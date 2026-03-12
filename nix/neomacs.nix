@@ -266,12 +266,18 @@ in stdenv.mkDerivation {
 
   # Wrap the binary with required environment variables
   postInstall = if isLinux then ''
+    install -Dm644 ${./site-start.el} \
+      "$out/share/emacs/site-lisp/site-start.el"
+
     wrapProgram $out/bin/emacs \
       --set WPE_BACKEND_LIBRARY "${libwpe-fdo}/lib/libWPEBackend-fdo-1.0.so" \
       --set GIO_MODULE_DIR "${glib-networking}/lib/gio/modules" \
       --set WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS "1" \
       --prefix PATH : "${wpewebkit}/libexec/wpe-webkit-2.0"
   '' else ''
+    install -Dm644 ${./site-start.el} \
+      "$out/share/emacs/site-lisp/site-start.el"
+
     wrapProgram $out/bin/emacs \
       --set GIO_MODULE_DIR "${glib-networking}/lib/gio/modules"
   '';
