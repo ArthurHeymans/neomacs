@@ -8,6 +8,7 @@
 use super::expr::{Expr, ParseError};
 use super::intern::{intern, intern_uninterned};
 use super::string_escape::{bytes_to_unibyte_storage_string, encode_nonunicode_char_for_storage};
+use super::value::Value;
 
 pub fn parse_forms(input: &str) -> Result<Vec<Expr>, ParseError> {
     let mut parser = Parser::new(input);
@@ -25,6 +26,31 @@ pub fn parse_form(input: &str) -> Result<Option<(Expr, usize)>, ParseError> {
     }
     let expr = parser.parse_expr()?;
     Ok(Some((expr, parser.pos)))
+}
+
+/// Decode a character from a parsed Elisp string back to its raw byte value.
+///
+/// The string parser encodes non-ASCII raw bytes as Unicode sentinel chars:
+/// - U+E080..U+E0FF  (raw-byte sentinels for bytes 0x80..0xFF)
+/// - U+E300..U+E3FF  (unibyte-byte sentinels for bytes 0x00..0xFF)
+///
+/// For bool-vector data strings we need to recover the original byte value
+/// so we can extract individual bits.
+fn char_to_raw_byte(ch: char) -> u8 {
+    let code = ch as u32;
+    if code <= 0x7F {
+        return code as u8;
+    }
+    // Raw-byte sentinel: U+E080..U+E0FF -> 0x80..0xFF
+    if (0xE080..=0xE0FF).contains(&code) {
+        return (code - 0xE000) as u8;
+    }
+    // Unibyte-byte sentinel: U+E300..U+E3FF -> 0x00..0xFF
+    if (0xE300..=0xE3FF).contains(&code) {
+        return (code - 0xE300) as u8;
+    }
+    // Fallback: treat as low byte (shouldn't happen for well-formed bool-vector data)
+    (code & 0xFF) as u8
 }
 
 struct Parser<'a> {
@@ -752,32 +778,33 @@ impl<'a> Parser<'a> {
                     Expr::Str(s) => s,
                     _ => return Err(self.error("#& expected string after size")),
                 };
-                // Expand packed bytes to individual bits and emit as
-                // (bool-vector t nil t ...) — the builtin uses truthiness.
-                let t_sym = intern("t");
-                let nil_sym = intern("nil");
-                let mut call = Vec::with_capacity(1 + size);
-                call.push(Expr::Symbol(intern("bool-vector")));
+                // Expand packed bytes to individual bits and construct the
+                // bool-vector directly as an opaque tagged vector:
+                //   [--bool-vector-- SIZE bit0 bit1 ...]
+                let mut tagged_vec = Vec::with_capacity(2 + size);
+                tagged_vec.push(Value::Symbol(intern("--bool-vector--")));
+                tagged_vec.push(Value::Int(size as i64));
                 let mut bit_count = 0;
-                for byte_val in data_str.bytes() {
+                for ch in data_str.chars() {
+                    let byte_val = char_to_raw_byte(ch);
                     for bit_idx in 0..8 {
                         if bit_count >= size {
                             break;
                         }
                         if (byte_val >> bit_idx) & 1 != 0 {
-                            call.push(Expr::Symbol(t_sym));
+                            tagged_vec.push(Value::Int(1));
                         } else {
-                            call.push(Expr::Symbol(nil_sym));
+                            tagged_vec.push(Value::Int(0));
                         }
                         bit_count += 1;
                     }
                 }
-                // Pad with nil if data is shorter than SIZE
+                // Pad with 0 if data is shorter than SIZE
                 while bit_count < size {
-                    call.push(Expr::Symbol(nil_sym));
+                    tagged_vec.push(Value::Int(0));
                     bit_count += 1;
                 }
-                Ok(Expr::List(call))
+                Ok(Expr::OpaqueValue(Value::vector(tagged_vec)))
             }
             '0'..='9' => {
                 // #N=EXPR defines read label N, #N# references it.
