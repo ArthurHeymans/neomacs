@@ -3877,6 +3877,15 @@ pub(crate) fn make_byte_code_from_parts(
         constants[i] = try_convert_nested_compiled_literal(constants[i]);
     }
 
+    // Debug: check for any remaining byte-code-literal lists
+    for (i, c) in constants.iter().enumerate() {
+        if c.is_cons() && c.cons_car().is_symbol_named("byte-code-literal") {
+            tracing::error!(
+                "make_byte_code_from_parts: constant[{i}] still has byte-code-literal after conversion!"
+            );
+        }
+    }
+
     // 4. Decode GNU bytecodes
     let (ops, gnu_byte_offset_map) =
         decode_gnu_bytecode_with_offset_map(&raw_bytes, &mut constants).map_err(|e| {
@@ -4002,6 +4011,41 @@ pub(crate) fn make_interpreted_closure_from_parts(
 pub(crate) fn try_convert_nested_compiled_literal(val: Value) -> Value {
     if let Some(table) = try_convert_hash_table_literal(val) {
         return table;
+    }
+
+    // Handle (byte-code-literal [arglist bytecode constants depth ...]) lists.
+    // The parser produces these for #[...] in .elc files.
+    if val.is_cons() {
+        let car = val.cons_car();
+        if car.is_symbol_named("byte-code-literal") {
+            let cdr = val.cons_cdr();
+            if cdr.is_cons() {
+                let vector_val = cdr.cons_car();
+                if let Some(items) = vector_val.as_vector_data() {
+                    if items.len() >= 4 {
+                        // Recursively convert nested byte-code-literals
+                        let mut converted = items.clone();
+                        if let Some(consts) = converted.get(2).and_then(|v| v.as_vector_data()) {
+                            let mut new_consts: Vec<Value> = consts.clone();
+                            for c in &mut new_consts {
+                                *c = try_convert_nested_compiled_literal(*c);
+                            }
+                            converted[2] = Value::vector(new_consts);
+                        }
+                        if let Ok(bc) = make_byte_code_from_parts(
+                            &converted[0],
+                            &converted[1],
+                            &converted[2],
+                            &converted[3],
+                            converted.get(4),
+                            converted.get(5),
+                        ) {
+                            return bc;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let items = match val.kind() {

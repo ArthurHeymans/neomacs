@@ -1185,47 +1185,54 @@ fn load_file_body(
             None
         };
 
-        // --- Parse forms ---
-        let forms = if is_elc {
-            super::parser::parse_forms(&content).map_err(|e| EvalError::Signal {
-                symbol: intern("error"),
-                data: vec![Value::string(format!(
-                    "Parse error in {}: {}",
-                    path.display(),
-                    e
-                ))],
-                raw_data: None,
-            })?
-        } else {
-            parse_source_forms(path, &content)?
-        };
-
         let file_name = path
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
 
+        // --- .elc path: streaming parse + eval (one form at a time) ---
+        // Matches GNU Emacs readevalloop: read one form, eval, repeat.
+        // No batch Vec<Expr> accumulation.
         if is_elc {
-            tracing::info!(
-                "{} parsed {} ELC forms from {} bytes",
-                file_name,
-                forms.len(),
-                content.len()
-            );
-        }
+            tracing::info!("{} loading ELC ({} bytes)", file_name, content.len());
+            let mut pos = 0;
+            let mut form_idx = 0;
+            loop {
+                let remaining = &content[pos..];
+                let parsed =
+                    super::parser::parse_form(remaining).map_err(|e| EvalError::Signal {
+                        symbol: intern("error"),
+                        data: vec![Value::string(format!(
+                            "Parse error in {} at offset {}: {}",
+                            file_name,
+                            pos + e.position,
+                            e
+                        ))],
+                        raw_data: None,
+                    })?;
+                let Some((form, consumed)) = parsed else {
+                    break;
+                };
+                pos += consumed;
 
-        // --- .elc path: reify byte-code literals + eval via shared readevalloop ---
-        if is_elc {
-            readevalloop(eval, &file_name, &forms, |eval, _i, form| {
-                let reified = eval
-                    .reify_byte_code_literals(form)
-                    .map_err(crate::emacs_core::error::map_flow)?;
-                eval.eval_expr(&reified)
-            })?;
+                // Evaluate the Expr directly. sf_byte_code_literal handles
+                // (byte-code-literal ...) forms natively.
+                let result = eval.eval_expr(&form);
+                // form (Expr) is dropped here — no accumulation.
+                if let Err(ref e) = result {
+                    tracing::error!("  !! {} FORM[{}] FAILED: {:?}", file_name, form_idx, e);
+                }
+                result?;
+                eval.gc_safe_point();
+                form_idx += 1;
+            }
             record_load_history(eval, path);
             return Ok(Value::T);
         }
+
+        // --- .el path ---
+        let forms = parse_source_forms(path, &content)?;
 
         // --- .el path: parse forms, macroexpand+eval each form, record history ---
         if let Some(mexp_fn) = macroexpand_fn {

@@ -7178,6 +7178,7 @@ impl Context {
     /// `(byte-code-literal VECTOR)`) that DO need evaluation.
     fn quote_to_value_with_bytecode(&mut self, expr: &Expr) -> EvalResult {
         match expr {
+            // Direct byte-code-literal: evaluate to Value::ByteCode
             Expr::List(elts)
                 if matches!(
                     elts.first(),
@@ -7186,12 +7187,34 @@ impl Context {
             {
                 self.eval(expr)
             }
+            // Vector: recurse into each element
             Expr::Vector(items) => {
                 let mut values = Vec::with_capacity(items.len());
                 for item in items {
                     values.push(self.quote_to_value_with_bytecode(item)?);
                 }
                 Ok(Value::vector(values))
+            }
+            // List: recurse to find nested byte-code-literal
+            // (e.g., (closure #[...] env) or (macro . #[...]))
+            Expr::List(items) => {
+                let values: Vec<Value> = items
+                    .iter()
+                    .map(|item| self.quote_to_value_with_bytecode(item))
+                    .collect::<Result<_, _>>()?;
+                Ok(Value::list(values))
+            }
+            // Dotted list: recurse
+            Expr::DottedList(items, tail) => {
+                let head_vals: Vec<Value> = items
+                    .iter()
+                    .map(|item| self.quote_to_value_with_bytecode(item))
+                    .collect::<Result<_, _>>()?;
+                let tail_val = self.quote_to_value_with_bytecode(tail)?;
+                Ok(head_vals
+                    .into_iter()
+                    .rev()
+                    .fold(tail_val, |acc, item| Value::cons(item, acc)))
             }
             _ => Ok(self.quote_to_runtime_value(expr)),
         }
@@ -9518,6 +9541,34 @@ pub fn quote_to_value(expr: &Expr) -> Value {
         Expr::Symbol(id) if resolve_sym(*id) == "nil" => Value::NIL,
         Expr::Symbol(id) if resolve_sym(*id) == "t" => Value::T,
         Expr::Symbol(id) => Value::from_sym_id(*id),
+        Expr::List(items)
+            if matches!(
+                items.first(),
+                Some(Expr::Symbol(s)) if resolve_sym(*s) == "byte-code-literal"
+            ) =>
+        {
+            // Convert (byte-code-literal [arglist bytecode constants depth ...])
+            // to Value::ByteCode, matching GNU where #[...] produces a compiled
+            // function directly during reading.
+            if let Some(Expr::Vector(vec_items)) = items.get(1) {
+                if vec_items.len() >= 4 {
+                    let values: Vec<Value> = vec_items.iter().map(quote_to_value).collect();
+                    if let Ok(bc) = crate::emacs_core::builtins::make_byte_code_from_parts(
+                        &values[0],
+                        &values[1],
+                        &values[2],
+                        &values[3],
+                        values.get(4),
+                        values.get(5),
+                    ) {
+                        return bc;
+                    }
+                }
+            }
+            // Fallback: convert as regular list
+            let quoted = items.iter().map(quote_to_value).collect::<Vec<_>>();
+            Value::list(quoted)
+        }
         Expr::List(items) => {
             let quoted = items.iter().map(quote_to_value).collect::<Vec<_>>();
             Value::list(quoted)
