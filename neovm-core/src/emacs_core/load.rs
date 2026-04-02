@@ -1072,7 +1072,17 @@ fn load_file_body(
 ) -> Result<Value, EvalError> {
     let is_elc = path.extension().and_then(|e| e.to_str()) == Some("elc");
 
+    // For generated loaddefs files, bypass load-source-file-function
+    // and use the optimized Rust streaming loader directly.
+    // This matches GNU's approach where loaddefs is loaded efficiently.
+    let is_generated_loaddefs = !is_elc && {
+        // Quick check: only read the file if the name suggests loaddefs
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        name.contains("loaddefs")
+    };
+
     if !is_elc
+        && !is_generated_loaddefs
         && let load_source_file_function =
             eval.visible_variable_value_or_nil("load-source-file-function")
         && !load_source_file_function.is_nil()
@@ -1162,6 +1172,11 @@ fn load_file_body(
             eval.source_literal_cache.clear();
 
             let generated_loaddefs = is_generated_loaddefs_source(&content);
+            tracing::info!(
+                "loaddefs check for {}: generated={}",
+                path.display(),
+                generated_loaddefs
+            );
             if generated_loaddefs {
                 tracing::info!("generated loaddefs streaming for {}", path.display(),);
                 let mut pos = 0;
