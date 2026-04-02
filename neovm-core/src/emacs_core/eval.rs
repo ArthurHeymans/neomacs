@@ -4565,13 +4565,22 @@ impl Context {
         self.tagged_heap.collect(roots.into_iter());
         let after = self.tagged_heap.allocated_count();
         let threshold = self.tagged_heap.gc_threshold();
+        // Read process RSS from /proc/self/statm
+        let rss_kb = std::fs::read_to_string("/proc/self/statm")
+            .ok()
+            .and_then(|s| s.split_whitespace().nth(1)?.parse::<u64>().ok())
+            .map(|pages| pages * 4) // 4KB pages
+            .unwrap_or(0);
+        let opaque_pool_size = OPAQUE_POOL.with(|pool| pool.borrow().values.len());
         tracing::info!(
-            "GC #{}: {} -> {} objects (freed {}), next threshold={}",
+            "GC #{}: {} -> {} objects (freed {}), threshold={}, RSS={}MB, opaque_pool={}",
             self.gc_count,
             before,
             after,
             before.saturating_sub(after),
-            threshold
+            threshold,
+            rss_kb / 1024,
+            opaque_pool_size
         );
         self.gc_pending = false;
         self.gc_count += 1;
