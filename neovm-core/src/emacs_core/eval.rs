@@ -9,8 +9,8 @@ use std::rc::Rc;
 /// Replaces Expr::OpaqueValue(Value) with Expr::OpaqueValueRef(u32).
 /// Values in this pool are always traced by GC — no stale references.
 pub(crate) struct OpaqueValuePool {
-    values: Vec<Option<Value>>,
-    free_list: Vec<u32>,
+    pub values: Vec<Option<Value>>,
+    pub free_list: Vec<u32>,
 }
 
 impl OpaqueValuePool {

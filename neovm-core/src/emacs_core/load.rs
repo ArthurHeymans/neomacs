@@ -1246,6 +1246,12 @@ fn load_file_body(
                 // (byte-code-literal ...) forms natively.
                 let result = eval.eval_expr(&form);
                 // form (Expr) is dropped here — no accumulation.
+                // Clear OpaquePool to prevent leak from value_to_expr insertions.
+                super::eval::OPAQUE_POOL.with(|pool| {
+                    let mut p = pool.borrow_mut();
+                    p.values.clear();
+                    p.free_list.clear();
+                });
                 if let Err(ref e) = result {
                     tracing::error!("  !! {} FORM[{}] FAILED: {:?}", file_name, form_idx, e);
                 }
@@ -1287,6 +1293,12 @@ fn load_file_body(
                     eval.eval_expr(&form)
                 };
                 // form (Expr) is dropped here — no accumulation.
+                // Clear OpaquePool to prevent leak from value_to_expr insertions.
+                super::eval::OPAQUE_POOL.with(|pool| {
+                    let mut p = pool.borrow_mut();
+                    p.values.clear();
+                    p.free_list.clear();
+                });
                 if let Err(ref e) = result {
                     tracing::error!("  !! {} FORM[{}] FAILED: {:?}", file_name, form_idx, e);
                 }
