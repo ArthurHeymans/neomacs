@@ -1163,14 +1163,25 @@ fn load_file_body(
 
             let generated_loaddefs = is_generated_loaddefs_source(&content);
             if generated_loaddefs {
-                let forms = parse_source_forms(path, &content)?;
-                tracing::info!(
-                    "generated loaddefs replay for {} ({} forms)",
-                    path.display(),
-                    forms.len()
-                );
-                for form in &forms {
-                    eval_generated_loaddefs_form(eval, form)?;
+                tracing::info!("generated loaddefs streaming for {}", path.display(),);
+                let mut pos = 0;
+                loop {
+                    let remaining = &content[pos..];
+                    let parsed =
+                        super::parser::parse_form(remaining).map_err(|e| EvalError::Signal {
+                            symbol: intern("error"),
+                            data: vec![Value::string(format!(
+                                "Parse error in loaddefs at offset {}: {}",
+                                pos + e.position,
+                                e
+                            ))],
+                            raw_data: None,
+                        })?;
+                    let Some((form, consumed)) = parsed else {
+                        break;
+                    };
+                    pos += consumed;
+                    eval_generated_loaddefs_form(eval, &form)?;
                     eval.gc_safe_point();
                 }
                 record_load_history(eval, path);
@@ -1254,19 +1265,43 @@ fn load_file_body(
             return Ok(Value::T);
         }
 
-        // --- .el path ---
-        let forms = parse_source_forms(path, &content)?;
+        // --- .el path: streaming parse + eval (one form at a time) ---
+        // Matches GNU Emacs readevalloop: read one form, eval, repeat.
+        {
+            let mut pos = 0;
+            let mut form_idx = 0;
+            loop {
+                let remaining = &content[pos..];
+                let parsed =
+                    super::parser::parse_form(remaining).map_err(|e| EvalError::Signal {
+                        symbol: intern("error"),
+                        data: vec![Value::string(format!(
+                            "Parse error in {} at offset {}: {}",
+                            file_name,
+                            pos + e.position,
+                            e
+                        ))],
+                        raw_data: None,
+                    })?;
+                let Some((form, consumed)) = parsed else {
+                    break;
+                };
+                pos += consumed;
 
-        // --- .el path: parse forms, macroexpand+eval each form, record history ---
-        if let Some(mexp_fn) = macroexpand_fn {
-            readevalloop(eval, &file_name, &forms, |eval, _i, form| {
-                let form_value = eval.quote_to_runtime_value(form);
-                eager_expand_eval(eval, form_value, mexp_fn)
-            })?;
-        } else {
-            readevalloop(eval, &file_name, &forms, |eval, _i, form| {
-                eval.eval_expr(form)
-            })?;
+                let result = if let Some(mexp_fn) = macroexpand_fn {
+                    let form_value = eval.quote_to_runtime_value(&form);
+                    eager_expand_eval(eval, form_value, mexp_fn)
+                } else {
+                    eval.eval_expr(&form)
+                };
+                // form (Expr) is dropped here — no accumulation.
+                if let Err(ref e) = result {
+                    tracing::error!("  !! {} FORM[{}] FAILED: {:?}", file_name, form_idx, e);
+                }
+                result?;
+                eval.gc_safe_point();
+                form_idx += 1;
+            }
         }
 
         record_load_history(eval, path);
