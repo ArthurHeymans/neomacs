@@ -1,17 +1,22 @@
 experimental = ["wrapper-scripts"]
 
-# Memory-limited wrapper: each test process gets a 4GB RSS limit via cgroup.
-# Prevents runaway tests from OOM-killing the system.
+# Memory-limited wrapper: prevents runaway tests from OOM-killing the system.
 [scripts.wrapper.memory-limit]
 command = 'systemd-run --user --scope -q -p MemoryMax=1G --'
 
+# Bootstrap tests load 80+ .elc files and need more memory
+[scripts.wrapper.memory-limit-bootstrap]
+command = 'systemd-run --user --scope -q -p MemoryMax=2G --'
+
 [profile.default]
-# Many tests use the bootstrap evaluator (which loads 122 .el files)
-# even without "bootstrap" in their name. 120s covers the ~63s
-# bootstrap initialization plus test execution time.
 slow-timeout = { period = "120s", terminate-after = 1 }
 
-# Apply memory limit to all tests
+# Bootstrap/pdump tests get larger memory limit — MUST come before all() rule
+[[profile.default.scripts]]
+filter = 'test(bootstrap) | test(pdump)'
+run-wrapper = 'memory-limit-bootstrap'
+
+# Apply memory limit to all other tests
 [[profile.default.scripts]]
 filter = 'all()'
 run-wrapper = 'memory-limit'
