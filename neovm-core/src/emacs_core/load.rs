@@ -1207,8 +1207,6 @@ fn load_file_body(
         // No batch Vec<Expr> accumulation.
         if is_elc {
             tracing::info!("{} loading ELC ({} bytes)", file_name, content.len());
-            // Debug: check function cells after loading
-            let check_after = file_name.contains("subr");
             let mut pos = 0;
             let mut form_idx = 0;
             loop {
@@ -1239,27 +1237,6 @@ fn load_file_body(
                 result?;
                 eval.gc_safe_point();
                 form_idx += 1;
-            }
-            // Debug: after loading subr.elc, check add-hook function cell
-            if check_after {
-                if let Some(func) = eval.obarray().symbol_function("add-hook") {
-                    if func.is_bytecode() {
-                        let bc = func.get_bytecode_data().unwrap();
-                        for (i, c) in bc.constants.iter().enumerate() {
-                            if c.is_cons() && c.cons_car().is_symbol_named("byte-code-literal") {
-                                tracing::error!(
-                                    "add-hook constant[{}] is STILL byte-code-literal after loading!",
-                                    i
-                                );
-                            }
-                        }
-                    } else {
-                        tracing::error!(
-                            "add-hook function cell is NOT bytecode: {:?}",
-                            func.kind()
-                        );
-                    }
-                }
             }
             record_load_history(eval, path);
             return Ok(Value::T);

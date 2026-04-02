@@ -3877,15 +3877,6 @@ pub(crate) fn make_byte_code_from_parts(
         constants[i] = try_convert_nested_compiled_literal(constants[i]);
     }
 
-    // Debug: check for any remaining byte-code-literal lists
-    for (i, c) in constants.iter().enumerate() {
-        if c.is_cons() && c.cons_car().is_symbol_named("byte-code-literal") {
-            tracing::error!(
-                "make_byte_code_from_parts: constant[{i}] still has byte-code-literal after conversion!"
-            );
-        }
-    }
-
     // 4. Decode GNU bytecodes
     let (ops, gnu_byte_offset_map) =
         decode_gnu_bytecode_with_offset_map(&raw_bytes, &mut constants).map_err(|e| {
