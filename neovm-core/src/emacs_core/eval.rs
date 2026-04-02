@@ -8097,6 +8097,18 @@ impl Context {
             return Err(signal("invalid-function", vec![function]));
         };
 
+        // NeoVM-specific: convert (byte-code-literal [vector]) to ByteCode.
+        // The parser produces these for #[...] in .elc files. When they
+        // leak into a runtime function position, convert on-the-fly.
+        if head_name == "byte-code-literal" {
+            let converted =
+                crate::emacs_core::builtins::try_convert_nested_compiled_literal(function);
+            if converted.is_bytecode() {
+                return Ok(converted);
+            }
+            return Err(signal("invalid-function", vec![function]));
+        }
+
         let (env_value, params_value, mut body_start) = match head_name {
             "lambda" => {
                 let Some(params_value) = items.get(1).copied() else {

@@ -1747,6 +1747,13 @@ impl<'a> Vm<'a> {
                         closure.env = Some(self.ctx.lexenv);
                         stack.push(Value::make_bytecode(closure));
                     } else {
+                        // Not a ByteCode — check if it's a byte-code-literal list
+                        if val.is_cons() && val.cons_car().is_symbol_named("byte-code-literal") {
+                            tracing::error!(
+                                "MakeClosure: constant[{}] is byte-code-literal list, not ByteCode!",
+                                idx
+                            );
+                        }
                         stack.push(val);
                     }
                 }
