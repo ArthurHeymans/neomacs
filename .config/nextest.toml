@@ -1,42 +1,33 @@
 experimental = ["wrapper-scripts"]
 
-# Memory-limited wrapper: prevents runaway tests from OOM-killing the system.
+# Memory-limited wrapper: prevent runaway tests from OOM-killing the system.
 [scripts.wrapper.memory-limit]
-command = 'systemd-run --user --scope -q -p MemoryMax=1G --'
-
-# Bootstrap tests load 80+ .elc files and need more memory
-[scripts.wrapper.memory-limit-bootstrap]
-command = 'systemd-run --user --scope -q -p MemoryMax=8G --'
+command = 'systemd-run --user --scope -q -p MemoryMax=4G --'
 
 [profile.default]
 slow-timeout = { period = "120s", terminate-after = 1 }
 
-# Bootstrap/pdump tests get larger memory limit — MUST come before all() rule
-[[profile.default.scripts]]
-filter = 'test(bootstrap) | test(pdump)'
-run-wrapper = 'memory-limit-bootstrap'
-
-# Apply memory limit to all other tests
+# Apply 1GB memory limit to all tests (bootstrap tests are excluded below)
 [[profile.default.scripts]]
 filter = 'all()'
 run-wrapper = 'memory-limit'
-
-# Oracle tests get longer timeouts
-[[profile.default.overrides]]
-filter = 'test(/^emacs_core::oracle_test::/)'
-slow-timeout = { period = "120s", terminate-after = 1 }
 
 # Bootstrap tests need much longer timeouts
 [[profile.default.overrides]]
 filter = 'test(bootstrap) | test(pdump)'
 slow-timeout = { period = "600s", terminate-after = 1 }
 
-# GNU-vs-NeoVM compatibility integration tests also need the cold-bootstrap budget.
+# Oracle tests get longer timeouts
+[[profile.default.overrides]]
+filter = 'test(/^emacs_core::oracle_test::/)'
+slow-timeout = { period = "120s", terminate-after = 1 }
+
+# GNU-vs-NeoVM compatibility integration tests
 [[profile.default.overrides]]
 filter = 'package(=neovm-core) and test(/compat_.*_matches_gnu_emacs/)'
 slow-timeout = { period = "600s", terminate-after = 1 }
 
-# Loadup bootstrap is the slowest (cold start can take >300s)
+# Loadup bootstrap is the slowest
 [[profile.default.overrides]]
 filter = 'package(=neovm-core) and test(=emacs_core::load::tests::neovm_loadup_bootstrap)'
 slow-timeout = { period = "600s", terminate-after = 1 }
