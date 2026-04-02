@@ -4558,15 +4558,21 @@ impl Context {
     /// Perform a full mark-and-sweep garbage collection.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn gc_collect(&mut self) {
-        // Clear source_literal_cache before GC — it uses *const Expr raw
-        // pointers as keys which can alias after Rc<Vec<Expr>> bodies are
-        // freed, causing ABA: a new lambda body at the same address gets
-        // a stale cached Value from a collected lambda's expression.
+        let before = self.tagged_heap.allocated_count();
         self.source_literal_cache.clear();
         self.macro_expansion_cache.clear();
         let roots = self.collect_roots();
-        // Use the new tagged heap for GC collection
         self.tagged_heap.collect(roots.into_iter());
+        let after = self.tagged_heap.allocated_count();
+        let threshold = self.tagged_heap.gc_threshold();
+        tracing::info!(
+            "GC #{}: {} -> {} objects (freed {}), next threshold={}",
+            self.gc_count,
+            before,
+            after,
+            before.saturating_sub(after),
+            threshold
+        );
         self.gc_pending = false;
         self.gc_count += 1;
         self.run_post_gc_hook();
