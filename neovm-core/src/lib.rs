@@ -1,3 +1,10 @@
+// When the `dhat-heap` feature is enabled, use dhat as the global allocator
+// for heap profiling. Run with: cargo test --features dhat-heap -p neovm-core
+// Output goes to dhat-heap.json (view at https://nnethercote.github.io/dh_view/dh_view.html)
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 pub mod buffer;
 pub mod emacs_core;
 pub mod encoding;

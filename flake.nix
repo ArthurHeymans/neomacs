@@ -200,6 +200,10 @@
 
               # For bindgen (generates Rust bindings from C headers)
               pkgs.llvmPackages.clang
+
+              # Memory profiling tools
+              pkgs.heaptrack
+              pkgs.valgrind
             ];
 
             buildInputs = commonBuildInputsFor pkgs

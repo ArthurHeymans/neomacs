@@ -32,6 +32,12 @@ arboard.workspace = true
 
 [features]
 default = []
+# Enable dhat heap profiler — use with DHAT_OUT_FILE env var
+dhat-heap = ["dep:dhat"]
+
+[dependencies.dhat]
+version = "0.3"
+optional = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

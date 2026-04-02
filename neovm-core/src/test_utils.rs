@@ -29,3 +29,11 @@ pub fn init_test_tracing() {
         .with_test_writer()
         .try_init();
 }
+
+/// Initialize dhat heap profiler (when `dhat-heap` feature is enabled).
+/// Call once at test start. The profiler writes dhat-heap.json on drop.
+/// View results at: https://nnethercote.github.io/dh_view/dh_view.html
+#[cfg(feature = "dhat-heap")]
+pub fn init_dhat_profiler() -> dhat::Profiler {
+    dhat::Profiler::builder().testing().build()
+}
