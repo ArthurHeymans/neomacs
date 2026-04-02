@@ -7262,6 +7262,16 @@ impl Context {
                 .symbol_value("load-file-name")
                 .cloned()
                 .unwrap_or(Value::NIL),
+            // Handle (byte-code-literal [...]) → Value::ByteCode
+            Expr::List(items)
+                if matches!(
+                    items.first(),
+                    Some(Expr::Symbol(s)) if resolve_sym(*s) == "byte-code-literal"
+                ) =>
+            {
+                // Delegate to quote_to_value which handles byte-code-literal
+                quote_to_value(expr)
+            }
             Expr::List(items) => {
                 let quoted = items
                     .iter()
