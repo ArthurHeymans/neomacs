@@ -70,6 +70,20 @@ pub(crate) struct OldRegionPlacement {
     pub(crate) line_count: usize,
 }
 
+/// Physical placement of an object inside an `OldBlock` from `OldGenState`.
+///
+/// Distinct from `OldRegionPlacement`, which tracks the *logical* old-region
+/// bookkeeping for compaction planning. `OldBlockPlacement` records which
+/// concrete block buffer the object's bytes live in so the sweep path can
+/// re-mark the lines the object occupies and so empty blocks can be reclaimed
+/// after collection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct OldBlockPlacement {
+    pub(crate) block_index: usize,
+    pub(crate) offset_bytes: usize,
+    pub(crate) total_size: usize,
+}
+
 /// Per-object header stored adjacent to the payload.
 #[repr(C)]
 #[derive(Debug)]
@@ -163,6 +177,7 @@ pub(crate) struct ObjectRecord {
     layout: Layout,
     header: NonNull<ObjectHeader>,
     old_region: Option<OldRegionPlacement>,
+    old_block: Option<OldBlockPlacement>,
     memory_kind: ObjectMemoryKind,
 }
 
@@ -207,6 +222,7 @@ impl ObjectRecord {
             layout,
             header,
             old_region: None,
+            old_block: None,
             memory_kind: ObjectMemoryKind::Owned,
         })
     }
@@ -243,6 +259,7 @@ impl ObjectRecord {
             layout,
             header,
             old_region: None,
+            old_block: None,
             memory_kind: ObjectMemoryKind::Arena,
         }
     }
@@ -300,6 +317,19 @@ impl ObjectRecord {
 
     pub(crate) fn set_old_region_placement(&mut self, placement: OldRegionPlacement) {
         self.old_region = Some(placement);
+    }
+
+    pub(crate) fn old_block_placement(&self) -> Option<OldBlockPlacement> {
+        self.old_block
+    }
+
+    pub(crate) fn set_old_block_placement(&mut self, placement: OldBlockPlacement) {
+        self.old_block = Some(placement);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn clear_old_block_placement(&mut self) {
+        self.old_block = None;
     }
 
     pub(crate) fn total_size(&self) -> usize {
@@ -400,6 +430,7 @@ impl ObjectRecord {
             layout,
             header,
             old_region: None,
+            old_block: None,
             memory_kind: ObjectMemoryKind::Owned,
         })
     }
@@ -431,6 +462,7 @@ impl ObjectRecord {
             layout,
             header,
             old_region: None,
+            old_block: None,
             memory_kind: ObjectMemoryKind::Arena,
         })
     }
