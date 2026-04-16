@@ -31,10 +31,7 @@ use crate::emacs_core::intern::{
 use crate::heap_types::LispString;
 
 use super::gc_trace_impls::{GcBignum, GcFloat, GcLispString};
-use super::header::{
-    BignumObj, ConsCell, FloatObj, GcHeader, StringObj, SubrObj, SymbolWithPosObj, VecLikeHeader,
-    VecLikeType,
-};
+use super::header::{ConsCell, VecLikeType};
 
 /// Clear the old subr registry on the tagged heap — no-op now that subrs use
 /// the static global table, but kept to avoid breaking pdump callers until
@@ -406,10 +403,11 @@ impl TaggedValue {
         }
     }
 
-    /// If this is a symbol-with-pos, return a reference to the object.
-    pub fn as_symbol_with_pos(&self) -> Option<&SymbolWithPosObj> {
+    /// If this is a symbol-with-pos, return a reference to the GcSymbolWithPos.
+    pub fn as_symbol_with_pos(&self) -> Option<&super::gc_trace_impls::GcSymbolWithPos> {
         if self.is_symbol_with_pos() {
-            Some(unsafe { &*(self.as_veclike_ptr()? as *const SymbolWithPosObj) })
+            let ptr = (self.0 & !TAG_MASK) as *const super::gc_trace_impls::GcSymbolWithPos;
+            Some(unsafe { &*ptr })
         } else {
             None
         }
@@ -417,13 +415,24 @@ impl TaggedValue {
 
     /// If this is a symbol-with-pos, return the bare symbol Value.
     pub fn as_symbol_with_pos_sym(&self) -> Option<TaggedValue> {
-        self.as_symbol_with_pos().map(|swp| swp.sym)
+        if self.is_symbol_with_pos() {
+            let ptr = (self.0 & !TAG_MASK) as *const super::gc_trace_impls::GcSymbolWithPos;
+            Some(unsafe { (*ptr).sym })
+        } else {
+            None
+        }
     }
 
     /// If this is a symbol-with-pos, return the position as i64.
     pub fn as_symbol_with_pos_pos(&self) -> Option<i64> {
         self.as_symbol_with_pos()
             .and_then(|swp| swp.pos.as_fixnum())
+    }
+
+    /// True if this value is a symbol-with-position vectorlike.
+    #[inline]
+    pub fn is_symbol_with_pos(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::SymbolWithPos)
     }
 
     /// True if this value holds a heap pointer (needs GC tracing).
@@ -733,12 +742,6 @@ impl TaggedValue {
     #[inline]
     pub fn is_hash_table(self) -> bool {
         self.veclike_type() == Some(VecLikeType::HashTable)
-    }
-
-    /// True if this value is a symbol-with-pos pseudo-vector.
-    #[inline]
-    pub fn is_symbol_with_pos(self) -> bool {
-        self.veclike_type() == Some(VecLikeType::SymbolWithPos)
     }
 
     /// True if this value is callable (lambda, macro, bytecode, subr).

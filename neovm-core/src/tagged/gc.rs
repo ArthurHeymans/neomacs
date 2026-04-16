@@ -670,6 +670,14 @@ impl TaggedHeap {
         TaggedValue(ptr as usize | TAG_VECLIKE)
     }
 
+    pub fn alloc_symbol_with_pos(&mut self, sym: TaggedValue, pos: TaggedValue) -> TaggedValue {
+        let gc_swp = GcSymbolWithPos { type_tag: VecLikeType::SymbolWithPos, sym, pos };
+        let ptr = self.gc_alloc(gc_swp);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<GcSymbolWithPos>());
+        TaggedValue(ptr as usize | TAG_VECLIKE)
+    }
+
     // -----------------------------------------------------------------------
     // Marker operations
     // -----------------------------------------------------------------------

@@ -468,6 +468,25 @@ unsafe impl Trace for GcBignum {
     fn layout_kind() -> LayoutKind { LayoutKind::External }
 }
 
+/// Symbol-with-position managed by neovm-gc. Two TaggedValue edges.
+#[repr(C)]
+pub struct GcSymbolWithPos {
+    pub type_tag: VecLikeType,
+    /// The bare symbol (TAG_SYMBOL).
+    pub sym: TaggedValue,
+    /// Source byte offset (fixnum).
+    pub pos: TaggedValue,
+}
+
+unsafe impl Trace for GcSymbolWithPos {
+    fn trace(&self, tracer: &mut dyn Tracer) {
+        trace_tagged(tracer, self.sym);
+        trace_tagged(tracer, self.pos);
+    }
+    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+}
+
 /// Buffer reference managed by neovm-gc. No TaggedValue edges.
 #[repr(C)]
 pub struct GcBuffer {

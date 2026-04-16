@@ -10,7 +10,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, lookup_interned, resolve_name, resolve_sym};
 use super::value::*;
 use crate::tagged::gc_trace_impls::GcSubr;
-use crate::tagged::header::{SubrDispatchKind, SubrObj};
+use crate::tagged::header::SubrDispatchKind;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
