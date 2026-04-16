@@ -163,6 +163,7 @@ fn execute_collection_plan_records_minor_phases() {
         &mut stats,
         &mut nursery_state,
         &runtime_state,
+        None,
         |phase| phases.push(phase),
     )
     .expect("minor collection should succeed");
@@ -196,7 +197,7 @@ fn collect_global_sources_includes_roots_and_immortal_objects() {
         ..HeapIndexState::default()
     };
     let view = FlatReadView::new(&objects, &indexes);
-    let sources = super::collect_global_sources(&roots, &view);
+    let sources = super::collect_global_sources(&roots, &view, None);
 
     assert!(sources.contains(&rooted_source));
     assert!(sources.contains(&immortal_source));

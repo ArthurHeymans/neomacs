@@ -302,6 +302,7 @@ pub(crate) fn trace_major(
 pub(crate) fn collect_global_sources(
     roots: &RootStack,
     objects: &impl ObjectReadView,
+    external_scanner: Option<&crate::heap::ExternalRootScanner>,
 ) -> Vec<GcErased> {
     let raw = objects.raw();
     let immortal_sources = raw
@@ -310,7 +311,11 @@ pub(crate) fn collect_global_sources(
         .map(|locator| raw.get(locator))
         .filter(|object| object.space() == SpaceKind::Immortal)
         .map(ObjectRecord::erased);
-    roots.iter().chain(immortal_sources).collect()
+    let mut sources: Vec<GcErased> = roots.iter().chain(immortal_sources).collect();
+    if let Some(scanner) = external_scanner {
+        scanner.call(&mut sources);
+    }
+    sources
 }
 
 /// Round `value` up to the next multiple of `align` (assumed non-zero).
@@ -674,6 +679,7 @@ pub(crate) fn execute_collection_plan(
     stats: &mut HeapStats,
     nursery: &mut crate::spaces::NurseryState,
     runtime_state: &RuntimeStateHandle,
+    external_scanner: Option<&crate::heap::ExternalRootScanner>,
     mut record_phase: impl FnMut(CollectionPhase),
 ) -> Result<CollectionStats, AllocError> {
     let before_bytes = stats.total_live_bytes();
@@ -683,7 +689,10 @@ pub(crate) fn execute_collection_plan(
     }
 
     let view = FlatReadView::new(objects, indexes);
-    let mut sources = collect_global_sources(roots, &view);
+    let mut sources = collect_global_sources(roots, &view, None);
+    if let Some(scanner) = external_scanner {
+        scanner.call(&mut sources);
+    }
     // Dirty-card scan for minor collections: walk every dirty
     // card in every old-gen block and add the records living in
     // those cards as additional roots so the trace picks up any

@@ -85,6 +85,26 @@ pub enum AllocError {
 /// would run their payload `Drop` implementations against
 /// already-freed buffers.
 ///
+/// Wrapper for external root scanner callback with Debug impl.
+pub(crate) struct ExternalRootScanner(std::sync::Mutex<Box<dyn FnMut(&mut Vec<GcErased>) + Send>>);
+
+impl ExternalRootScanner {
+    fn new(f: impl FnMut(&mut Vec<GcErased>) + Send + 'static) -> Self {
+        Self(std::sync::Mutex::new(Box::new(f)))
+    }
+
+    pub(crate) fn call(&self, roots: &mut Vec<GcErased>) {
+        let mut guard = self.0.lock().expect("external root scanner lock");
+        guard(roots);
+    }
+}
+
+impl std::fmt::Debug for ExternalRootScanner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<external_root_scanner>")
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct HeapCore {
     config: HeapConfig,
@@ -118,6 +138,13 @@ pub(crate) struct HeapCore {
     /// [`crate::stats::BarrierStats`] snapshot via
     /// [`crate::stats::AtomicBarrierStats::snapshot`].
     barrier_stats: std::sync::Arc<crate::stats::AtomicBarrierStats>,
+    /// Optional external root scanner provided by the VM.
+    /// Called during collection to discover roots that live outside
+    /// neovm-gc's own RootStack (e.g., the VM's bytecode stack,
+    /// binding stack, obarray, etc.).
+    ///
+    /// Wrapped in a Mutex to satisfy Sync (HeapCore is behind a RwLock).
+    external_root_scanner: Option<ExternalRootScanner>,
     // --- arena buffers (drops last, after all records) ---
     /// Bump-pointer semispace nursery arenas.
     nursery: NurseryState,
@@ -197,6 +224,25 @@ impl Heap {
                 collector_plans_refresh_epoch: std::sync::atomic::AtomicU64::new(0),
             }),
         }
+    }
+
+    /// Register an external root scanner callback.
+    ///
+    /// During garbage collection, the collector calls this callback
+    /// to discover roots that live outside neovm-gc's own `RootStack`
+    /// (e.g., the VM's bytecode stack, binding stack, obarray, etc.).
+    ///
+    /// The callback receives a `&mut Vec<GcErased>` and should push
+    /// every externally-rooted managed object into it.
+    ///
+    /// This must be called before any collection that depends on
+    /// external roots. Replaces any previously registered scanner.
+    pub fn set_external_root_scanner<F>(&self, scanner: F)
+    where
+        F: FnMut(&mut Vec<GcErased>) + Send + 'static,
+    {
+        let mut core = self.state.core.write().expect("heap core write lock");
+        core.external_root_scanner = Some(ExternalRootScanner::new(scanner));
     }
 
     /// Convert this heap into a shared synchronized heap wrapper.
@@ -1260,6 +1306,7 @@ impl HeapCore {
             compaction_stats: crate::stats::CompactionStats::default(),
             barrier_stats: std::sync::Arc::new(crate::stats::AtomicBarrierStats::new()),
             alloc_counters: std::sync::Arc::new(crate::stats::AtomicAllocationCounters::default()),
+            external_root_scanner: None,
             nursery,
         };
         // Seed the atomic counters from the initial stats so
@@ -1325,7 +1372,11 @@ impl HeapCore {
         roots: &crate::root::RootStack,
     ) -> Vec<GcErased> {
         let objects = self.objects();
-        collect_global_sources(roots, &objects)
+        let mut sources = collect_global_sources(roots, &objects, None);
+        if let Some(scanner) = &self.external_root_scanner {
+            scanner.call(&mut sources);
+        }
+        sources
     }
 
     pub(crate) fn objects(&self) -> ObjectStoreReadGuard<'_> {
@@ -1749,6 +1800,7 @@ impl HeapCore {
             &NurseryConfig,
             &mut HeapStats,
             &mut NurseryState,
+            Option<&ExternalRootScanner>,
         ) -> R,
     ) -> R {
         let old_config = self.config.old;
@@ -1761,6 +1813,7 @@ impl HeapCore {
             &nursery_config,
             &mut self.stats,
             &mut self.nursery,
+            self.external_root_scanner.as_ref(),
         );
         self.restore_flat_store(flat);
         result
