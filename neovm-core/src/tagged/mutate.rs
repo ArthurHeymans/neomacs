@@ -8,7 +8,10 @@ use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::value::LispHashTable;
 use crate::heap_types::{LispString, MarkerData, OverlayData};
 
-use super::gc::{HeapWriteKind, note_heap_slot_write, note_heap_write};
+use super::gc::{
+    HeapWriteKind, gc_post_write_barrier, gc_post_write_barrier_bulk, note_heap_slot_write,
+    note_heap_write,
+};
 use super::header::{
     ByteCodeObj, ConsCell, HashTableObj, LambdaObj, MacroObj, MarkerObj, OverlayObj, RecordObj,
     StringObj, VecLikeType, VectorObj,
@@ -20,10 +23,13 @@ pub fn set_cons_car(cell: TaggedValue, value: TaggedValue) -> bool {
     if !cell.is_cons() {
         return false;
     }
+    // Read old value BEFORE store (SATB needs it).
+    let old_value = unsafe { (*cell.xcons_ptr()).car };
     note_heap_slot_write(cell, HeapWriteKind::ConsCar, 0, value);
     unsafe {
         (*(cell.xcons_ptr() as *mut ConsCell)).set_car(value);
     }
+    gc_post_write_barrier(cell, 0, old_value, value);
     true
 }
 
@@ -32,10 +38,13 @@ pub fn set_cons_cdr(cell: TaggedValue, value: TaggedValue) -> bool {
     if !cell.is_cons() {
         return false;
     }
+    // Read old value BEFORE store (SATB needs it).
+    let old_value = unsafe { (*cell.xcons_ptr()).cdr() };
     note_heap_slot_write(cell, HeapWriteKind::ConsCdr, 1, value);
     unsafe {
         (*(cell.xcons_ptr() as *mut ConsCell)).set_cdr(value);
     }
+    gc_post_write_barrier(cell, 1, old_value, value);
     true
 }
 
@@ -49,7 +58,9 @@ pub fn with_vector_data_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::VectorBulk);
     let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
-    Some(f(unsafe { (*ptr).data.ensure_owned() }))
+    let result = f(unsafe { &mut (*ptr).data });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
 
 #[inline]
@@ -63,13 +74,16 @@ pub fn set_vector_slot(value: TaggedValue, index: usize, item: TaggedValue) -> b
         return false;
     }
     let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
-    let data = unsafe { (*ptr).data.ensure_owned() };
+    let data = unsafe { &mut (*ptr).data };
     let slot = match data.get_mut(index) {
         Some(slot) => slot,
         None => return false,
     };
+    // Read old value BEFORE store (SATB needs it).
+    let old_value = *slot;
     note_heap_slot_write(value, HeapWriteKind::VectorSlot, index, item);
     *slot = item;
+    gc_post_write_barrier(value, index, old_value, item);
     true
 }
 
@@ -83,7 +97,9 @@ pub fn with_record_data_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::RecordBulk);
     let ptr = value.as_veclike_ptr().unwrap() as *mut RecordObj;
-    Some(f(unsafe { (*ptr).data.ensure_owned() }))
+    let result = f(unsafe { &mut (*ptr).data });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
 
 #[inline]
@@ -97,13 +113,16 @@ pub fn set_record_slot(value: TaggedValue, index: usize, item: TaggedValue) -> b
         return false;
     }
     let ptr = value.as_veclike_ptr().unwrap() as *mut RecordObj;
-    let data = unsafe { (*ptr).data.ensure_owned() };
+    let data = unsafe { &mut (*ptr).data };
     let slot = match data.get_mut(index) {
         Some(slot) => slot,
         None => return false,
     };
+    // Read old value BEFORE store (SATB needs it).
+    let old_value = *slot;
     note_heap_slot_write(value, HeapWriteKind::RecordSlot, index, item);
     *slot = item;
+    gc_post_write_barrier(value, index, old_value, item);
     true
 }
 
@@ -113,13 +132,13 @@ pub fn with_closure_slots_mut<R>(
     f: impl FnOnce(&mut Vec<TaggedValue>) -> R,
 ) -> Option<R> {
     note_heap_write(value, HeapWriteKind::ClosureBulk);
-    match value.veclike_type()? {
+    let result = match value.veclike_type()? {
         VecLikeType::Lambda => {
             let ptr = value.as_veclike_ptr().unwrap() as *mut LambdaObj;
             unsafe {
                 let obj = &mut *ptr;
                 let _ = obj.parsed_params.take();
-                Some(f(obj.data.ensure_owned()))
+                Some(f(&mut obj.data))
             }
         }
         VecLikeType::Macro => {
@@ -127,11 +146,15 @@ pub fn with_closure_slots_mut<R>(
             unsafe {
                 let obj = &mut *ptr;
                 let _ = obj.parsed_params.take();
-                Some(f(obj.data.ensure_owned()))
+                Some(f(&mut obj.data))
             }
         }
         _ => None,
+    };
+    if result.is_some() {
+        gc_post_write_barrier_bulk(value);
     }
+    result
 }
 
 #[inline]
@@ -150,8 +173,11 @@ pub fn set_closure_slot(value: TaggedValue, index: usize, item: TaggedValue) -> 
                 Some(slot) => slot,
                 None => return false,
             };
+            // Read old value BEFORE store (SATB needs it).
+            let old_value = *slot;
             note_heap_slot_write(value, HeapWriteKind::ClosureSlot, index, item);
             *slot = item;
+            gc_post_write_barrier(value, index, old_value, item);
             true
         },
         Some(VecLikeType::Macro) => unsafe {
@@ -162,8 +188,11 @@ pub fn set_closure_slot(value: TaggedValue, index: usize, item: TaggedValue) -> 
                 Some(slot) => slot,
                 None => return false,
             };
+            // Read old value BEFORE store (SATB needs it).
+            let old_value = *slot;
             note_heap_slot_write(value, HeapWriteKind::ClosureSlot, index, item);
             *slot = item;
+            gc_post_write_barrier(value, index, old_value, item);
             true
         },
         _ => false,
@@ -177,7 +206,9 @@ pub fn with_string_text_props_mut<R>(
 ) -> Option<R> {
     let ptr = value.as_string_ptr()? as *mut StringObj;
     note_heap_write(value, HeapWriteKind::StringTextProps);
-    Some(f(unsafe { &mut (*ptr).text_props }))
+    let result = f(unsafe { &mut (*ptr).text_props });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
 
 #[inline]
@@ -187,6 +218,7 @@ pub fn with_lisp_string_mut<R>(
 ) -> Option<R> {
     let ptr = value.as_string_ptr()? as *mut StringObj;
     note_heap_write(value, HeapWriteKind::StringData);
+    // LispString does not contain TaggedValue fields — no GC edge barrier needed.
     Some(f(unsafe { &mut (*ptr).data }))
 }
 
@@ -200,7 +232,9 @@ pub fn with_hash_table_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::HashTableData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut HashTableObj;
-    Some(f(unsafe { &mut (*ptr).table }))
+    let result = f(unsafe { &mut (*ptr).table });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
 
 #[inline]
@@ -213,7 +247,9 @@ pub fn with_bytecode_data_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::ByteCodeData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut ByteCodeObj;
-    Some(f(unsafe { &mut (*ptr).data }))
+    let result = f(unsafe { &mut (*ptr).data });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
 
 #[inline]
@@ -226,6 +262,7 @@ pub fn with_marker_data_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::MarkerData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut MarkerObj;
+    // MarkerData does not contain TaggedValue fields — no GC edge barrier needed.
     Some(f(unsafe { &mut (*ptr).data }))
 }
 
@@ -239,5 +276,7 @@ pub fn with_overlay_data_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::OverlayData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut OverlayObj;
-    Some(f(unsafe { &mut (*ptr).data }))
+    let result = f(unsafe { &mut (*ptr).data });
+    gc_post_write_barrier_bulk(value);
+    Some(result)
 }
