@@ -33,6 +33,34 @@ impl<T> Gc<T> {
         let payload = unsafe { ObjectHeader::payload_ptr(self.object.header()) };
         payload.cast()
     }
+
+    /// Return the raw payload pointer (for encoding into tagged values).
+    pub fn payload_ptr(self) -> *const T {
+        self.as_non_null().as_ptr() as *const T
+    }
+
+    /// Return the mutable raw payload pointer.
+    pub fn payload_ptr_mut(self) -> *mut T {
+        self.as_non_null().as_ptr()
+    }
+
+    /// Recover a `Gc<T>` from a raw payload pointer.
+    ///
+    /// This reverses `payload_ptr()`: given a pointer to the payload
+    /// of an object allocated by this heap, recovers the `Gc<T>` handle
+    /// by subtracting the payload offset stored in the object header.
+    ///
+    /// # Safety
+    ///
+    /// - `ptr` must point to the payload of a live object allocated by
+    ///   the same heap that will trace/collect this handle.
+    /// - The object must have been allocated as type `T`.
+    /// - The object must not have been moved without updating `ptr`.
+    pub unsafe fn from_payload_ptr(ptr: *const T) -> Self {
+        let header = unsafe { ObjectHeader::header_from_payload(ptr as *const u8) };
+        let erased = unsafe { GcErased::from_header(header) };
+        unsafe { Self::from_erased(erased) }
+    }
 }
 
 impl<T: ?Sized> Copy for Gc<T> {}

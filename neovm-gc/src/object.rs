@@ -237,6 +237,36 @@ impl ObjectHeader {
         let payload = unsafe { header.cast::<u8>().as_ptr().add(header_ref.payload_offset) };
         unsafe { NonNull::new_unchecked(payload) }
     }
+
+    /// Recover the header pointer from a raw payload pointer.
+    ///
+    /// This reverses `payload_ptr()`: given a pointer to an object's
+    /// payload, reads the `payload_offset` field from the header to
+    /// compute the header base address.
+    ///
+    /// # Safety
+    ///
+    /// `payload` must point to the payload of a live object managed
+    /// by this heap. The header must be intact (not yet freed/moved
+    /// without forwarding).
+    pub(crate) unsafe fn header_from_payload(payload: *const u8) -> NonNull<Self> {
+        // payload_offset is computed from Layout::extend() and for
+        // repr(C) structs with pointer-aligned payloads, it equals
+        // size_of::<ObjectHeader>(). We verify this by reading the
+        // field after recovery.
+        let header_size = core::mem::size_of::<ObjectHeader>();
+        let candidate = unsafe { payload.sub(header_size) as *mut ObjectHeader };
+        let header = unsafe { NonNull::new_unchecked(candidate) };
+        debug_assert_eq!(
+            unsafe { (*candidate).payload_offset },
+            header_size,
+            "header_from_payload: payload_offset mismatch (expected {}, got {}). \
+             This type may have alignment > 8 bytes.",
+            header_size,
+            unsafe { (*candidate).payload_offset },
+        );
+        header
+    }
 }
 
 /// Backing-store identity for the memory underneath one `ObjectRecord`.

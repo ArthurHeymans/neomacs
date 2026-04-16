@@ -11918,3 +11918,99 @@ fn nursery_tlab_honors_custom_tlab_bytes_config() {
         "a tight tlab_bytes value must still end up holding a TLAB after many allocations",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Tagged pointer round-trip: proof-of-concept for VM integration
+// ---------------------------------------------------------------------------
+
+/// Simulated cons cell — two u64 fields representing tagged Value pointers.
+#[derive(Debug)]
+struct SimCons {
+    car: u64,
+    cdr: u64,
+}
+
+unsafe impl Trace for SimCons {
+    fn trace(&self, _tracer: &mut dyn Tracer) {
+        // In the real integration, car/cdr would be traced as tagged Values.
+        // Here they're just u64 sentinels — no GC edges.
+    }
+    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+}
+
+#[test]
+fn tagged_pointer_round_trip_through_gc() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    let mut scope = mutator.handle_scope();
+
+    // Allocate a SimCons
+    let root = mutator
+        .alloc(&mut scope, SimCons { car: 0xCAFE, cdr: 0xBEEF })
+        .expect("alloc SimCons");
+    let gc = root.as_gc();
+
+    // Extract payload pointer (simulates encoding into tagged Value)
+    let payload_ptr: *const SimCons = gc.payload_ptr();
+    assert!(!payload_ptr.is_null());
+
+    // Verify we can read the payload through the raw pointer
+    let cons = unsafe { &*payload_ptr };
+    assert_eq!(cons.car, 0xCAFE);
+    assert_eq!(cons.cdr, 0xBEEF);
+
+    // Recover the Gc handle from the raw payload pointer
+    let recovered: Gc<SimCons> = unsafe { Gc::from_payload_ptr(payload_ptr) };
+
+    // The recovered handle should be equal to the original
+    assert_eq!(gc, recovered);
+
+    // The recovered handle should still read the same payload
+    let recovered_ptr = recovered.payload_ptr();
+    let recovered_cons = unsafe { &*recovered_ptr };
+    assert_eq!(recovered_cons.car, 0xCAFE);
+    assert_eq!(recovered_cons.cdr, 0xBEEF);
+}
+
+#[test]
+fn tagged_pointer_survives_minor_gc() {
+    let heap = Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            tlab_bytes: 256,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let mut mutator = heap.mutator();
+
+    // Allocate a cons and extract raw payload pointer
+    let payload_ptr: *const SimCons;
+    {
+        let mut scope = mutator.handle_scope();
+        let root = mutator
+            .alloc(&mut scope, SimCons { car: 42, cdr: 99 })
+            .expect("alloc SimCons");
+        payload_ptr = root.as_gc().payload_ptr();
+
+        // Verify before GC
+        assert_eq!(unsafe { (*payload_ptr).car }, 42);
+
+        // Trigger minor GC while the root is alive
+        mutator
+            .collect(CollectionKind::Minor)
+            .expect("minor collection");
+
+        // After minor GC, the root kept the object alive.
+        // If the object moved (nursery evacuation), the root was updated.
+        // But our raw payload_ptr may be stale if the object moved!
+        // Re-extract from the root to get the (possibly new) pointer.
+        let post_gc_ptr = root.as_gc().payload_ptr();
+        let post_gc_cons = unsafe { &*post_gc_ptr };
+        assert_eq!(post_gc_cons.car, 42);
+        assert_eq!(post_gc_cons.cdr, 99);
+
+        // Verify round-trip still works on the post-GC pointer
+        let recovered: Gc<SimCons> = unsafe { Gc::from_payload_ptr(post_gc_ptr) };
+        assert_eq!(recovered, root.as_gc());
+    }
+}

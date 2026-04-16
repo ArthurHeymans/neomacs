@@ -29,7 +29,7 @@ impl GcErased {
     /// # Safety
     ///
     /// `header` must point at an object header managed by the heap.
-    pub(crate) unsafe fn from_header(header: NonNull<ObjectHeader>) -> Self {
+    pub unsafe fn from_header(header: NonNull<ObjectHeader>) -> Self {
         Self(header)
     }
 
