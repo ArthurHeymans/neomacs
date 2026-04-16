@@ -56,7 +56,20 @@ move freely; all pointer slots are recorded and fixed up after compaction.
 4. **Fast allocation** -- bump pointer for all types (especially cons cells)
 5. **Keep tagged pointer performance** -- `cons_car` stays a single pointer deref
 6. **Idle-time GC** -- do GC work while waiting for keystrokes
-7. **Minimal VM API change** -- the 7,000+ `Value::cons()` call sites don't change
+
+## Migration Strategy: Big-Bang Refactor
+
+No adapter layer, no dual-heap period, no gradual migration. Replace TaggedHeap
+with neovm-gc directly in one coordinated change. Rationale:
+
+- **Simpler**: no shim layer to maintain, no two-GC state to reason about
+- **Cleaner**: the allocation API surface (alloc_cons, alloc_string, etc.) is
+  small (~17 functions) and well-defined
+- **Testable**: the full Emacs bootstrap (byte-compile bytecomp.el, build pdump)
+  is the integration test — it either works or it doesn't
+- **The 7,000+ Value constructor call sites don't change** — they call
+  Value::cons(), Value::string() etc. which internally call alloc_cons(),
+  alloc_string(). Only the alloc_* implementations change.
 
 ## Key Design Decision: V8-Style Move + Fixup (Not Pin, Not Load Barrier)
 
@@ -206,7 +219,7 @@ Timeline:
 
 ## Changes Required
 
-### Phase 1: neovm-gc API additions
+### Part A: neovm-gc API additions
 
 #### 1.1 External root slot scanner
 
@@ -340,7 +353,7 @@ fn idle_notification(&mut self, budget: Duration) -> Duration {
 }
 ```
 
-### Phase 2: Trace impls for Lisp types
+### Part B: Trace impls for Lisp types
 
 ```rust
 struct GcConsCell {
@@ -416,21 +429,27 @@ fn trace_tagged_value(tracer: &mut dyn Tracer, val: TaggedValue) {
 Similar impls for: LispHashTable, LambdaData, ByteCodeFunction, OverlayData,
 MarkerData, FloatObj, BignumObj, SubrObj, RecordObj.
 
-### Phase 3: GcHeap adapter
+### Part C: Replace TaggedHeap
+
+Rewrite `tagged/gc.rs` to use neovm-gc directly. The struct keeps the same
+public API (alloc_cons, alloc_string, etc.) but the implementation changes
+from block allocator + linked list to neovm-gc mutator calls:
 
 ```rust
-pub struct GcHeap {
+// tagged/gc.rs — rewritten internals, same public API
+pub struct TaggedHeap {
     heap: neovm_gc::Heap,
     mutator: neovm_gc::Mutator<'static>,
-    // Registries (same as TaggedHeap)
+    // Registries unchanged
     subr_registry: Vec<Option<TaggedValue>>,
     buffer_registry: FxHashMap<BufferId, TaggedValue>,
     window_registry: FxHashMap<u64, TaggedValue>,
     frame_registry: FxHashMap<u64, TaggedValue>,
     timer_registry: FxHashMap<u64, TaggedValue>,
+    marker_ptrs: Vec<*mut MarkerObj>,
 }
 
-impl GcHeap {
+impl TaggedHeap {
     pub fn alloc_cons(&mut self, car: TaggedValue, cdr: TaggedValue) -> TaggedValue {
         let gc = self.mutator.alloc(GcConsCell { car, cdr });
         TaggedValue::from_cons_ptr(gc.payload_ptr())
@@ -452,13 +471,17 @@ impl GcHeap {
     }
 
     // ... same pattern for all 17 allocation functions
+    // Public API unchanged. with_tagged_heap() unchanged.
+    // ConsBlock, GcHeader, all_objects linked list — all removed.
 }
 ```
 
-The `with_tagged_heap()` thread-local accessor switches to `with_gc_heap()`.
-The 7,000+ Value constructor call sites don't change.
+Remove: ConsBlock, cons bump allocator, GcHeader, all_objects linked list,
+mark bitmap, mark_all(), sweep_cons(), sweep_objects(), free_gc_object().
 
-### Phase 4: Wire write barriers
+Keep: with_tagged_heap() accessor, registries, marker_ptrs, write tracking hooks.
+
+### Part D: Wire write barriers
 
 Two barriers, matching V8:
 
@@ -480,7 +503,7 @@ pub fn note_heap_slot_write(owner: TaggedValue, kind: HeapWriteKind,
 }
 ```
 
-### Phase 5: Wire root slot discovery
+### Part E: Wire root slot discovery
 
 Connect trace_roots() to neovm-gc with mutable slot access for compaction:
 
@@ -534,7 +557,7 @@ fn trace_root_slots(&mut self, visitor: &mut dyn FnMut(&mut Value)) {
 After compaction, all pointer slots have been updated in-place. The mutator
 resumes with all tagged pointers pointing to new locations.
 
-### Phase 6: Wire idle-time GC
+### Part F: Wire idle-time GC
 
 In the editor's event loop (neomacs-bin), call idle_notification when waiting
 for input:
@@ -558,7 +581,7 @@ V8 performs incremental marking, lazy sweeping, or compaction.
 For neomacs, idle time is abundant -- the editor spends most time waiting for
 keystrokes. GC work during idle is essentially free.
 
-### Phase 7: Wire concurrent marker + adaptive pacer
+### Part G: Wire concurrent marker + adaptive pacer
 
 ```rust
 // During Context initialization:
@@ -583,7 +606,7 @@ fn gc_safe_point_exact(&mut self) {
 }
 ```
 
-### Phase 8: Incremental marking (V8 innovation)
+### Part H: Incremental marking (V8 innovation)
 
 V8 doesn't just mark concurrently on a background thread -- it also marks
 incrementally on the main thread, spread across allocation events:
@@ -608,7 +631,7 @@ fn gc_safe_point_exact(&mut self) {
 This ensures marking completes quickly even if the background thread is slow,
 because the main thread contributes marking work during normal execution.
 
-### Phase 9: Lazy sweeping (V8 innovation)
+### Part I: Lazy sweeping (V8 innovation)
 
 Instead of sweeping all dead objects in one STW pause, sweep on demand:
 
@@ -632,14 +655,6 @@ fn alloc_from_old_gen(&mut self, size: usize) -> *mut u8 {
 
 This spreads sweep cost across allocation events. V8 also sweeps concurrently
 on a background thread.
-
-### Phase 10: Remove TaggedHeap
-
-Once GcHeap is validated via full bootstrap test:
-- Remove tagged/gc.rs (TaggedHeap)
-- Remove ConsBlock, GcHeader, all_objects linked list
-- Keep tagged/value.rs, tagged/header.rs (Value representation unchanged)
-- Keep tagged/mutate.rs (write barrier hooks, now wired to neovm-gc)
 
 ## GC Cycle Breakdown
 
@@ -716,7 +731,11 @@ Once GcHeap is validated via full bootstrap test:
    bootstrap (byte-compilation of bytecomp.el etc.) under the new GC to
    validate correctness before removing TaggedHeap.
 
-## Implementation Order
+## Implementation Order (Big-Bang)
+
+All changes land together on the wire-neovm-gc branch. No intermediate
+dual-heap state. The branch is validated by running the full Emacs bootstrap
+before merging to main.
 
 | Step | Scope | Description |
 |------|-------|-------------|
@@ -725,19 +744,16 @@ Once GcHeap is validated via full bootstrap test:
 | 3 | neovm-gc | Tagged pointer helpers (payload_ptr, from_payload_ptr) |
 | 4 | neovm-gc | Idle-time collection API (idle_notification) |
 | 5 | neovm-core | Trace + trace_slots impls for all Lisp heap types |
-| 6 | neovm-core | GcHeap adapter (wraps neovm-gc, matches TaggedHeap API) |
-| 7 | neovm-core | Swap with_tagged_heap to use GcHeap |
-| 8 | neovm-core | Wire write barriers (generational + SATB) |
-| 9 | neovm-core | Wire root slot scanner (trace_root_slots) |
-| 10 | neovm-core | Wire concurrent marker + adaptive pacer |
-| 11 | neovm-core | Wire idle-time GC into editor event loop |
-| 12 | neovm-core | Add incremental marking at safe points |
-| 13 | neovm-core | Add lazy sweeping in allocation path |
-| 14 | neovm-core | Validation: full bootstrap under new GC |
-| 15 | neovm-core | Remove TaggedHeap |
+| 6 | neovm-core | Rewrite tagged/gc.rs internals to use neovm-gc (same public API) |
+| 7 | neovm-core | Wire write barriers (generational + SATB) |
+| 8 | neovm-core | Add trace_root_slots (mutable slot visitor) to Context |
+| 9 | neovm-core | Wire concurrent marker + adaptive pacer |
+| 10 | neovm-core | Wire idle-time GC into editor event loop |
+| 11 | neovm-core | Add incremental marking at safe points |
+| 12 | neovm-core | Add lazy sweeping in allocation path |
+| 13 | validate | Full Emacs bootstrap (byte-compile, pdump) under new GC |
 
-Steps 1-4 are neovm-gc API additions (independent).
-Steps 5-7 are core integration (GcHeap adapter).
-Steps 8-9 enable generational collection + compaction.
-Steps 10-13 enable concurrent/incremental/idle GC (V8-style).
-Step 14 is the go/no-go gate before step 15.
+Steps 1-4: neovm-gc API additions (can be developed independently).
+Steps 5-8: big-bang replacement of TaggedHeap internals.
+Steps 9-12: enable V8-style concurrent/incremental/idle GC.
+Step 13: validation gate before merging to main.
