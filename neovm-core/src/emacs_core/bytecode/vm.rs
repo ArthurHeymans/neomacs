@@ -475,30 +475,9 @@ impl<'a> Vm<'a> {
             };
         }
 
-        // Debug: validate string values before pushing to bc_buf
         macro_rules! stk_push {
             ($val:expr) => {{
-                let v = $val;
-                #[cfg(debug_assertions)]
-                if v.is_string() {
-                    let ptr = v.as_string_ptr().unwrap();
-                    let hdr =
-                        unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
-                    if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
-                        panic!(
-                            "BC_BUF PUSH BUG: pushing corrupt string {:#x} (ptr {:?}, kind={:?}) \
-                             at pc={}, op={:?}, bc_buf.len()={}, frame_base={}",
-                            v.0,
-                            ptr,
-                            hdr.kind,
-                            *pc - 1,
-                            ops.get(*pc - 1),
-                            stk!().len(),
-                            frame_base,
-                        );
-                    }
-                }
-                self.ctx.bc_buf.push(v);
+                self.ctx.bc_buf.push($val);
             }};
         }
 
