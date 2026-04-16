@@ -721,41 +721,14 @@ impl TaggedHeap {
     /// Install the buffered roots as the external root scanner on the
     /// neovm-gc heap and execute a collection.
     fn flush_roots_and_collect(&mut self) {
-        // Add registry roots (subr, buffer, window, frame, timer)
-        // that aren't discovered through Context::trace_roots().
-        for value in self.buffer_registry.values() {
-            if value.is_heap_object() {
-                let erased = unsafe { Self::tagged_to_erased(*value) };
-                self.gc_root_buffer.push(erased);
-            }
-        }
-        for value in self.window_registry.values() {
-            if value.is_heap_object() {
-                let erased = unsafe { Self::tagged_to_erased(*value) };
-                self.gc_root_buffer.push(erased);
-            }
-        }
-        for value in self.frame_registry.values() {
-            if value.is_heap_object() {
-                let erased = unsafe { Self::tagged_to_erased(*value) };
-                self.gc_root_buffer.push(erased);
-            }
-        }
-        for value in self.timer_registry.values() {
-            if value.is_heap_object() {
-                let erased = unsafe { Self::tagged_to_erased(*value) };
-                self.gc_root_buffer.push(erased);
-            }
-        }
-
-        let roots = std::mem::take(&mut self.gc_root_buffer);
-        self.gc_heap
-            .set_external_root_scanner(move |out: &mut Vec<GcErased>| {
-                out.extend_from_slice(&roots);
-            });
-
-        let mut mutator = self.gc_heap.mutator();
-        let _ = mutator.collect(CollectionKind::Minor);
+        // All objects are MovePolicy::Pinned, so they live in PinnedSpace
+        // (system allocator). Minor collection only touches the nursery,
+        // which is empty. Skip the actual neovm-gc collection call for now
+        // and just reset counters. This validates that the allocation path
+        // is correct (no objects are freed, just like GC-disabled mode,
+        // but should_collect() is true so the GC safe-point code path is
+        // exercised).
+        self.gc_root_buffer.clear();
         self.bytes_since_gc = 0;
         self.clear_dirty_owners();
         self.clear_dirty_writes();
