@@ -10257,7 +10257,7 @@ impl Context {
         let root_count = self.specpdl.len();
         self.specpdl.push(SpecBinding::GcRoot { value: func_value });
 
-        let call_state = match self.begin_lambda_call(params, env, &args) {
+        let call_state = match self.begin_lambda_call(&params, env, &args) {
             Ok(state) => state,
             Err(err) => {
                 self.unbind_to(root_count);

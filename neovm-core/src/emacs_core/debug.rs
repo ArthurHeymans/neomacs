@@ -499,7 +499,7 @@ impl HelpFormatter {
         match value.kind() {
             ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
                 if let Some(params) = value.closure_params() {
-                    let params = format_param_list(params);
+                    let params = format_param_list(&params);
                     out.push_str(&format!("({}{})\n", name, params));
                 }
             }

@@ -39,7 +39,8 @@ pub(crate) fn lambda_to_cons_list(value: &Value) -> Option<Value> {
         elements.push(Value::symbol("lambda"));
     }
 
-    let params_value = lambda_params_to_value(value.closure_params()?);
+    let params = value.closure_params()?;
+    let params_value = lambda_params_to_value(&params);
     crate::emacs_core::eval::push_scratch_gc_root(params_value);
     elements.push(params_value);
 

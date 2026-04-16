@@ -58,11 +58,8 @@ use crate::face::{
 };
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
-use crate::tagged::header::{
-    BufferObj, ByteCodeObj, CLOSURE_MIN_SLOTS, ConsCell, FloatObj, FrameObj, GcHeader,
-    HashTableObj, HeapObjectKind, LambdaObj, LispValueVec, MacroObj, MarkerObj, OverlayObj,
-    RecordObj, StringObj, SubrObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
-};
+use crate::tagged::gc_trace_impls::GcSubr;
+use crate::tagged::header::CLOSURE_MIN_SLOTS;
 use crate::tagged::value::TaggedValue;
 
 thread_local! {
@@ -1523,7 +1520,7 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
             DumpHeapObject::Timer(value.as_timer_id().expect("timer"))
         }
         ValueKind::Veclike(VecLikeType::Subr) => {
-            let ptr = value.as_veclike_ptr().expect("subr") as *const SubrObj;
+            let ptr = value.as_veclike_ptr().expect("subr") as *const GcSubr;
             let subr = unsafe { &*ptr };
             DumpHeapObject::Subr {
                 name: dump_name_id(subr.name),

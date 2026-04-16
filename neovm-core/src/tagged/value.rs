@@ -30,6 +30,7 @@ use crate::emacs_core::intern::{
 };
 use crate::heap_types::LispString;
 
+use super::gc_trace_impls::{GcBignum, GcFloat, GcLispString};
 use super::header::{
     BignumObj, ConsCell, FloatObj, GcHeader, StringObj, SubrObj, SymbolWithPosObj, VecLikeHeader,
     VecLikeType,
@@ -209,40 +210,41 @@ impl TaggedValue {
 
     // -- String --
 
-    /// Create a string value from a pointer to a StringObj.
+    /// Create a string value from a pointer to a GcLispString.
     ///
     /// # Safety
-    /// `obj` must be a valid, 8-byte-aligned pointer to a live `StringObj`.
+    /// `obj` must be a valid, 8-byte-aligned pointer to a live `GcLispString`.
     #[inline]
-    pub unsafe fn from_string_ptr(obj: *const StringObj) -> Self {
+    pub unsafe fn from_string_ptr(obj: *const GcLispString) -> Self {
         debug_assert!(!obj.is_null());
-        debug_assert!(obj as usize & TAG_MASK == 0, "StringObj not aligned");
+        debug_assert!(obj as usize & TAG_MASK == 0, "GcLispString not aligned");
         Self(obj as usize | TAG_STRING)
     }
 
     // -- Float --
 
-    /// Create a float value from a pointer to a FloatObj.
+    /// Create a float value from a pointer to a GcFloat.
     ///
     /// # Safety
-    /// `obj` must be a valid, 8-byte-aligned pointer to a live `FloatObj`.
+    /// `obj` must be a valid, 8-byte-aligned pointer to a live `GcFloat`.
     #[inline]
-    pub unsafe fn from_float_ptr(obj: *const FloatObj) -> Self {
+    pub unsafe fn from_float_ptr(obj: *const GcFloat) -> Self {
         debug_assert!(!obj.is_null());
-        debug_assert!(obj as usize & TAG_MASK == 0, "FloatObj not aligned");
+        debug_assert!(obj as usize & TAG_MASK == 0, "GcFloat not aligned");
         Self(obj as usize | TAG_FLOAT)
     }
 
     // -- Vectorlike --
 
-    /// Create a vectorlike value from a pointer to a VecLikeHeader.
+    /// Create a vectorlike value from a raw pointer to a GcXxx veclike struct.
     ///
     /// # Safety
-    /// `obj` must be a valid, 8-byte-aligned pointer to a live veclike object.
+    /// `obj` must be a valid, 8-byte-aligned pointer to a live veclike object
+    /// whose first field is `type_tag: VecLikeType`.
     #[inline]
-    pub unsafe fn from_veclike_ptr(obj: *const VecLikeHeader) -> Self {
+    pub unsafe fn from_veclike_ptr(obj: *const u8) -> Self {
         debug_assert!(!obj.is_null());
-        debug_assert!(obj as usize & TAG_MASK == 0, "VecLikeHeader not aligned");
+        debug_assert!(obj as usize & TAG_MASK == 0, "veclike ptr not aligned");
         Self(obj as usize | TAG_VECLIKE)
     }
 
@@ -394,10 +396,10 @@ impl TaggedValue {
     #[inline]
     pub fn as_bignum(self) -> Option<&'static rug::Integer> {
         if self.is_bignum() {
-            let ptr = (self.0 & !TAG_MASK) as *const BignumObj;
-            // Safety: tag check ensures this is a BignumObj allocated
-            // through `alloc_bignum`, which puts a `VecLikeHeader` at
-            // offset 0 followed by `value: rug::Integer`.
+            let ptr = (self.0 & !TAG_MASK) as *const GcBignum;
+            // Safety: tag check ensures this is a GcBignum allocated
+            // through `alloc_bignum`, with `type_tag` at offset 0
+            // followed by `value: rug::Integer`.
             Some(unsafe { &(*ptr).value })
         } else {
             None
@@ -508,8 +510,8 @@ impl TaggedValue {
     #[inline]
     pub fn as_subr_id(self) -> Option<SymId> {
         if self.veclike_type() == Some(super::header::VecLikeType::Subr) {
-            let ptr = self.as_veclike_ptr().unwrap() as *const super::header::SubrObj;
-            Some(unsafe { (*ptr).sym_id })
+            let ptr = self.as_veclike_ptr().unwrap() as *const super::gc_trace_impls::GcSubr;
+            canonical_symbol_for_name(unsafe { (*ptr).name })
         } else {
             None
         }
@@ -536,9 +538,9 @@ impl TaggedValue {
 
     /// Extract raw string object pointer. Returns None if not a string.
     #[inline]
-    pub fn as_string_ptr(self) -> Option<*const StringObj> {
+    pub fn as_string_ptr(self) -> Option<*const GcLispString> {
         if self.is_string() {
-            Some((self.0 & !TAG_MASK) as *const StringObj)
+            Some((self.0 & !TAG_MASK) as *const GcLispString)
         } else {
             None
         }
@@ -546,19 +548,23 @@ impl TaggedValue {
 
     /// Extract raw float object pointer. Returns None if not a float.
     #[inline]
-    pub fn as_float_ptr(self) -> Option<*const FloatObj> {
+    pub fn as_float_ptr(self) -> Option<*const GcFloat> {
         if self.is_float() {
-            Some((self.0 & !TAG_MASK) as *const FloatObj)
+            Some((self.0 & !TAG_MASK) as *const GcFloat)
         } else {
             None
         }
     }
 
-    /// Extract raw veclike header pointer. Returns None if not veclike.
+    /// Extract raw veclike payload pointer. Returns None if not veclike.
+    ///
+    /// The returned pointer points to the GcXxx struct whose first field
+    /// is `type_tag: VecLikeType`. Callers cast to the appropriate
+    /// concrete GcXxx type.
     #[inline]
-    pub fn as_veclike_ptr(self) -> Option<*const VecLikeHeader> {
+    pub fn as_veclike_ptr(self) -> Option<*const u8> {
         if self.is_veclike() {
-            Some((self.0 & !TAG_MASK) as *const VecLikeHeader)
+            Some((self.0 & !TAG_MASK) as *const u8)
         } else {
             None
         }
@@ -621,7 +627,9 @@ impl TaggedValue {
     #[inline]
     pub fn veclike_type(self) -> Option<VecLikeType> {
         if self.is_veclike() {
-            Some(unsafe { (*self.as_veclike_ptr().unwrap()).type_tag })
+            // type_tag is at offset 0 of every GcXxx veclike struct
+            let ptr = self.as_veclike_ptr().unwrap() as *const VecLikeType;
+            Some(unsafe { *ptr })
         } else {
             None
         }
@@ -649,7 +657,9 @@ impl TaggedValue {
             _ if self.is_fixnum() => ValueKind::Fixnum(self.xfixnum()),
             TAG_CONS => ValueKind::Cons,
             TAG_VECLIKE => {
-                ValueKind::Veclike(unsafe { (*self.as_veclike_ptr().unwrap()).type_tag })
+                // type_tag is at offset 0 of every GcXxx veclike struct
+                let ptr = self.as_veclike_ptr().unwrap() as *const VecLikeType;
+                ValueKind::Veclike(unsafe { *ptr })
             }
             TAG_STRING => ValueKind::String,
             TAG_FLOAT => ValueKind::Float,
@@ -817,17 +827,7 @@ impl TaggedValue {
             let ptr = self.as_string_ptr().unwrap();
             // Safety: the string object is alive (caller must ensure no GC).
             // Lifetime is extended to 'static — same pattern as old Value::as_str.
-            unsafe {
-                let header = &(*(ptr as *const super::header::StringObj)).header;
-                if !matches!(header.kind, super::header::HeapObjectKind::String) {
-                    panic!(
-                        "BUG: StringObj header.kind = {:?} (expected String) — \
-                         possible use-after-free. Tagged value = {:#x}, ptr = {:?}",
-                        header.kind, self.0, ptr,
-                    );
-                }
-                (*ptr).data.as_utf8_str()
-            }
+            unsafe { (*ptr).data.as_utf8_str() }
         } else {
             None
         }

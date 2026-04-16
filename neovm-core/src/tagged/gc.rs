@@ -478,6 +478,7 @@ impl TaggedHeap {
         dispatch_kind: SubrDispatchKind,
     ) -> TaggedValue {
         let gc_subr = GcSubr {
+            type_tag: VecLikeType::Subr,
             name,
             function,
             min_args,
@@ -494,6 +495,7 @@ impl TaggedHeap {
     pub fn alloc_vector(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         let storage_bytes = items.capacity().saturating_mul(size_of::<TaggedValue>());
         let gc_vec = GcVector {
+            type_tag: VecLikeType::Vector,
             items: UnsafeCell::new(items),
         };
         let ptr = self.gc_alloc(gc_vec);
@@ -508,6 +510,7 @@ impl TaggedHeap {
         table: crate::emacs_core::value::LispHashTable,
     ) -> TaggedValue {
         let gc_ht = GcHashTable {
+            type_tag: VecLikeType::HashTable,
             table: UnsafeCell::new(table),
         };
         let ptr = self.gc_alloc(gc_ht);
@@ -521,6 +524,7 @@ impl TaggedHeap {
     pub fn alloc_lambda(&mut self, slots: Vec<TaggedValue>) -> TaggedValue {
         let storage_bytes = slots.capacity().saturating_mul(size_of::<TaggedValue>());
         let gc_lambda = GcLambda {
+            type_tag: VecLikeType::Lambda,
             data: UnsafeCell::new(slots),
         };
         let ptr = self.gc_alloc(gc_lambda);
@@ -543,6 +547,7 @@ impl TaggedHeap {
     pub fn alloc_macro(&mut self, slots: Vec<TaggedValue>) -> TaggedValue {
         let storage_bytes = slots.capacity().saturating_mul(size_of::<TaggedValue>());
         let gc_macro = GcMacro {
+            type_tag: VecLikeType::Macro,
             data: UnsafeCell::new(slots),
         };
         let ptr = self.gc_alloc(gc_macro);
@@ -562,7 +567,7 @@ impl TaggedHeap {
 
     /// Allocate a buffer reference.
     pub fn alloc_buffer(&mut self, id: crate::buffer::BufferId) -> TaggedValue {
-        let gc_buf = GcBuffer { id };
+        let gc_buf = GcBuffer { type_tag: VecLikeType::Buffer, id };
         let ptr = self.gc_alloc(gc_buf);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBuffer>());
@@ -571,7 +576,7 @@ impl TaggedHeap {
 
     /// Allocate a window reference.
     pub fn alloc_window(&mut self, id: u64) -> TaggedValue {
-        let gc_win = GcWindow { id };
+        let gc_win = GcWindow { type_tag: VecLikeType::Window, id };
         let ptr = self.gc_alloc(gc_win);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcWindow>());
@@ -580,7 +585,7 @@ impl TaggedHeap {
 
     /// Allocate a frame reference.
     pub fn alloc_frame(&mut self, id: u64) -> TaggedValue {
-        let gc_frame = GcFrame { id };
+        let gc_frame = GcFrame { type_tag: VecLikeType::Frame, id };
         let ptr = self.gc_alloc(gc_frame);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFrame>());
@@ -589,7 +594,7 @@ impl TaggedHeap {
 
     /// Allocate a timer reference.
     pub fn alloc_timer(&mut self, id: u64) -> TaggedValue {
-        let gc_timer = GcTimer { id };
+        let gc_timer = GcTimer { type_tag: VecLikeType::Timer, id };
         let ptr = self.gc_alloc(gc_timer);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcTimer>());
@@ -602,6 +607,7 @@ impl TaggedHeap {
         data: crate::emacs_core::bytecode::ByteCodeFunction,
     ) -> TaggedValue {
         let gc_bc = GcByteCode {
+            type_tag: VecLikeType::ByteCode,
             data: UnsafeCell::new(data),
         };
         let ptr = self.gc_alloc(gc_bc);
@@ -614,6 +620,7 @@ impl TaggedHeap {
     pub fn alloc_record(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         let storage_bytes = items.capacity().saturating_mul(size_of::<TaggedValue>());
         let gc_record = GcRecord {
+            type_tag: VecLikeType::Record,
             items: UnsafeCell::new(items),
         };
         let ptr = self.gc_alloc(gc_record);
@@ -625,6 +632,7 @@ impl TaggedHeap {
     /// Allocate an overlay.
     pub fn alloc_overlay(&mut self, data: crate::heap_types::OverlayData) -> TaggedValue {
         let gc_overlay = GcOverlay {
+            type_tag: VecLikeType::Overlay,
             data: UnsafeCell::new(data),
         };
         let ptr = self.gc_alloc(gc_overlay);
@@ -635,7 +643,7 @@ impl TaggedHeap {
 
     /// Allocate a marker.
     pub fn alloc_marker(&mut self, data: crate::heap_types::MarkerData) -> TaggedValue {
-        let gc_marker = GcMarker { data };
+        let gc_marker = GcMarker { type_tag: VecLikeType::Marker, data };
         let ptr = self.gc_alloc(gc_marker);
         self.marker_ptrs.push(ptr as *mut GcMarker);
         self.allocated_count += 1;
@@ -650,7 +658,7 @@ impl TaggedHeap {
     /// Use `Value::make_integer` for the canonical "fixnum-or-bignum"
     /// constructor that delegates here only when promotion is needed.
     pub fn alloc_bignum(&mut self, value: rug::Integer) -> TaggedValue {
-        let gc_bignum = GcBignum { value };
+        let gc_bignum = GcBignum { type_tag: VecLikeType::Bignum, value };
         let ptr = self.gc_alloc(gc_bignum);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBignum>());

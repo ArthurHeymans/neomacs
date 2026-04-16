@@ -13,6 +13,7 @@ use std::cell::UnsafeCell;
 use neovm_gc::descriptor::{GcErased, LayoutKind, MovePolicy, Relocator, Trace, Tracer};
 use neovm_gc::root::Gc;
 
+use super::header::VecLikeType;
 use super::value::TaggedValue;
 use crate::buffer::text_props::TextPropertyTable;
 use crate::emacs_core::bytecode::ByteCodeFunction;
@@ -202,7 +203,9 @@ unsafe impl Trace for GcLispString {
 // ---------------------------------------------------------------------------
 
 /// Lisp vector managed by neovm-gc. All elements are TaggedValue edges.
+#[repr(C)]
 pub struct GcVector {
+    pub type_tag: VecLikeType,
     pub items: UnsafeCell<Vec<TaggedValue>>,
 }
 
@@ -233,7 +236,9 @@ unsafe impl Trace for GcVector {
 // ---------------------------------------------------------------------------
 
 /// Lisp hash table managed by neovm-gc.
+#[repr(C)]
 pub struct GcHashTable {
+    pub type_tag: VecLikeType,
     pub table: UnsafeCell<LispHashTable>,
 }
 
@@ -273,7 +278,9 @@ unsafe impl Trace for GcHashTable {
 
 /// Lisp lambda (interpreted closure) managed by neovm-gc.
 /// All slots are TaggedValue edges.
+#[repr(C)]
 pub struct GcLambda {
+    pub type_tag: VecLikeType,
     pub data: UnsafeCell<Vec<TaggedValue>>,
 }
 
@@ -300,7 +307,9 @@ unsafe impl Trace for GcLambda {
 }
 
 /// Lisp macro — same structure as lambda.
+#[repr(C)]
 pub struct GcMacro {
+    pub type_tag: VecLikeType,
     pub data: UnsafeCell<Vec<TaggedValue>>,
 }
 
@@ -332,7 +341,9 @@ unsafe impl Trace for GcMacro {
 
 /// Bytecode function managed by neovm-gc. The constants vector
 /// contains TaggedValue edges.
+#[repr(C)]
 pub struct GcByteCode {
+    pub type_tag: VecLikeType,
     pub data: UnsafeCell<ByteCodeFunction>,
 }
 
@@ -371,7 +382,9 @@ unsafe impl Trace for GcByteCode {
 // ---------------------------------------------------------------------------
 
 /// Record managed by neovm-gc (vector-like with type tag in slot 0).
+#[repr(C)]
 pub struct GcRecord {
+    pub type_tag: VecLikeType,
     pub items: UnsafeCell<Vec<TaggedValue>>,
 }
 
@@ -402,7 +415,9 @@ unsafe impl Trace for GcRecord {
 // ---------------------------------------------------------------------------
 
 /// Buffer overlay managed by neovm-gc. The plist contains TaggedValue edges.
+#[repr(C)]
 pub struct GcOverlay {
+    pub type_tag: VecLikeType,
     pub data: UnsafeCell<OverlayData>,
 }
 
@@ -427,7 +442,9 @@ unsafe impl Trace for GcOverlay {
 // ---------------------------------------------------------------------------
 
 /// Buffer marker managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcMarker {
+    pub type_tag: VecLikeType,
     pub data: MarkerData,
 }
 
@@ -438,7 +455,9 @@ unsafe impl Trace for GcMarker {
 }
 
 /// Bignum managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcBignum {
+    pub type_tag: VecLikeType,
     pub value: rug::Integer,
 }
 
@@ -450,7 +469,9 @@ unsafe impl Trace for GcBignum {
 }
 
 /// Buffer reference managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcBuffer {
+    pub type_tag: VecLikeType,
     pub id: crate::buffer::BufferId,
 }
 
@@ -461,7 +482,9 @@ unsafe impl Trace for GcBuffer {
 }
 
 /// Window reference managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcWindow {
+    pub type_tag: VecLikeType,
     pub id: u64,
 }
 
@@ -472,7 +495,9 @@ unsafe impl Trace for GcWindow {
 }
 
 /// Frame reference managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcFrame {
+    pub type_tag: VecLikeType,
     pub id: u64,
 }
 
@@ -483,7 +508,9 @@ unsafe impl Trace for GcFrame {
 }
 
 /// Timer reference managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcTimer {
+    pub type_tag: VecLikeType,
     pub id: u64,
 }
 
@@ -494,7 +521,9 @@ unsafe impl Trace for GcTimer {
 }
 
 /// Built-in function managed by neovm-gc. No TaggedValue edges.
+#[repr(C)]
 pub struct GcSubr {
+    pub type_tag: VecLikeType,
     pub name: crate::emacs_core::intern::NameId,
     pub function: Option<super::header::SubrFn>,
     pub min_args: u16,

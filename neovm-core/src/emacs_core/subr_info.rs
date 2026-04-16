@@ -9,6 +9,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, lookup_interned, resolve_name, resolve_sym};
 use super::value::*;
+use crate::tagged::gc_trace_impls::GcSubr;
 use crate::tagged::header::{SubrDispatchKind, SubrObj};
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -419,7 +420,7 @@ fn subr_arity_from_value(subr: Value) -> Option<Value> {
     if !matches!(subr.kind(), ValueKind::Veclike(VecLikeType::Subr)) {
         return None;
     }
-    let ptr = subr.as_veclike_ptr()? as *const SubrObj;
+    let ptr = subr.as_veclike_ptr()? as *const GcSubr;
     let subr = unsafe { &*ptr };
     if subr.dispatch_kind == SubrDispatchKind::SpecialForm {
         return Some(arity_unevalled(special_form_min_arity(subr)));
@@ -434,7 +435,7 @@ fn subr_arity_from_value(subr: Value) -> Option<Value> {
     }
 }
 
-fn special_form_min_arity(subr: &SubrObj) -> usize {
+fn special_form_min_arity(subr: &GcSubr) -> usize {
     if subr.min_args > 0 || subr.max_args.is_some() {
         subr.min_args as usize
     } else {
@@ -505,7 +506,7 @@ pub(crate) fn subr_dispatch_kind_from_value(value: &Value) -> Option<SubrDispatc
     if !matches!(value.kind(), ValueKind::Veclike(VecLikeType::Subr)) {
         return None;
     }
-    let ptr = value.as_veclike_ptr()? as *const SubrObj;
+    let ptr = value.as_veclike_ptr()? as *const GcSubr;
     Some(unsafe { (*ptr).dispatch_kind })
 }
 

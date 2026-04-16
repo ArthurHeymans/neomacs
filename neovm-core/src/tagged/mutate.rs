@@ -12,10 +12,11 @@ use super::gc::{
     HeapWriteKind, gc_post_write_barrier, gc_post_write_barrier_bulk, note_heap_slot_write,
     note_heap_write,
 };
-use super::header::{
-    ByteCodeObj, ConsCell, HashTableObj, LambdaObj, MacroObj, MarkerObj, OverlayObj, RecordObj,
-    StringObj, VecLikeType, VectorObj,
+use super::gc_trace_impls::{
+    GcByteCode, GcHashTable, GcLambda, GcLispString, GcMacro, GcMarker, GcOverlay, GcRecord,
+    GcVector,
 };
+use super::header::{ConsCell, VecLikeType};
 use super::value::TaggedValue;
 
 #[inline]
@@ -57,8 +58,8 @@ pub fn with_vector_data_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::VectorBulk);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
-    let result = f(unsafe { &mut (*ptr).data });
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcVector;
+    let result = f(unsafe { &mut *(*ptr).items.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }
@@ -73,8 +74,8 @@ pub fn set_vector_slot(value: TaggedValue, index: usize, item: TaggedValue) -> b
     if value.veclike_type() != Some(VecLikeType::Vector) {
         return false;
     }
-    let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
-    let data = unsafe { &mut (*ptr).data };
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcVector;
+    let data = unsafe { &mut *(*ptr).items.get() };
     let slot = match data.get_mut(index) {
         Some(slot) => slot,
         None => return false,
@@ -96,8 +97,8 @@ pub fn with_record_data_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::RecordBulk);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut RecordObj;
-    let result = f(unsafe { &mut (*ptr).data });
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcRecord;
+    let result = f(unsafe { &mut *(*ptr).items.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }
@@ -112,8 +113,8 @@ pub fn set_record_slot(value: TaggedValue, index: usize, item: TaggedValue) -> b
     if value.veclike_type() != Some(VecLikeType::Record) {
         return false;
     }
-    let ptr = value.as_veclike_ptr().unwrap() as *mut RecordObj;
-    let data = unsafe { &mut (*ptr).data };
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcRecord;
+    let data = unsafe { &mut *(*ptr).items.get() };
     let slot = match data.get_mut(index) {
         Some(slot) => slot,
         None => return false,
@@ -134,20 +135,12 @@ pub fn with_closure_slots_mut<R>(
     note_heap_write(value, HeapWriteKind::ClosureBulk);
     let result = match value.veclike_type()? {
         VecLikeType::Lambda => {
-            let ptr = value.as_veclike_ptr().unwrap() as *mut LambdaObj;
-            unsafe {
-                let obj = &mut *ptr;
-                let _ = obj.parsed_params.take();
-                Some(f(&mut obj.data))
-            }
+            let ptr = value.as_veclike_ptr().unwrap() as *const GcLambda;
+            Some(f(unsafe { &mut *(*ptr).data.get() }))
         }
         VecLikeType::Macro => {
-            let ptr = value.as_veclike_ptr().unwrap() as *mut MacroObj;
-            unsafe {
-                let obj = &mut *ptr;
-                let _ = obj.parsed_params.take();
-                Some(f(&mut obj.data))
-            }
+            let ptr = value.as_veclike_ptr().unwrap() as *const GcMacro;
+            Some(f(unsafe { &mut *(*ptr).data.get() }))
         }
         _ => None,
     };
@@ -166,10 +159,9 @@ pub fn replace_closure_slots(value: TaggedValue, slots: Vec<TaggedValue>) -> boo
 pub fn set_closure_slot(value: TaggedValue, index: usize, item: TaggedValue) -> bool {
     match value.veclike_type() {
         Some(VecLikeType::Lambda) => unsafe {
-            let ptr = value.as_veclike_ptr().unwrap() as *mut LambdaObj;
-            let obj = &mut *ptr;
-            let _ = obj.parsed_params.take();
-            let slot = match obj.data.get_mut(index) {
+            let ptr = value.as_veclike_ptr().unwrap() as *const GcLambda;
+            let data = &mut *(*ptr).data.get();
+            let slot = match data.get_mut(index) {
                 Some(slot) => slot,
                 None => return false,
             };
@@ -181,10 +173,9 @@ pub fn set_closure_slot(value: TaggedValue, index: usize, item: TaggedValue) -> 
             true
         },
         Some(VecLikeType::Macro) => unsafe {
-            let ptr = value.as_veclike_ptr().unwrap() as *mut MacroObj;
-            let obj = &mut *ptr;
-            let _ = obj.parsed_params.take();
-            let slot = match obj.data.get_mut(index) {
+            let ptr = value.as_veclike_ptr().unwrap() as *const GcMacro;
+            let data = &mut *(*ptr).data.get();
+            let slot = match data.get_mut(index) {
                 Some(slot) => slot,
                 None => return false,
             };
@@ -204,7 +195,7 @@ pub fn with_string_text_props_mut<R>(
     value: TaggedValue,
     f: impl FnOnce(&mut TextPropertyTable) -> R,
 ) -> Option<R> {
-    let ptr = value.as_string_ptr()? as *mut StringObj;
+    let ptr = value.as_string_ptr()? as *mut GcLispString;
     note_heap_write(value, HeapWriteKind::StringTextProps);
     let result = f(unsafe { &mut (*ptr).text_props });
     gc_post_write_barrier_bulk(value);
@@ -216,7 +207,7 @@ pub fn with_lisp_string_mut<R>(
     value: TaggedValue,
     f: impl FnOnce(&mut LispString) -> R,
 ) -> Option<R> {
-    let ptr = value.as_string_ptr()? as *mut StringObj;
+    let ptr = value.as_string_ptr()? as *mut GcLispString;
     note_heap_write(value, HeapWriteKind::StringData);
     // LispString does not contain TaggedValue fields — no GC edge barrier needed.
     Some(f(unsafe { &mut (*ptr).data }))
@@ -231,8 +222,8 @@ pub fn with_hash_table_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::HashTableData);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut HashTableObj;
-    let result = f(unsafe { &mut (*ptr).table });
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcHashTable;
+    let result = f(unsafe { &mut *(*ptr).table.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }
@@ -246,8 +237,8 @@ pub fn with_bytecode_data_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::ByteCodeData);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut ByteCodeObj;
-    let result = f(unsafe { &mut (*ptr).data });
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcByteCode;
+    let result = f(unsafe { &mut *(*ptr).data.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }
@@ -261,7 +252,7 @@ pub fn with_marker_data_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::MarkerData);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut MarkerObj;
+    let ptr = value.as_veclike_ptr().unwrap() as *mut GcMarker;
     // MarkerData does not contain TaggedValue fields — no GC edge barrier needed.
     Some(f(unsafe { &mut (*ptr).data }))
 }
@@ -275,8 +266,8 @@ pub fn with_overlay_data_mut<R>(
         return None;
     }
     note_heap_write(value, HeapWriteKind::OverlayData);
-    let ptr = value.as_veclike_ptr().unwrap() as *mut OverlayObj;
-    let result = f(unsafe { &mut (*ptr).data });
+    let ptr = value.as_veclike_ptr().unwrap() as *const GcOverlay;
+    let result = f(unsafe { &mut *(*ptr).data.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }

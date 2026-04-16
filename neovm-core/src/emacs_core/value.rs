@@ -14,7 +14,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::intern::{SymId, intern, resolve_sym};
@@ -22,9 +21,9 @@ use crate::buffer::text_props::TextPropertyTable;
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
-use crate::tagged::header::{
-    BufferObj, ByteCodeObj, FloatObj, FrameObj, HashTableObj, LambdaObj, LispValueSlice, MacroObj,
-    MarkerObj, OverlayObj, RecordObj, StringObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
+use crate::tagged::gc_trace_impls::{
+    GcBuffer, GcByteCode, GcFrame, GcHashTable, GcLambda, GcLispString, GcMacro, GcMarker,
+    GcOverlay, GcRecord, GcSubr, GcTimer, GcVector, GcWindow,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::TaggedValue;
@@ -268,7 +267,7 @@ fn as_neovm_int(value: u64) -> i64 {
 // ---------------------------------------------------------------------------
 
 fn string_text_props(value: Value) -> Option<&'static TextPropertyTable> {
-    let ptr = value.as_string_ptr()? as *const StringObj;
+    let ptr = value.as_string_ptr()?;
     Some(unsafe { &(*ptr).text_props })
 }
 
@@ -868,28 +867,6 @@ impl TaggedValue {
 
     /// Allocate a cons cell.
     pub fn make_cons(car: Value, cdr: Value) -> Self {
-        // Validate string values aren't corrupt before storing in cons
-        if car.is_string() {
-            let ptr = car.as_string_ptr().unwrap();
-            let hdr = unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
-            if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
-                // Check if the address is actually a VecLike — dump its type_tag
-                let vlh = unsafe { &*(ptr as *const crate::tagged::header::VecLikeHeader) };
-                let expected_tagged = ptr as usize | 0b101; // what the VecLike tag would be
-                panic!(
-                    "CONS CAR BUG: car={:#x} (ptr {:?}, kind={:?}) is corrupt string.\n\
-                     VecLikeHeader.type_tag={:?}\n\
-                     If this were tagged as VecLike it would be {:#x}\n\
-                     car XOR veclike_tagged = {:#x}",
-                    car.0,
-                    ptr,
-                    hdr.kind,
-                    vlh.type_tag,
-                    expected_tagged,
-                    car.0 ^ expected_tagged,
-                );
-            }
-        }
         add_wrapping(&CONS_CELLS_CONSED, 1);
         with_tagged_heap(|h| h.alloc_cons(car, cdr))
     }
@@ -1137,7 +1114,8 @@ impl TaggedValue {
 
     /// Borrow the LispString for a string value.
     pub fn as_lisp_string(self) -> Option<&'static LispString> {
-        self.as_string_ptr().map(|p| unsafe { &(*p).data })
+        let ptr = self.as_string_ptr()?;
+        Some(unsafe { &(*ptr).data })
     }
 
     /// Check if a string is multibyte.
@@ -1146,15 +1124,15 @@ impl TaggedValue {
     }
 
     /// Get the closure slot vector for a Lambda or Macro.
-    pub fn closure_slots(self) -> Option<&'static LispValueSlice> {
+    pub fn closure_slots(self) -> Option<&'static Vec<Value>> {
         match self.veclike_type()? {
             VecLikeType::Lambda => {
-                let ptr = self.as_veclike_ptr().unwrap() as *const LambdaObj;
-                Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+                let ptr = self.as_veclike_ptr().unwrap() as *const GcLambda;
+                Some(unsafe { &*(*ptr).data.get() })
             }
             VecLikeType::Macro => {
-                let ptr = self.as_veclike_ptr().unwrap() as *const MacroObj;
-                Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+                let ptr = self.as_veclike_ptr().unwrap() as *const GcMacro;
+                Some(unsafe { &*(*ptr).data.get() })
             }
             _ => None,
         }
@@ -1175,32 +1153,20 @@ impl TaggedValue {
         mutate::set_closure_slot(self, index, value)
     }
 
-    fn closure_parsed_params_cell(self) -> Option<&'static OnceLock<LambdaParams>> {
-        match self.veclike_type()? {
-            VecLikeType::Lambda => {
-                let ptr = self.as_veclike_ptr().unwrap() as *const LambdaObj;
-                Some(unsafe { &(*ptr).parsed_params })
-            }
-            VecLikeType::Macro => {
-                let ptr = self.as_veclike_ptr().unwrap() as *const MacroObj;
-                Some(unsafe { &(*ptr).parsed_params })
-            }
-            _ => None,
-        }
-    }
-
     pub fn closure_slot(self, index: usize) -> Option<Value> {
         self.closure_slots()
             .and_then(|slots| slots.get(index).copied())
     }
 
-    pub fn closure_params(self) -> Option<&'static LambdaParams> {
-        let cell = self.closure_parsed_params_cell()?;
-        Some(cell.get_or_init(|| {
-            let arglist = self.closure_slot(CLOSURE_ARGLIST).unwrap_or(Value::NIL);
+    pub fn closure_params(self) -> Option<LambdaParams> {
+        if !matches!(self.veclike_type()?, VecLikeType::Lambda | VecLikeType::Macro) {
+            return None;
+        }
+        let arglist = self.closure_slot(CLOSURE_ARGLIST).unwrap_or(Value::NIL);
+        Some(
             crate::emacs_core::builtins::parse_lambda_params_from_value(&arglist)
-                .unwrap_or_else(|_| LambdaParams::simple(vec![]))
-        }))
+                .unwrap_or_else(|_| LambdaParams::simple(vec![])),
+        )
     }
 
     pub fn closure_body_value(self) -> Option<Value> {
@@ -1244,8 +1210,8 @@ impl TaggedValue {
     /// Borrow the ByteCodeFunction from a ByteCode value.
     pub fn get_bytecode_data(self) -> Option<&'static super::bytecode::ByteCodeFunction> {
         if self.veclike_type()? == VecLikeType::ByteCode {
-            let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
-            Some(unsafe { &(*ptr).data })
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcByteCode;
+            Some(unsafe { &*(*ptr).data.get() })
         } else {
             None
         }
@@ -1260,7 +1226,7 @@ impl TaggedValue {
     /// Get the buffer ID from a buffer value.
     pub fn as_buffer_id(self) -> Option<crate::buffer::BufferId> {
         if self.is_buffer() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const BufferObj;
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcBuffer;
             Some(unsafe { (*ptr).id })
         } else {
             None
@@ -1270,7 +1236,7 @@ impl TaggedValue {
     /// Get the window ID from a window value.
     pub fn as_window_id(self) -> Option<u64> {
         if self.is_window() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const WindowObj;
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcWindow;
             Some(unsafe { (*ptr).id })
         } else {
             None
@@ -1280,7 +1246,7 @@ impl TaggedValue {
     /// Get the frame ID from a frame value.
     pub fn as_frame_id(self) -> Option<u64> {
         if self.is_frame() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const FrameObj;
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcFrame;
             Some(unsafe { (*ptr).id })
         } else {
             None
@@ -1290,7 +1256,7 @@ impl TaggedValue {
     /// Get the timer ID from a timer value.
     pub fn as_timer_id(self) -> Option<u64> {
         if self.is_timer() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const TimerObj;
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcTimer;
             Some(unsafe { (*ptr).id })
         } else {
             None
@@ -1300,7 +1266,7 @@ impl TaggedValue {
     /// Get the marker data from a marker value.
     pub fn as_marker_data(self) -> Option<&'static crate::heap_types::MarkerData> {
         if self.is_marker() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const MarkerObj;
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcMarker;
             Some(unsafe { &(*ptr).data })
         } else {
             None
@@ -1318,8 +1284,8 @@ impl TaggedValue {
     /// Get the overlay data from an overlay value.
     pub fn as_overlay_data(self) -> Option<&'static crate::heap_types::OverlayData> {
         if self.is_overlay() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const OverlayObj;
-            Some(unsafe { &(*ptr).data })
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcOverlay;
+            Some(unsafe { &*(*ptr).data.get() })
         } else {
             None
         }
@@ -1334,10 +1300,10 @@ impl TaggedValue {
     }
 
     /// Get vector elements.
-    pub fn as_vector_data(self) -> Option<&'static LispValueSlice> {
+    pub fn as_vector_data(self) -> Option<&'static Vec<Value>> {
         if self.is_vector() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const VectorObj;
-            Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcVector;
+            Some(unsafe { &*(*ptr).items.get() })
         } else {
             None
         }
@@ -1359,10 +1325,10 @@ impl TaggedValue {
     }
 
     /// Get record elements.
-    pub fn as_record_data(self) -> Option<&'static LispValueSlice> {
+    pub fn as_record_data(self) -> Option<&'static Vec<Value>> {
         if self.is_record() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const RecordObj;
-            Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcRecord;
+            Some(unsafe { &*(*ptr).items.get() })
         } else {
             None
         }
@@ -1395,8 +1361,8 @@ impl TaggedValue {
     /// Get hash table reference.
     pub fn as_hash_table(self) -> Option<&'static LispHashTable> {
         if self.is_hash_table() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const HashTableObj;
-            Some(unsafe { &(*ptr).table })
+            let ptr = self.as_veclike_ptr().unwrap() as *const GcHashTable;
+            Some(unsafe { &*(*ptr).table.get() })
         } else {
             None
         }
@@ -1835,7 +1801,7 @@ fn closure_to_equal_key(value: Value, depth: usize, seen: &mut Vec<usize>) -> Ha
 
     let mut slots = vec![
         HashKey::Text("lambda".to_string()),
-        closure_params_to_equal_key(params),
+        closure_params_to_equal_key(&params),
         value
             .closure_body_value()
             .map_or(HashKey::Nil, |body| body.to_equal_key_depth(0, seen)),

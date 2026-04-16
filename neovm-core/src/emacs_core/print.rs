@@ -1637,7 +1637,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
                         }
                         let params = value
                             .closure_params()
-                            .map_or_else(|| "nil".to_string(), format_params);
+                            .map_or_else(|| "nil".to_string(), |p| format_params(&p));
                         let body = value
                             .closure_body_value()
                             .map(|body| format_closure_body_forms(body, options))
@@ -1656,7 +1656,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             let pushed = push_bytes_cycle_object(value);
             let params = value
                 .closure_params()
-                .map_or_else(|| "nil".to_string(), format_params);
+                .map_or_else(|| "nil".to_string(), |p| format_params(&p));
             let body = value
                 .closure_body_value()
                 .map(|body| format_closure_body_forms(body, options))
@@ -1993,7 +1993,7 @@ fn format_interpreted_closure(value: &Value, options: PrintOptions) -> String {
     slots.push(
         value
             .closure_params()
-            .map_or_else(|| "nil".to_string(), format_params),
+            .map_or_else(|| "nil".to_string(), |p| format_params(&p)),
     );
     slots.push(
         value

@@ -266,7 +266,7 @@ fn vector_mutation_helper_updates_elements() {
         items[1] = TaggedValue::fixnum(99);
     });
 
-    let items = unsafe { &(*(vec.as_veclike_ptr().unwrap() as *const VectorObj)).data };
+    let items = unsafe { &*(*(vec.as_veclike_ptr().unwrap() as *const super::gc_trace_impls::GcVector)).items.get() };
     assert_eq!(items[0].as_fixnum(), Some(10));
     assert_eq!(items[1].as_fixnum(), Some(99));
 }
