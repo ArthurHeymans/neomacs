@@ -14,7 +14,13 @@ pub struct Gc<T: ?Sized> {
 }
 
 impl<T: ?Sized> Gc<T> {
-    pub(crate) unsafe fn from_erased(object: GcErased) -> Self {
+    /// Construct a typed `Gc<T>` from a type-erased `GcErased` handle.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `object` points to a live
+    /// managed object whose payload type is `T`.
+    pub unsafe fn from_erased(object: GcErased) -> Self {
         Self {
             object,
             _marker: PhantomData,

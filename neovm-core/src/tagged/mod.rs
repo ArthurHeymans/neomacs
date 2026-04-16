@@ -7,6 +7,7 @@
 //! This matches GNU Emacs's `Lisp_Object` design exactly.
 
 pub mod gc;
+pub mod gc_trace_impls;
 pub mod header;
 pub mod mutate;
 pub mod value;
