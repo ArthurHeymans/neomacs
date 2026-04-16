@@ -293,7 +293,8 @@ impl TaggedHeap {
     }
 
     pub fn should_collect(&self) -> bool {
-        self.bytes_since_gc >= self.gc_threshold
+        // TODO: re-enable once GC collection is validated.
+        false
     }
 
     pub fn gc_threshold(&self) -> usize {
@@ -721,38 +722,22 @@ impl TaggedHeap {
     /// Install the buffered roots as the external root scanner on the
     /// neovm-gc heap and execute a collection.
     fn flush_roots_and_collect(&mut self) {
-        let roots = std::mem::take(&mut self.gc_root_buffer);
-        self.gc_heap
-            .set_external_root_scanner(move |out: &mut Vec<GcErased>| {
-                out.extend_from_slice(&roots);
-            });
-
-        let mut mutator = self.gc_heap.mutator();
-        let _ = mutator.collect(CollectionKind::Minor);
+        // TODO: re-enable once root scanning is validated.
+        // For now, skip collection to validate the allocation path.
         self.bytes_since_gc = 0;
-
         self.clear_dirty_owners();
         self.clear_dirty_writes();
     }
 
     /// Run a garbage collection.
-    ///
-    /// `roots` must yield every reachable `TaggedValue`.
     pub fn collect(&mut self, roots: impl Iterator<Item = TaggedValue>) {
-        self.collect_exact(roots);
+        let _ = roots;
+        self.flush_roots_and_collect();
     }
 
     /// Run a collection using only the explicit roots provided.
-    ///
-    /// Buffers each heap-tagged root into a `Vec<GcErased>`, registers
-    /// them as the external root scanner on the neovm-gc heap, then
-    /// triggers a collection so the collector can trace all live objects
-    /// reachable from those roots.
     pub fn collect_exact(&mut self, roots: impl Iterator<Item = TaggedValue>) {
-        self.gc_root_buffer.clear();
-        for root in roots {
-            self.buffer_root(root);
-        }
+        let _ = roots;
         self.flush_roots_and_collect();
     }
 
