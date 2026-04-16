@@ -132,7 +132,7 @@ unsafe impl Trace for GcCons {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 }
 
@@ -151,7 +151,7 @@ unsafe impl Trace for GcFloat {
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 }
 
@@ -190,7 +190,7 @@ unsafe impl Trace for GcLispString {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -223,7 +223,7 @@ unsafe impl Trace for GcVector {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -264,7 +264,7 @@ unsafe impl Trace for GcHashTable {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -298,7 +298,7 @@ unsafe impl Trace for GcLambda {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -327,7 +327,7 @@ unsafe impl Trace for GcMacro {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -369,7 +369,7 @@ unsafe impl Trace for GcByteCode {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -402,7 +402,7 @@ unsafe impl Trace for GcRecord {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 
     fn layout_kind() -> LayoutKind {
@@ -433,7 +433,7 @@ unsafe impl Trace for GcOverlay {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Movable
+        MovePolicy::Pinned
     }
 }
 

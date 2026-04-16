@@ -293,8 +293,7 @@ impl TaggedHeap {
     }
 
     pub fn should_collect(&self) -> bool {
-        // TODO: re-enable once GC collection is validated.
-        false
+        self.bytes_since_gc >= self.gc_threshold
     }
 
     pub fn gc_threshold(&self) -> usize {
@@ -722,8 +721,41 @@ impl TaggedHeap {
     /// Install the buffered roots as the external root scanner on the
     /// neovm-gc heap and execute a collection.
     fn flush_roots_and_collect(&mut self) {
-        // TODO: re-enable once root scanning is validated.
-        // For now, skip collection to validate the allocation path.
+        // Add registry roots (subr, buffer, window, frame, timer)
+        // that aren't discovered through Context::trace_roots().
+        for value in self.buffer_registry.values() {
+            if value.is_heap_object() {
+                let erased = unsafe { Self::tagged_to_erased(*value) };
+                self.gc_root_buffer.push(erased);
+            }
+        }
+        for value in self.window_registry.values() {
+            if value.is_heap_object() {
+                let erased = unsafe { Self::tagged_to_erased(*value) };
+                self.gc_root_buffer.push(erased);
+            }
+        }
+        for value in self.frame_registry.values() {
+            if value.is_heap_object() {
+                let erased = unsafe { Self::tagged_to_erased(*value) };
+                self.gc_root_buffer.push(erased);
+            }
+        }
+        for value in self.timer_registry.values() {
+            if value.is_heap_object() {
+                let erased = unsafe { Self::tagged_to_erased(*value) };
+                self.gc_root_buffer.push(erased);
+            }
+        }
+
+        let roots = std::mem::take(&mut self.gc_root_buffer);
+        self.gc_heap
+            .set_external_root_scanner(move |out: &mut Vec<GcErased>| {
+                out.extend_from_slice(&roots);
+            });
+
+        let mut mutator = self.gc_heap.mutator();
+        let _ = mutator.collect(CollectionKind::Minor);
         self.bytes_since_gc = 0;
         self.clear_dirty_owners();
         self.clear_dirty_writes();
