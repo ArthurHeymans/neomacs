@@ -292,6 +292,11 @@ impl TaggedHeap {
         self.write_tracking_mode
     }
 
+    /// Get neovm-gc heap statistics snapshot.
+    pub fn gc_heap_stats(&self) -> neovm_gc::stats::HeapStats {
+        self.gc_heap.stats()
+    }
+
     pub fn should_collect(&self) -> bool {
         self.bytes_since_gc >= self.gc_threshold
     }

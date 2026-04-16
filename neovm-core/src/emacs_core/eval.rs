@@ -5914,11 +5914,35 @@ impl Context {
             (*heap_ptr).set_marker_chain_head_slots(chain_heads);
             (*heap_ptr).complete_collection();
         }
+        let elapsed = start.elapsed();
         self.gc_pending = false;
         self.gc_count += 1;
-        self.update_gc_runtime_stats(start.elapsed());
+        self.log_neovm_gc_stats(elapsed);
+        self.update_gc_runtime_stats(elapsed);
         self.sync_gc_threshold_from_runtime_settings();
         self.run_post_gc_hook();
+    }
+
+    fn log_neovm_gc_stats(&self, elapsed: std::time::Duration) {
+        let s = self.tagged_heap.gc_heap_stats();
+        let total_live = s.pinned.live_bytes + s.nursery.live_bytes
+            + s.old.live_bytes + s.large.live_bytes;
+        tracing::info!(
+            "neovm-gc #{}: {}us, live={}KB (pinned={}KB nursery={}KB old={}KB large={}KB), \
+             alloc={}, collections={} (minor={} major={}), reclaimed={}KB",
+            self.gc_count,
+            elapsed.as_micros(),
+            total_live / 1024,
+            s.pinned.live_bytes / 1024,
+            s.nursery.live_bytes / 1024,
+            s.old.live_bytes / 1024,
+            s.large.live_bytes / 1024,
+            self.tagged_heap.allocated_count,
+            s.collections.collections,
+            s.collections.minor_collections,
+            s.collections.major_collections,
+            s.collections.reclaimed_bytes / 1024,
+        );
     }
 
     fn with_gc_inhibited<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
