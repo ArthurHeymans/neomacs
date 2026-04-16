@@ -5927,9 +5927,13 @@ impl Context {
         let s = self.tagged_heap.gc_heap_stats();
         let total_live = s.pinned.live_bytes + s.nursery.live_bytes
             + s.old.live_bytes + s.large.live_bytes;
+        let (rss_kb, virt_kb) = memory_stats::memory_stats()
+            .map(|m| (m.physical_mem / 1024, m.virtual_mem / 1024))
+            .unwrap_or((0, 0));
         tracing::info!(
             "neovm-gc #{}: {}us, live={}KB (pinned={}KB nursery={}KB old={}KB large={}KB), \
-             alloc={}, collections={} (minor={} major={}), reclaimed={}KB",
+             alloc={}, collections={} (minor={} major={}), reclaimed={}KB, \
+             process: rss={}MB virt={}MB",
             self.gc_count,
             elapsed.as_micros(),
             total_live / 1024,
@@ -5942,6 +5946,8 @@ impl Context {
             s.collections.minor_collections,
             s.collections.major_collections,
             s.collections.reclaimed_bytes / 1024,
+            rss_kb / 1024,
+            virt_kb / 1024,
         );
     }
 

@@ -43,6 +43,7 @@ parking_lot.workspace = true
 rug.workspace = true
 gmp-mpfr-sys.workspace = true
 unicode_names2.workspace = true
+memory-stats = "1.2.0"
 
 [features]
 default = []
