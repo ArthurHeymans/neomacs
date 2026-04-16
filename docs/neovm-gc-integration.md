@@ -177,13 +177,15 @@ neovm-gc Heap
 ### Tagged pointer encoding (unchanged)
 
 ```
-Tag (3 low bits)  Payload
-000               Symbol (SymId index)
-01x               Fixnum (62-bit signed)
-010               Cons (pointer to ConsCell payload, past ObjectHeader)
-011               Vectorlike (pointer to payload, past ObjectHeader)
-100               String (pointer to StringObj payload, past ObjectHeader)
-110               Float (pointer to FloatObj payload, past ObjectHeader)
+Tag (3 low bits)  Payload                         Fast check
+000               Symbol (SymId << 3)              (v & 7) == 0
+xx1               Fixnum (integer << 2)            (v & 3) == 1
+                  Uses tags 001 and 101 for 62-bit signed range
+010               Cons (pointer | 2)               (v & 7) == 2
+011               Vectorlike (pointer | 3)          (v & 7) == 3
+100               String (pointer | 4)              (v & 7) == 4
+110               Float (pointer | 6)               (v & 7) == 6
+111               Immediate (Qunbound sentinel)     (v & 7) == 7
 ```
 
 The pointer in a tagged Value points to the **payload**, not the ObjectHeader.
@@ -219,7 +221,7 @@ Timeline:
 
 ## Changes Required
 
-### Part A: neovm-gc API additions
+### Part A: neovm-gc API additions (PROPOSED — these APIs do not exist yet)
 
 #### 1.1 External root slot scanner
 
@@ -353,7 +355,7 @@ fn idle_notification(&mut self, budget: Duration) -> Duration {
 }
 ```
 
-### Part B: Trace impls for Lisp types
+### Part B: Trace impls for Lisp types (PROPOSED — pseudocode, trace_slots does not exist yet)
 
 ```rust
 struct GcConsCell {
@@ -429,7 +431,7 @@ fn trace_tagged_value(tracer: &mut dyn Tracer, val: TaggedValue) {
 Similar impls for: LispHashTable, LambdaData, ByteCodeFunction, OverlayData,
 MarkerData, FloatObj, BignumObj, SubrObj, RecordObj.
 
-### Part C: Replace TaggedHeap
+### Part C: Replace TaggedHeap (PROPOSED — pseudocode showing target API shape)
 
 Rewrite `tagged/gc.rs` to use neovm-gc directly. The struct keeps the same
 public API (alloc_cons, alloc_string, etc.) but the implementation changes
@@ -437,9 +439,26 @@ from block allocator + linked list to neovm-gc mutator calls:
 
 ```rust
 // tagged/gc.rs — rewritten internals, same public API
+//
+// NOTE: Mutator<'heap> borrows &Heap, so TaggedHeap must own the Heap
+// and produce a Mutator on demand (or use an unsafe self-referential
+// pattern). Two viable approaches:
+//
+//   (a) Own Heap in a Box/Pin, produce Mutator for each allocation
+//       batch via an unsafe lifetime extension (the Heap outlives
+//       every Mutator because TaggedHeap owns it).
+//
+//   (b) Store Heap in a separate long-lived allocation (Arc or leaked
+//       Box), and keep a Mutator<'heap> that borrows it.
+//
+// Approach (b) is shown below (pseudocode — exact lifetime wiring
+// depends on neovm-gc's API surface for long-lived mutators):
+
 pub struct TaggedHeap {
-    heap: neovm_gc::Heap,
-    mutator: neovm_gc::Mutator<'static>,
+    heap: Pin<Box<neovm_gc::Heap>>,
+    // Mutator borrows heap; safe because heap is pinned and owned.
+    // In practice this may require unsafe or a self-referential crate.
+    mutator: neovm_gc::Mutator<'???>,  // lifetime TBD during implementation
     // Registries unchanged
     subr_registry: Vec<Option<TaggedValue>>,
     buffer_registry: FxHashMap<BufferId, TaggedValue>,
@@ -488,20 +507,40 @@ Two barriers, matching V8:
 ```rust
 // 1. Generational barrier: old object stores pointer to young object
 // 2. SATB marking barrier: object modified during concurrent mark
+//
+// neovm-gc API (mutator.rs:955-966):
+//   pub fn post_write_barrier<Owner, Value>(
+//       &mut self,
+//       owner: Gc<Owner>,
+//       slot: Option<usize>,
+//       old_value: Option<Gc<Value>>,   // ← needed for SATB
+//       new_value: Option<Gc<Value>>,
+//   )
+//
+// INTEGRATION GAP: current note_heap_slot_write() in tagged/mutate.rs
+// only records the new value, not the old value. Must be extended to
+// capture the old value BEFORE the store for SATB correctness:
 
-pub fn note_heap_slot_write(owner: TaggedValue, kind: HeapWriteKind,
-                            _slot: usize, value: TaggedValue) {
+pub fn set_cons_car(cell: TaggedValue, value: TaggedValue) -> bool {
+    if !cell.is_cons() { return false; }
+    // Read old value BEFORE the store (SATB needs it)
+    let old_value = unsafe { (*cell.xcons_ptr()).car };
+    // Perform the store
+    unsafe { (*(cell.xcons_ptr() as *mut ConsCell)).set_car(value); }
+    // Post-write barrier with both old and new
     with_gc_heap(|h| {
-        if owner.is_heap_pointer() && value.is_heap_pointer() {
-            let owner_hdr = unsafe { ObjectHeader::from_payload_ptr(owner.heap_ptr()) };
-            let value_hdr = unsafe { ObjectHeader::from_payload_ptr(value.heap_ptr()) };
-            // Post-write barrier (generational)
-            h.mutator.record_post_write(owner_hdr, value_hdr);
-            // SATB barrier (concurrent marking) handled internally by neovm-gc
-        }
+        let owner_gc = tagged_to_gc(cell);
+        let old_gc = tagged_to_gc_option(old_value);
+        let new_gc = tagged_to_gc_option(value);
+        h.mutator.post_write_barrier(owner_gc, Some(0), old_gc, new_gc);
     });
+    true
 }
 ```
+
+This is the main integration gap: all ~15 mutation functions in tagged/mutate.rs
+(set_cons_car, set_cons_cdr, set_vector_slot, etc.) must be updated to capture
+the old value before the store and pass both old+new to the barrier.
 
 ### Part E: Wire root slot discovery
 
