@@ -133,7 +133,8 @@ mod index_state;
 mod mark;
 /// `Mutator<'heap>` — the only allocating view onto a `Heap`.
 pub mod mutator;
-mod object;
+/// Object headers, records, and layout helpers.
+pub mod object;
 mod object_store;
 /// Adaptive Go-style pacer with EWMA trigger thresholds.
 pub mod pacer;

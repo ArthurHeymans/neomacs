@@ -187,6 +187,56 @@ const TAG_STRING: usize = 0b100;
 const TAG_FLOAT: usize = 0b110;
 
 // ---------------------------------------------------------------------------
+// Arena bump allocator for dense object packing
+// ---------------------------------------------------------------------------
+
+const ARENA_BLOCK_SIZE: usize = 1024 * 1024; // 1 MB blocks
+
+struct ArenaBlock {
+    storage: *mut u8,
+    capacity: usize,
+    cursor: usize,
+}
+
+impl ArenaBlock {
+    fn new() -> Self {
+        let layout = std::alloc::Layout::from_size_align(ARENA_BLOCK_SIZE, 16)
+            .expect("arena block layout");
+        let storage = unsafe { std::alloc::alloc(layout) };
+        if storage.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
+        Self {
+            storage,
+            capacity: ARENA_BLOCK_SIZE,
+            cursor: 0,
+        }
+    }
+
+    /// Try to bump-allocate `layout.size()` bytes with `layout.align()`.
+    /// Returns the base pointer if successful, None if the block is full.
+    fn try_alloc(&mut self, layout: std::alloc::Layout) -> Option<std::ptr::NonNull<u8>> {
+        let align = layout.align();
+        let aligned_cursor = (self.cursor + align - 1) & !(align - 1);
+        let end = aligned_cursor + layout.size();
+        if end > self.capacity {
+            return None;
+        }
+        let ptr = unsafe { self.storage.add(aligned_cursor) };
+        self.cursor = end;
+        std::ptr::NonNull::new(ptr)
+    }
+}
+
+impl Drop for ArenaBlock {
+    fn drop(&mut self) {
+        let layout = std::alloc::Layout::from_size_align(ARENA_BLOCK_SIZE, 16)
+            .expect("arena block layout");
+        unsafe { std::alloc::dealloc(self.storage, layout); }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TaggedHeap — the main GC-managed heap
 // ---------------------------------------------------------------------------
 
@@ -195,11 +245,16 @@ const TAG_FLOAT: usize = 0b110;
 /// Internally delegates allocation and collection to a `neovm_gc::Heap`.
 /// The Heap is leaked to obtain a `'static` reference so that on-demand
 /// `Mutator` views can be created without self-referential lifetime issues.
+///
+/// Small fixed-size objects are bump-allocated from arena blocks (1MB each)
+/// to avoid per-object system allocator overhead and fragmentation.
 pub struct TaggedHeap {
     /// The neovm-gc Heap, leaked for 'static lifetime.
     gc_heap: &'static neovm_gc::Heap,
     /// Raw pointer for Drop cleanup.
     gc_heap_box: *mut neovm_gc::Heap,
+    /// Arena blocks for dense bump allocation.
+    arena_blocks: Vec<ArenaBlock>,
 
     /// Total number of allocated objects (cons + non-cons).
     pub allocated_count: usize,
@@ -257,6 +312,7 @@ impl TaggedHeap {
         Self {
             gc_heap,
             gc_heap_box: heap_box,
+            arena_blocks: vec![ArenaBlock::new()],
             allocated_count: 0,
             gc_threshold: 100_000 * size_of::<usize>(),
             gc_threshold_overridden: false,

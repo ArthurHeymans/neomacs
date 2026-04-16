@@ -13,11 +13,16 @@ use crate::heap::AllocError;
 #[allow(dead_code)]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SpaceKind {
+pub enum SpaceKind {
+    /// Young-generation semispace.
     Nursery,
+    /// Old-generation Immix blocks.
     Old,
+    /// Non-moving pinned space.
     Pinned,
+    /// Large-object space.
     Large,
+    /// Permanent objects never collected.
     Immortal,
 }
 
@@ -274,7 +279,7 @@ const NO_OLD_BLOCK_INDEX: u32 = u32::MAX;
 
 /// Owned allocation record stored by the heap.
 #[derive(Debug)]
-pub(crate) struct ObjectRecord {
+pub struct ObjectRecord {
     header: NonNull<ObjectHeader>,
     old_block_index: u32,
     old_block_offset_bytes: u32,
@@ -290,7 +295,9 @@ pub(crate) struct ObjectRecord {
 unsafe impl Send for ObjectRecord {}
 unsafe impl Sync for ObjectRecord {}
 
-pub(crate) fn allocation_layout_for<T>() -> Result<(Layout, usize), AllocError> {
+/// Compute the allocation layout for a `T`-payload object record.
+/// Returns `(combined_layout, payload_offset)`.
+pub fn allocation_layout_for<T>() -> Result<(Layout, usize), AllocError> {
     let header_layout = Layout::new::<ObjectHeader>();
     let payload_layout = Layout::new::<T>();
     let (layout, payload_offset) = header_layout
@@ -409,7 +416,7 @@ impl ObjectRecord {
     ///   the returned `ObjectRecord`.
     /// - `layout` and `payload_offset` must match the results of
     ///   `allocation_layout_for::<T>()`.
-    pub(crate) unsafe fn allocate_in_arena<T: Trace + 'static>(
+    pub unsafe fn allocate_in_arena<T: Trace + 'static>(
         desc: &'static TypeDesc,
         space: SpaceKind,
         base: NonNull<u8>,

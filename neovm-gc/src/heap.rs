@@ -226,6 +226,15 @@ impl Heap {
         }
     }
 
+    /// Get (or create) the static type descriptor for `T`.
+    ///
+    /// This is needed by callers that use `ObjectRecord::allocate_in_arena`
+    /// directly (bypassing the Mutator allocation path).
+    pub fn type_desc_for<T: Trace + 'static>(&self) -> &'static TypeDesc {
+        let mut core = self.state.core.write().expect("heap core write lock");
+        core.descriptor_for::<T>()
+    }
+
     /// Register an external root scanner callback.
     ///
     /// During garbage collection, the collector calls this callback
