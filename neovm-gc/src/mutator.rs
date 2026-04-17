@@ -708,6 +708,43 @@ impl<'heap> Mutator<'heap> {
         self.alloc_typed_scoped(scope, value)
     }
 
+    /// Allocate a managed object routed by its `MovePolicy` and return a
+    /// raw payload pointer. Mirrors [`alloc_pinned_raw`] but respects the
+    /// type's declared policy, so Movable types land in the nursery (or
+    /// Old for large payloads) and Pinned types land in the pinned space.
+    ///
+    /// The caller is responsible for rooting the returned pointer through
+    /// an [`ExternalRootScanner`] callback and must additionally register
+    /// an [`ExternalRootRelocator`] when the type is Movable so pointer
+    /// rewrites are applied at the end of each evacuation.
+    ///
+    /// The first call on a fresh mutator pins a safepoint read guard to
+    /// keep `ObjectPublishLocal` chunk reservations alive across calls.
+    ///
+    /// # Safety
+    ///
+    /// - The returned pointer must remain reachable via an external root
+    ///   until the object becomes unreachable.
+    /// - For Movable types, the caller must install an
+    ///   [`ExternalRootRelocator`] so the pointer is rewritten when the
+    ///   object evacuates.
+    pub fn alloc_external_raw<T: Trace + 'static>(
+        &mut self,
+        value: T,
+    ) -> Result<NonNull<T>, AllocError> {
+        if !self.handle_scope_state.has_safepoint() {
+            self.handle_scope_state.pin_safepoint();
+            self.local.refresh_safepoint_fast_path_state(self.heap);
+        }
+        let mut scope = self.handle_scope();
+        let root = self.alloc_typed_scoped(&mut scope, value)?;
+        let gc = root.as_gc();
+        let ptr = gc.as_non_null();
+        drop(root);
+        drop(scope);
+        Ok(ptr)
+    }
+
     /// Return whether this mutator currently holds a
     /// reserved nursery TLAB slab. Test-only observer.
     #[cfg(test)]

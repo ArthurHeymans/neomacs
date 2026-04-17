@@ -534,12 +534,23 @@ impl TaggedHeap {
     }
 
     /// Allocate a float object.
+    ///
+    /// Routes through the policy-aware `alloc_external_raw` path so that
+    /// flipping `GcFloat::move_policy()` to `Movable` (phase beta of the
+    /// moving-nursery design) transparently lands allocations in the
+    /// nursery.
     pub fn alloc_float(&mut self, value: f64) -> TaggedValue {
         let gc_float = GcFloat { value };
-        let ptr = self.gc_alloc(gc_float);
+        let mutator = self
+            .gc_mutator
+            .as_mut()
+            .expect("gc_mutator is only None during Drop");
+        let ptr = mutator
+            .alloc_external_raw(gc_float)
+            .expect("float allocation should succeed");
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFloat>());
-        TaggedValue(ptr as usize | TAG_FLOAT)
+        TaggedValue(ptr.as_ptr() as usize | TAG_FLOAT)
     }
 
     /// Allocate a canonical subr object.
