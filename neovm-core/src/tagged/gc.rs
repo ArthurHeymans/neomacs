@@ -885,22 +885,58 @@ impl Drop for TaggedHeap {
 /// is not yet initialized (e.g., during pdump deserialization).
 #[inline]
 pub fn gc_post_write_barrier(
-    _owner: TaggedValue,
-    _slot: usize,
-    _old_val: TaggedValue,
-    _new_val: TaggedValue,
+    owner: TaggedValue,
+    slot: usize,
+    old_val: TaggedValue,
+    new_val: TaggedValue,
 ) {
-    // TODO: Wire to neovm-gc post_write_barrier once ObjectHeader
-    // round-trip is validated for all allocation paths (pdump, etc.).
-    // For now, the write tracking in note_heap_slot_write provides
-    // the remembered-set bookkeeping, and neovm-gc collection uses
-    // the external root scanner for root discovery.
+    if !owner.is_heap_object() {
+        return;
+    }
+    if TAGGED_HEAP.with(|h| h.get().is_null()) {
+        return;
+    }
+    with_tagged_heap(|heap| {
+        let Some(mutator) = heap.gc_mutator.as_mut() else {
+            return;
+        };
+        let owner_gc = unsafe { TaggedHeap::tagged_to_erased(owner) };
+        let old_gc = old_val
+            .is_heap_object()
+            .then(|| unsafe { TaggedHeap::tagged_to_erased(old_val) });
+        let new_gc = new_val
+            .is_heap_object()
+            .then(|| unsafe { TaggedHeap::tagged_to_erased(new_val) });
+        let owner_gc: neovm_gc::root::Gc<u8> = unsafe { neovm_gc::root::Gc::from_erased(owner_gc) };
+        let old_gc = old_gc.map(|e| unsafe { neovm_gc::root::Gc::<u8>::from_erased(e) });
+        let new_gc = new_gc.map(|e| unsafe { neovm_gc::root::Gc::<u8>::from_erased(e) });
+        mutator.post_write_barrier(owner_gc, Some(slot), old_gc, new_gc);
+    });
 }
 
 /// Call the neovm-gc post-write barrier for a bulk mutation (no single old value).
+///
+/// Used when the caller cannot cheaply produce the old slot value (e.g.,
+/// `fillarray`, `copy-sequence`, `delete!`). SATB still needs to see the
+/// mutation, so we fire the barrier with `old_value = None` and let the
+/// marker re-scan the owner during its next visit.
 #[inline]
-pub fn gc_post_write_barrier_bulk(_owner: TaggedValue) {
-    // TODO: Wire to neovm-gc barrier once round-trip is validated.
+pub fn gc_post_write_barrier_bulk(owner: TaggedValue) {
+    if !owner.is_heap_object() {
+        return;
+    }
+    if TAGGED_HEAP.with(|h| h.get().is_null()) {
+        return;
+    }
+    with_tagged_heap(|heap| {
+        let Some(mutator) = heap.gc_mutator.as_mut() else {
+            return;
+        };
+        let owner_erased = unsafe { TaggedHeap::tagged_to_erased(owner) };
+        let owner_gc: neovm_gc::root::Gc<u8> =
+            unsafe { neovm_gc::root::Gc::from_erased(owner_erased) };
+        mutator.post_write_barrier::<u8, u8>(owner_gc, None, None, None);
+    });
 }
 
 pub fn read_stack_end_from_proc() -> Option<usize> {
