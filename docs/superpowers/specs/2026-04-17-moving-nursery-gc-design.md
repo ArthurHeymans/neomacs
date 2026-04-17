@@ -159,6 +159,30 @@ Each phase lands independently, test suite must stay green.
   `Movable` breaks on its first minor-GC evacuation (tagged values
   in live roots dangle). Originally listed 4th in the roadmap;
   moved to 2nd after discovering this blocker during Phase α.
+- **STATUS: neovm-core side done** (commits 3b7f1b071 through
+  6581c614a). All 23 sub-system impl sites have `trace_roots_mut`;
+  `Context::trace_roots_mut` drives them.
+- **BLOCKER for end-to-end:** neovm-gc's `ExternalRootScanner` is
+  `FnMut(&mut Vec<GcErased>) + Send + 'static` — marker-only, cannot
+  rewrite pointers. To feed the collector our mutable roots during
+  evacuation, add a parallel `ExternalRootRelocator` type in
+  neovm-gc:
+  ```rust
+  pub fn set_external_root_relocator<F>(&self, f: F)
+      where F: FnMut(&mut dyn Relocator) + Send + 'static;
+  ```
+  And plumb through `with_flat_store_for_collection` ->
+  `execute_collection_plan`, called right after
+  `relocate_forwarded_roots_and_edges` in the Minor and Full
+  branches. The existing `ForwardingRelocator` (wraps
+  `ForwardingMap`) already implements the `Relocator` trait; the
+  new setter just needs to expose it to the external callback.
+  Concrete files to touch in neovm-gc:
+    - `heap.rs`: new struct, setter, wrapper with `call(&mut dyn Relocator)`
+    - `collector_exec.rs`: add param, call after relocate_forwarded_roots
+    - `runtime.rs` / `with_flat_store_for_collection`: pipe the extra
+      arg through
+  ~1 day of focused work, risk: moderate (touches STW protocol).
 
 **Phase β — GcFloat as the canary.**
 - Flip `GcFloat::move_policy` to `Movable`
