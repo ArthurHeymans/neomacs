@@ -529,6 +529,36 @@ impl GcTrace for ThreadManager {
             roots.push(*err);
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for thread in self.threads.values_mut() {
+            visit(&mut thread.function);
+            visit(&mut thread.result);
+            visit(&mut thread.buffer_disposition);
+            visit(&mut thread.event_object);
+            visit(&mut thread.error_symbol);
+            visit(&mut thread.error_data);
+            // current_buffer is BufferId (not a Value slot to rewrite
+            // -- buffers are Pinned so even their tagged value stays
+            // stable; trace_roots manufactures a fresh Value via
+            // Value::make_buffer so no rewrite is needed here).
+            if let Some(ref mut err) = thread.last_error {
+                visit(err);
+            }
+        }
+        for value in self.thread_handles.values_mut() {
+            visit(value);
+        }
+        for value in self.mutex_handles.values_mut() {
+            visit(value);
+        }
+        for value in self.condition_var_handles.values_mut() {
+            visit(value);
+        }
+        if let Some(ref mut err) = self.last_error {
+            visit(err);
+        }
+    }
 }
 
 // ===========================================================================

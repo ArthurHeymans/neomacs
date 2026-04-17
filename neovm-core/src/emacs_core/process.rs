@@ -6698,6 +6698,32 @@ impl GcTrace for ProcessManager {
             roots.push(process.thread);
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for process in self
+            .processes
+            .values_mut()
+            .chain(self.deleted_processes.values_mut())
+        {
+            visit(&mut process.name);
+            visit(&mut process.proc_type);
+            visit(&mut process.buffer);
+            visit(&mut process.mark);
+            visit(&mut process.command);
+            visit(&mut process.childp);
+            visit(&mut process.status);
+            visit(&mut process.tty_name);
+            visit(&mut process.write_queue);
+            visit(&mut process.filter);
+            visit(&mut process.sentinel);
+            visit(&mut process.log);
+            visit(&mut process.plist);
+            visit(&mut process.stderrproc);
+            visit(&mut process.coding_decode);
+            visit(&mut process.coding_encode);
+            visit(&mut process.thread);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
