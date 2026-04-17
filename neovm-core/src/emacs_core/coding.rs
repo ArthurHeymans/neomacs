@@ -665,11 +665,28 @@ impl CodingSystemManager {
             }
         }
     }
+
+    /// Mutable variant: hand each Value to `visit` so an evacuating
+    /// collector can rewrite the pointer after moving the target.
+    pub fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for info in self.systems.values_mut() {
+            for value in info.properties.values_mut() {
+                visit(value);
+            }
+            for value in info.int_properties.values_mut() {
+                visit(value);
+            }
+        }
+    }
 }
 
 impl crate::gc_trace::GcTrace for CodingSystemManager {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         CodingSystemManager::trace_roots(self, roots);
+    }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        CodingSystemManager::trace_roots_mut(self, visit);
     }
 }
 

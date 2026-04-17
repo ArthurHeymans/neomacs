@@ -1630,6 +1630,37 @@ impl GcTrace for FaceTable {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        // HashMap keys are Values. Rewriting them in place would
+        // invalidate their hashes, so we can only visit them via a
+        // rebuild. Face-table keys point at symbols (TAG_SYMBOL =
+        // never a heap pointer), so they don't move and don't need
+        // rewriting -- skip them safely.
+        for face in self.faces.values_mut() {
+            if let Some(ref mut family) = face.family {
+                visit(family);
+            }
+            if let Some(ref mut foundry) = face.foundry {
+                visit(foundry);
+            }
+            if let Some(ref mut stipple) = face.stipple {
+                visit(stipple);
+            }
+            if let Some(ref mut doc) = face.doc {
+                visit(doc);
+            }
+            // :inherit is a Rust-owned Option<Value>. The recursive
+            // walk in trace_roots over list_to_vec contents isn't
+            // mirrored here because cons cells are reached via
+            // GcCons::relocate, which the collector calls
+            // separately; the Rust-owned inherit slot is the only
+            // thing we can actually rewrite in place.
+            if let Some(ref mut inherit) = face.inherit {
+                visit(inherit);
+            }
+        }
+    }
 }
 
 // ===========================================================================
