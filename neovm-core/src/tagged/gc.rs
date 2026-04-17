@@ -811,6 +811,17 @@ impl TaggedHeap {
     /// edge updates. After the mark phase, the sweep reclaims dead
     /// objects from pinned span pools.
     ///
+    /// Currently this runs one full Major cycle synchronously
+    /// (begin_mark + mark + remark + reclaim). An earlier attempt
+    /// split the work across safe points via `begin_major_mark` +
+    /// `assist_major_mark` + `finish_major_collection`, but the
+    /// sweep/reclaim phase (finish_major_collection) still has to
+    /// run in a single STW step, and that's where most of the cost
+    /// is -- splitting the mark alone didn't reduce observed pause
+    /// times. Meaningful pause reduction needs either (a) a
+    /// background worker thread (requires SharedHeap) or (b) a
+    /// cheaper sweep inside neovm-gc.
+    ///
     /// Enabled by default; set `NEOVM_GC_ENABLE_COLLECTION=0` to
     /// disable (useful for bisecting whether a regression involves
     /// actual collection vs the surrounding infrastructure).

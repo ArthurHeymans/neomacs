@@ -856,7 +856,8 @@ impl Heap {
         &self.state.allocation_config.old
     }
 
-    pub(crate) fn has_active_major_mark(&self) -> bool {
+    /// True when a persistent major-mark session is in flight.
+    pub fn has_active_major_mark(&self) -> bool {
         self.state.collector.has_active_major_mark()
     }
 
