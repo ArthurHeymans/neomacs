@@ -179,14 +179,18 @@ unsafe impl Trace for GcLispString {
     }
 
     fn relocate(&self, _relocator: &mut dyn Relocator) {
-        // Text property relocation requires mutable access to the
-        // PropertyInterval HashMaps. For now, text properties are
-        // relocated via the fixup pass on root slots and interior
-        // edges. A full implementation would rebuild the HashMap
-        // with relocated keys.
+        // GcLispString stays MovePolicy::Pinned under the current
+        // GC design, so relocate never actually fires. The reason
+        // is that text_props holds TaggedValue edges inside
+        // PropertyInterval HashMaps, which would require rebuilding
+        // the HashMap contents during evacuation -- expensive and
+        // tricky to do without allocating (allocating during GC is
+        // forbidden). Pinning strings avoids the problem entirely.
         //
-        // TODO: implement interior text property relocation when
-        // compaction is enabled.
+        // If Phase ε of the moving-nursery roadmap decides to move
+        // short-lived strings (fresh strings typically have empty
+        // text_props), this impl will need a full rebuild path.
+        // See docs/superpowers/specs/2026-04-17-moving-nursery-gc-design.md.
     }
 
     fn move_policy() -> MovePolicy {
@@ -495,7 +499,15 @@ unsafe impl Trace for GcSymbolWithPos {
         trace_tagged(tracer, self.sym);
         trace_tagged(tracer, self.pos);
     }
-    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+    fn relocate(&self, _relocator: &mut dyn Relocator) {
+        // Safe no-op: GcSymbolWithPos.sym is always TAG_SYMBOL (not a
+        // heap pointer) and .pos is always a fixnum. Neither can
+        // ever be a heap-tagged value that the collector might move,
+        // so there is nothing to relocate. If that invariant ever
+        // changes (e.g. a future version allows a heap-tagged
+        // position for detailed source maps), convert sym/pos to
+        // UnsafeCell<TaggedValue> and mirror trace() here.
+    }
     fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
