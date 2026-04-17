@@ -37,11 +37,13 @@ impl PinnedSpaceState {
         &mut self.allocator
     }
 
+    #[allow(dead_code)]
     pub(crate) fn allocator(&self) -> &SizeClassAllocator {
         &self.allocator
     }
 
     /// Bytes currently allocated across all span pools.
+    #[allow(dead_code)]
     pub(crate) fn allocated_bytes(&self) -> usize {
         self.allocator.allocated_bytes()
     }

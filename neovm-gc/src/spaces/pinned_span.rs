@@ -27,6 +27,7 @@ const SIZE_CLASSES: &[usize] = &[
 ];
 
 /// Number of size classes.
+#[allow(dead_code)]
 const NUM_CLASSES: usize = SIZE_CLASSES.len();
 
 /// Find the size class index for a given allocation size.
@@ -119,6 +120,11 @@ impl Span {
     /// Sweep this span: check mark bits on all initialized slots.
     /// Unmarked objects get their payload dropped and slot added to free list.
     /// Returns the number of objects reclaimed.
+    ///
+    /// Currently unused — sweep is driven by neovm-gc's own ObjectStore
+    /// walk for now. Retained as the design target: once sweep moves into
+    /// the size-class allocator, this will be the entry point.
+    #[allow(dead_code)]
     fn sweep(&mut self) -> usize {
         let mut reclaimed = 0;
         let mut new_free_head = FREE_NONE;
@@ -158,6 +164,7 @@ impl Span {
     /// Check if a slot is currently live (allocated and not yet freed).
     /// A slot is live if it has been bump-allocated or reused from free list,
     /// and hasn't been swept as dead.
+    #[allow(dead_code)]
     fn is_slot_live(&self, index: usize) -> bool {
         if index >= self.bump_cursor as usize {
             return false;
@@ -172,11 +179,13 @@ impl Span {
     }
 
     /// Returns true if this span has no live objects.
+    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.live_count == 0
     }
 
     /// Clear all mark bits in this span (prepare for new mark cycle).
+    #[allow(dead_code)]
     fn clear_marks(&mut self) {
         for i in 0..self.bump_cursor as usize {
             let ptr = self.slot_ptr(i);
@@ -189,6 +198,7 @@ impl Span {
     }
 
     /// Check if a slot pointer is in the free list.
+    #[allow(dead_code)]
     fn is_in_free_list(&self, _ptr: NonNull<u8>) -> bool {
         // For now, we can't cheaply check this without walking the free list.
         // The sweep phase rebuilds the free list from scratch, so this isn't
@@ -258,6 +268,7 @@ impl SizeClassPool {
     }
 
     /// Sweep all spans in this pool. Returns (reclaimed_count, reclaimed_bytes).
+    #[allow(dead_code)]
     fn sweep(&mut self) -> (usize, usize) {
         let mut total_reclaimed = 0;
 
@@ -288,6 +299,7 @@ impl SizeClassPool {
     }
 
     /// Clear marks on all spans.
+    #[allow(dead_code)]
     fn clear_marks(&mut self) {
         if let Some(span) = &mut self.current {
             span.clear_marks();
@@ -298,6 +310,7 @@ impl SizeClassPool {
     }
 
     /// Iterate over all live object headers in this pool.
+    #[allow(dead_code)]
     fn for_each_header(&self, f: &mut dyn FnMut(NonNull<ObjectHeader>)) {
         let mut visit_span = |span: &Span| {
             for i in 0..span.bump_cursor as usize {
@@ -350,11 +363,13 @@ impl SizeClassAllocator {
     }
 
     /// Check if a layout can be served by the span allocator.
+    #[allow(dead_code)]
     pub(crate) fn can_alloc(&self, layout: &Layout) -> bool {
         layout.size() <= MAX_SLOT_SIZE
     }
 
     /// Sweep all pools after marking. Returns (reclaimed_objects, reclaimed_bytes).
+    #[allow(dead_code)]
     pub(crate) fn sweep(&mut self) -> (usize, usize) {
         let mut total_objects = 0;
         let mut total_bytes = 0;
@@ -368,6 +383,7 @@ impl SizeClassAllocator {
     }
 
     /// Clear all mark bits in preparation for a new mark cycle.
+    #[allow(dead_code)]
     pub(crate) fn clear_marks(&mut self) {
         for pool in &mut self.pools {
             pool.clear_marks();
@@ -375,11 +391,13 @@ impl SizeClassAllocator {
     }
 
     /// Total bytes allocated across all spans.
+    #[allow(dead_code)]
     pub(crate) fn allocated_bytes(&self) -> usize {
         self.allocated_bytes
     }
 
     /// Iterate over all object headers (for statistics/debugging).
+    #[allow(dead_code)]
     pub(crate) fn for_each_header(&self, mut f: impl FnMut(NonNull<ObjectHeader>)) {
         for pool in &self.pools {
             pool.for_each_header(&mut f);
