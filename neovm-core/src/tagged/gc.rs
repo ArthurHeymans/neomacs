@@ -819,6 +819,11 @@ impl TaggedHeap {
             if let Some(mutator) = self.gc_mutator.as_mut() {
                 let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
             }
+            // Resync our cumulative allocation counter with neovm-gc's
+            // live object count so callers that treat allocated_count
+            // as "currently live" see the post-sweep value.
+            self.allocated_count = self.gc_heap.object_count();
+            self.live_bytes = self.gc_heap.stats().pinned.live_bytes;
         }
         // External root scanner drained gc_root_buffer during the
         // collection (or we are skipping it); clear any residue.
@@ -831,15 +836,21 @@ impl TaggedHeap {
         self.clear_dirty_writes();
     }
 
-    /// Run a garbage collection.
+    /// Run a garbage collection using the explicit roots provided.
     pub fn collect(&mut self, roots: impl Iterator<Item = TaggedValue>) {
-        let _ = roots;
+        self.begin_collection();
+        for root in roots {
+            self.seed_root(root);
+        }
         self.flush_roots_and_collect();
     }
 
     /// Run a collection using only the explicit roots provided.
     pub fn collect_exact(&mut self, roots: impl Iterator<Item = TaggedValue>) {
-        let _ = roots;
+        self.begin_collection();
+        for root in roots {
+            self.seed_root(root);
+        }
         self.flush_roots_and_collect();
     }
 
