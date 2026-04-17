@@ -104,17 +104,17 @@ impl HeapWriteRecord {
 
 /// Check whether the environment requests actual neovm-gc collection.
 ///
-/// Reads `NEOVM_GC_ENABLE_COLLECTION` once per call; callers should
-/// not assume the value is cached. Any non-empty value other than
-/// `0`, `false`, or `no` enables collection. Default is disabled
-/// while the end-to-end collection path is still being stabilized.
+/// Default: enabled. Set NEOVM_GC_ENABLE_COLLECTION to 0, false, or no
+/// to disable (useful for bisecting a regression back to the old no-op
+/// flush_roots_and_collect behavior). Any other value -- empty string,
+/// unset, 1, true, yes, anything -- leaves collection on.
 fn gc_collection_enabled() -> bool {
     match std::env::var("NEOVM_GC_ENABLE_COLLECTION") {
         Ok(v) => {
             let lower = v.to_ascii_lowercase();
-            !v.is_empty() && lower != "0" && lower != "false" && lower != "no"
+            lower != "0" && lower != "false" && lower != "no"
         }
-        Err(_) => false,
+        Err(_) => true,
     }
 }
 
