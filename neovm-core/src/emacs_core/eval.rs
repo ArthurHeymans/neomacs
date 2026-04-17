@@ -5901,10 +5901,13 @@ impl Context {
         // Safety: GC is stop-the-world with exclusive `&mut self`. Root
         // enumeration only reads Context state while seeding the collector via
         // the raw heap pointer.
+        let mut root_count = 0usize;
+        let roots_start = std::time::Instant::now();
         unsafe {
             (*heap_ptr).begin_collection();
             self.trace_roots(&mut |root| {
                 (*heap_ptr).seed_root(root);
+                root_count += 1;
             });
             // Install per-buffer marker-chain head slots so
             // `unchain_dead_markers` can splice unmarked markers out of
@@ -5912,9 +5915,22 @@ impl Context {
             // `sweep_buffer → unchain_dead_markers` (alloc.c).
             let chain_heads = self.buffers.collect_marker_chain_head_slots();
             (*heap_ptr).set_marker_chain_head_slots(chain_heads);
+        }
+        let roots_elapsed = roots_start.elapsed();
+        let collect_start = std::time::Instant::now();
+        unsafe {
             (*heap_ptr).complete_collection();
         }
+        let collect_elapsed = collect_start.elapsed();
         let elapsed = start.elapsed();
+        tracing::info!(
+            "neovm-gc phase timings: total={}us, trace_roots={}us ({} roots), \
+             mutator.collect={}us",
+            elapsed.as_micros(),
+            roots_elapsed.as_micros(),
+            root_count,
+            collect_elapsed.as_micros(),
+        );
         self.gc_pending = false;
         self.gc_count += 1;
         self.log_neovm_gc_stats(elapsed);
