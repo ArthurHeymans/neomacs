@@ -99,6 +99,26 @@ impl HeapWriteRecord {
 }
 
 // ---------------------------------------------------------------------------
+// Opt-in collection toggle
+// ---------------------------------------------------------------------------
+
+/// Check whether the environment requests actual neovm-gc collection.
+///
+/// Reads `NEOVM_GC_ENABLE_COLLECTION` once per call; callers should
+/// not assume the value is cached. Any non-empty value other than
+/// `0`, `false`, or `no` enables collection. Default is disabled
+/// while the end-to-end collection path is still being stabilized.
+fn gc_collection_enabled() -> bool {
+    match std::env::var("NEOVM_GC_ENABLE_COLLECTION") {
+        Ok(v) => {
+            let lower = v.to_ascii_lowercase();
+            !v.is_empty() && lower != "0" && lower != "false" && lower != "no"
+        }
+        Err(_) => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Thread-local heap access
 // ---------------------------------------------------------------------------
 
@@ -790,12 +810,26 @@ impl TaggedHeap {
     /// barriers fired from `gc_post_write_barrier` feed the marker's
     /// edge updates. After the mark phase, the sweep reclaims dead
     /// objects from pinned span pools.
+    ///
+    /// Currently opt-in via `NEOVM_GC_ENABLE_COLLECTION=1`. The
+    /// default is a no-op because:
+    ///   * some tests still SIGSEGV after collection triggers
+    ///     (likely missing write barriers, missing roots, or
+    ///     tagged-pointer round-trip issues with pdump-embedded
+    ///     values)
+    ///   * some tests time out (possible deadlock in the marker
+    ///     or infinite loop in a Trace impl)
+    /// These will be fixed incrementally; until then, phases 1-3
+    /// (allocator, root scanner, barriers) remain wired so enabling
+    /// the flag is a one-knob experiment.
     fn flush_roots_and_collect(&mut self) {
-        if let Some(mutator) = self.gc_mutator.as_mut() {
-            let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+        if gc_collection_enabled() {
+            if let Some(mutator) = self.gc_mutator.as_mut() {
+                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+            }
         }
         // External root scanner drained gc_root_buffer during the
-        // collection; clear any residue defensively.
+        // collection (or we are skipping it); clear any residue.
         self.gc_root_buffer
             .lock()
             .expect("gc_root_buffer lock poisoned")
