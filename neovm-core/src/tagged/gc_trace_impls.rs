@@ -151,7 +151,10 @@ unsafe impl Trace for GcFloat {
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase beta canary: GcFloat is a leaf (no heap edges), so
+        // flipping it to Movable is the minimum-risk first test of
+        // the end-to-end moving-nursery path.
+        MovePolicy::Movable
     }
 }
 

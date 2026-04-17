@@ -1,6 +1,6 @@
 //! Context — special forms, function application, and dispatch.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -1106,6 +1106,16 @@ pub(crate) const RECENT_INPUT_EVENT_LIMIT: usize = 300;
 
 thread_local! {
     static SCRATCH_GC_ROOTS: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
+
+    /// Raw pointer to the `Context` whose roots should be rewritten when
+    /// the neovm-gc evacuation hook fires. Installed by
+    /// `Context::gc_collect_from_current_roots` for the duration of the
+    /// collect call; cleared immediately after. Used by the
+    /// `ExternalRootRelocator` closure registered in `TaggedHeap::new`
+    /// to find the live `Context` during STW without capturing it at
+    /// heap-construction time.
+    pub(crate) static GC_RELOCATOR_CONTEXT: Cell<*mut Context> =
+        const { Cell::new(std::ptr::null_mut()) };
 }
 
 /// Collect GC roots from all thread-local statics that hold Values.
@@ -4559,7 +4569,7 @@ impl Context {
     /// through `TaggedHeap`'s external root scanner is Phase δ
     /// part 10.
     #[allow(dead_code)]
-    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+    pub(crate) fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
         for frame in self.vm_root_frames.iter_mut() {
             for root in frame.roots.iter_mut() {
                 visit(root);
@@ -6076,9 +6086,16 @@ impl Context {
         }
         let roots_elapsed = roots_start.elapsed();
         let collect_start = std::time::Instant::now();
+        // Install a raw pointer to this Context so the
+        // ExternalRootRelocator closure registered in
+        // TaggedHeap::new can find us during STW evacuation.
+        // Cleared immediately after the collect returns.
+        let ctx_ptr: *mut Context = self;
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(ctx_ptr));
         unsafe {
             (*heap_ptr).complete_collection();
         }
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(std::ptr::null_mut()));
         let collect_elapsed = collect_start.elapsed();
         let elapsed = start.elapsed();
         tracing::info!(

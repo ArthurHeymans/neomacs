@@ -315,6 +315,31 @@ impl TaggedHeap {
                 out.extend(guard.drain(..));
             });
         }
+
+        // Install the external-root relocator callback. When an
+        // evacuating collection (Minor or Full) forwards objects out
+        // of the nursery, the collector invokes this closure so the
+        // VM can rewrite every live tagged pointer to its
+        // post-evacuation address. Finds the live Context via
+        // `GC_RELOCATOR_CONTEXT`, a thread-local raw pointer that
+        // `gc_collect_from_current_roots` installs around the
+        // collect call.
+        gc_heap.set_external_root_relocator(
+            move |relocator: &mut dyn neovm_gc::descriptor::Relocator| {
+                let ctx_ptr = crate::emacs_core::eval::GC_RELOCATOR_CONTEXT
+                    .with(|slot| slot.get());
+                if ctx_ptr.is_null() {
+                    return;
+                }
+                // SAFETY: STW collection runs on the same thread that
+                // installed `ctx_ptr`, and no other code path reads
+                // the Context for the duration of the collect call.
+                let ctx = unsafe { &mut *ctx_ptr };
+                ctx.trace_roots_mut(&mut |slot: &mut TaggedValue| {
+                    relocate_tagged_slot(slot, relocator);
+                });
+            },
+        );
         Self {
             gc_heap,
             gc_heap_box: heap_box,
@@ -839,7 +864,12 @@ impl TaggedHeap {
     fn flush_roots_and_collect(&mut self) {
         if gc_collection_enabled() {
             if let Some(mutator) = self.gc_mutator.as_mut() {
-                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+                // Phase beta canary: use Full instead of Major so the
+                // nursery gets evacuated on every cycle, exercising the
+                // relocator end-to-end. Movable types (currently just
+                // GcFloat) will have their tagged pointers rewritten
+                // via `relocate_tagged_slot`.
+                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Full);
             }
             // Resync our cumulative allocation counter with neovm-gc's
             // live object count so callers that treat allocated_count
@@ -907,6 +937,29 @@ impl TaggedHeap {
     pub(crate) fn complete_collection(&mut self) {
         self.flush_roots_and_collect();
     }
+}
+
+/// Rewrite a heap-tagged `TaggedValue` through a collector-supplied
+/// `Relocator` so the slot's payload pointer tracks its new location
+/// after evacuation. No-op for non-heap values.
+fn relocate_tagged_slot(
+    slot: &mut TaggedValue,
+    relocator: &mut dyn neovm_gc::descriptor::Relocator,
+) {
+    if !slot.is_heap_object() {
+        return;
+    }
+    let tag = slot.0 & 0b111;
+    let payload_ptr = (slot.0 & !0b111) as *const u8;
+    // SAFETY: caller guarantees the tagged pointer references a live
+    // object allocated through neovm-gc (its payload sits after an
+    // ObjectHeader).
+    let gc: Gc<u8> = unsafe { Gc::from_payload_ptr(payload_ptr) };
+    let erased = gc.erase();
+    let new_erased = relocator.relocate_erased(erased);
+    let new_gc: Gc<u8> = unsafe { Gc::<u8>::from_erased(new_erased) };
+    let new_payload = new_gc.payload_ptr() as usize;
+    slot.0 = new_payload | tag;
 }
 
 impl Drop for TaggedHeap {
