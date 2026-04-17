@@ -27,7 +27,6 @@ license = "GPL-3.0-or-later"
 neovm-core = { path = "neovm-core", version = "0.0.1", default-features = false }
 neovm-gc = { path = "neovm-gc", version = "0.0.1" }
 neovm-host-abi = { path = "neovm-host-abi", version = "0.0.1" }
-neovm-oracle-tests = { path = "neovm-oracle-tests", version = "0.0.1" }
 neomacs-display-runtime = { path = "neomacs-display-runtime", version = "0.0.1", default-features = false }
 neomacs-display-protocol = { path = "neomacs-display-protocol", version = "0.0.1", default-features = false }
 neomacs-layout-engine = { path = "neomacs-layout-engine", version = "0.0.1", default-features = false }
@@ -113,10 +112,6 @@ alacritty_terminal = "0.25"
 parking_lot = "0.12"
 portable-pty = "0.9"
 smallvec = "1.13"
-
-# Build dependencies
-cbindgen = "0.27"
-which = "7.0"
 bindgen = "0.71"
 pkg-config = "0.3"
 
