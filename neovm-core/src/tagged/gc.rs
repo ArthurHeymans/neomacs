@@ -783,16 +783,19 @@ impl TaggedHeap {
         }
     }
 
-    /// Install the buffered roots as the external root scanner on the
-    /// neovm-gc heap and execute a collection.
+    /// Trigger a major collection on the neovm-gc heap.
+    ///
+    /// The external root scanner installed in [`Self::new`] drains
+    /// `gc_root_buffer` into the collector's root vec. SATB write
+    /// barriers fired from `gc_post_write_barrier` feed the marker's
+    /// edge updates. After the mark phase, the sweep reclaims dead
+    /// objects from pinned span pools.
     fn flush_roots_and_collect(&mut self) {
-        // All objects are MovePolicy::Pinned, so they live in PinnedSpace
-        // (system allocator). Minor collection only touches the nursery,
-        // which is empty. Skip the actual neovm-gc collection call for now
-        // and just reset counters. This validates that the allocation path
-        // is correct (no objects are freed, just like GC-disabled mode,
-        // but should_collect() is true so the GC safe-point code path is
-        // exercised).
+        if let Some(mutator) = self.gc_mutator.as_mut() {
+            let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+        }
+        // External root scanner drained gc_root_buffer during the
+        // collection; clear any residue defensively.
         self.gc_root_buffer
             .lock()
             .expect("gc_root_buffer lock poisoned")
