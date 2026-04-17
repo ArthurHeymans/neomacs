@@ -110,6 +110,14 @@ impl TreeSitterManager {
         self.parsers.values().map(|entry| entry.value).collect()
     }
 
+    /// Visit each stored root Value with mutable access so an
+    /// evacuating collector can rewrite the pointer after a move.
+    pub(crate) fn roots_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut Value> {
+        self.parsers.values_mut().map(|entry| &mut entry.value)
+    }
+
     pub(crate) fn loaded_language(&self, key: SymId) -> Option<(Language, Option<String>)> {
         self.loaded_languages
             .get(&key)

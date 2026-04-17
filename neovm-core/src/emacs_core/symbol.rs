@@ -2040,7 +2040,7 @@ impl GcTrace for Obarray {
                     // is the live union variant. Writing through
                     // &mut is safe under STW GC -- no other reader
                     // exists during the relocate pass.
-                    let v_ptr: *mut Value = unsafe { &raw mut sym.val.plain };
+                    let v_ptr: *mut Value = &raw mut sym.val.plain;
                     let v_ref = unsafe { &mut *v_ptr };
                     if *v_ref != Value::UNBOUND {
                         visit(v_ref);

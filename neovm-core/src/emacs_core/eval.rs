@@ -4551,6 +4551,145 @@ impl Context {
         }
     }
 
+    /// Mutable variant of `trace_roots`: hands each Value as
+    /// `&mut Value` so an evacuating collector can rewrite the
+    /// pointer after moving the target. Required before any heap
+    /// type flips to `MovePolicy::Movable`. Currently unused by the
+    /// collector (it still calls the immutable path); wiring it
+    /// through `TaggedHeap`'s external root scanner is Phase δ
+    /// part 10.
+    #[allow(dead_code)]
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for frame in self.vm_root_frames.iter_mut() {
+            for root in frame.roots.iter_mut() {
+                visit(root);
+            }
+        }
+        for root in self.treesit.roots_mut() {
+            visit(root);
+        }
+        for root in self.bc_buf.iter_mut() {
+            visit(root);
+        }
+        for frame in self.bc_frames.iter_mut() {
+            if frame.fun.is_heap_object() {
+                visit(&mut frame.fun);
+            }
+        }
+        for frame in self.condition_stack.iter_mut() {
+            match frame {
+                ConditionFrame::Catch { tag, .. } => visit(tag),
+                ConditionFrame::ConditionCase { conditions, .. } => visit(conditions),
+                ConditionFrame::HandlerBind {
+                    conditions, handler, ..
+                } => {
+                    visit(conditions);
+                    visit(handler);
+                }
+                ConditionFrame::SkipConditions { .. } => {}
+            }
+        }
+        for entry in self.specpdl.iter_mut() {
+            match entry {
+                SpecBinding::Let {
+                    old_value: Some(val), ..
+                } => visit(val),
+                SpecBinding::LetLocal { old_value, .. } => visit(old_value),
+                SpecBinding::LetDefault {
+                    old_value: Some(val), ..
+                } => visit(val),
+                SpecBinding::LexicalEnv { old_lexenv } => visit(old_lexenv),
+                SpecBinding::GcRoot { value } => visit(value),
+                SpecBinding::Backtrace { function, args, .. } => {
+                    visit(function);
+                    for arg in args.iter_mut() {
+                        visit(arg);
+                    }
+                }
+                SpecBinding::UnwindProtect { forms, lexenv } => {
+                    visit(forms);
+                    visit(lexenv);
+                }
+                SpecBinding::SaveRestriction { state } => {
+                    state.trace_roots_mut(visit);
+                }
+                SpecBinding::SaveExcursion { .. }
+                | SpecBinding::SaveCurrentBuffer { .. }
+                | SpecBinding::Nop => {}
+                _ => {}
+            }
+        }
+        visit(&mut self.lexenv);
+        for entry in self.runtime_macro_expansion_cache.values_mut() {
+            visit(&mut entry.expanded);
+        }
+        for bucket in self.interpreted_closure_trim_cache.values_mut() {
+            for entry in bucket.iter_mut() {
+                visit(&mut entry.params_value);
+                visit(&mut entry.body_value);
+                visit(&mut entry.iform_value);
+                visit(&mut entry.trimmed_params_value);
+                visit(&mut entry.trimmed_body_value);
+            }
+        }
+        for bucket in self.interpreted_closure_value_cache.values_mut() {
+            for entry in bucket.iter_mut() {
+                visit(&mut entry.source_function);
+                visit(&mut entry.trimmed_params_value);
+                visit(&mut entry.trimmed_body_value);
+            }
+        }
+        if let Some(ref mut filter_fn) = self.interpreted_closure_filter_fn {
+            visit(filter_fn);
+        }
+        for entry in self.named_call_cache.values_mut() {
+            if let NamedCallTarget::Obarray(ref mut val) = entry.target {
+                visit(val);
+            }
+        }
+        for funcall in self.pending_safe_funcalls.iter_mut() {
+            visit(&mut funcall.function);
+            for arg in funcall.args.iter_mut() {
+                visit(arg);
+            }
+        }
+        // Thread-local GC roots: the existing collect_ helper is
+        // read-only; a mutable variant would need per-module thread-
+        // local accessors that return &mut. For now this is a
+        // documented gap -- safe while thread-local caches (syntax,
+        // casetab, category, etc.) hold only Pinned Values.
+        if !self.current_local_map.is_nil() {
+            visit(&mut self.current_local_map);
+        }
+        if self.standard_syntax_table.is_heap_object() {
+            visit(&mut self.standard_syntax_table);
+        }
+        if self.standard_category_table.is_heap_object() {
+            visit(&mut self.standard_category_table);
+        }
+        self.obarray.trace_roots_mut(visit);
+        self.processes.trace_roots_mut(visit);
+        self.timers.trace_roots_mut(visit);
+        self.watchers.trace_roots_mut(visit);
+        self.registers.trace_roots_mut(visit);
+        self.custom.trace_roots_mut(visit);
+        self.autoloads.trace_roots_mut(visit);
+        self.buffers.trace_roots_mut(visit);
+        self.face_table.trace_roots_mut(visit);
+        self.threads.trace_roots_mut(visit);
+        self.kmacro.trace_roots_mut(visit);
+        crate::gc_trace::GcTrace::trace_roots_mut(&mut self.command_loop, visit);
+        self.modes.trace_roots_mut(visit);
+        self.frames.trace_roots_mut(visit);
+        self.coding_systems.trace_roots_mut(visit);
+        if let Some(ref mut md) = self.match_data
+            && let Some(crate::emacs_core::regex::SearchedString::Heap(ref mut val)) =
+                md.searched_string
+        {
+            visit(val);
+        }
+    }
+
     /// Get the current GC threshold.
     pub fn gc_threshold(&self) -> usize {
         self.tagged_heap.gc_threshold()
