@@ -434,6 +434,14 @@ impl ReadKeySequenceState {
         &self.translated_events
     }
 
+    pub fn raw_events_mut(&mut self) -> &mut [Value] {
+        &mut self.raw_events
+    }
+
+    pub fn translated_events_mut(&mut self) -> &mut [Value] {
+        &mut self.translated_events
+    }
+
     pub fn snapshot(&self) -> (Vec<Value>, Vec<Value>) {
         (self.translated_events.clone(), self.raw_events.clone())
     }
@@ -1184,6 +1192,52 @@ impl crate::gc_trace::GcTrace for KBoard {
             roots.extend(events.iter().copied());
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        if let Some(ref mut event) = self.unread_selection_event {
+            visit(event);
+        }
+        if let Some(ref mut event) = self.last_help_echo_event {
+            visit(event);
+        }
+        for event in self.unread_events.iter_mut() {
+            visit(event);
+        }
+        for event in self.current_key_sequence.raw_events_mut().iter_mut() {
+            visit(event);
+        }
+        for event in self
+            .current_key_sequence
+            .translated_events_mut()
+            .iter_mut()
+        {
+            visit(event);
+        }
+        for event in self.command_keys.iter_mut() {
+            visit(event);
+        }
+        for event in self.raw_command_keys.iter_mut() {
+            visit(event);
+        }
+        for event in self.recent_input_events.iter_mut() {
+            visit(event);
+        }
+        visit(&mut self.input_decode_map);
+        visit(&mut self.local_function_key_map);
+        for event in self.kbd_macro_events.iter_mut() {
+            visit(event);
+        }
+        if let Some(ref mut events) = self.last_kbd_macro {
+            for event in events.iter_mut() {
+                visit(event);
+            }
+        }
+        if let Some(ref mut events) = self.executing_kbd_macro {
+            for event in events.iter_mut() {
+                visit(event);
+            }
+        }
+    }
 }
 
 /// Keyboard runtime state shared by the command loop.
@@ -1521,6 +1575,13 @@ impl crate::gc_trace::GcTrace for KeyboardRuntime {
             kboard.trace_roots(roots);
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        self.kboard.trace_roots_mut(visit);
+        for kboard in self.parked_kboards.values_mut() {
+            kboard.trace_roots_mut(visit);
+        }
+    }
 }
 
 /// State of the command loop.
@@ -1707,6 +1768,10 @@ impl Default for CommandLoop {
 impl crate::gc_trace::GcTrace for CommandLoop {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         self.keyboard.trace_roots(roots);
+    }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        self.keyboard.trace_roots_mut(visit);
     }
 }
 
