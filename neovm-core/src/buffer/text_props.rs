@@ -647,6 +647,20 @@ impl GcTrace for TextPropertyTable {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         self.for_each_root(|value| roots.push(value));
     }
+
+    fn trace_roots_mut(&mut self, _visit: &mut dyn FnMut(&mut Value)) {
+        // TextPropertyTable stores properties in HashMap<Value, Value>
+        // inside each interval. Rewriting a HashMap key in place would
+        // invalidate the hash invariant; a correct mut-visit path
+        // would need to rebuild each interval's properties map.
+        //
+        // Safe to no-op today because GcLispString (owner of the
+        // text-property table) is MovePolicy::Pinned, and all Value
+        // types that can appear as plist keys (Cons, string, vector,
+        // etc.) are also Pinned in the current roadmap. When a
+        // short-lived type becomes Movable, this impl must rebuild
+        // every interval's HashMap by draining, visiting, reinserting.
+    }
 }
 
 // ===========================================================================

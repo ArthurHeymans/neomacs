@@ -3269,6 +3269,30 @@ impl GcTrace for FrameManager {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        // Visit the leaf Rust-owned Value slots that can be
+        // rewritten in place. HashMap<Value, Value> parameters are
+        // skipped here because rewriting the keys would invalidate
+        // the hash; when types flip to Movable, those maps need
+        // drain-and-reinsert. Safe no-op today (all frame-referenced
+        // types stay Pinned).
+        for frame in self.frames.values_mut() {
+            visit(&mut frame.name);
+            visit(&mut frame.icon_name);
+            visit(&mut frame.focus_frame);
+            visit(&mut frame.title);
+            visit(&mut frame.face_hash_table);
+            for v in frame.parameters.values_mut() {
+                visit(v);
+            }
+            // Skipped: deleted_window_parameters (HashMap),
+            // frame.parameters keys, frame.realized_faces keys,
+            // trace_window contents (display/history values live
+            // inside Window enum variants accessed via getters
+            // that don't expose &mut in the current Window API).
+        }
+    }
 }
 
 fn trace_window(window: &Window, roots: &mut Vec<Value>) {

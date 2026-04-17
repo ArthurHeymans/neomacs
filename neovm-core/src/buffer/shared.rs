@@ -61,4 +61,11 @@ impl SharedUndoState {
     pub fn trace_roots(&self, roots: &mut Vec<Value>) {
         roots.push(self.list());
     }
+
+    /// Visit each root slot with &mut access so an evacuating
+    /// collector can rewrite pointers after a minor GC.
+    pub fn trace_roots_mut(&self, visit: &mut dyn FnMut(&mut Value)) {
+        // self.inner is a RefCell; borrow_mut to expose &mut list.
+        visit(&mut self.inner.borrow_mut().list);
+    }
 }
