@@ -224,15 +224,15 @@ storage moves from old-gen blocks to spans.
 |-----------|--------|
 | PinnedSpace | Replace 15-line stub with SizeClassAllocator |
 | Mutator alloc (pinned path) | Call SizeClassAllocator instead of Box::new |
-| ObjectStore | NOT USED for span-allocated objects |
-| Sweep/reclaim | Walk spans instead of ObjectStore for pinned objects |
+| ObjectStore | ObjectRecords published via ObjectPublishLocal (Arena memory kind) |
+| Sweep/reclaim | Walk spans to build free-lists; ObjectStore records removed during reclaim |
 | HeapStats | Count span-allocated bytes from SizeClassAllocator |
 
 **What stays unchanged**:
 
 | Component | Why unchanged |
 |-----------|---------------|
-| ConcurrentMarker | Follows Trace edges, sets ObjectHeader.mark_bits — doesn't care where objects live |
+| ConcurrentMarker | Follows Trace edges via ObjectStore lookup — span objects must be published to ObjectStore |
 | Pacer | Tracks bytes allocated/reclaimed — fed from SizeClassAllocator stats |
 | Write barriers | Records card table entries — cards move to spans but barrier logic unchanged |
 | Root scanner | Feeds GcErased to marker — same mechanism |
@@ -248,18 +248,23 @@ Per-object overhead comparison:
 |-----------|----------------------------------|--------------------|
 | ObjectHeader | 56B | 56B (same) |
 | malloc metadata | ~32B per alloc | 0 (span-internal) |
-| ObjectRecord | 24B | 0 (no ObjectStore) |
+| ObjectRecord | 24B | 24B (published to ObjectStore for marker visibility) |
 | Mark bitmap | 0 (in header) | 0 (use header) |
 | Free-list | 0 | 0 (intrusive) |
 | Card table | 0 | ~0.025B per object |
 | Span metadata | 0 | ~0.1B per object (amortized) |
-| **Total per object** | **~112B** | **~56B** |
+| **Total per object** | **~112B** | **~80B** |
 
 For 780K objects:
 - Current: 780K × 112B = 87MB (but actual RSS is 1.3GB due to malloc fragmentation)
-- SizeClassAllocator: 780K × 56B = 44MB + span overhead = ~50MB
+- SizeClassAllocator: 780K × 80B = 62MB + span overhead = ~70MB
 - Plus payload data: ~60MB
-- **Expected RSS: ~110-120MB** (matching our arena prototype)
+- **Expected RSS: ~130-140MB** (slightly above arena prototype's 116MB due to ObjectRecord overhead, but with working GC collection)
+
+Note: ObjectStore records (24B each) are needed because the ConcurrentMarker
+uses ObjectLocator to look up objects during edge tracing. A future
+optimization can remove this by modifying the marker to work with raw
+GcErased pointers directly, reducing per-object cost to 56B.
 
 ### Size Class Table
 
