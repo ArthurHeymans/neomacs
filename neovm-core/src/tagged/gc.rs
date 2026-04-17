@@ -202,7 +202,7 @@ impl ArenaBlock {
     fn new() -> Self {
         let layout = std::alloc::Layout::from_size_align(ARENA_BLOCK_SIZE, 16)
             .expect("arena block layout");
-        let storage = unsafe { std::alloc::alloc(layout) };
+        let storage = unsafe { std::alloc::alloc_zeroed(layout) };
         if storage.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
@@ -898,4 +898,61 @@ pub fn read_stack_end_from_proc() -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod arena_tests {
+    use super::*;
+
+    #[test]
+    fn arena_cons_round_trip() {
+        let mut heap = TaggedHeap::new();
+        let car = TaggedValue::fixnum(42);
+        let cdr = TaggedValue::fixnum(99);
+        let val = heap.alloc_cons(car, cdr);
+        assert!(val.is_cons());
+        let read_car = unsafe { (*val.xcons_ptr()).car };
+        let read_cdr = unsafe { (*val.xcons_ptr()).cdr() };
+        assert_eq!(read_car.0, car.0, "car mismatch: got {:#x}, expected {:#x}", read_car.0, car.0);
+        assert_eq!(read_cdr.0, cdr.0, "cdr mismatch: got {:#x}, expected {:#x}", read_cdr.0, cdr.0);
+    }
+
+    #[test]
+    fn arena_float_round_trip() {
+        let mut heap = TaggedHeap::new();
+        let val = heap.alloc_float(3.14);
+        assert!(val.is_float());
+        let ptr = (val.0 & !0b111) as *const super::super::gc_trace_impls::GcFloat;
+        let read = unsafe { (*ptr).value };
+        assert_eq!(read, 3.14);
+    }
+}
+
+#[cfg(test)]
+mod arena_tests2 {
+    use super::*;
+    use crate::emacs_core::value::Value;
+
+    #[test]
+    fn arena_vector_round_trip() {
+        let mut heap = TaggedHeap::new();
+        crate::tagged::gc::set_tagged_heap(&mut heap);
+        let v = Value::vector(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]);
+        assert!(v.is_vector());
+        let data = v.as_vector_data().unwrap();
+        assert_eq!(data.len(), 3);
+        assert_eq!(data[0], Value::fixnum(1));
+        assert_eq!(data[1], Value::fixnum(2));
+        assert_eq!(data[2], Value::fixnum(3));
+    }
+
+    #[test]
+    fn arena_string_round_trip() {
+        let mut heap = TaggedHeap::new();
+        crate::tagged::gc::set_tagged_heap(&mut heap);
+        let v = Value::string("hello");
+        assert!(v.is_string());
+        let s = v.as_utf8_str().unwrap();
+        assert_eq!(s, "hello");
+    }
 }
