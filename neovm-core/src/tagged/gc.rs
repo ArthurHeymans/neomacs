@@ -255,7 +255,11 @@ pub struct TaggedHeap {
     /// `begin_collection()` and `complete_collection()`. These are converted
     /// to `GcErased` handles and fed to neovm-gc's external root scanner
     /// so the collector can trace all live VM objects.
-    gc_root_buffer: Vec<GcErased>,
+    ///
+    /// Wrapped in `Arc<Mutex<>>` so the scanner callback installed on the
+    /// neovm-gc heap — which must be `FnMut + Send + 'static` and therefore
+    /// cannot borrow `self` — can drain the buffer when the marker runs.
+    gc_root_buffer: std::sync::Arc<std::sync::Mutex<Vec<GcErased>>>,
 }
 
 impl TaggedHeap {
@@ -276,6 +280,21 @@ impl TaggedHeap {
         // ObjectPublishLocal chunk reservations.
         mutator.pin_safepoint();
         let gc_mutator = Some(Box::new(mutator));
+
+        // Install the external-root scanner callback. When the collector
+        // runs, it calls this closure to discover every VM-owned root.
+        // The closure drains `gc_root_buffer` (populated by the VM's
+        // `trace_roots()` pass via `seed_root()`) into the Vec supplied
+        // by the collector.
+        let gc_root_buffer: std::sync::Arc<std::sync::Mutex<Vec<GcErased>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        {
+            let roots = std::sync::Arc::clone(&gc_root_buffer);
+            gc_heap.set_external_root_scanner(move |out: &mut Vec<GcErased>| {
+                let mut guard = roots.lock().expect("gc_root_buffer lock poisoned");
+                out.extend(guard.drain(..));
+            });
+        }
         Self {
             gc_heap,
             gc_heap_box: heap_box,
@@ -294,7 +313,7 @@ impl TaggedHeap {
             dirty_owners: Vec::new(),
             dirty_owner_bits: FxHashSet::default(),
             dirty_writes: Vec::new(),
-            gc_root_buffer: Vec::new(),
+            gc_root_buffer,
         }
     }
 
@@ -757,7 +776,10 @@ impl TaggedHeap {
     fn buffer_root(&mut self, root: TaggedValue) {
         if root.is_heap_object() {
             let erased = unsafe { Self::tagged_to_erased(root) };
-            self.gc_root_buffer.push(erased);
+            self.gc_root_buffer
+                .lock()
+                .expect("gc_root_buffer lock poisoned")
+                .push(erased);
         }
     }
 
@@ -771,7 +793,10 @@ impl TaggedHeap {
         // is correct (no objects are freed, just like GC-disabled mode,
         // but should_collect() is true so the GC safe-point code path is
         // exercised).
-        self.gc_root_buffer.clear();
+        self.gc_root_buffer
+            .lock()
+            .expect("gc_root_buffer lock poisoned")
+            .clear();
         self.bytes_since_gc = 0;
         self.clear_dirty_owners();
         self.clear_dirty_writes();
@@ -794,7 +819,10 @@ impl TaggedHeap {
     /// Clears the root buffer in preparation for the VM's root
     /// enumeration pass.
     pub(crate) fn begin_collection(&mut self) {
-        self.gc_root_buffer.clear();
+        self.gc_root_buffer
+            .lock()
+            .expect("gc_root_buffer lock poisoned")
+            .clear();
     }
 
     /// Buffer a single VM root for the in-progress collection cycle.
