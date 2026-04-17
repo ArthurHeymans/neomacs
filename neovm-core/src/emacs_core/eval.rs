@@ -58,7 +58,23 @@ const STACK_GROWTH_PROBE_INTERVAL: usize = 16;
 const NAMED_CALL_CACHE_CAPACITY: usize = 4096;
 const LEXENV_ASSQ_CACHE_CAPACITY: usize = 16;
 const LEXENV_SPECIAL_CACHE_CAPACITY: usize = 16;
-const GC_DEFAULT_THRESHOLD_BYTES: usize = 100_000 * std::mem::size_of::<usize>();
+// Neomacs default gc-cons-threshold: 16 MB.
+//
+// GNU Emacs ships with 800_000 bytes, which triggers a full major
+// collection roughly every 1 MB of allocation -- on our mark-sweep
+// path each pause is 300-500 ms, so the 800_000 default means 1 sec
+// of GC per sec of heavy allocation during bootstrap or eval-buffer.
+//
+// 16 MB cuts threshold-driven GC frequency ~20x for editing
+// workloads. Bootstrap is largely unchanged (loadup.el calls
+// garbage-collect explicitly after every file load, so threshold
+// is bypassed there). Test suite data: 4MB and 16MB give the same
+// pass/fail count on the full neovm-core suite; 16MB wins for
+// long-session perceived latency.
+//
+// Users that want GNU-identical behavior can still
+// (setq gc-cons-threshold 800000) in their init file.
+const GC_DEFAULT_THRESHOLD_BYTES: usize = 16 * 1024 * 1024;
 const GC_THRESHOLD_FLOOR_BYTES: usize = GC_DEFAULT_THRESHOLD_BYTES / 10;
 const GC_HI_THRESHOLD_BYTES: usize = (i64::MAX as usize) / 2;
 const GC_PERCENT_SCALE: u64 = 1_000_000;
@@ -3035,7 +3051,10 @@ impl Context {
         obarray.set_symbol_value("double-click-fuzz", Value::fixnum(3));
         obarray.set_symbol_value("double-click-time", Value::fixnum(500));
         obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
-        obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(800000));
+        // Neomacs default: 16 MB (vs GNU's 800000). See
+        // GC_DEFAULT_THRESHOLD_BYTES for the rationale. Users can still
+        // `(setq gc-cons-threshold 800000)` to restore GNU behavior.
+        obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(16 * 1024 * 1024));
         obarray.set_symbol_value("help-char", Value::fixnum(8));
         obarray.set_symbol_value("hourglass-delay", Value::fixnum(1));
         obarray.set_symbol_value("hscroll-margin", Value::fixnum(5));
