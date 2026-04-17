@@ -778,6 +778,75 @@ impl GcTrace for ModeRegistry {
             roots.extend(group.members.iter().copied());
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for mode in self.major_modes.values_mut() {
+            if let Some(ref mut parent) = mode.parent {
+                visit(parent);
+            }
+            visit(&mut mode.mode_hook);
+            if let Some(ref mut keymap_name) = mode.keymap_name {
+                visit(keymap_name);
+            }
+            if let Some(ref mut syntax_table_name) = mode.syntax_table_name {
+                visit(syntax_table_name);
+            }
+            if let Some(ref mut abbrev_table_name) = mode.abbrev_table_name {
+                visit(abbrev_table_name);
+            }
+            if let Some(ref mut body) = mode.body {
+                visit(body);
+            }
+        }
+        for mode in self.minor_modes.values_mut() {
+            if let Some(ref mut keymap_name) = mode.keymap_name {
+                visit(keymap_name);
+            }
+            if let Some(ref mut body) = mode.body {
+                visit(body);
+            }
+        }
+        for mode in self.buffer_major_modes.values_mut() {
+            visit(mode);
+        }
+        for modes in self.buffer_minor_modes.values_mut() {
+            for mode in modes.iter_mut() {
+                visit(mode);
+            }
+        }
+        for mode in self.global_minor_modes.iter_mut() {
+            visit(mode);
+        }
+        for (_, mode) in self.auto_mode_alist.iter_mut() {
+            visit(mode);
+        }
+        visit(&mut self.fundamental_mode);
+        for var in self.custom_variables.values_mut() {
+            visit(&mut var.default_value);
+            if let Some(ref mut group) = var.group {
+                visit(group);
+            }
+            if let Some(ref mut set_function) = var.set_function {
+                visit(set_function);
+            }
+            if let Some(ref mut get_function) = var.get_function {
+                visit(get_function);
+            }
+            if let CustomType::Choice(ref mut choices) = var.type_ {
+                for (_, v) in choices.iter_mut() {
+                    visit(v);
+                }
+            }
+        }
+        for group in self.custom_groups.values_mut() {
+            if let Some(ref mut parent) = group.parent {
+                visit(parent);
+            }
+            for member in group.members.iter_mut() {
+                visit(member);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

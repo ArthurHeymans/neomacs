@@ -685,6 +685,14 @@ impl GcTrace for AutoloadManager {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for values in self.after_load.values_mut() {
+            for value in values.iter_mut() {
+                visit(value);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

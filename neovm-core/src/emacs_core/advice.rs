@@ -172,6 +172,14 @@ impl GcTrace for VariableWatcherList {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for watcher_list in self.watchers.values_mut() {
+            for watcher in watcher_list.iter_mut() {
+                visit(&mut watcher.callback);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
