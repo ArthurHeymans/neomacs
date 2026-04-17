@@ -141,6 +141,16 @@ impl<'heap> HandleScopeState<'heap> {
         self.ensure_safepoint();
     }
 
+    /// Pin the safepoint read guard without matching a `HandleScope`.
+    /// Used by the tagged-pointer host (neomacs) which manages roots
+    /// externally and never opens a scope, but still needs a persistent
+    /// safepoint so the mutator's `ObjectPublishLocal` reservations
+    /// don't get cleared by the next allocation's safepoint-refresh.
+    pub(crate) fn pin_safepoint(&mut self) {
+        self.depth = self.depth.saturating_add(1);
+        self.ensure_safepoint();
+    }
+
     pub(crate) fn ensure_safepoint(&mut self) {
         if self.depth > 0 && self.safepoint.is_none() {
             self.safepoint = Some(self.heap.read_safepoint());

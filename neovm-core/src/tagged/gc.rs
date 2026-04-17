@@ -187,56 +187,6 @@ const TAG_STRING: usize = 0b100;
 const TAG_FLOAT: usize = 0b110;
 
 // ---------------------------------------------------------------------------
-// Arena bump allocator for dense object packing
-// ---------------------------------------------------------------------------
-
-const ARENA_BLOCK_SIZE: usize = 1024 * 1024; // 1 MB blocks
-
-struct ArenaBlock {
-    storage: *mut u8,
-    capacity: usize,
-    cursor: usize,
-}
-
-impl ArenaBlock {
-    fn new() -> Self {
-        let layout = std::alloc::Layout::from_size_align(ARENA_BLOCK_SIZE, 16)
-            .expect("arena block layout");
-        let storage = unsafe { std::alloc::alloc_zeroed(layout) };
-        if storage.is_null() {
-            std::alloc::handle_alloc_error(layout);
-        }
-        Self {
-            storage,
-            capacity: ARENA_BLOCK_SIZE,
-            cursor: 0,
-        }
-    }
-
-    /// Try to bump-allocate `layout.size()` bytes with `layout.align()`.
-    /// Returns the base pointer if successful, None if the block is full.
-    fn try_alloc(&mut self, layout: std::alloc::Layout) -> Option<std::ptr::NonNull<u8>> {
-        let align = layout.align();
-        let aligned_cursor = (self.cursor + align - 1) & !(align - 1);
-        let end = aligned_cursor + layout.size();
-        if end > self.capacity {
-            return None;
-        }
-        let ptr = unsafe { self.storage.add(aligned_cursor) };
-        self.cursor = end;
-        std::ptr::NonNull::new(ptr)
-    }
-}
-
-impl Drop for ArenaBlock {
-    fn drop(&mut self) {
-        let layout = std::alloc::Layout::from_size_align(ARENA_BLOCK_SIZE, 16)
-            .expect("arena block layout");
-        unsafe { std::alloc::dealloc(self.storage, layout); }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // TaggedHeap — the main GC-managed heap
 // ---------------------------------------------------------------------------
 
@@ -246,15 +196,27 @@ impl Drop for ArenaBlock {
 /// The Heap is leaked to obtain a `'static` reference so that on-demand
 /// `Mutator` views can be created without self-referential lifetime issues.
 ///
-/// Small fixed-size objects are bump-allocated from arena blocks (1MB each)
-/// to avoid per-object system allocator overhead and fragmentation.
+/// All allocations route through neovm-gc's `SpaceKind::Pinned`. Objects
+/// up to [`neovm_gc::spaces::MAX_PINNED_SLOT_SIZE`] bytes are served from
+/// the span-based size-class allocator; larger objects fall back to the
+/// system allocator. Objects are tracked in the heap's `ObjectStore` so
+/// future concurrent marking can enumerate them.
 pub struct TaggedHeap {
     /// The neovm-gc Heap, leaked for 'static lifetime.
     gc_heap: &'static neovm_gc::Heap,
     /// Raw pointer for Drop cleanup.
     gc_heap_box: *mut neovm_gc::Heap,
-    /// Arena blocks for dense bump allocation.
-    arena_blocks: Vec<ArenaBlock>,
+    /// Persistent `Mutator` view so consecutive allocations share one
+    /// per-thread `ObjectPublishLocal`. A fresh `Mutator` per allocation
+    /// reserves a new 40KB `ObjectStore` chunk on first publish, burning
+    /// 1023 slots per single allocation — ~40GB wasted over a bootstrap.
+    /// Boxed to obtain a stable address and give the mutator a `'static`
+    /// borrow against the leaked `gc_heap`.
+    ///
+    /// Wrapped in `Option` so `Drop` can take and drop it *before*
+    /// reclaiming the `Heap` box, avoiding a use-after-free on the
+    /// safepoint read guard the mutator holds against the heap.
+    gc_mutator: Option<Box<neovm_gc::Mutator<'static>>>,
 
     /// Total number of allocated objects (cons + non-cons).
     pub allocated_count: usize,
@@ -309,10 +271,15 @@ impl TaggedHeap {
         let config = neovm_gc::HeapConfig::default();
         let heap_box = Box::into_raw(Box::new(neovm_gc::Heap::new(config)));
         let gc_heap: &'static neovm_gc::Heap = unsafe { &*heap_box };
+        let mut mutator = gc_heap.mutator();
+        // Pin the safepoint so subsequent allocations reuse the same
+        // ObjectPublishLocal chunk reservations.
+        mutator.pin_safepoint();
+        let gc_mutator = Some(Box::new(mutator));
         Self {
             gc_heap,
             gc_heap_box: heap_box,
-            arena_blocks: vec![ArenaBlock::new()],
+            gc_mutator,
             allocated_count: 0,
             gc_threshold: 100_000 * size_of::<usize>(),
             gc_threshold_overridden: false,
@@ -482,38 +449,20 @@ impl TaggedHeap {
     /// Allocate a value of type T through the neovm-gc Heap and return
     /// the raw payload pointer. The object is managed by neovm-gc from
     /// this point forward.
+    ///
+    /// Routes through `Mutator::alloc_pinned_raw` — small objects land
+    /// in span-based size-class pools; large objects fall back to the
+    /// system allocator. All records are published to neovm-gc's
+    /// `ObjectStore` so the marker can enumerate them.
     fn gc_alloc<T: neovm_gc::Trace + 'static>(&mut self, value: T) -> *const T {
-        let (layout, payload_offset) =
-            neovm_gc::object::allocation_layout_for::<T>().expect("layout for T");
-
-        // Bump-allocate from current arena block.
-        let base = loop {
-            if let Some(block) = self.arena_blocks.last_mut() {
-                if let Some(ptr) = block.try_alloc(layout) {
-                    break ptr;
-                }
-            }
-            self.arena_blocks.push(ArenaBlock::new());
-        };
-
-        // Write ObjectHeader + payload into arena memory.
-        let desc = self.gc_heap.type_desc_for::<T>();
-        let record = unsafe {
-            neovm_gc::object::ObjectRecord::allocate_in_arena::<T>(
-                desc,
-                neovm_gc::object::SpaceKind::Pinned,
-                base,
-                layout,
-                payload_offset,
-                value,
-            )
-        };
-        // CRITICAL: ObjectRecord::drop calls the payload's destructor.
-        // We must NOT let it drop — the arena owns the memory and the
-        // payload (e.g., Vec inside GcVector) must stay alive.
-        std::mem::forget(record);
-
-        unsafe { base.as_ptr().add(payload_offset) as *const T }
+        let mutator = self
+            .gc_mutator
+            .as_mut()
+            .expect("gc_mutator is only None during Drop");
+        let ptr = mutator
+            .alloc_pinned_raw(value)
+            .expect("pinned allocation should succeed");
+        ptr.as_ptr() as *const T
     }
 
     // -----------------------------------------------------------------------
@@ -872,6 +821,20 @@ impl TaggedHeap {
 
 impl Drop for TaggedHeap {
     fn drop(&mut self) {
+        // Clear the thread-local pointer if it still refers to us so
+        // callers that outlive this heap fall back to
+        // `TEST_FALLBACK_TAGGED_HEAP` (in test mode) or panic cleanly
+        // (in release) instead of dereferencing a dangling pointer.
+        let self_ptr = self as *mut TaggedHeap;
+        TAGGED_HEAP.with(|h| {
+            if h.get() == self_ptr {
+                h.set(std::ptr::null_mut());
+            }
+        });
+        // Drop the mutator BEFORE reclaiming the Heap box: the mutator
+        // holds a safepoint read guard borrowed from the heap, and
+        // dropping the heap first would invalidate that borrow.
+        self.gc_mutator.take();
         // Reclaim the leaked neovm-gc Heap.
         unsafe {
             drop(Box::from_raw(self.gc_heap_box));

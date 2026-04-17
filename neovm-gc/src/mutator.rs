@@ -515,6 +515,33 @@ impl<'heap> Mutator<'heap> {
                     },
                 )
             }
+            crate::object::SpaceKind::Pinned => {
+                let layout = alloc_profile.layout;
+                let payload_offset = alloc_profile.payload_offset;
+                let mut core = heap.write_core();
+                let span_base = if layout.size() <= crate::spaces::pinned_span::MAX_SLOT_SIZE {
+                    core.pinned_mut().allocator_mut().alloc(layout)
+                } else {
+                    None
+                };
+                Some(match span_base {
+                    Some(base) => unsafe {
+                        crate::object::ObjectRecord::allocate_in_arena::<T>(
+                            desc,
+                            space,
+                            base,
+                            layout,
+                            payload_offset,
+                            value.take().expect("allocation value should be present"),
+                        )
+                    },
+                    None => crate::object::ObjectRecord::allocate(
+                        desc,
+                        space,
+                        value.take().expect("allocation value should be present"),
+                    )?,
+                })
+            }
             _ => Some(crate::object::ObjectRecord::allocate(
                 desc,
                 space,
@@ -567,6 +594,108 @@ impl<'heap> Mutator<'heap> {
         value: T,
     ) -> Result<Root<'scope, T>, AllocError> {
         self.alloc_typed_scoped(scope, value)
+    }
+
+    /// Allocate a pinned (non-moving) object and return a raw payload
+    /// pointer. The caller is responsible for rooting the returned
+    /// pointer through an external mechanism (e.g., embedding it in a
+    /// tagged-pointer value that is reachable from the VM's external
+    /// root scanner).
+    ///
+    /// Routes through the span-based `SizeClassAllocator` for
+    /// allocations up to `MAX_SLOT_SIZE` bytes; falls back to the
+    /// system allocator for larger objects. Records are published to
+    /// `ObjectStore` so the concurrent marker can discover them.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the returned pointer is kept reachable
+    /// via a root the GC can discover until the object becomes
+    /// unreachable.
+    /// Pin a persistent safepoint read guard on this mutator. Required
+    /// by external-root hosts that use [`alloc_pinned_raw`] without
+    /// opening a `HandleScope`. Without a pinned safepoint, each
+    /// allocation re-entering the safepoint-fast-path would clear the
+    /// mutator's `ObjectPublishLocal` reservations and force a fresh
+    /// 40KB `ObjectStore` chunk per allocation. Safe to call more than
+    /// once; the guard is reference-counted by depth.
+    pub fn pin_safepoint(&mut self) {
+        self.handle_scope_state.pin_safepoint();
+        self.local.refresh_safepoint_fast_path_state(self.heap);
+    }
+
+    /// Allocate a pinned (non-moving) object and return a raw payload
+    /// pointer. The caller is responsible for rooting the returned
+    /// pointer through an external mechanism (e.g., embedding it in a
+    /// tagged-pointer value that is reachable from the VM's external
+    /// root scanner).
+    ///
+    /// Routes through the span-based `SizeClassAllocator` for
+    /// allocations up to `MAX_SLOT_SIZE` bytes; falls back to the
+    /// system allocator for larger objects. Records are published to
+    /// `ObjectStore` so the concurrent marker can discover them.
+    ///
+    /// The first call on a fresh mutator pins a safepoint read guard
+    /// so that subsequent allocations reuse the same
+    /// `ObjectPublishLocal` chunk reservations instead of allocating a
+    /// fresh 40KB chunk per call.
+    pub fn alloc_pinned_raw<T: Trace + 'static>(
+        &mut self,
+        value: T,
+    ) -> Result<NonNull<T>, AllocError> {
+        if !self.handle_scope_state.has_safepoint() {
+            // First call on a fresh mutator: pin the safepoint so that
+            // subsequent allocations reuse the same
+            // `ObjectPublishLocal` chunk reservations.
+            self.handle_scope_state.pin_safepoint();
+            self.local.refresh_safepoint_fast_path_state(self.heap);
+        }
+        let Self { heap, local, .. } = self;
+        if local.prepared_full_reclaim_active() {
+            return Err(AllocError::CollectionInProgress);
+        }
+        let desc = heap.type_desc_for::<T>();
+        let (layout, payload_offset) = crate::object::allocation_layout_for::<T>()?;
+        let space = crate::object::SpaceKind::Pinned;
+
+        let record = {
+            let mut core = heap.write_core();
+            let span_base = if layout.size() <= crate::spaces::pinned_span::MAX_SLOT_SIZE {
+                core.pinned_mut().allocator_mut().alloc(layout)
+            } else {
+                None
+            };
+            match span_base {
+                Some(base) => unsafe {
+                    crate::object::ObjectRecord::allocate_in_arena::<T>(
+                        desc,
+                        space,
+                        base,
+                        layout,
+                        payload_offset,
+                        value,
+                    )
+                },
+                None => crate::object::ObjectRecord::allocate(desc, space, value)?,
+            }
+        };
+
+        let (publish_local, alloc_counter_local) = local.publish_and_alloc_counter_local_mut();
+        let commit = heap.commit_allocated_record_shared(
+            record,
+            0,
+            publish_local,
+            alloc_counter_local,
+            true,
+        )?;
+        if commit.plans_dirty {
+            heap.mark_collector_plans_dirty_if_needed(
+                local.collector_plans_refresh_epoch_seen_mut(),
+            );
+        }
+        let header = commit.gc.header();
+        let payload = unsafe { crate::object::ObjectHeader::payload_ptr(header) };
+        Ok(payload.cast::<T>())
     }
 
     /// Allocate one managed object, collecting first if nursery pressure requires it.

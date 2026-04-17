@@ -16,7 +16,7 @@ use crate::runtime::CollectorRuntime;
 use crate::runtime_state::RuntimeStateHandle;
 use crate::spaces::{
     LargeObjectSpaceConfig, NurseryConfig, NurseryState, OldGenConfig, OldGenPlanSelection,
-    OldGenState, PinnedSpaceConfig,
+    OldGenState, PinnedSpaceConfig, PinnedSpaceState,
 };
 use crate::stats::{AllocationCounterLocal, CollectionStats, HeapStats, OldRegionStats};
 use core::any::TypeId;
@@ -148,6 +148,8 @@ pub(crate) struct HeapCore {
     // --- arena buffers (drops last, after all records) ---
     /// Bump-pointer semispace nursery arenas.
     nursery: NurseryState,
+    /// Span-based size-class allocator for pinned (non-moving) objects.
+    pinned: PinnedSpaceState,
 }
 
 // SAFETY: `HeapCore` owns all heap allocations and its raw pointers are internal references into
@@ -1317,6 +1319,7 @@ impl HeapCore {
             alloc_counters: std::sync::Arc::new(crate::stats::AtomicAllocationCounters::default()),
             external_root_scanner: None,
             nursery,
+            pinned: PinnedSpaceState::new(),
         };
         // Seed the atomic counters from the initial stats so
         // the nursery reserved_bytes (set above) is visible
@@ -1333,6 +1336,15 @@ impl HeapCore {
 
     pub(crate) fn nursery_mut(&mut self) -> &mut NurseryState {
         &mut self.nursery
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn pinned(&self) -> &PinnedSpaceState {
+        &self.pinned
+    }
+
+    pub(crate) fn pinned_mut(&mut self) -> &mut PinnedSpaceState {
+        &mut self.pinned
     }
 
     pub(crate) fn runtime_state_handle(&self) -> RuntimeStateHandle {

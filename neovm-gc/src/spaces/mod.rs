@@ -10,6 +10,8 @@ pub(crate) mod nursery_arena;
 pub mod old;
 /// Pinned-space configuration for objects that must not move.
 pub mod pinned;
+/// Span-based size-class allocator for pinned objects.
+pub(crate) mod pinned_span;
 
 pub use large::LargeObjectSpaceConfig;
 pub use nursery::NurseryConfig;
@@ -19,3 +21,4 @@ pub(crate) use old::{
     OldBlock, OldGenPlanSelection, OldGenState, OldRegionCollectionStats, PreparedOldGenReclaim,
 };
 pub use pinned::PinnedSpaceConfig;
+pub(crate) use pinned::PinnedSpaceState;
