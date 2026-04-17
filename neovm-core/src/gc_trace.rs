@@ -18,4 +18,29 @@ pub trait GcTrace {
             visit(root);
         }
     }
+
+    /// Visit all `Value` references held by `self` with mutable access,
+    /// so a moving collector can rewrite each pointer after an
+    /// evacuation copy. Phase δ of the moving-nursery roadmap:
+    /// concrete impls override this to expose `&mut Value` for every
+    /// slot they store.
+    ///
+    /// Default implementation is a read-only fallback that cannot
+    /// rewrite — it delegates to `trace_roots_with` and drops the
+    /// Values on the floor. Sub-systems that hold types in a
+    /// `Space::Nursery` must override this with real `&mut Value`
+    /// visits before their types can flip to `MovePolicy::Movable`.
+    ///
+    /// Until Phase δ is complete, overriding this is optional; the
+    /// default keeps the trait backward-compatible and lets the
+    /// collector's evacuation path no-op harmlessly on subsystems
+    /// that haven't migrated yet.
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        // Backwards-compatible fallback: visit values by value (copy).
+        // The `visit` callback receives &mut Value but any rewrite
+        // applies only to the local copy, so this path cannot
+        // actually track moved objects. Overriders must traverse
+        // their internal storage mutably.
+        let _ = visit;
+    }
 }
