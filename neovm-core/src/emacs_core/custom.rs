@@ -26,6 +26,7 @@ impl CustomManager {
 
 impl GcTrace for CustomManager {
     fn trace_roots(&self, _roots: &mut Vec<Value>) {}
+    fn trace_roots_mut(&mut self, _visit: &mut dyn FnMut(&mut Value)) {}
 }
 
 // ---------------------------------------------------------------------------

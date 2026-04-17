@@ -112,6 +112,14 @@ impl GcTrace for KmacroManager {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for macro_entry in self.macro_ring.iter_mut() {
+            for value in macro_entry.iter_mut() {
+                visit(value);
+            }
+        }
+    }
 }
 
 impl KmacroManager {

@@ -265,6 +265,15 @@ impl GcTrace for TimerManager {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for timer in self.timers.iter_mut() {
+            visit(&mut timer.callback);
+            for arg in timer.args.iter_mut() {
+                visit(arg);
+            }
+        }
+    }
 }
 
 // ===========================================================================
