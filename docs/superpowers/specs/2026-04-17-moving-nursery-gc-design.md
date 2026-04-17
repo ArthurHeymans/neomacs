@@ -143,23 +143,9 @@ Each phase lands independently, test suite must stay green.
 - Keep `MovePolicy::Pinned` for everything (relocate never fires yet)
 - All 638 `neovm-gc` tests still pass, all neovm-core tests still pass
 - Single PR, ~2 days
+- **STATUS: done** (commit 3b7f1b071)
 
-**Phase β — GcFloat as the canary.**
-- Flip `GcFloat::move_policy` to `Movable`
-- Route `alloc_float` through a new `alloc_nursery_raw`
-- Verify nursery minor cycles run, floats get copied, tagged values
-  get rewritten correctly
-- Keep all other types Pinned to keep the blast radius small
-- ~2-3 days
-
-**Phase γ — GcCons (the big one).**
-- Repeat Phase β for `GcCons`. Cons cells dominate allocation volume
-  in Lisp workloads, so this is the bulk of the pause-time win.
-- Add remembered-set probe points so cross-generation edges work
-- Stress-test: `gc_stress` mode + heavy cons workload
-- ~3-5 days
-
-**Phase δ — Root rewriting.**
+**Phase δ — Root rewriting. (REORDERED, must come before β)**
 - Change `GcTrace::trace_roots` signature from
   `fn trace_roots(&self, roots: &mut Vec<Value>)` to
   `fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value))`.
@@ -169,6 +155,26 @@ Each phase lands independently, test suite must stay green.
   (for evacuation fix-up).
 - ~3-5 days; highest risk phase because Rust's borrow checker will
   fight every `&mut` that crosses a trait object.
+- **Order rationale:** Without root rewriting, any type flipped to
+  `Movable` breaks on its first minor-GC evacuation (tagged values
+  in live roots dangle). Originally listed 4th in the roadmap;
+  moved to 2nd after discovering this blocker during Phase α.
+
+**Phase β — GcFloat as the canary.**
+- Flip `GcFloat::move_policy` to `Movable`
+- Route `alloc_float` through the nursery path (policy drives routing
+  automatically via `select_allocation_space`)
+- Verify nursery minor cycles run, floats get copied, tagged values
+  get rewritten correctly via the Phase δ root-rewrite API
+- Keep all other types Pinned to keep the blast radius small
+- ~2-3 days
+
+**Phase γ — GcCons (the big one).**
+- Repeat Phase β for `GcCons`. Cons cells dominate allocation volume
+  in Lisp workloads, so this is the bulk of the pause-time win.
+- Add remembered-set probe points so cross-generation edges work
+- Stress-test: `gc_stress` mode + heavy cons workload
+- ~3-5 days
 
 **Phase ε — Remaining short-lived types.**
 - `GcLispString` (nursery survival depends on text_props being
