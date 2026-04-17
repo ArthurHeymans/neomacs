@@ -482,13 +482,38 @@ impl TaggedHeap {
     /// Allocate a value of type T through the neovm-gc Heap and return
     /// the raw payload pointer. The object is managed by neovm-gc from
     /// this point forward.
-    fn gc_alloc<T: neovm_gc::Trace + 'static>(&self, value: T) -> *const T {
-        let mut mutator = self.gc_heap.mutator();
-        let mut scope = mutator.handle_scope();
-        let root = mutator
-            .alloc(&mut scope, value)
-            .expect("neovm-gc allocation failed");
-        root.as_gc().payload_ptr()
+    fn gc_alloc<T: neovm_gc::Trace + 'static>(&mut self, value: T) -> *const T {
+        let (layout, payload_offset) =
+            neovm_gc::object::allocation_layout_for::<T>().expect("layout for T");
+
+        // Bump-allocate from current arena block.
+        let base = loop {
+            if let Some(block) = self.arena_blocks.last_mut() {
+                if let Some(ptr) = block.try_alloc(layout) {
+                    break ptr;
+                }
+            }
+            self.arena_blocks.push(ArenaBlock::new());
+        };
+
+        // Write ObjectHeader + payload into arena memory.
+        let desc = self.gc_heap.type_desc_for::<T>();
+        let record = unsafe {
+            neovm_gc::object::ObjectRecord::allocate_in_arena::<T>(
+                desc,
+                neovm_gc::object::SpaceKind::Pinned,
+                base,
+                layout,
+                payload_offset,
+                value,
+            )
+        };
+        // CRITICAL: ObjectRecord::drop calls the payload's destructor.
+        // We must NOT let it drop — the arena owns the memory and the
+        // payload (e.g., Vec inside GcVector) must stay alive.
+        std::mem::forget(record);
+
+        unsafe { base.as_ptr().add(payload_offset) as *const T }
     }
 
     // -----------------------------------------------------------------------
