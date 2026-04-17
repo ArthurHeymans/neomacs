@@ -1367,6 +1367,18 @@ impl SavedRestrictionState {
             }
         }
     }
+
+    pub fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        if let Some(ref mut restrictions) = self.labeled_restrictions {
+            for restriction in restrictions.iter_mut() {
+                if let LabeledRestrictionLabel::User(ref mut label) =
+                    restriction.label
+                {
+                    visit(label);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -4217,6 +4229,40 @@ impl GcTrace for BufferManager {
             for restriction in restrictions {
                 if let LabeledRestrictionLabel::User(label) = restriction.label {
                     roots.push(label);
+                }
+            }
+        }
+    }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for buffer in self.buffers.values_mut() {
+            visit(&mut buffer.name);
+            // BufferText holds storage in a RefCell; the
+            // _mut method borrows internally.
+            buffer.text.trace_text_prop_roots_mut(visit);
+            // undo_state is SharedUndoState with internal RefCell.
+            buffer.undo_state.trace_roots_mut(visit);
+            // OverlayList.overlays is a BTreeSet; its trace_roots_mut
+            // is a documented no-op while overlay Values stay Pinned.
+            buffer.overlays.trace_roots_mut(visit);
+            for slot in buffer.slots.iter_mut() {
+                visit(slot);
+            }
+            visit(&mut buffer.local_var_alist);
+            visit(&mut buffer.keymap);
+        }
+        for last_name in self.dead_buffer_last_names.values_mut() {
+            visit(last_name);
+        }
+        for slot in self.buffer_defaults.iter_mut() {
+            visit(slot);
+        }
+        for restrictions in self.labeled_restrictions.values_mut() {
+            for restriction in restrictions.iter_mut() {
+                if let LabeledRestrictionLabel::User(ref mut label) =
+                    restriction.label
+                {
+                    visit(label);
                 }
             }
         }

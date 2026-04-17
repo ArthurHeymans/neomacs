@@ -2031,6 +2031,39 @@ impl GcTrace for Obarray {
             roots.push(blv.where_buf);
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for sym in self.symbols.iter_mut().flatten() {
+            match sym.flags.redirect() {
+                SymbolRedirect::Plainval => {
+                    // Safety: redirect==Plainval guarantees val.plain
+                    // is the live union variant. Writing through
+                    // &mut is safe under STW GC -- no other reader
+                    // exists during the relocate pass.
+                    let v_ptr: *mut Value = unsafe { &raw mut sym.val.plain };
+                    let v_ref = unsafe { &mut *v_ptr };
+                    if *v_ref != Value::UNBOUND {
+                        visit(v_ref);
+                    }
+                }
+                SymbolRedirect::Varalias
+                | SymbolRedirect::Forwarded
+                | SymbolRedirect::Localized => {}
+            }
+            if let Some(ref mut f) = sym.function {
+                visit(f);
+            }
+            visit(&mut sym.plist);
+        }
+        // BLV contents for LOCALIZED symbols. blv_ptr is *mut BLV,
+        // so we can hand &mut BLV field refs directly.
+        for &blv_ptr in &self.blvs {
+            let blv = unsafe { &mut *blv_ptr };
+            visit(&mut blv.defcell);
+            visit(&mut blv.valcell);
+            visit(&mut blv.where_buf);
+        }
+    }
 }
 #[cfg(test)]
 #[path = "symbol_test.rs"]

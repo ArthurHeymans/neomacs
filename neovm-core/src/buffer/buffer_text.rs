@@ -548,6 +548,10 @@ impl BufferText {
         self.storage.borrow().text_props.trace_roots(roots);
     }
 
+    pub fn trace_text_prop_roots_mut(&self, visit: &mut dyn FnMut(&mut Value)) {
+        self.storage.borrow_mut().text_props.trace_roots_mut(visit);
+    }
+
     /// Register a marker in this buffer. Updates `MarkerData` fields
     /// authoritatively (buffer/bytepos/charpos/marker_id/insertion_type)
     /// and splices the marker into this buffer's intrusive chain at head.
