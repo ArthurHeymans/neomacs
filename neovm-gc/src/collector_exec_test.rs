@@ -164,6 +164,7 @@ fn execute_collection_plan_records_minor_phases() {
         &mut nursery_state,
         &runtime_state,
         None,
+        None,
         |phase| phases.push(phase),
     )
     .expect("minor collection should succeed");

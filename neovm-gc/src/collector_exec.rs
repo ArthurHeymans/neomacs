@@ -598,6 +598,7 @@ pub(crate) fn prepare_full_reclaim_for_plan(
     nursery_config: &NurseryConfig,
     stats: &mut HeapStats,
     nursery: &mut crate::spaces::NurseryState,
+    external_relocator: Option<&crate::heap::ExternalRootRelocator>,
     mut record_phase: impl FnMut(CollectionPhase),
 ) -> Result<PreparedReclaim, AllocError> {
     struct FullReclaimState<'a> {
@@ -643,7 +644,11 @@ pub(crate) fn prepare_full_reclaim_for_plan(
                 state.objects,
                 state.indexes,
                 forwarding,
-            )
+            );
+            if let Some(relocator) = external_relocator {
+                let mut fwd = ForwardingRelocator::new(forwarding);
+                relocator.call(&mut fwd);
+            }
         },
         |state, plan, forwarding| {
             let view = FlatReadView::new(state.objects, state.indexes);
@@ -680,6 +685,7 @@ pub(crate) fn execute_collection_plan(
     nursery: &mut crate::spaces::NurseryState,
     runtime_state: &RuntimeStateHandle,
     external_scanner: Option<&crate::heap::ExternalRootScanner>,
+    external_relocator: Option<&crate::heap::ExternalRootRelocator>,
     mut record_phase: impl FnMut(CollectionPhase),
 ) -> Result<CollectionStats, AllocError> {
     let before_bytes = stats.total_live_bytes();
@@ -723,6 +729,10 @@ pub(crate) fn execute_collection_plan(
                 nursery,
             )?;
             relocate_forwarded_roots_and_edges(roots, objects, indexes, &evacuation.forwarding);
+            if let Some(relocator) = external_relocator {
+                let mut fwd = ForwardingRelocator::new(&evacuation.forwarding);
+                relocator.call(&mut fwd);
+            }
             let view = FlatReadView::new(objects, indexes);
             process_weak_references_for_candidates(
                 view.raw(),
@@ -811,6 +821,7 @@ pub(crate) fn execute_collection_plan(
                 nursery_config,
                 stats,
                 nursery,
+                external_relocator,
                 &mut record_phase,
             )?;
             record_phase(CollectionPhase::Reclaim);

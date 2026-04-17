@@ -105,6 +105,36 @@ impl std::fmt::Debug for ExternalRootScanner {
     }
 }
 
+/// Callback invoked during minor/full evacuation so external
+/// (VM-owned) roots can rewrite their tagged pointers to the new
+/// post-evacuation address. Parallel to [`ExternalRootScanner`]
+/// but hands the caller a [`Relocator`] instead of a root-list.
+///
+/// Hosts that hold raw-pointer values in their own data structures
+/// (e.g. a tagged-pointer Lisp VM) register a closure that walks
+/// every live slot and calls `relocator.relocate_erased(old)` to
+/// find the new address.
+pub(crate) struct ExternalRootRelocator(
+    std::sync::Mutex<Box<dyn FnMut(&mut dyn crate::descriptor::Relocator) + Send>>,
+);
+
+impl ExternalRootRelocator {
+    fn new(f: impl FnMut(&mut dyn crate::descriptor::Relocator) + Send + 'static) -> Self {
+        Self(std::sync::Mutex::new(Box::new(f)))
+    }
+
+    pub(crate) fn call(&self, relocator: &mut dyn crate::descriptor::Relocator) {
+        let mut guard = self.0.lock().expect("external root relocator lock");
+        guard(relocator);
+    }
+}
+
+impl std::fmt::Debug for ExternalRootRelocator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<external_root_relocator>")
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct HeapCore {
     config: HeapConfig,
@@ -145,6 +175,16 @@ pub(crate) struct HeapCore {
     ///
     /// Wrapped in a Mutex to satisfy Sync (HeapCore is behind a RwLock).
     external_root_scanner: Option<ExternalRootScanner>,
+    /// Optional external root relocator provided by the VM. Called
+    /// during minor/full evacuation so raw-pointer root holders can
+    /// rewrite their pointers to the post-evacuation address.
+    ///
+    /// Mirrors [`external_root_scanner`] but runs at a different
+    /// collection phase (after evacuation) and with a different
+    /// callback shape (takes `&mut dyn Relocator` rather than a
+    /// fresh Vec). Hosts that only do mark (e.g. Pinned-only VMs)
+    /// can leave this unset.
+    external_root_relocator: Option<ExternalRootRelocator>,
     // --- arena buffers (drops last, after all records) ---
     /// Bump-pointer semispace nursery arenas.
     nursery: NurseryState,
@@ -254,6 +294,29 @@ impl Heap {
     {
         let mut core = self.state.core.write().expect("heap core write lock");
         core.external_root_scanner = Some(ExternalRootScanner::new(scanner));
+    }
+
+    /// Install a callback the collector invokes during minor/full
+    /// evacuation so VM-owned tagged pointers can be rewritten to
+    /// their new addresses.
+    ///
+    /// The callback receives `&mut dyn Relocator`; for each heap-
+    /// pointing slot it holds, it should call
+    /// `relocator.relocate_erased(old_gc_erased)` and replace the
+    /// slot's address bits with the returned GcErased's payload
+    /// pointer. See `relocate_tagged` in the neomacs tagged-pointer
+    /// host for a canonical example.
+    ///
+    /// Must be called before any collection that evacuates
+    /// (`CollectionKind::Minor` or `Full`); Major-only hosts can
+    /// leave this unset. Replaces any previously registered
+    /// relocator.
+    pub fn set_external_root_relocator<F>(&self, relocator: F)
+    where
+        F: FnMut(&mut dyn crate::descriptor::Relocator) + Send + 'static,
+    {
+        let mut core = self.state.core.write().expect("heap core write lock");
+        core.external_root_relocator = Some(ExternalRootRelocator::new(relocator));
     }
 
     /// Convert this heap into a shared synchronized heap wrapper.
@@ -1319,6 +1382,7 @@ impl HeapCore {
             barrier_stats: std::sync::Arc::new(crate::stats::AtomicBarrierStats::new()),
             alloc_counters: std::sync::Arc::new(crate::stats::AtomicAllocationCounters::default()),
             external_root_scanner: None,
+            external_root_relocator: None,
             nursery,
             pinned: PinnedSpaceState::new(),
         };
@@ -1823,6 +1887,7 @@ impl HeapCore {
             &mut HeapStats,
             &mut NurseryState,
             Option<&ExternalRootScanner>,
+            Option<&ExternalRootRelocator>,
         ) -> R,
     ) -> R {
         let old_config = self.config.old;
@@ -1836,6 +1901,7 @@ impl HeapCore {
             &mut self.stats,
             &mut self.nursery,
             self.external_root_scanner.as_ref(),
+            self.external_root_relocator.as_ref(),
         );
         self.restore_flat_store(flat);
         result

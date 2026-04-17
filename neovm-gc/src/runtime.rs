@@ -196,7 +196,7 @@ impl<'heap> CollectorRuntime<'heap> {
         let mut phases = Vec::new();
         let roots = self.local.get_mut().roots_mut();
         let mut cycle = self.heap.with_flat_store_for_collection(
-            |flat, old_gen, old_config, nursery_config, stats, nursery, ext_scanner| {
+            |flat, old_gen, old_config, nursery_config, stats, nursery, ext_scanner, ext_relocator| {
                 execute_collection_plan(
                     &plan,
                     roots,
@@ -209,6 +209,7 @@ impl<'heap> CollectorRuntime<'heap> {
                     nursery,
                     &runtime_state,
                     ext_scanner.map(|s| s as &crate::heap::ExternalRootScanner),
+                    ext_relocator.map(|r| r as &crate::heap::ExternalRootRelocator),
                     |phase| phases.push(phase),
                 )
             },
@@ -791,7 +792,14 @@ impl<'heap> CollectorRuntime<'heap> {
                 let mut phases = Vec::new();
                 let roots = self.local.get_mut().roots_mut();
                 let prepared = self.heap.with_flat_store_for_collection(
-                    |flat, old_gen, old_config, nursery_config, stats, nursery, _ext_scanner| {
+                    |flat,
+                     old_gen,
+                     old_config,
+                     nursery_config,
+                     stats,
+                     nursery,
+                     _ext_scanner,
+                     ext_relocator| {
                         crate::collector_exec::prepare_full_reclaim_for_plan(
                             plan,
                             roots,
@@ -802,6 +810,7 @@ impl<'heap> CollectorRuntime<'heap> {
                             nursery_config,
                             stats,
                             nursery,
+                            ext_relocator,
                             |phase| phases.push(phase),
                         )
                     },
