@@ -168,6 +168,22 @@ impl GcTrace for RegisterManager {
             }
         }
     }
+
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        for content in self.registers.values_mut() {
+            match content {
+                RegisterContent::Marker(v) | RegisterContent::FrameConfig(v) => {
+                    visit(v);
+                }
+                RegisterContent::KbdMacro(keys) => {
+                    for v in keys.iter_mut() {
+                        visit(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 // ===========================================================================
