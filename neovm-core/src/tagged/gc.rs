@@ -811,17 +811,9 @@ impl TaggedHeap {
     /// edge updates. After the mark phase, the sweep reclaims dead
     /// objects from pinned span pools.
     ///
-    /// Currently opt-in via `NEOVM_GC_ENABLE_COLLECTION=1`. The
-    /// default is a no-op because:
-    ///   * some tests still SIGSEGV after collection triggers
-    ///     (likely missing write barriers, missing roots, or
-    ///     tagged-pointer round-trip issues with pdump-embedded
-    ///     values)
-    ///   * some tests time out (possible deadlock in the marker
-    ///     or infinite loop in a Trace impl)
-    /// These will be fixed incrementally; until then, phases 1-3
-    /// (allocator, root scanner, barriers) remain wired so enabling
-    /// the flag is a one-knob experiment.
+    /// Enabled by default; set `NEOVM_GC_ENABLE_COLLECTION=0` to
+    /// disable (useful for bisecting whether a regression involves
+    /// actual collection vs the surrounding infrastructure).
     fn flush_roots_and_collect(&mut self) {
         if gc_collection_enabled() {
             if let Some(mutator) = self.gc_mutator.as_mut() {
