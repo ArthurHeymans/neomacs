@@ -11,7 +11,7 @@
 use std::alloc::{Layout, alloc, dealloc};
 use std::ptr::NonNull;
 
-use crate::object::{ObjectHeader, SpaceKind};
+use crate::object::ObjectHeader;
 
 /// Span size in bytes. 32KB per span.
 const SPAN_BYTES: usize = 32 * 1024;
