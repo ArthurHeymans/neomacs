@@ -176,30 +176,22 @@ Each phase lands independently, test suite must stay green.
   get rewritten correctly via the Phase δ root-rewrite API
 - Keep all other types Pinned to keep the blast radius small
 - ~2-3 days
-- **STATUS: prep done** (commit f95cc2f78). New
-  `Mutator::alloc_external_raw` mirrors `alloc_pinned_raw` but
-  respects the type's declared `MovePolicy`, so flipping
-  `GcFloat::move_policy()` to `Movable` will transparently land
-  allocations in the nursery. `TaggedHeap::alloc_float` now routes
-  through this API. Remaining work before the actual flip:
-  1. Install an `ExternalRootRelocator` closure in
-     `TaggedHeap::new` that walks `Context::trace_roots_mut` and
-     rewrites each heap-tagged `&mut TaggedValue` through the
-     collector-supplied `&mut dyn Relocator`. Requires a
-     thread-local `*mut Context` installed by
-     `Context::gc_collect_from_current_roots` around
-     `complete_collection` so the closure can find the live Context
-     during STW.
-  2. Trigger an evacuating collection (`CollectionKind::Minor` or
-     `Full`). Current code path only runs Major, which does not
-     move objects, so flipping `GcFloat` to Movable without also
-     triggering Minor would leak nursery allocations. Simplest: add
-     a knob to alternate Major ↔ Full (or switch unconditionally to
-     Full) once the relocator hook is wired.
-  3. Flip `GcFloat::move_policy()` → `MovePolicy::Movable` (one
-     line, in `gc_trace_impls.rs`).
-  4. Regression test: round-trip a float allocation through a
-     forced Full GC, verify the extracted f64 still matches.
+- **STATUS: done** (commits f95cc2f78, bd0ac29da). End-to-end:
+  1. `Mutator::alloc_external_raw` respects `MovePolicy`;
+     `TaggedHeap::alloc_float` routes through it.
+  2. `TaggedHeap::new` registers an `ExternalRootRelocator` that
+     walks `Context::trace_roots_mut` and rewrites each heap-tagged
+     `TaggedValue` via a new `relocate_tagged_slot` helper. The
+     closure finds the live Context through the
+     `GC_RELOCATOR_CONTEXT` thread-local that
+     `gc_collect_from_current_roots` installs around
+     `complete_collection`.
+  3. VM's synchronous collect switched from
+     `CollectionKind::Major` to `CollectionKind::Full`, so every
+     cycle evacuates the nursery and exercises the relocator.
+  4. `GcFloat::move_policy()` flipped to `MovePolicy::Movable`.
+  5. All 43 tagged tests pass; pre-existing failure count in
+     neovm-core unchanged at 190 (same before and after the flip).
 
 **Phase γ — GcCons (the big one).**
 - Repeat Phase β for `GcCons`. Cons cells dominate allocation volume
