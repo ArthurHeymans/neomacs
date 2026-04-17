@@ -356,6 +356,12 @@ unsafe impl Trace for GcByteCode {
         if let Some(env) = data.env {
             trace_tagged(tracer, env);
         }
+        if let Some(doc) = data.doc_form {
+            trace_tagged(tracer, doc);
+        }
+        if let Some(interactive) = data.interactive {
+            trace_tagged(tracer, interactive);
+        }
     }
 
     fn relocate(&self, relocator: &mut dyn Relocator) {
@@ -365,6 +371,12 @@ unsafe impl Trace for GcByteCode {
         }
         if let Some(ref mut env) = data.env {
             relocate_tagged(relocator, env);
+        }
+        if let Some(ref mut doc) = data.doc_form {
+            relocate_tagged(relocator, doc);
+        }
+        if let Some(ref mut interactive) = data.interactive {
+            relocate_tagged(relocator, interactive);
         }
     }
 
@@ -451,7 +463,7 @@ pub struct GcMarker {
 unsafe impl Trace for GcMarker {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
 /// Bignum managed by neovm-gc. No TaggedValue edges.
@@ -464,7 +476,7 @@ pub struct GcBignum {
 unsafe impl Trace for GcBignum {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
     fn layout_kind() -> LayoutKind { LayoutKind::External }
 }
 
@@ -497,7 +509,7 @@ pub struct GcBuffer {
 unsafe impl Trace for GcBuffer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
 /// Window reference managed by neovm-gc. No TaggedValue edges.
@@ -510,7 +522,7 @@ pub struct GcWindow {
 unsafe impl Trace for GcWindow {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
 /// Frame reference managed by neovm-gc. No TaggedValue edges.
@@ -523,7 +535,7 @@ pub struct GcFrame {
 unsafe impl Trace for GcFrame {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
 /// Timer reference managed by neovm-gc. No TaggedValue edges.
@@ -536,7 +548,7 @@ pub struct GcTimer {
 unsafe impl Trace for GcTimer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Movable }
+    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
 }
 
 /// Built-in function managed by neovm-gc. No TaggedValue edges.
