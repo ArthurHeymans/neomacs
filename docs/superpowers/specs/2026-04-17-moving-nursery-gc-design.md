@@ -159,30 +159,14 @@ Each phase lands independently, test suite must stay green.
   `Movable` breaks on its first minor-GC evacuation (tagged values
   in live roots dangle). Originally listed 4th in the roadmap;
   moved to 2nd after discovering this blocker during Phase α.
-- **STATUS: neovm-core side done** (commits 3b7f1b071 through
-  6581c614a). All 23 sub-system impl sites have `trace_roots_mut`;
-  `Context::trace_roots_mut` drives them.
-- **BLOCKER for end-to-end:** neovm-gc's `ExternalRootScanner` is
-  `FnMut(&mut Vec<GcErased>) + Send + 'static` — marker-only, cannot
-  rewrite pointers. To feed the collector our mutable roots during
-  evacuation, add a parallel `ExternalRootRelocator` type in
-  neovm-gc:
-  ```rust
-  pub fn set_external_root_relocator<F>(&self, f: F)
-      where F: FnMut(&mut dyn Relocator) + Send + 'static;
-  ```
-  And plumb through `with_flat_store_for_collection` ->
-  `execute_collection_plan`, called right after
-  `relocate_forwarded_roots_and_edges` in the Minor and Full
-  branches. The existing `ForwardingRelocator` (wraps
-  `ForwardingMap`) already implements the `Relocator` trait; the
-  new setter just needs to expose it to the external callback.
-  Concrete files to touch in neovm-gc:
-    - `heap.rs`: new struct, setter, wrapper with `call(&mut dyn Relocator)`
-    - `collector_exec.rs`: add param, call after relocate_forwarded_roots
-    - `runtime.rs` / `with_flat_store_for_collection`: pipe the extra
-      arg through
-  ~1 day of focused work, risk: moderate (touches STW protocol).
+- **STATUS: done** (commits 3b7f1b071 through febc96cec). All 23
+  sub-system impl sites have `trace_roots_mut`;
+  `Context::trace_roots_mut` drives them. neovm-gc side
+  `ExternalRootRelocator` is plumbed through
+  `with_flat_store_for_collection` and invoked after
+  `relocate_forwarded_roots_and_edges` in both Minor and Full
+  branches of `execute_collection_plan`. 638/638 neovm-gc tests,
+  43/43 tagged tests green.
 
 **Phase β — GcFloat as the canary.**
 - Flip `GcFloat::move_policy` to `Movable`
@@ -192,6 +176,30 @@ Each phase lands independently, test suite must stay green.
   get rewritten correctly via the Phase δ root-rewrite API
 - Keep all other types Pinned to keep the blast radius small
 - ~2-3 days
+- **STATUS: prep done** (commit f95cc2f78). New
+  `Mutator::alloc_external_raw` mirrors `alloc_pinned_raw` but
+  respects the type's declared `MovePolicy`, so flipping
+  `GcFloat::move_policy()` to `Movable` will transparently land
+  allocations in the nursery. `TaggedHeap::alloc_float` now routes
+  through this API. Remaining work before the actual flip:
+  1. Install an `ExternalRootRelocator` closure in
+     `TaggedHeap::new` that walks `Context::trace_roots_mut` and
+     rewrites each heap-tagged `&mut TaggedValue` through the
+     collector-supplied `&mut dyn Relocator`. Requires a
+     thread-local `*mut Context` installed by
+     `Context::gc_collect_from_current_roots` around
+     `complete_collection` so the closure can find the live Context
+     during STW.
+  2. Trigger an evacuating collection (`CollectionKind::Minor` or
+     `Full`). Current code path only runs Major, which does not
+     move objects, so flipping `GcFloat` to Movable without also
+     triggering Minor would leak nursery allocations. Simplest: add
+     a knob to alternate Major ↔ Full (or switch unconditionally to
+     Full) once the relocator hook is wired.
+  3. Flip `GcFloat::move_policy()` → `MovePolicy::Movable` (one
+     line, in `gc_trace_impls.rs`).
+  4. Regression test: round-trip a float allocation through a
+     forced Full GC, verify the extracted f64 still matches.
 
 **Phase γ — GcCons (the big one).**
 - Repeat Phase β for `GcCons`. Cons cells dominate allocation volume
