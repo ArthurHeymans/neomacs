@@ -256,7 +256,10 @@ pub struct TaggedHeap {
     /// Threshold, in bytes, above which `should_collect_minor`
     /// returns true. Kept independent of `gc_threshold` so the
     /// fast-path cycle can be tuned separately from the full-GC
-    /// frequency.
+    /// frequency. 2MB is the bisected default: at 1MB a rare
+    /// un-rewritten Value slot gets exercised during bootstrap
+    /// (follow-up task #25), while 2MB+ lets Minor run frequently
+    /// enough to keep the Nursery drained without tripping it.
     gc_minor_threshold: usize,
     /// Approximate bytes retained by the live heap after the last sweep.
     live_bytes: usize,
@@ -372,7 +375,7 @@ impl TaggedHeap {
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
             bytes_since_minor: 0,
-            gc_minor_threshold: 1 << 20,
+            gc_minor_threshold: 2 << 20,  // 2 MiB
             live_bytes: 0,
             marker_ptrs: Vec::new(),
             buffer_registry: FxHashMap::default(),
