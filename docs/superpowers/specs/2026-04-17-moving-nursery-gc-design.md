@@ -257,20 +257,31 @@ Each phase lands independently, test suite must stay green.
   Default-off today because the bootstrap test calls
   `gc_collect_exact` per form; real editor paths that drive GC
   through safe-point thresholds should flip the default on.
-- *Concurrent (background thread)*: **NOT YET LANDED.** The
-  neovm-gc `SharedHeap` + `BackgroundWorker` pair exists but
-  requires a persistent-shared-mutator API: today's
-  `SharedHeap::with_mutator` creates a fresh `Mutator` per call,
-  which burns a 40 KiB `ObjectPublishLocal` chunk on every
-  allocation (~40 GiB wasted over one bootstrap). An upstream
-  neovm-gc change is needed -- either
-  `Heap::mutator_with_local(&mut MutatorLocal)` to let the host
-  own `MutatorLocal` independently of `Mutator` lifetime, or
-  a new `SharedMutator` type whose state survives across
-  `with_mutator` closures. Tracked as a future milestone; when
-  that lands the `SharedCollectorRuntime::spawn_background_worker`
-  path can move Major mark entirely off the mutator thread, with
-  only the brief remark + reclaim phases remaining as STW.
+- *Concurrent (background thread)*: **infrastructure landed,
+  opt-in** (commits cb466566e, c15473979). neovm-gc gained three
+  new APIs: `MutatorLocal::new_registered` /
+  `MutatorLocal::release`, `Mutator::from_local` /
+  `Mutator::into_local` (ManuallyDrop-suppressed release), and
+  `SharedHeap::with_persistent_mutator`. These let a host reuse
+  one `MutatorLocal` across calls, avoiding the ~40 GiB
+  ObjectPublishLocal churn that plain `with_mutator` would
+  cause.
+  TaggedHeap now holds both `&static Heap` (direct, for the
+  main mutator's persistent `Mutator<static>`) AND `&static
+  SharedHeap` (for spawning a `BackgroundWorker`). Both views
+  back the same `HeapState` via `Heap::clone` (Arc bump), so
+  neither path costs the other anything.
+  `SharedHeap::with_persistent_mutator` switched from outer
+  write-lock to outer read-lock so alloc-heavy callers don't
+  serialize against the background collector thread.
+  Spawn the worker with `NEOVM_GC_BACKGROUND=1`. In the current
+  bootstrap test the worker does not reduce pause time because
+  `gc_collect_exact` is invoked per form (the caller blocks for
+  the whole sync cycle). Concurrent-marking wins materialize
+  only on the safe-point-driven path; set
+  `NEOVM_GC_INCREMENTAL_MAJOR=1` alongside
+  `NEOVM_GC_BACKGROUND=1` to exercise it in workloads that do
+  not force per-form sync GC.
 
 **Total estimate: 2-4 weeks focused work.** Phase δ is the risk
 centerpiece; everything else is mechanical.
