@@ -1140,6 +1140,30 @@ impl SharedHeap {
         })
     }
 
+    /// Execute one closure with exclusive access to a `Mutator`
+    /// that reuses the supplied persistent `MutatorLocal`.
+    ///
+    /// Intended for VM-side hosts (e.g. neomacs's `TaggedHeap`)
+    /// that issue many allocations and want to avoid the
+    /// publish-local / counter-slot churn of building a fresh
+    /// `Mutator` per call. The local must have been obtained from
+    /// [`crate::mutator::MutatorLocal::new_registered`] against
+    /// this heap; it persists across calls, so
+    /// `ObjectPublishLocal` chunk reservations stay reusable.
+    pub fn with_persistent_mutator<R>(
+        &self,
+        local: &mut crate::mutator::MutatorLocal,
+        f: impl for<'heap> FnOnce(&mut Mutator<'heap>) -> R,
+    ) -> Result<R, SharedHeapError> {
+        self.with_heap(|heap| {
+            let taken = std::mem::replace(local, crate::mutator::MutatorLocal::default());
+            let mut mutator = Mutator::from_local(heap, taken);
+            let result = f(&mut mutator);
+            *local = mutator.into_local();
+            result
+        })
+    }
+
     /// Execute one closure with exclusive access to a mutator bound to this heap without
     /// blocking.
     pub fn try_with_mutator<R>(

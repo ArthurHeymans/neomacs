@@ -316,6 +316,78 @@ impl<'heap> Mutator<'heap> {
         }
     }
 
+    /// Construct a mutator that reuses an existing `MutatorLocal`.
+    ///
+    /// Used by persistent-mutator hosts (e.g., a VM-side
+    /// `TaggedHeap` that holds one `MutatorLocal` across many
+    /// allocations) to avoid per-alloc churn on the
+    /// `ObjectPublishLocal`, `AllocationCounterLocal`, and
+    /// `BarrierStatsLocal` slots.
+    ///
+    /// The supplied local must have been obtained from
+    /// [`MutatorLocal::new_registered`] against this same `heap`;
+    /// its counter slots live in `heap`'s shared pools and would
+    /// alias or dangle if the local was registered against a
+    /// different heap.
+    pub fn from_local(heap: &'heap Heap, local: MutatorLocal) -> Self {
+        Self {
+            heap,
+            local,
+            handle_scope_state: crate::root::HandleScopeState::new(heap),
+        }
+    }
+
+    /// Consume the mutator and return its `MutatorLocal` without
+    /// running the usual `Drop` release. Caller is responsible for
+    /// either handing the local to another [`Mutator::from_local`]
+    /// call or invoking [`MutatorLocal::release`] before dropping
+    /// it.
+    pub fn into_local(self) -> MutatorLocal {
+        // Suppress Drop by moving `self` into ManuallyDrop, then
+        // move the fields out.
+        let mut md = std::mem::ManuallyDrop::new(self);
+        // SAFETY: we read the fields out of `md` and never access
+        // them again; `md` is a `ManuallyDrop` so its destructor
+        // is not called, preventing the usual release-on-drop.
+        unsafe {
+            let local = std::ptr::read(&md.local);
+            // Also drop the handle_scope_state since we're skipping
+            // Drop on Mutator itself.
+            std::ptr::drop_in_place(&mut md.handle_scope_state);
+            local
+        }
+    }
+}
+
+impl MutatorLocal {
+    /// Construct a fresh `MutatorLocal` registered against `heap`.
+    ///
+    /// Equivalent to the private initialization path in
+    /// [`Mutator::new`]; use this when building a persistent
+    /// local that will outlive its first `Mutator`.
+    pub fn new_registered(heap: &Heap) -> Self {
+        let mut local = Self::default();
+        local.set_alloc_counter_local(heap.allocation_counter_local());
+        local.set_barrier_stats_local(heap.barrier_stats_local());
+        local.set_nursery_generation(heap.current_nursery_generation());
+        local.nursery_tlab_bytes = heap.nursery_tlab_bytes();
+        local
+    }
+
+    /// Release counter slots back to `heap`'s shared pools.
+    ///
+    /// Mirrors the release done by [`Mutator::drop`]. Safe to
+    /// call before dropping a `MutatorLocal` that was obtained
+    /// from [`Self::new_registered`] or extracted via
+    /// [`Mutator::into_local`].
+    pub fn release(&mut self, heap: &Heap) {
+        heap.release_barrier_stats_local(&mut self.barrier_stats_local);
+        heap.release_allocation_counter_local(&mut self.alloc_counter_local);
+    }
+}
+
+impl<'heap> Mutator<'heap> {
+
     /// Acquire the safepoint write lock plus the heap-core
     /// write lock and run the closure with a live
     /// `CollectorRuntime` built against those guards plus
