@@ -240,6 +240,28 @@ Each phase lands independently, test suite must stay green.
 - `GcVector` small cases.
 - Bytecode constant arrays.
 - ~3-5 days.
+- **STATUS: partial** (commits deb540866, 8c3ea4221). Flipped:
+  `GcVector`, `GcRecord` (identical shape to vector),
+  `GcBignum` (leaf, rug::Integer memcpy-safe),
+  `GcSymbolWithPos` (sym/pos are never heap-tagged per the
+  phase-alpha invariant). All route through
+  `alloc_external_raw`; all 43 tagged tests + bootstrap pass.
+  Not yet flipped because of complications:
+  - `GcLispString`: owns a `TextPropertyTable` whose
+    `HashMap<Value, Value>` keys can include Movable cons cells.
+    `relocate()` would need to rebuild each interval's HashMap
+    during GC, mirroring the drain-and-reinsert pattern used at
+    the VM-side `TextPropertyTable::trace_roots_mut`.
+  - `GcHashTable`: same pattern -- keys are Values, rewriting
+    them in place breaks hash invariants.
+  - `GcLambda` / `GcMacro` / `GcByteCode`: shape is clean
+    (`Vec<TaggedValue>`) but these are typically long-lived
+    (bound to a defining symbol). Flipping would churn them
+    through the Nursery without a clear win; leave Pinned until
+    a pacer pass shows otherwise.
+  - Long-lived editor objects (`GcBuffer`, `GcWindow`,
+    `GcFrame`, `GcTimer`, `GcSubr`, `GcMarker`, `GcOverlay`):
+    stay Pinned by design.
 
 **Phase ζ — Pacer + policy.**
 - Threshold-driven minor-vs-major selection.
