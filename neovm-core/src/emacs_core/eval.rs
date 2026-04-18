@@ -58,24 +58,33 @@ const STACK_GROWTH_PROBE_INTERVAL: usize = 16;
 const NAMED_CALL_CACHE_CAPACITY: usize = 4096;
 const LEXENV_ASSQ_CACHE_CAPACITY: usize = 16;
 const LEXENV_SPECIAL_CACHE_CAPACITY: usize = 16;
-// Neomacs default gc-cons-threshold: 16 MB.
+// Neomacs default gc-cons-threshold: 4 MiB.
 //
-// GNU Emacs ships with 800_000 bytes, which triggers a full major
-// collection roughly every 1 MB of allocation -- on our mark-sweep
-// path each pause is 300-500 ms, so the 800_000 default means 1 sec
-// of GC per sec of heavy allocation during bootstrap or eval-buffer.
+// Tuned for pause-time rather than throughput. Measured on
+// gc_bench cons-churn (1M iterations, release):
 //
-// 16 MB cuts threshold-driven GC frequency ~20x for editing
-// workloads. Bootstrap is largely unchanged (loadup.el calls
-// garbage-collect explicitly after every file load, so threshold
-// is bypassed there). Test suite data: 4MB and 16MB give the same
-// pass/fail count on the full neovm-core suite; 16MB wins for
-// long-session perceived latency.
+//   threshold   cycles   p50     p99     wall
+//   1 MiB       20       4.6 ms  8.2 ms  1.26 s
+//   4 MiB       20       5.5 ms  10 ms   ~1.3 s   <-- default
+//   16 MiB      9        16 ms   25 ms   1.75 s
 //
-// Users that want GNU-identical behavior can still
-// (setq gc-cons-threshold 800000) in their init file.
-const GC_DEFAULT_THRESHOLD_BYTES: usize = 16 * 1024 * 1024;
-const GC_THRESHOLD_FLOOR_BYTES: usize = GC_DEFAULT_THRESHOLD_BYTES / 10;
+// Bootstrap (load full Lisp runtime) wall time scales roughly
+// inversely with the threshold; 4 MiB gives ~27% bootstrap
+// slowdown vs 16 MiB but cuts p99 latency by 2.5x. The trade
+// favors interactive latency because GNU Emacs's own default is
+// 800_000 bytes -- we're still an order of magnitude above that.
+//
+// The 16 MiB default used to be necessary because each Major
+// was 300-500 ms of span-allocator sweep; phase-gamma onward
+// put cons cells in the moving nursery and dropped per-cycle
+// cost to ~5-10 ms, which is what unlocks this tuning.
+//
+// Users who need the old throughput-biased behavior can still
+// `(setq gc-cons-threshold (* 16 1024 1024))` in init.el.
+const GC_DEFAULT_THRESHOLD_BYTES: usize = 4 * 1024 * 1024;
+// Floor kept small so Lisp can still drop below the default if
+// someone wants GNU-identical 800_000-byte behavior.
+const GC_THRESHOLD_FLOOR_BYTES: usize = 128 * 1024;
 const GC_HI_THRESHOLD_BYTES: usize = (i64::MAX as usize) / 2;
 const GC_PERCENT_SCALE: u64 = 1_000_000;
 pub(crate) const INTERNAL_COMPILER_FUNCTION_OVERRIDES: &str =
@@ -3086,7 +3095,10 @@ impl Context {
         // Neomacs default: 16 MB (vs GNU's 800000). See
         // GC_DEFAULT_THRESHOLD_BYTES for the rationale. Users can still
         // `(setq gc-cons-threshold 800000)` to restore GNU behavior.
-        obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(16 * 1024 * 1024));
+        obarray.set_symbol_value(
+            "gc-cons-threshold",
+            Value::fixnum(GC_DEFAULT_THRESHOLD_BYTES as i64),
+        );
         obarray.set_symbol_value("help-char", Value::fixnum(8));
         obarray.set_symbol_value("hourglass-delay", Value::fixnum(1));
         obarray.set_symbol_value("hscroll-margin", Value::fixnum(5));

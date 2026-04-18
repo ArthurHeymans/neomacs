@@ -31,11 +31,13 @@ use std::time::Instant;
 #[derive(Clone, Copy, Debug)]
 struct BenchOptions {
     iterations: usize,
+    gc_threshold_bytes: Option<usize>,
 }
 
 fn parse_args() -> BenchOptions {
     let mut opts = BenchOptions {
         iterations: 2_000_000,
+        gc_threshold_bytes: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -44,8 +46,12 @@ fn parse_args() -> BenchOptions {
                 let v = args.next().expect("--iters needs a value");
                 opts.iterations = v.parse().expect("iters must be usize");
             }
+            "--gc-threshold" => {
+                let v = args.next().expect("--gc-threshold needs a value (bytes)");
+                opts.gc_threshold_bytes = Some(v.parse().expect("threshold must be usize"));
+            }
             "--help" | "-h" => {
-                eprintln!("usage: gc_bench [--iters N]");
+                eprintln!("usage: gc_bench [--iters N] [--gc-threshold BYTES]");
                 std::process::exit(0);
             }
             other => {
@@ -78,8 +84,12 @@ fn describe_env() -> String {
     }
 }
 
-fn bench_cons_churn(iterations: usize) {
+fn bench_cons_churn(opts: BenchOptions) {
+    let iterations = opts.iterations;
     let mut ctx = Context::new();
+    if let Some(threshold) = opts.gc_threshold_bytes {
+        ctx.set_gc_threshold(threshold);
+    }
 
     // Build a long list of cons cells in a tight loop. Uses
     // Lisp-level `dotimes` so every iteration hits
@@ -142,5 +152,5 @@ fn bench_cons_churn(iterations: usize) {
 
 fn main() {
     let opts = parse_args();
-    bench_cons_churn(opts.iterations);
+    bench_cons_churn(opts);
 }
