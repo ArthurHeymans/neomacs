@@ -280,7 +280,20 @@ pub struct TaggedHeap {
     /// neovm-gc heap — which must be `FnMut + Send + 'static` and therefore
     /// cannot borrow `self` — can drain the buffer when the marker runs.
     gc_root_buffer: std::sync::Arc<std::sync::Mutex<Vec<GcErased>>>,
+
+    /// Monotonic counter of collection cycles. Drives the simple
+    /// pacer in `flush_roots_and_collect`: every `GC_FULL_EVERY`-th
+    /// cycle escalates from Minor to Full so nursery evacuation
+    /// stays cheap on the fast path while old-gen dead objects
+    /// still get reclaimed periodically.
+    gc_cycle_counter: u64,
 }
+
+/// Every Nth collect cycle runs Full instead of Minor. Chosen
+/// empirically: Minor-only cycles are cheap but never reclaim
+/// old-gen survivors; Full every cycle is wasteful. 16 keeps Full
+/// under ~7% of cycles while still bounding old-gen growth.
+const GC_FULL_EVERY: u64 = 16;
 
 impl TaggedHeap {
     /// Create a `Mutator` view for write barrier calls.
@@ -359,6 +372,7 @@ impl TaggedHeap {
             dirty_owner_bits: FxHashSet::default(),
             dirty_writes: Vec::new(),
             gc_root_buffer,
+            gc_cycle_counter: 0,
         }
     }
 
@@ -864,12 +878,24 @@ impl TaggedHeap {
     fn flush_roots_and_collect(&mut self) {
         if gc_collection_enabled() {
             if let Some(mutator) = self.gc_mutator.as_mut() {
-                // Phase beta canary: use Full instead of Major so the
-                // nursery gets evacuated on every cycle, exercising the
-                // relocator end-to-end. Movable types (currently just
-                // GcFloat) will have their tagged pointers rewritten
-                // via `relocate_tagged_slot`.
-                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Full);
+                // Pacer: Major is the default — it sweeps Pinned
+                // and Old without evacuating the Nursery, matching
+                // pre-phase-beta behavior for every allocation type
+                // except GcFloat. Every GC_FULL_EVERY-th cycle
+                // escalates to Full so the Nursery gets evacuated
+                // and Movable types (currently just GcFloat) go
+                // through the relocator. Minor is deliberately not
+                // used here because today Pinned dominates the
+                // working set; once more types flip to Movable in
+                // Phase γ / ε this ratio inverts and Minor becomes
+                // the fast path.
+                self.gc_cycle_counter = self.gc_cycle_counter.wrapping_add(1);
+                let kind = if self.gc_cycle_counter % GC_FULL_EVERY == 0 {
+                    neovm_gc::plan::CollectionKind::Full
+                } else {
+                    neovm_gc::plan::CollectionKind::Major
+                };
+                let _ = mutator.collect(kind);
             }
             // Resync our cumulative allocation counter with neovm-gc's
             // live object count so callers that treat allocated_count
