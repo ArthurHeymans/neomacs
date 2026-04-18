@@ -1354,7 +1354,9 @@ fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Con
         if *name == "!load-ldefs-boot" {
             let ldefs_path = lisp_dir.join("ldefs-boot.el");
             if ldefs_path.exists() {
-                load_file(&mut eval, &ldefs_path).expect("load ldefs-boot");
+                if let Err(err) = load_file(&mut eval, &ldefs_path) {
+                    panic!("load ldefs-boot failed: {}", format_eval_error(&eval, &err));
+                }
             }
             continue;
         }
