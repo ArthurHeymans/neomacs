@@ -197,7 +197,9 @@ pub fn with_string_text_props_mut<R>(
 ) -> Option<R> {
     let ptr = value.as_string_ptr()? as *mut GcLispString;
     note_heap_write(value, HeapWriteKind::StringTextProps);
-    let result = f(unsafe { &mut (*ptr).text_props });
+    // text_props is wrapped in UnsafeCell so `Trace::relocate`
+    // can rebuild it during STW evacuation (see gc_trace_impls.rs).
+    let result = f(unsafe { &mut *(*ptr).text_props.get() });
     gc_post_write_barrier_bulk(value);
     Some(result)
 }

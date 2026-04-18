@@ -174,14 +174,20 @@ unsafe impl Trace for GcFloat {
 /// TaggedValue edges that must be traced.
 pub struct GcLispString {
     pub data: LispString,
-    pub text_props: TextPropertyTable,
+    /// UnsafeCell so `Trace::relocate(&self, ...)` can rebuild
+    /// each property interval's `HashMap<Value, Value>` in place
+    /// after the collector moves a key/value Value out from
+    /// under it. Mutation is safe because relocate only fires
+    /// during STW.
+    pub text_props: UnsafeCell<TextPropertyTable>,
 }
 
 unsafe impl Trace for GcLispString {
     fn trace(&self, tracer: &mut dyn Tracer) {
+        let text_props = unsafe { &*self.text_props.get() };
         // Text properties contain TaggedValue edges in their
         // PropertyInterval HashMap<Value, Value> entries.
-        for interval in self.text_props.intervals_snapshot() {
+        for interval in text_props.intervals_snapshot() {
             for (key, val) in interval.ordered_properties() {
                 trace_tagged(tracer, key);
                 trace_tagged(tracer, *val);
@@ -189,23 +195,27 @@ unsafe impl Trace for GcLispString {
         }
     }
 
-    fn relocate(&self, _relocator: &mut dyn Relocator) {
-        // GcLispString stays MovePolicy::Pinned under the current
-        // GC design, so relocate never actually fires. The reason
-        // is that text_props holds TaggedValue edges inside
-        // PropertyInterval HashMaps, which would require rebuilding
-        // the HashMap contents during evacuation -- expensive and
-        // tricky to do without allocating (allocating during GC is
-        // forbidden). Pinning strings avoids the problem entirely.
-        //
-        // If Phase ε of the moving-nursery roadmap decides to move
-        // short-lived strings (fresh strings typically have empty
-        // text_props), this impl will need a full rebuild path.
-        // See docs/superpowers/specs/2026-04-17-moving-nursery-gc-design.md.
+    fn relocate(&self, relocator: &mut dyn Relocator) {
+        // Rebuild each interval's `HashMap<Value, Value>` via the
+        // same drain-and-reinsert path used by the VM-side
+        // `TextPropertyTable::trace_roots_mut`, but feed the
+        // relocator instead of a generic visitor. This keeps
+        // bucket indexes consistent with the post-evacuation
+        // pointer values in the keys.
+        let text_props = unsafe { &mut *self.text_props.get() };
+        crate::gc_trace::GcTrace::trace_roots_mut(text_props, &mut |slot| {
+            relocate_tagged(relocator, slot);
+        });
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase epsilon: fresh strings typically have empty
+        // text_props (most allocations come from `(make-string ...)`
+        // or literal reads, which don't install properties), so
+        // the Nursery fast path is a natural fit. The relocate()
+        // path above handles the rare populated-properties case
+        // by rebuilding each interval's HashMap after evacuation.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {

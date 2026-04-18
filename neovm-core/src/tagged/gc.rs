@@ -715,12 +715,15 @@ impl TaggedHeap {
         let byte_len = s.byte_len();
         let gc_str = GcLispString {
             data: s,
-            text_props: TextPropertyTable::new(),
+            text_props: UnsafeCell::new(TextPropertyTable::new()),
         };
-        let ptr = self.gc_alloc(gc_str);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_str)
+                .expect("string allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcLispString>().saturating_add(byte_len));
-        TaggedValue(ptr as usize | TAG_STRING)
+        TaggedValue(ptr.as_ptr() as usize | TAG_STRING)
     }
 
     /// Allocate a float object.

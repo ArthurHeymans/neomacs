@@ -268,7 +268,10 @@ fn as_neovm_int(value: u64) -> i64 {
 
 fn string_text_props(value: Value) -> Option<&'static TextPropertyTable> {
     let ptr = value.as_string_ptr()?;
-    Some(unsafe { &(*ptr).text_props })
+    // text_props is now an UnsafeCell so `relocate()` can rebuild
+    // it during STW evacuation. Read access still takes a shared
+    // reference to the inner value.
+    Some(unsafe { &*(*ptr).text_props.get() })
 }
 
 /// String text properties now live on the string object itself.
