@@ -132,14 +132,18 @@ unsafe impl Trace for GcCons {
     }
 
     fn move_policy() -> MovePolicy {
-        // Phase gamma reverted: flipping GcCons to Movable under the
-        // current Major-default pacer regresses GC pause time because
-        // Major marks through all nursery cons cells every cycle
-        // without reclaiming their slab space (only Full evacuates
-        // the nursery). Observed 19-second Major pauses during
-        // bootstrap. Re-enable after Phase γ follow-up lands
-        // Minor-default pacing + cross-generation remembered-set
-        // tracking so cons churn flows through cheap Minor cycles.
+        // Phase gamma still blocked: Minor evacuation works for the
+        // Context-owned roots (trace_roots_mut) and the card-based /
+        // legacy remembered set, but thread-local Value holders
+        // (collect_syntax_gc_roots, collect_casetab_gc_roots,
+        // collect_category_gc_roots, collect_value_reader_gc_roots,
+        // collect_terminal_gc_roots, collect_font_gc_roots,
+        // collect_charset_gc_roots, collect_ccl_gc_roots in
+        // neovm-core/src/emacs_core/eval.rs:1008) have no `_mut`
+        // counterpart. After a Minor cycle any cons pinned by one of
+        // those thread-locals would dangle, which crashes bootstrap
+        // load. Re-enable after each thread-local grows a parallel
+        // mutable-visitor hook that trace_roots_mut can drive.
         MovePolicy::Pinned
     }
 }
