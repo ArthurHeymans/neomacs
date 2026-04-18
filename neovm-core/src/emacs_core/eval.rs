@@ -4730,6 +4730,17 @@ impl Context {
         self.tagged_heap.gc_threshold()
     }
 
+    /// Number of completed GC cycles since this Context was
+    /// constructed.
+    pub fn gc_count(&self) -> u64 {
+        self.gc_count
+    }
+
+    /// Snapshot of neovm-gc heap statistics.
+    pub fn gc_heap_stats(&self) -> neovm_gc::stats::HeapStats {
+        self.tagged_heap.gc_heap_stats()
+    }
+
     fn is_gc_runtime_setting_symbol(sym_id: SymId) -> bool {
         sym_id == gc_cons_threshold_symbol()
             || sym_id == gc_cons_percentage_symbol()
