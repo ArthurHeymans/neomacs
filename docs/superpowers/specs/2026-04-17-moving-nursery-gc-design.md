@@ -199,30 +199,28 @@ Each phase lands independently, test suite must stay green.
 - Add remembered-set probe points so cross-generation edges work
 - Stress-test: `gc_stress` mode + heavy cons workload
 - ~3-5 days
-- **STATUS: flip attempted twice and reverted** (commits d7eb9fe5e,
-  9084d72cc, ca6cb2ef3, ba1eb8624, 9beb178bf, ca0116a66). Minor-cycle
-  infrastructure lands this round: new
-  `TaggedHeap::complete_collection_minor`,
-  `bytes_since_minor` / `gc_minor_threshold` accounting, and a
-  Minor trigger in `gc_safe_point_exact` so fast-path cycles fire
-  under Nursery pressure without changing explicit
-  `(garbage-collect)` semantics. GcFloat still moves end-to-end.
-  GcCons Movable still crashes bootstrap: eight thread-local Value
-  holders in neovm-core/src/emacs_core
-  (`collect_syntax_gc_roots`, `collect_casetab_gc_roots`,
-  `collect_category_gc_roots`, `collect_value_reader_gc_roots`,
-  `collect_terminal_gc_roots`, `collect_font_gc_roots`,
-  `collect_charset_gc_roots`, `collect_ccl_gc_roots`) have no
-  mutable-visitor counterpart, so any cons cell pinned only by one
-  of those thread-locals dangles after a Minor evacuation. Nursery
-  remembered-set and Pinned→Nursery legacy remembered-set paths
-  are fine; the gap is strictly in VM-side root rewriting.
-  Re-enable after:
-  1. Add `relocate_*_gc_roots(visit: &mut dyn FnMut(&mut Value))`
-     per module (8 call sites). Wire into
-     `Context::trace_roots_mut` so evacuation updates every
-     thread-local slot.
-  2. Stress-test heavy cons churn, validate pause histogram
+- **STATUS: GcCons Movable landed with Minor disabled** (commits
+  d7eb9fe5e, 9084d72cc, ca6cb2ef3, ba1eb8624, 9beb178bf, ca0116a66,
+  06e37a51b). Wiring complete end-to-end: Minor-cycle API, 8
+  thread-local `relocate_*_gc_roots` helpers driven by
+  `Context::trace_roots_mut`, alloc_cons routes through
+  alloc_external_raw, `GcCons::move_policy()` is Movable.
+  Bootstrap passes in 3.0s (vs 11.9s with GcCons Pinned) because
+  Major skips the Nursery reclaim path entirely -- the bulk of
+  the pause-time cost with Pinned cons was mark-sweep on the span
+  allocator. Full (every 16th cycle) handles Nursery evacuation.
+  Remaining gap before Minor can be re-enabled:
+  1. At least one Value slot still goes un-rewritten when a real
+     Minor fires during bootstrap (bootstrap signals partway
+     through ldefs-boot). Not in the 8 migrated thread-locals and
+     not in any sub-manager already covered by
+     `Context::trace_roots_mut`. Bisect by logging every slot the
+     relocator visits and comparing against the pre-evacuation
+     marked set, or by lowering the Minor threshold incrementally
+     until the first violation.
+  2. After the slot is fixed, set `gc_minor_threshold` back to
+     ~1MB and verify bootstrap + the tagged/load tests still pass.
+  3. Stress-test heavy cons churn, validate pause histogram
      against the p50 < 2ms / p99 < 20ms goal.
 
 **Phase ε — Remaining short-lived types.**
