@@ -199,23 +199,30 @@ Each phase lands independently, test suite must stay green.
 - Add remembered-set probe points so cross-generation edges work
 - Stress-test: `gc_stress` mode + heavy cons workload
 - ~3-5 days
-- **STATUS: flip attempted and reverted** (commits d7eb9fe5e,
-  9084d72cc, ca6cb2ef3). The wiring is ready — `alloc_cons` routes
-  through `alloc_external_raw`, the 16-to-1 pacer
-  (Major default, Full periodic) is in place — but flipping
-  `GcCons::move_policy()` to Movable under this pacer regressed
-  GC pauses to 19 seconds during bootstrap. Root cause: Major
-  marks through all cons cells in the nursery every cycle but
-  never reclaims their slab space (only Full evacuates); the
-  nursery grows unbounded between Full cycles.
-  Re-enable after the follow-up lands:
-  1. Minor-default pacer (Major/Full on threshold). Requires
-     cross-generation remembered-set tracking so Minor's
-     nursery-only scan catches Old→Nursery edges.
-  2. Wire service_allocation_pressure so Minor can trigger from
-     the mutator (needs the ExternalRootScanner to seed VM roots
-     lazily — today it only drains a VM-populated buffer).
-  3. Stress-test heavy cons churn, validate pause histogram
+- **STATUS: flip attempted twice and reverted** (commits d7eb9fe5e,
+  9084d72cc, ca6cb2ef3, ba1eb8624, 9beb178bf, ca0116a66). Minor-cycle
+  infrastructure lands this round: new
+  `TaggedHeap::complete_collection_minor`,
+  `bytes_since_minor` / `gc_minor_threshold` accounting, and a
+  Minor trigger in `gc_safe_point_exact` so fast-path cycles fire
+  under Nursery pressure without changing explicit
+  `(garbage-collect)` semantics. GcFloat still moves end-to-end.
+  GcCons Movable still crashes bootstrap: eight thread-local Value
+  holders in neovm-core/src/emacs_core
+  (`collect_syntax_gc_roots`, `collect_casetab_gc_roots`,
+  `collect_category_gc_roots`, `collect_value_reader_gc_roots`,
+  `collect_terminal_gc_roots`, `collect_font_gc_roots`,
+  `collect_charset_gc_roots`, `collect_ccl_gc_roots`) have no
+  mutable-visitor counterpart, so any cons cell pinned only by one
+  of those thread-locals dangles after a Minor evacuation. Nursery
+  remembered-set and Pinned→Nursery legacy remembered-set paths
+  are fine; the gap is strictly in VM-side root rewriting.
+  Re-enable after:
+  1. Add `relocate_*_gc_roots(visit: &mut dyn FnMut(&mut Value))`
+     per module (8 call sites). Wire into
+     `Context::trace_roots_mut` so evacuation updates every
+     thread-local slot.
+  2. Stress-test heavy cons churn, validate pause histogram
      against the p50 < 2ms / p99 < 20ms goal.
 
 **Phase ε — Remaining short-lived types.**
