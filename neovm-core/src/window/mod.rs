@@ -3271,26 +3271,70 @@ impl GcTrace for FrameManager {
     }
 
     fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
-        // Visit the leaf Rust-owned Value slots that can be
-        // rewritten in place. HashMap<Value, Value> parameters are
-        // skipped here because rewriting the keys would invalidate
-        // the hash; when types flip to Movable, those maps need
-        // drain-and-reinsert. Safe no-op today (all frame-referenced
-        // types stay Pinned).
+        // Deleted window parameter maps: Vec<(Value, Value)>, keys
+        // and values both mutable in place.
+        for params in self.deleted_window_parameters.values_mut() {
+            for (k, v) in params.iter_mut() {
+                visit(k);
+                visit(v);
+            }
+        }
         for frame in self.frames.values_mut() {
             visit(&mut frame.name);
             visit(&mut frame.icon_name);
             visit(&mut frame.focus_frame);
             visit(&mut frame.title);
             visit(&mut frame.face_hash_table);
-            for v in frame.parameters.values_mut() {
-                visit(v);
+            // `frame.parameters` is HashMap<Value, Value>: rewriting
+            // a key in place would leave it under the wrong bucket,
+            // so drain-and-reinsert to regenerate bucket indexes
+            // against post-evacuation pointers.
+            let old_params = std::mem::take(&mut frame.parameters);
+            let mut new_params = HashMap::with_capacity(old_params.len());
+            for (mut k, mut v) in old_params {
+                visit(&mut k);
+                visit(&mut v);
+                new_params.insert(k, v);
             }
-            // Skipped: deleted_window_parameters (HashMap),
-            // frame.parameters keys, frame.realized_faces keys,
-            // trace_window contents (display/history values live
-            // inside Window enum variants accessed via getters
-            // that don't expose &mut in the current Window API).
+            frame.parameters = new_params;
+            // `frame.realized_faces` is HashMap<Value, RuntimeFace>:
+            // same drain-and-reinsert for the Value keys. Face
+            // values themselves are Rust-owned and get rewritten by
+            // the face-table's trace_roots_mut; we only touch the
+            // key here.
+            let old_faces = std::mem::take(&mut frame.realized_faces);
+            let mut new_faces = HashMap::with_capacity(old_faces.len());
+            for (mut k, face) in old_faces {
+                visit(&mut k);
+                new_faces.insert(k, face);
+            }
+            frame.realized_faces = new_faces;
+            trace_window_mut(&mut frame.root_window, visit);
+            if let Some(mb) = frame.minibuffer_leaf.as_mut() {
+                trace_window_mut(mb, visit);
+            }
+        }
+    }
+}
+
+fn trace_window_mut(window: &mut Window, visit: &mut dyn FnMut(&mut Value)) {
+    for (key, value) in window.parameters_mut().iter_mut() {
+        visit(key);
+        visit(value);
+    }
+    if let Some(history) = window.history_mut() {
+        visit(&mut history.prev_buffers);
+        visit(&mut history.next_buffers);
+    }
+    if let Some(display) = window.display_mut() {
+        visit(&mut display.display_table);
+        visit(&mut display.cursor_type);
+        visit(&mut display.vertical_scroll_bar_type);
+        visit(&mut display.horizontal_scroll_bar_type);
+    }
+    if let Window::Internal { children, .. } = window {
+        for child in children.iter_mut() {
+            trace_window_mut(child, visit);
         }
     }
 }

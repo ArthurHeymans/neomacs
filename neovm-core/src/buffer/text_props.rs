@@ -648,18 +648,23 @@ impl GcTrace for TextPropertyTable {
         self.for_each_root(|value| roots.push(value));
     }
 
-    fn trace_roots_mut(&mut self, _visit: &mut dyn FnMut(&mut Value)) {
-        // TextPropertyTable stores properties in HashMap<Value, Value>
-        // inside each interval. Rewriting a HashMap key in place would
-        // invalidate the hash invariant; a correct mut-visit path
-        // would need to rebuild each interval's properties map.
-        //
-        // Safe to no-op today because GcLispString (owner of the
-        // text-property table) is MovePolicy::Pinned, and all Value
-        // types that can appear as plist keys (Cons, string, vector,
-        // etc.) are also Pinned in the current roadmap. When a
-        // short-lived type becomes Movable, this impl must rebuild
-        // every interval's HashMap by draining, visiting, reinserting.
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        // Each interval's `properties: HashMap<Value, Value>` is
+        // rebuilt here so the evacuator can rewrite any heap-tagged
+        // key or value without breaking the HashMap's hash invariant.
+        // Mutating a key in place would leave it under a stale bucket;
+        // drain → visit → reinsert regenerates the bucket indexes
+        // against the post-evacuation pointers.
+        for interval in self.intervals.values_mut() {
+            let mut rebuilt: HashMap<Value, Value> =
+                HashMap::with_capacity(interval.properties.len());
+            for (mut k, mut v) in interval.properties.drain() {
+                visit(&mut k);
+                visit(&mut v);
+                rebuilt.insert(k, v);
+            }
+            interval.properties = rebuilt;
+        }
     }
 }
 
