@@ -770,10 +770,16 @@ impl TaggedHeap {
             type_tag: VecLikeType::Vector,
             items: UnsafeCell::new(items),
         };
-        let ptr = self.gc_alloc(gc_vec);
+        // Policy-aware path so flipping `GcVector::move_policy()`
+        // to `Movable` routes vector allocations through the
+        // nursery transparently.
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_vec)
+                .expect("vector allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcVector>().saturating_add(storage_bytes));
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a hash table.
@@ -895,10 +901,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Record,
             items: UnsafeCell::new(items),
         };
-        let ptr = self.gc_alloc(gc_record);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_record)
+                .expect("record allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcRecord>().saturating_add(storage_bytes));
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate an overlay.

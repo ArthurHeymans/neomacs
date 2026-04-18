@@ -238,7 +238,13 @@ unsafe impl Trace for GcVector {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase epsilon: vectors move through the nursery.
+        // GcVector metadata (type_tag + Vec header) is fixed-size
+        // and safe to evacuate; the Vec's backing store lives in
+        // malloc so its pointer stays valid across the struct's
+        // evacuation. All TaggedValue elements get rewritten via
+        // relocate() above.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {
@@ -429,7 +435,10 @@ unsafe impl Trace for GcRecord {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase epsilon: records have the same shape as vectors
+        // (type_tag + Vec<TaggedValue>), so the same Movable
+        // reasoning applies.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {
