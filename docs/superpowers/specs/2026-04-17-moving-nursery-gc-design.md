@@ -247,6 +247,31 @@ Each phase lands independently, test suite must stay green.
 - Measure against the success metric.
 - ~3-5 days.
 
+**Phase η — Incremental Major mark (partial) + concurrent Major (full).**
+- *Incremental*: landed (commit 79aad7a17). Opt-in via
+  `NEOVM_GC_INCREMENTAL_MAJOR=1`. Wires neovm-gc's
+  `begin_major_mark` + `assist_major_mark` +
+  `finish_major_collection` into the safe-point path so Major
+  cycles slice mark work across small assist calls (~1 ms each)
+  instead of blocking the mutator for the whole cycle.
+  Default-off today because the bootstrap test calls
+  `gc_collect_exact` per form; real editor paths that drive GC
+  through safe-point thresholds should flip the default on.
+- *Concurrent (background thread)*: **NOT YET LANDED.** The
+  neovm-gc `SharedHeap` + `BackgroundWorker` pair exists but
+  requires a persistent-shared-mutator API: today's
+  `SharedHeap::with_mutator` creates a fresh `Mutator` per call,
+  which burns a 40 KiB `ObjectPublishLocal` chunk on every
+  allocation (~40 GiB wasted over one bootstrap). An upstream
+  neovm-gc change is needed -- either
+  `Heap::mutator_with_local(&mut MutatorLocal)` to let the host
+  own `MutatorLocal` independently of `Mutator` lifetime, or
+  a new `SharedMutator` type whose state survives across
+  `with_mutator` closures. Tracked as a future milestone; when
+  that lands the `SharedCollectorRuntime::spawn_background_worker`
+  path can move Major mark entirely off the mutator thread, with
+  only the brief remark + reclaim phases remaining as STW.
+
 **Total estimate: 2-4 weeks focused work.** Phase δ is the risk
 centerpiece; everything else is mechanical.
 
