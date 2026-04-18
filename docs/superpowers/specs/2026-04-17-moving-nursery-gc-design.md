@@ -199,6 +199,22 @@ Each phase lands independently, test suite must stay green.
 - Add remembered-set probe points so cross-generation edges work
 - Stress-test: `gc_stress` mode + heavy cons workload
 - ~3-5 days
+- **STATUS: initial flip done** (commits d7eb9fe5e, 9084d72cc).
+  Added a 16-to-1 pacer (Major default, Full periodic) so Nursery
+  stays bounded without evacuating every cycle. `alloc_cons` now
+  routes through `alloc_external_raw`; `GcCons::move_policy()` is
+  Movable. GcCons's `trace()` / `relocate()` impls (from phase
+  alpha) visit both car and cdr via GcSlot interior mutability,
+  so edges stay valid across evacuation. All 43 tagged tests
+  pass. Remaining work for production pause targets:
+  1. Add cross-generation write-barrier remembered-set tracking
+     so Minor can run safely with cons cells in the nursery
+     (today's pacer avoids Minor entirely — Major sweeps unmarked
+     nursery in place but never reclaims slab space, so the
+     nursery only drains on Full cycles).
+  2. Flip the pacer: Minor default, Major/Full on threshold.
+  3. Stress-test heavy cons churn + validate pause histogram
+     against the p50 < 2ms / p99 < 20ms goal.
 
 **Phase ε — Remaining short-lived types.**
 - `GcLispString` (nursery survival depends on text_props being
