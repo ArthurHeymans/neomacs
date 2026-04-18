@@ -6061,6 +6061,32 @@ impl Context {
         self.gc_collect_from_current_roots();
     }
 
+    /// Run a fast-path Minor collection that evacuates the Nursery
+    /// without sweeping Pinned/Old. Intended for safe-point callers
+    /// crossing the Minor threshold; explicit user-level GC
+    /// (`garbage-collect`) continues to run the full cycle via
+    /// [`Self::gc_collect_from_current_roots`].
+    fn gc_collect_minor_from_current_roots(&mut self) {
+        let start = std::time::Instant::now();
+        let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
+        // Safety: STW inside mutator.collect(Minor); same ownership
+        // as gc_collect_from_current_roots.
+        unsafe {
+            (*heap_ptr).begin_collection();
+            self.trace_roots(&mut |root| {
+                (*heap_ptr).seed_root(root);
+            });
+        }
+        let ctx_ptr: *mut Context = self;
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(ctx_ptr));
+        unsafe {
+            (*heap_ptr).complete_collection_minor();
+        }
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(std::ptr::null_mut()));
+        let elapsed = start.elapsed();
+        tracing::debug!("neovm-gc minor cycle: total={}us", elapsed.as_micros());
+    }
+
     fn gc_collect_from_current_roots(&mut self) {
         let start = std::time::Instant::now();
         *self.lexenv_assq_cache.borrow_mut() = LexenvAssqCache::default();
@@ -6174,6 +6200,8 @@ impl Context {
         if self.tagged_heap.gc_threshold_is_overridden() {
             if self.tagged_heap.should_collect() {
                 self.gc_collect_from_current_roots();
+            } else if self.tagged_heap.should_collect_minor() {
+                self.gc_collect_minor_from_current_roots();
             }
             return;
         }
@@ -6184,6 +6212,8 @@ impl Context {
                 self.tagged_heap.set_gc_threshold_from_runtime(threshold);
             }
             self.gc_collect_from_current_roots();
+        } else if self.tagged_heap.should_collect_minor() {
+            self.gc_collect_minor_from_current_roots();
         }
     }
 

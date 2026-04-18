@@ -246,8 +246,18 @@ pub struct TaggedHeap {
     /// When true, `gc_threshold` was explicitly overridden by tests or host
     /// code and should not be recomputed from Lisp-visible GC variables.
     gc_threshold_overridden: bool,
-    /// Approximate Lisp heap bytes allocated since the last full collection.
+    /// Approximate Lisp heap bytes allocated since the last full
+    /// (Major or Full) collection.
     bytes_since_gc: usize,
+    /// Approximate Lisp heap bytes allocated since the last Minor
+    /// (or Major/Full) collection. Used to drive
+    /// `should_collect_minor` in [`Context::gc_safe_point_exact`].
+    bytes_since_minor: usize,
+    /// Threshold, in bytes, above which `should_collect_minor`
+    /// returns true. Kept independent of `gc_threshold` so the
+    /// fast-path cycle can be tuned separately from the full-GC
+    /// frequency.
+    gc_minor_threshold: usize,
     /// Approximate bytes retained by the live heap after the last sweep.
     live_bytes: usize,
 
@@ -361,6 +371,8 @@ impl TaggedHeap {
             gc_threshold: 100_000 * size_of::<usize>(),
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
+            bytes_since_minor: 0,
+            gc_minor_threshold: 1 << 20,
             live_bytes: 0,
             marker_ptrs: Vec::new(),
             buffer_registry: FxHashMap::default(),
@@ -400,6 +412,22 @@ impl TaggedHeap {
 
     pub fn should_collect(&self) -> bool {
         self.bytes_since_gc >= self.gc_threshold
+    }
+
+    /// Returns true if enough nursery traffic has accumulated since
+    /// the last Minor collection to make a fast-path Minor
+    /// worthwhile. Independent of [`Self::should_collect`]; both
+    /// can fire in the same safe point.
+    pub fn should_collect_minor(&self) -> bool {
+        self.bytes_since_minor >= self.gc_minor_threshold
+    }
+
+    pub fn gc_minor_threshold(&self) -> usize {
+        self.gc_minor_threshold
+    }
+
+    pub fn set_gc_minor_threshold(&mut self, threshold: usize) {
+        self.gc_minor_threshold = threshold.max(1);
     }
 
     pub fn gc_threshold(&self) -> usize {
@@ -517,6 +545,7 @@ impl TaggedHeap {
 
     fn note_allocation_bytes(&mut self, bytes: usize) {
         self.bytes_since_gc = self.bytes_since_gc.saturating_add(bytes);
+        self.bytes_since_minor = self.bytes_since_minor.saturating_add(bytes);
         self.live_bytes = self.live_bytes.saturating_add(bytes);
     }
 
@@ -914,6 +943,10 @@ impl TaggedHeap {
     /// not sweep Pinned or reclaim Old. Cheap (target <5ms) and safe
     /// to run between Major cycles so Movable-type allocations don't
     /// accumulate in the Nursery between heavier reclaims.
+    ///
+    /// Only `bytes_since_minor` resets here — `bytes_since_gc`
+    /// continues to accumulate so the Major/Full threshold still
+    /// fires on schedule.
     fn flush_roots_and_collect_minor(&mut self) {
         if gc_collection_enabled() {
             if let Some(mutator) = self.gc_mutator.as_mut() {
@@ -921,7 +954,19 @@ impl TaggedHeap {
             }
             self.resync_post_collection_counters();
         }
-        self.clear_post_collection_residue();
+        self.gc_root_buffer
+            .lock()
+            .expect("gc_root_buffer lock poisoned")
+            .clear();
+        self.bytes_since_minor = 0;
+        // Dirty-card / dirty-owner tracking is consumed by the
+        // collection itself (see `collect_dirty_card_root_indices`
+        // / legacy remembered-set paths) so we clear it here too.
+        // `bytes_since_gc` is intentionally not reset — Minor is a
+        // fast-path cycle that still counts toward the full-GC
+        // threshold.
+        self.clear_dirty_owners();
+        self.clear_dirty_writes();
     }
 
     fn resync_post_collection_counters(&mut self) {
@@ -940,6 +985,7 @@ impl TaggedHeap {
             .expect("gc_root_buffer lock poisoned")
             .clear();
         self.bytes_since_gc = 0;
+        self.bytes_since_minor = 0;
         self.clear_dirty_owners();
         self.clear_dirty_writes();
     }
