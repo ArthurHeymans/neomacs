@@ -240,12 +240,22 @@ Each phase lands independently, test suite must stay green.
 - `GcVector` small cases.
 - Bytecode constant arrays.
 - ~3-5 days.
-- **STATUS: partial** (commits deb540866, 8c3ea4221). Flipped:
-  `GcVector`, `GcRecord` (identical shape to vector),
+- **STATUS: partial** (commits deb540866, 8c3ea4221, 8c6282b38).
+  Flipped: `GcVector`, `GcRecord` (identical shape to vector),
   `GcBignum` (leaf, rug::Integer memcpy-safe),
   `GcSymbolWithPos` (sym/pos are never heap-tagged per the
-  phase-alpha invariant). All route through
-  `alloc_external_raw`; all 43 tagged tests + bootstrap pass.
+  phase-alpha invariant), and `GcLispString` via the
+  TextPropertyTable drain-and-reinsert pattern. All route
+  through `alloc_external_raw`; all 43 tagged tests + bootstrap
+  pass.
+- **LATENT BUG (tracked separately)**: eq-hash tables store
+  `HashKey::Ptr(usize) = Value::bits()` as keys. When a Movable
+  keyed object evacuates, the stored Ptr bits are stale and
+  future `(gethash moved-obj ht)` misses. Not triggered by
+  bootstrap or tagged tests. Fix: `GcHashTable::relocate`
+  rewrites HashKey::Ptr / EqualCons / EqualVec nested pointer
+  bits and rebuilds the HashMap via drain-and-reinsert so
+  bucket indexes regenerate against post-evacuation pointers.
   Not yet flipped because of complications:
   - `GcLispString`: owns a `TextPropertyTable` whose
     `HashMap<Value, Value>` keys can include Movable cons cells.

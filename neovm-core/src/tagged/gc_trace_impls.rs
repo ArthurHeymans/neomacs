@@ -285,21 +285,79 @@ unsafe impl Trace for GcHashTable {
     }
 
     fn relocate(&self, relocator: &mut dyn Relocator) {
+        // eq-hash tables use `HashKey::Ptr(usize) = Value::bits()`
+        // as their stored hash-key form. When a Movable keyed
+        // object evacuates, the Ptr bits are stale AND the
+        // HashMap's bucket index for the key is wrong relative
+        // to the post-evacuation hash.
+        //
+        // Fix: drain both `data` and `key_snapshots`, walk each
+        // HashKey and each Value through the relocator, then
+        // reinsert into the same (now-empty but still-allocated)
+        // HashMap. Drain reuses the existing bucket array, so no
+        // allocation happens during GC; reinsert refills those
+        // buckets against the post-evacuation hash.
         let table = unsafe { &mut *self.table.get() };
-        for value in table.data.values_mut() {
-            relocate_tagged(relocator, value);
-        }
-        for value in table.key_snapshots.values_mut() {
-            relocate_tagged(relocator, value);
-        }
+        rebuild_hashmap_with_relocator(&mut table.data, relocator);
+        rebuild_hashmap_with_relocator(&mut table.key_snapshots, relocator);
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase epsilon: hash tables move through the nursery
+        // now that `relocate` rebuilds their HashMap keys.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {
         LayoutKind::External
+    }
+}
+
+/// Drain a `HashMap<HashKey, Value>`, relocate both the key's
+/// embedded pointer bits and the value's tagged pointer, then
+/// reinsert so bucket indexes regenerate against post-evacuation
+/// hashes.
+fn rebuild_hashmap_with_relocator(
+    map: &mut std::collections::HashMap<crate::emacs_core::value::HashKey, TaggedValue>,
+    relocator: &mut dyn Relocator,
+) {
+    let taken = std::mem::take(map);
+    let mut rebuilt = std::collections::HashMap::with_capacity(taken.len());
+    for (mut k, mut v) in taken {
+        relocate_hashkey(&mut k, relocator);
+        relocate_tagged(relocator, &mut v);
+        rebuilt.insert(k, v);
+    }
+    *map = rebuilt;
+}
+
+/// Rewrite heap-pointer bits nested inside a `HashKey`. Primitive
+/// variants (Int, Float, Symbol, etc.) are no-ops; only `Ptr`,
+/// `EqualCons`, and `EqualVec` carry storage that can go stale
+/// across evacuation.
+fn relocate_hashkey(
+    key: &mut crate::emacs_core::value::HashKey,
+    relocator: &mut dyn Relocator,
+) {
+    use crate::emacs_core::value::HashKey;
+    match key {
+        HashKey::Ptr(bits) => {
+            let mut tv = TaggedValue(*bits);
+            if tv.is_heap_object() {
+                relocate_tagged(relocator, &mut tv);
+                *bits = tv.0;
+            }
+        }
+        HashKey::EqualCons(head, tail) => {
+            relocate_hashkey(head.as_mut(), relocator);
+            relocate_hashkey(tail.as_mut(), relocator);
+        }
+        HashKey::EqualVec(items) => {
+            for item in items.iter_mut() {
+                relocate_hashkey(item, relocator);
+            }
+        }
+        _ => {}
     }
 }
 

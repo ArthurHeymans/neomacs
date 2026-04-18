@@ -794,10 +794,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::HashTable,
             table: UnsafeCell::new(table),
         };
-        let ptr = self.gc_alloc(gc_ht);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_ht)
+                .expect("hash table allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcHashTable>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a lambda (interpreted closure) as a Value vector.
