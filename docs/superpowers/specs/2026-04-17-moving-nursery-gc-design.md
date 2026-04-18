@@ -199,21 +199,23 @@ Each phase lands independently, test suite must stay green.
 - Add remembered-set probe points so cross-generation edges work
 - Stress-test: `gc_stress` mode + heavy cons workload
 - ~3-5 days
-- **STATUS: initial flip done** (commits d7eb9fe5e, 9084d72cc).
-  Added a 16-to-1 pacer (Major default, Full periodic) so Nursery
-  stays bounded without evacuating every cycle. `alloc_cons` now
-  routes through `alloc_external_raw`; `GcCons::move_policy()` is
-  Movable. GcCons's `trace()` / `relocate()` impls (from phase
-  alpha) visit both car and cdr via GcSlot interior mutability,
-  so edges stay valid across evacuation. All 43 tagged tests
-  pass. Remaining work for production pause targets:
-  1. Add cross-generation write-barrier remembered-set tracking
-     so Minor can run safely with cons cells in the nursery
-     (today's pacer avoids Minor entirely — Major sweeps unmarked
-     nursery in place but never reclaims slab space, so the
-     nursery only drains on Full cycles).
-  2. Flip the pacer: Minor default, Major/Full on threshold.
-  3. Stress-test heavy cons churn + validate pause histogram
+- **STATUS: flip attempted and reverted** (commits d7eb9fe5e,
+  9084d72cc, ca6cb2ef3). The wiring is ready — `alloc_cons` routes
+  through `alloc_external_raw`, the 16-to-1 pacer
+  (Major default, Full periodic) is in place — but flipping
+  `GcCons::move_policy()` to Movable under this pacer regressed
+  GC pauses to 19 seconds during bootstrap. Root cause: Major
+  marks through all cons cells in the nursery every cycle but
+  never reclaims their slab space (only Full evacuates); the
+  nursery grows unbounded between Full cycles.
+  Re-enable after the follow-up lands:
+  1. Minor-default pacer (Major/Full on threshold). Requires
+     cross-generation remembered-set tracking so Minor's
+     nursery-only scan catches Old→Nursery edges.
+  2. Wire service_allocation_pressure so Minor can trigger from
+     the mutator (needs the ExternalRootScanner to seed VM roots
+     lazily — today it only drains a VM-populated buffer).
+  3. Stress-test heavy cons churn, validate pause histogram
      against the p50 < 2ms / p99 < 20ms goal.
 
 **Phase ε — Remaining short-lived types.**
