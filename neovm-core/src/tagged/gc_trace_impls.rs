@@ -132,12 +132,15 @@ unsafe impl Trace for GcCons {
     }
 
     fn move_policy() -> MovePolicy {
-        // Phase gamma: cons cells dominate allocation volume, so
-        // routing them through the moving nursery is the bulk of the
-        // pause-time win. trace() and relocate() visit both car and
-        // cdr via GcSlot interior mutability, which keeps edges valid
-        // after evacuation.
-        MovePolicy::Movable
+        // Phase gamma reverted: flipping GcCons to Movable under the
+        // current Major-default pacer regresses GC pause time because
+        // Major marks through all nursery cons cells every cycle
+        // without reclaiming their slab space (only Full evacuates
+        // the nursery). Observed 19-second Major pauses during
+        // bootstrap. Re-enable after Phase γ follow-up lands
+        // Minor-default pacing + cross-generation remembered-set
+        // tracking so cons churn flows through cheap Minor cycles.
+        MovePolicy::Pinned
     }
 }
 
