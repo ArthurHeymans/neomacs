@@ -382,6 +382,20 @@ pub(crate) fn collect_terminal_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit terminal-thread-local slots with mutable references so a
+/// moving collector can rewrite payload pointers after evacuation.
+pub(crate) fn relocate_terminal_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    TERMINAL_MANAGER.with(|slot| {
+        for terminal in &mut slot.borrow_mut().terminals {
+            visit(&mut terminal.handle);
+            for (k, v) in &mut terminal.params {
+                visit(k);
+                visit(v);
+            }
+        }
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Terminal handle helpers
 // ---------------------------------------------------------------------------

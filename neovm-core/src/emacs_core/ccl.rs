@@ -118,6 +118,20 @@ pub(crate) fn collect_ccl_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit CCL-registry slots with mutable references so a moving
+/// collector can rewrite payload pointers after evacuation.
+pub(crate) fn relocate_ccl_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    CCL_REGISTRY.with(|r| {
+        let mut reg = r.borrow_mut();
+        for (_, v) in reg.programs.values_mut() {
+            visit(v);
+        }
+        for (_, v) in reg.code_conversion_maps.values_mut() {
+            visit(v);
+        }
+    });
+}
+
 pub(crate) fn unregister_registered_ccl_program(name: SymId) {
     with_ccl_registry_mut(|registry| {
         let _ = registry.programs.remove(&name);

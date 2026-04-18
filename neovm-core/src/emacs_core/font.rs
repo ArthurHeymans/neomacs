@@ -2094,6 +2094,26 @@ pub(crate) fn collect_font_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit face-attribute override slots with mutable references so a
+/// moving collector can rewrite payload pointers after evacuation.
+/// Keys are interned `SymId`s that never move, so only values need
+/// mutable access.
+pub(crate) fn relocate_font_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    FACE_ATTR_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        for attrs in state.selected_overrides.values_mut() {
+            for v in attrs.values_mut() {
+                visit(v);
+            }
+        }
+        for attrs in state.defaults_overrides.values_mut() {
+            for v in attrs.values_mut() {
+                visit(v);
+            }
+        }
+    });
+}
+
 fn is_created_lisp_face(name: &str) -> bool {
     CREATED_LISP_FACES.with(|slot| slot.borrow().contains(&face_symbol_id(name)))
 }

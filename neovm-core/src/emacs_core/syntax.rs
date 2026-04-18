@@ -45,6 +45,17 @@ pub fn collect_syntax_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit the cached syntax-table slot with a mutable reference so a
+/// moving collector can rewrite the payload pointer after
+/// evacuation.
+pub fn relocate_syntax_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| {
+        if let Some(ref mut v) = *slot.borrow_mut() {
+            visit(v);
+        }
+    });
+}
+
 // Phase 10D holdout 3: the per-buffer syntax table char-table now lives in
 // `Buffer::slots[BUFFER_SLOT_SYNTAX_TABLE]`, mirroring GNU's
 // `BVAR(buf, syntax_table)` storage. Reads go through `slots[offset]`,

@@ -132,19 +132,15 @@ unsafe impl Trace for GcCons {
     }
 
     fn move_policy() -> MovePolicy {
-        // Phase gamma still blocked: Minor evacuation works for the
-        // Context-owned roots (trace_roots_mut) and the card-based /
-        // legacy remembered set, but thread-local Value holders
-        // (collect_syntax_gc_roots, collect_casetab_gc_roots,
-        // collect_category_gc_roots, collect_value_reader_gc_roots,
-        // collect_terminal_gc_roots, collect_font_gc_roots,
-        // collect_charset_gc_roots, collect_ccl_gc_roots in
-        // neovm-core/src/emacs_core/eval.rs:1008) have no `_mut`
-        // counterpart. After a Minor cycle any cons pinned by one of
-        // those thread-locals would dangle, which crashes bootstrap
-        // load. Re-enable after each thread-local grows a parallel
-        // mutable-visitor hook that trace_roots_mut can drive.
-        MovePolicy::Pinned
+        // Phase gamma: cons cells dominate allocation volume, so
+        // routing them through the moving nursery is the bulk of
+        // the pause-time win. trace() / relocate() visit both car
+        // and cdr via GcSlot interior mutability; Context
+        // roots + card-based remembered set + legacy remembered
+        // set + relocate_thread_local_gc_roots together cover every
+        // live Value slot that could point at a nursery cons after
+        // evacuation.
+        MovePolicy::Movable
     }
 }
 

@@ -28,6 +28,17 @@ pub fn collect_casetab_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit the cached case-table slot with a mutable reference so a
+/// moving collector can rewrite the payload pointer after
+/// evacuation.
+pub fn relocate_casetab_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    STANDARD_CASE_TABLE_OBJECT.with(|slot| {
+        if let Some(ref mut v) = *slot.borrow_mut() {
+            visit(v);
+        }
+    });
+}
+
 // ---------------------------------------------------------------------------
 // CaseTable
 // ---------------------------------------------------------------------------

@@ -1136,6 +1136,28 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
     SCRATCH_GC_ROOTS.with(|scratch| roots.extend(scratch.borrow().iter().copied()));
 }
 
+/// Visit every thread-local Value slot with a mutable reference so a
+/// moving collector can rewrite payload pointers after evacuation.
+/// Parallels [`collect_thread_local_gc_roots`] — every call site that
+/// contributes to the marking path has a matching mutable visitor
+/// here so Values pinned only by thread-locals do not dangle after
+/// Minor evacuation.
+fn relocate_thread_local_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    super::syntax::relocate_syntax_gc_roots(visit);
+    super::casetab::relocate_casetab_gc_roots(visit);
+    super::category::relocate_category_gc_roots(visit);
+    super::value_reader::relocate_value_reader_gc_roots(visit);
+    super::terminal::pure::relocate_terminal_gc_roots(visit);
+    super::font::relocate_font_gc_roots(visit);
+    super::charset::relocate_charset_gc_roots(visit);
+    super::ccl::relocate_ccl_gc_roots(visit);
+    SCRATCH_GC_ROOTS.with(|scratch| {
+        for v in scratch.borrow_mut().iter_mut() {
+            visit(v);
+        }
+    });
+}
+
 pub fn save_scratch_gc_roots() -> usize {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow().len())
 }
@@ -4663,11 +4685,14 @@ impl Context {
                 visit(arg);
             }
         }
-        // Thread-local GC roots: the existing collect_ helper is
-        // read-only; a mutable variant would need per-module thread-
-        // local accessors that return &mut. For now this is a
-        // documented gap -- safe while thread-local caches (syntax,
-        // casetab, category, etc.) hold only Pinned Values.
+        // Thread-local GC roots: parallels
+        // `collect_thread_local_gc_roots` on the marking path so a
+        // moving collector can rewrite every Value slot held by
+        // `STANDARD_SYNTAX_TABLE_OBJECT`, `STANDARD_CASE_TABLE_OBJECT`,
+        // `STANDARD_CATEGORY_TABLE_OBJECT`, `READER_LOAD_FILE_NAME`,
+        // `TERMINAL_MANAGER`, `FACE_ATTR_STATE`, `CHARSET_REGISTRY`,
+        // `CCL_REGISTRY`, and `SCRATCH_GC_ROOTS`.
+        relocate_thread_local_gc_roots(visit);
         if !self.current_local_map.is_nil() {
             visit(&mut self.current_local_map);
         }

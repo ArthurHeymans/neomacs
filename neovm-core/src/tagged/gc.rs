@@ -372,7 +372,18 @@ impl TaggedHeap {
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
             bytes_since_minor: 0,
-            gc_minor_threshold: 1 << 20,
+            // Phase gamma landing compromise: Minor evacuation is
+            // live for GcFloat but something still dangles when it
+            // fires during cons-heavy bootstrap. Disable the
+            // Minor-threshold trigger for now so Full (every 16th
+            // cycle) is the only path that evacuates the Nursery.
+            // This keeps the pause profile bounded (Major skips
+            // Nursery reclaim -> cheaper than Pinned-cons Major)
+            // while we audit the remaining non-rewritten Value
+            // holder. Safe-point callers can still run an explicit
+            // Minor via collect_minor if they handle the root
+            // seeding themselves.
+            gc_minor_threshold: usize::MAX,
             live_bytes: 0,
             marker_ptrs: Vec::new(),
             buffer_registry: FxHashMap::default(),

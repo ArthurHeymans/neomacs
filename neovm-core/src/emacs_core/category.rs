@@ -34,6 +34,16 @@ pub fn collect_category_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit the cached category-table slot with a mutable reference so a
+/// moving collector can rewrite the payload pointer after evacuation.
+pub fn relocate_category_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    STANDARD_CATEGORY_TABLE_OBJECT.with(|slot| {
+        if let Some(ref mut v) = *slot.borrow_mut() {
+            visit(v);
+        }
+    });
+}
+
 // Phase 10D holdout 4: per-buffer category table char-table now lives in
 // `Buffer::slots[BUFFER_SLOT_CATEGORY_TABLE]`, mirroring GNU's
 // `BVAR(buf, category_table)` storage. The slot is non-Lisp-visible

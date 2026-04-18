@@ -587,6 +587,22 @@ pub(crate) fn collect_charset_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit charset-registry slots with mutable references so a moving
+/// collector can rewrite payload pointers after evacuation.
+pub(crate) fn relocate_charset_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    CHARSET_REGISTRY.with(|slot| {
+        let mut reg = slot.borrow_mut();
+        for info in reg.charsets.values_mut() {
+            if !info.unify_map.is_nil() {
+                visit(&mut info.unify_map);
+            }
+            for (_, value) in &mut info.plist {
+                visit(value);
+            }
+        }
+    });
+}
+
 pub(crate) fn snapshot_charset_registry() -> CharsetRegistrySnapshot {
     CHARSET_REGISTRY.with(|slot| slot.borrow().snapshot())
 }

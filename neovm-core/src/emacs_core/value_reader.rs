@@ -32,6 +32,17 @@ pub(crate) fn collect_value_reader_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// Visit the reader's thread-local load-file-name slot with a
+/// mutable reference so a moving collector can rewrite the payload
+/// pointer after evacuation.
+pub(crate) fn relocate_value_reader_gc_roots(visit: &mut dyn FnMut(&mut Value)) {
+    READER_LOAD_FILE_NAME.with(|slot| {
+        if let Some(ref mut value) = *slot.borrow_mut() {
+            visit(value);
+        }
+    });
+}
+
 /// Set the current load-file-name for the `#$` reader macro.
 pub fn set_reader_load_file_name(value: Option<Value>) {
     READER_LOAD_FILE_NAME.with(|slot| *slot.borrow_mut() = value);
