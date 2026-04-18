@@ -553,10 +553,16 @@ impl TaggedHeap {
             car: GcSlot::new(car),
             cdr: GcSlot::new(cdr),
         };
-        let ptr = self.gc_alloc(gc_cons);
+        let mutator = self
+            .gc_mutator
+            .as_mut()
+            .expect("gc_mutator is only None during Drop");
+        let ptr = mutator
+            .alloc_external_raw(gc_cons)
+            .expect("cons allocation should succeed");
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcCons>());
-        TaggedValue(ptr as usize | TAG_CONS)
+        TaggedValue(ptr.as_ptr() as usize | TAG_CONS)
     }
 
     /// Allocate a string object.

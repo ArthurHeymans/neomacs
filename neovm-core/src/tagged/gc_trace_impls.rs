@@ -132,7 +132,12 @@ unsafe impl Trace for GcCons {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Phase gamma: cons cells dominate allocation volume, so
+        // routing them through the moving nursery is the bulk of the
+        // pause-time win. trace() and relocate() visit both car and
+        // cdr via GcSlot interior mutability, which keeps edges valid
+        // after evacuation.
+        MovePolicy::Movable
     }
 }
 
