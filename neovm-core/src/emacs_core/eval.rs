@@ -4741,6 +4741,11 @@ impl Context {
         self.tagged_heap.gc_heap_stats()
     }
 
+    /// Snapshot of the GC pause-time histogram.
+    pub fn gc_pause_histogram(&self) -> neovm_gc::PauseHistogram {
+        self.tagged_heap.gc_pause_histogram()
+    }
+
     fn is_gc_runtime_setting_symbol(sym_id: SymId) -> bool {
         sym_id == gc_cons_threshold_symbol()
             || sym_id == gc_cons_percentage_symbol()

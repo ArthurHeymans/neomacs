@@ -114,6 +114,7 @@ fn bench_cons_churn(iterations: usize) {
     assert_eq!(final_i, iterations - 1, "final cons payload mismatch");
 
     let stats = ctx.gc_heap_stats();
+    let hist = ctx.gc_pause_histogram();
     println!("config:        {}", describe_env());
     println!("iterations:    {}", iterations);
     println!("wall time:     {:?}", elapsed);
@@ -130,6 +131,13 @@ fn bench_cons_churn(iterations: usize) {
         "reclaimed:     {} MiB",
         stats.collections.reclaimed_bytes / 1024 / 1024
     );
+    println!("pause stats ({} samples):", hist.sample_count);
+    println!("  min:   {:.2} ms", (hist.min_nanos as f64) / 1_000_000.0);
+    println!("  p50:   {:.2} ms", (hist.p50_nanos as f64) / 1_000_000.0);
+    println!("  p95:   {:.2} ms", (hist.p95_nanos as f64) / 1_000_000.0);
+    println!("  p99:   {:.2} ms", (hist.p99_nanos as f64) / 1_000_000.0);
+    println!("  max:   {:.2} ms", (hist.max_nanos as f64) / 1_000_000.0);
+    println!("  mean:  {:.2} ms", (hist.mean_nanos as f64) / 1_000_000.0);
 }
 
 fn main() {

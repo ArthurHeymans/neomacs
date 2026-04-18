@@ -532,6 +532,15 @@ impl TaggedHeap {
         self.gc_heap.stats()
     }
 
+    /// Snapshot of the GC pause-time histogram (rolling window of
+    /// the most recent collection pauses). Exposed so external
+    /// tooling -- benchmarks, tests, Lisp observability builtins --
+    /// can track p50 / p95 / p99 latencies without polling raw
+    /// stats every cycle.
+    pub fn gc_pause_histogram(&self) -> neovm_gc::PauseHistogram {
+        self.gc_heap.pause_histogram()
+    }
+
     pub fn should_collect(&self) -> bool {
         self.bytes_since_gc >= self.gc_threshold
     }
