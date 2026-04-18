@@ -1124,6 +1124,29 @@ impl TaggedHeap {
         }
     }
 
+    /// Yield the mutator's persistent safepoint read guard so the
+    /// background collector can take its write guard and finish a
+    /// pending STW phase.
+    ///
+    /// Fast-gated on `has_active_major_mark`: the common case
+    /// (no background mark session in flight) is a single
+    /// atomic load and early return, so this is cheap enough to
+    /// call from every safe point. Only when the worker has
+    /// actually started a concurrent Major do we pay for the
+    /// RwLock release/re-acquire pair.
+    pub(crate) fn yield_to_background_collector(&mut self) {
+        if self.gc_background_worker.is_none() {
+            return;
+        }
+        if !self.gc_heap.has_active_major_mark() {
+            return;
+        }
+        if let Some(mutator) = self.gc_mutator.as_mut() {
+            mutator.yield_safepoint();
+        }
+    }
+
+
     /// True if an incremental Major session is in flight.
     pub(crate) fn has_incremental_major(&self) -> bool {
         self.gc_major_in_progress

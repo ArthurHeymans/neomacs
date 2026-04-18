@@ -6262,6 +6262,12 @@ impl Context {
             self.gc_collect_minor_from_current_roots();
         } else if self.tagged_heap.has_incremental_major() {
             self.tagged_heap.assist_incremental_major();
+        } else {
+            // Fast-gated yield: free when no background mark
+            // session is running, brief release + re-acquire
+            // while one is in flight so the worker can complete
+            // its STW reclaim.
+            self.tagged_heap.yield_to_background_collector();
         }
     }
 

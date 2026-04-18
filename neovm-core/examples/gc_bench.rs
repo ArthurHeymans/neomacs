@@ -86,12 +86,17 @@ fn bench_cons_churn(iterations: usize) {
     // `gc_safe_point_exact` via the VM's instrumented loop
     // bodies. No explicit `(garbage-collect)` -- the pacer
     // decides when to collect.
+    // Build a short-lived cons in each iteration and let it
+    // become unreachable the next time through the loop, so the
+    // workload generates maximum garbage for the collector to
+    // reclaim. The outer `last` binding keeps the final cons
+    // alive so we can sanity-check the run completed.
     let src = format!(
-        "(let ((lst nil) (i 0)) \
+        "(let ((last nil) (i 0)) \
              (while (< i {}) \
-                 (setq lst (cons i lst)) \
+                 (setq last (cons i nil)) \
                  (setq i (1+ i))) \
-             (length lst))",
+             (car last))",
         iterations
     );
 
@@ -99,17 +104,14 @@ fn bench_cons_churn(iterations: usize) {
     let result = ctx.eval_str(&src);
     let elapsed = start.elapsed();
 
-    let length = match result {
-        Ok(val) => val
-            .as_fixnum()
-            .map(|n| n as usize)
-            .unwrap_or(0),
+    let final_i = match result {
+        Ok(val) => val.as_fixnum().map(|n| n as usize).unwrap_or(usize::MAX),
         Err(flow) => {
             eprintln!("eval failed: {:?}", flow);
             std::process::exit(1);
         }
     };
-    assert_eq!(length, iterations, "list length mismatch");
+    assert_eq!(final_i, iterations - 1, "final cons payload mismatch");
 
     let stats = ctx.gc_heap_stats();
     println!("config:        {}", describe_env());

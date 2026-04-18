@@ -696,6 +696,38 @@ impl<'heap> Mutator<'heap> {
         self.local.refresh_safepoint_fast_path_state(self.heap);
     }
 
+    /// Yield the persistent safepoint read guard briefly so the
+    /// collector can take its write guard and complete a pending
+    /// STW phase.
+    ///
+    /// Drops the read guard, hints the scheduler, then re-acquires
+    /// the guard. If the collector was not waiting for write, the
+    /// main thread takes the read guard again almost immediately
+    /// and keeps working; if it was waiting, the OS scheduler
+    /// hands it the CPU during the hint window, it takes write,
+    /// completes its STW work, and we block briefly on our
+    /// re-acquisition. Net: the background worker's reclaim phase
+    /// can make progress without requiring the mutator to leave
+    /// the pin_safepoint fast-path entirely.
+    ///
+    /// Also refreshes the mutator's safepoint fast-path state
+    /// (nursery generation, TLAB size, etc.) since the brief
+    /// window may have seen a collection complete. Safe to call
+    /// at any time the mutator is quiescent -- typically from a
+    /// VM safe point.
+    pub fn yield_safepoint(&mut self) {
+        self.handle_scope_state.release_safepoint();
+        // No explicit scheduler yield here: sched_yield costs
+        // microseconds and, multiplied by every safe point, will
+        // dominate the whole workload. The release/re-acquire
+        // window alone is enough -- if the collector had been
+        // blocked waiting for write_safepoint, it takes the lock
+        // now; our `ensure_safepoint` call below blocks on its
+        // release.
+        self.handle_scope_state.ensure_safepoint();
+        self.local.refresh_safepoint_fast_path_state(self.heap);
+    }
+
     /// Allocate a pinned (non-moving) object and return a raw payload
     /// pointer. The caller is responsible for rooting the returned
     /// pointer through an external mechanism (e.g., embedding it in a
