@@ -118,6 +118,27 @@ fn gc_collection_enabled() -> bool {
     }
 }
 
+/// Check whether the safe-point path should use incremental Major
+/// marking instead of a synchronous Major cycle.
+///
+/// Default: disabled. Set `NEOVM_GC_INCREMENTAL_MAJOR=1|true|yes`
+/// to enable. Incremental Major slices the mark phase across
+/// safe-point calls so the mutator pauses briefly per call instead
+/// of blocking for a whole cycle, which is the right tradeoff in a
+/// running editor where safe points fire often between form
+/// evaluations. Explicit `(garbage-collect)` / test-driven
+/// `gc_collect_exact` callers always run the synchronous path, so
+/// bootstrap/regression tests that GC per-form are unaffected.
+pub(crate) fn gc_incremental_major_enabled() -> bool {
+    match std::env::var("NEOVM_GC_INCREMENTAL_MAJOR") {
+        Ok(v) => {
+            let lower = v.to_ascii_lowercase();
+            lower == "1" || lower == "true" || lower == "yes"
+        }
+        Err(_) => false,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Thread-local heap access
 // ---------------------------------------------------------------------------
@@ -300,6 +321,15 @@ pub struct TaggedHeap {
     /// stays cheap on the fast path while old-gen dead objects
     /// still get reclaimed periodically.
     gc_cycle_counter: u64,
+
+    /// True while an incremental Major mark session is in progress
+    /// (i.e., the VM has called `begin_major_mark` and has not yet
+    /// called `finish_major_collection`). Each safe point drives
+    /// the session forward via `assist_major_mark` slices; the
+    /// mutator keeps allocating and firing write barriers during
+    /// this window so total STW time is limited to the brief
+    /// finish phase plus one root-seed prelude.
+    gc_major_in_progress: bool,
 }
 
 /// Every Nth collect cycle runs Full instead of Minor. Chosen
@@ -307,6 +337,17 @@ pub struct TaggedHeap {
 /// old-gen survivors; Full every cycle is wasteful. 16 keeps Full
 /// under ~7% of cycles while still bounding old-gen growth.
 const GC_FULL_EVERY: u64 = 16;
+
+/// Max objects drained per `assist_major_mark` slice. Smaller =
+/// finer-grained pauses, but more scheduling overhead. 1024 gives
+/// roughly ~1ms slices at ~1us/object trace cost.
+const GC_MARK_SLICE_BUDGET: usize = 1024;
+
+/// Number of mark slices drained per safe-point assist call.
+/// Higher = fewer safe points to completion, more work per safe
+/// point. 4 keeps per-safe-point pause under ~5ms while still
+/// making visible progress each call.
+const GC_ASSIST_SLICES_PER_STEP: usize = 4;
 
 impl TaggedHeap {
     /// Create a `Mutator` view for write barrier calls.
@@ -388,6 +429,7 @@ impl TaggedHeap {
             dirty_writes: Vec::new(),
             gc_root_buffer,
             gc_cycle_counter: 0,
+            gc_major_in_progress: false,
         }
     }
 
@@ -915,18 +957,17 @@ impl TaggedHeap {
     /// actual collection vs the surrounding infrastructure).
     fn flush_roots_and_collect(&mut self) {
         if gc_collection_enabled() {
+            // Explicit `gc_collect_exact` path: always runs
+            // synchronously so callers that need a completed GC
+            // (tests, (garbage-collect) Lisp builtin) get one.
+            // Incremental Major sessions started by the organic
+            // safe-point path are drained here before the sync
+            // cycle so the session and the sync cycle do not
+            // overlap.
+            if self.gc_major_in_progress {
+                self.drain_incremental_major();
+            }
             if let Some(mutator) = self.gc_mutator.as_mut() {
-                // Pacer: Major is the default — it sweeps Pinned
-                // and Old without evacuating the Nursery, matching
-                // pre-phase-beta behavior for every allocation type
-                // except GcFloat. Every GC_FULL_EVERY-th cycle
-                // escalates to Full so the Nursery gets evacuated
-                // and Movable types (currently just GcFloat) go
-                // through the relocator. Minor is deliberately not
-                // used here because today Pinned dominates the
-                // working set; once more types flip to Movable in
-                // Phase γ / ε this ratio inverts and Minor becomes
-                // the fast path.
                 self.gc_cycle_counter = self.gc_cycle_counter.wrapping_add(1);
                 let kind = if self.gc_cycle_counter % GC_FULL_EVERY == 0 {
                     neovm_gc::plan::CollectionKind::Full
@@ -938,6 +979,117 @@ impl TaggedHeap {
             self.resync_post_collection_counters();
         }
         self.clear_post_collection_residue();
+    }
+
+    /// Begin a new incremental Major mark session. Seeds the
+    /// already-buffered roots, then does one initial slice so the
+    /// worklist starts draining immediately. Subsequent
+    /// safe-point cycles drive the session forward via
+    /// `assist_incremental_major` until the worklist is empty, at
+    /// which point we run the STW finish (reclaim) phase.
+    fn begin_incremental_major(&mut self) {
+        let Some(mutator) = self.gc_mutator.as_mut() else {
+            return;
+        };
+        let mut plan = self
+            .gc_heap
+            .plan_for(neovm_gc::plan::CollectionKind::Major);
+        plan.mark_slice_budget = GC_MARK_SLICE_BUDGET;
+        if mutator.begin_major_mark(plan).is_err() {
+            // A session was already active (shouldn't happen given
+            // our state flag, but defensive). Fall back to a
+            // synchronous Major.
+            let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+            return;
+        }
+        self.gc_major_in_progress = true;
+        self.assist_incremental_major_step();
+    }
+
+    /// Advance the active incremental Major session by one step.
+    /// If the step completes the mark phase, run the STW finish
+    /// immediately.
+    fn assist_incremental_major_step(&mut self) {
+        let Some(mutator) = self.gc_mutator.as_mut() else {
+            return;
+        };
+        match mutator.assist_major_mark(GC_ASSIST_SLICES_PER_STEP) {
+            Ok(Some(progress)) if progress.completed => {
+                let _ = mutator.finish_major_collection();
+                self.gc_major_in_progress = false;
+            }
+            _ => {}
+        }
+    }
+
+    /// Drive the active incremental Major session to completion in
+    /// one call. Used when a Full cycle is about to run and cannot
+    /// overlap with an in-flight Major session.
+    fn drain_incremental_major(&mut self) {
+        while self.gc_major_in_progress {
+            let Some(mutator) = self.gc_mutator.as_mut() else {
+                break;
+            };
+            match mutator.assist_major_mark(usize::MAX) {
+                Ok(Some(progress)) if progress.completed => {
+                    let _ = mutator.finish_major_collection();
+                    self.gc_major_in_progress = false;
+                }
+                Ok(_) => {
+                    // No progress but still in session; avoid an
+                    // infinite loop by forcing finish.
+                    let _ = mutator.finish_major_collection();
+                    self.gc_major_in_progress = false;
+                }
+                Err(_) => {
+                    self.gc_major_in_progress = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Public safe-point entry point for the VM to nudge the
+    /// incremental Major mark session forward. No-op if no
+    /// session is in flight.
+    pub(crate) fn assist_incremental_major(&mut self) {
+        if self.gc_major_in_progress {
+            self.assist_incremental_major_step();
+        }
+    }
+
+    /// True if an incremental Major session is in flight.
+    pub(crate) fn has_incremental_major(&self) -> bool {
+        self.gc_major_in_progress
+    }
+
+    /// Start an incremental Major session with the already-seeded
+    /// roots. Intended for the organic safe-point threshold path
+    /// where the caller expects mark work to slice across future
+    /// safe points rather than complete inline.
+    ///
+    /// Also resets the post-collection counters / residue so the
+    /// next Major threshold check fires on schedule. Returns true
+    /// if a session started; false if one was already in flight.
+    pub(crate) fn start_incremental_major(&mut self) -> bool {
+        if !gc_collection_enabled() || self.gc_major_in_progress {
+            return false;
+        }
+        self.begin_incremental_major();
+        self.resync_post_collection_counters();
+        // Reset byte counters so the next Major threshold fires
+        // on allocations accumulated AFTER this mark snapshot.
+        // Dirty tracking is handed off into the collector; clear
+        // our shadow copies.
+        self.gc_root_buffer
+            .lock()
+            .expect("gc_root_buffer lock poisoned")
+            .clear();
+        self.bytes_since_gc = 0;
+        self.bytes_since_minor = 0;
+        self.clear_dirty_owners();
+        self.clear_dirty_writes();
+        true
     }
 
     /// Run one Minor collection cycle with the already-seeded roots.

@@ -6224,9 +6224,15 @@ impl Context {
 
         if self.tagged_heap.gc_threshold_is_overridden() {
             if self.tagged_heap.should_collect() {
-                self.gc_collect_from_current_roots();
+                if crate::tagged::gc::gc_incremental_major_enabled() {
+                    self.start_or_assist_incremental_major();
+                } else {
+                    self.gc_collect_from_current_roots();
+                }
             } else if self.tagged_heap.should_collect_minor() {
                 self.gc_collect_minor_from_current_roots();
+            } else if self.tagged_heap.has_incremental_major() {
+                self.tagged_heap.assist_incremental_major();
             }
             return;
         }
@@ -6236,10 +6242,44 @@ impl Context {
             if self.tagged_heap.gc_threshold() != threshold {
                 self.tagged_heap.set_gc_threshold_from_runtime(threshold);
             }
-            self.gc_collect_from_current_roots();
+            if crate::tagged::gc::gc_incremental_major_enabled() {
+                self.start_or_assist_incremental_major();
+            } else {
+                self.gc_collect_from_current_roots();
+            }
         } else if self.tagged_heap.should_collect_minor() {
             self.gc_collect_minor_from_current_roots();
+        } else if self.tagged_heap.has_incremental_major() {
+            self.tagged_heap.assist_incremental_major();
         }
+    }
+
+    /// Start a new incremental Major mark session with current
+    /// roots, or assist an already-running one. Each safe-point
+    /// call through here does a bounded amount of mark work so
+    /// the mutator does not block for a whole Major at once.
+    /// Explicit `gc_collect_exact` continues to use the sync
+    /// path so callers that need a completed cycle get one.
+    fn start_or_assist_incremental_major(&mut self) {
+        if self.tagged_heap.has_incremental_major() {
+            self.tagged_heap.assist_incremental_major();
+            return;
+        }
+        let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
+        unsafe {
+            (*heap_ptr).begin_collection();
+            self.trace_roots(&mut |root| {
+                (*heap_ptr).seed_root(root);
+            });
+        }
+        let ctx_ptr: *mut Context = self;
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(ctx_ptr));
+        unsafe {
+            (*heap_ptr).start_incremental_major();
+        }
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(std::ptr::null_mut()));
+        self.gc_pending = false;
+        self.gc_count += 1;
     }
 
     /// GNU-style quit processing used from evaluator boundaries.
