@@ -1155,7 +1155,15 @@ impl SharedHeap {
         local: &mut crate::mutator::MutatorLocal,
         f: impl for<'heap> FnOnce(&mut Mutator<'heap>) -> R,
     ) -> Result<R, SharedHeapError> {
-        self.with_heap(|heap| {
+        // Take the OUTER read lock, not the write lock. The outer
+        // RwLock protects snapshot consistency; allocations and
+        // barriers synchronize via the heap's internal safepoint +
+        // core locks, which are correct under a shared outer read
+        // guard. Using write here would serialize every allocation
+        // against every reader (including the background
+        // collector), which regresses allocation throughput by
+        // orders of magnitude.
+        self.with_heap_read(|heap| {
             let taken = std::mem::replace(local, crate::mutator::MutatorLocal::default());
             let mut mutator = Mutator::from_local(heap, taken);
             let result = f(&mut mutator);

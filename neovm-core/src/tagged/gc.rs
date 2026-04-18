@@ -129,6 +129,24 @@ fn gc_collection_enabled() -> bool {
 /// evaluations. Explicit `(garbage-collect)` / test-driven
 /// `gc_collect_exact` callers always run the synchronous path, so
 /// bootstrap/regression tests that GC per-form are unaffected.
+/// Check whether to spawn a background collector worker thread
+/// on TaggedHeap construction.
+///
+/// Default: disabled. Set `NEOVM_GC_BACKGROUND=1|true|yes` to
+/// enable. When on, `SharedHeap::spawn_background_worker` starts
+/// a thread that polls the shared heap for recommended concurrent
+/// Major plans and drains mark work off the mutator thread.
+/// Shutdown happens in `TaggedHeap::drop` via `worker.join()`.
+pub(crate) fn gc_background_enabled() -> bool {
+    match std::env::var("NEOVM_GC_BACKGROUND") {
+        Ok(v) => {
+            let lower = v.to_ascii_lowercase();
+            lower == "1" || lower == "true" || lower == "yes"
+        }
+        Err(_) => false,
+    }
+}
+
 pub(crate) fn gc_incremental_major_enabled() -> bool {
     match std::env::var("NEOVM_GC_INCREMENTAL_MAJOR") {
         Ok(v) => {
@@ -243,21 +261,37 @@ const TAG_FLOAT: usize = 0b110;
 /// system allocator. Objects are tracked in the heap's `ObjectStore` so
 /// future concurrent marking can enumerate them.
 pub struct TaggedHeap {
-    /// The neovm-gc Heap, leaked for 'static lifetime.
+    /// Direct `&'static Heap` for the main mutator thread: zero
+    /// outer-lock overhead on allocs and write barriers. All
+    /// mutator operations go through this path and use a
+    /// persistent `Mutator<'static>`.
     gc_heap: &'static neovm_gc::Heap,
-    /// Raw pointer for Drop cleanup.
+    /// Raw pointer for `Drop` cleanup of the direct heap.
     gc_heap_box: *mut neovm_gc::Heap,
-    /// Persistent `Mutator` view so consecutive allocations share one
-    /// per-thread `ObjectPublishLocal`. A fresh `Mutator` per allocation
-    /// reserves a new 40KB `ObjectStore` chunk on first publish, burning
-    /// 1023 slots per single allocation — ~40GB wasted over a bootstrap.
-    /// Boxed to obtain a stable address and give the mutator a `'static`
-    /// borrow against the leaked `gc_heap`.
-    ///
-    /// Wrapped in `Option` so `Drop` can take and drop it *before*
-    /// reclaiming the `Heap` box, avoiding a use-after-free on the
-    /// safepoint read guard the mutator holds against the heap.
+    /// Persistent `Mutator` on the direct heap. Identical to the
+    /// pre-concurrent-marking design: one `MutatorLocal` lives
+    /// across every alloc/barrier, keeping `ObjectPublishLocal`
+    /// chunk reservations reusable across calls.
     gc_mutator: Option<Box<neovm_gc::Mutator<'static>>>,
+    /// `SharedHeap` view of the SAME underlying heap as
+    /// `gc_heap`. Constructed via `SharedHeap::from_heap` on a
+    /// cheap `Heap::clone` (Heap is `Arc<HeapState>`), so both
+    /// refer to the same `HeapState`. The `SharedHeap` side-channel
+    /// is used purely to spawn a `BackgroundWorker` for
+    /// concurrent Major mark; the background worker takes the
+    /// inner `safepoint` / `core` RwLocks directly on the shared
+    /// `HeapState`, which serializes correctly with the main
+    /// thread's direct-heap operations.
+    gc_shared: &'static neovm_gc::SharedHeap,
+    /// Raw pointer for `Drop` cleanup of the `SharedHeap`.
+    gc_shared_box: *mut neovm_gc::SharedHeap,
+    /// Optional background collector worker thread. Spawned via
+    /// `SharedHeap::spawn_background_worker` when
+    /// `gc_background_enabled()` is true; joined in `Drop`. The
+    /// worker polls the shared heap for recommended concurrent
+    /// Major plans and drains mark slices off-thread so the
+    /// mutator only blocks for the brief remark + reclaim phase.
+    gc_background_worker: Option<neovm_gc::BackgroundWorker>,
 
     /// Total number of allocated objects (cons + non-cons).
     pub allocated_count: usize,
@@ -358,21 +392,48 @@ impl TaggedHeap {
         self.gc_heap.mutator()
     }
 
+    /// Run `f` against the persistent mutator. Kept for API
+    /// symmetry with the SharedHeap-wrapped variant; on the
+    /// direct heap this is just a borrow.
+    pub(crate) fn with_mutator<R>(
+        &mut self,
+        f: impl for<'heap> FnOnce(&mut neovm_gc::Mutator<'heap>) -> R,
+    ) -> R {
+        // Safety: the persistent Mutator<'static> is stored in a
+        // Box so its address is stable; we reborrow it shorter for
+        // this closure. The `for<'heap>` HRTB is accepted because
+        // the supplied 'static outlives any 'heap.
+        let mutator = self
+            .gc_mutator
+            .as_mut()
+            .expect("gc_mutator is only None during Drop");
+        f(mutator.as_mut())
+    }
+
     pub fn new() -> Self {
         let config = neovm_gc::HeapConfig::default();
-        let heap_box = Box::into_raw(Box::new(neovm_gc::Heap::new(config)));
+        // Build the direct-access Heap first. Heap is
+        // `Arc<HeapState>` so `Heap::clone` is a cheap Arc bump:
+        // both `heap_direct` and the Heap wrapped inside
+        // `SharedHeap` end up pointing at the same `HeapState`.
+        let heap = neovm_gc::Heap::new(config);
+        let heap_direct = heap.clone();
+        let heap_box = Box::into_raw(Box::new(heap_direct));
         let gc_heap: &'static neovm_gc::Heap = unsafe { &*heap_box };
+        let shared_box = Box::into_raw(Box::new(neovm_gc::SharedHeap::from_heap(heap)));
+        let gc_shared: &'static neovm_gc::SharedHeap = unsafe { &*shared_box };
+
+        // Persistent Mutator on the direct heap. Pin its
+        // safepoint read guard so subsequent allocations reuse
+        // one `ObjectPublishLocal` across calls.
         let mut mutator = gc_heap.mutator();
-        // Pin the safepoint so subsequent allocations reuse the same
-        // ObjectPublishLocal chunk reservations.
         mutator.pin_safepoint();
         let gc_mutator = Some(Box::new(mutator));
 
-        // Install the external-root scanner callback. When the collector
-        // runs, it calls this closure to discover every VM-owned root.
-        // The closure drains `gc_root_buffer` (populated by the VM's
-        // `trace_roots()` pass via `seed_root()`) into the Vec supplied
-        // by the collector.
+        // Install the external-root scanner + relocator callbacks
+        // on the direct Heap. Both views (`gc_heap` and
+        // `gc_shared`) back the same `HeapState`, so these fire
+        // regardless of which thread drives the collection.
         let gc_root_buffer: std::sync::Arc<std::sync::Mutex<Vec<GcErased>>> =
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         {
@@ -381,36 +442,52 @@ impl TaggedHeap {
                 let mut guard = roots.lock().expect("gc_root_buffer lock poisoned");
                 out.extend(guard.drain(..));
             });
+            gc_heap.set_external_root_relocator(
+                move |relocator: &mut dyn neovm_gc::descriptor::Relocator| {
+                    let ctx_ptr = crate::emacs_core::eval::GC_RELOCATOR_CONTEXT
+                        .with(|slot| slot.get());
+                    if ctx_ptr.is_null() {
+                        return;
+                    }
+                    // SAFETY: STW collection runs on the thread
+                    // that installed `ctx_ptr`, so the Context is
+                    // pinned for the duration of the relocator
+                    // call.
+                    let ctx = unsafe { &mut *ctx_ptr };
+                    ctx.trace_roots_mut(&mut |slot: &mut TaggedValue| {
+                        relocate_tagged_slot(slot, relocator);
+                    });
+                },
+            );
         }
 
-        // Install the external-root relocator callback. When an
-        // evacuating collection (Minor or Full) forwards objects out
-        // of the nursery, the collector invokes this closure so the
-        // VM can rewrite every live tagged pointer to its
-        // post-evacuation address. Finds the live Context via
-        // `GC_RELOCATOR_CONTEXT`, a thread-local raw pointer that
-        // `gc_collect_from_current_roots` installs around the
-        // collect call.
-        gc_heap.set_external_root_relocator(
-            move |relocator: &mut dyn neovm_gc::descriptor::Relocator| {
-                let ctx_ptr = crate::emacs_core::eval::GC_RELOCATOR_CONTEXT
-                    .with(|slot| slot.get());
-                if ctx_ptr.is_null() {
-                    return;
-                }
-                // SAFETY: STW collection runs on the same thread that
-                // installed `ctx_ptr`, and no other code path reads
-                // the Context for the duration of the collect call.
-                let ctx = unsafe { &mut *ctx_ptr };
-                ctx.trace_roots_mut(&mut |slot: &mut TaggedValue| {
-                    relocate_tagged_slot(slot, relocator);
-                });
-            },
-        );
+        // Optionally spawn a background collector worker. When
+        // enabled, the worker thread polls the shared heap for
+        // recommended concurrent Major plans and drains mark
+        // slices off-thread so the mutator only blocks for the
+        // brief remark + reclaim phase at the end of a cycle.
+        let gc_background_worker = if gc_background_enabled() {
+            let cfg = neovm_gc::BackgroundWorkerConfig {
+                collector: neovm_gc::BackgroundCollectorConfig {
+                    auto_start_concurrent: true,
+                    auto_finish_when_ready: true,
+                    max_rounds_per_tick: 1,
+                },
+                idle_sleep: std::time::Duration::from_millis(1),
+                busy_sleep: std::time::Duration::ZERO,
+            };
+            Some(gc_shared.spawn_background_worker(cfg))
+        } else {
+            None
+        };
+
         Self {
             gc_heap,
             gc_heap_box: heap_box,
             gc_mutator,
+            gc_shared,
+            gc_shared_box: shared_box,
+            gc_background_worker,
             allocated_count: 0,
             gc_threshold: 100_000 * size_of::<usize>(),
             gc_threshold_overridden: false,
@@ -607,13 +684,10 @@ impl TaggedHeap {
     /// system allocator. All records are published to neovm-gc's
     /// `ObjectStore` so the marker can enumerate them.
     fn gc_alloc<T: neovm_gc::Trace + 'static>(&mut self, value: T) -> *const T {
-        let mutator = self
-            .gc_mutator
-            .as_mut()
-            .expect("gc_mutator is only None during Drop");
-        let ptr = mutator
-            .alloc_pinned_raw(value)
-            .expect("pinned allocation should succeed");
+        let ptr = self.with_mutator(|m| {
+            m.alloc_pinned_raw(value)
+                .expect("pinned allocation should succeed")
+        });
         ptr.as_ptr() as *const T
     }
 
@@ -627,13 +701,10 @@ impl TaggedHeap {
             car: GcSlot::new(car),
             cdr: GcSlot::new(cdr),
         };
-        let mutator = self
-            .gc_mutator
-            .as_mut()
-            .expect("gc_mutator is only None during Drop");
-        let ptr = mutator
-            .alloc_external_raw(gc_cons)
-            .expect("cons allocation should succeed");
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_cons)
+                .expect("cons allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcCons>());
         TaggedValue(ptr.as_ptr() as usize | TAG_CONS)
@@ -660,13 +731,10 @@ impl TaggedHeap {
     /// nursery.
     pub fn alloc_float(&mut self, value: f64) -> TaggedValue {
         let gc_float = GcFloat { value };
-        let mutator = self
-            .gc_mutator
-            .as_mut()
-            .expect("gc_mutator is only None during Drop");
-        let ptr = mutator
-            .alloc_external_raw(gc_float)
-            .expect("float allocation should succeed");
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_float)
+                .expect("float allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFloat>());
         TaggedValue(ptr.as_ptr() as usize | TAG_FLOAT)
@@ -967,15 +1035,13 @@ impl TaggedHeap {
             if self.gc_major_in_progress {
                 self.drain_incremental_major();
             }
-            if let Some(mutator) = self.gc_mutator.as_mut() {
-                self.gc_cycle_counter = self.gc_cycle_counter.wrapping_add(1);
-                let kind = if self.gc_cycle_counter % GC_FULL_EVERY == 0 {
-                    neovm_gc::plan::CollectionKind::Full
-                } else {
-                    neovm_gc::plan::CollectionKind::Major
-                };
-                let _ = mutator.collect(kind);
-            }
+            self.gc_cycle_counter = self.gc_cycle_counter.wrapping_add(1);
+            let kind = if self.gc_cycle_counter % GC_FULL_EVERY == 0 {
+                neovm_gc::plan::CollectionKind::Full
+            } else {
+                neovm_gc::plan::CollectionKind::Major
+            };
+            let _ = self.with_mutator(|m| m.collect(kind));
             self.resync_post_collection_counters();
         }
         self.clear_post_collection_residue();
@@ -988,18 +1054,20 @@ impl TaggedHeap {
     /// `assist_incremental_major` until the worklist is empty, at
     /// which point we run the STW finish (reclaim) phase.
     fn begin_incremental_major(&mut self) {
-        let Some(mutator) = self.gc_mutator.as_mut() else {
-            return;
-        };
-        let mut plan = self
-            .gc_heap
-            .plan_for(neovm_gc::plan::CollectionKind::Major);
+        let mut plan = self.gc_heap.plan_for(neovm_gc::plan::CollectionKind::Major);
         plan.mark_slice_budget = GC_MARK_SLICE_BUDGET;
-        if mutator.begin_major_mark(plan).is_err() {
-            // A session was already active (shouldn't happen given
-            // our state flag, but defensive). Fall back to a
-            // synchronous Major.
-            let _ = mutator.collect(neovm_gc::plan::CollectionKind::Major);
+        let started = self.with_mutator(|m| {
+            if m.begin_major_mark(plan.clone()).is_err() {
+                // A session was already active (shouldn't happen
+                // given our state flag, but defensive). Fall back
+                // to a synchronous Major.
+                let _ = m.collect(neovm_gc::plan::CollectionKind::Major);
+                false
+            } else {
+                true
+            }
+        });
+        if !started {
             return;
         }
         self.gc_major_in_progress = true;
@@ -1010,15 +1078,15 @@ impl TaggedHeap {
     /// If the step completes the mark phase, run the STW finish
     /// immediately.
     fn assist_incremental_major_step(&mut self) {
-        let Some(mutator) = self.gc_mutator.as_mut() else {
-            return;
-        };
-        match mutator.assist_major_mark(GC_ASSIST_SLICES_PER_STEP) {
-            Ok(Some(progress)) if progress.completed => {
-                let _ = mutator.finish_major_collection();
-                self.gc_major_in_progress = false;
-            }
-            _ => {}
+        let completed = self.with_mutator(|m| {
+            matches!(
+                m.assist_major_mark(GC_ASSIST_SLICES_PER_STEP),
+                Ok(Some(progress)) if progress.completed
+            )
+        });
+        if completed {
+            let _ = self.with_mutator(|m| m.finish_major_collection());
+            self.gc_major_in_progress = false;
         }
     }
 
@@ -1027,18 +1095,16 @@ impl TaggedHeap {
     /// overlap with an in-flight Major session.
     fn drain_incremental_major(&mut self) {
         while self.gc_major_in_progress {
-            let Some(mutator) = self.gc_mutator.as_mut() else {
-                break;
-            };
-            match mutator.assist_major_mark(usize::MAX) {
-                Ok(Some(progress)) if progress.completed => {
-                    let _ = mutator.finish_major_collection();
+            let progress = self.with_mutator(|m| m.assist_major_mark(usize::MAX));
+            match progress {
+                Ok(Some(p)) if p.completed => {
+                    let _ = self.with_mutator(|m| m.finish_major_collection());
                     self.gc_major_in_progress = false;
                 }
                 Ok(_) => {
                     // No progress but still in session; avoid an
                     // infinite loop by forcing finish.
-                    let _ = mutator.finish_major_collection();
+                    let _ = self.with_mutator(|m| m.finish_major_collection());
                     self.gc_major_in_progress = false;
                 }
                 Err(_) => {
@@ -1104,9 +1170,7 @@ impl TaggedHeap {
     /// fires on schedule.
     fn flush_roots_and_collect_minor(&mut self) {
         if gc_collection_enabled() {
-            if let Some(mutator) = self.gc_mutator.as_mut() {
-                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Minor);
-            }
+            let _ = self.with_mutator(|m| m.collect(neovm_gc::plan::CollectionKind::Minor));
             self.resync_post_collection_counters();
         }
         self.gc_root_buffer
@@ -1238,12 +1302,23 @@ impl Drop for TaggedHeap {
                 h.set(std::ptr::null_mut());
             }
         });
-        // Drop the mutator BEFORE reclaiming the Heap box: the mutator
-        // holds a safepoint read guard borrowed from the heap, and
-        // dropping the heap first would invalidate that borrow.
+        // Stop the background worker first. `BackgroundWorker::join`
+        // signals shutdown and waits for the thread to exit, so by
+        // the time it returns no thread is still touching the heap.
+        if let Some(worker) = self.gc_background_worker.take() {
+            let _ = worker.join();
+        }
+        // Drop the persistent mutator BEFORE reclaiming either
+        // Heap box. The mutator holds a safepoint read guard
+        // borrowed from the direct Heap.
         self.gc_mutator.take();
-        // Reclaim the leaked neovm-gc Heap.
+        // Reclaim the leaked SharedHeap first (it shares the same
+        // HeapState via Arc), then the direct Heap box. Dropping
+        // SharedHeap releases its clone of the Arc; dropping the
+        // direct Heap releases the last clone which finally
+        // drops HeapState.
         unsafe {
+            drop(Box::from_raw(self.gc_shared_box));
             drop(Box::from_raw(self.gc_heap_box));
         }
     }
@@ -1276,9 +1351,6 @@ pub fn gc_post_write_barrier(
         return;
     }
     with_tagged_heap(|heap| {
-        let Some(mutator) = heap.gc_mutator.as_mut() else {
-            return;
-        };
         let owner_gc = unsafe { TaggedHeap::tagged_to_erased(owner) };
         let old_gc = old_val
             .is_heap_object()
@@ -1289,7 +1361,7 @@ pub fn gc_post_write_barrier(
         let owner_gc: neovm_gc::root::Gc<u8> = unsafe { neovm_gc::root::Gc::from_erased(owner_gc) };
         let old_gc = old_gc.map(|e| unsafe { neovm_gc::root::Gc::<u8>::from_erased(e) });
         let new_gc = new_gc.map(|e| unsafe { neovm_gc::root::Gc::<u8>::from_erased(e) });
-        mutator.post_write_barrier(owner_gc, Some(slot), old_gc, new_gc);
+        heap.with_mutator(|m| m.post_write_barrier(owner_gc, Some(slot), old_gc, new_gc));
     });
 }
 
@@ -1308,13 +1380,10 @@ pub fn gc_post_write_barrier_bulk(owner: TaggedValue) {
         return;
     }
     with_tagged_heap(|heap| {
-        let Some(mutator) = heap.gc_mutator.as_mut() else {
-            return;
-        };
         let owner_erased = unsafe { TaggedHeap::tagged_to_erased(owner) };
         let owner_gc: neovm_gc::root::Gc<u8> =
             unsafe { neovm_gc::root::Gc::from_erased(owner_erased) };
-        mutator.post_write_barrier::<u8, u8>(owner_gc, None, None, None);
+        heap.with_mutator(|m| m.post_write_barrier::<u8, u8>(owner_gc, None, None, None));
     });
 }
 
