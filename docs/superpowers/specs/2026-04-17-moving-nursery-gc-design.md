@@ -257,6 +257,28 @@ Each phase lands independently, test suite must stay green.
   Default-off today because the bootstrap test calls
   `gc_collect_exact` per form; real editor paths that drive GC
   through safe-point thresholds should flip the default on.
+- *Concurrent benchmark (500k cons churn, release)*:
+  | Mode | Wall time | vs baseline |
+  | --- | --- | --- |
+  | default (sync Major) | 753 ms | 1.0x |
+  | NEOVM_GC_BACKGROUND | 1159 ms | 1.5x slower |
+  | NEOVM_GC_INCREMENTAL_MAJOR | 7108 ms | 9.4x slower |
+  | both | 6962 ms | 9.2x slower |
+
+  All modes ran the same 4 Major cycles; the deltas are pure
+  overhead. INCREMENTAL_MAJOR regresses heavily because
+  `assist_major_mark` takes the safepoint write lock every safe
+  point (thousands of lock acquires per loop iteration);
+  BACKGROUND alone adds modest cache/CPU contention. The sync
+  path wins on single-threaded tight allocation loops because
+  Major mark is already fast (cons are Movable, span sweep
+  avoided) and the main thread is 100% CPU-bound on allocs, so
+  there is no idle time for a background thread to exploit.
+  Concurrent marking is the right shape for interactive /
+  multi-threaded workloads where the mutator has substantial
+  CPU work beyond allocation (user input wait, I/O, heavy
+  non-Lisp computation). Defaults stay off;
+  `neovm-core/examples/gc_bench.rs` is the repro harness.
 - *Concurrent (background thread)*: **infrastructure landed,
   opt-in** (commits cb466566e, c15473979). neovm-gc gained three
   new APIs: `MutatorLocal::new_registered` /
