@@ -903,12 +903,36 @@ impl TaggedHeap {
                 };
                 let _ = mutator.collect(kind);
             }
-            // Resync our cumulative allocation counter with neovm-gc's
-            // live object count so callers that treat allocated_count
-            // as "currently live" see the post-sweep value.
-            self.allocated_count = self.gc_heap.object_count();
-            self.live_bytes = self.gc_heap.stats().pinned.live_bytes;
+            self.resync_post_collection_counters();
         }
+        self.clear_post_collection_residue();
+    }
+
+    /// Run one Minor collection cycle with the already-seeded roots.
+    ///
+    /// Minor evacuates the Nursery and runs the relocator; it does
+    /// not sweep Pinned or reclaim Old. Cheap (target <5ms) and safe
+    /// to run between Major cycles so Movable-type allocations don't
+    /// accumulate in the Nursery between heavier reclaims.
+    fn flush_roots_and_collect_minor(&mut self) {
+        if gc_collection_enabled() {
+            if let Some(mutator) = self.gc_mutator.as_mut() {
+                let _ = mutator.collect(neovm_gc::plan::CollectionKind::Minor);
+            }
+            self.resync_post_collection_counters();
+        }
+        self.clear_post_collection_residue();
+    }
+
+    fn resync_post_collection_counters(&mut self) {
+        // Resync our cumulative allocation counter with neovm-gc's
+        // live object count so callers that treat allocated_count
+        // as "currently live" see the post-sweep value.
+        self.allocated_count = self.gc_heap.object_count();
+        self.live_bytes = self.gc_heap.stats().pinned.live_bytes;
+    }
+
+    fn clear_post_collection_residue(&mut self) {
         // External root scanner drained gc_root_buffer during the
         // collection (or we are skipping it); clear any residue.
         self.gc_root_buffer
@@ -968,6 +992,13 @@ impl TaggedHeap {
     /// on the `Gc*` types to find the full reachable object graph.
     pub(crate) fn complete_collection(&mut self) {
         self.flush_roots_and_collect();
+    }
+
+    /// Variant of [`Self::complete_collection`] that runs only a
+    /// Minor cycle. Roots must already be seeded via `seed_root`
+    /// between a prior `begin_collection` and this call.
+    pub(crate) fn complete_collection_minor(&mut self) {
+        self.flush_roots_and_collect_minor();
     }
 }
 
