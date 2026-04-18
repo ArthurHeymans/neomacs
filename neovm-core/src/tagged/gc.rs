@@ -940,18 +940,24 @@ impl TaggedHeap {
     /// constructor that delegates here only when promotion is needed.
     pub fn alloc_bignum(&mut self, value: rug::Integer) -> TaggedValue {
         let gc_bignum = GcBignum { type_tag: VecLikeType::Bignum, value };
-        let ptr = self.gc_alloc(gc_bignum);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_bignum)
+                .expect("bignum allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBignum>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     pub fn alloc_symbol_with_pos(&mut self, sym: TaggedValue, pos: TaggedValue) -> TaggedValue {
         let gc_swp = GcSymbolWithPos { type_tag: VecLikeType::SymbolWithPos, sym, pos };
-        let ptr = self.gc_alloc(gc_swp);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_swp)
+                .expect("symbol-with-pos allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcSymbolWithPos>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     // -----------------------------------------------------------------------

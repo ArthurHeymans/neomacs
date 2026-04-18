@@ -500,7 +500,13 @@ pub struct GcBignum {
 unsafe impl Trace for GcBignum {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        // Phase epsilon: bignums have no TaggedValue edges and
+        // the rug::Integer wrapper is memcpy-safe -- its GMP
+        // limb pointer is owned by malloc and survives the
+        // struct's relocation.
+        MovePolicy::Movable
+    }
     fn layout_kind() -> LayoutKind { LayoutKind::External }
 }
 
@@ -528,7 +534,13 @@ unsafe impl Trace for GcSymbolWithPos {
         // position for detailed source maps), convert sym/pos to
         // UnsafeCell<TaggedValue> and mirror trace() here.
     }
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        // Phase epsilon: symbol-with-pos has no heap edges
+        // (sym is TAG_SYMBOL, pos is a fixnum) so the memcpy
+        // evacuation is safe. The Pinned status was only there
+        // because phase alpha did not need to flip it.
+        MovePolicy::Movable
+    }
 }
 
 /// Buffer reference managed by neovm-gc. No TaggedValue edges.
