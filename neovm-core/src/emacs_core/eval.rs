@@ -6605,7 +6605,7 @@ impl Context {
     /// The remaining evaluator entry points either root their live Values
     /// explicitly or run before materializing heap-backed Values, so this path
     /// now uses exact roots rather than conservative stack scanning.
-    fn maybe_gc_and_quit(&mut self) -> Result<(), Flow> {
+    pub(crate) fn maybe_gc_and_quit(&mut self) -> Result<(), Flow> {
         self.poll_pending_input_for_throw_on_input()?;
         self.maybe_quit()?;
         self.gc_safe_point_exact();
@@ -8552,24 +8552,35 @@ impl Context {
         if !tail.is_cons() {
             return Err(self.listp_error(tail));
         }
-        let test_form = tail.cons_car();
-        let body = tail.cons_cdr();
-        let mut iters: u64 = 0;
-        loop {
-            if self.eval_sub(test_form)?.is_nil() {
-                return Ok(Value::NIL);
+        let specpdl_root_scope = self.save_specpdl_roots();
+        let test_root_index = self.specpdl.len();
+        self.push_specpdl_root(tail.cons_car());
+        let body_root_index = self.specpdl.len();
+        self.push_specpdl_root(tail.cons_cdr());
+
+        let result = (|| -> EvalResult {
+            let mut iters: u64 = 0;
+            loop {
+                let test_form =
+                    specpdl_gc_root_value(&self.specpdl, test_root_index, "while test");
+                let body = specpdl_gc_root_value(&self.specpdl, body_root_index, "while body");
+                if self.eval_sub(test_form)?.is_nil() {
+                    return Ok(Value::NIL);
+                }
+                self.sf_progn_value(body)?;
+                iters += 1;
+                if iters == 1_000_000 {
+                    let cond_str = super::print::print_value(&test_form);
+                    tracing::warn!(
+                        "while loop exceeded 1M iterations, cond: {}",
+                        &cond_str[..cond_str.len().min(300)]
+                    );
+                }
+                self.maybe_gc_and_quit()?;
             }
-            self.sf_progn_value(body)?;
-            iters += 1;
-            if iters == 1_000_000 {
-                let cond_str = super::print::print_value(&test_form);
-                tracing::warn!(
-                    "while loop exceeded 1M iterations, cond: {}",
-                    &cond_str[..cond_str.len().min(300)]
-                );
-            }
-            self.maybe_quit()?;
-        }
+        })();
+        self.restore_specpdl_roots(specpdl_root_scope);
+        result
     }
 
     fn sf_progn_value(&mut self, forms: Value) -> EvalResult {

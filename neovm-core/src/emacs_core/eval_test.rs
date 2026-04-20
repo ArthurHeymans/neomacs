@@ -8625,6 +8625,33 @@ fn while_processes_quit_flag_without_loop_local_gc() {
 }
 
 #[test]
+fn while_loop_safe_points_can_run_minor_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_gc_threshold(usize::MAX);
+    ev.tagged_heap.set_gc_minor_threshold(1024);
+
+    let result = ev.eval_str(
+        "(let ((i 0) (last nil))
+           (while (< i 512)
+             (setq last (cons i nil))
+             (setq i (1+ i)))
+           (car last))",
+    );
+
+    assert_eq!(format_eval_result(&result), "OK 511");
+    let stats = ev.gc_heap_stats();
+    assert!(
+        stats.collections.minor_collections > 0,
+        "while loop should expose GC safe points for nursery collection"
+    );
+    assert_eq!(
+        stats.collections.major_collections, 0,
+        "minor-only loop stress should not need a major collection"
+    );
+}
+
+#[test]
 fn throw_on_input_is_special_and_dynamically_bound() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

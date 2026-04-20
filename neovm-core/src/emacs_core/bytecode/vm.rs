@@ -682,11 +682,12 @@ impl<'a> Vm<'a> {
                 // `maybe_gc()` + `maybe_quit()` when the target is
                 // behind the current pc. Without this, `(while t)` in
                 // bytecode is uninterruptible: `C-g` never gets to run
-                // `maybe_quit` because control never leaves the VM.
+                // `maybe_quit`, and GC never gets a loop-local safe
+                // point, because control never leaves the VM.
                 Op::Goto(addr) => {
                     let target = *addr as usize;
                     if target < *pc {
-                        vm_try!(self.ctx.maybe_quit());
+                        vm_try!(self.ctx.maybe_gc_and_quit());
                     }
                     *pc = target;
                 }
@@ -695,7 +696,7 @@ impl<'a> Vm<'a> {
                     if val.is_nil() {
                         let target = *addr as usize;
                         if target < *pc {
-                            vm_try!(self.ctx.maybe_quit());
+                            vm_try!(self.ctx.maybe_gc_and_quit());
                         }
                         *pc = target;
                     }
@@ -705,7 +706,7 @@ impl<'a> Vm<'a> {
                     if val.is_truthy() {
                         let target = *addr as usize;
                         if target < *pc {
-                            vm_try!(self.ctx.maybe_quit());
+                            vm_try!(self.ctx.maybe_gc_and_quit());
                         }
                         *pc = target;
                     }
@@ -714,7 +715,7 @@ impl<'a> Vm<'a> {
                     if stk!().last().is_none_or(|v| v.is_nil()) {
                         let target = *addr as usize;
                         if target < *pc {
-                            vm_try!(self.ctx.maybe_quit());
+                            vm_try!(self.ctx.maybe_gc_and_quit());
                         }
                         *pc = target;
                     } else {
@@ -725,7 +726,7 @@ impl<'a> Vm<'a> {
                     if stk!().last().is_some_and(|v| v.is_truthy()) {
                         let target = *addr as usize;
                         if target < *pc {
-                            vm_try!(self.ctx.maybe_quit());
+                            vm_try!(self.ctx.maybe_gc_and_quit());
                         }
                         *pc = target;
                     } else {
