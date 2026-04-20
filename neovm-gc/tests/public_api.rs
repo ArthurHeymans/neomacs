@@ -362,6 +362,16 @@ unsafe impl Trace for ThreadRecordingWeakHolder {
 }
 
 static PUBLIC_FINALIZE_COUNT: AtomicUsize = AtomicUsize::new(0);
+static PUBLIC_FINALIZE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+macro_rules! reset_public_finalize_count {
+    () => {
+        let _finalizer_guard = PUBLIC_FINALIZE_TEST_LOCK
+            .lock()
+            .expect("lock public finalizer test guard");
+        PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    };
+}
 
 #[derive(Debug)]
 struct FinalizableLeaf(u64);
@@ -1903,7 +1913,7 @@ fn public_api_collector_runtime_service_background_collection_round_finishes_maj
 
 #[test]
 fn public_api_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -1952,7 +1962,7 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
     //   * the first call returns 2 and leaves one pending
     //   * the second call drains the remaining one
     //   * stats.finalizers_run reflects the cumulative total
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -2973,7 +2983,7 @@ fn public_api_poll_active_major_mark_prepares_major_old_region_rebuild_before_fi
 
 #[test]
 fn public_api_poll_active_major_mark_prepares_major_finalizer_before_finish() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -3572,7 +3582,7 @@ fn public_api_background_collector_prepares_full_reclaim_before_finishing_runtim
 
 #[test]
 fn public_api_reports_queued_finalizers_and_finalizer_drains() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig::default());
     {
@@ -5160,7 +5170,7 @@ fn public_api_background_service_owns_collector_runtime_loop() {
 
 #[test]
 fn public_api_background_service_drains_pending_finalizers() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5209,7 +5219,7 @@ fn public_api_background_service_drain_pending_finalizers_bounded_runs_in_slices
     // tests, but exposed through the in-process background
     // service handle so a host that drives finalization through
     // its background service can budget work per service tick.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5747,7 +5757,7 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
 
 #[test]
 fn public_api_shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5805,7 +5815,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
     // finalizer queue without holding a Mutator. Verifies the
     // slicing semantics through the shared runtime path: budget
     // 2, then budget 5 to drain the rest.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5859,7 +5869,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
 
 #[test]
 fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5914,7 +5924,7 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_r
 
 #[test]
 fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7117,7 +7127,7 @@ fn public_api_shared_background_service_drives_shared_heap_without_manual_lockin
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7183,7 +7193,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
     // 2 then budget 5 to drain the rest. With this test the
     // bounded drain is now end-to-end pinned across every public
     // SharedHeap-side surface that exposes it.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7244,7 +7254,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_read_locked() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7294,7 +7304,7 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_write_locked() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -8223,16 +8233,14 @@ fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for
 #[test]
 fn public_api_background_worker_uses_snapshot_idle_fast_path_when_locked_heap_has_no_work() {
     let shared = neovm_gc::SharedHeap::new(HeapConfig::default());
+    let guard = shared.lock().expect("lock shared heap");
     let worker = shared.spawn_background_worker(neovm_gc::BackgroundWorkerConfig {
         collector: neovm_gc::BackgroundCollectorConfig::default(),
         idle_sleep: Duration::from_millis(1),
         busy_sleep: Duration::ZERO,
     });
-
-    {
-        let _guard = shared.lock().expect("lock shared heap");
-        thread::sleep(Duration::from_millis(10));
-    }
+    thread::sleep(Duration::from_millis(10));
+    drop(guard);
 
     worker.request_stop();
     let stats = worker.join().expect("join background worker");
@@ -8366,7 +8374,7 @@ fn public_api_shared_heap_wait_for_change_wakes_on_guard_drop() {
 
 #[test]
 fn public_api_shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -8682,7 +8690,7 @@ fn public_api_shared_collector_runtime_can_spawn_background_worker() {
 #[test]
 fn public_api_shared_background_service_wait_for_background_change_reports_pending_finalizer_change()
  {
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9488,7 +9496,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_while_heap_is_write_l
     // test queues two finalizers, parks a helper thread on the
     // heap write lock, and verifies the bounded drain still
     // returns and runs the requested slice.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9551,7 +9559,7 @@ fn public_api_shared_try_drain_pending_finalizers_bounded_runs_in_slices() {
     // contract for VMs that want to drive cooperative
     // finalization without ever blocking, e.g. inside a tight
     // event loop.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9608,7 +9616,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_in_slices() {
     // CollectorRuntime test, but exercised via the SharedHeap
     // surface so the bounded drain is pinned end-to-end through
     // the shared snapshot path.
-    PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    reset_public_finalize_count!();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {

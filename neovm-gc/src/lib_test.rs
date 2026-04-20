@@ -513,11 +513,12 @@ unsafe impl Trace for ThreadRecordingWeakHolder {
     }
 }
 
-static MINOR_FINALIZE_COUNT: AtomicUsize = AtomicUsize::new(0);
-static MAJOR_FINALIZE_COUNT: AtomicUsize = AtomicUsize::new(0);
+fn new_finalize_counter() -> Arc<AtomicUsize> {
+    Arc::new(AtomicUsize::new(0))
+}
 
 #[derive(Debug)]
-struct FinalizableNurseryLeaf(u64);
+struct FinalizableNurseryLeaf(u64, Arc<AtomicUsize>);
 
 unsafe impl Trace for FinalizableNurseryLeaf {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
@@ -525,7 +526,7 @@ unsafe impl Trace for FinalizableNurseryLeaf {
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
 
     fn finalize(&self) {
-        MINOR_FINALIZE_COUNT.fetch_add(1, Ordering::SeqCst);
+        self.1.fetch_add(1, Ordering::SeqCst);
     }
 
     fn type_flags() -> TypeFlags
@@ -537,7 +538,7 @@ unsafe impl Trace for FinalizableNurseryLeaf {
 }
 
 #[derive(Debug)]
-struct FinalizableOldLeaf([u8; 32]);
+struct FinalizableOldLeaf([u8; 32], Arc<AtomicUsize>);
 
 unsafe impl Trace for FinalizableOldLeaf {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
@@ -545,7 +546,7 @@ unsafe impl Trace for FinalizableOldLeaf {
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
 
     fn finalize(&self) {
-        MAJOR_FINALIZE_COUNT.fetch_add(1, Ordering::SeqCst);
+        self.1.fetch_add(1, Ordering::SeqCst);
     }
 
     fn type_flags() -> TypeFlags
@@ -2123,7 +2124,7 @@ fn heap_drop_runs_pending_finalizers_while_arena_buffers_are_alive() {
     // pending_finalizers) may outlive the inner Heap. Without the
     // explicit Heap::drop drain, a block- or arena-backed finalizer
     // record would try to deref a header in freed buffer memory.
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -2144,7 +2145,7 @@ fn heap_drop_runs_pending_finalizers_while_arena_buffers_are_alive() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([7; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([7; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -2159,7 +2160,7 @@ fn heap_drop_runs_pending_finalizers_while_arena_buffers_are_alive() {
     // must have run exactly once.
     drop(shared);
     assert_eq!(
-        MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst),
+        finalize_count.load(Ordering::SeqCst),
         1,
         "Heap::drop must drain pending finalizers before arena buffers free"
     );
@@ -2899,7 +2900,7 @@ fn collector_runtime_service_background_collection_round_finishes_major_session(
 
 #[test]
 fn collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -2916,13 +2917,13 @@ fn collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableOldLeaf([71; 32]))
+            .alloc(&mut scope, FinalizableOldLeaf([71; 32], finalize_count.clone()))
             .expect("alloc finalizable old leaf");
     }
 
     let cycle = heap.collect(CollectionKind::Major).expect("major collect");
     assert_eq!(cycle.queued_finalizers, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
 
     let mut runtime = heap.collector_runtime();
     assert_eq!(runtime.pending_finalizer_count(), 1);
@@ -2934,7 +2935,7 @@ fn collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
     assert_eq!(runtime.pending_finalizer_count(), 0);
     assert_eq!(runtime.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(runtime.stats().finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -3870,7 +3871,7 @@ fn poll_active_major_mark_with_physical_compaction_packs_block_view() {
 
 #[test]
 fn poll_active_major_mark_prepares_major_finalizer_before_finish() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -3887,7 +3888,7 @@ fn poll_active_major_mark_prepares_major_finalizer_before_finish() {
     {
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableOldLeaf([42; 32]))
+            .alloc(&mut scope, FinalizableOldLeaf([42; 32], finalize_count.clone()))
             .expect("alloc finalizable old leaf");
     }
 
@@ -3924,12 +3925,12 @@ fn poll_active_major_mark_prepares_major_finalizer_before_finish() {
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
     assert_eq!(mutator.heap().stats().pending_finalizers, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(mutator.drain_pending_finalizers(), 1);
     assert_eq!(mutator.pending_finalizer_count(), 0);
     assert_eq!(mutator.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(mutator.heap().stats().finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
     assert_eq!(mutator.heap().object_count(), 0);
 }
 
@@ -5291,14 +5292,17 @@ fn major_collection_reclaims_unrooted_objects() {
 
 #[test]
 fn minor_collection_finalizes_dead_nursery_object() {
-    MINOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let heap = Heap::new(HeapConfig::default());
     {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         let leaf = mutator
-            .alloc(&mut scope, FinalizableNurseryLeaf(41))
+            .alloc(
+                &mut scope,
+                FinalizableNurseryLeaf(41, finalize_count.clone()),
+            )
             .expect("alloc finalizable nursery leaf");
         assert_eq!(unsafe { leaf.as_gc().as_non_null().as_ref() }.0, 41);
     }
@@ -5314,18 +5318,18 @@ fn minor_collection_finalizes_dead_nursery_object() {
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
     assert_eq!(heap.stats().pending_finalizers, 1);
-    assert_eq!(MINOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(heap.drain_pending_finalizers(), 1);
     assert_eq!(heap.pending_finalizer_count(), 0);
     assert_eq!(heap.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(heap.stats().finalizers_run, 1);
-    assert_eq!(MINOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
     assert_eq!(heap.object_count(), 0);
 }
 
 #[test]
 fn major_collection_finalizes_dead_old_object() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -5342,7 +5346,7 @@ fn major_collection_finalizes_dead_old_object() {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         let leaf = mutator
-            .alloc(&mut scope, FinalizableOldLeaf([42; 32]))
+            .alloc(&mut scope, FinalizableOldLeaf([42; 32], finalize_count.clone()))
             .expect("alloc finalizable old leaf");
         assert_eq!(mutator.heap().space_of(leaf.as_gc()), Some(SpaceKind::Old));
         assert_eq!(unsafe { leaf.as_gc().as_non_null().as_ref() }.0[0], 42);
@@ -5359,12 +5363,12 @@ fn major_collection_finalizes_dead_old_object() {
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
     assert_eq!(heap.stats().pending_finalizers, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(heap.drain_pending_finalizers(), 1);
     assert_eq!(heap.pending_finalizer_count(), 0);
     assert_eq!(heap.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(heap.stats().finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
     assert_eq!(heap.object_count(), 0);
 }
 
@@ -6030,6 +6034,7 @@ fn major_collection_ephemeron_clears_when_key_is_dead() {
 fn post_sweep_rebuild_refreshes_weak_and_ephemeron_candidate_indexes() {
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();
+    let finalize_count = new_finalize_counter();
 
     let (weak_holder_gc, ephemeron_holder_gc, finalizable_gc) = {
         let mut setup_scope = mutator.handle_scope();
@@ -6063,7 +6068,10 @@ fn post_sweep_rebuild_refreshes_weak_and_ephemeron_candidate_indexes() {
             )
             .expect("alloc ephemeron holder");
         let finalizable = mutator
-            .alloc(&mut setup_scope, FinalizableNurseryLeaf(318))
+            .alloc(
+                &mut setup_scope,
+                FinalizableNurseryLeaf(318, finalize_count.clone()),
+            )
             .expect("alloc finalizable holder");
         (
             weak_holder.as_gc(),
@@ -6340,7 +6348,7 @@ fn background_service_owns_collector_runtime_loop() {
 
 #[test]
 fn background_service_drains_pending_finalizers() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -6356,10 +6364,10 @@ fn background_service_drains_pending_finalizers() {
     {
         let mut mutator = heap.mutator();
         {
-            let mut scope = mutator.handle_scope();
-            mutator
-                .alloc(&mut scope, FinalizableOldLeaf([75; 32]))
-                .expect("alloc finalizable old leaf");
+                let mut scope = mutator.handle_scope();
+                mutator
+                    .alloc(&mut scope, FinalizableOldLeaf([75; 32], finalize_count.clone()))
+                    .expect("alloc finalizable old leaf");
         }
         let cycle = mutator
             .collect(CollectionKind::Major)
@@ -6373,12 +6381,12 @@ fn background_service_drains_pending_finalizers() {
         service.runtime_work_status(),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(service.drain_pending_finalizers(), 1);
     assert_eq!(service.pending_finalizer_count(), 0);
     assert_eq!(service.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(service.heap_stats().finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -6884,7 +6892,7 @@ fn shared_collector_runtime_prepare_active_reclaim_moves_full_session_to_reclaim
 
 #[test]
 fn shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = SharedHeap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -6903,7 +6911,7 @@ fn shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([73; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([73; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -6919,7 +6927,7 @@ fn shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(
         runtime
             .drain_pending_finalizers()
@@ -6932,12 +6940,12 @@ fn shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
         RuntimeWorkStatus::Idle
     );
     assert_eq!(runtime.stats().expect("runtime stats").finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = SharedHeap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -6956,7 +6964,7 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked(
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([74; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([74; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -6984,7 +6992,7 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked(
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap read lock");
     waiter.join().expect("join read-lock helper thread");
@@ -6992,7 +7000,7 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked(
 
 #[test]
 fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = SharedHeap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -7011,7 +7019,7 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([79; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([79; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7039,7 +7047,7 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap write lock");
     waiter.join().expect("join write-lock helper thread");
@@ -8188,7 +8196,7 @@ fn shared_background_service_drives_shared_heap_without_manual_locking() {
 
 #[test]
 fn shared_background_service_drains_pending_finalizers() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -8207,7 +8215,7 @@ fn shared_background_service_drains_pending_finalizers() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([77; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([77; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8223,7 +8231,7 @@ fn shared_background_service_drains_pending_finalizers() {
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(
         service
             .drain_pending_finalizers()
@@ -8243,12 +8251,12 @@ fn shared_background_service_drains_pending_finalizers() {
             .finalizers_run,
         1
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn shared_background_service_drains_pending_finalizers_while_heap_is_read_locked() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -8267,7 +8275,7 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_read_locked
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([78; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([78; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8290,7 +8298,7 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_read_locked
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap read lock");
     waiter.join().expect("join read-lock helper thread");
@@ -8298,7 +8306,7 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_read_locked
 
 #[test]
 fn shared_background_service_drains_pending_finalizers_while_heap_is_write_locked() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -8317,7 +8325,7 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_write_locke
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([80; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([80; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8345,7 +8353,7 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_write_locke
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap write lock");
     waiter.join().expect("join write-lock helper thread");
@@ -9218,16 +9226,14 @@ fn shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_
 #[test]
 fn background_worker_uses_snapshot_idle_fast_path_when_locked_heap_has_no_work() {
     let shared = SharedHeap::new(HeapConfig::default());
+    let guard = shared.lock().expect("lock shared heap");
     let worker = shared.spawn_background_worker(BackgroundWorkerConfig {
         collector: BackgroundCollectorConfig::default(),
         idle_sleep: Duration::from_millis(1),
         busy_sleep: Duration::ZERO,
     });
-
-    {
-        let _guard = shared.lock().expect("lock shared heap");
-        thread::sleep(Duration::from_millis(10));
-    }
+    thread::sleep(Duration::from_millis(10));
+    drop(guard);
 
     worker.request_stop();
     let stats = worker.join().expect("join background worker");
@@ -9361,7 +9367,7 @@ fn shared_heap_wait_for_change_wakes_on_guard_drop() {
 
 #[test]
 fn shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = SharedHeap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -9380,7 +9386,7 @@ fn shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([91; 32]))
+                    .alloc(&mut scope, FinalizableOldLeaf([91; 32], finalize_count.clone()))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9411,7 +9417,7 @@ fn shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
         .expect("read status after runtime drain wake");
     assert_eq!(status.stats.pending_finalizers, 0);
     assert_eq!(status.stats.finalizers_run, 1);
-    assert_eq!(MAJOR_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -9766,7 +9772,7 @@ fn shared_collector_runtime_can_spawn_background_worker() {
 
 #[test]
 fn shared_background_service_wait_for_background_change_reports_pending_finalizer_change() {
-    MAJOR_FINALIZE_COUNT.store(0, Ordering::SeqCst);
+    let finalize_count = new_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: NurseryConfig {
@@ -9797,7 +9803,7 @@ fn shared_background_service_wait_for_background_change_reports_pending_finalize
                 {
                     let mut scope = mutator.handle_scope();
                     mutator
-                        .alloc(&mut scope, FinalizableOldLeaf([79; 32]))
+                        .alloc(&mut scope, FinalizableOldLeaf([79; 32], finalize_count.clone()))
                         .expect("alloc finalizable old leaf");
                 }
                 let cycle = mutator
@@ -11946,7 +11952,13 @@ fn tagged_pointer_round_trip_through_gc() {
 
     // Allocate a SimCons
     let root = mutator
-        .alloc(&mut scope, SimCons { car: 0xCAFE, cdr: 0xBEEF })
+        .alloc(
+            &mut scope,
+            SimCons {
+                car: 0xCAFE,
+                cdr: 0xBEEF,
+            },
+        )
         .expect("alloc SimCons");
     let gc = root.as_gc();
 
