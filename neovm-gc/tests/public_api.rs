@@ -1,12 +1,12 @@
 use neovm_gc::{
-    BarrierKind, CollectionKind, CollectionPhase, ConcurrentMarker, ConcurrentMarkerConfig,
-    EdgeCell, Ephemeron, EphemeronVisitor, Heap, HeapConfig, MovePolicy, PacerConfig, Relocator,
-    RuntimeWorkStatus, Trace, Tracer, TypeFlags, Weak, WeakCell, WeakProcessor,
-    estimated_allocation_size,
+    estimated_allocation_size, BarrierKind, CollectionKind, CollectionPhase, ConcurrentMarker,
+    ConcurrentMarkerConfig, EdgeCell, Ephemeron, EphemeronVisitor, Heap, HeapConfig, MovePolicy,
+    PacerConfig, Relocator, RuntimeWorkStatus, Trace, Tracer, TypeFlags, Weak, WeakCell,
+    WeakProcessor,
 };
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -361,20 +361,12 @@ unsafe impl Trace for ThreadRecordingWeakHolder {
     }
 }
 
-static PUBLIC_FINALIZE_COUNT: AtomicUsize = AtomicUsize::new(0);
-static PUBLIC_FINALIZE_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-macro_rules! reset_public_finalize_count {
-    () => {
-        let _finalizer_guard = PUBLIC_FINALIZE_TEST_LOCK
-            .lock()
-            .expect("lock public finalizer test guard");
-        PUBLIC_FINALIZE_COUNT.store(0, Ordering::SeqCst);
-    };
+fn new_public_finalize_counter() -> Arc<AtomicUsize> {
+    Arc::new(AtomicUsize::new(0))
 }
 
 #[derive(Debug)]
-struct FinalizableLeaf(u64);
+struct FinalizableLeaf(u64, Arc<AtomicUsize>);
 
 unsafe impl Trace for FinalizableLeaf {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
@@ -382,7 +374,7 @@ unsafe impl Trace for FinalizableLeaf {
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
 
     fn finalize(&self) {
-        PUBLIC_FINALIZE_COUNT.fetch_add(1, Ordering::SeqCst);
+        self.1.fetch_add(1, Ordering::SeqCst);
     }
 
     fn type_flags() -> TypeFlags
@@ -1231,8 +1223,8 @@ fn public_api_execute_major_plan_visits_ephemerons_on_multiple_threads_when_work
 }
 
 #[test]
-fn public_api_execute_major_plan_processes_weak_edges_on_multiple_threads_when_worker_count_is_high()
- {
+fn public_api_execute_major_plan_processes_weak_edges_on_multiple_threads_when_worker_count_is_high(
+) {
     let seen_threads = Arc::new(Mutex::new(HashSet::new()));
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();
@@ -1536,11 +1528,9 @@ fn public_api_collector_runtime_prepare_active_reclaim_moves_full_session_to_rec
             ..plan.clone()
         })
     );
-    assert!(
-        runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
+    assert!(runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
     assert_eq!(
         runtime.active_major_mark_plan(),
         Some(neovm_gc::CollectionPlan {
@@ -1548,11 +1538,9 @@ fn public_api_collector_runtime_prepare_active_reclaim_moves_full_session_to_rec
             ..plan.clone()
         })
     );
-    assert!(
-        !runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("second reclaim preparation should be a no-op")
-    );
+    assert!(!runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("second reclaim preparation should be a no-op"));
 
     let stats = runtime
         .finish_active_major_collection_if_ready()
@@ -1780,17 +1768,13 @@ fn public_api_collector_runtime_commit_active_reclaim_returns_none_before_full_r
             .expect("commit before full reclaim is prepared"),
         None
     );
-    assert!(
-        runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
-    assert!(
-        runtime
-            .commit_active_reclaim_if_ready()
-            .expect("commit prepared full reclaim")
-            .is_some()
-    );
+    assert!(runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
+    assert!(runtime
+        .commit_active_reclaim_if_ready()
+        .expect("commit prepared full reclaim")
+        .is_some());
 }
 
 #[test]
@@ -1845,11 +1829,9 @@ fn public_api_collector_runtime_prepare_active_major_reclaim_moves_major_session
             ..plan.clone()
         })
     );
-    assert!(
-        !runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("prepared major reclaim should already be complete")
-    );
+    assert!(!runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepared major reclaim should already be complete"));
 }
 
 #[test]
@@ -1913,7 +1895,7 @@ fn public_api_collector_runtime_service_background_collection_round_finishes_maj
 
 #[test]
 fn public_api_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -1930,13 +1912,16 @@ fn public_api_collector_runtime_drain_pending_finalizers_runs_queued_finalizers(
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableLeaf(591))
+            .alloc(
+                &mut scope,
+                FinalizableLeaf(591, Arc::clone(&finalize_count)),
+            )
             .expect("alloc finalizable old leaf");
     }
 
     let cycle = heap.collect(CollectionKind::Major).expect("major collect");
     assert_eq!(cycle.queued_finalizers, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
 
     let mut runtime = heap.collector_runtime();
     assert_eq!(runtime.pending_finalizer_count(), 1);
@@ -1948,7 +1933,7 @@ fn public_api_collector_runtime_drain_pending_finalizers_runs_queued_finalizers(
     assert_eq!(runtime.pending_finalizer_count(), 0);
     assert_eq!(runtime.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(runtime.stats().finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -1962,7 +1947,7 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
     //   * the first call returns 2 and leaves one pending
     //   * the second call drains the remaining one
     //   * stats.finalizers_run reflects the cumulative total
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -1980,14 +1965,17 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
         for i in 0..3u64 {
             let mut scope = mutator.handle_scope();
             mutator
-                .alloc(&mut scope, FinalizableLeaf(700 + i))
+                .alloc(
+                    &mut scope,
+                    FinalizableLeaf(700 + i, Arc::clone(&finalize_count)),
+                )
                 .expect("alloc finalizable old leaf");
         }
     }
 
     let cycle = heap.collect(CollectionKind::Major).expect("major collect");
     assert_eq!(cycle.queued_finalizers, 3);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
 
     {
         let mut runtime = heap.collector_runtime();
@@ -1996,13 +1984,13 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
         // First slice: budget 2 → exactly 2 should run.
         assert_eq!(runtime.drain_pending_finalizers_bounded(2), 2);
         assert_eq!(runtime.pending_finalizer_count(), 1);
-        assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+        assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
         assert_eq!(runtime.stats().finalizers_run, 2);
 
         // Second slice: budget 5 → only the remaining 1 runs.
         assert_eq!(runtime.drain_pending_finalizers_bounded(5), 1);
         assert_eq!(runtime.pending_finalizer_count(), 0);
-        assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+        assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
         assert_eq!(runtime.stats().finalizers_run, 3);
 
         // Third slice on an empty queue is a no-op.
@@ -2019,7 +2007,10 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableLeaf(703))
+            .alloc(
+                &mut scope,
+                FinalizableLeaf(703, Arc::clone(&finalize_count)),
+            )
             .expect("alloc finalizable old leaf");
     }
     let cycle = heap
@@ -2029,10 +2020,10 @@ fn public_api_collector_runtime_drain_pending_finalizers_bounded_runs_in_slices(
     assert_eq!(heap.pending_finalizer_count(), 1);
     assert_eq!(heap.drain_pending_finalizers_bounded(0), 0);
     assert_eq!(heap.pending_finalizer_count(), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
     // Drain the leftover so the test leaves no queued finalizers.
     assert_eq!(heap.drain_pending_finalizers(), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 4);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 4);
 }
 
 #[test]
@@ -2081,11 +2072,9 @@ fn public_api_mutator_prepare_active_major_reclaim_moves_session_to_reclaim() {
             ..plan.clone()
         })
     );
-    assert!(
-        mutator
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent major reclaim")
-    );
+    assert!(mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent major reclaim"));
     assert_eq!(
         mutator.active_major_mark_plan(),
         Some(neovm_gc::CollectionPlan {
@@ -2093,11 +2082,9 @@ fn public_api_mutator_prepare_active_major_reclaim_moves_session_to_reclaim() {
             ..plan.clone()
         })
     );
-    assert!(
-        !mutator
-            .prepare_active_reclaim_if_needed()
-            .expect("second reclaim preparation should be a no-op")
-    );
+    assert!(!mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("second reclaim preparation should be a no-op"));
     let cycle = mutator
         .finish_active_major_collection_if_ready()
         .expect("finish prepared major reclaim")
@@ -2159,11 +2146,9 @@ fn public_api_mutator_commit_active_reclaim_requires_reclaim_phase() {
         None
     );
 
-    assert!(
-        mutator
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent major reclaim")
-    );
+    assert!(mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent major reclaim"));
     let cycle = mutator
         .commit_active_reclaim_if_ready()
         .expect("commit prepared major reclaim")
@@ -2226,17 +2211,13 @@ fn public_api_mutator_commit_active_reclaim_returns_none_before_full_reclaim_is_
             .expect("commit before full reclaim prep"),
         None
     );
-    assert!(
-        mutator
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
-    assert!(
-        mutator
-            .commit_active_reclaim_if_ready()
-            .expect("commit prepared full reclaim")
-            .is_some()
-    );
+    assert!(mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
+    assert!(mutator
+        .commit_active_reclaim_if_ready()
+        .expect("commit prepared full reclaim")
+        .is_some());
 }
 
 #[test]
@@ -2350,12 +2331,10 @@ fn public_api_persistent_major_mark_barrier_keeps_new_value() {
         .get()
         .expect("barrier-retained target");
     assert_eq!(unsafe { next.as_non_null().as_ref() }.label, 2);
-    assert!(
-        mutator
-            .recent_barrier_events()
-            .iter()
-            .any(|event| event.kind == BarrierKind::PostWrite)
-    );
+    assert!(mutator
+        .recent_barrier_events()
+        .iter()
+        .any(|event| event.kind == BarrierKind::PostWrite));
 }
 
 #[test]
@@ -2983,7 +2962,7 @@ fn public_api_poll_active_major_mark_prepares_major_old_region_rebuild_before_fi
 
 #[test]
 fn public_api_poll_active_major_mark_prepares_major_finalizer_before_finish() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -3000,7 +2979,7 @@ fn public_api_poll_active_major_mark_prepares_major_finalizer_before_finish() {
     {
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableLeaf(42))
+            .alloc(&mut scope, FinalizableLeaf(42, Arc::clone(&finalize_count)))
             .expect("alloc finalizable old leaf");
     }
 
@@ -3037,12 +3016,12 @@ fn public_api_poll_active_major_mark_prepares_major_finalizer_before_finish() {
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
     assert_eq!(mutator.heap().stats().pending_finalizers, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(mutator.drain_pending_finalizers(), 1);
     assert_eq!(mutator.pending_finalizer_count(), 0);
     assert_eq!(mutator.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(mutator.heap().stats().finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
     assert_eq!(mutator.heap().object_count(), 0);
 }
 
@@ -3582,14 +3561,17 @@ fn public_api_background_collector_prepares_full_reclaim_before_finishing_runtim
 
 #[test]
 fn public_api_reports_queued_finalizers_and_finalizer_drains() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig::default());
     {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         let leaf = mutator
-            .alloc(&mut scope, FinalizableLeaf(501))
+            .alloc(
+                &mut scope,
+                FinalizableLeaf(501, Arc::clone(&finalize_count)),
+            )
             .expect("alloc finalizable leaf");
         assert_eq!(unsafe { leaf.as_gc().as_non_null().as_ref() }.0, 501);
     }
@@ -3606,12 +3588,12 @@ fn public_api_reports_queued_finalizers_and_finalizer_drains() {
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
     assert_eq!(heap.stats().pending_finalizers, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(heap.drain_pending_finalizers(), 1);
     assert_eq!(heap.pending_finalizer_count(), 0);
     assert_eq!(heap.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(heap.stats().finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -3888,7 +3870,10 @@ fn public_api_heap_stats_report_candidate_counts() {
             )
             .expect("alloc ephemeron holder");
         let finalizable = mutator
-            .alloc(&mut setup_scope, FinalizableLeaf(536))
+            .alloc(
+                &mut setup_scope,
+                FinalizableLeaf(536, new_public_finalize_counter()),
+            )
             .expect("alloc finalizable holder");
         (
             weak_holder.as_gc(),
@@ -5170,7 +5155,7 @@ fn public_api_background_service_owns_collector_runtime_loop() {
 
 #[test]
 fn public_api_background_service_drains_pending_finalizers() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5188,7 +5173,10 @@ fn public_api_background_service_drains_pending_finalizers() {
         {
             let mut scope = mutator.handle_scope();
             mutator
-                .alloc(&mut scope, FinalizableLeaf(595))
+                .alloc(
+                    &mut scope,
+                    FinalizableLeaf(595, Arc::clone(&finalize_count)),
+                )
                 .expect("alloc finalizable old leaf");
         }
         let cycle = mutator
@@ -5203,12 +5191,12 @@ fn public_api_background_service_drains_pending_finalizers() {
         service.runtime_work_status(),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(service.drain_pending_finalizers(), 1);
     assert_eq!(service.pending_finalizer_count(), 0);
     assert_eq!(service.runtime_work_status(), RuntimeWorkStatus::Idle);
     assert_eq!(service.heap_stats().finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -5219,7 +5207,7 @@ fn public_api_background_service_drain_pending_finalizers_bounded_runs_in_slices
     // tests, but exposed through the in-process background
     // service handle so a host that drives finalization through
     // its background service can budget work per service tick.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5237,7 +5225,10 @@ fn public_api_background_service_drain_pending_finalizers_bounded_runs_in_slices
         for i in 0..3u64 {
             let mut scope = mutator.handle_scope();
             mutator
-                .alloc(&mut scope, FinalizableLeaf(1100 + i))
+                .alloc(
+                    &mut scope,
+                    FinalizableLeaf(1100 + i, Arc::clone(&finalize_count)),
+                )
                 .expect("alloc finalizable old leaf");
         }
         let cycle = mutator
@@ -5252,12 +5243,12 @@ fn public_api_background_service_drain_pending_finalizers_bounded_runs_in_slices
     // First slice: budget 2.
     assert_eq!(service.drain_pending_finalizers_bounded(2), 2);
     assert_eq!(service.pending_finalizer_count(), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
 
     // Second slice: budget 5 (only 1 remaining).
     assert_eq!(service.drain_pending_finalizers_bounded(5), 1);
     assert_eq!(service.pending_finalizer_count(), 0);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
     assert_eq!(service.heap_stats().finalizers_run, 3);
 }
 
@@ -5305,11 +5296,9 @@ fn public_api_shared_background_service_prepare_active_reclaim_moves_full_sessio
         .expect("seed and drain full mark");
 
     let mut service = shared.background_service(neovm_gc::BackgroundCollectorConfig::default());
-    assert!(
-        service
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
+    assert!(service
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
     assert_eq!(
         service
             .active_major_mark_plan()
@@ -5319,11 +5308,9 @@ fn public_api_shared_background_service_prepare_active_reclaim_moves_full_sessio
             ..plan.clone()
         })
     );
-    assert!(
-        !service
-            .try_prepare_active_reclaim_if_needed()
-            .expect("second reclaim preparation should be a no-op")
-    );
+    assert!(!service
+        .try_prepare_active_reclaim_if_needed()
+        .expect("second reclaim preparation should be a no-op"));
     let cycle = service
         .finish_active_major_collection_if_ready()
         .expect("finish prepared full reclaim")
@@ -5397,11 +5384,9 @@ fn public_api_shared_background_service_commit_active_reclaim_requires_reclaim_p
         })
     );
 
-    assert!(
-        service
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
+    assert!(service
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
     let cycle = service
         .commit_active_reclaim_if_ready()
         .expect("commit prepared full reclaim")
@@ -5550,12 +5535,10 @@ fn public_api_shared_collector_runtime_begin_and_poll_work_while_heap_is_read_lo
         .expect("poll major mark under read lock")
         .expect("active major-mark progress");
     assert!(progress.completed || progress.remaining_work > 0);
-    assert!(
-        runtime
-            .active_major_mark_plan()
-            .expect("inspect active shared major-mark plan")
-            .is_some()
-    );
+    assert!(runtime
+        .active_major_mark_plan()
+        .expect("inspect active shared major-mark plan")
+        .is_some());
     assert_eq!(
         runtime.try_finish_active_major_collection_if_ready(),
         Err(neovm_gc::SharedBackgroundError::WouldBlock)
@@ -5722,11 +5705,9 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
             ..plan.clone()
         })
     );
-    assert!(
-        runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare persistent full reclaim")
-    );
+    assert!(runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare persistent full reclaim"));
     assert_eq!(
         runtime
             .active_major_mark_plan()
@@ -5736,11 +5717,9 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
             ..plan.clone()
         })
     );
-    assert!(
-        !runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("second reclaim preparation should be a no-op")
-    );
+    assert!(!runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("second reclaim preparation should be a no-op"));
 
     let stats = runtime
         .finish_active_major_collection_if_ready()
@@ -5757,7 +5736,7 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
 
 #[test]
 fn public_api_shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5776,7 +5755,10 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_runs_queued_fina
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(592))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(592, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -5792,7 +5774,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_runs_queued_fina
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(
         runtime
             .drain_pending_finalizers()
@@ -5805,7 +5787,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_runs_queued_fina
         RuntimeWorkStatus::Idle
     );
     assert_eq!(runtime.stats().expect("runtime stats").finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -5815,7 +5797,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
     // finalizer queue without holding a Mutator. Verifies the
     // slicing semantics through the shared runtime path: budget
     // 2, then budget 5 to drain the rest.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5834,7 +5816,10 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
             for i in 0..3u64 {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(1200 + i))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(1200 + i, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -5854,7 +5839,7 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
         2
     );
     assert_eq!(runtime.pending_finalizer_count().expect("pending count"), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
 
     assert_eq!(
         runtime
@@ -5863,13 +5848,13 @@ fn public_api_shared_collector_runtime_drain_pending_finalizers_bounded_runs_in_
         1
     );
     assert_eq!(runtime.pending_finalizer_count().expect("pending count"), 0);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
     assert_eq!(runtime.stats().expect("runtime stats").finalizers_run, 3);
 }
 
 #[test]
 fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5888,7 +5873,10 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_r
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(5921))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(5921, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -5916,7 +5904,7 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_r
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap read lock");
     waiter.join().expect("join read-lock helper thread");
@@ -5924,7 +5912,7 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_r
 
 #[test]
 fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -5943,7 +5931,10 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_w
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(5922))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(5922, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -5971,15 +5962,15 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_w
         runtime.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap write lock");
     waiter.join().expect("join write-lock helper thread");
 }
 
 #[test]
-fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_heap_is_read_locked()
- {
+fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_heap_is_read_locked(
+) {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6029,11 +6020,9 @@ fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_
     let runtime = shared.collector_runtime();
     let _guard = shared.read().expect("read-lock shared heap");
 
-    assert!(
-        runtime
-            .prepare_active_reclaim_if_needed()
-            .expect("prepare major reclaim under read lock")
-    );
+    assert!(runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare major reclaim under read lock"));
     assert_eq!(
         runtime
             .active_major_mark_plan()
@@ -6166,8 +6155,8 @@ fn public_api_shared_collector_runtime_try_finish_prepares_major_reclaim_while_h
 }
 
 #[test]
-fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked()
- {
+fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked(
+) {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         large: neovm_gc::spaces::LargeObjectSpaceConfig {
             threshold_bytes: 64,
@@ -6214,8 +6203,8 @@ fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_bef
 }
 
 #[test]
-fn public_api_shared_collector_runtime_background_observation_stays_stable_under_lock_and_refreshes_on_drop()
- {
+fn public_api_shared_collector_runtime_background_observation_stays_stable_under_lock_and_refreshes_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6318,8 +6307,8 @@ fn public_api_shared_collector_runtime_wait_for_background_change_reports_old_wo
 }
 
 #[test]
-fn public_api_shared_collector_runtime_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_collector_runtime_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6440,8 +6429,8 @@ fn public_api_shared_try_with_mutator_status_returns_snapshot_when_heap_is_locke
 }
 
 #[test]
-fn public_api_shared_try_with_mutator_status_reports_active_major_mark_snapshot_when_heap_is_locked()
- {
+fn public_api_shared_try_with_mutator_status_reports_active_major_mark_snapshot_when_heap_is_locked(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6636,8 +6625,8 @@ fn public_api_shared_status_supports_parallel_snapshot_readers() {
 }
 
 #[test]
-fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6722,8 +6711,8 @@ fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_
 }
 
 #[test]
-fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6796,8 +6785,8 @@ fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_
 }
 
 #[test]
-fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6854,8 +6843,8 @@ fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_hel
 }
 
 #[test]
-fn public_api_shared_collector_runtime_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_collector_runtime_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7127,7 +7116,7 @@ fn public_api_shared_background_service_drives_shared_heap_without_manual_lockin
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7146,7 +7135,10 @@ fn public_api_shared_background_service_drains_pending_finalizers() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(596))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(596, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7162,7 +7154,7 @@ fn public_api_shared_background_service_drains_pending_finalizers() {
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::PendingFinalizers { count: 1 }
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 0);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 0);
     assert_eq!(
         service
             .drain_pending_finalizers()
@@ -7182,7 +7174,7 @@ fn public_api_shared_background_service_drains_pending_finalizers() {
             .finalizers_run,
         1
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -7193,7 +7185,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
     // 2 then budget 5 to drain the rest. With this test the
     // bounded drain is now end-to-end pinned across every public
     // SharedHeap-side surface that exposes it.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7212,7 +7204,10 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
             for i in 0..3u64 {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(1300 + i))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(1300 + i, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7232,7 +7227,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
         2
     );
     assert_eq!(service.pending_finalizer_count().expect("pending count"), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
 
     assert_eq!(
         service
@@ -7241,7 +7236,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
         1
     );
     assert_eq!(service.pending_finalizer_count().expect("pending count"), 0);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
     assert_eq!(
         service
             .heap()
@@ -7254,7 +7249,7 @@ fn public_api_shared_background_service_drain_pending_finalizers_bounded_runs_in
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_read_locked() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7273,7 +7268,10 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(5961))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(5961, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7296,7 +7294,7 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap read lock");
     waiter.join().expect("join read-lock helper thread");
@@ -7304,7 +7302,7 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
 
 #[test]
 fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_write_locked() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -7323,7 +7321,10 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(5962))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(5962, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7351,15 +7352,15 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
         service.runtime_work_status().expect("runtime work status"),
         RuntimeWorkStatus::Idle
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     release_tx.send(()).expect("release shared heap write lock");
     waiter.join().expect("join write-lock helper thread");
 }
 
 #[test]
-fn public_api_shared_background_service_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
- {
+fn public_api_shared_background_service_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7442,8 +7443,8 @@ fn public_api_shared_background_service_try_tick_returns_idle_from_snapshot_when
 }
 
 #[test]
-fn public_api_shared_background_service_try_run_until_idle_returns_idle_from_snapshot_when_heap_is_locked()
- {
+fn public_api_shared_background_service_try_run_until_idle_returns_idle_from_snapshot_when_heap_is_locked(
+) {
     let shared = neovm_gc::SharedHeap::new(HeapConfig::default());
     let mut service = shared.background_service(neovm_gc::BackgroundCollectorConfig::default());
     let _guard = shared.lock().expect("lock shared heap");
@@ -7478,8 +7479,8 @@ fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_wh
 }
 
 #[test]
-fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_active_not_ready_session()
- {
+fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_active_not_ready_session(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7516,8 +7517,8 @@ fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_ac
 }
 
 #[test]
-fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_for_active_not_ready_session()
- {
+fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_for_active_not_ready_session(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7557,8 +7558,8 @@ fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_fo
 }
 
 #[test]
-fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_completed_active_session_when_heap_is_locked()
- {
+fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_completed_active_session_when_heap_is_locked(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7604,8 +7605,8 @@ fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_co
 }
 
 #[test]
-fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked()
- {
+fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked(
+) {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         large: neovm_gc::spaces::LargeObjectSpaceConfig {
             threshold_bytes: 64,
@@ -7653,8 +7654,8 @@ fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_be
 }
 
 #[test]
-fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session()
- {
+fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7762,8 +7763,8 @@ fn public_api_shared_background_service_tick_returns_progress_from_snapshot_for_
 }
 
 #[test]
-fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish()
- {
+fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7885,8 +7886,8 @@ fn public_api_shared_background_service_tick_aggregates_multiple_rounds_with_sho
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_aggregates_multiple_rounds_with_short_lock_windows()
- {
+fn public_api_shared_background_service_try_tick_aggregates_multiple_rounds_with_short_lock_windows(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8102,17 +8103,15 @@ fn public_api_shared_background_service_tick_starts_active_session_while_heap_is
     assert!(service.stats().ticks > 0);
     assert_eq!(service.stats().sessions_started, 1);
     assert!(service.stats().rounds > 0);
-    assert!(
-        shared
-            .active_major_mark_plan()
-            .expect("read shared active plan after shared-read auto-start")
-            .is_some()
-    );
+    assert!(shared
+        .active_major_mark_plan()
+        .expect("read shared active plan after shared-read auto-start")
+        .is_some());
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session()
- {
+fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8170,8 +8169,8 @@ fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish()
- {
+fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish(
+) {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8374,7 +8373,7 @@ fn public_api_shared_heap_wait_for_change_wakes_on_guard_drop() {
 
 #[test]
 fn public_api_shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -8393,7 +8392,7 @@ fn public_api_shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(91))
+                    .alloc(&mut scope, FinalizableLeaf(91, Arc::clone(&finalize_count)))
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8424,7 +8423,7 @@ fn public_api_shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
         .expect("read status after runtime drain wake");
     assert_eq!(status.stats.pending_finalizers, 0);
     assert_eq!(status.stats.finalizers_run, 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -8688,9 +8687,9 @@ fn public_api_shared_collector_runtime_can_spawn_background_worker() {
 }
 
 #[test]
-fn public_api_shared_background_service_wait_for_background_change_reports_pending_finalizer_change()
- {
-    reset_public_finalize_count!();
+fn public_api_shared_background_service_wait_for_background_change_reports_pending_finalizer_change(
+) {
+    let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -8715,6 +8714,7 @@ fn public_api_shared_background_service_wait_for_background_change_reports_pendi
     assert_eq!(observed_status.runtime_work, RuntimeWorkStatus::Idle);
 
     let waking_shared = shared.clone();
+    let waiter_finalize_count = Arc::clone(&finalize_count);
     let waiter = thread::spawn(move || {
         thread::sleep(Duration::from_millis(10));
         waking_shared
@@ -8722,7 +8722,10 @@ fn public_api_shared_background_service_wait_for_background_change_reports_pendi
                 {
                     let mut scope = mutator.handle_scope();
                     mutator
-                        .alloc(&mut scope, FinalizableLeaf(597))
+                        .alloc(
+                            &mut scope,
+                            FinalizableLeaf(597, Arc::clone(&waiter_finalize_count)),
+                        )
                         .expect("alloc finalizable old leaf");
                 }
                 let cycle = mutator
@@ -9496,7 +9499,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_while_heap_is_write_l
     // test queues two finalizers, parks a helper thread on the
     // heap write lock, and verifies the bounded drain still
     // returns and runs the requested slice.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9514,7 +9517,10 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_while_heap_is_write_l
             for i in 0..2u64 {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(900 + i))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(900 + i, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9534,7 +9540,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_while_heap_is_write_l
             .expect("bounded drain while heap is write-locked"),
         1
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 1);
 
     // Second slice while the heap is write-locked: budget 5.
@@ -9544,7 +9550,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_while_heap_is_write_l
             .expect("bounded drain while heap is write-locked"),
         1
     );
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 0);
 
     release_tx.send(()).expect("release shared heap write lock");
@@ -9559,7 +9565,7 @@ fn public_api_shared_try_drain_pending_finalizers_bounded_runs_in_slices() {
     // contract for VMs that want to drive cooperative
     // finalization without ever blocking, e.g. inside a tight
     // event loop.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9577,7 +9583,10 @@ fn public_api_shared_try_drain_pending_finalizers_bounded_runs_in_slices() {
             for i in 0..3u64 {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(1000 + i))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(1000 + i, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9597,7 +9606,7 @@ fn public_api_shared_try_drain_pending_finalizers_bounded_runs_in_slices() {
         2
     );
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 1);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 2);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 2);
 
     // Second slice: budget 5 (only 1 remaining).
     assert_eq!(
@@ -9607,7 +9616,7 @@ fn public_api_shared_try_drain_pending_finalizers_bounded_runs_in_slices() {
         1
     );
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 0);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
 }
 
 #[test]
@@ -9616,7 +9625,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_in_slices() {
     // CollectorRuntime test, but exercised via the SharedHeap
     // surface so the bounded drain is pinned end-to-end through
     // the shared snapshot path.
-    reset_public_finalize_count!();
+    let finalize_count = new_public_finalize_counter();
 
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
@@ -9634,7 +9643,10 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_in_slices() {
             for i in 0..3u64 {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableLeaf(800 + i))
+                    .alloc(
+                        &mut scope,
+                        FinalizableLeaf(800 + i, Arc::clone(&finalize_count)),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9654,7 +9666,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_in_slices() {
         1
     );
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 2);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 1);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 1);
 
     // Second slice: budget 10 → only the remaining 2 run.
     assert_eq!(
@@ -9664,7 +9676,7 @@ fn public_api_shared_drain_pending_finalizers_bounded_runs_in_slices() {
         2
     );
     assert_eq!(shared.pending_finalizer_count().expect("pending count"), 0);
-    assert_eq!(PUBLIC_FINALIZE_COUNT.load(Ordering::SeqCst), 3);
+    assert_eq!(finalize_count.load(Ordering::SeqCst), 3);
 
     let stats = shared.stats().expect("read stats after bounded drain");
     assert_eq!(stats.finalizers_run, 3);
@@ -10305,16 +10317,14 @@ fn public_api_multi_mutator_each_mutator_owns_independent_barrier_ring() {
     // event.
     assert_eq!(m1.barrier_event_count(), 1);
     assert_eq!(m2.barrier_event_count(), 1);
-    assert!(
-        m1.recent_barrier_events()
-            .iter()
-            .any(|e| e.kind == BarrierKind::PostWrite)
-    );
-    assert!(
-        m2.recent_barrier_events()
-            .iter()
-            .any(|e| e.kind == BarrierKind::PostWrite)
-    );
+    assert!(m1
+        .recent_barrier_events()
+        .iter()
+        .any(|e| e.kind == BarrierKind::PostWrite));
+    assert!(m2
+        .recent_barrier_events()
+        .iter()
+        .any(|e| e.kind == BarrierKind::PostWrite));
 
     // The heap-wide cumulative counters reflect both events
     // because the AtomicBarrierStats counters are shared
