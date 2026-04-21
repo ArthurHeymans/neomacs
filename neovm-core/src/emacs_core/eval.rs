@@ -1175,6 +1175,19 @@ pub fn push_scratch_gc_root(value: Value) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().push(value));
 }
 
+pub fn overwrite_scratch_gc_root(index: usize, value: Value) {
+    SCRATCH_GC_ROOTS.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        if let Some(slot) = scratch.get_mut(index) {
+            *slot = value;
+        }
+    });
+}
+
+pub fn read_scratch_gc_root(index: usize) -> Option<Value> {
+    SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow().get(index).copied())
+}
+
 pub fn restore_scratch_gc_roots(saved_len: usize) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().truncate(saved_len));
 }
@@ -1602,6 +1615,11 @@ pub struct Context {
     pub(crate) gc_inhibit_depth: usize,
     /// Stress-test mode: force GC at every safe point regardless of threshold.
     pub(crate) gc_stress: bool,
+    /// Test-only diagnostic: assert that every movable root reachable via
+    /// `trace_roots` is also reachable as a mutable slot via
+    /// `trace_roots_mut`, so evacuation has a place to rewrite it.
+    #[cfg(test)]
+    pub(crate) gc_assert_mutable_root_coverage: bool,
     /// Cached Lisp-visible GC tuning variables used on every safe point.
     ///
     /// GNU updates its low-level GC tuning state when the watched variables
@@ -1893,7 +1911,7 @@ pub(crate) struct ActiveLambdaCallState {
 pub(crate) struct ActiveMacroExpansionScopeState {
     saved_specpdl_len: usize,
     old_lexical: bool,
-    old_dynvars: Value,
+    old_dynvars_root_index: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1905,6 +1923,32 @@ pub(crate) struct VmRootScopeState {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SpecpdlRootScopeState {
     saved_len: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SpecpdlCallRootState {
+    function_root_index: usize,
+    args_root_start: usize,
+    args_len: usize,
+}
+
+fn specpdl_gc_root_value(specpdl: &[SpecBinding], index: usize, label: &str) -> Value {
+    match specpdl.get(index) {
+        Some(SpecBinding::GcRoot { value }) => *value,
+        other => panic!("expected specpdl gc root entry for {label}, got {other:?}"),
+    }
+}
+
+fn set_specpdl_gc_root_value(
+    specpdl: &mut [SpecBinding],
+    index: usize,
+    value: Value,
+    label: &str,
+) {
+    match specpdl.get_mut(index) {
+        Some(SpecBinding::GcRoot { value: slot }) => *slot = value,
+        other => panic!("expected mutable specpdl gc root entry for {label}, got {other:?}"),
+    }
 }
 
 fn bind_lexical_value_rooted_in_specpdl(
@@ -1933,21 +1977,15 @@ fn prepend_lexical_binding_in_specpdl_rooted_env(
     sym: SymId,
     value: Value,
 ) {
+    let temp_root_index = specpdl.len();
     specpdl.push(SpecBinding::GcRoot { value });
-    let current_env = match specpdl.get(env_root_index) {
-        Some(SpecBinding::GcRoot { value }) => *value,
-        other => panic!("expected specpdl gc root entry for lexical env, got {other:?}"),
-    };
     let binding = Value::make_cons(lexenv_binding_symbol_value(sym), value);
-    match specpdl.last_mut() {
-        Some(SpecBinding::GcRoot { value }) => *value = binding,
-        other => panic!("expected temporary specpdl gc root entry, got {other:?}"),
-    }
-    let new_env = Value::make_cons(binding, current_env);
-    match specpdl.get_mut(env_root_index) {
-        Some(SpecBinding::GcRoot { value }) => *value = new_env,
-        other => panic!("expected mutable specpdl gc root entry for lexical env, got {other:?}"),
-    }
+    set_specpdl_gc_root_value(specpdl, temp_root_index, binding, "temporary lexical binding");
+    let rooted_binding =
+        specpdl_gc_root_value(specpdl, temp_root_index, "temporary lexical binding");
+    let rooted_env = specpdl_gc_root_value(specpdl, env_root_index, "lexical env");
+    let new_env = Value::make_cons(rooted_binding, rooted_env);
+    set_specpdl_gc_root_value(specpdl, env_root_index, new_env, "lexical env");
     *lexenv = new_env;
     match specpdl.pop() {
         Some(SpecBinding::GcRoot { .. }) => {}
@@ -2131,18 +2169,22 @@ fn begin_macro_expansion_scope_in_state(
         .cloned()
         .unwrap_or(Value::NIL);
 
+    let old_dynvars_root_index = specpdl.len();
+    specpdl.push(SpecBinding::GcRoot { value: old_dynvars });
     let dynvars_root_index = specpdl.len();
     specpdl.push(SpecBinding::GcRoot { value: old_dynvars });
-    let mut dynvars = old_dynvars;
     for sym in lexenv_bare_symbols(lexenv) {
         if sym == t_symbol || sym == nil_symbol {
             continue;
         }
-        dynvars = Value::cons(Value::from_sym_id(sym), dynvars);
-        match specpdl.get_mut(dynvars_root_index) {
-            Some(SpecBinding::GcRoot { value }) => *value = dynvars,
-            other => panic!("expected macro-expansion dynvars gc root, got {other:?}"),
-        }
+        let dynvars = specpdl_gc_root_value(specpdl, dynvars_root_index, "macro-expansion dynvars");
+        let new_dynvars = Value::cons(Value::from_sym_id(sym), dynvars);
+        set_specpdl_gc_root_value(
+            specpdl,
+            dynvars_root_index,
+            new_dynvars,
+            "macro-expansion dynvars",
+        );
     }
     let specpdl_dynvars: Vec<SymId> = specpdl
         .iter()
@@ -2165,12 +2207,16 @@ fn begin_macro_expansion_scope_in_state(
         if sym_id == t_symbol || sym_id == nil_symbol {
             continue;
         }
-        dynvars = Value::cons(Value::from_sym_id(sym_id), dynvars);
-        match specpdl.get_mut(dynvars_root_index) {
-            Some(SpecBinding::GcRoot { value }) => *value = dynvars,
-            other => panic!("expected macro-expansion dynvars gc root, got {other:?}"),
-        }
+        let dynvars = specpdl_gc_root_value(specpdl, dynvars_root_index, "macro-expansion dynvars");
+        let new_dynvars = Value::cons(Value::from_sym_id(sym_id), dynvars);
+        set_specpdl_gc_root_value(
+            specpdl,
+            dynvars_root_index,
+            new_dynvars,
+            "macro-expansion dynvars",
+        );
     }
+    let dynvars = specpdl_gc_root_value(specpdl, dynvars_root_index, "macro-expansion dynvars");
 
     obarray.set_symbol_value_id(lexical_binding_symbol(), Value::bool_val(!lexenv.is_nil()));
     set_runtime_binding(
@@ -2185,7 +2231,7 @@ fn begin_macro_expansion_scope_in_state(
     ActiveMacroExpansionScopeState {
         saved_specpdl_len,
         old_lexical,
-        old_dynvars,
+        old_dynvars_root_index,
     }
 }
 
@@ -2196,13 +2242,18 @@ fn finish_macro_expansion_scope_in_state(
     custom: &CustomManager,
     state: ActiveMacroExpansionScopeState,
 ) {
+    let old_dynvars = specpdl_gc_root_value(
+        specpdl,
+        state.old_dynvars_root_index,
+        "saved macro-expansion dynvars",
+    );
     set_runtime_binding(
         obarray,
         buffers,
         custom,
         specpdl,
         macroexp_dynvars_symbol(),
-        state.old_dynvars,
+        old_dynvars,
     );
     obarray.set_symbol_value_id(lexical_binding_symbol(), Value::bool_val(state.old_lexical));
     specpdl.truncate(state.saved_specpdl_len);
@@ -2666,13 +2717,18 @@ impl Context {
         let mut tagged_heap = Box::new(crate::tagged::gc::TaggedHeap::new());
         crate::tagged::gc::set_tagged_heap(&mut tagged_heap);
 
-        // Clear any caches that hold heap-allocated Values (tagged pointers) from a
-        // previous heap. Critical for test isolation when multiple Contexts
-        // are created sequentially on the same thread.
+        // Clear any caches that hold heap-allocated Values (tagged pointers)
+        // from a previous heap. Critical for test isolation when multiple
+        // Contexts are created sequentially on the same thread: standard
+        // syntax/category table TLS slots can otherwise still point at the
+        // prior Context's freed heap objects while we are constructing the
+        // next Context's standard tables.
         if reset_thread_locals {
             super::pdump::runtime::reset_runtime_for_new_heap(
                 super::pdump::runtime::HeapResetMode::FreshContext,
             );
+            super::syntax::reset_syntax_thread_locals();
+            super::category::reset_category_thread_locals();
         }
 
         let mut obarray = Obarray::new();
@@ -4243,6 +4299,8 @@ impl Context {
             gc_count: 0,
             gc_inhibit_depth: 0,
             gc_stress: false,
+            #[cfg(test)]
+            gc_assert_mutable_root_coverage: false,
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
@@ -4394,6 +4452,8 @@ impl Context {
             gc_count: 0,
             gc_inhibit_depth: 0,
             gc_stress: false,
+            #[cfg(test)]
+            gc_assert_mutable_root_coverage: false,
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
@@ -4625,7 +4685,9 @@ impl Context {
                 ConditionFrame::Catch { tag, .. } => visit(tag),
                 ConditionFrame::ConditionCase { conditions, .. } => visit(conditions),
                 ConditionFrame::HandlerBind {
-                    conditions, handler, ..
+                    conditions,
+                    handler,
+                    ..
                 } => {
                     visit(conditions);
                     visit(handler);
@@ -4633,14 +4695,16 @@ impl Context {
                 ConditionFrame::SkipConditions { .. } => {}
             }
         }
-        for entry in self.specpdl.iter_mut() {
+        for (idx, entry) in self.specpdl.iter_mut().enumerate() {
             match entry {
                 SpecBinding::Let {
-                    old_value: Some(val), ..
+                    old_value: Some(val),
+                    ..
                 } => visit(val),
                 SpecBinding::LetLocal { old_value, .. } => visit(old_value),
                 SpecBinding::LetDefault {
-                    old_value: Some(val), ..
+                    old_value: Some(val),
+                    ..
                 } => visit(val),
                 SpecBinding::LexicalEnv { old_lexenv } => visit(old_lexenv),
                 SpecBinding::GcRoot { value } => visit(value),
@@ -4735,6 +4799,79 @@ impl Context {
         {
             visit(val);
         }
+    }
+
+    #[cfg(test)]
+    fn root_requires_mutable_relocation(value: Value) -> bool {
+        value.is_cons()
+            || value.is_string()
+            || value.is_float()
+            || value.is_vector()
+            || value.is_record()
+            || value.is_hash_table()
+            || value.is_bignum()
+            || value.is_symbol_with_pos()
+    }
+
+    #[cfg(test)]
+    fn assert_mutable_root_coverage(&mut self) {
+        let mut immutable_counts = std::collections::BTreeMap::<usize, usize>::new();
+        self.trace_roots(&mut |root| {
+            if Self::root_requires_mutable_relocation(root) {
+                *immutable_counts.entry(root.bits()).or_default() += 1;
+            }
+        });
+
+        let mut mutable_counts = std::collections::BTreeMap::<usize, usize>::new();
+        self.trace_roots_mut(&mut |slot| {
+            if Self::root_requires_mutable_relocation(*slot) {
+                *mutable_counts.entry(slot.bits()).or_default() += 1;
+            }
+        });
+
+        if immutable_counts == mutable_counts {
+            return;
+        }
+
+        let mut missing = Vec::new();
+        for (bits, need) in &immutable_counts {
+            let have = mutable_counts.get(bits).copied().unwrap_or(0);
+            if have < *need {
+                missing.push((*bits, *need - have));
+            }
+        }
+        let mut extra = Vec::new();
+        for (bits, have) in &mutable_counts {
+            let need = immutable_counts.get(bits).copied().unwrap_or(0);
+            if need < *have {
+                extra.push((*bits, *have - need));
+            }
+        }
+
+        let describe = |bits: usize, count: usize| {
+            let value = crate::tagged::value::TaggedValue(bits);
+            format!("{value:?} bits={bits:#x} count={count}")
+        };
+        let missing_summary = missing
+            .into_iter()
+            .take(8)
+            .map(|(bits, count)| describe(bits, count))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let extra_summary = extra
+            .into_iter()
+            .take(8)
+            .map(|(bits, count)| describe(bits, count))
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        panic!(
+            "movable root coverage mismatch: immutable={} mutable={} missing=[{}] extra=[{}]",
+            immutable_counts.values().sum::<usize>(),
+            mutable_counts.values().sum::<usize>(),
+            missing_summary,
+            extra_summary,
+        );
     }
 
     /// Get the current GC threshold.
@@ -6121,6 +6258,12 @@ impl Context {
     /// [`Self::gc_collect_from_current_roots`].
     fn gc_collect_minor_from_current_roots(&mut self) {
         let start = std::time::Instant::now();
+        #[cfg(test)]
+        if self.gc_assert_mutable_root_coverage {
+            self.assert_mutable_root_coverage();
+        }
+        *self.lexenv_assq_cache.borrow_mut() = LexenvAssqCache::default();
+        *self.lexenv_special_cache.borrow_mut() = LexenvSpecialCache::default();
         let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
         // Safety: STW inside mutator.collect(Minor); same ownership
         // as gc_collect_from_current_roots.
@@ -6195,8 +6338,8 @@ impl Context {
 
     fn log_neovm_gc_stats(&self, elapsed: std::time::Duration) {
         let s = self.tagged_heap.gc_heap_stats();
-        let total_live = s.pinned.live_bytes + s.nursery.live_bytes
-            + s.old.live_bytes + s.large.live_bytes;
+        let total_live =
+            s.pinned.live_bytes + s.nursery.live_bytes + s.old.live_bytes + s.large.live_bytes;
         let (rss_kb, virt_kb) = memory_stats::memory_stats()
             .map(|m| (m.physical_mem / 1024, m.virtual_mem / 1024))
             .unwrap_or((0, 0));
@@ -6615,14 +6758,26 @@ impl Context {
 
 impl Context {
     #[inline]
-    fn maybe_grow_eval_stack<R>(&mut self, callback: impl FnOnce(&mut Self) -> R) -> R {
-        let depth = self.depth;
-        if depth < STACK_GROWTH_PROBE_START_DEPTH
-            || !depth.is_multiple_of(STACK_GROWTH_PROBE_INTERVAL)
-        {
+    pub(crate) fn maybe_grow_eval_stack_for_depth<R>(
+        &mut self,
+        depth: usize,
+        callback: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let should_probe = if cfg!(debug_assertions) {
+            true
+        } else {
+            depth >= STACK_GROWTH_PROBE_START_DEPTH
+                && depth.is_multiple_of(STACK_GROWTH_PROBE_INTERVAL)
+        };
+        if !should_probe {
             return callback(self);
         }
         stacker::maybe_grow(EVAL_STACK_RED_ZONE, EVAL_STACK_SEGMENT, || callback(self))
+    }
+
+    #[inline]
+    pub(crate) fn maybe_grow_eval_stack<R>(&mut self, callback: impl FnOnce(&mut Self) -> R) -> R {
+        self.maybe_grow_eval_stack_for_depth(self.depth, callback)
     }
 
     /// Whether lexical-binding is currently enabled.
@@ -7184,7 +7339,14 @@ impl Context {
     fn eval_sub_cons(&mut self, form: Value) -> EvalResult {
         let original_fun = self.unwrap_symbol(form.cons_car());
         let original_args = form.cons_cdr();
-
+        #[cfg(test)]
+        if original_fun.as_symbol_name() == Some("eight-bit") {
+            let mut budget = 200;
+            tracing::error!(
+                "eval_sub_cons entering eight-bit form: {}",
+                self.debug_value_shape_for_log(form, 10, &mut budget)
+            );
+        }
         // GNU eval.c:2583-2585 records an UNEVALLED backtrace frame on
         // every `eval_sub` cons-form evaluation. The frame starts in
         // UNEVALLED shape holding the surface function symbol and the
@@ -7261,7 +7423,7 @@ impl Context {
                             f
                         }
                     }
-                    _ => return Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+                    _ => return Err(self.void_function_flow(Value::from_sym_id(sym_id))),
                 }
             }
         } else if original_fun.is_cons() {
@@ -7374,7 +7536,7 @@ impl Context {
         // never emits the resolved fncell contents as signal data.
         if !self.function_value_is_callable(&func) {
             if func.is_nil() {
-                return Err(signal("void-function", vec![original_fun]));
+                return Err(self.void_function_flow(original_fun));
             }
             return Err(signal("invalid-function", vec![original_fun]));
         }
@@ -7418,8 +7580,16 @@ impl Context {
         self.set_backtrace_args_evalled(outer_bt_count, &args);
         self.unbind_to(args_roots_base);
 
-        self.maybe_gc_and_quit()?;
-        self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(func, args))
+        self.with_specpdl_call_roots(func, args, |ctx, call_roots| {
+            ctx.maybe_gc_and_quit()?;
+            let rooted_func = specpdl_gc_root_value(
+                &ctx.specpdl,
+                call_roots.function_root_index,
+                "function call",
+            );
+            let rooted_args = ctx.read_specpdl_call_args(call_roots);
+            ctx.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(rooted_func, rooted_args))
+        })
     }
 
     /// Legacy eval_value: delegates to eval_sub.
@@ -7698,11 +7868,11 @@ impl Context {
         }
 
         if self.obarray.is_function_unbound_id(sym_id) {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(self.void_function_flow(Value::from_sym_id(sym_id)));
         }
 
         let Some(function) = self.obarray.symbol_function_id(sym_id) else {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(self.void_function_flow(Value::from_sym_id(sym_id)));
         };
 
         // Handle autoloads for non-canonical symbols the same as canonical
@@ -7751,11 +7921,11 @@ impl Context {
         }
 
         if self.obarray.is_function_unbound_id(sym_id) {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(self.void_function_flow(Value::from_sym_id(sym_id)));
         }
 
         let Some(function) = self.obarray.symbol_function_id(sym_id) else {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(self.void_function_flow(Value::from_sym_id(sym_id)));
         };
 
         if super::autoload::is_autoload_value(&function) {
@@ -8233,6 +8403,16 @@ impl Context {
         // created in the body captured oversized environments.
         self.restore_specpdl_roots(specpdl_root_scope);
 
+        let scratch_root_scope = save_scratch_gc_roots();
+        let lexical_value_roots_start = save_scratch_gc_roots();
+        for (_, value) in lexical_bindings.iter().copied() {
+            push_scratch_gc_root(value);
+        }
+        let dynamic_value_roots_start = save_scratch_gc_roots();
+        for (_, value) in dynamic_sym_ids.iter().copied() {
+            push_scratch_gc_root(value);
+        }
+
         // Save lexenv AFTER init forms run (matches GNU eval.c:1167:
         //   `lexenv = Vinternal_interpreter_environment;`).
         // Capture specpdl_count AFTER restoring so LexicalEnv sits exactly at
@@ -8252,26 +8432,30 @@ impl Context {
         // Build new lexenv locally by consing bindings onto the ENTRY-POINT
         // lexenv (not self.lexenv which may have been modified by init forms).
         // Matches GNU eval.c:1167-1186.
+        let env_root_index = self.specpdl.len();
+        self.specpdl.push(SpecBinding::GcRoot {
+            value: lexenv_at_entry,
+        });
         let mut new_lexenv = lexenv_at_entry;
-        for (sym_id, val) in &lexical_bindings {
-            let binding_pair = Value::make_cons(
-                crate::emacs_core::eval::lexenv_binding_symbol_value(*sym_id),
-                *val,
+        for (offset, (sym_id, _)) in lexical_bindings.iter().enumerate() {
+            let rooted_value =
+                read_scratch_gc_root(lexical_value_roots_start + offset).unwrap_or(Value::NIL);
+            prepend_lexical_binding_in_specpdl_rooted_env(
+                &mut new_lexenv,
+                &mut self.specpdl,
+                env_root_index,
+                *sym_id,
+                rooted_value,
             );
-            self.specpdl.push(SpecBinding::GcRoot {
-                value: binding_pair,
-            });
-            new_lexenv = Value::make_cons(binding_pair, new_lexenv);
-            match self.specpdl.last_mut() {
-                Some(SpecBinding::GcRoot { value }) => *value = new_lexenv,
-                _ => unreachable!(),
-            }
         }
         // Install the new lexenv atomically.
-        self.lexenv = new_lexenv;
-        for (sym_id, value) in &dynamic_sym_ids {
-            self.specbind(*sym_id, *value);
+        self.lexenv = specpdl_gc_root_value(&self.specpdl, env_root_index, "let lexical env");
+        for (offset, (sym_id, _)) in dynamic_sym_ids.iter().enumerate() {
+            let rooted_value =
+                read_scratch_gc_root(dynamic_value_roots_start + offset).unwrap_or(Value::NIL);
+            self.specbind(*sym_id, rooted_value);
         }
+        restore_scratch_gc_roots(scratch_root_scope);
 
         let result = self.sf_progn_value(body);
         self.unbind_to(specpdl_count);
@@ -8351,12 +8535,11 @@ impl Context {
                     && !self.obarray.is_special_id(id)
                     && !self.lexenv_declares_special_cached_in(self.lexenv, id)
                 {
-                    // Matches GNU Flet_star (eval.c:1113-1120):
-                    // Direct cons onto Vinternal_interpreter_environment.
                     // The LexicalEnv entry at specpdl_count saves the pre-let*
-                    // state; unbind_to restores it.
-                    let binding = Value::make_cons(lexenv_binding_symbol_value(id), value);
-                    self.lexenv = Value::make_cons(binding, self.lexenv);
+                    // state; install each new binding with temporary GcRoot
+                    // protection so a minor collection cannot strand the just-
+                    // allocated binding/env pair in raw Rust locals.
+                    self.bind_lexical_value_rooted(id, value);
                 } else {
                     self.specbind(id, value);
                 }
@@ -8974,9 +9157,7 @@ impl Context {
                         self.specpdl.push(SpecBinding::LexicalEnv {
                             old_lexenv: self.lexenv,
                         });
-                        let binding =
-                            Value::make_cons(lexenv_binding_symbol_value(var_id), binding_value);
-                        self.lexenv = Value::make_cons(binding, self.lexenv);
+                        self.bind_lexical_value_rooted(var_id, binding_value);
                     } else if bind_var {
                         self.specbind(var_id, binding_value);
                     }
@@ -9169,14 +9350,18 @@ impl Context {
             interactive: None,
         };
 
+        let bc_value = Value::make_bytecode(bc);
+        let bc_data = bc_value
+            .get_bytecode_data()
+            .expect("fresh bytecode object should expose bytecode data");
         let mut vm = super::bytecode::Vm::from_context(self);
         let exec_start = trace_toplevel_bytecode.then(std::time::Instant::now);
-        let result = vm.execute(&bc, vec![]);
+        let result = vm.execute_with_func_value(bc_data, vec![], bc_value);
         if let Some(start) = exec_start {
             tracing::info!(
                 "TOPLEVEL-BYTECODE exec   file={} ops={} elapsed={:.2?}",
                 load_file_name,
-                bc.ops.len(),
+                bc_data.ops.len(),
                 start.elapsed()
             );
         }
@@ -9790,7 +9975,6 @@ impl Context {
             ),
         }
     }
-
     pub(crate) fn save_specpdl_roots(&self) -> SpecpdlRootScopeState {
         SpecpdlRootScopeState {
             saved_len: self.specpdl.len(),
@@ -9833,6 +10017,119 @@ impl Context {
                 .filter(|binding| !matches!(binding, SpecBinding::GcRoot { .. })),
         );
     }
+
+    fn read_specpdl_call_args(&self, roots: SpecpdlCallRootState) -> Vec<Value> {
+        (0..roots.args_len)
+            .map(|offset| {
+                specpdl_gc_root_value(
+                    &self.specpdl,
+                    roots.args_root_start + offset,
+                    "call argument",
+                )
+            })
+            .collect()
+    }
+
+    fn with_specpdl_call_roots<T>(
+        &mut self,
+        function: Value,
+        args: Vec<Value>,
+        f: impl FnOnce(&mut Self, SpecpdlCallRootState) -> T,
+    ) -> T {
+        let scope = self.save_specpdl_roots();
+        let function_root_index = self.specpdl.len();
+        self.push_specpdl_root(function);
+        let args_root_start = self.specpdl.len();
+        for value in args.iter().copied() {
+            self.push_specpdl_root(value);
+        }
+        let roots = SpecpdlCallRootState {
+            function_root_index,
+            args_root_start,
+            args_len: args.len(),
+        };
+        let result = f(self, roots);
+        self.restore_specpdl_roots(scope);
+        result
+    }
+
+    #[cfg(test)]
+    fn debug_symbol_name_for_log(&self, value: Value) -> Option<String> {
+        let sym_id = value.as_symbol_id()?;
+        if self.obarray.get_by_id(sym_id).is_some() {
+            Some(resolve_sym(sym_id).to_owned())
+        } else {
+            Some(format!("<invalid-sym:{sym_id:?}>"))
+        }
+    }
+
+    #[cfg(test)]
+    fn debug_value_shape_for_log(&self, value: Value, depth: usize, budget: &mut usize) -> String {
+        if *budget == 0 {
+            return "...".to_owned();
+        }
+        *budget -= 1;
+        match value.kind() {
+            ValueKind::Nil => "nil".to_owned(),
+            ValueKind::Fixnum(n) => n.to_string(),
+            ValueKind::Float => "<float>".to_owned(),
+            ValueKind::Symbol(_) => self
+                .debug_symbol_name_for_log(value)
+                .unwrap_or_else(|| "<symbol?>".to_owned()),
+            ValueKind::Cons => {
+                if depth == 0 {
+                    return format!("Cons@{:#x}", value.bits());
+                }
+                let car = self.debug_value_shape_for_log(value.cons_car(), depth - 1, budget);
+                let cdr = self.debug_value_shape_for_log(value.cons_cdr(), depth - 1, budget);
+                format!("({car} . {cdr})")
+            }
+            ValueKind::String => match value.as_lisp_string() {
+                Some(s) => format!("<string:{}>", s.as_bytes().len()),
+                None => "<string?>".to_owned(),
+            },
+            ValueKind::Veclike(kind) => format!("<{kind:?}:{:#x}>", value.bits()),
+            other => format!("<{other:?}:{:#x}>", value.bits()),
+        }
+    }
+
+    #[cfg(test)]
+    fn log_test_inhibit_auto_revert_expansion(&self, expanded: Value) {
+        let mut budget = 200;
+        tracing::error!(
+            "inhibit-auto-revert expansion: {}",
+            self.debug_value_shape_for_log(expanded, 8, &mut budget)
+        );
+    }
+
+    #[cfg(test)]
+    fn log_test_void_function_backtrace(&self, function: Value) {
+        if function.as_symbol_name() != Some("eight-bit") {
+            return;
+        }
+        tracing::error!("test backtrace for void-function eight-bit:");
+        for (idx, entry) in self.specpdl.iter().rev().enumerate() {
+            if let SpecBinding::Backtrace { function, args, .. } = entry {
+                let rendered_args = args
+                    .iter()
+                    .map(crate::emacs_core::print::print_value)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                tracing::error!(
+                    "  BT[{idx}] fn={} args=[{}]",
+                    crate::emacs_core::print::print_value(function),
+                    rendered_args
+                );
+            }
+        }
+    }
+
+    fn void_function_flow(&self, function: Value) -> Flow {
+        #[cfg(test)]
+        self.log_test_void_function_backtrace(function);
+        signal("void-function", vec![function])
+    }
+
     pub(crate) fn push_vm_root_frame(&mut self) {
         self.vm_root_frames.push(VmRootFrame::new());
     }
@@ -9924,12 +10221,22 @@ impl Context {
         if record_backtrace {
             self.push_backtrace_frame(function, &args);
         }
-        let result = self.maybe_gc_and_quit().and_then(|_| {
-            // GNU does not probe stack space for every funcall. Keep growth
-            // checks at the function-application boundary, but only on coarse
-            // depth intervals so normal startup is not dominated by TLS lookups
-            // in stacker::maybe_grow.
-            self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args))
+        let result = self.with_specpdl_call_roots(function, args, |ctx, call_roots| {
+            ctx.maybe_gc_and_quit().and_then(|_| {
+                // GNU does not probe stack space for every funcall. Keep growth
+                // checks at the function-application boundary, but only on coarse
+                // depth intervals so normal startup is not dominated by TLS lookups
+                // in stacker::maybe_grow.
+                let rooted_function = specpdl_gc_root_value(
+                    &ctx.specpdl,
+                    call_roots.function_root_index,
+                    "function call",
+                );
+                let rooted_args = ctx.read_specpdl_call_args(call_roots);
+                ctx.maybe_grow_eval_stack(|ctx| {
+                    ctx.funcall_general_untraced(rooted_function, rooted_args)
+                })
+            })
         });
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
@@ -9961,8 +10268,16 @@ impl Context {
     ) -> EvalResult {
         let bt_count = self.specpdl.len();
         self.push_backtrace_frame(frame_function, &args);
-        let result = self.maybe_gc_and_quit().and_then(|_| {
-            self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(func, args))
+        let result = self.with_specpdl_call_roots(func, args, |ctx, call_roots| {
+            ctx.maybe_gc_and_quit().and_then(|_| {
+                let rooted_func = specpdl_gc_root_value(
+                    &ctx.specpdl,
+                    call_roots.function_root_index,
+                    "function call",
+                );
+                let rooted_args = ctx.read_specpdl_call_args(call_roots);
+                ctx.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(rooted_func, rooted_args))
+            })
         });
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
@@ -9974,7 +10289,8 @@ impl Context {
     pub(crate) fn funcall_general(&mut self, function: Value, args: Vec<Value>) -> EvalResult {
         let bt_count = self.specpdl.len();
         self.push_backtrace_frame(function, &args);
-        let result = self.funcall_general_untraced(function, args);
+        let result =
+            self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args));
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
     }
@@ -9986,15 +10302,18 @@ impl Context {
     ) -> EvalResult {
         match function.kind() {
             ValueKind::Veclike(VecLikeType::ByteCode) => {
-                // get_bytecode_data returns a reference into the GC-managed
-                // ByteCodeObj.  GNU's bytecode interpreter executes from the
-                // function struct in place, never copying.  Don't clone here
-                // either — bytecode functions can have thousands of ops, and
-                // cloning per call dominated debug-build batch-byte-compile
-                // runtime.
-                let bc_data = function.get_bytecode_data().unwrap();
-                let mut vm = super::bytecode::Vm::from_context(self);
-                vm.execute_with_func_value(bc_data, args, function)
+                let next_depth = self.depth.saturating_add(1);
+                self.maybe_grow_eval_stack_for_depth(next_depth, |ctx| {
+                    // get_bytecode_data returns a reference into the GC-managed
+                    // ByteCodeObj. GNU's bytecode interpreter executes from the
+                    // function struct in place, never copying. Don't clone here
+                    // either — bytecode functions can have thousands of ops, and
+                    // cloning per call dominated debug-build batch-byte-compile
+                    // runtime.
+                    let bc_data = function.get_bytecode_data().unwrap();
+                    let mut vm = super::bytecode::Vm::from_context(ctx);
+                    vm.execute_with_func_value(bc_data, args, function)
+                })
             }
             ValueKind::Veclike(VecLikeType::Lambda) => self.apply_lambda(function, args),
             ValueKind::Veclike(VecLikeType::Macro) => self.apply_lambda(function, args),
@@ -10002,7 +10321,7 @@ impl Context {
             ValueKind::Veclike(VecLikeType::Subr) => self.apply_subr_object(function, args, true),
             ValueKind::Symbol(id) => self.apply_symbol_callable_untraced(id, args, true),
             ValueKind::T => self.apply_symbol_callable_untraced(intern("t"), args, true),
-            ValueKind::Nil => Err(signal("void-function", vec![Value::symbol("nil")])),
+            ValueKind::Nil => Err(self.void_function_flow(Value::symbol("nil"))),
             _ if function.is_symbol_with_pos() => {
                 // Transparently unwrap symbol-with-pos → bare symbol for funcall dispatch.
                 let bare = function.as_symbol_with_pos_sym().unwrap();
@@ -10291,7 +10610,7 @@ impl Context {
         if let Some(result) = self.dispatch_subr_entry_internal(entry, args, function) {
             result.map_err(|flow| self.validate_throw(flow))
         } else {
-            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+            Err(self.void_function_flow(Value::from_sym_id(sym_id)))
         }
     }
 
@@ -10451,7 +10770,7 @@ impl Context {
                 }
                 self.apply_subr_object_with_entry(sym_id, func, args, entry)
             }
-            NamedCallTarget::Void => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+            NamedCallTarget::Void => Err(self.void_function_flow(Value::from_sym_id(sym_id))),
         }
     }
 
@@ -10497,7 +10816,7 @@ impl Context {
                     result
                 }
             }
-            NamedCallTarget::Void => Err(signal("void-function", vec![Value::symbol(name)])),
+            NamedCallTarget::Void => Err(self.void_function_flow(Value::symbol(name))),
         }
     }
 
@@ -10577,7 +10896,7 @@ impl Context {
                     Err(signal("no-catch", vec![tag, value]))
                 }
             }
-            _ => Err(signal("void-function", vec![Value::symbol(name)])),
+            _ => Err(self.void_function_flow(Value::symbol(name))),
         }
     }
 
@@ -10600,7 +10919,7 @@ impl Context {
                 Err(signal("no-catch", vec![tag, value]))
             }
         } else {
-            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+            Err(self.void_function_flow(Value::from_sym_id(sym_id)))
         }
     }
 
@@ -10888,6 +11207,21 @@ impl Context {
         if let Some(environment) = environment {
             self.push_specpdl_root(environment);
         }
+        let scratch_root_scope = save_scratch_gc_roots();
+        let form_root_index = save_scratch_gc_roots();
+        push_scratch_gc_root(form);
+        let definition_root_index = save_scratch_gc_roots();
+        push_scratch_gc_root(definition);
+        let environment_root_index = environment.map(|value| {
+            let index = save_scratch_gc_roots();
+            push_scratch_gc_root(value);
+            index
+        });
+        let args_root_start = save_scratch_gc_roots();
+        for value in args_for_cache.iter().copied() {
+            push_scratch_gc_root(value);
+        }
+        let args_root_end = save_scratch_gc_roots();
 
         let result = (|| {
             let expanded = if definition.is_macro() {
@@ -10903,16 +11237,24 @@ impl Context {
             };
 
             let expand_elapsed = expand_start.elapsed();
+            let rooted_form = read_scratch_gc_root(form_root_index).unwrap_or(Value::NIL);
+            let rooted_definition =
+                read_scratch_gc_root(definition_root_index).unwrap_or(Value::NIL);
+            let rooted_environment = environment_root_index.and_then(read_scratch_gc_root);
+            let rooted_args = (args_root_start..args_root_end)
+                .filter_map(read_scratch_gc_root)
+                .collect::<Vec<_>>();
             self.store_runtime_macro_expansion(
-                form,
-                definition,
-                &args_for_cache,
+                rooted_form,
+                rooted_definition,
+                &rooted_args,
                 &expanded,
                 expand_elapsed,
-                environment,
+                rooted_environment,
             );
             Ok(expanded)
         })();
+        restore_scratch_gc_roots(scratch_root_scope);
         self.restore_specpdl_roots(specpdl_root_scope);
         if let Some(start) = perf_start {
             self.macro_perf_stats

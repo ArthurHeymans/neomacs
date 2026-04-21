@@ -6,6 +6,7 @@
 use crate::buffer::text_props::TextPropertyTable;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::value::LispHashTable;
+use crate::gc_trace::GcTrace;
 use crate::heap_types::{LispString, MarkerData, OverlayData};
 
 use super::gc::{
@@ -18,6 +19,26 @@ use super::gc_trace_impls::{
 };
 use super::header::{ConsCell, VecLikeType};
 use super::value::TaggedValue;
+
+#[inline]
+fn record_bulk_tagged_edges(
+    owner: TaggedValue,
+    values: impl IntoIterator<Item = TaggedValue>,
+    start_index: usize,
+) {
+    for (offset, value) in values.into_iter().enumerate() {
+        gc_post_write_barrier(owner, start_index + offset, TaggedValue::NIL, value);
+    }
+}
+
+#[inline]
+fn record_bulk_text_property_edges(owner: TaggedValue, table: &mut TextPropertyTable) {
+    let mut slot = 0usize;
+    table.trace_roots_mut(&mut |value| {
+        gc_post_write_barrier(owner, slot, TaggedValue::NIL, *value);
+        slot += 1;
+    });
+}
 
 #[inline]
 pub fn set_cons_car(cell: TaggedValue, value: TaggedValue) -> bool {
@@ -61,6 +82,8 @@ pub fn with_vector_data_mut<R>(
     let ptr = value.as_veclike_ptr().unwrap() as *const GcVector;
     let result = f(unsafe { &mut *(*ptr).items.get() });
     gc_post_write_barrier_bulk(value);
+    let items = unsafe { &*(*ptr).items.get() };
+    record_bulk_tagged_edges(value, items.iter().copied(), 0);
     Some(result)
 }
 
@@ -100,6 +123,8 @@ pub fn with_record_data_mut<R>(
     let ptr = value.as_veclike_ptr().unwrap() as *const GcRecord;
     let result = f(unsafe { &mut *(*ptr).items.get() });
     gc_post_write_barrier_bulk(value);
+    let items = unsafe { &*(*ptr).items.get() };
+    record_bulk_tagged_edges(value, items.iter().copied(), 0);
     Some(result)
 }
 
@@ -146,6 +171,17 @@ pub fn with_closure_slots_mut<R>(
     };
     if result.is_some() {
         gc_post_write_barrier_bulk(value);
+        match value.veclike_type() {
+            Some(VecLikeType::Lambda) => unsafe {
+                let ptr = value.as_veclike_ptr().unwrap() as *const GcLambda;
+                record_bulk_tagged_edges(value, (&*(*ptr).data.get()).iter().copied(), 0);
+            },
+            Some(VecLikeType::Macro) => unsafe {
+                let ptr = value.as_veclike_ptr().unwrap() as *const GcMacro;
+                record_bulk_tagged_edges(value, (&*(*ptr).data.get()).iter().copied(), 0);
+            },
+            _ => {}
+        }
     }
     result
 }
@@ -201,6 +237,8 @@ pub fn with_string_text_props_mut<R>(
     // can rebuild it during STW evacuation (see gc_trace_impls.rs).
     let result = f(unsafe { &mut *(*ptr).text_props.get() });
     gc_post_write_barrier_bulk(value);
+    let table = unsafe { &mut *(*ptr).text_props.get() };
+    record_bulk_text_property_edges(value, table);
     Some(result)
 }
 
@@ -227,6 +265,13 @@ pub fn with_hash_table_mut<R>(
     let ptr = value.as_veclike_ptr().unwrap() as *const GcHashTable;
     let result = f(unsafe { &mut *(*ptr).table.get() });
     gc_post_write_barrier_bulk(value);
+    let table = unsafe { &*(*ptr).table.get() };
+    record_bulk_tagged_edges(value, table.data.values().copied(), 0);
+    record_bulk_tagged_edges(
+        value,
+        table.key_snapshots.values().copied(),
+        table.data.len(),
+    );
     Some(result)
 }
 
@@ -242,6 +287,20 @@ pub fn with_bytecode_data_mut<R>(
     let ptr = value.as_veclike_ptr().unwrap() as *const GcByteCode;
     let result = f(unsafe { &mut *(*ptr).data.get() });
     gc_post_write_barrier_bulk(value);
+    let data = unsafe { &*(*ptr).data.get() };
+    record_bulk_tagged_edges(value, data.constants.iter().copied(), 0);
+    let mut next_index = data.constants.len();
+    if let Some(env) = data.env {
+        gc_post_write_barrier(value, next_index, TaggedValue::NIL, env);
+        next_index += 1;
+    }
+    if let Some(doc) = data.doc_form {
+        gc_post_write_barrier(value, next_index, TaggedValue::NIL, doc);
+        next_index += 1;
+    }
+    if let Some(interactive) = data.interactive {
+        gc_post_write_barrier(value, next_index, TaggedValue::NIL, interactive);
+    }
     Some(result)
 }
 
@@ -271,5 +330,7 @@ pub fn with_overlay_data_mut<R>(
     let ptr = value.as_veclike_ptr().unwrap() as *const GcOverlay;
     let result = f(unsafe { &mut *(*ptr).data.get() });
     gc_post_write_barrier_bulk(value);
+    let data = unsafe { &*(*ptr).data.get() };
+    record_bulk_tagged_edges(value, [data.plist], 0);
     Some(result)
 }

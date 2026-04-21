@@ -387,7 +387,6 @@ impl MutatorLocal {
 }
 
 impl<'heap> Mutator<'heap> {
-
     /// Acquire the safepoint write lock plus the heap-core
     /// write lock and run the closure with a live
     /// `CollectorRuntime` built against those guards plus

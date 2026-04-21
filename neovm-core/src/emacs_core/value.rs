@@ -630,6 +630,48 @@ impl LispHashTable {
     }
 }
 
+pub(crate) fn insert_hash_table_entry(
+    table: &mut LispHashTable,
+    key_value: Value,
+    val_value: Value,
+) {
+    let key = key_value.to_hash_key(&table.test);
+    let inserting_new_key = !table.data.contains_key(&key);
+    table.data.insert(key.clone(), val_value);
+    if inserting_new_key {
+        table.key_snapshots.insert(key.clone(), key_value);
+        table.insertion_order.push(key);
+    }
+}
+
+pub(crate) fn build_hash_table_value_from_scratch_roots(
+    test: HashTableTest,
+    test_name: Option<SymId>,
+    size: i64,
+    weakness: Option<HashTableWeakness>,
+    rehash_size: f64,
+    rehash_threshold: f64,
+    root_start: usize,
+    root_end: usize,
+) -> Value {
+    debug_assert_eq!((root_end - root_start) % 2, 0);
+    let table_value =
+        Value::hash_table_with_options(test, size, weakness, rehash_size, rehash_threshold);
+    let _ = table_value.with_hash_table_mut(|table| {
+        table.test_name = test_name;
+        let mut index = root_start;
+        while index + 1 < root_end {
+            let key_value = crate::emacs_core::eval::read_scratch_gc_root(index)
+                .expect("scratch key root should exist");
+            let val_value = crate::emacs_core::eval::read_scratch_gc_root(index + 1)
+                .expect("scratch value root should exist");
+            insert_hash_table_entry(table, key_value, val_value);
+            index += 2;
+        }
+    });
+    table_value
+}
+
 pub(crate) fn build_hash_table_literal_value(
     test: HashTableTest,
     test_name: Option<SymId>,
@@ -639,20 +681,23 @@ pub(crate) fn build_hash_table_literal_value(
     rehash_threshold: f64,
     entries: Vec<(Value, Value)>,
 ) -> Value {
-    let table_value =
-        Value::hash_table_with_options(test, size, weakness, rehash_size, rehash_threshold);
-    let _ = table_value.with_hash_table_mut(|table| {
-        table.test_name = test_name;
-        for (key_value, val_value) in entries {
-            let key = key_value.to_hash_key(&table.test);
-            let inserting_new_key = !table.data.contains_key(&key);
-            table.data.insert(key.clone(), val_value);
-            if inserting_new_key {
-                table.key_snapshots.insert(key.clone(), key_value);
-                table.insertion_order.push(key);
-            }
-        }
-    });
+    let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+    for (key_value, val_value) in entries {
+        crate::emacs_core::eval::push_scratch_gc_root(key_value);
+        crate::emacs_core::eval::push_scratch_gc_root(val_value);
+    }
+    let root_end = crate::emacs_core::eval::save_scratch_gc_roots();
+    let table_value = build_hash_table_value_from_scratch_roots(
+        test,
+        test_name,
+        size,
+        weakness,
+        rehash_size,
+        rehash_threshold,
+        saved_roots,
+        root_end,
+    );
+    crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
     table_value
 }
 
@@ -871,7 +916,12 @@ impl TaggedValue {
     /// Allocate a cons cell.
     pub fn make_cons(car: Value, cdr: Value) -> Self {
         add_wrapping(&CONS_CELLS_CONSED, 1);
-        with_tagged_heap(|h| h.alloc_cons(car, cdr))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(car);
+        crate::emacs_core::eval::push_scratch_gc_root(cdr);
+        let result = with_tagged_heap(|h| h.alloc_cons(car, cdr));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        result
     }
 
     /// Build a proper list from a Vec.
@@ -881,11 +931,13 @@ impl TaggedValue {
             super::eval::push_scratch_gc_root(value);
         }
         let mut acc = Value::NIL;
+        let acc_root_index = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(acc);
         while let Some(item) = values.pop() {
             acc = Value::cons(item, acc);
-            super::eval::push_scratch_gc_root(acc);
+            crate::emacs_core::eval::overwrite_scratch_gc_root(acc_root_index, acc);
         }
-        super::eval::restore_scratch_gc_roots(saved_roots);
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
         acc
     }
 
@@ -896,13 +948,15 @@ impl TaggedValue {
             super::eval::push_scratch_gc_root(value);
         }
         let mut acc = Value::NIL;
+        let acc_root_index = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(acc);
         let mut idx = values.len();
         while idx > 0 {
             idx -= 1;
             acc = Value::cons(values[idx], acc);
-            super::eval::push_scratch_gc_root(acc);
+            crate::emacs_core::eval::overwrite_scratch_gc_root(acc_root_index, acc);
         }
-        super::eval::restore_scratch_gc_roots(saved_roots);
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
         acc
     }
 
@@ -914,38 +968,112 @@ impl TaggedValue {
     /// Allocate a vector.
     pub fn make_vector(values: Vec<Value>) -> Self {
         add_wrapping(&VECTOR_CELLS_CONSED, values.len() as u64);
-        with_tagged_heap(|h| h.alloc_vector(values))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in values.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let result = with_tagged_heap(|h| h.alloc_vector(values));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        result
     }
 
     /// Allocate a record.
     pub fn make_record(values: Vec<Value>) -> Self {
         add_wrapping(&VECTOR_CELLS_CONSED, values.len() as u64);
-        with_tagged_heap(|h| h.alloc_record(values))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in values.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let result = with_tagged_heap(|h| h.alloc_record(values));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        result
     }
 
     /// Allocate a lambda. Converts LambdaData to a Value vector for GC safety.
     pub fn make_lambda(data: LambdaData) -> Self {
-        with_tagged_heap(|h| h.alloc_lambda_from_data(data))
+        Self::make_lambda_with_slots(data.to_closure_slots())
     }
 
     /// Allocate a lambda from already-validated GNU closure slots.
     pub fn make_lambda_with_slots(slots: Vec<Value>) -> Self {
-        with_tagged_heap(|h| h.alloc_lambda(slots))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in slots.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let result = with_tagged_heap(|h| h.alloc_lambda(slots));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        for (index, value) in result
+            .closure_slots()
+            .into_iter()
+            .flatten()
+            .copied()
+            .enumerate()
+        {
+            crate::tagged::gc::gc_post_write_barrier(result, index, Value::NIL, value);
+        }
+        result
     }
 
     /// Allocate a macro. Converts LambdaData to a Value vector for GC safety.
     pub fn make_macro(data: LambdaData) -> Self {
-        with_tagged_heap(|h| h.alloc_macro_from_data(data))
+        Self::make_macro_with_slots(data.to_closure_slots())
     }
 
     /// Allocate a macro from already-validated GNU closure slots.
     pub fn make_macro_with_slots(slots: Vec<Value>) -> Self {
-        with_tagged_heap(|h| h.alloc_macro(slots))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in slots.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let result = with_tagged_heap(|h| h.alloc_macro(slots));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        for (index, value) in result
+            .closure_slots()
+            .into_iter()
+            .flatten()
+            .copied()
+            .enumerate()
+        {
+            crate::tagged::gc::gc_post_write_barrier(result, index, Value::NIL, value);
+        }
+        result
     }
 
     /// Allocate a bytecode function.
     pub fn make_bytecode(bc: super::bytecode::ByteCodeFunction) -> Self {
-        with_tagged_heap(|h| h.alloc_bytecode(bc))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in bc.constants.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        if let Some(value) = bc.env {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        if let Some(value) = bc.doc_form {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        if let Some(value) = bc.interactive {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let result = with_tagged_heap(|h| h.alloc_bytecode(bc));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        if let Some(data) = result.get_bytecode_data() {
+            for (index, value) in data.constants.iter().copied().enumerate() {
+                crate::tagged::gc::gc_post_write_barrier(result, index, Value::NIL, value);
+            }
+            let mut next_index = data.constants.len();
+            if let Some(value) = data.env {
+                crate::tagged::gc::gc_post_write_barrier(result, next_index, Value::NIL, value);
+                next_index += 1;
+            }
+            if let Some(value) = data.doc_form {
+                crate::tagged::gc::gc_post_write_barrier(result, next_index, Value::NIL, value);
+                next_index += 1;
+            }
+            if let Some(value) = data.interactive {
+                crate::tagged::gc::gc_post_write_barrier(result, next_index, Value::NIL, value);
+            }
+        }
+        result
     }
 
     /// Allocate a hash table.
@@ -981,7 +1109,13 @@ impl TaggedValue {
 
     /// Allocate an overlay.
     pub fn make_overlay(data: crate::heap_types::OverlayData) -> Self {
-        with_tagged_heap(|h| h.alloc_overlay(data))
+        let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(data.plist);
+        let plist = data.plist;
+        let result = with_tagged_heap(|h| h.alloc_overlay(data));
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        crate::tagged::gc::gc_post_write_barrier(result, 0, Value::NIL, plist);
+        result
     }
 
     /// Allocate a buffer reference.
@@ -1162,7 +1296,10 @@ impl TaggedValue {
     }
 
     pub fn closure_params(self) -> Option<LambdaParams> {
-        if !matches!(self.veclike_type()?, VecLikeType::Lambda | VecLikeType::Macro) {
+        if !matches!(
+            self.veclike_type()?,
+            VecLikeType::Lambda | VecLikeType::Macro
+        ) {
             return None;
         }
         let arglist = self.closure_slot(CLOSURE_ARGLIST).unwrap_or(Value::NIL);

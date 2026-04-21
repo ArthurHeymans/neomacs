@@ -138,6 +138,23 @@ impl<'a> Vm<'a> {
         result
     }
 
+    fn build_list_with_roots(&mut self, values: &[Value]) -> Value {
+        self.with_vm_root_scope(|vm| {
+            for value in values.iter().copied() {
+                vm.push_dynamic_vm_root(value);
+            }
+            Value::list(values.to_vec())
+        })
+    }
+
+    fn build_cons_with_roots(&mut self, car: Value, cdr: Value) -> Value {
+        self.with_vm_root_scope(|vm| {
+            vm.push_dynamic_vm_root(car);
+            vm.push_dynamic_vm_root(cdr);
+            Value::cons(car, cdr)
+        })
+    }
+
     fn with_frame_roots<T>(
         &mut self,
         func: &ByteCodeFunction,
@@ -243,11 +260,16 @@ impl<'a> Vm<'a> {
             ));
         }
 
-        // Root the bytecode function's constants so they survive GC during
-        // nested calls. Heap bytecode calls also root func_value below, which
-        // mirrors GNU's frame-held function object; direct/manual bytecode
-        // execution can pass NIL func_value, so constants still need roots.
-        let result = self.maybe_grow_vm_stack(|vm| {
+        // Probe stack growth after incrementing depth. Probing only at the
+        // caller sees the previous depth and can miss the exact frame where
+        // tight bytecode recursion first crosses the guard interval.
+        let result = self.ctx.maybe_grow_eval_stack(|ctx| {
+            let mut vm = Vm::from_context(ctx);
+            // Root the bytecode function's constants so they survive GC during
+            // nested calls. Keep them in the active VM root frame so they remain
+            // reachable even if the ByteCodeObj tracing has a gap (e.g. cloned
+            // ByteCodeFunction whose constants diverge from the heap object, or
+            // NIL func_value from sf_byte_code_value).
             vm.with_dynamic_vm_roots(|vm| {
                 if func_value.is_heap_object() {
                     vm.push_dynamic_vm_root(func_value);
@@ -319,7 +341,7 @@ impl<'a> Vm<'a> {
         // If &rest, collect remaining args into a list
         if has_rest {
             let rest_list = if nargs > nonrest {
-                Value::list(args[nonrest..].to_vec())
+                self.build_list_with_roots(&args[nonrest..])
             } else {
                 Value::NIL
             };
@@ -400,7 +422,7 @@ impl<'a> Vm<'a> {
             }
             if let Some(rest_name) = func.params.rest {
                 let rest_list = if arg_idx < nargs {
-                    Value::list(args[arg_idx..].to_vec())
+                    self.build_list_with_roots(&args[arg_idx..])
                 } else {
                     Value::NIL
                 };
@@ -817,27 +839,40 @@ impl<'a> Vm<'a> {
                     // Evaluating the body without restoring the window
                     // configuration leaves minibuffer/window state corrupted.
                     let body = stk!().pop().unwrap_or(Value::NIL);
-                    let progn_form = Value::cons(Value::symbol("progn"), body);
-                    let saved = vm_try!(
-                        crate::emacs_core::window_cmds::builtin_current_window_configuration(
-                            self.ctx,
-                            vec![Value::NIL],
-                        )
-                    );
-                    let body_result = self.ctx.eval_sub(progn_form);
-                    let restore_result =
-                        crate::emacs_core::window_cmds::builtin_set_window_configuration(
-                            self.ctx,
-                            vec![saved],
-                        );
+                    let result = self.with_vm_root_scope(|vm| -> EvalResult {
+                        vm.push_dynamic_vm_root(body);
+                        let saved =
+                            crate::emacs_core::window_cmds::builtin_current_window_configuration(
+                                vm.ctx,
+                                vec![Value::NIL],
+                            )?;
+                        vm.push_dynamic_vm_root(saved);
+                        let progn_form =
+                            vm.build_cons_with_roots(Value::symbol("progn"), body);
+                        vm.push_dynamic_vm_root(progn_form);
+                        let body_result = vm.ctx.eval_sub(progn_form);
 
-                    match body_result {
-                        Ok(result) => {
-                            vm_try!(restore_result);
-                            stk_push!(result);
+                        match body_result {
+                            Ok(result) => {
+                                crate::emacs_core::window_cmds::builtin_set_window_configuration(
+                                    vm.ctx,
+                                    vec![saved],
+                                )?;
+                                Ok(result)
+                            }
+                            Err(flow) => {
+                                crate::emacs_core::window_cmds::builtin_set_window_configuration(
+                                    vm.ctx,
+                                    vec![saved],
+                                )?;
+                                Err(flow)
+                            }
                         }
+                    });
+
+                    match result {
+                        Ok(result) => stk_push!(result),
                         Err(flow) => {
-                            vm_try!(restore_result);
                             self.resume_nonlocal(func, pc, handlers, bind_stack, flow)?;
                             continue;
                         }
@@ -3560,17 +3595,22 @@ impl<'a> Vm<'a> {
     fn call_function(&mut self, func_val: Value, args: Vec<Value>) -> EvalResult {
         let bt_count = self.ctx.specpdl.len();
         self.ctx.push_backtrace_frame(func_val, &args);
-        let result = match func_val.kind() {
-            // Fast path: stay in VM for bytecoded calls.
+        let next_depth = self.ctx.depth.saturating_add(1);
+        let result = self
+            .ctx
+            .maybe_grow_eval_stack_for_depth(next_depth, |ctx| match func_val.kind() {
+            // Fast path: stay in VM for bytecoded calls, but still probe for
+            // C stack growth before recursing into another VM instance.
             // Matches GNU Emacs's CLOSUREP → goto setup_frame in bytecode.c.
             ValueKind::Veclike(VecLikeType::ByteCode) => {
                 let bc_data = func_val.get_bytecode_data().unwrap();
-                self.execute_with_func_value(bc_data, args, func_val)
+                let mut vm = Vm::from_context(ctx);
+                vm.execute_with_func_value(bc_data, args, func_val)
             }
             // Everything else: shared dispatch via funcall_general on Context.
             // Matches GNU Emacs where exec_byte_code delegates to funcall_general.
-            _ => self.ctx.funcall_general_untraced(func_val, args),
-        };
+            _ => ctx.funcall_general_untraced(func_val, args),
+        });
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         self.ctx.unbind_to_with_result(bt_count, result)
     }
@@ -3635,6 +3675,54 @@ impl<'a> Vm<'a> {
                 Err(signal("no-catch", vec![tag, value]))
             }
             Flow::Signal(sig) => {
+                #[cfg(test)]
+                if sig.symbol_name() == "void-function"
+                    && sig.data.first().and_then(|value| value.as_symbol_name())
+                        == Some("eight-bit")
+                {
+                    let current_pc = pc.saturating_sub(1);
+                    let current_op = _func
+                        .ops
+                        .get(current_pc)
+                        .map(|op| format!("{op:?}"))
+                        .unwrap_or_else(|| "<pc out of range>".to_string());
+                    let frame_fun = self
+                        .ctx
+                        .bc_frames
+                        .last()
+                        .map(|frame| frame.fun)
+                        .unwrap_or(Value::NIL);
+                    let stack_preview = self
+                        .ctx
+                        .bc_buf
+                        .iter()
+                        .rev()
+                        .take(8)
+                        .map(crate::emacs_core::print::print_value)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    tracing::error!(
+                        "vm void-function eight-bit: pc={} op={} frame_fun={} stack_top=[{}]",
+                        current_pc,
+                        current_op,
+                        crate::emacs_core::print::print_value(&frame_fun),
+                        stack_preview
+                    );
+                    for (idx, entry) in self.ctx.specpdl.iter().rev().enumerate() {
+                        if let SpecBinding::Backtrace { function, args, .. } = entry {
+                            let rendered_args = args
+                                .iter()
+                                .map(crate::emacs_core::print::print_value)
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            tracing::error!(
+                                "  VM-BT[{idx}] fn={} args=[{}]",
+                                crate::emacs_core::print::print_value(function),
+                                rendered_args
+                            );
+                        }
+                    }
+                }
                 if sig.symbol == intern("kill-emacs") {
                     return Err(Flow::Signal(sig));
                 }
@@ -4511,7 +4599,22 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
         }
         let args_for_cache = args.clone();
         let expand_start = std::time::Instant::now();
-        self.with_dynamic_vm_roots(move |vm| {
+        let saved_scratch_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+        let form_root_index = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(form);
+        let function_root_index = crate::emacs_core::eval::save_scratch_gc_roots();
+        crate::emacs_core::eval::push_scratch_gc_root(function);
+        let environment_root_index = environment.map(|value| {
+            let index = crate::emacs_core::eval::save_scratch_gc_roots();
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+            index
+        });
+        let args_root_start = crate::emacs_core::eval::save_scratch_gc_roots();
+        for value in args_for_cache.iter().copied() {
+            crate::emacs_core::eval::push_scratch_gc_root(value);
+        }
+        let args_root_end = crate::emacs_core::eval::save_scratch_gc_roots();
+        let result = self.with_dynamic_vm_roots(move |vm| {
             vm.push_dynamic_vm_root(form);
             vm.push_dynamic_vm_root(function);
             if let Some(environment) = environment {
@@ -4522,16 +4625,28 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
             }
             let expanded = vm.with_macro_expansion_scope(|vm| vm.call_function(function, args))?;
             let expand_elapsed = expand_start.elapsed();
+            let rooted_form = crate::emacs_core::eval::read_scratch_gc_root(form_root_index)
+                .unwrap_or(Value::NIL);
+            let rooted_function =
+                crate::emacs_core::eval::read_scratch_gc_root(function_root_index)
+                    .unwrap_or(Value::NIL);
+            let rooted_environment =
+                environment_root_index.and_then(crate::emacs_core::eval::read_scratch_gc_root);
+            let rooted_args = (args_root_start..args_root_end)
+                .filter_map(crate::emacs_core::eval::read_scratch_gc_root)
+                .collect::<Vec<_>>();
             vm.ctx.store_runtime_macro_expansion(
-                form,
-                function,
-                &args_for_cache,
+                rooted_form,
+                rooted_function,
+                &rooted_args,
                 &expanded,
                 expand_elapsed,
-                environment,
+                rooted_environment,
             );
             Ok(expanded)
-        })
+        });
+        crate::emacs_core::eval::restore_scratch_gc_roots(saved_scratch_roots);
+        result
     }
 }
 

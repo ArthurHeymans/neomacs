@@ -1206,11 +1206,7 @@ impl crate::gc_trace::GcTrace for KBoard {
         for event in self.current_key_sequence.raw_events_mut().iter_mut() {
             visit(event);
         }
-        for event in self
-            .current_key_sequence
-            .translated_events_mut()
-            .iter_mut()
-        {
+        for event in self.current_key_sequence.translated_events_mut().iter_mut() {
             visit(event);
         }
         for event in self.command_keys.iter_mut() {

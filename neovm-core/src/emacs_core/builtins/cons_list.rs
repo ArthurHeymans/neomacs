@@ -7,7 +7,12 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 pub(crate) fn builtin_cons(args: Vec<Value>) -> EvalResult {
     expect_args("cons", &args, 2)?;
-    Ok(Value::cons(args[0], args[1]))
+    let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+    crate::emacs_core::eval::push_scratch_gc_root(args[0]);
+    crate::emacs_core::eval::push_scratch_gc_root(args[1]);
+    let result = Value::cons(args[0], args[1]);
+    crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+    Ok(result)
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +403,13 @@ pub(crate) fn builtin_setcdr(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_list(args: Vec<Value>) -> EvalResult {
-    Ok(Value::list(args))
+    let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+    for value in args.iter().copied() {
+        crate::emacs_core::eval::push_scratch_gc_root(value);
+    }
+    let result = Value::list(args);
+    crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+    Ok(result)
 }
 
 pub(crate) fn builtin_length(args: Vec<Value>) -> EvalResult {

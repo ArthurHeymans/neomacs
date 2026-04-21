@@ -1371,9 +1371,7 @@ impl SavedRestrictionState {
     pub fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
         if let Some(ref mut restrictions) = self.labeled_restrictions {
             for restriction in restrictions.iter_mut() {
-                if let LabeledRestrictionLabel::User(ref mut label) =
-                    restriction.label
-                {
+                if let LabeledRestrictionLabel::User(ref mut label) = restriction.label {
                     visit(label);
                 }
             }
@@ -4259,9 +4257,7 @@ impl GcTrace for BufferManager {
         }
         for restrictions in self.labeled_restrictions.values_mut() {
             for restriction in restrictions.iter_mut() {
-                if let LabeledRestrictionLabel::User(ref mut label) =
-                    restriction.label
-                {
+                if let LabeledRestrictionLabel::User(ref mut label) = restriction.label {
                     visit(label);
                 }
             }

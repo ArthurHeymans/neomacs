@@ -375,12 +375,43 @@ fn is_generated_loaddefs_source(source: &str) -> bool {
     source.contains(GENERATED_LOADDEFS_MARKER)
 }
 
-fn eval_generated_form_args(
+fn with_rooted_generated_form_values<T>(
+    values: &[Value],
+    f: impl FnOnce(std::ops::Range<usize>) -> Result<T, EvalError>,
+) -> Result<T, EvalError> {
+    let saved_roots = super::eval::save_scratch_gc_roots();
+    let result = (|| {
+        let range_start = super::eval::save_scratch_gc_roots();
+        for value in values.iter().copied() {
+            super::eval::push_scratch_gc_root(value);
+        }
+        let range_end = super::eval::save_scratch_gc_roots();
+        f(range_start..range_end)
+    })();
+    super::eval::restore_scratch_gc_roots(saved_roots);
+    result
+}
+
+fn with_evaluated_generated_form_args<T>(
     eval: &mut super::eval::Context,
     args: &[Value],
-) -> Result<Vec<Value>, EvalError> {
-    args.iter()
-        .map(|value| eval_runtime_form(eval, *value))
+    f: impl FnOnce(&mut super::eval::Context, std::ops::Range<usize>) -> Result<T, EvalError>,
+) -> Result<T, EvalError> {
+    with_rooted_generated_form_values(args, |arg_form_roots| {
+        let evaluated_start = super::eval::save_scratch_gc_roots();
+        for root_index in arg_form_roots {
+            let form = super::eval::read_scratch_gc_root(root_index).unwrap_or(Value::NIL);
+            let value = eval_runtime_form(eval, form)?;
+            super::eval::push_scratch_gc_root(value);
+        }
+        let evaluated_end = super::eval::save_scratch_gc_roots();
+        f(eval, evaluated_start..evaluated_end)
+    })
+}
+
+fn read_scratch_root_values(range: std::ops::Range<usize>) -> Vec<Value> {
+    range
+        .filter_map(super::eval::read_scratch_gc_root)
         .collect()
 }
 
@@ -404,18 +435,24 @@ fn generated_defalias(eval: &mut super::eval::Context, args: &[Value]) -> Result
             raw_data: None,
         });
     }
-    let values = eval_generated_form_args(eval, args)?;
-    let result = eval
-        .defalias_value(values[0], values[1])
-        .map_err(map_flow)?;
-    if let Some(doc) = values.get(2).copied().filter(|value| !value.is_nil()) {
-        super::builtins::builtin_put(
-            eval,
-            vec![values[0], Value::symbol("function-documentation"), doc],
-        )
-        .map_err(map_flow)?;
-    }
-    Ok(result)
+    with_evaluated_generated_form_args(eval, args, |eval, value_roots| {
+        let name = super::eval::read_scratch_gc_root(value_roots.start).unwrap_or(Value::NIL);
+        let definition =
+            super::eval::read_scratch_gc_root(value_roots.start + 1).unwrap_or(Value::NIL);
+        let result = eval.defalias_value(name, definition).map_err(map_flow)?;
+        if value_roots.end > value_roots.start + 2 {
+            let doc =
+                super::eval::read_scratch_gc_root(value_roots.start + 2).unwrap_or(Value::NIL);
+            if !doc.is_nil() {
+                super::builtins::builtin_put(
+                    eval,
+                    vec![name, Value::symbol("function-documentation"), doc],
+                )
+                .map_err(map_flow)?;
+            }
+        }
+        Ok(result)
+    })
 }
 
 fn try_eval_generated_loaddefs_form(
@@ -433,32 +470,35 @@ fn try_eval_generated_loaddefs_form(
     // helpers from loaddefs (e.g. custom/obsolete metadata helpers) should
     // run through the already-loaded GNU Lisp runtime instead.
     match head_sym {
-        "progn" => {
+        "progn" => with_rooted_generated_form_values(tail, |item_roots| {
             let mut last = Value::NIL;
-            for item in tail {
-                last = eval_generated_loaddefs_form(eval, *item)?;
+            for root_index in item_roots {
+                let item = super::eval::read_scratch_gc_root(root_index).unwrap_or(Value::NIL);
+                last = eval_generated_loaddefs_form(eval, item)?;
             }
             Ok(Some(last))
-        }
-        "autoload" => {
-            let values = eval_generated_form_args(eval, tail)?;
+        }),
+        "autoload" => with_evaluated_generated_form_args(eval, tail, |eval, value_roots| {
+            let values = read_scratch_root_values(value_roots);
             Ok(Some(
                 super::autoload::builtin_autoload(eval, values).map_err(map_flow)?,
             ))
-        }
+        }),
         "put" | "function-put" => {
-            let values = eval_generated_form_args(eval, tail)?;
-            Ok(Some(
-                super::builtins::builtin_put(eval, values).map_err(map_flow)?,
-            ))
+            with_evaluated_generated_form_args(eval, tail, |eval, value_roots| {
+                let values = read_scratch_root_values(value_roots);
+                Ok(Some(
+                    super::builtins::builtin_put(eval, values).map_err(map_flow)?,
+                ))
+            })
         }
         "defalias" => Ok(Some(generated_defalias(eval, tail)?)),
-        "defvaralias" => {
-            let values = eval_generated_form_args(eval, tail)?;
+        "defvaralias" => with_evaluated_generated_form_args(eval, tail, |eval, value_roots| {
+            let values = read_scratch_root_values(value_roots);
             Ok(Some(
                 super::builtins::builtin_defvaralias(eval, values).map_err(map_flow)?,
             ))
-        }
+        }),
         _ => Ok(None),
     }
 }
@@ -1233,6 +1273,12 @@ where
 {
     let old_reader_load_file = super::value_reader::get_reader_load_file_name_public();
     let old_macro_cache_disabled = eval.macro_cache_disabled;
+    let saved_old_context_roots = super::eval::save_scratch_gc_roots();
+    let old_reader_load_file_root = old_reader_load_file.map(|value| {
+        let index = super::eval::save_scratch_gc_roots();
+        super::eval::push_scratch_gc_root(value);
+        index
+    });
 
     let specpdl_count = eval.specpdl.len();
     // GNU Fload first specbinds `lexical-binding' to nil, then assigns the
@@ -1261,8 +1307,10 @@ where
     }
 
     let roots = eval.save_specpdl_roots();
-    if let Some(v) = old_reader_load_file {
-        eval.push_specpdl_root(v);
+    if let Some(index) = old_reader_load_file_root
+        && let Some(value) = super::eval::read_scratch_gc_root(index)
+    {
+        eval.push_specpdl_root(value);
     }
 
     let load_file_value = Value::heap_string(hist_file_name.clone());
@@ -1290,8 +1338,10 @@ where
     let result = body(eval);
 
     // Restore reader load-file-name
-    super::value_reader::set_reader_load_file_name(old_reader_load_file);
     eval.macro_cache_disabled = old_macro_cache_disabled;
+    super::value_reader::set_reader_load_file_name(
+        old_reader_load_file_root.and_then(super::eval::read_scratch_gc_root),
+    );
 
     // Restore lexenv via specpdl unbind_to, matching GNU's
     // readevalloop cleanup. This pops the LexicalEnv entry we
@@ -1300,6 +1350,7 @@ where
     // restoring their pre-load values.
     eval.unbind_to(specpdl_count);
     eval.restore_specpdl_roots(roots);
+    super::eval::restore_scratch_gc_roots(saved_old_context_roots);
 
     result
 }
@@ -3022,7 +3073,6 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
             }
         }
 
-        let mut property_forms: Vec<Value> = Vec::new();
         for form in &forms {
             let Some(items) = list_to_vec(form) else {
                 continue;
@@ -3040,12 +3090,8 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
                 continue;
             };
             if wanted.contains(&name) {
-                property_forms.push(*form);
+                eval_generated_loaddefs_form(eval, *form)?;
             }
-        }
-
-        for form in &property_forms {
-            eval_generated_loaddefs_form(eval, *form)?;
         }
         Ok(())
     })();

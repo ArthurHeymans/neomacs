@@ -83,6 +83,14 @@ pub enum VecLikeType {
     SymbolWithPos = 14,
 }
 
+/// Compatibility alias for call sites that still treat vectorlike payloads as
+/// an opaque header-sized pointer target before tagging it as a `TaggedValue`.
+pub type VecLikeHeader = u8;
+
+/// Compatibility alias for marker payload pointers after the neovm-gc
+/// migration. Marker storage now lives in `GcMarker`.
+pub type MarkerObj = crate::tagged::gc_trace_impls::GcMarker;
+
 // ---------------------------------------------------------------------------
 // Closure slot indices (GNU Emacs compatible)
 // ---------------------------------------------------------------------------

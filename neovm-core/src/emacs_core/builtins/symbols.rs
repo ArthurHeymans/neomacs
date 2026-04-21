@@ -4744,33 +4744,29 @@ fn try_convert_hash_table_literal(val: Value) -> Option<Value> {
         i += 2;
     }
 
-    let table_value =
-        Value::hash_table_with_options(test, size, weakness, rehash_size, rehash_threshold);
-    if !table_value.is_hash_table() {
-        return None;
-    };
-
-    {
-        let _ = table_value.with_hash_table_mut(|table| {
-            table.test_name = test_name;
-            if let Some(data) = data_value.and_then(|value| list_to_vec(&value)) {
-                let mut idx = 0_usize;
-                while idx + 1 < data.len() {
-                    let key_value = try_convert_nested_compiled_literal(data[idx]);
-                    let val_value = try_convert_nested_compiled_literal(data[idx + 1]);
-                    let key = key_value.to_hash_key(&table.test);
-                    let inserting_new_key = !table.data.contains_key(&key);
-                    table.data.insert(key.clone(), val_value);
-                    if inserting_new_key {
-                        table.key_snapshots.insert(key.clone(), key_value);
-                        table.insertion_order.push(key);
-                    }
-                    idx += 2;
-                }
-            }
-        });
+    let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+    if let Some(data) = data_value.and_then(|value| list_to_vec(&value)) {
+        let mut idx = 0_usize;
+        while idx + 1 < data.len() {
+            let key_value = try_convert_nested_compiled_literal(data[idx]);
+            let val_value = try_convert_nested_compiled_literal(data[idx + 1]);
+            crate::emacs_core::eval::push_scratch_gc_root(key_value);
+            crate::emacs_core::eval::push_scratch_gc_root(val_value);
+            idx += 2;
+        }
     }
-
+    let root_end = crate::emacs_core::eval::save_scratch_gc_roots();
+    let table_value = build_hash_table_value_from_scratch_roots(
+        test,
+        test_name,
+        size,
+        weakness,
+        rehash_size,
+        rehash_threshold,
+        saved_roots,
+        root_end,
+    );
+    crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
     Some(table_value)
 }
 

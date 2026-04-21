@@ -323,6 +323,13 @@ pub struct TaggedHeap {
     /// like clearing markers when buffers are killed.
     marker_ptrs: Vec<*mut GcMarker>,
 
+    /// Raw `BufferText.markers_head` slots for the currently running GC
+    /// cycle. `Context::gc_collect_from_current_roots` repopulates this
+    /// before each stop-the-world collection so dead marker finalizers can
+    /// unlink themselves from every live buffer chain before control returns
+    /// to the VM.
+    marker_chain_head_slots: Vec<*mut *mut crate::tagged::header::MarkerObj>,
+
     /// Canonical runtime handle wrappers keyed by their underlying object id.
     buffer_registry: FxHashMap<crate::buffer::BufferId, TaggedValue>,
     window_registry: FxHashMap<u64, TaggedValue>,
@@ -444,8 +451,8 @@ impl TaggedHeap {
             });
             gc_heap.set_external_root_relocator(
                 move |relocator: &mut dyn neovm_gc::descriptor::Relocator| {
-                    let ctx_ptr = crate::emacs_core::eval::GC_RELOCATOR_CONTEXT
-                        .with(|slot| slot.get());
+                    let ctx_ptr =
+                        crate::emacs_core::eval::GC_RELOCATOR_CONTEXT.with(|slot| slot.get());
                     if ctx_ptr.is_null() {
                         return;
                     }
@@ -493,9 +500,10 @@ impl TaggedHeap {
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
             bytes_since_minor: 0,
-            gc_minor_threshold: 2 << 20,  // 2 MiB
+            gc_minor_threshold: 2 << 20, // 2 MiB
             live_bytes: 0,
             marker_ptrs: Vec::new(),
+            marker_chain_head_slots: Vec::new(),
             buffer_registry: FxHashMap::default(),
             window_registry: FxHashMap::default(),
             frame_registry: FxHashMap::default(),
@@ -860,7 +868,10 @@ impl TaggedHeap {
 
     /// Allocate a buffer reference.
     pub fn alloc_buffer(&mut self, id: crate::buffer::BufferId) -> TaggedValue {
-        let gc_buf = GcBuffer { type_tag: VecLikeType::Buffer, id };
+        let gc_buf = GcBuffer {
+            type_tag: VecLikeType::Buffer,
+            id,
+        };
         let ptr = self.gc_alloc(gc_buf);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBuffer>());
@@ -869,7 +880,10 @@ impl TaggedHeap {
 
     /// Allocate a window reference.
     pub fn alloc_window(&mut self, id: u64) -> TaggedValue {
-        let gc_win = GcWindow { type_tag: VecLikeType::Window, id };
+        let gc_win = GcWindow {
+            type_tag: VecLikeType::Window,
+            id,
+        };
         let ptr = self.gc_alloc(gc_win);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcWindow>());
@@ -878,7 +892,10 @@ impl TaggedHeap {
 
     /// Allocate a frame reference.
     pub fn alloc_frame(&mut self, id: u64) -> TaggedValue {
-        let gc_frame = GcFrame { type_tag: VecLikeType::Frame, id };
+        let gc_frame = GcFrame {
+            type_tag: VecLikeType::Frame,
+            id,
+        };
         let ptr = self.gc_alloc(gc_frame);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFrame>());
@@ -887,7 +904,10 @@ impl TaggedHeap {
 
     /// Allocate a timer reference.
     pub fn alloc_timer(&mut self, id: u64) -> TaggedValue {
-        let gc_timer = GcTimer { type_tag: VecLikeType::Timer, id };
+        let gc_timer = GcTimer {
+            type_tag: VecLikeType::Timer,
+            id,
+        };
         let ptr = self.gc_alloc(gc_timer);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcTimer>());
@@ -939,7 +959,10 @@ impl TaggedHeap {
 
     /// Allocate a marker.
     pub fn alloc_marker(&mut self, data: crate::heap_types::MarkerData) -> TaggedValue {
-        let gc_marker = GcMarker { type_tag: VecLikeType::Marker, data };
+        let gc_marker = GcMarker {
+            type_tag: VecLikeType::Marker,
+            data,
+        };
         let ptr = self.gc_alloc(gc_marker);
         self.marker_ptrs.push(ptr as *mut GcMarker);
         self.allocated_count += 1;
@@ -954,7 +977,10 @@ impl TaggedHeap {
     /// Use `Value::make_integer` for the canonical "fixnum-or-bignum"
     /// constructor that delegates here only when promotion is needed.
     pub fn alloc_bignum(&mut self, value: rug::Integer) -> TaggedValue {
-        let gc_bignum = GcBignum { type_tag: VecLikeType::Bignum, value };
+        let gc_bignum = GcBignum {
+            type_tag: VecLikeType::Bignum,
+            value,
+        };
         let ptr = self.with_mutator(|m| {
             m.alloc_external_raw(gc_bignum)
                 .expect("bignum allocation should succeed")
@@ -965,7 +991,11 @@ impl TaggedHeap {
     }
 
     pub fn alloc_symbol_with_pos(&mut self, sym: TaggedValue, pos: TaggedValue) -> TaggedValue {
-        let gc_swp = GcSymbolWithPos { type_tag: VecLikeType::SymbolWithPos, sym, pos };
+        let gc_swp = GcSymbolWithPos {
+            type_tag: VecLikeType::SymbolWithPos,
+            sym,
+            pos,
+        };
         let ptr = self.with_mutator(|m| {
             m.alloc_external_raw(gc_swp)
                 .expect("symbol-with-pos allocation should succeed")
@@ -991,7 +1021,44 @@ impl TaggedHeap {
             let marker = unsafe { &mut (**ptr).data };
             if marker.buffer.is_some_and(|b| killed.contains(&b)) {
                 marker.buffer = None;
-                marker.position = None;
+                marker.bytepos = 0;
+                marker.charpos = 0;
+            }
+        }
+    }
+
+    /// Compatibility shim for older buffer marker-chain integration. The
+    /// current neovm-gc path does not consume these chain head slots directly.
+    pub unsafe fn set_marker_chain_head_slots(
+        &mut self,
+        slots: Vec<*mut *mut crate::tagged::header::MarkerObj>,
+    ) {
+        self.marker_chain_head_slots = slots;
+    }
+
+    /// Unlink one marker from any registered buffer marker chain.
+    ///
+    /// Called from `GcMarker::finalize` after the collector has decided the
+    /// marker is dead but before the finalizer queue is drained. This keeps
+    /// `BufferText.markers_head` from retaining dangling raw pointers after
+    /// the GC cycle completes.
+    pub(crate) unsafe fn unlink_marker_from_registered_chains(&mut self, marker: *mut GcMarker) {
+        let marker = marker.cast::<crate::tagged::header::MarkerObj>();
+        for &slot in &self.marker_chain_head_slots {
+            if slot.is_null() {
+                continue;
+            }
+            let mut prev_slot = slot;
+            while !unsafe { (*prev_slot).is_null() } {
+                let curr = unsafe { *prev_slot };
+                if curr == marker {
+                    unsafe {
+                        *prev_slot = (*curr).data.next_marker;
+                        (*curr).data.next_marker = std::ptr::null_mut();
+                    }
+                    break;
+                }
+                prev_slot = unsafe { &mut (*curr).data.next_marker };
             }
         }
     }
@@ -1072,6 +1139,7 @@ impl TaggedHeap {
                 neovm_gc::plan::CollectionKind::Major
             };
             let _ = self.with_mutator(|m| m.collect(kind));
+            let _ = self.with_mutator(|m| m.drain_pending_finalizers());
             self.resync_post_collection_counters();
         }
         self.clear_post_collection_residue();
@@ -1176,7 +1244,6 @@ impl TaggedHeap {
         }
     }
 
-
     /// True if an incremental Major session is in flight.
     pub(crate) fn has_incremental_major(&self) -> bool {
         self.gc_major_in_progress
@@ -1224,6 +1291,7 @@ impl TaggedHeap {
     fn flush_roots_and_collect_minor(&mut self) {
         if gc_collection_enabled() {
             let _ = self.with_mutator(|m| m.collect(neovm_gc::plan::CollectionKind::Minor));
+            let _ = self.with_mutator(|m| m.drain_pending_finalizers());
             self.resync_post_collection_counters();
         }
         self.gc_root_buffer
@@ -1239,6 +1307,7 @@ impl TaggedHeap {
         // threshold.
         self.clear_dirty_owners();
         self.clear_dirty_writes();
+        self.marker_chain_head_slots.clear();
     }
 
     fn resync_post_collection_counters(&mut self) {
@@ -1260,6 +1329,7 @@ impl TaggedHeap {
         self.bytes_since_minor = 0;
         self.clear_dirty_owners();
         self.clear_dirty_writes();
+        self.marker_chain_head_slots.clear();
     }
 
     /// Run a garbage collection using the explicit roots provided.
@@ -1466,8 +1536,16 @@ mod arena_tests {
         assert!(val.is_cons());
         let read_car = unsafe { (*val.xcons_ptr()).car };
         let read_cdr = unsafe { (*val.xcons_ptr()).cdr() };
-        assert_eq!(read_car.0, car.0, "car mismatch: got {:#x}, expected {:#x}", read_car.0, car.0);
-        assert_eq!(read_cdr.0, cdr.0, "cdr mismatch: got {:#x}, expected {:#x}", read_cdr.0, cdr.0);
+        assert_eq!(
+            read_car.0, car.0,
+            "car mismatch: got {:#x}, expected {:#x}",
+            read_car.0, car.0
+        );
+        assert_eq!(
+            read_cdr.0, cdr.0,
+            "cdr mismatch: got {:#x}, expected {:#x}",
+            read_cdr.0, cdr.0
+        );
     }
 
     #[test]

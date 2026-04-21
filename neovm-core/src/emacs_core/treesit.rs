@@ -112,9 +112,7 @@ impl TreeSitterManager {
 
     /// Visit each stored root Value with mutable access so an
     /// evacuating collector can rewrite the pointer after a move.
-    pub(crate) fn roots_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut Value> {
+    pub(crate) fn roots_mut(&mut self) -> impl Iterator<Item = &mut Value> {
         self.parsers.values_mut().map(|entry| &mut entry.value)
     }
 

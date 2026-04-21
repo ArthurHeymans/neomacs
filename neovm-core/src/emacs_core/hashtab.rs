@@ -556,8 +556,30 @@ pub(crate) fn builtin_copy_hash_table(args: Vec<Value>) -> EvalResult {
     expect_args("copy-hash-table", &args, 1)?;
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
-            let new_table = args[0].as_hash_table().unwrap().clone();
-            Ok(with_tagged_heap(|h| h.alloc_hash_table(new_table)))
+            let table = args[0].as_hash_table().unwrap().clone();
+            let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
+            for key in &table.insertion_order {
+                let Some(value) = table.data.get(key).copied() else {
+                    continue;
+                };
+                crate::emacs_core::eval::push_scratch_gc_root(hash_key_to_visible_value(
+                    &table, key,
+                ));
+                crate::emacs_core::eval::push_scratch_gc_root(value);
+            }
+            let root_end = crate::emacs_core::eval::save_scratch_gc_roots();
+            let copied = build_hash_table_value_from_scratch_roots(
+                table.test,
+                table.test_name,
+                table.size,
+                table.weakness,
+                table.rehash_size,
+                table.rehash_threshold,
+                saved_roots,
+                root_end,
+            );
+            crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+            Ok(copied)
         }
         _ => Err(signal(
             "wrong-type-argument",

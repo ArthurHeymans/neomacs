@@ -196,7 +196,14 @@ impl<'heap> CollectorRuntime<'heap> {
         let mut phases = Vec::new();
         let roots = self.local.get_mut().roots_mut();
         let mut cycle = self.heap.with_flat_store_for_collection(
-            |flat, old_gen, old_config, nursery_config, stats, nursery, ext_scanner, ext_relocator| {
+            |flat,
+             old_gen,
+             old_config,
+             nursery_config,
+             stats,
+             nursery,
+             ext_scanner,
+             ext_relocator| {
                 execute_collection_plan(
                     &plan,
                     roots,
@@ -1284,7 +1291,8 @@ impl SharedCollectorRuntime {
     pub fn begin_major_mark(&self, plan: CollectionPlan) -> Result<(), SharedBackgroundError> {
         self.with_heap_read_collector_update(|core, collector| {
             let objects = core.objects();
-            let sources = collect_global_sources(&crate::root::RootStack::default(), &objects, None);
+            let sources =
+                collect_global_sources(&crate::root::RootStack::default(), &objects, None);
             collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,
@@ -1303,7 +1311,8 @@ impl SharedCollectorRuntime {
     pub fn try_begin_major_mark(&self, plan: CollectionPlan) -> Result<(), SharedBackgroundError> {
         self.try_with_heap_read_collector_update(|core, collector| {
             let objects = core.objects();
-            let sources = collect_global_sources(&crate::root::RootStack::default(), &objects, None);
+            let sources =
+                collect_global_sources(&crate::root::RootStack::default(), &objects, None);
             collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,

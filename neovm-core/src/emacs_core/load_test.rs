@@ -1274,7 +1274,11 @@ fn format_eval_error(eval: &Context, err: &EvalError) -> String {
     }
 }
 
-fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Context {
+fn partial_bootstrap_eval_until_with_config(
+    stop_before: &str,
+    prefer_compiled: bool,
+    configure: impl FnOnce(&mut Context),
+) -> Context {
     crate::test_utils::init_test_tracing();
 
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1287,6 +1291,7 @@ fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Con
     );
 
     let mut eval = Context::new();
+    configure(&mut eval);
     eval.set_variable(
         "load-path",
         Value::list(bootstrap_load_path_entries(&lisp_dir)),
@@ -1376,6 +1381,10 @@ fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Con
     }
 
     eval
+}
+
+fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Context {
+    partial_bootstrap_eval_until_with_config(stop_before, prefer_compiled, |_| {})
 }
 
 fn build_pre_macroexp_reload_eval() -> Context {
@@ -11807,6 +11816,36 @@ fn bootstrap_macroexpand_all_pcase_and_pred() {
     assert!(
         rendered.starts_with("OK"),
         "macroexpand-all pcase and+pred failed: {rendered}"
+    );
+}
+
+#[test]
+fn bootstrap_macroexpand_all_pcase_and_pred_survives_1mib_minor_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut eval =
+        partial_bootstrap_eval_until_with_config("emacs-lisp/cl-preloaded", true, |eval| {
+            eval.set_gc_threshold(64 << 20);
+            eval.tagged_heap.set_gc_minor_threshold(1 << 20);
+            eval.gc_assert_mutable_root_coverage = true;
+        });
+    let result = eval.eval_str_each(
+        r#"
+(macroexpand-all
+ '(pcase val
+    ((and type (pred symbolp))
+     (if (get type 'test-prop) (list 'found type) 'no-prop))
+    (_ 'default)))
+"#,
+    );
+    let rendered = result
+        .iter()
+        .map(format_eval_result)
+        .collect::<Vec<_>>()
+        .join(" ");
+    tracing::info!("macroexpand-all pcase and+pred @1MiB minor => {rendered}");
+    assert!(
+        rendered.starts_with("OK"),
+        "macroexpand-all pcase and+pred under 1MiB minor failed: {rendered}"
     );
 }
 

@@ -2050,8 +2050,8 @@ impl GcTrace for Obarray {
                 | SymbolRedirect::Forwarded
                 | SymbolRedirect::Localized => {}
             }
-            if let Some(ref mut f) = sym.function {
-                visit(f);
+            if !sym.function.is_nil() {
+                visit(&mut sym.function);
             }
             visit(&mut sym.plist);
         }

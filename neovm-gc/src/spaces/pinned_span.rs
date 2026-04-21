@@ -22,9 +22,7 @@ pub(crate) const MAX_SLOT_SIZE: usize = 2048;
 
 /// Size class table. Each entry is the slot size for that class.
 /// Objects are rounded up to the nearest class.
-const SIZE_CLASSES: &[usize] = &[
-    64, 72, 80, 96, 128, 192, 256, 384, 512, 768, 1024, 2048,
-];
+const SIZE_CLASSES: &[usize] = &[64, 72, 80, 96, 128, 192, 256, 384, 512, 768, 1024, 2048];
 
 /// Number of size classes.
 #[allow(dead_code)]
@@ -33,7 +31,9 @@ const NUM_CLASSES: usize = SIZE_CLASSES.len();
 /// Find the size class index for a given allocation size.
 /// Returns None if the size exceeds MAX_SLOT_SIZE.
 fn size_class_for(size: usize) -> Option<usize> {
-    SIZE_CLASSES.iter().position(|&class_size| size <= class_size)
+    SIZE_CLASSES
+        .iter()
+        .position(|&class_size| size <= class_size)
 }
 
 /// Sentinel value for "no free slot".
@@ -69,8 +69,7 @@ unsafe impl Sync for Span {}
 impl Span {
     /// Allocate a new span for the given slot size.
     fn new(slot_size: usize) -> Self {
-        let layout = Layout::from_size_align(SPAN_BYTES, 16)
-            .expect("span layout");
+        let layout = Layout::from_size_align(SPAN_BYTES, 16).expect("span layout");
         let base = unsafe { alloc(layout) };
         if base.is_null() {
             std::alloc::handle_alloc_error(layout);
@@ -141,9 +140,9 @@ impl Span {
                 unsafe {
                     let desc = header.desc();
                     if desc.needs_drop {
-                        let payload = ObjectHeader::payload_ptr(
-                            NonNull::new_unchecked(ptr.as_ptr() as *mut ObjectHeader)
-                        );
+                        let payload = ObjectHeader::payload_ptr(NonNull::new_unchecked(
+                            ptr.as_ptr() as *mut ObjectHeader,
+                        ));
                         (desc.drop_in_place)(payload.as_ptr());
                     }
                 }
@@ -223,9 +222,10 @@ impl Drop for Span {
         //    drops run first.
         //  - During sweep: dead records are removed from ObjectStore
         //    before their span slot is reused.
-        let layout = Layout::from_size_align(SPAN_BYTES, 16)
-            .expect("span layout");
-        unsafe { dealloc(self.base.as_ptr(), layout); }
+        let layout = Layout::from_size_align(SPAN_BYTES, 16).expect("span layout");
+        unsafe {
+            dealloc(self.base.as_ptr(), layout);
+        }
     }
 }
 
@@ -411,13 +411,13 @@ mod tests {
 
     #[test]
     fn size_class_lookup() {
-        assert_eq!(size_class_for(1), Some(0));   // → 64B
-        assert_eq!(size_class_for(64), Some(0));  // → 64B
-        assert_eq!(size_class_for(65), Some(1));  // → 72B
-        assert_eq!(size_class_for(72), Some(1));  // → 72B
-        assert_eq!(size_class_for(73), Some(2));  // → 80B
+        assert_eq!(size_class_for(1), Some(0)); // → 64B
+        assert_eq!(size_class_for(64), Some(0)); // → 64B
+        assert_eq!(size_class_for(65), Some(1)); // → 72B
+        assert_eq!(size_class_for(72), Some(1)); // → 72B
+        assert_eq!(size_class_for(73), Some(2)); // → 80B
         assert_eq!(size_class_for(2048), Some(11)); // → 2048B
-        assert_eq!(size_class_for(2049), None);   // too large
+        assert_eq!(size_class_for(2049), None); // too large
     }
 
     #[test]

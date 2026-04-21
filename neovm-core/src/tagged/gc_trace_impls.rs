@@ -10,7 +10,7 @@
 
 use std::cell::UnsafeCell;
 
-use neovm_gc::descriptor::{GcErased, LayoutKind, MovePolicy, Relocator, Trace, Tracer};
+use neovm_gc::descriptor::{GcErased, LayoutKind, MovePolicy, Relocator, Trace, Tracer, TypeFlags};
 use neovm_gc::root::Gc;
 
 use super::header::VecLikeType;
@@ -43,7 +43,9 @@ impl GcSlot {
 
     #[inline]
     pub fn set(&self, val: TaggedValue) {
-        unsafe { *self.0.get() = val; }
+        unsafe {
+            *self.0.get() = val;
+        }
     }
 
     #[inline]
@@ -300,6 +302,9 @@ unsafe impl Trace for GcHashTable {
         let table = unsafe { &mut *self.table.get() };
         rebuild_hashmap_with_relocator(&mut table.data, relocator);
         rebuild_hashmap_with_relocator(&mut table.key_snapshots, relocator);
+        for key in &mut table.insertion_order {
+            relocate_hashkey(key, relocator);
+        }
     }
 
     fn move_policy() -> MovePolicy {
@@ -335,10 +340,7 @@ fn rebuild_hashmap_with_relocator(
 /// variants (Int, Float, Symbol, etc.) are no-ops; only `Ptr`,
 /// `EqualCons`, and `EqualVec` carry storage that can go stale
 /// across evacuation.
-fn relocate_hashkey(
-    key: &mut crate::emacs_core::value::HashKey,
-    relocator: &mut dyn Relocator,
-) {
+fn relocate_hashkey(key: &mut crate::emacs_core::value::HashKey, relocator: &mut dyn Relocator) {
     use crate::emacs_core::value::HashKey;
     match key {
         HashKey::Ptr(bits) => {
@@ -555,7 +557,18 @@ pub struct GcMarker {
 unsafe impl Trace for GcMarker {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn finalize(&self) {
+        let marker = self as *const GcMarker as *mut GcMarker;
+        super::gc::with_tagged_heap(|heap| unsafe {
+            heap.unlink_marker_from_registered_chains(marker);
+        });
+    }
+    fn type_flags() -> TypeFlags {
+        TypeFlags::FINALIZABLE
+    }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
 
 /// Bignum managed by neovm-gc. No TaggedValue edges.
@@ -575,7 +588,9 @@ unsafe impl Trace for GcBignum {
         // struct's relocation.
         MovePolicy::Movable
     }
-    fn layout_kind() -> LayoutKind { LayoutKind::External }
+    fn layout_kind() -> LayoutKind {
+        LayoutKind::External
+    }
 }
 
 /// Symbol-with-position managed by neovm-gc. Two TaggedValue edges.
@@ -621,7 +636,9 @@ pub struct GcBuffer {
 unsafe impl Trace for GcBuffer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
 
 /// Window reference managed by neovm-gc. No TaggedValue edges.
@@ -634,7 +651,9 @@ pub struct GcWindow {
 unsafe impl Trace for GcWindow {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
 
 /// Frame reference managed by neovm-gc. No TaggedValue edges.
@@ -647,7 +666,9 @@ pub struct GcFrame {
 unsafe impl Trace for GcFrame {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
 
 /// Timer reference managed by neovm-gc. No TaggedValue edges.
@@ -660,7 +681,9 @@ pub struct GcTimer {
 unsafe impl Trace for GcTimer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
 
 /// Built-in function managed by neovm-gc. No TaggedValue edges.
@@ -677,5 +700,7 @@ pub struct GcSubr {
 unsafe impl Trace for GcSubr {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
-    fn move_policy() -> MovePolicy { MovePolicy::Pinned }
+    fn move_policy() -> MovePolicy {
+        MovePolicy::Pinned
+    }
 }
