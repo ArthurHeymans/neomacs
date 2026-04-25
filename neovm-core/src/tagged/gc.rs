@@ -383,11 +383,6 @@ const GC_FULL_EVERY: u64 = 16;
 /// roughly ~1ms slices at ~1us/object trace cost.
 const GC_MARK_SLICE_BUDGET: usize = 1024;
 
-/// Max objects rewritten per reclaim-commit assist. This stays much
-/// smaller than the mark budget because reclaim commit is fully
-/// stop-the-world.
-const GC_RECLAIM_SLICE_BUDGET: usize = neovm_gc::runtime::DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET;
-
 impl TaggedHeap {
     /// Create a `Mutator` view for write barrier calls.
     ///
@@ -1278,9 +1273,7 @@ impl TaggedHeap {
         match self.active_major_phase() {
             Some(CollectionPhase::Reclaim) => {
                 if self
-                    .with_mutator(|m| {
-                        m.advance_active_reclaim_commit_with_budget(GC_RECLAIM_SLICE_BUDGET)
-                    })
+                    .with_mutator(|m| m.advance_active_reclaim_commit())
                     .ok()
                     .flatten()
                     .is_some()
@@ -1346,6 +1339,16 @@ impl TaggedHeap {
         if self.gc_major_in_progress {
             self.assist_incremental_major_step();
         }
+    }
+
+    /// Advance one deferred physical old-gen compaction slice.
+    ///
+    /// This runs only after an incremental/background major has
+    /// already completed its reclaim work and queued follow-up
+    /// compaction. Returns true when the safe point did real
+    /// compaction work so callers can skip other idle-path work.
+    pub(crate) fn assist_auto_compaction(&mut self) -> bool {
+        self.with_mutator(|m| m.advance_auto_compaction()) > 0
     }
 
     /// Yield the mutator's persistent safepoint read guard so the

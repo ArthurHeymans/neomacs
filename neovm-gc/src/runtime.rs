@@ -35,6 +35,32 @@ use crate::root::{HandleScope, Root};
 /// small fixed budget instead of inheriting the throughput-oriented
 /// concurrent mark slice size from `CollectionPlan::mark_slice_budget`.
 pub const DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET: usize = 64;
+const MAX_RECLAIM_COMMIT_SLICE_BUDGET: usize = 4096;
+const DEFAULT_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 256 * 1024;
+const MIN_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 64 * 1024;
+const MAX_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 8 * 1024 * 1024;
+
+fn adaptive_pause_target_budget(
+    target_pause: Duration,
+    observed_units: usize,
+    observed_pause_nanos: u64,
+    default_budget: usize,
+    min_budget: usize,
+    max_budget: usize,
+) -> usize {
+    if observed_units == 0 || observed_pause_nanos == 0 {
+        return default_budget.clamp(min_budget, max_budget);
+    }
+    let target_pause_nanos = elapsed_nanos(target_pause);
+    if target_pause_nanos == 0 {
+        return min_budget.max(1);
+    }
+
+    let projected = ((observed_units as u128) * (target_pause_nanos as u128))
+        .div_ceil(observed_pause_nanos as u128)
+        .min(usize::MAX as u128) as usize;
+    projected.clamp(min_budget, max_budget)
+}
 
 /// Collector-side runtime bound to one heap.
 ///
@@ -199,6 +225,9 @@ impl<'heap> CollectorRuntime<'heap> {
         if self.heap.collector_handle().has_active_major_mark() {
             return Err(AllocError::CollectionInProgress);
         }
+        if matches!(plan.kind, CollectionKind::Major | CollectionKind::Full) {
+            self.heap.clear_pending_auto_compaction();
+        }
 
         let pause_start = Instant::now();
         self.heap.collector_handle().clear_recent_phase_trace();
@@ -239,9 +268,9 @@ impl<'heap> CollectorRuntime<'heap> {
         // for it. The hook is gated on
         // `physical_compaction_density_threshold > 0.0`, so
         // heaps with the default 0.0 threshold see no behavior
-        // change. A matching hook in
-        // `commit_finished_active_collection` covers the
-        // background concurrent path.
+        // change. Incremental/background majors defer physical
+        // compaction to later mutator-driven assists so the
+        // reclaim finish pause stays bounded.
         if matches!(plan.kind, CollectionKind::Major | CollectionKind::Full) {
             let density_threshold = self.heap.old_config().physical_compaction_density_threshold;
             if density_threshold > 0.0 {
@@ -517,6 +546,7 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Begin a persistent major-mark session for one scheduler-provided plan.
     pub fn begin_major_mark(&mut self, plan: CollectionPlan) -> Result<(), AllocError> {
+        self.heap.clear_pending_auto_compaction();
         let sources = self.heap.global_sources_with_roots(&self.local.get().roots);
         let objects = self.heap.objects();
         self.heap.collector_handle().begin_major_mark_and_refresh(
@@ -709,7 +739,22 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
     pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
-        self.advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+        let Some((pause_nanos, scanned_objects)) = self
+            .heap
+            .collector_handle()
+            .active_reclaim_commit_progress()
+        else {
+            return Ok(None);
+        };
+        let budget = adaptive_pause_target_budget(
+            self.heap.pacer().config().target_pause,
+            scanned_objects,
+            pause_nanos,
+            DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
+            1,
+            MAX_RECLAIM_COMMIT_SLICE_BUDGET,
+        );
+        self.advance_active_reclaim_commit_with_budget(budget)
     }
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice
@@ -719,6 +764,43 @@ impl<'heap> CollectorRuntime<'heap> {
         budget: usize,
     ) -> Result<Option<CollectionStats>, AllocError> {
         self.advance_active_reclaim_commit_impl(budget)
+    }
+
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the runtime's adaptive pause budget.
+    pub fn advance_auto_compaction(&mut self) -> usize {
+        let state = self.heap.auto_compaction_state();
+        let budget = adaptive_pause_target_budget(
+            self.heap.pacer().config().target_pause,
+            state.compacted_bytes,
+            state.pause_nanos,
+            DEFAULT_AUTO_COMPACTION_SLICE_BUDGET_BYTES,
+            MIN_AUTO_COMPACTION_SLICE_BUDGET_BYTES,
+            MAX_AUTO_COMPACTION_SLICE_BUDGET_BYTES,
+        );
+        self.advance_auto_compaction_with_byte_budget(budget)
+    }
+
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the provided live-byte budget.
+    pub fn advance_auto_compaction_with_byte_budget(&mut self, budget_bytes: usize) -> usize {
+        let pause_start = Instant::now();
+        let advance = {
+            let roots = self.local.get_mut().roots_mut();
+            self.heap.advance_auto_compaction_slice(roots, budget_bytes)
+        };
+        if advance.selected_bytes == 0 || advance.moved_records == 0 {
+            return 0;
+        }
+
+        let pause_nanos = elapsed_nanos(pause_start.elapsed());
+        self.heap.record_pause_sample(pause_nanos);
+        self.heap.record_auto_compaction_slice(
+            advance.selected_bytes,
+            pause_nanos,
+            advance.remaining,
+        );
+        advance.moved_records
     }
 
     /// Commit the active major collection once reclaim has already been prepared.
@@ -961,26 +1043,18 @@ impl<'heap> CollectorRuntime<'heap> {
         prior_pause_nanos: u64,
         pause_start: Instant,
     ) -> CollectionStats {
-        // Physical compaction hook (physical-compaction step 6).
-        //
-        // After the major reclaim commits, the objects vec
-        // contains only survivors of the mark phase. Walk the
-        // sparse old-gen blocks and physically evacuate every
-        // live record whose home block is at or below the
-        // configured density threshold. This genuinely moves
-        // bytes: the source blocks become empty and get dropped
-        // by the next sweep. The threshold defaults to 0.0
-        // (disabled) so existing workloads that do not opt in
-        // see no behavior change.
-        let density_threshold = self.heap.old_config().physical_compaction_density_threshold;
-        if density_threshold > 0.0 {
-            let roots = self.local.get_mut().roots_mut();
-            self.heap.compact_old_gen_physical(roots, density_threshold);
-        }
         let current_pause_nanos = elapsed_nanos(pause_start.elapsed());
         self.heap.record_pause_sample(current_pause_nanos);
         cycle.pause_nanos = prior_pause_nanos.saturating_add(current_pause_nanos);
-        self.record_completed_cycle(cycle, completed_plan);
+        self.record_completed_cycle(cycle, completed_plan.clone());
+        if matches!(
+            completed_plan.kind,
+            CollectionKind::Major | CollectionKind::Full
+        ) {
+            self.heap.schedule_auto_compaction_if_enabled();
+        } else {
+            self.heap.clear_pending_auto_compaction();
+        }
         cycle
     }
 

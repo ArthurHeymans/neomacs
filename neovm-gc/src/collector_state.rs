@@ -137,6 +137,10 @@ impl CollectorStateHandle {
         self.lock().major_mark_progress()
     }
 
+    pub(crate) fn active_reclaim_commit_progress(&self) -> Option<(u64, usize)> {
+        self.lock().active_reclaim_commit_progress()
+    }
+
     /// Lock-free hot-path read. Exact for callers that hold
     /// the heap safepoint lock; advisory elsewhere.
     pub(crate) fn has_active_major_mark(&self) -> bool {
@@ -502,6 +506,17 @@ impl CollectorState {
                 mark_rounds: state.mark_rounds,
                 remaining_work: state.worklist.len(),
             })
+    }
+
+    pub(crate) fn active_reclaim_commit_progress(&self) -> Option<(u64, usize)> {
+        self.major_mark_state.as_ref().map(|state| {
+            let scanned = state
+                .reclaim_commit_state
+                .as_ref()
+                .map(|commit| commit.scanned_objects())
+                .unwrap_or(0);
+            (state.reclaim_commit_pause_nanos, scanned)
+        })
     }
 
     pub(crate) fn has_active_major_mark(&self) -> bool {

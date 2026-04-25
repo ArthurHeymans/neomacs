@@ -926,6 +926,18 @@ impl<'heap> Mutator<'heap> {
         guard.compact_old_gen_blocks(self.local.roots_mut(), block_indices)
     }
 
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the runtime's adaptive pause budget.
+    pub fn advance_auto_compaction(&mut self) -> usize {
+        self.with_runtime(|runtime| runtime.advance_auto_compaction())
+    }
+
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the provided live-byte budget.
+    pub fn advance_auto_compaction_with_byte_budget(&mut self, budget_bytes: usize) -> usize {
+        self.with_runtime(|runtime| runtime.advance_auto_compaction_with_byte_budget(budget_bytes))
+    }
+
     /// Predicate-only check for opportunistic compaction.
     /// Mirrors [`Heap::should_compact_old_gen`].
     pub fn should_compact_old_gen(&self, fragmentation_threshold: f64) -> bool {

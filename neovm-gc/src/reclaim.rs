@@ -314,6 +314,12 @@ pub(crate) struct PreparedReclaimCommitState {
     finalize_keys: std::collections::HashSet<ObjectKey, ObjectKeyBuildHasher>,
 }
 
+impl PreparedReclaimCommitState {
+    pub(crate) fn scanned_objects(&self) -> usize {
+        self.scan_index
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct MinorRebuildResult {
     pub(crate) queued_finalizers: u64,

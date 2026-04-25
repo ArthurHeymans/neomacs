@@ -1,6 +1,6 @@
 use crate::background::{BackgroundCollectorConfig, BackgroundService, SharedHeap};
 use crate::barrier::BarrierKind;
-use crate::collector_exec::collect_global_sources;
+use crate::collector_exec::{ForwardingRelocator, collect_global_sources};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorStateHandle};
 use crate::descriptor::{GcErased, Trace, TypeDesc, fixed_type_desc};
 use crate::mutator::Mutator;
@@ -135,6 +135,21 @@ impl std::fmt::Debug for ExternalRootRelocator {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct AutoCompactionState {
+    pub(crate) pending: bool,
+    pub(crate) target_bytes: usize,
+    pub(crate) compacted_bytes: usize,
+    pub(crate) pause_nanos: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct AutoCompactionAdvance {
+    pub(crate) selected_bytes: usize,
+    pub(crate) moved_records: usize,
+    pub(crate) remaining: bool,
+}
+
 #[derive(Debug)]
 pub(crate) struct HeapCore {
     config: HeapConfig,
@@ -160,6 +175,7 @@ pub(crate) struct HeapCore {
     /// by `compact_old_gen_physical` after every call that
     /// actually moves at least one record.
     compaction_stats: crate::stats::CompactionStats,
+    auto_compaction: AutoCompactionState,
     /// Cumulative write-barrier traffic counters. The
     /// backing store uses mutator-owned slots so the barrier
     /// hot path can publish relaxed stores without taking
@@ -545,6 +561,18 @@ impl Heap {
     ) -> Result<Option<CollectionStats>, AllocError> {
         self.collector_runtime()
             .advance_active_reclaim_commit_with_budget(budget)
+    }
+
+    /// Advance one deferred post-major auto-compaction slice.
+    pub fn advance_auto_compaction(&self) -> usize {
+        self.collector_runtime().advance_auto_compaction()
+    }
+
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the provided live-byte budget.
+    pub fn advance_auto_compaction_with_byte_budget(&self, budget_bytes: usize) -> usize {
+        self.collector_runtime()
+            .advance_auto_compaction_with_byte_budget(budget_bytes)
     }
 
     /// Per-block old-generation statistics.
@@ -1177,6 +1205,18 @@ impl<'a> HeapCollectorRuntime<'a> {
             .advance_active_reclaim_commit_with_budget(budget)
     }
 
+    /// Advance one deferred post-major auto-compaction slice.
+    pub fn advance_auto_compaction(&mut self) -> usize {
+        self.runtime().advance_auto_compaction()
+    }
+
+    /// Advance one deferred post-major auto-compaction slice using
+    /// the provided live-byte budget.
+    pub fn advance_auto_compaction_with_byte_budget(&mut self, budget_bytes: usize) -> usize {
+        self.runtime()
+            .advance_auto_compaction_with_byte_budget(budget_bytes)
+    }
+
     /// Service one background collection round.
     pub fn service_background_collection_round(
         &mut self,
@@ -1413,6 +1453,7 @@ impl HeapCore {
             pause_stats: PauseStatsHandle::new(),
             pacer,
             compaction_stats: crate::stats::CompactionStats::default(),
+            auto_compaction: AutoCompactionState::default(),
             barrier_stats: std::sync::Arc::new(crate::stats::AtomicBarrierStats::new()),
             alloc_counters: std::sync::Arc::new(crate::stats::AtomicAllocationCounters::default()),
             external_root_scanner: None,
@@ -1547,58 +1588,166 @@ impl HeapCore {
     /// `block.used_bytes() - block.live_bytes()` on the fresh
     /// target blocks reflects the tight packed layout, so metrics
     /// that measure "hole bytes" (e.g. `OldRegionStats::hole_bytes`)
-    /// genuinely shrink.
-    ///
-    /// `density_threshold` is in `[0.0, 1.0]`. At 0.0 the threshold
-    /// never fires (nothing is compacted). At 1.0 every block with
-    /// any empty space becomes a candidate.
-    ///
-    /// Returns the number of records physically evacuated.
-    ///
-    /// This method assumes the caller has just completed a mark
-    /// phase that identified every live record. It does NOT run a
-    /// mark pass itself: dead records must already be gone from
-    /// `objects`, or the compaction will waste effort moving them.
-    /// In practice callers should invoke this right after a major
-    /// cycle to get physical compaction of the post-mark heap.
-    ///
-    /// # Typical usage
-    ///
-    /// Two common patterns:
-    ///
-    /// 1. **Automatic invocation**: set
-    ///    `OldGenConfig::physical_compaction_density_threshold`
-    ///    above 0.0 in `HeapConfig` and the runtime hooks in
-    ///    `execute_plan` and `commit_finished_active_collection`
-    ///    will call `compact_old_gen_physical` after every major
-    ///    cycle. Most callers want this.
-    ///
-    /// 2. **Manual invocation**: keep the threshold at 0.0 in
-    ///    config and call `mutator.compact_old_gen_physical(...)`
-    ///    explicitly at chosen safepoints. Useful for callers
-    ///    that want to time compaction against their own
-    ///    workload pattern (idle periods, post-checkpoint, etc.).
-    ///
-    /// For the conditional variant that only runs compaction
-    /// when fragmentation actually warrants it, see
-    /// [`Heap::compact_old_gen_if_fragmented`]. For multi-pass
-    /// bulk cleanup before a long idle period see
-    /// [`Heap::compact_old_gen_aggressive`]. For a cheap
-    /// "should I bother?" predicate see
-    /// [`Heap::should_compact_old_gen`].
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use neovm_gc::{Heap, HeapConfig};
-    ///
-    /// // A fresh heap has no old-gen records, so compaction
-    /// // at any threshold is a no-op.
-    /// let mut heap = Heap::new(HeapConfig::default());
-    /// let moved = heap.compact_old_gen_physical(0.5);
-    /// assert_eq!(moved, 0);
-    /// assert_eq!(heap.compaction_stats().cycles, 0);
-    /// ```
+    // Internal physical-compaction helpers.
+    fn relocate_compaction_forwarding(
+        &self,
+        roots: &mut crate::root::RootStack,
+        objects: &[ObjectRecord],
+        indexes: &mut crate::index_state::HeapIndexState,
+        forwarding: &crate::index_state::ForwardingMap,
+    ) {
+        crate::spaces::nursery::relocate_roots_and_edges(roots, objects, indexes, forwarding);
+        if let Some(relocator) = self.external_root_relocator.as_ref() {
+            let mut forwarding_relocator = ForwardingRelocator::new(forwarding);
+            relocator.call(&mut forwarding_relocator);
+        }
+    }
+
+    fn record_compaction_counters(
+        &mut self,
+        moved: usize,
+        block_count_before: usize,
+        block_count_after_evacuation: usize,
+        block_count_after_rebuild: usize,
+    ) {
+        let target_blocks_created =
+            block_count_after_evacuation.saturating_sub(block_count_before) as u64;
+        let source_blocks_reclaimed =
+            block_count_after_evacuation.saturating_sub(block_count_after_rebuild) as u64;
+        self.compaction_stats.cycles = self.compaction_stats.cycles.saturating_add(1);
+        self.compaction_stats.records_moved = self
+            .compaction_stats
+            .records_moved
+            .saturating_add(moved as u64);
+        self.compaction_stats.target_blocks_created = self
+            .compaction_stats
+            .target_blocks_created
+            .saturating_add(target_blocks_created);
+        self.compaction_stats.source_blocks_reclaimed = self
+            .compaction_stats
+            .source_blocks_reclaimed
+            .saturating_add(source_blocks_reclaimed);
+    }
+
+    fn auto_compaction_candidates(&self) -> Vec<OldRegionStats> {
+        if self.config.old.physical_compaction_density_threshold <= 0.0 {
+            return Vec::new();
+        }
+        let min_hole_bytes = self
+            .config
+            .old
+            .selective_reclaim_threshold_bytes
+            .max(self.config.old.line_bytes.max(1));
+        self.old_gen
+            .block_plan_selection(&self.config.old)
+            .candidates
+            .into_iter()
+            .filter(|candidate| candidate.hole_bytes >= min_hole_bytes)
+            .collect()
+    }
+
+    pub(crate) fn auto_compaction_state(&self) -> AutoCompactionState {
+        self.auto_compaction
+    }
+
+    pub(crate) fn clear_pending_auto_compaction(&mut self) {
+        self.auto_compaction = AutoCompactionState::default();
+    }
+
+    pub(crate) fn schedule_auto_compaction_if_enabled(&mut self) -> bool {
+        let target_bytes = self
+            .auto_compaction_candidates()
+            .iter()
+            .map(|candidate| candidate.live_bytes)
+            .sum();
+        let pending = target_bytes > 0;
+        self.auto_compaction = AutoCompactionState {
+            pending,
+            target_bytes,
+            compacted_bytes: 0,
+            pause_nanos: 0,
+        };
+        pending
+    }
+
+    pub(crate) fn record_auto_compaction_slice(
+        &mut self,
+        compacted_bytes: usize,
+        pause_nanos: u64,
+        remaining: bool,
+    ) {
+        self.auto_compaction.pending = remaining;
+        if compacted_bytes > 0 {
+            self.auto_compaction.compacted_bytes = self
+                .auto_compaction
+                .compacted_bytes
+                .saturating_add(compacted_bytes);
+            self.auto_compaction.pause_nanos =
+                self.auto_compaction.pause_nanos.saturating_add(pause_nanos);
+        } else if !remaining {
+            self.auto_compaction.target_bytes = 0;
+            self.auto_compaction.compacted_bytes = 0;
+            self.auto_compaction.pause_nanos = 0;
+        }
+        if !remaining {
+            self.auto_compaction.target_bytes = 0;
+        }
+    }
+
+    pub(crate) fn advance_auto_compaction_slice(
+        &mut self,
+        roots: &mut crate::root::RootStack,
+        byte_budget: usize,
+    ) -> AutoCompactionAdvance {
+        if !self.auto_compaction.pending {
+            return AutoCompactionAdvance::default();
+        }
+
+        let candidates = self.auto_compaction_candidates();
+        if candidates.is_empty() {
+            self.clear_pending_auto_compaction();
+            return AutoCompactionAdvance::default();
+        }
+
+        let mut selected_bytes = 0usize;
+        let mut selected_blocks = Vec::new();
+        let target_budget = byte_budget.max(1);
+        for candidate in candidates {
+            if !selected_blocks.is_empty()
+                && selected_bytes.saturating_add(candidate.live_bytes) > target_budget
+            {
+                break;
+            }
+            selected_bytes = selected_bytes.saturating_add(candidate.live_bytes.max(1));
+            selected_blocks.push(candidate.region_index);
+            if selected_bytes >= target_budget {
+                break;
+            }
+        }
+        if selected_blocks.is_empty() {
+            self.clear_pending_auto_compaction();
+            return AutoCompactionAdvance::default();
+        }
+
+        let moved_records = self.compact_old_gen_blocks(roots, &selected_blocks);
+        let reached_target = self
+            .auto_compaction
+            .compacted_bytes
+            .saturating_add(selected_bytes)
+            >= self.auto_compaction.target_bytes;
+        let remaining = moved_records > 0 && !reached_target && !self.auto_compaction_candidates().is_empty();
+        if !remaining {
+            self.auto_compaction.pending = false;
+        }
+        AutoCompactionAdvance {
+            selected_bytes,
+            moved_records,
+            remaining,
+        }
+    }
+
+    /// Run one physical old-gen compaction pass using the current
+    /// density threshold.
     pub(crate) fn compact_old_gen_physical(
         &mut self,
         roots: &mut crate::root::RootStack,
@@ -1619,12 +1768,7 @@ impl HeapCore {
             self.restore_flat_store(flat);
             return 0;
         }
-        crate::spaces::nursery::relocate_roots_and_edges(
-            roots,
-            &mut flat.objects,
-            &mut flat.indexes,
-            &forwarding,
-        );
+        self.relocate_compaction_forwarding(roots, &flat.objects, &mut flat.indexes, &forwarding);
         let block_count_after_evacuation = self.old_gen.block_count();
         // After the compaction pass: source blocks have stale
         // line_marks reflecting their pre-compaction placements,
@@ -1642,28 +1786,12 @@ impl HeapCore {
         );
         self.restore_flat_store(flat);
         let block_count_after_rebuild = self.old_gen.block_count();
-        // target_blocks_created = blocks that appeared between
-        // the pre-compact count and the post-evacuation count.
-        // source_blocks_reclaimed = blocks that disappeared
-        // between the post-evacuation count and the post-rebuild
-        // count.
-        let target_blocks_created =
-            block_count_after_evacuation.saturating_sub(block_count_before) as u64;
-        let source_blocks_reclaimed =
-            block_count_after_evacuation.saturating_sub(block_count_after_rebuild) as u64;
-        self.compaction_stats.cycles = self.compaction_stats.cycles.saturating_add(1);
-        self.compaction_stats.records_moved = self
-            .compaction_stats
-            .records_moved
-            .saturating_add(moved as u64);
-        self.compaction_stats.target_blocks_created = self
-            .compaction_stats
-            .target_blocks_created
-            .saturating_add(target_blocks_created);
-        self.compaction_stats.source_blocks_reclaimed = self
-            .compaction_stats
-            .source_blocks_reclaimed
-            .saturating_add(source_blocks_reclaimed);
+        self.record_compaction_counters(
+            moved,
+            block_count_before,
+            block_count_after_evacuation,
+            block_count_after_rebuild,
+        );
         moved
     }
 
@@ -1711,12 +1839,7 @@ impl HeapCore {
             self.restore_flat_store(flat);
             return 0;
         }
-        crate::spaces::nursery::relocate_roots_and_edges(
-            roots,
-            &mut flat.objects,
-            &mut flat.indexes,
-            &forwarding,
-        );
+        self.relocate_compaction_forwarding(roots, &flat.objects, &mut flat.indexes, &forwarding);
         let block_count_after_evacuation = self.old_gen.block_count();
         crate::reclaim::rebuild_line_marks_and_reclaim_empty_old_blocks(
             &mut flat.objects,
@@ -1725,23 +1848,12 @@ impl HeapCore {
         );
         self.restore_flat_store(flat);
         let block_count_after_rebuild = self.old_gen.block_count();
-        let target_blocks_created =
-            block_count_after_evacuation.saturating_sub(block_count_before) as u64;
-        let source_blocks_reclaimed =
-            block_count_after_evacuation.saturating_sub(block_count_after_rebuild) as u64;
-        self.compaction_stats.cycles = self.compaction_stats.cycles.saturating_add(1);
-        self.compaction_stats.records_moved = self
-            .compaction_stats
-            .records_moved
-            .saturating_add(moved as u64);
-        self.compaction_stats.target_blocks_created = self
-            .compaction_stats
-            .target_blocks_created
-            .saturating_add(target_blocks_created);
-        self.compaction_stats.source_blocks_reclaimed = self
-            .compaction_stats
-            .source_blocks_reclaimed
-            .saturating_add(source_blocks_reclaimed);
+        self.record_compaction_counters(
+            moved,
+            block_count_before,
+            block_count_after_evacuation,
+            block_count_after_rebuild,
+        );
         moved
     }
 

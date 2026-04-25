@@ -6421,6 +6421,8 @@ impl Context {
                 self.gc_collect_minor_from_current_roots();
             } else if self.tagged_heap.has_incremental_major() {
                 self.tagged_heap.assist_incremental_major();
+            } else if self.tagged_heap.assist_auto_compaction() {
+                return;
             }
             return;
         }
@@ -6439,6 +6441,8 @@ impl Context {
             self.gc_collect_minor_from_current_roots();
         } else if self.tagged_heap.has_incremental_major() {
             self.tagged_heap.assist_incremental_major();
+        } else if self.tagged_heap.assist_auto_compaction() {
+            return;
         } else {
             // Fast-gated yield: free when no background mark
             // session is running, brief release + re-acquire
