@@ -280,11 +280,11 @@ fn function_doc_or_error(func_val: Value) -> EvalResult {
             Ok(Value::string("Keyboard macro."))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
-            let bc = func_val.get_bytecode_data().unwrap();
-            Ok(bc
-                .docstring
-                .as_ref()
-                .map_or(Value::NIL, |doc| Value::heap_string(doc.clone())))
+            let doc = func_val
+                .bytecode_docstring_owned()
+                .unwrap()
+                .map_or(Value::NIL, Value::heap_string);
+            Ok(doc)
         }
         other => Err(signal("invalid-function", vec![func_val])),
     }

@@ -3248,9 +3248,7 @@ fn interactive_form_from_quoted_lambda(value: &Value) -> Result<Option<Value>, F
 }
 
 fn interactive_form_from_bytecode_value(function: Value) -> Option<Value> {
-    let bc = function.get_bytecode_data()?;
-    let spec = bc.interactive;
-    spec.map(|s| {
+    function.bytecode_interactive().flatten().map(|s| {
         let spec_val = if s.is_vector() {
             let vec_data = s.as_vector_data().unwrap();
             if !vec_data.is_empty() { vec_data[0] } else { s }
@@ -3471,9 +3469,7 @@ pub(crate) fn builtin_interactive_form(
             }
             // Bytecode has no interactive slot. Check for an oclosure
             // tag in the doc slot.
-            if let Some(bc) = fun.get_bytecode_data()
-                && bc.doc_form.is_some()
-            {
+            if fun.bytecode_doc_form().flatten().is_some() {
                 genfun = true;
             }
             if genfun

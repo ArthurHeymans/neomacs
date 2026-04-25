@@ -478,7 +478,7 @@ unsafe impl Trace for GcByteCode {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {

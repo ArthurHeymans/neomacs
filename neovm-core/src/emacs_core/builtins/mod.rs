@@ -5078,12 +5078,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             };
 
             let bc_value = Value::make_bytecode(bc);
-            let bc_data = bc_value
-                .get_bytecode_data()
-                .expect("fresh bytecode object should expose bytecode data");
             ctx.refresh_features_from_variable();
             let mut vm = super::bytecode::Vm::from_context(ctx);
-            let result = vm.execute_with_func_value(bc_data, vec![], bc_value);
+            let result = vm.execute_bytecode_value(bc_value, vec![]);
             ctx.sync_features_variable();
             result
         },

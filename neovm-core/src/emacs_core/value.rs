@@ -1348,6 +1348,9 @@ impl TaggedValue {
     }
 
     /// Borrow the ByteCodeFunction from a ByteCode value.
+    ///
+    /// Callers must keep this borrow short-lived and avoid Lisp allocation or
+    /// GC while it is live.
     pub fn get_bytecode_data(self) -> Option<&'static super::bytecode::ByteCodeFunction> {
         if self.veclike_type()? == VecLikeType::ByteCode {
             let ptr = self.as_veclike_ptr().unwrap() as *const GcByteCode;
@@ -1355,6 +1358,30 @@ impl TaggedValue {
         } else {
             None
         }
+    }
+
+    pub fn bytecode_params(self) -> Option<LambdaParams> {
+        self.get_bytecode_data().map(|bc| bc.params.clone())
+    }
+
+    pub fn bytecode_env(self) -> Option<Option<Value>> {
+        self.get_bytecode_data().map(|bc| bc.env)
+    }
+
+    pub fn bytecode_doc_form(self) -> Option<Option<Value>> {
+        self.get_bytecode_data().map(|bc| bc.doc_form)
+    }
+
+    pub fn bytecode_docstring_owned(self) -> Option<Option<LispString>> {
+        self.get_bytecode_data().map(|bc| bc.docstring.clone())
+    }
+
+    pub fn bytecode_interactive(self) -> Option<Option<Value>> {
+        self.get_bytecode_data().map(|bc| bc.interactive)
+    }
+
+    pub fn bytecode_ops_len(self) -> Option<usize> {
+        self.get_bytecode_data().map(|bc| bc.ops.len())
     }
 
     /// Get the pointer address as a unique identity for a string value.

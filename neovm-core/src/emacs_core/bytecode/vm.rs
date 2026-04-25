@@ -28,6 +28,89 @@ enum Handler {
 
 use crate::emacs_core::eval::SpecBinding;
 
+#[derive(Clone, Copy)]
+struct RawSlice<T> {
+    ptr: *const T,
+    len: usize,
+}
+
+impl<T> RawSlice<T> {
+    fn from_slice(slice: &[T]) -> Self {
+        Self {
+            ptr: slice.as_ptr(),
+            len: slice.len(),
+        }
+    }
+
+    fn as_slice(&self) -> &[T] {
+        // Bytecode execution snapshots stable Vec backing storage instead of
+        // borrowing the GC-movable ByteCode object itself. The vector buffers
+        // do not move when the outer GcByteCode relocates.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+struct ByteCodeExecView {
+    ops: RawSlice<Op>,
+    constants: RawSlice<Value>,
+    params: LambdaParams,
+    lexical: bool,
+    env: Option<Value>,
+    gnu_byte_offset_map: Option<HashMap<usize, usize>>,
+    rooted_func_value_slot: Option<usize>,
+    env_root_slot: Option<usize>,
+}
+
+impl ByteCodeExecView {
+    fn from_borrowed(func: &ByteCodeFunction) -> Self {
+        Self {
+            ops: RawSlice::from_slice(&func.ops),
+            constants: RawSlice::from_slice(&func.constants),
+            params: func.params.clone(),
+            lexical: func.lexical,
+            env: func.env,
+            gnu_byte_offset_map: func.gnu_byte_offset_map.clone(),
+            rooted_func_value_slot: None,
+            env_root_slot: None,
+        }
+    }
+
+    fn from_rooted_value(func_value: Value, rooted_func_value_slot: usize) -> Option<Self> {
+        let func = func_value.get_bytecode_data()?;
+        Some(Self {
+            ops: RawSlice::from_slice(&func.ops),
+            constants: RawSlice::from_slice(&func.constants),
+            params: func.params.clone(),
+            lexical: func.lexical,
+            env: None,
+            gnu_byte_offset_map: func.gnu_byte_offset_map.clone(),
+            rooted_func_value_slot: Some(rooted_func_value_slot),
+            env_root_slot: None,
+        })
+    }
+
+    fn ops(&self) -> &[Op] {
+        self.ops.as_slice()
+    }
+
+    fn constants(&self) -> &[Value] {
+        self.constants.as_slice()
+    }
+
+    fn env(&self, ctx: &Context) -> Option<Value> {
+        if let Some(slot) = self.rooted_func_value_slot {
+            return ctx
+                .vm_frame_root_value(slot)
+                .get_bytecode_data()
+                .and_then(|func| func.env);
+        }
+        if let Some(slot) = self.env_root_slot {
+            return Some(ctx.vm_frame_root_value(slot));
+        }
+        self.env
+    }
+}
+
 /// The bytecode VM execution engine.
 ///
 /// Operates on an Context's obarray and dynamic binding stack.
@@ -117,6 +200,10 @@ impl<'a> Vm<'a> {
         self.ctx.push_vm_frame_root(value);
     }
 
+    fn push_dynamic_vm_root_slot(&mut self, value: Value) -> usize {
+        self.ctx.push_vm_frame_root_slot(value)
+    }
+
     fn cleanup_bytecode_frame(
         &mut self,
         result: EvalResult,
@@ -157,7 +244,7 @@ impl<'a> Vm<'a> {
 
     fn with_frame_roots<T>(
         &mut self,
-        func: &ByteCodeFunction,
+        _func: &ByteCodeExecView,
         extra: &[Value],
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
@@ -174,7 +261,7 @@ impl<'a> Vm<'a> {
 
     fn with_frame_arg_roots<T>(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         args: Vec<Value>,
         f: impl FnOnce(&mut Self, Vec<Value>) -> T,
     ) -> T {
@@ -188,7 +275,7 @@ impl<'a> Vm<'a> {
 
     fn with_frame_call_roots<T>(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         function: Value,
         args: Vec<Value>,
         f: impl FnOnce(&mut Self, Vec<Value>) -> T,
@@ -239,12 +326,12 @@ impl<'a> Vm<'a> {
 
     /// Execute a bytecode function with given arguments.
     pub(crate) fn execute(&mut self, func: &ByteCodeFunction, args: Vec<Value>) -> EvalResult {
-        self.execute_with_func_value(func, args, Value::NIL)
+        self.execute_borrowed_with_func_value(func, args, Value::NIL)
     }
 
     /// Execute a bytecode function, passing through the original function
     /// value for use in `wrong-number-of-arguments` error reporting.
-    pub(crate) fn execute_with_func_value(
+    fn execute_borrowed_with_func_value(
         &mut self,
         func: &ByteCodeFunction,
         args: Vec<Value>,
@@ -265,6 +352,7 @@ impl<'a> Vm<'a> {
         // tight bytecode recursion first crosses the guard interval.
         let result = self.ctx.maybe_grow_eval_stack(|ctx| {
             let mut vm = Vm::from_context(ctx);
+            let mut func = ByteCodeExecView::from_borrowed(func);
             // Root the bytecode function's constants so they survive GC during
             // nested calls. Keep them in the active VM root frame so they remain
             // reachable even if the ByteCodeObj tracing has a gap (e.g. cloned
@@ -272,12 +360,52 @@ impl<'a> Vm<'a> {
             // NIL func_value from sf_byte_code_value).
             vm.with_dynamic_vm_roots(|vm| {
                 if func_value.is_heap_object() {
-                    vm.push_dynamic_vm_root(func_value);
+                    func.rooted_func_value_slot = Some(vm.push_dynamic_vm_root_slot(func_value));
                 }
-                for value in func.constants.iter().copied() {
+                for value in func.constants().iter().copied() {
                     vm.push_dynamic_vm_root(value);
                 }
-                vm.run_frame(func, args, func_value)
+                if func.rooted_func_value_slot.is_none()
+                    && let Some(env) = func.env
+                {
+                    func.env_root_slot = Some(vm.push_dynamic_vm_root_slot(env));
+                }
+                vm.run_frame(&func, args, func_value)
+            })
+        });
+        self.ctx.depth -= 1;
+        result
+    }
+
+    /// Execute a heap-allocated bytecode function value without holding a
+    /// borrow into the GC-managed ByteCode object across collection.
+    pub(crate) fn execute_bytecode_value(
+        &mut self,
+        func_value: Value,
+        args: Vec<Value>,
+    ) -> EvalResult {
+        self.ctx.depth += 1;
+        if self.ctx.depth > self.ctx.max_depth {
+            let overflow_depth = self.ctx.depth as i64;
+            self.ctx.depth -= 1;
+            return Err(signal(
+                "excessive-lisp-nesting",
+                vec![Value::fixnum(overflow_depth)],
+            ));
+        }
+
+        let result = self.ctx.maybe_grow_eval_stack(|ctx| {
+            let mut vm = Vm::from_context(ctx);
+            vm.with_dynamic_vm_roots(|vm| {
+                let rooted_func_value_slot = vm.push_dynamic_vm_root_slot(func_value);
+                let rooted_func_value = vm.ctx.vm_frame_root_value(rooted_func_value_slot);
+                let func =
+                    ByteCodeExecView::from_rooted_value(rooted_func_value, rooted_func_value_slot)
+                        .expect("heap bytecode value should expose bytecode data");
+                for value in func.constants().iter().copied() {
+                    vm.push_dynamic_vm_root(value);
+                }
+                vm.run_frame(&func, args, func_value)
             })
         });
         self.ctx.depth -= 1;
@@ -286,7 +414,7 @@ impl<'a> Vm<'a> {
 
     fn run_frame(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         args: Vec<Value>,
         func_value: Value,
     ) -> EvalResult {
@@ -361,7 +489,8 @@ impl<'a> Vm<'a> {
         // debug-build batch-byte-compile runtime.
         let has_named_params = nonrest > 0 || has_rest;
         if has_named_params {
-            if func.lexical || func.env.is_some() {
+            let func_env = func.env(self.ctx);
+            if func.lexical || func_env.is_some() {
                 // Lexical bytecode functions: params live on bc_buf at the
                 // bottom of the frame.  Just install the captured closure
                 // env (if any) and run; the body's stack-ref opcodes find
@@ -374,7 +503,7 @@ impl<'a> Vm<'a> {
                 self.ctx.specpdl.push(SpecBinding::LexicalEnv {
                     old_lexenv: self.ctx.lexenv,
                 });
-                if let Some(env) = func.env {
+                if let Some(env) = func_env {
                     self.ctx.lexenv = env;
                 }
                 let result =
@@ -446,30 +575,31 @@ impl<'a> Vm<'a> {
         // Save/restore via specpdl, matching GNU's specbind pattern.
         {
             use crate::emacs_core::eval::SpecBinding;
-            if func.env.is_some() || func.lexical {
+            let func_env = func.env(self.ctx);
+            if func_env.is_some() || func.lexical {
                 self.ctx.specpdl.push(SpecBinding::LexicalEnv {
                     old_lexenv: self.ctx.lexenv,
                 });
-                if let Some(env) = func.env {
+                if let Some(env) = func_env {
                     self.ctx.lexenv = env;
                 }
             }
         }
 
-        let result = self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+        let result = self.run_loop(&func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
     fn run_loop(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         frame_base: usize,
         pc: &mut usize,
         handlers: &mut Vec<Handler>,
         bind_stack: &mut Vec<usize>,
     ) -> EvalResult {
-        let ops = &func.ops;
-        let constants = &func.constants;
+        let ops = func.ops();
+        let constants = func.constants();
 
         macro_rules! stk {
             () => {
@@ -847,8 +977,7 @@ impl<'a> Vm<'a> {
                                 vec![Value::NIL],
                             )?;
                         vm.push_dynamic_vm_root(saved);
-                        let progn_form =
-                            vm.build_cons_with_roots(Value::symbol("progn"), body);
+                        let progn_form = vm.build_cons_with_roots(Value::symbol("progn"), body);
                         vm.push_dynamic_vm_root(progn_form);
                         let body_result = vm.ctx.eval_sub(progn_form);
 
@@ -1912,7 +2041,7 @@ impl<'a> Vm<'a> {
 
     fn maybe_call_named_function_cell(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         name: &str,
         args: Vec<Value>,
     ) -> Result<Option<Value>, Flow> {
@@ -3596,27 +3725,27 @@ impl<'a> Vm<'a> {
         let bt_count = self.ctx.specpdl.len();
         self.ctx.push_backtrace_frame(func_val, &args);
         let next_depth = self.ctx.depth.saturating_add(1);
-        let result = self
-            .ctx
-            .maybe_grow_eval_stack_for_depth(next_depth, |ctx| match func_val.kind() {
-            // Fast path: stay in VM for bytecoded calls, but still probe for
-            // C stack growth before recursing into another VM instance.
-            // Matches GNU Emacs's CLOSUREP → goto setup_frame in bytecode.c.
-            ValueKind::Veclike(VecLikeType::ByteCode) => {
-                let bc_data = func_val.get_bytecode_data().unwrap();
-                let mut vm = Vm::from_context(ctx);
-                vm.execute_with_func_value(bc_data, args, func_val)
-            }
-            // Everything else: shared dispatch via funcall_general on Context.
-            // Matches GNU Emacs where exec_byte_code delegates to funcall_general.
-            _ => ctx.funcall_general_untraced(func_val, args),
-        });
+        let result =
+            self.ctx
+                .maybe_grow_eval_stack_for_depth(next_depth, |ctx| match func_val.kind() {
+                    // Fast path: stay in VM for bytecoded calls, but still probe for
+                    // C stack growth before recursing into another VM instance.
+                    // Matches GNU Emacs's CLOSUREP → goto setup_frame in bytecode.c.
+                    ValueKind::Veclike(VecLikeType::ByteCode) => {
+                        let mut vm = Vm::from_context(ctx);
+                        vm.execute_bytecode_value(func_val, args)
+                    }
+                    // Everything else: shared dispatch via funcall_general on Context.
+                    // Matches GNU Emacs where exec_byte_code delegates to funcall_general.
+                    _ => ctx.funcall_general_untraced(func_val, args),
+                });
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         self.ctx.unbind_to_with_result(bt_count, result)
     }
 
     /// Execute a compiled function without param binding (for inline compilation).
     fn execute_inline(&mut self, func: &ByteCodeFunction) -> EvalResult {
+        let func = ByteCodeExecView::from_borrowed(func);
         let condition_stack_base = self.ctx.condition_stack_len();
         let frame_base = self.ctx.bc_buf.len();
         self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
@@ -3627,13 +3756,13 @@ impl<'a> Vm<'a> {
         let mut handlers: Vec<Handler> = Vec::new();
         let specpdl_base = self.ctx.specpdl.len();
         let mut bind_stack: Vec<usize> = Vec::new();
-        let result = self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+        let result = self.run_loop(&func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
     fn resume_nonlocal(
         &mut self,
-        _func: &ByteCodeFunction,
+        _func: &ByteCodeExecView,
         pc: &mut usize,
         handlers: &mut Vec<Handler>,
         bind_stack: &mut Vec<usize>,
@@ -3682,7 +3811,7 @@ impl<'a> Vm<'a> {
                 {
                     let current_pc = pc.saturating_sub(1);
                     let current_op = _func
-                        .ops
+                        .ops()
                         .get(current_pc)
                         .map(|op| format!("{op:?}"))
                         .unwrap_or_else(|| "<pc out of range>".to_string());
@@ -3765,7 +3894,7 @@ impl<'a> Vm<'a> {
 
     fn dispatch_vm_builtin_with_frame(
         &mut self,
-        func: &ByteCodeFunction,
+        func: &ByteCodeExecView,
         name: &str,
         args: Vec<Value>,
     ) -> EvalResult {
@@ -4722,7 +4851,7 @@ fn normalize_vm_builtin_error(name: &str, flow: Flow) -> Flow {
     }
 }
 
-fn resolve_switch_target(func: &ByteCodeFunction, raw_addr: i64) -> Result<usize, Flow> {
+fn resolve_switch_target(func: &ByteCodeExecView, raw_addr: i64) -> Result<usize, Flow> {
     let raw_addr = usize::try_from(raw_addr).map_err(|_| {
         signal(
             "error",

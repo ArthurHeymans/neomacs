@@ -920,11 +920,6 @@ impl TaggedHeap {
     }
 
     /// Allocate a bytecode function.
-    ///
-    /// Bytecode stays pinned for now: the VM borrows `&ByteCodeFunction`
-    /// across execution, and execution itself can safepoint / GC. Making
-    /// bytecode movable requires that path to stop holding address-sensitive
-    /// borrows across collection.
     pub fn alloc_bytecode(
         &mut self,
         data: crate::emacs_core::bytecode::ByteCodeFunction,
@@ -933,10 +928,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::ByteCode,
             data: UnsafeCell::new(data),
         };
-        let ptr = self.gc_alloc_pinned(gc_bc);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_bc)
+                .expect("bytecode allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcByteCode>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a record.

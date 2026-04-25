@@ -9941,6 +9941,76 @@ fn gc_stress_closures() {
 }
 
 #[test]
+fn bytecode_object_relocates_during_minor_gc_and_remains_callable() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let mut bc = crate::emacs_core::bytecode::ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    let answer_idx = bc.add_constant(Value::fixnum(42));
+    bc.ops = vec![
+        crate::emacs_core::bytecode::Op::Constant(answer_idx),
+        crate::emacs_core::bytecode::Op::Return,
+    ];
+    bc.max_stack = 1;
+
+    let sym = intern("vm-moving-bytecode");
+    ev.obarray
+        .set_symbol_value_id(sym, Value::make_bytecode(bc));
+
+    let mut bytecode = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("moving bytecode should be rooted in obarray");
+    let initial_ptr = bytecode
+        .heap_ptr()
+        .expect("bytecode should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    ev.gc_safe_point_exact();
+
+    bytecode = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("bytecode should survive first minor");
+    let after_first_minor_ptr = bytecode
+        .heap_ptr()
+        .expect("bytecode should stay heap-allocated after first minor");
+    assert_ne!(
+        after_first_minor_ptr, initial_ptr,
+        "bytecode should relocate during the first minor collection"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(bytecode, vec![])
+            .expect("bytecode should remain callable after first minor"),
+        Value::fixnum(42)
+    );
+
+    let _garbage = Value::cons(Value::fixnum(3), Value::fixnum(4));
+    ev.gc_safe_point_exact();
+
+    bytecode = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("bytecode should survive second minor");
+    let after_second_minor_ptr = bytecode
+        .heap_ptr()
+        .expect("bytecode should stay heap-allocated after second minor");
+    assert_ne!(
+        after_second_minor_ptr, after_first_minor_ptr,
+        "bytecode should keep moving across successive minor collections"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(bytecode, vec![])
+            .expect("bytecode should remain callable after second minor"),
+        Value::fixnum(42)
+    );
+}
+
+#[test]
 fn interpreted_closure_relocates_across_minor_gc_cycles_and_remains_callable() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

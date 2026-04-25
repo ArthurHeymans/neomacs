@@ -1939,12 +1939,7 @@ fn specpdl_gc_root_value(specpdl: &[SpecBinding], index: usize, label: &str) -> 
     }
 }
 
-fn set_specpdl_gc_root_value(
-    specpdl: &mut [SpecBinding],
-    index: usize,
-    value: Value,
-    label: &str,
-) {
+fn set_specpdl_gc_root_value(specpdl: &mut [SpecBinding], index: usize, value: Value, label: &str) {
     match specpdl.get_mut(index) {
         Some(SpecBinding::GcRoot { value: slot }) => *slot = value,
         other => panic!("expected mutable specpdl gc root entry for {label}, got {other:?}"),
@@ -1980,7 +1975,12 @@ fn prepend_lexical_binding_in_specpdl_rooted_env(
     let temp_root_index = specpdl.len();
     specpdl.push(SpecBinding::GcRoot { value });
     let binding = Value::make_cons(lexenv_binding_symbol_value(sym), value);
-    set_specpdl_gc_root_value(specpdl, temp_root_index, binding, "temporary lexical binding");
+    set_specpdl_gc_root_value(
+        specpdl,
+        temp_root_index,
+        binding,
+        "temporary lexical binding",
+    );
     let rooted_binding =
         specpdl_gc_root_value(specpdl, temp_root_index, "temporary lexical binding");
     let rooted_env = specpdl_gc_root_value(specpdl, env_root_index, "lexical env");
@@ -8744,8 +8744,7 @@ impl Context {
         let result = (|| -> EvalResult {
             let mut iters: u64 = 0;
             loop {
-                let test_form =
-                    specpdl_gc_root_value(&self.specpdl, test_root_index, "while test");
+                let test_form = specpdl_gc_root_value(&self.specpdl, test_root_index, "while test");
                 let body = specpdl_gc_root_value(&self.specpdl, body_root_index, "while body");
                 if self.eval_sub(test_form)?.is_nil() {
                     return Ok(Value::NIL);
@@ -9351,17 +9350,17 @@ impl Context {
         };
 
         let bc_value = Value::make_bytecode(bc);
-        let bc_data = bc_value
-            .get_bytecode_data()
+        let bc_ops_len = bc_value
+            .bytecode_ops_len()
             .expect("fresh bytecode object should expose bytecode data");
         let mut vm = super::bytecode::Vm::from_context(self);
         let exec_start = trace_toplevel_bytecode.then(std::time::Instant::now);
-        let result = vm.execute_with_func_value(bc_data, vec![], bc_value);
+        let result = vm.execute_bytecode_value(bc_value, vec![]);
         if let Some(start) = exec_start {
             tracing::info!(
                 "TOPLEVEL-BYTECODE exec   file={} ops={} elapsed={:.2?}",
                 load_file_name,
-                bc_data.ops.len(),
+                bc_ops_len,
                 start.elapsed()
             );
         }
@@ -10146,6 +10145,24 @@ impl Context {
             .push(value);
     }
 
+    pub(crate) fn push_vm_frame_root_slot(&mut self, value: Value) -> usize {
+        let roots = &mut self
+            .vm_root_frames
+            .last_mut()
+            .expect("VM root frame missing")
+            .roots;
+        let slot = roots.len();
+        roots.push(value);
+        slot
+    }
+
+    pub(crate) fn vm_frame_root_value(&self, slot: usize) -> Value {
+        self.vm_root_frames
+            .last()
+            .expect("VM root frame missing")
+            .roots[slot]
+    }
+
     pub(crate) fn push_eval_result_roots(&mut self, result: &EvalResult) {
         match result {
             Ok(value) => self.push_vm_frame_root(*value),
@@ -10276,7 +10293,9 @@ impl Context {
                     "function call",
                 );
                 let rooted_args = ctx.read_specpdl_call_args(call_roots);
-                ctx.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(rooted_func, rooted_args))
+                ctx.maybe_grow_eval_stack(|ctx| {
+                    ctx.funcall_general_untraced(rooted_func, rooted_args)
+                })
             })
         });
         let result = self.dispatch_signal_result_if_needed(result);
@@ -10289,8 +10308,7 @@ impl Context {
     pub(crate) fn funcall_general(&mut self, function: Value, args: Vec<Value>) -> EvalResult {
         let bt_count = self.specpdl.len();
         self.push_backtrace_frame(function, &args);
-        let result =
-            self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args));
+        let result = self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args));
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
     }
@@ -10304,15 +10322,8 @@ impl Context {
             ValueKind::Veclike(VecLikeType::ByteCode) => {
                 let next_depth = self.depth.saturating_add(1);
                 self.maybe_grow_eval_stack_for_depth(next_depth, |ctx| {
-                    // get_bytecode_data returns a reference into the GC-managed
-                    // ByteCodeObj. GNU's bytecode interpreter executes from the
-                    // function struct in place, never copying. Don't clone here
-                    // either — bytecode functions can have thousands of ops, and
-                    // cloning per call dominated debug-build batch-byte-compile
-                    // runtime.
-                    let bc_data = function.get_bytecode_data().unwrap();
                     let mut vm = super::bytecode::Vm::from_context(ctx);
-                    vm.execute_with_func_value(bc_data, args, function)
+                    vm.execute_bytecode_value(function, args)
                 })
             }
             ValueKind::Veclike(VecLikeType::Lambda) => self.apply_lambda(function, args),
