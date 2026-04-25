@@ -463,6 +463,14 @@ impl TaggedHeap {
                     ctx.trace_roots_mut(&mut |slot: &mut TaggedValue| {
                         relocate_tagged_slot(slot, relocator);
                     });
+                    // SAFETY: the active tagged heap is the same heap that
+                    // installed this relocator, and STW collection guarantees
+                    // exclusive access while the callback runs.
+                    with_tagged_heap(|heap| {
+                        heap.trace_runtime_roots_mut(&mut |slot| {
+                            relocate_tagged_slot(slot, relocator);
+                        });
+                    });
                 },
             );
         }
@@ -605,6 +613,36 @@ impl TaggedHeap {
 
     pub fn buffer_value(&self, id: crate::buffer::BufferId) -> Option<TaggedValue> {
         self.buffer_registry.get(&id).copied()
+    }
+
+    fn trace_runtime_roots(&self, visit: &mut dyn FnMut(TaggedValue)) {
+        for value in self.buffer_registry.values() {
+            visit(*value);
+        }
+        for value in self.window_registry.values() {
+            visit(*value);
+        }
+        for value in self.frame_registry.values() {
+            visit(*value);
+        }
+        for value in self.timer_registry.values() {
+            visit(*value);
+        }
+    }
+
+    fn trace_runtime_roots_mut(&mut self, visit: &mut dyn FnMut(&mut TaggedValue)) {
+        for value in self.buffer_registry.values_mut() {
+            visit(value);
+        }
+        for value in self.window_registry.values_mut() {
+            visit(value);
+        }
+        for value in self.frame_registry.values_mut() {
+            visit(value);
+        }
+        for value in self.timer_registry.values_mut() {
+            visit(value);
+        }
     }
 
     pub fn register_buffer_value(&mut self, id: crate::buffer::BufferId, value: TaggedValue) {
@@ -776,10 +814,13 @@ impl TaggedHeap {
             max_args,
             dispatch_kind,
         };
-        let ptr = self.gc_alloc_pinned(gc_subr);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_subr)
+                .expect("subr allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcSubr>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a vector.
@@ -877,10 +918,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Buffer,
             id,
         };
-        let ptr = self.gc_alloc_pinned(gc_buf);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_buf)
+                .expect("buffer allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBuffer>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a window reference.
@@ -889,10 +933,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Window,
             id,
         };
-        let ptr = self.gc_alloc_pinned(gc_win);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_win)
+                .expect("window allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcWindow>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a frame reference.
@@ -901,10 +948,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Frame,
             id,
         };
-        let ptr = self.gc_alloc_pinned(gc_frame);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_frame)
+                .expect("frame allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFrame>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a timer reference.
@@ -913,10 +963,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Timer,
             id,
         };
-        let ptr = self.gc_alloc_pinned(gc_timer);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_timer)
+                .expect("timer allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcTimer>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a bytecode function.
@@ -959,10 +1012,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Overlay,
             data: UnsafeCell::new(data),
         };
-        let ptr = self.gc_alloc_pinned(gc_overlay);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_overlay)
+                .expect("overlay allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcOverlay>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a marker.
@@ -1367,6 +1423,11 @@ impl TaggedHeap {
             .lock()
             .expect("gc_root_buffer lock poisoned")
             .clear();
+        let mut runtime_roots = Vec::new();
+        self.trace_runtime_roots(&mut |root| runtime_roots.push(root));
+        for root in runtime_roots {
+            self.buffer_root(root);
+        }
     }
 
     /// Buffer a single VM root for the in-progress collection cycle.

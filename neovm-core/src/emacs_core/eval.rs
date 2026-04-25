@@ -4809,7 +4809,16 @@ impl Context {
             || value.is_vector()
             || value.is_record()
             || value.is_hash_table()
+            || value.is_lambda()
+            || value.is_macro()
+            || value.is_bytecode()
+            || value.is_buffer()
+            || value.is_window()
+            || value.is_frame()
+            || value.is_timer()
+            || value.is_overlay()
             || value.is_bignum()
+            || matches!(value.kind(), ValueKind::Veclike(VecLikeType::Subr))
             || value.is_symbol_with_pos()
     }
 

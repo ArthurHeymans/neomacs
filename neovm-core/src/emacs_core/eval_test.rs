@@ -10109,6 +10109,180 @@ fn macro_object_relocates_during_minor_gc_when_rooted_in_obarray() {
 }
 
 #[test]
+fn canonical_runtime_handles_relocate_via_gc_registries() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let buffer_id = crate::buffer::BufferId(0xBEEF);
+    let window_id = 0xCAFE_u64;
+    let frame_id = 0xFACE_u64;
+    let timer_id = 0xF00D_u64;
+
+    let buffer = Value::make_buffer(buffer_id);
+    let window = Value::make_window(window_id);
+    let frame = Value::make_frame(frame_id);
+    let timer = Value::make_timer(timer_id);
+
+    let initial_buffer_ptr = buffer.heap_ptr().expect("buffer handle should be heap-allocated");
+    let initial_window_ptr = window.heap_ptr().expect("window handle should be heap-allocated");
+    let initial_frame_ptr = frame.heap_ptr().expect("frame handle should be heap-allocated");
+    let initial_timer_ptr = timer.heap_ptr().expect("timer handle should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    ev.gc_safe_point_exact();
+
+    let relocated_buffer = Value::make_buffer(buffer_id);
+    let relocated_window = Value::make_window(window_id);
+    let relocated_frame = Value::make_frame(frame_id);
+    let relocated_timer = Value::make_timer(timer_id);
+
+    assert_eq!(relocated_buffer.as_buffer_id(), Some(buffer_id));
+    assert_eq!(relocated_window.as_window_id(), Some(window_id));
+    assert_eq!(relocated_frame.as_frame_id(), Some(frame_id));
+    assert_eq!(relocated_timer.as_timer_id(), Some(timer_id));
+
+    assert_ne!(
+        relocated_buffer
+            .heap_ptr()
+            .expect("buffer handle should remain heap-allocated"),
+        initial_buffer_ptr,
+        "buffer registry should relocate canonical buffer handles across minor GC"
+    );
+    assert_ne!(
+        relocated_window
+            .heap_ptr()
+            .expect("window handle should remain heap-allocated"),
+        initial_window_ptr,
+        "window registry should relocate canonical window handles across minor GC"
+    );
+    assert_ne!(
+        relocated_frame
+            .heap_ptr()
+            .expect("frame handle should remain heap-allocated"),
+        initial_frame_ptr,
+        "frame registry should relocate canonical frame handles across minor GC"
+    );
+    assert_ne!(
+        relocated_timer
+            .heap_ptr()
+            .expect("timer handle should remain heap-allocated"),
+        initial_timer_ptr,
+        "timer registry should relocate canonical timer handles across minor GC"
+    );
+
+    assert_eq!(relocated_buffer, Value::make_buffer(buffer_id));
+    assert_eq!(relocated_window, Value::make_window(window_id));
+    assert_eq!(relocated_frame, Value::make_frame(frame_id));
+    assert_eq!(relocated_timer, Value::make_timer(timer_id));
+}
+
+#[test]
+fn overlay_object_relocates_during_minor_gc_and_remains_indexed() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let buffer_id = ev.buffers.create_buffer("*moving-overlay*");
+    ev.buffers.set_current(buffer_id);
+
+    let prop = Value::symbol("gc-overlay-prop");
+    let plist = Value::list(vec![prop, Value::fixnum(9)]);
+    let overlay = Value::make_overlay(crate::heap_types::OverlayData {
+        buffer: Some(buffer_id),
+        plist,
+        start: 1,
+        end: 4,
+        front_advance: false,
+        rear_advance: false,
+    });
+    ev.buffers
+        .get_mut(buffer_id)
+        .expect("buffer should exist")
+        .overlays
+        .insert_overlay(overlay);
+
+    let initial_ptr = overlay.heap_ptr().expect("overlay should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(3), Value::fixnum(4));
+    ev.gc_safe_point_exact();
+
+    let overlays = ev
+        .buffers
+        .get(buffer_id)
+        .expect("buffer should survive minor GC")
+        .overlays
+        .overlays_at(2);
+    assert_eq!(overlays.len(), 1, "overlay index should still find the moved overlay");
+
+    let relocated = overlays[0];
+    assert_ne!(
+        relocated
+            .heap_ptr()
+            .expect("overlay should remain heap-allocated"),
+        initial_ptr,
+        "overlay should relocate during minor GC once it stops using the pinned path"
+    );
+    assert_eq!(
+        crate::emacs_core::plist::plist_get(
+            relocated
+                .as_overlay_data()
+                .expect("overlay data should remain readable")
+                .plist,
+            &prop,
+        ),
+        Some(Value::fixnum(9)),
+        "overlay plist should survive relocation"
+    );
+}
+
+#[test]
+fn legacy_heap_subr_object_relocates_during_minor_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let legacy_subr_root = intern("vm-moving-legacy-subr");
+    let canonical_sym = intern("car");
+    let legacy_subr = crate::tagged::gc::with_tagged_heap(|heap| {
+        heap.alloc_subr(
+            crate::emacs_core::intern::symbol_name_id(canonical_sym),
+            None,
+            1,
+            Some(1),
+            crate::tagged::header::SubrDispatchKind::Builtin,
+        )
+    });
+    ev.obarray.set_symbol_value_id(legacy_subr_root, legacy_subr);
+
+    let initial_ptr = legacy_subr
+        .heap_ptr()
+        .expect("legacy subr object should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(5), Value::fixnum(6));
+    ev.gc_safe_point_exact();
+
+    let relocated = ev
+        .obarray
+        .symbol_value_id(legacy_subr_root)
+        .copied()
+        .expect("legacy subr should remain rooted in obarray");
+    assert_eq!(relocated.veclike_type(), Some(VecLikeType::Subr));
+    assert_eq!(
+        relocated.as_subr_id(),
+        Some(canonical_sym),
+        "legacy heap subr should keep resolving back to its canonical symbol"
+    );
+    assert_ne!(
+        relocated
+            .heap_ptr()
+            .expect("legacy subr should remain heap-allocated"),
+        initial_ptr,
+        "legacy heap subr should relocate during minor GC once it stops using the pinned path"
+    );
+}
+
+#[test]
 fn gc_stress_lambda_argument_closure_survives_binding_installation() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

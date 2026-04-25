@@ -549,17 +549,16 @@ impl GcTrace for OverlayList {
         }
     }
 
-    fn trace_roots_mut(&mut self, _visit: &mut dyn FnMut(&mut Value)) {
-        // self.overlays is a BTreeSet<Value>. Mutating set elements
-        // via iter_mut would invalidate the set's ordering invariant
-        // (the set is ordered by pointer identity), so BTreeSet does
-        // not expose iter_mut.
-        //
-        // Safe to no-op here because GcOverlay stays MovePolicy::Pinned
-        // in the current roadmap -- overlay pointers never change, so
-        // the collector never needs to rewrite them. If a future phase
-        // makes GcOverlay Movable, this impl must rebuild the set with
-        // a temporary Vec (visit each member, then collect back).
+    fn trace_roots_mut(&mut self, visit: &mut dyn FnMut(&mut Value)) {
+        // Overlay sets are ordered by pointer identity, so moving GC
+        // must rewrite every member out-of-line and rebuild the sets
+        // from the relocated Values.
+        let mut overlays: Vec<Value> = self.overlays.iter().copied().collect();
+        for overlay in overlays.iter_mut() {
+            visit(overlay);
+        }
+        self.overlays = overlays.into_iter().collect();
+        self.rebuild_indexes();
     }
 }
 

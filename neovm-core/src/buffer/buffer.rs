@@ -4240,8 +4240,8 @@ impl GcTrace for BufferManager {
             buffer.text.trace_text_prop_roots_mut(visit);
             // undo_state is SharedUndoState with internal RefCell.
             buffer.undo_state.trace_roots_mut(visit);
-            // OverlayList.overlays is a BTreeSet; its trace_roots_mut
-            // is a documented no-op while overlay Values stay Pinned.
+            // OverlayList rebuilds its pointer-ordered sets after
+            // visiting relocated overlay Values.
             buffer.overlays.trace_roots_mut(visit);
             for slot in buffer.slots.iter_mut() {
                 visit(slot);

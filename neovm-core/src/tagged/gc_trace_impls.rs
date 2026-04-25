@@ -545,7 +545,7 @@ unsafe impl Trace for GcOverlay {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 
@@ -643,7 +643,7 @@ unsafe impl Trace for GcBuffer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 
@@ -658,7 +658,7 @@ unsafe impl Trace for GcWindow {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 
@@ -673,7 +673,7 @@ unsafe impl Trace for GcFrame {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 
@@ -688,7 +688,7 @@ unsafe impl Trace for GcTimer {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 
@@ -707,6 +707,6 @@ unsafe impl Trace for GcSubr {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
