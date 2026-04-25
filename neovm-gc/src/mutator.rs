@@ -1293,6 +1293,10 @@ impl BackgroundCollectionRuntime for Mutator<'_> {
         self.prepare_active_reclaim_if_needed()
     }
 
+    fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        self.advance_active_reclaim_commit()
+    }
+
     fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {

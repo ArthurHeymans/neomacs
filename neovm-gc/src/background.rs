@@ -38,6 +38,9 @@ pub trait BackgroundCollectionRuntime {
     /// Prepare reclaim for the active major collection once mark work is fully drained.
     fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError>;
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError>;
+
     /// Commit the active major collection once reclaim has already been prepared.
     fn commit_active_reclaim_if_ready(&mut self) -> Result<Option<CollectionStats>, AllocError>;
 
@@ -1882,7 +1885,7 @@ impl BackgroundCollector {
                 if runtime.prepare_active_reclaim_if_needed()? {
                     return Ok(BackgroundCollectionStatus::ReadyToFinish(progress));
                 }
-                if let Some(cycle) = runtime.commit_active_reclaim_if_ready()? {
+                if let Some(cycle) = runtime.advance_active_reclaim_commit()? {
                     self.stats.sessions_finished = self.stats.sessions_finished.saturating_add(1);
                     return Ok(BackgroundCollectionStatus::Finished(cycle));
                 }
@@ -2137,6 +2140,10 @@ impl BackgroundCollector {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "background_test.rs"]
+mod tests;
 
 impl<'heap> BackgroundService<'heap> {
     /// Create a new background service loop from a

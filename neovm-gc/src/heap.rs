@@ -532,6 +532,11 @@ impl Heap {
         self.collector_runtime().commit_active_reclaim_if_ready()
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    pub fn advance_active_reclaim_commit(&self) -> Result<Option<CollectionStats>, AllocError> {
+        self.collector_runtime().advance_active_reclaim_commit()
+    }
+
     /// Per-block old-generation statistics.
     pub fn old_region_stats(&self) -> Vec<OldRegionStats> {
         self.read_core().old_region_stats()
@@ -1147,6 +1152,11 @@ impl<'a> HeapCollectorRuntime<'a> {
         self.runtime().commit_active_reclaim_if_ready()
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        self.runtime().advance_active_reclaim_commit()
+    }
+
     /// Service one background collection round.
     pub fn service_background_collection_round(
         &mut self,
@@ -1272,6 +1282,10 @@ impl crate::background::BackgroundCollectionRuntime for HeapCollectorRuntime<'_>
 
     fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError> {
         HeapCollectorRuntime::prepare_active_reclaim_if_needed(self)
+    }
+
+    fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        HeapCollectorRuntime::advance_active_reclaim_commit(self)
     }
 
     fn finish_active_major_collection_if_ready(

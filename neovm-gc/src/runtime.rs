@@ -1622,6 +1622,34 @@ impl SharedCollectorRuntime {
         }
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    pub fn advance_active_reclaim_commit(
+        &self,
+    ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
+        let snapshot = self.collector_snapshot()?;
+        if snapshot.active_major_mark_plan.is_none() {
+            return Ok(None);
+        }
+        if snapshot
+            .major_mark_progress
+            .is_some_and(|progress| !progress.completed)
+        {
+            return Ok(None);
+        }
+        if snapshot
+            .active_major_mark_plan
+            .as_ref()
+            .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
+        {
+            return Ok(None);
+        }
+        match self.try_with_runtime_update(|runtime| runtime.advance_active_reclaim_commit()) {
+            Ok(result) => result.map_err(SharedBackgroundError::Collection),
+            Err(SharedHeapError::WouldBlock) => Ok(None),
+            Err(error) => Err(Self::map_shared_heap_error(error)),
+        }
+    }
+
     /// Commit the active major collection once reclaim has already been prepared.
     pub fn commit_active_reclaim_if_ready(
         &self,
@@ -1684,6 +1712,33 @@ impl SharedCollectorRuntime {
             .map_err(SharedBackgroundError::Collection)
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice, without blocking on
+    /// heap contention.
+    pub fn try_advance_active_reclaim_commit(
+        &self,
+    ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
+        let snapshot = self.collector_snapshot()?;
+        if snapshot.active_major_mark_plan.is_none() {
+            return Ok(None);
+        }
+        if snapshot
+            .major_mark_progress
+            .is_some_and(|progress| !progress.completed)
+        {
+            return Ok(None);
+        }
+        if snapshot
+            .active_major_mark_plan
+            .as_ref()
+            .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
+        {
+            return Ok(None);
+        }
+        self.try_with_runtime_update(|runtime| runtime.advance_active_reclaim_commit())
+            .map_err(Self::map_shared_heap_error)?
+            .map_err(SharedBackgroundError::Collection)
+    }
+
     /// Commit the active major collection once reclaim has already been prepared, without
     /// blocking on heap contention.
     pub fn try_commit_active_reclaim_if_ready(
@@ -1728,7 +1783,7 @@ impl SharedCollectorRuntime {
                 Ok(false) | Err(SharedBackgroundError::WouldBlock) => {}
                 Err(error) => return Err(error),
             }
-            match self.try_commit_active_reclaim_if_ready() {
+            match self.try_advance_active_reclaim_commit() {
                 Ok(Some(cycle)) => Ok(BackgroundCollectionStatus::Finished(cycle)),
                 Ok(None) | Err(SharedBackgroundError::WouldBlock) => {
                     Ok(BackgroundCollectionStatus::ReadyToFinish(progress))
@@ -1756,7 +1811,7 @@ impl SharedCollectorRuntime {
             match self.try_prepare_active_reclaim_if_needed() {
                 Ok(true) => Ok(BackgroundCollectionStatus::ReadyToFinish(progress)),
                 Ok(false) => {
-                    if let Some(cycle) = self.try_commit_active_reclaim_if_ready()? {
+                    if let Some(cycle) = self.try_advance_active_reclaim_commit()? {
                         Ok(BackgroundCollectionStatus::Finished(cycle))
                     } else {
                         Ok(BackgroundCollectionStatus::ReadyToFinish(progress))
@@ -1792,6 +1847,10 @@ impl BackgroundCollectionRuntime for CollectorRuntime<'_> {
 
     fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError> {
         self.prepare_active_reclaim_if_needed()
+    }
+
+    fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        self.advance_active_reclaim_commit()
     }
 
     fn finish_active_major_collection_if_ready(
@@ -1843,6 +1902,15 @@ impl BackgroundCollectionRuntime for SharedCollectorRuntime {
                 SharedBackgroundError::Collection(error) => error,
             },
         )
+    }
+
+    fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        SharedCollectorRuntime::advance_active_reclaim_commit(self).map_err(|error| match error {
+            SharedBackgroundError::LockPoisoned | SharedBackgroundError::WouldBlock => {
+                AllocError::CollectionInProgress
+            }
+            SharedBackgroundError::Collection(error) => error,
+        })
     }
 
     fn finish_active_major_collection_if_ready(
