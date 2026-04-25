@@ -18,7 +18,10 @@ use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress,
     RuntimeWorkStatus,
 };
-use crate::reclaim::{PreparedReclaim, finish_prepared_reclaim_cycle};
+use crate::reclaim::{
+    PreparedReclaim, advance_prepared_reclaim_commit, begin_prepared_reclaim_commit,
+    finish_prepared_reclaim_cycle, finish_prepared_reclaim_cycle_with_state,
+};
 use crate::stats::{CollectionStats, HeapStats};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
@@ -579,6 +582,13 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Finish the current persistent major-mark session and reclaim.
     pub fn finish_major_collection(&mut self) -> Result<CollectionStats, AllocError> {
+        if self
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+            && let Some(cycle) = self.commit_active_reclaim_if_ready()?
+        {
+            return Ok(cycle);
+        }
         let pause_start = Instant::now();
         let Some(state) = self.heap.collector_handle().take_major_mark_state() else {
             return Err(AllocError::NoCollectionInProgress);
@@ -600,7 +610,7 @@ impl<'heap> CollectorRuntime<'heap> {
         self.heap
             .collector_handle()
             .push_phase(CollectionPhase::Reclaim);
-        Ok(self.commit_finished_active_collection(finished, before_bytes, pause_start))
+        Ok(self.commit_finished_active_collection(finished, before_bytes, 0, pause_start))
     }
 
     /// Prepare reclaim for the active major collection once mark work is fully drained.
@@ -683,36 +693,16 @@ impl<'heap> CollectorRuntime<'heap> {
         {
             return Ok(None);
         }
-        let mut prepared_major_reclaim =
-            snapshot.active_major_mark_plan.as_ref().and_then(|plan| {
-                (plan.kind == CollectionKind::Major
-                    && !self
-                        .heap
-                        .collector_handle()
-                        .active_major_mark_has_prepared_reclaim())
-                .then(|| prepare_heap_major_reclaim(self.heap, plan))
-            });
-        let before_bytes = self.heap.stats().total_live_bytes();
-        let pause_start = Instant::now();
-        let finished = self
-            .heap
-            .collector_handle()
-            .finish_active_collection_if_ready(
-                self.heap.objects().raw(),
-                |_tracer, _plan| panic!("reclaim-ready session should not re-run remark"),
-                move |plan| match plan.kind {
-                    CollectionKind::Major => Ok(prepared_major_reclaim
-                        .take()
-                        .expect("major finish should have one deferred reclaim prepared")),
-                    _ => Err(AllocError::UnsupportedCollectionKind { kind: plan.kind }),
-                },
-            )?;
-        Ok(finished.map(|finished| {
-            self.heap
-                .collector_handle()
-                .push_phase(CollectionPhase::Reclaim);
-            self.commit_finished_active_collection(finished, before_bytes, pause_start)
-        }))
+        self.commit_active_reclaim_if_ready()
+    }
+
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        let budget = self
+            .active_major_mark_plan()
+            .map(|plan| plan.mark_slice_budget.max(1))
+            .unwrap_or(1);
+        self.advance_active_reclaim_commit_with_budget(budget)
     }
 
     /// Commit the active major collection once reclaim has already been prepared.
@@ -736,35 +726,116 @@ impl<'heap> CollectorRuntime<'heap> {
         {
             return Ok(None);
         }
-        let mut prepared_major_reclaim =
-            snapshot.active_major_mark_plan.as_ref().and_then(|plan| {
-                (plan.kind == CollectionKind::Major
-                    && !self
-                        .heap
-                        .collector_handle()
-                        .active_major_mark_has_prepared_reclaim())
-                .then(|| prepare_heap_major_reclaim(self.heap, plan))
-            });
-        let before_bytes = self.heap.stats().total_live_bytes();
+        self.advance_active_reclaim_commit_with_budget(usize::MAX)
+    }
+
+    fn advance_active_reclaim_commit_with_budget(
+        &mut self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        let snapshot = self.heap.collector_shared_snapshot();
+        if snapshot.active_major_mark_plan.is_none() {
+            return Ok(None);
+        }
+        if snapshot
+            .major_mark_progress
+            .is_some_and(|progress| !progress.completed)
+        {
+            return Ok(None);
+        }
+        let Some(active_plan) = snapshot.active_major_mark_plan else {
+            return Ok(None);
+        };
+        if active_plan.phase != CollectionPhase::Reclaim {
+            return Ok(None);
+        }
+
         let pause_start = Instant::now();
-        let finished = self.heap.collector_handle().finish_active_collection_now(
-            self.heap.objects().raw(),
-            |_tracer, _plan| panic!("reclaim-ready session should not re-run remark"),
-            move |plan| match plan.kind {
-                CollectionKind::Major => Ok(prepared_major_reclaim
-                    .take()
-                    .expect("major commit should have one deferred reclaim prepared")),
-                _ => Err(AllocError::UnsupportedCollectionKind { kind: plan.kind }),
-            },
-        )?;
+        let before_bytes = self.heap.stats().total_live_bytes();
+        let Some(mut state) = self.heap.collector_handle().take_major_mark_state() else {
+            return Ok(None);
+        };
+        if state.plan.kind == CollectionKind::Major && state.prepared_reclaim.is_none() {
+            state.prepared_reclaim = Some(prepare_heap_major_reclaim(self.heap, &active_plan));
+        }
+        let reclaim_plan = CollectionPlan {
+            phase: CollectionPhase::Reclaim,
+            ..state.plan.clone()
+        };
+        let started_commit = state.reclaim_commit_state.is_none();
+        if started_commit {
+            self.heap
+                .collector_handle()
+                .push_phase(CollectionPhase::Reclaim);
+        }
+        let runtime_state = self.heap.runtime_state_handle();
+        let runtime_state_for_callback = runtime_state.clone();
+        let mut completed_cycle = None;
+        self.heap
+            .with_flat_store_for_reclaim_commit(|flat, old_gen, stats| {
+                let prepared_reclaim = state
+                    .prepared_reclaim
+                    .as_ref()
+                    .expect("reclaim-ready session should have prepared reclaim state");
+                let commit_state = state.reclaim_commit_state.get_or_insert_with(|| {
+                    begin_prepared_reclaim_commit(prepared_reclaim, &flat.objects)
+                });
+                let completed = advance_prepared_reclaim_commit(
+                    flat.objects.as_mut_slice(),
+                    &mut flat.indexes,
+                    prepared_reclaim,
+                    commit_state,
+                    budget,
+                );
+                if completed {
+                    let prepared_reclaim = state
+                        .prepared_reclaim
+                        .take()
+                        .expect("completed reclaim commit should take prepared reclaim state");
+                    let commit_state = state
+                        .reclaim_commit_state
+                        .take()
+                        .expect("completed reclaim commit should take commit state");
+                    completed_cycle = Some(finish_prepared_reclaim_cycle_with_state(
+                        &mut flat.objects,
+                        &mut flat.indexes,
+                        old_gen,
+                        stats,
+                        &runtime_state,
+                        before_bytes,
+                        state.mark_steps,
+                        state.mark_rounds,
+                        state.mark_elapsed_nanos,
+                        state.reclaim_prepare_nanos,
+                        prepared_reclaim,
+                        commit_state,
+                        move |object| runtime_state_for_callback.enqueue_pending_finalizer(object),
+                    ));
+                }
+            });
+
+        if let Some(cycle) = completed_cycle {
+            return Ok(Some(self.finalize_reclaim_cycle(
+                cycle,
+                reclaim_plan,
+                state.reclaim_commit_pause_nanos,
+                pause_start,
+            )));
+        }
+
+        state.reclaim_commit_pause_nanos = state
+            .reclaim_commit_pause_nanos
+            .saturating_add(elapsed_nanos(pause_start.elapsed()));
         self.heap
             .collector_handle()
-            .push_phase(CollectionPhase::Reclaim);
-        Ok(Some(self.commit_finished_active_collection(
-            finished,
-            before_bytes,
-            pause_start,
-        )))
+            .restore_major_mark_state_and_refresh(
+                state,
+                &self.heap.storage_stats(),
+                self.heap.old_gen(),
+                self.heap.old_config(),
+                |kind| self.heap.plan_for(kind),
+            );
+        Ok(None)
     }
 
     /// Service one background collection round for the active major-mark session.
@@ -835,11 +906,12 @@ impl<'heap> CollectorRuntime<'heap> {
         &mut self,
         finished: crate::collector_session::FinishedActiveCollection,
         before_bytes: usize,
+        prior_pause_nanos: u64,
         pause_start: Instant,
     ) -> CollectionStats {
         let runtime_state = self.heap.runtime_state_handle();
         let runtime_state_for_callback = runtime_state.clone();
-        let mut cycle = self
+        let cycle = self
             .heap
             .with_flat_store_for_reclaim_commit(|flat, old_gen, stats| {
                 finish_prepared_reclaim_cycle(
@@ -857,6 +929,21 @@ impl<'heap> CollectorRuntime<'heap> {
                     move |object| runtime_state_for_callback.enqueue_pending_finalizer(object),
                 )
             });
+        self.finalize_reclaim_cycle(
+            cycle,
+            finished.completed_plan,
+            prior_pause_nanos,
+            pause_start,
+        )
+    }
+
+    fn finalize_reclaim_cycle(
+        &mut self,
+        mut cycle: CollectionStats,
+        completed_plan: CollectionPlan,
+        prior_pause_nanos: u64,
+        pause_start: Instant,
+    ) -> CollectionStats {
         // Physical compaction hook (physical-compaction step 6).
         //
         // After the major reclaim commits, the objects vec
@@ -873,8 +960,8 @@ impl<'heap> CollectorRuntime<'heap> {
             let roots = self.local.get_mut().roots_mut();
             self.heap.compact_old_gen_physical(roots, density_threshold);
         }
-        cycle.pause_nanos = pause_start.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
-        self.record_completed_cycle(cycle, finished.completed_plan);
+        cycle.pause_nanos = prior_pause_nanos.saturating_add(elapsed_nanos(pause_start.elapsed()));
+        self.record_completed_cycle(cycle, completed_plan);
         cycle
     }
 
@@ -893,6 +980,10 @@ impl<'heap> CollectorRuntime<'heap> {
             |kind| self.heap.plan_for(kind),
         );
     }
+}
+
+fn elapsed_nanos(duration: Duration) -> u64 {
+    duration.as_nanos().min(u128::from(u64::MAX)) as u64
 }
 
 fn prepare_heap_major_reclaim(heap: &mut HeapCore, plan: &CollectionPlan) -> PreparedReclaim {

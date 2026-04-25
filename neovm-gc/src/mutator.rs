@@ -1086,6 +1086,11 @@ impl<'heap> Mutator<'heap> {
         self.with_runtime(|runtime| runtime.commit_active_reclaim_if_ready())
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice.
+    pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
+        self.with_runtime(|runtime| runtime.advance_active_reclaim_commit())
+    }
+
     /// Service one background collection round for the active major-mark session.
     pub fn service_background_collection_round(
         &mut self,

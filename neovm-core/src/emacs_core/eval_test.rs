@@ -9885,14 +9885,73 @@ fn incremental_major_moves_to_reclaim_before_final_commit() {
         "reclaim-ready incremental major should remain active until a later assist commits it"
     );
 
-    ev.tagged_heap.assist_incremental_major();
+    let mut reclaim_assists = 0usize;
+    while reclaim_assists < 256 && ev.tagged_heap.has_incremental_major() {
+        ev.tagged_heap.assist_incremental_major();
+        reclaim_assists += 1;
+    }
     assert!(
         !ev.tagged_heap.has_incremental_major(),
-        "a later assist should commit the prepared reclaim"
+        "later assists should eventually commit the prepared reclaim"
     );
 
     let results = ev.eval_str_each("(car incremental-major-root)");
     assert_eq!(format_eval_result(&results[0]), "OK 41");
+}
+
+#[test]
+fn incremental_major_reclaim_slices_preserve_post_prepare_allocations() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each(
+        "(progn
+           (setq incremental-major-big-list nil)
+           (dotimes (i 1500)
+             (setq incremental-major-big-list
+                   (cons i incremental-major-big-list))))",
+    );
+    ev.start_or_assist_incremental_major();
+    assert!(ev.tagged_heap.has_incremental_major());
+
+    let mut assists = 0usize;
+    while assists < 512
+        && !matches!(
+            ev.tagged_heap.active_major_phase(),
+            Some(neovm_gc::plan::CollectionPhase::Reclaim)
+        )
+    {
+        ev.tagged_heap.assist_incremental_major();
+        assists += 1;
+    }
+
+    assert!(
+        matches!(
+            ev.tagged_heap.active_major_phase(),
+            Some(neovm_gc::plan::CollectionPhase::Reclaim)
+        ),
+        "incremental major should reach reclaim before the sliced commit test runs"
+    );
+
+    ev.eval_str_each("(setq incremental-major-tail (cons 'tail 99))");
+    ev.tagged_heap.assist_incremental_major();
+    assert!(
+        ev.tagged_heap.has_incremental_major(),
+        "large reclaim snapshots should need more than one reclaim assist"
+    );
+
+    let mut reclaim_assists = 0usize;
+    while reclaim_assists < 512 && ev.tagged_heap.has_incremental_major() {
+        ev.tagged_heap.assist_incremental_major();
+        reclaim_assists += 1;
+    }
+    assert!(
+        !ev.tagged_heap.has_incremental_major(),
+        "incremental major reclaim should finish after bounded assists"
+    );
+
+    let tail_results = ev.eval_str_each("(car incremental-major-tail)");
+    assert_eq!(format_eval_result(&tail_results[0]), "OK tail");
 }
 
 // -----------------------------------------------------------------------
@@ -10170,10 +10229,18 @@ fn canonical_runtime_handles_relocate_via_gc_registries() {
     let frame = Value::make_frame(frame_id);
     let timer = Value::make_timer(timer_id);
 
-    let initial_buffer_ptr = buffer.heap_ptr().expect("buffer handle should be heap-allocated");
-    let initial_window_ptr = window.heap_ptr().expect("window handle should be heap-allocated");
-    let initial_frame_ptr = frame.heap_ptr().expect("frame handle should be heap-allocated");
-    let initial_timer_ptr = timer.heap_ptr().expect("timer handle should be heap-allocated");
+    let initial_buffer_ptr = buffer
+        .heap_ptr()
+        .expect("buffer handle should be heap-allocated");
+    let initial_window_ptr = window
+        .heap_ptr()
+        .expect("window handle should be heap-allocated");
+    let initial_frame_ptr = frame
+        .heap_ptr()
+        .expect("frame handle should be heap-allocated");
+    let initial_timer_ptr = timer
+        .heap_ptr()
+        .expect("timer handle should be heap-allocated");
 
     let _garbage = Value::cons(Value::fixnum(1), Value::fixnum(2));
     ev.gc_safe_point_exact();
@@ -10248,7 +10315,9 @@ fn overlay_object_relocates_during_minor_gc_and_remains_indexed() {
         .overlays
         .insert_overlay(overlay);
 
-    let initial_ptr = overlay.heap_ptr().expect("overlay should be heap-allocated");
+    let initial_ptr = overlay
+        .heap_ptr()
+        .expect("overlay should be heap-allocated");
 
     let _garbage = Value::cons(Value::fixnum(3), Value::fixnum(4));
     ev.gc_safe_point_exact();
@@ -10259,7 +10328,11 @@ fn overlay_object_relocates_during_minor_gc_and_remains_indexed() {
         .expect("buffer should survive minor GC")
         .overlays
         .overlays_at(2);
-    assert_eq!(overlays.len(), 1, "overlay index should still find the moved overlay");
+    assert_eq!(
+        overlays.len(),
+        1,
+        "overlay index should still find the moved overlay"
+    );
 
     let relocated = overlays[0];
     assert_ne!(
@@ -10299,7 +10372,8 @@ fn legacy_heap_subr_object_relocates_during_minor_gc() {
             crate::tagged::header::SubrDispatchKind::Builtin,
         )
     });
-    ev.obarray.set_symbol_value_id(legacy_subr_root, legacy_subr);
+    ev.obarray
+        .set_symbol_value_id(legacy_subr_root, legacy_subr);
 
     let initial_ptr = legacy_subr
         .heap_ptr()

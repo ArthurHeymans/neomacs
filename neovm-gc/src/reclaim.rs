@@ -1,5 +1,8 @@
+use crate::descriptor::ObjectKey;
 use crate::heap::AllocError;
-use crate::index_state::{ForwardingMap, HeapIndexState, ObjectLocator, PreparedIndexReclaim};
+use crate::index_state::{
+    ForwardingMap, HeapIndexState, ObjectKeyBuildHasher, ObjectLocator, PreparedIndexReclaim,
+};
 use crate::object::{ObjectRecord, OldBlockPlacement, PendingFinalizer, SpaceKind};
 use crate::plan::{CollectionKind, CollectionPlan};
 use crate::runtime_state::RuntimeStateHandle;
@@ -283,6 +286,9 @@ pub(crate) struct PreparedReclaimSurvivor {
 
 #[derive(Debug)]
 pub(crate) struct PreparedReclaim {
+    /// Object count when reclaim preparation ran. Objects allocated after this
+    /// snapshot are outside the current collection and must survive commit.
+    pub(crate) prepared_object_count: usize,
     pub(crate) promoted_bytes: usize,
     pub(crate) old_gen: PreparedOldGenReclaim,
     /// Per-subsystem reclaim state assembled under `HeapIndexState`.
@@ -297,6 +303,15 @@ pub(crate) struct PreparedReclaim {
     /// `objects` vector, so ordering is part of the prepared-state contract.
     pub(crate) survivors: Vec<PreparedReclaimSurvivor>,
     pub(crate) stats: PreparedHeapStats,
+}
+
+#[derive(Debug)]
+pub(crate) struct PreparedReclaimCommitState {
+    scan_index: usize,
+    survivor_cursor: usize,
+    finalize_cursor: usize,
+    survivor_write_index: usize,
+    finalize_keys: std::collections::HashSet<ObjectKey, ObjectKeyBuildHasher>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -341,6 +356,7 @@ pub(crate) fn prepare_reclaim(
 
     let prepared_indexes = indexes.prepare_reclaim_state(objects, &survivors, kind);
     PreparedReclaim {
+        prepared_object_count: objects.len(),
         promoted_bytes: 0,
         old_gen: PreparedOldGenReclaim::default(),
         indexes: prepared_indexes,
@@ -375,11 +391,35 @@ pub(crate) fn prepare_full_reclaim<Heap, Forwarding>(
     })
 }
 
-pub(crate) fn commit_prepared_reclaim_objects(
-    old_objects: Vec<ObjectRecord>,
+pub(crate) fn begin_prepared_reclaim_commit(
     prepared_reclaim: &PreparedReclaim,
-    mut enqueue_pending_finalizer: impl FnMut(PendingFinalizer) -> u64,
-) -> (Vec<ObjectRecord>, u64) {
+    objects: &[ObjectRecord],
+) -> PreparedReclaimCommitState {
+    let prepared_object_count = prepared_reclaim.prepared_object_count.min(objects.len());
+    let finalize_keys = prepared_reclaim
+        .indexes
+        .finalize_indices
+        .iter()
+        .copied()
+        .filter(|&index| index < prepared_object_count)
+        .map(|index| objects[index].object_key())
+        .collect();
+    PreparedReclaimCommitState {
+        scan_index: 0,
+        survivor_cursor: 0,
+        finalize_cursor: 0,
+        survivor_write_index: 0,
+        finalize_keys,
+    }
+}
+
+pub(crate) fn advance_prepared_reclaim_commit(
+    objects: &mut [ObjectRecord],
+    indexes: &mut HeapIndexState,
+    prepared_reclaim: &PreparedReclaim,
+    commit_state: &mut PreparedReclaimCommitState,
+    budget: usize,
+) -> bool {
     debug_assert!(
         prepared_reclaim
             .survivors
@@ -396,55 +436,49 @@ pub(crate) fn commit_prepared_reclaim_objects(
         "prepared reclaim finalizer indices must stay sorted by original object index"
     );
 
-    let mut queued_finalizers = 0u64;
-    let mut survivor_iter = prepared_reclaim.survivors.iter().peekable();
-    let mut finalize_iter = prepared_reclaim
-        .indexes
-        .finalize_indices
-        .iter()
-        .copied()
-        .peekable();
-    let mut object_index = 0usize;
-    let mut rebuilt_objects = Vec::with_capacity(old_objects.len());
-
-    // Prepared reclaim is assembled in original object order. Finish drains
-    // that prepared order in lockstep with the owned `objects` vector so
-    // commit stays linear while dead finalizable objects are transferred to
-    // the pending-finalizer queue instead of running inline during GC.
-    for object in old_objects {
-        let current_index = object_index;
-        object_index = object_index.saturating_add(1);
-        let should_finalize = finalize_iter
-            .peek()
+    let prepared_object_count = prepared_reclaim.prepared_object_count.min(objects.len());
+    let target_scan_index =
+        prepared_object_count.min(commit_state.scan_index.saturating_add(budget.max(1)));
+    while commit_state.scan_index < target_scan_index {
+        let current_index = commit_state.scan_index;
+        let should_finalize = prepared_reclaim
+            .indexes
+            .finalize_indices
+            .get(commit_state.finalize_cursor)
             .is_some_and(|&pending_index| pending_index == current_index);
+        let is_survivor = prepared_reclaim
+            .survivors
+            .get(commit_state.survivor_cursor)
+            .is_some_and(|survivor| survivor.object_index == current_index);
+
+        debug_assert!(
+            !(should_finalize && is_survivor),
+            "prepared reclaim object cannot be both live and queued for finalization"
+        );
+
         if should_finalize {
-            finalize_iter.next();
-            let pending = PendingFinalizer::new(object);
-            queued_finalizers =
-                queued_finalizers.saturating_add(enqueue_pending_finalizer(pending));
-            continue;
+            let object_key = objects[current_index].object_key();
+            indexes.object_index.remove(&object_key);
+            commit_state.finalize_cursor = commit_state.finalize_cursor.saturating_add(1);
+        } else if is_survivor {
+            if commit_state.survivor_write_index != current_index {
+                let object_key = objects[current_index].object_key();
+                objects.swap(commit_state.survivor_write_index, current_index);
+                indexes.object_index.insert(
+                    object_key,
+                    ObjectLocator::flat(commit_state.survivor_write_index),
+                );
+            }
+            commit_state.survivor_cursor = commit_state.survivor_cursor.saturating_add(1);
+            commit_state.survivor_write_index = commit_state.survivor_write_index.saturating_add(1);
+        } else {
+            let object_key = objects[current_index].object_key();
+            indexes.object_index.remove(&object_key);
         }
-
-        let Some(_survivor) =
-            survivor_iter.next_if(|survivor| survivor.object_index == current_index)
-        else {
-            continue;
-        };
-
-        object.clear_mark();
-        rebuilt_objects.push(object);
+        commit_state.scan_index = commit_state.scan_index.saturating_add(1);
     }
 
-    debug_assert!(
-        survivor_iter.next().is_none(),
-        "prepared reclaim survivors should all be drained during finish"
-    );
-    debug_assert!(
-        finalize_iter.next().is_none(),
-        "prepared reclaim finalizers should all be drained during finish"
-    );
-
-    (rebuilt_objects, queued_finalizers)
+    commit_state.scan_index >= prepared_object_count
 }
 
 /// Rebuild old-block line marks from currently surviving records and pending
@@ -509,6 +543,67 @@ pub(crate) fn rebuild_line_marks_and_reclaim_empty_old_blocks(
     dropped
 }
 
+fn compute_rebuilt_heap_stats(objects: &[ObjectRecord]) -> PreparedHeapStats {
+    let mut rebuilt_stats = PreparedHeapStats::default();
+    for object in objects {
+        rebuilt_stats.record_live_object(object.space(), object.total_size());
+    }
+    rebuilt_stats
+}
+
+fn finish_prepared_reclaim_commit(
+    objects: &mut Vec<ObjectRecord>,
+    indexes: &mut HeapIndexState,
+    old_gen: &mut OldGenState,
+    stats: &mut HeapStats,
+    runtime_state: &RuntimeStateHandle,
+    prepared_reclaim: PreparedReclaim,
+    mut commit_state: PreparedReclaimCommitState,
+    mut enqueue_pending_finalizer: impl FnMut(PendingFinalizer) -> u64,
+) -> ReclaimCommitResult {
+    let _ = advance_prepared_reclaim_commit(
+        objects.as_mut_slice(),
+        indexes,
+        &prepared_reclaim,
+        &mut commit_state,
+        usize::MAX,
+    );
+
+    let prepared_object_count = prepared_reclaim.prepared_object_count.min(objects.len());
+    let mut queued_finalizers = 0u64;
+    for object in objects.drain(commit_state.survivor_write_index..prepared_object_count) {
+        if commit_state.finalize_keys.contains(&object.object_key()) {
+            queued_finalizers = queued_finalizers
+                .saturating_add(enqueue_pending_finalizer(PendingFinalizer::new(object)));
+        }
+    }
+    for object in objects.iter() {
+        object.clear_mark();
+    }
+
+    let PreparedReclaim {
+        old_gen: prepared_old_gen,
+        ..
+    } = prepared_reclaim;
+    let mut old_region_stats = old_gen.apply_prepared_reclaim(prepared_old_gen);
+    // Rebuild every index structure from the committed survivor set so
+    // post-prepare allocations remain visible after the reclaim snapshot
+    // closes.
+    indexes.rebuild_from_objects(objects);
+    let dropped_blocks =
+        rebuild_line_marks_and_reclaim_empty_old_blocks(objects, old_gen, runtime_state);
+    old_region_stats.reclaimed_regions = old_region_stats
+        .reclaimed_regions
+        .saturating_add(dropped_blocks as u64);
+    let after_bytes =
+        compute_rebuilt_heap_stats(objects).apply_space_rebuild(stats, old_gen.reserved_bytes());
+    ReclaimCommitResult {
+        queued_finalizers,
+        old_region_stats,
+        after_bytes,
+    }
+}
+
 pub(crate) fn apply_prepared_reclaim(
     objects: &mut Vec<ObjectRecord>,
     indexes: &mut HeapIndexState,
@@ -518,37 +613,17 @@ pub(crate) fn apply_prepared_reclaim(
     prepared_reclaim: PreparedReclaim,
     enqueue_pending_finalizer: impl FnMut(PendingFinalizer) -> u64,
 ) -> ReclaimCommitResult {
-    let old_objects = core::mem::take(objects);
-    let (rebuilt_objects, queued_finalizers) =
-        commit_prepared_reclaim_objects(old_objects, &prepared_reclaim, enqueue_pending_finalizer);
-
-    let PreparedReclaim {
-        old_gen: prepared_old_gen,
-        indexes: prepared_indexes,
-        stats: prepared_stats,
-        ..
-    } = prepared_reclaim;
-    *objects = rebuilt_objects;
-    let mut old_region_stats = old_gen.apply_prepared_reclaim(prepared_old_gen);
-    indexes.apply_prepared_reclaim(prepared_indexes);
-    // Rebuild line marks across surviving block-backed records (and any
-    // pending finalizer placements that still pin a block), then drop
-    // every block whose lines remain entirely free.
-    let dropped_blocks =
-        rebuild_line_marks_and_reclaim_empty_old_blocks(objects, old_gen, runtime_state);
-    // Merge the physical block-reclaim count into the cycle's
-    // reclaimed_regions stat: physical block reclaim is the
-    // only reclamation event in the major commit path.
-    old_region_stats.reclaimed_regions = old_region_stats
-        .reclaimed_regions
-        .saturating_add(dropped_blocks as u64);
-    let old_reserved_bytes = old_gen.reserved_bytes();
-    let after_bytes = prepared_stats.apply_space_rebuild(stats, old_reserved_bytes);
-    ReclaimCommitResult {
-        queued_finalizers,
-        old_region_stats,
-        after_bytes,
-    }
+    let commit_state = begin_prepared_reclaim_commit(&prepared_reclaim, objects);
+    finish_prepared_reclaim_commit(
+        objects,
+        indexes,
+        old_gen,
+        stats,
+        runtime_state,
+        prepared_reclaim,
+        commit_state,
+        enqueue_pending_finalizer,
+    )
 }
 
 pub(crate) fn finish_prepared_reclaim_cycle(
@@ -565,14 +640,48 @@ pub(crate) fn finish_prepared_reclaim_cycle(
     prepared_reclaim: PreparedReclaim,
     enqueue_pending_finalizer: impl FnMut(PendingFinalizer) -> u64,
 ) -> CollectionStats {
+    let commit_state = begin_prepared_reclaim_commit(&prepared_reclaim, objects);
+    finish_prepared_reclaim_cycle_with_state(
+        objects,
+        indexes,
+        old_gen,
+        stats,
+        runtime_state,
+        before_bytes,
+        mark_steps,
+        mark_rounds,
+        mark_elapsed_nanos,
+        reclaim_prepare_nanos,
+        prepared_reclaim,
+        commit_state,
+        enqueue_pending_finalizer,
+    )
+}
+
+pub(crate) fn finish_prepared_reclaim_cycle_with_state(
+    objects: &mut Vec<ObjectRecord>,
+    indexes: &mut HeapIndexState,
+    old_gen: &mut OldGenState,
+    stats: &mut HeapStats,
+    runtime_state: &RuntimeStateHandle,
+    before_bytes: usize,
+    mark_steps: u64,
+    mark_rounds: u64,
+    mark_elapsed_nanos: u64,
+    reclaim_prepare_nanos: u64,
+    prepared_reclaim: PreparedReclaim,
+    commit_state: PreparedReclaimCommitState,
+    enqueue_pending_finalizer: impl FnMut(PendingFinalizer) -> u64,
+) -> CollectionStats {
     let promoted_bytes = prepared_reclaim.promoted_bytes;
-    let commit = apply_prepared_reclaim(
+    let commit = finish_prepared_reclaim_commit(
         objects,
         indexes,
         old_gen,
         stats,
         runtime_state,
         prepared_reclaim,
+        commit_state,
         enqueue_pending_finalizer,
     );
     CollectionStats::completed_old_gen_cycle(

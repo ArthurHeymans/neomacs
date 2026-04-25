@@ -33,6 +33,7 @@ fn full_plan() -> CollectionPlan {
 
 fn prepared_reclaim() -> PreparedReclaim {
     PreparedReclaim {
+        prepared_object_count: 1,
         promoted_bytes: 0,
         old_gen: PreparedOldGenReclaim {
             region_stats: OldRegionCollectionStats::default(),

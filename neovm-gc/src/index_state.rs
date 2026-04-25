@@ -633,12 +633,41 @@ impl HeapIndexState {
         self.remembered.replace(prepared.remembered_owners);
     }
 
+    pub(crate) fn rebuild_from_objects(&mut self, objects: &[ObjectRecord]) {
+        self.reset_candidate_indexes(objects.len());
+        for (index, object) in objects.iter().enumerate() {
+            self.record_allocated_object(
+                object.object_key(),
+                ObjectLocator::flat(index),
+                object.header().desc(),
+            );
+        }
+        self.rebuild_remembered_owners_from_objects(objects);
+    }
+
     pub(crate) fn refresh_remembered_owners_for_post_sweep_objects(
         &mut self,
         objects: &[ObjectRecord],
     ) {
         self.remembered
             .refresh_from_records(objects, &self.object_index);
+    }
+
+    fn rebuild_remembered_owners_from_objects(&mut self, objects: &[ObjectRecord]) {
+        let mut owners = Vec::new();
+        let mut owner_set = HashSet::new();
+        for object in objects {
+            if !owner_qualifies_as_explicit_remembered_owner(object) {
+                continue;
+            }
+            if owner_has_nursery_edge(objects, &self.object_index, object) {
+                let object_key = object.object_key();
+                if owner_set.insert(object_key) {
+                    owners.push(object_key);
+                }
+            }
+        }
+        self.remembered.replace(owners);
     }
 }
 

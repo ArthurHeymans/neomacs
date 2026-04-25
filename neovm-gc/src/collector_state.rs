@@ -12,7 +12,7 @@ use crate::index_state::ObjectLocator;
 use crate::mark::MarkWorklist;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
-use crate::reclaim::PreparedReclaim;
+use crate::reclaim::{PreparedReclaim, PreparedReclaimCommitState};
 use crate::spaces::{OldGenConfig, OldGenState};
 use crate::stats::HeapStats;
 
@@ -152,6 +152,20 @@ impl CollectorStateHandle {
 
     pub(crate) fn take_major_mark_state(&self) -> Option<MajorMarkState> {
         self.with_state(CollectorState::take_major_mark_state)
+    }
+
+    pub(crate) fn restore_major_mark_state_and_refresh(
+        &self,
+        major_mark_state: MajorMarkState,
+        stats: &HeapStats,
+        old_gen: &OldGenState,
+        old_config: &OldGenConfig,
+        plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
+    ) {
+        self.with_state(|state| {
+            state.restore_major_mark_state(major_mark_state);
+            refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
+        });
     }
 
     pub(crate) fn recommended_plan(&self) -> CollectionPlan {
@@ -427,9 +441,11 @@ pub(crate) struct MajorMarkState {
     pub(crate) mark_steps: u64,
     pub(crate) mark_rounds: u64,
     pub(crate) reclaim_prepare_nanos: u64,
+    pub(crate) reclaim_commit_pause_nanos: u64,
     pub(crate) ephemerons_processed: bool,
     pub(crate) reclaim_prepared: bool,
     pub(crate) prepared_reclaim: Option<PreparedReclaim>,
+    pub(crate) reclaim_commit_state: Option<PreparedReclaimCommitState>,
 }
 
 pub(crate) struct MajorMarkUpdate {
@@ -505,9 +521,11 @@ impl CollectorState {
             mark_steps: 0,
             mark_rounds: 0,
             reclaim_prepare_nanos: 0,
+            reclaim_commit_pause_nanos: 0,
             ephemerons_processed: false,
             reclaim_prepared: false,
             prepared_reclaim: None,
+            reclaim_commit_state: None,
         });
     }
 
@@ -518,9 +536,11 @@ impl CollectorState {
         state.worklist.push(index);
         state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
         state.reclaim_prepare_nanos = 0;
+        state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = false;
         state.reclaim_prepared = false;
         state.prepared_reclaim = None;
+        state.reclaim_commit_state = None;
         true
     }
 
@@ -529,9 +549,11 @@ impl CollectorState {
     }
 
     pub(crate) fn active_major_mark_is_ready(&self) -> bool {
-        self.major_mark_state
-            .as_ref()
-            .is_some_and(|state| state.worklist.is_empty() && state.reclaim_prepared)
+        self.major_mark_state.as_ref().is_some_and(|state| {
+            state.worklist.is_empty()
+                && state.reclaim_prepared
+                && state.reclaim_commit_state.is_none()
+        })
     }
 
     pub(crate) fn active_major_mark_needs_reclaim_prep_plan(&self) -> Option<CollectionPlan> {
@@ -601,9 +623,11 @@ impl CollectorState {
         state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
         state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
         state.reclaim_prepare_nanos = saturating_duration_nanos(reclaim_prepare_time);
+        state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = true;
         state.reclaim_prepared = true;
         state.prepared_reclaim = prepared_reclaim;
+        state.reclaim_commit_state = None;
         true
     }
 
@@ -622,9 +646,11 @@ impl CollectorState {
         state.mark_rounds = state.mark_rounds.saturating_add(update.mark_rounds_delta);
         if !state.worklist.is_empty() {
             state.reclaim_prepare_nanos = 0;
+            state.reclaim_commit_pause_nanos = 0;
             state.ephemerons_processed = false;
             state.reclaim_prepared = false;
             state.prepared_reclaim = None;
+            state.reclaim_commit_state = None;
         }
 
         let progress = MajorMarkProgress {
@@ -638,6 +664,10 @@ impl CollectorState {
 
         self.major_mark_state = Some(state);
         Ok(progress)
+    }
+
+    pub(crate) fn restore_major_mark_state(&mut self, major_mark_state: MajorMarkState) {
+        self.major_mark_state = Some(major_mark_state);
     }
 
     pub(crate) fn recommended_plan(&self) -> CollectionPlan {

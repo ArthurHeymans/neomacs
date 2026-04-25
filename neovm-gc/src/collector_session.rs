@@ -140,7 +140,11 @@ pub(crate) fn record_active_major_reachable_object(
     object: GcErased,
     assist_slices: usize,
 ) -> Result<bool, AllocError> {
-    if !collector.has_active_major_mark() {
+    if !collector.has_active_major_mark()
+        || collector
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+    {
         return Ok(false);
     }
 
@@ -167,7 +171,11 @@ pub(crate) fn record_active_major_post_write(
     new_value: Option<GcErased>,
     assist_slices: usize,
 ) -> Result<bool, AllocError> {
-    if !collector.has_active_major_mark() {
+    if !collector.has_active_major_mark()
+        || collector
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+    {
         return Ok(false);
     }
 

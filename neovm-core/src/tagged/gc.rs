@@ -1273,7 +1273,7 @@ impl TaggedHeap {
         match self.active_major_phase() {
             Some(CollectionPhase::Reclaim) => {
                 if self
-                    .with_mutator(|m| m.commit_active_reclaim_if_ready())
+                    .with_mutator(|m| m.advance_active_reclaim_commit())
                     .ok()
                     .flatten()
                     .is_some()
@@ -1547,7 +1547,10 @@ pub(crate) fn relocate_marker_ptr_slot(
     let gc: Gc<u8> = unsafe { Gc::from_payload_ptr((*slot).cast::<u8>()) };
     let relocated = relocator.relocate_erased(gc.erase());
     let new_gc: Gc<u8> = unsafe { Gc::from_erased(relocated) };
-    *slot = new_gc.payload_ptr().cast::<crate::tagged::header::MarkerObj>().cast_mut();
+    *slot = new_gc
+        .payload_ptr()
+        .cast::<crate::tagged::header::MarkerObj>()
+        .cast_mut();
 }
 
 impl Drop for TaggedHeap {
