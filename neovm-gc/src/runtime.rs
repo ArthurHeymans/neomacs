@@ -29,6 +29,13 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 use crate::root::{HandleScope, Root};
 
+/// Default object budget for one bounded reclaim-commit assist.
+///
+/// Reclaim commit runs stop-the-world, so it deliberately uses a
+/// small fixed budget instead of inheriting the throughput-oriented
+/// concurrent mark slice size from `CollectionPlan::mark_slice_budget`.
+pub const DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET: usize = 64;
+
 /// Collector-side runtime bound to one heap.
 ///
 /// The runtime carries a per-cycle `MutatorLocal` that it
@@ -698,11 +705,16 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
     pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
-        let budget = self
-            .active_major_mark_plan()
-            .map(|plan| plan.mark_slice_budget.max(1))
-            .unwrap_or(1);
-        self.advance_active_reclaim_commit_with_budget(budget)
+        self.advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+    }
+
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget.
+    pub fn advance_active_reclaim_commit_with_budget(
+        &mut self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        self.advance_active_reclaim_commit_impl(budget)
     }
 
     /// Commit the active major collection once reclaim has already been prepared.
@@ -726,10 +738,10 @@ impl<'heap> CollectorRuntime<'heap> {
         {
             return Ok(None);
         }
-        self.advance_active_reclaim_commit_with_budget(usize::MAX)
+        self.advance_active_reclaim_commit_impl(usize::MAX)
     }
 
-    fn advance_active_reclaim_commit_with_budget(
+    fn advance_active_reclaim_commit_impl(
         &mut self,
         budget: usize,
     ) -> Result<Option<CollectionStats>, AllocError> {
@@ -1626,6 +1638,15 @@ impl SharedCollectorRuntime {
     pub fn advance_active_reclaim_commit(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
+        self.advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+    }
+
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget.
+    pub fn advance_active_reclaim_commit_with_budget(
+        &self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
         let snapshot = self.collector_snapshot()?;
         if snapshot.active_major_mark_plan.is_none() {
             return Ok(None);
@@ -1643,7 +1664,9 @@ impl SharedCollectorRuntime {
         {
             return Ok(None);
         }
-        match self.try_with_runtime_update(|runtime| runtime.advance_active_reclaim_commit()) {
+        match self.try_with_runtime_update(|runtime| {
+            runtime.advance_active_reclaim_commit_with_budget(budget)
+        }) {
             Ok(result) => result.map_err(SharedBackgroundError::Collection),
             Err(SharedHeapError::WouldBlock) => Ok(None),
             Err(error) => Err(Self::map_shared_heap_error(error)),
@@ -1717,6 +1740,15 @@ impl SharedCollectorRuntime {
     pub fn try_advance_active_reclaim_commit(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
+        self.try_advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+    }
+
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget, without blocking on heap contention.
+    pub fn try_advance_active_reclaim_commit_with_budget(
+        &self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
         let snapshot = self.collector_snapshot()?;
         if snapshot.active_major_mark_plan.is_none() {
             return Ok(None);
@@ -1734,9 +1766,11 @@ impl SharedCollectorRuntime {
         {
             return Ok(None);
         }
-        self.try_with_runtime_update(|runtime| runtime.advance_active_reclaim_commit())
-            .map_err(Self::map_shared_heap_error)?
-            .map_err(SharedBackgroundError::Collection)
+        self.try_with_runtime_update(|runtime| {
+            runtime.advance_active_reclaim_commit_with_budget(budget)
+        })
+        .map_err(Self::map_shared_heap_error)?
+        .map_err(SharedBackgroundError::Collection)
     }
 
     /// Commit the active major collection once reclaim has already been prepared, without
@@ -1783,7 +1817,9 @@ impl SharedCollectorRuntime {
                 Ok(false) | Err(SharedBackgroundError::WouldBlock) => {}
                 Err(error) => return Err(error),
             }
-            match self.try_advance_active_reclaim_commit() {
+            match self
+                .try_advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+            {
                 Ok(Some(cycle)) => Ok(BackgroundCollectionStatus::Finished(cycle)),
                 Ok(None) | Err(SharedBackgroundError::WouldBlock) => {
                     Ok(BackgroundCollectionStatus::ReadyToFinish(progress))
@@ -1811,7 +1847,9 @@ impl SharedCollectorRuntime {
             match self.try_prepare_active_reclaim_if_needed() {
                 Ok(true) => Ok(BackgroundCollectionStatus::ReadyToFinish(progress)),
                 Ok(false) => {
-                    if let Some(cycle) = self.try_advance_active_reclaim_commit()? {
+                    if let Some(cycle) = self.try_advance_active_reclaim_commit_with_budget(
+                        DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
+                    )? {
                         Ok(BackgroundCollectionStatus::Finished(cycle))
                     } else {
                         Ok(BackgroundCollectionStatus::ReadyToFinish(progress))

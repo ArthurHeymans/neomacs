@@ -1,4 +1,7 @@
 use super::*;
+use crate::descriptor::{Relocator, Trace, Tracer};
+use crate::heap::HeapConfig;
+use crate::spaces::{LargeObjectSpaceConfig, NurseryConfig, OldGenConfig};
 use std::collections::VecDeque;
 
 fn major_reclaim_plan() -> CollectionPlan {
@@ -25,6 +28,17 @@ fn completed_progress() -> MajorMarkProgress {
         mark_rounds: 1,
         remaining_work: 0,
     }
+}
+
+#[derive(Debug)]
+struct OldLeaf {
+    _bytes: [u8; 32],
+}
+
+unsafe impl Trace for OldLeaf {
+    fn trace(&self, _tracer: &mut dyn Tracer) {}
+
+    fn relocate(&self, _relocator: &mut dyn Relocator) {}
 }
 
 #[derive(Debug)]
@@ -170,4 +184,85 @@ fn repeated_ticks_finish_after_multiple_reclaim_assists() {
     ));
     assert_eq!(runtime.advance_calls, 2);
     assert_eq!(collector.stats().sessions_finished, 1);
+}
+
+#[test]
+fn reclaim_ready_tick_stays_bounded_even_with_unbounded_mark_budget() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    let mut scope = mutator.handle_scope();
+    for byte in 0..200u8 {
+        mutator
+            .alloc(&mut scope, OldLeaf { _bytes: [byte; 32] })
+            .expect("allocate old leaf");
+    }
+
+    mutator
+        .begin_major_mark(CollectionPlan {
+            mark_slice_budget: usize::MAX,
+            ..mutator.plan_for(CollectionKind::Major)
+        })
+        .expect("begin major mark");
+    let progress = mutator
+        .poll_active_major_mark()
+        .expect("poll active major mark")
+        .expect("major-mark session should stay active");
+    assert!(progress.completed);
+    assert_eq!(
+        mutator.active_major_mark_plan().map(|plan| plan.phase),
+        Some(crate::plan::CollectionPhase::Reclaim)
+    );
+
+    let mut collector = BackgroundCollector::new(BackgroundCollectorConfig {
+        auto_start_concurrent: false,
+        auto_finish_when_ready: true,
+        max_rounds_per_tick: 1,
+    });
+    let first = collector
+        .tick(&mut mutator)
+        .expect("first reclaim-ready tick should succeed");
+    assert!(
+        matches!(first, BackgroundCollectionStatus::ReadyToFinish(progress) if progress.completed),
+        "dedicated reclaim budget should keep the first reclaim-ready tick bounded: {first:?}"
+    );
+    assert!(
+        mutator.active_major_mark_plan().is_some(),
+        "bounded reclaim assist should leave the prepared session active"
+    );
+
+    let mut saw_finish = false;
+    for _ in 0..32 {
+        match collector
+            .tick(&mut mutator)
+            .expect("follow-up reclaim tick")
+        {
+            BackgroundCollectionStatus::Finished(_) => {
+                saw_finish = true;
+                break;
+            }
+            BackgroundCollectionStatus::ReadyToFinish(progress) => {
+                assert!(progress.completed);
+            }
+            other => panic!("reclaim-ready session should not revert to {other:?}"),
+        }
+    }
+    assert!(
+        saw_finish,
+        "bounded reclaim assists should still finish promptly"
+    );
 }

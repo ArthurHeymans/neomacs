@@ -1091,6 +1091,15 @@ impl<'heap> Mutator<'heap> {
         self.with_runtime(|runtime| runtime.advance_active_reclaim_commit())
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget.
+    pub fn advance_active_reclaim_commit_with_budget(
+        &mut self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        self.with_runtime(|runtime| runtime.advance_active_reclaim_commit_with_budget(budget))
+    }
+
     /// Service one background collection round for the active major-mark session.
     pub fn service_background_collection_round(
         &mut self,

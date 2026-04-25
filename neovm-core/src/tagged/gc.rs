@@ -383,6 +383,11 @@ const GC_FULL_EVERY: u64 = 16;
 /// roughly ~1ms slices at ~1us/object trace cost.
 const GC_MARK_SLICE_BUDGET: usize = 1024;
 
+/// Max objects rewritten per reclaim-commit assist. This stays much
+/// smaller than the mark budget because reclaim commit is fully
+/// stop-the-world.
+const GC_RECLAIM_SLICE_BUDGET: usize = neovm_gc::runtime::DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET;
+
 impl TaggedHeap {
     /// Create a `Mutator` view for write barrier calls.
     ///
@@ -1273,7 +1278,9 @@ impl TaggedHeap {
         match self.active_major_phase() {
             Some(CollectionPhase::Reclaim) => {
                 if self
-                    .with_mutator(|m| m.advance_active_reclaim_commit())
+                    .with_mutator(|m| {
+                        m.advance_active_reclaim_commit_with_budget(GC_RECLAIM_SLICE_BUDGET)
+                    })
                     .ok()
                     .flatten()
                     .is_some()

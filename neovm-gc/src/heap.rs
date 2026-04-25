@@ -537,6 +537,16 @@ impl Heap {
         self.collector_runtime().advance_active_reclaim_commit()
     }
 
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget.
+    pub fn advance_active_reclaim_commit_with_budget(
+        &self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        self.collector_runtime()
+            .advance_active_reclaim_commit_with_budget(budget)
+    }
+
     /// Per-block old-generation statistics.
     pub fn old_region_stats(&self) -> Vec<OldRegionStats> {
         self.read_core().old_region_stats()
@@ -1155,6 +1165,16 @@ impl<'a> HeapCollectorRuntime<'a> {
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
     pub fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError> {
         self.runtime().advance_active_reclaim_commit()
+    }
+
+    /// Advance the active reclaim commit by one bounded stop-the-world slice
+    /// using the provided object budget.
+    pub fn advance_active_reclaim_commit_with_budget(
+        &mut self,
+        budget: usize,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        self.runtime()
+            .advance_active_reclaim_commit_with_budget(budget)
     }
 
     /// Service one background collection round.
