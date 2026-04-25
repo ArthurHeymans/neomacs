@@ -9941,6 +9941,104 @@ fn gc_stress_closures() {
 }
 
 #[test]
+fn interpreted_closure_relocates_across_minor_gc_cycles_and_remains_callable() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_lexical_binding(true);
+    ev.eval_str("(setq vm-moving-closure (lambda (x) x))")
+        .expect("install moving closure root");
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let sym = intern("vm-moving-closure");
+    let mut closure = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("moving closure should be rooted in obarray");
+    let initial_ptr = closure
+        .heap_ptr()
+        .expect("closure should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    ev.gc_safe_point_exact();
+
+    closure = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("closure should survive first minor");
+    let after_first_minor_ptr = closure
+        .heap_ptr()
+        .expect("closure should stay heap-allocated after first minor");
+    assert_ne!(
+        after_first_minor_ptr, initial_ptr,
+        "interpreted closure should relocate during the first minor collection"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(closure, vec![Value::fixnum(7)])
+            .expect("closure should remain callable after first minor"),
+        Value::fixnum(7)
+    );
+
+    let _garbage = Value::cons(Value::fixnum(3), Value::fixnum(4));
+    ev.gc_safe_point_exact();
+
+    closure = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("closure should survive second minor");
+    let after_second_minor_ptr = closure
+        .heap_ptr()
+        .expect("closure should stay heap-allocated after second minor");
+    assert_ne!(
+        after_second_minor_ptr, after_first_minor_ptr,
+        "interpreted closure should keep moving across successive minor collections"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(closure, vec![Value::fixnum(11)])
+            .expect("closure should remain callable after second minor"),
+        Value::fixnum(11)
+    );
+}
+
+#[test]
+fn macro_object_relocates_during_minor_gc_when_rooted_in_obarray() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let sym = intern("vm-moving-macro");
+    let mac = Value::make_macro(LambdaData {
+        params: LambdaParams::simple(vec![intern("form")]),
+        body: vec![Value::fixnum(99)],
+        env: None,
+        docstring: None,
+        doc_form: None,
+        interactive: None,
+    });
+    ev.obarray.set_symbol_value_id(sym, mac);
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let initial_ptr = mac.heap_ptr().expect("macro should be heap-allocated");
+
+    let _garbage = Value::cons(Value::fixnum(5), Value::fixnum(6));
+    ev.gc_safe_point_exact();
+
+    let relocated = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("macro should stay rooted after minor GC");
+    assert_eq!(relocated.veclike_type(), Some(VecLikeType::Macro));
+    assert_ne!(
+        relocated
+            .heap_ptr()
+            .expect("macro should stay heap-allocated"),
+        initial_ptr,
+        "macro object should relocate during minor GC once it stops using the pinned path"
+    );
+}
+
+#[test]
 fn gc_stress_lambda_argument_closure_survives_binding_installation() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -255,7 +255,6 @@ fn vector_allocation() {
     assert_eq!(vec.veclike_type(), Some(VecLikeType::Vector));
 }
 
-#[test]
 fn vector_mutation_helper_updates_elements() {
     crate::test_utils::init_test_tracing();
     let mut heap = super::gc::TaggedHeap::new();

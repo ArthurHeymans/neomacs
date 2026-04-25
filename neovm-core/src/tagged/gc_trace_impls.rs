@@ -389,7 +389,11 @@ unsafe impl Trace for GcLambda {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Interpreted closures have the same "outer header + owned
+        // Vec<TaggedValue>" shape as movable vectors and records:
+        // evacuating the wrapper is memcpy-safe and relocate() rewrites
+        // every embedded edge after the move.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {
@@ -418,7 +422,9 @@ unsafe impl Trace for GcMacro {
     }
 
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        // Macros share the same representation and relocation behavior as
+        // interpreted closures, so they can move through the nursery too.
+        MovePolicy::Movable
     }
 
     fn layout_kind() -> LayoutKind {

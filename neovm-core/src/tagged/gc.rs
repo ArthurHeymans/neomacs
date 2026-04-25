@@ -255,11 +255,10 @@ const TAG_FLOAT: usize = 0b110;
 /// The Heap is leaked to obtain a `'static` reference so that on-demand
 /// `Mutator` views can be created without self-referential lifetime issues.
 ///
-/// All allocations route through neovm-gc's `SpaceKind::Pinned`. Objects
-/// up to [`neovm_gc::spaces::MAX_PINNED_SLOT_SIZE`] bytes are served from
-/// the span-based size-class allocator; larger objects fall back to the
-/// system allocator. Objects are tracked in the heap's `ObjectStore` so
-/// future concurrent marking can enumerate them.
+/// Tagged heap objects follow their declared `MovePolicy`: movable types
+/// route through the nursery/old-generation path, while address-stable
+/// runtime objects continue to use pinned space. All objects are tracked
+/// in neovm-gc's `ObjectStore` so concurrent marking can enumerate them.
 pub struct TaggedHeap {
     /// Direct `&'static Heap` for the main mutator thread: zero
     /// outer-lock overhead on allocs and write barriers. All
@@ -692,15 +691,15 @@ impl TaggedHeap {
     // Internal helper: allocate through neovm-gc and extract payload pointer
     // -----------------------------------------------------------------------
 
-    /// Allocate a value of type T through the neovm-gc Heap and return
-    /// the raw payload pointer. The object is managed by neovm-gc from
-    /// this point forward.
+    /// Allocate a pinned value of type `T` through neovm-gc and return the
+    /// raw payload pointer. The object is managed by neovm-gc from this
+    /// point forward.
     ///
     /// Routes through `Mutator::alloc_pinned_raw` — small objects land
     /// in span-based size-class pools; large objects fall back to the
     /// system allocator. All records are published to neovm-gc's
     /// `ObjectStore` so the marker can enumerate them.
-    fn gc_alloc<T: neovm_gc::Trace + 'static>(&mut self, value: T) -> *const T {
+    fn gc_alloc_pinned<T: neovm_gc::Trace + 'static>(&mut self, value: T) -> *const T {
         let ptr = self.with_mutator(|m| {
             m.alloc_pinned_raw(value)
                 .expect("pinned allocation should succeed")
@@ -777,7 +776,7 @@ impl TaggedHeap {
             max_args,
             dispatch_kind,
         };
-        let ptr = self.gc_alloc(gc_subr);
+        let ptr = self.gc_alloc_pinned(gc_subr);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcSubr>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -828,10 +827,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Lambda,
             data: UnsafeCell::new(slots),
         };
-        let ptr = self.gc_alloc(gc_lambda);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_lambda)
+                .expect("lambda allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcLambda>().saturating_add(storage_bytes));
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a lambda from a LambdaData (bridge for migration).
@@ -851,10 +853,13 @@ impl TaggedHeap {
             type_tag: VecLikeType::Macro,
             data: UnsafeCell::new(slots),
         };
-        let ptr = self.gc_alloc(gc_macro);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_macro)
+                .expect("macro allocation should succeed")
+        });
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcMacro>().saturating_add(storage_bytes));
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a macro from a LambdaData (bridge for migration).
@@ -872,7 +877,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::Buffer,
             id,
         };
-        let ptr = self.gc_alloc(gc_buf);
+        let ptr = self.gc_alloc_pinned(gc_buf);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcBuffer>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -884,7 +889,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::Window,
             id,
         };
-        let ptr = self.gc_alloc(gc_win);
+        let ptr = self.gc_alloc_pinned(gc_win);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcWindow>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -896,7 +901,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::Frame,
             id,
         };
-        let ptr = self.gc_alloc(gc_frame);
+        let ptr = self.gc_alloc_pinned(gc_frame);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcFrame>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -908,13 +913,18 @@ impl TaggedHeap {
             type_tag: VecLikeType::Timer,
             id,
         };
-        let ptr = self.gc_alloc(gc_timer);
+        let ptr = self.gc_alloc_pinned(gc_timer);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcTimer>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
     }
 
     /// Allocate a bytecode function.
+    ///
+    /// Bytecode stays pinned for now: the VM borrows `&ByteCodeFunction`
+    /// across execution, and execution itself can safepoint / GC. Making
+    /// bytecode movable requires that path to stop holding address-sensitive
+    /// borrows across collection.
     pub fn alloc_bytecode(
         &mut self,
         data: crate::emacs_core::bytecode::ByteCodeFunction,
@@ -923,7 +933,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::ByteCode,
             data: UnsafeCell::new(data),
         };
-        let ptr = self.gc_alloc(gc_bc);
+        let ptr = self.gc_alloc_pinned(gc_bc);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcByteCode>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -951,7 +961,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::Overlay,
             data: UnsafeCell::new(data),
         };
-        let ptr = self.gc_alloc(gc_overlay);
+        let ptr = self.gc_alloc_pinned(gc_overlay);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcOverlay>());
         TaggedValue(ptr as usize | TAG_VECLIKE)
@@ -963,7 +973,7 @@ impl TaggedHeap {
             type_tag: VecLikeType::Marker,
             data,
         };
-        let ptr = self.gc_alloc(gc_marker);
+        let ptr = self.gc_alloc_pinned(gc_marker);
         self.marker_ptrs.push(ptr as *mut GcMarker);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcMarker>());
