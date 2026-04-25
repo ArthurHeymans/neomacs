@@ -7516,11 +7516,14 @@ fn vm_syntax_navigation_after_prior_context_syntax_mutation_uses_fresh_tls_state
             r#"(progn
                  (erase-buffer)
                  (insert "(a (b)) c")
-                 (list (scan-sexps 1 1)
+                 (list (eq (syntax-table) (standard-syntax-table))
+                       (char-syntax ?\;)
+                       (char-syntax ?\n)
+                       (scan-sexps 1 1)
                        (scan-lists 1 2 0)
                        (scan-sexps (point-max) -1)))"#
         ),
-        "OK (8 10 9)"
+        "OK (t 46 32 8 nil 9)"
     );
 }
 
