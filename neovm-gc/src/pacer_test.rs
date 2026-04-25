@@ -19,6 +19,21 @@ fn cycle_with_pause_and_reclaim(pause_nanos: u64, reclaim_prepare_nanos: u64) ->
     }
 }
 
+fn cycle_with_pause_mark_and_reclaim(
+    pause_nanos: u64,
+    mark_nanos: u64,
+    reclaim_prepare_nanos: u64,
+) -> CollectionStats {
+    CollectionStats {
+        collections: 1,
+        major_collections: 1,
+        pause_nanos,
+        mark_nanos,
+        reclaim_prepare_nanos,
+        ..CollectionStats::default()
+    }
+}
+
 #[test]
 fn ewma_update_seeds_with_first_observation() {
     assert_eq!(ewma_update(0.0, 100.0, 0.2), 100.0);
@@ -216,15 +231,30 @@ fn pacer_default_threshold_starts_at_min_trigger() {
 }
 
 #[test]
-fn pacer_mark_rate_uses_pause_minus_reclaim_prepare_time() {
-    // Use pause=10ms with reclaim_prepare=8ms so mark-only time
-    // is 2ms. With live=1000 bytes after the cycle, mark rate
-    // should be 1000 / 0.002 = 500_000 bps. If the pacer used
-    // pause_nanos directly, it would compute 1000 / 0.010 =
-    // 100_000 bps -- five times lower.
-    //
-    // ewma_alpha=1.0 makes the EWMA take the latest sample
-    // exactly so the test reads the observed rate directly.
+fn pacer_mark_rate_prefers_explicit_mark_nanos_over_pause_components() {
+    // Use pause=10ms with reclaim_prepare=8ms, but report the real
+    // mark session as 4ms. The reclaim-heavy final pause should not
+    // distort the pacer's throughput model once mark_nanos is
+    // available.
+    let pacer = Pacer::new(PacerConfig {
+        ewma_alpha: 1.0,
+        ..PacerConfig::default()
+    });
+    let cycle = cycle_with_pause_mark_and_reclaim(10_000_000, 4_000_000, 8_000_000);
+    pacer.record_completed_cycle(&cycle, 1000);
+    let stats = pacer.stats();
+    assert_eq!(
+        stats.mark_rate_bps, 250_000,
+        "expected mark_rate_bps to be live / mark_nanos \
+         = 1000 / 0.004s = 250_000, got {}",
+        stats.mark_rate_bps
+    );
+}
+
+#[test]
+fn pacer_mark_rate_falls_back_to_pause_minus_reclaim_prepare_without_mark_nanos() {
+    // Synthetic callers that do not populate mark_nanos should still
+    // get the old pause-based approximation.
     let pacer = Pacer::new(PacerConfig {
         ewma_alpha: 1.0,
         ..PacerConfig::default()
@@ -232,19 +262,11 @@ fn pacer_mark_rate_uses_pause_minus_reclaim_prepare_time() {
     let cycle = cycle_with_pause_and_reclaim(10_000_000, 8_000_000);
     pacer.record_completed_cycle(&cycle, 1000);
     let stats = pacer.stats();
-    assert_eq!(
-        stats.mark_rate_bps, 500_000,
-        "expected mark_rate_bps to be live / (pause - reclaim_prepare) \
-         = 1000 / 0.002s = 500_000, got {}",
-        stats.mark_rate_bps
-    );
+    assert_eq!(stats.mark_rate_bps, 500_000);
 }
 
 #[test]
-fn pacer_mark_rate_falls_back_to_pause_nanos_when_reclaim_zero() {
-    // When reclaim_prepare_nanos == 0, the subtraction yields the
-    // full pause_nanos and the mark rate matches the original
-    // (pre-improvement) behavior.
+fn pacer_mark_rate_falls_back_to_pause_when_mark_and_reclaim_are_zero() {
     let pacer = Pacer::new(PacerConfig {
         ewma_alpha: 1.0,
         ..PacerConfig::default()
