@@ -9849,6 +9849,52 @@ fn gc_safe_point_runs_post_gc_hook_when_incremental_collection_finishes() {
     assert!(entries.iter().all(|entry| *entry == Value::symbol("ran")));
 }
 
+#[test]
+fn incremental_major_moves_to_reclaim_before_final_commit() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq incremental-major-root (cons 41 42))");
+    ev.start_or_assist_incremental_major();
+    assert!(
+        ev.tagged_heap.has_incremental_major(),
+        "incremental major should stay active after the first assist step"
+    );
+
+    let mut saw_reclaim = false;
+    let mut assists = 0usize;
+    while assists < 256 && ev.tagged_heap.has_incremental_major() {
+        if matches!(
+            ev.tagged_heap.active_major_phase(),
+            Some(neovm_gc::plan::CollectionPhase::Reclaim)
+        ) {
+            saw_reclaim = true;
+            break;
+        }
+        ev.tagged_heap.assist_incremental_major();
+        assists += 1;
+    }
+
+    assert!(
+        saw_reclaim,
+        "incremental major should reach reclaim before the session commits: assists={assists}, phase={:?}",
+        ev.tagged_heap.active_major_phase()
+    );
+    assert!(
+        ev.tagged_heap.has_incremental_major(),
+        "reclaim-ready incremental major should remain active until a later assist commits it"
+    );
+
+    ev.tagged_heap.assist_incremental_major();
+    assert!(
+        !ev.tagged_heap.has_incremental_major(),
+        "a later assist should commit the prepared reclaim"
+    );
+
+    let results = ev.eval_str_each("(car incremental-major-root)");
+    assert_eq!(format_eval_result(&results[0]), "OK 41");
+}
+
 // -----------------------------------------------------------------------
 // GC stress tests — force collection between every top-level form
 // -----------------------------------------------------------------------

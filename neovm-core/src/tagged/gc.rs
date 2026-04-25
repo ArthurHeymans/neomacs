@@ -26,7 +26,7 @@ use super::value::TaggedValue;
 use crate::buffer::text_props::TextPropertyTable;
 use crate::emacs_core::intern::SymId;
 use neovm_gc::descriptor::GcErased;
-use neovm_gc::plan::CollectionKind;
+use neovm_gc::plan::{CollectionKind, CollectionPhase};
 use neovm_gc::root::Gc;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::Cell;
@@ -382,12 +382,6 @@ const GC_FULL_EVERY: u64 = 16;
 /// finer-grained pauses, but more scheduling overhead. 1024 gives
 /// roughly ~1ms slices at ~1us/object trace cost.
 const GC_MARK_SLICE_BUDGET: usize = 1024;
-
-/// Number of mark slices drained per safe-point assist call.
-/// Higher = fewer safe points to completion, more work per safe
-/// point. 4 keeps per-safe-point pause under ~5ms while still
-/// making visible progress each call.
-const GC_ASSIST_SLICES_PER_STEP: usize = 4;
 
 impl TaggedHeap {
     /// Create a `Mutator` view for write barrier calls.
@@ -1237,8 +1231,9 @@ impl TaggedHeap {
     /// already-buffered roots, then does one initial slice so the
     /// worklist starts draining immediately. Subsequent
     /// safe-point cycles drive the session forward via
-    /// `assist_incremental_major` until the worklist is empty, at
-    /// which point we run the STW finish (reclaim) phase.
+    /// `assist_incremental_major` until the worklist is empty. The
+    /// runtime then prepares reclaim and leaves the session parked in
+    /// `CollectionPhase::Reclaim` so a later safe point can commit it.
     fn begin_incremental_major(&mut self) {
         let mut plan = self.gc_heap.plan_for(neovm_gc::plan::CollectionKind::Major);
         plan.mark_slice_budget = GC_MARK_SLICE_BUDGET;
@@ -1260,19 +1255,40 @@ impl TaggedHeap {
         self.assist_incremental_major_step();
     }
 
-    /// Advance the active incremental Major session by one step.
-    /// If the step completes the mark phase, run the STW finish
-    /// immediately.
+    fn finish_incremental_major_step(&mut self) {
+        let _ = self.with_mutator(|m| m.drain_pending_finalizers());
+        self.resync_post_collection_counters();
+        self.gc_major_in_progress = false;
+    }
+
+    pub(crate) fn active_major_phase(&mut self) -> Option<CollectionPhase> {
+        self.with_mutator(|m| m.active_major_mark_plan().map(|plan| plan.phase))
+    }
+
+    /// Advance the active incremental Major session by one safe-point
+    /// step. Mark work and reclaim preparation happen first; the
+    /// eventual reclaim commit is deferred to a later safe point once
+    /// the session reaches `CollectionPhase::Reclaim`.
     fn assist_incremental_major_step(&mut self) {
-        let completed = self.with_mutator(|m| {
-            matches!(
-                m.assist_major_mark(GC_ASSIST_SLICES_PER_STEP),
-                Ok(Some(progress)) if progress.completed
-            )
-        });
-        if completed {
-            let _ = self.with_mutator(|m| m.finish_major_collection());
-            self.gc_major_in_progress = false;
+        match self.active_major_phase() {
+            Some(CollectionPhase::Reclaim) => {
+                if self
+                    .with_mutator(|m| m.commit_active_reclaim_if_ready())
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    self.finish_incremental_major_step();
+                }
+            }
+            Some(_) => {
+                if self.with_mutator(|m| m.poll_active_major_mark()).is_err() {
+                    self.gc_major_in_progress = false;
+                }
+            }
+            None => {
+                self.gc_major_in_progress = false;
+            }
         }
     }
 
@@ -1281,21 +1297,36 @@ impl TaggedHeap {
     /// overlap with an in-flight Major session.
     fn drain_incremental_major(&mut self) {
         while self.gc_major_in_progress {
-            let progress = self.with_mutator(|m| m.assist_major_mark(usize::MAX));
-            match progress {
-                Ok(Some(p)) if p.completed => {
-                    let _ = self.with_mutator(|m| m.finish_major_collection());
-                    self.gc_major_in_progress = false;
+            match self.active_major_phase() {
+                Some(CollectionPhase::Reclaim) => {
+                    match self.with_mutator(|m| m.commit_active_reclaim_if_ready()) {
+                        Ok(Some(_)) => self.finish_incremental_major_step(),
+                        Ok(None) => match self.with_mutator(|m| m.finish_major_collection()) {
+                            Ok(_) => self.finish_incremental_major_step(),
+                            Err(_) => self.gc_major_in_progress = false,
+                        },
+                        Err(_) => {
+                            self.gc_major_in_progress = false;
+                        }
+                    }
                 }
-                Ok(_) => {
-                    // No progress but still in session; avoid an
-                    // infinite loop by forcing finish.
-                    let _ = self.with_mutator(|m| m.finish_major_collection());
+                Some(_) => match self.with_mutator(|m| m.poll_active_major_mark()) {
+                    Ok(Some(progress)) if !progress.completed && progress.drained_objects == 0 => {
+                        match self.with_mutator(|m| m.finish_major_collection()) {
+                            Ok(_) => self.finish_incremental_major_step(),
+                            Err(_) => self.gc_major_in_progress = false,
+                        }
+                    }
+                    Ok(Some(_)) => {}
+                    Ok(None) => {
+                        self.gc_major_in_progress = false;
+                    }
+                    Err(_) => {
+                        self.gc_major_in_progress = false;
+                    }
+                },
+                None => {
                     self.gc_major_in_progress = false;
-                }
-                Err(_) => {
-                    self.gc_major_in_progress = false;
-                    break;
                 }
             }
         }
