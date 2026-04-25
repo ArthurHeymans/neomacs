@@ -2869,6 +2869,28 @@ impl BufferManager {
             .collect()
     }
 
+    /// Rewrite every raw marker pointer held by the runtime so a moving GC
+    /// can keep intrusive chains and state-marker caches coherent.
+    ///
+    /// SAFETY: callers must stop the world and ensure no outstanding
+    /// `BufferTextStorage` borrows before mutating chain-head slots.
+    pub(crate) fn relocate_marker_raw_roots(
+        &mut self,
+        visit: &mut dyn FnMut(&mut *mut crate::tagged::header::MarkerObj),
+    ) {
+        for buffer in self.buffers.values_mut() {
+            if let Some(markers) = buffer.state_markers.as_mut() {
+                visit(&mut markers.pt_marker_ptr);
+                visit(&mut markers.begv_marker_ptr);
+                visit(&mut markers.zv_marker_ptr);
+            }
+            unsafe {
+                let head_slot = buffer.text.markers_head_slot_raw();
+                visit(&mut *head_slot);
+            }
+        }
+    }
+
     /// Immutable access to the current buffer.
     pub fn current_buffer(&self) -> Option<&Buffer> {
         self.current.and_then(|id| self.buffers.get(&id))

@@ -463,12 +463,18 @@ impl TaggedHeap {
                     ctx.trace_roots_mut(&mut |slot: &mut TaggedValue| {
                         relocate_tagged_slot(slot, relocator);
                     });
+                    ctx.relocate_marker_raw_roots(&mut |slot| {
+                        relocate_marker_ptr_slot(slot, relocator);
+                    });
                     // SAFETY: the active tagged heap is the same heap that
                     // installed this relocator, and STW collection guarantees
                     // exclusive access while the callback runs.
                     with_tagged_heap(|heap| {
                         heap.trace_runtime_roots_mut(&mut |slot| {
                             relocate_tagged_slot(slot, relocator);
+                        });
+                        heap.trace_marker_side_tables_mut(&mut |slot| {
+                            relocate_marker_ptr_slot(slot, relocator);
                         });
                     });
                 },
@@ -642,6 +648,17 @@ impl TaggedHeap {
         }
         for value in self.timer_registry.values_mut() {
             visit(value);
+        }
+    }
+
+    fn trace_marker_side_tables_mut(
+        &mut self,
+        visit: &mut dyn FnMut(&mut *mut crate::tagged::header::MarkerObj),
+    ) {
+        for ptr in self.marker_ptrs.iter_mut() {
+            let mut marker = (*ptr).cast::<crate::tagged::header::MarkerObj>();
+            visit(&mut marker);
+            *ptr = marker.cast::<GcMarker>();
         }
     }
 
@@ -1027,11 +1044,14 @@ impl TaggedHeap {
             type_tag: VecLikeType::Marker,
             data,
         };
-        let ptr = self.gc_alloc_pinned(gc_marker);
-        self.marker_ptrs.push(ptr as *mut GcMarker);
+        let ptr = self.with_mutator(|m| {
+            m.alloc_external_raw(gc_marker)
+                .expect("marker allocation should succeed")
+        });
+        self.marker_ptrs.push(ptr.as_ptr());
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<GcMarker>());
-        TaggedValue(ptr as usize | TAG_VECLIKE)
+        TaggedValue(ptr.as_ptr() as usize | TAG_VECLIKE)
     }
 
     /// Allocate a bignum (arbitrary-precision integer).
@@ -1089,6 +1109,10 @@ impl TaggedHeap {
                 marker.charpos = 0;
             }
         }
+    }
+
+    pub(crate) fn unregister_marker_ptr(&mut self, marker: *mut GcMarker) {
+        self.marker_ptrs.retain(|&ptr| ptr != marker);
     }
 
     /// Compatibility shim for older buffer marker-chain integration. The
@@ -1480,6 +1504,19 @@ fn relocate_tagged_slot(
     let new_gc: Gc<u8> = unsafe { Gc::<u8>::from_erased(new_erased) };
     let new_payload = new_gc.payload_ptr() as usize;
     slot.0 = new_payload | tag;
+}
+
+pub(crate) fn relocate_marker_ptr_slot(
+    slot: &mut *mut crate::tagged::header::MarkerObj,
+    relocator: &mut dyn neovm_gc::descriptor::Relocator,
+) {
+    if (*slot).is_null() {
+        return;
+    }
+    let gc: Gc<u8> = unsafe { Gc::from_payload_ptr((*slot).cast::<u8>()) };
+    let relocated = relocator.relocate_erased(gc.erase());
+    let new_gc: Gc<u8> = unsafe { Gc::from_erased(relocated) };
+    *slot = new_gc.payload_ptr().cast::<crate::tagged::header::MarkerObj>().cast_mut();
 }
 
 impl Drop for TaggedHeap {

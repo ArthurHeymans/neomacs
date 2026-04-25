@@ -1297,38 +1297,65 @@ fn state_markers_survive_gc_without_lisp_references() {
         "pre-GC baseline: chain must contain all three state markers, got {chain_contains_before:?}"
     );
 
-    // Force a full GC. No Lisp value references these three markers; the
-    // only structural references are (a) the intrusive marker chain and
-    // (b) the `BufferStateMarkers` raw pointers. If neither is treated as
-    // a GC root, `unchain_dead_markers` will splice them out and
-    // `sweep_objects` will free them.
-    eval.gc_collect_exact();
+    // Force a Minor GC so the nursery-held markers must actually
+    // relocate. No Lisp value references these three markers; the only
+    // structural references are (a) the intrusive marker chain and (b)
+    // the `BufferStateMarkers` raw pointers. If neither is treated as a
+    // GC root and a relocation target, the minor collector will either
+    // drop them or leave the raw slots pointing at old nursery
+    // addresses.
+    eval.tagged_heap.set_gc_minor_threshold(1);
+    let _garbage = crate::emacs_core::value::Value::cons(
+        crate::emacs_core::value::Value::fixnum(1),
+        crate::emacs_core::value::Value::fixnum(2),
+    );
+    eval.gc_safe_point_exact();
 
-    // After GC, the pointers must still point at LIVE markers whose
-    // header has the expected tag and whose data still reflects the
-    // buffer binding. Reading a freed allocation is UB; we can't make
-    // this test segfault-proof without ASAN, but if the allocation was
-    // reused for something else, `data.buffer` will almost certainly no
-    // longer match `expected_buf`.
+    let (pt_after, begv_after, zv_after) = {
+        let buffer = eval
+            .buffers
+            .get(indirect_id)
+            .expect("indirect buffer present after GC");
+        let sm = buffer
+            .state_markers
+            .as_ref()
+            .expect("state markers should still be present after GC");
+        (sm.pt_marker_ptr, sm.begv_marker_ptr, sm.zv_marker_ptr)
+    };
+    assert_ne!(pt_after, pt_ptr, "pt state marker should relocate across GC");
+    assert_ne!(
+        begv_after, begv_ptr,
+        "begv state marker should relocate across GC"
+    );
+    assert_ne!(zv_after, zv_ptr, "zv state marker should relocate across GC");
+
     unsafe {
-        let pt_buffer = (*pt_ptr).data.buffer;
-        let begv_buffer = (*begv_ptr).data.buffer;
-        let zv_buffer = (*zv_ptr).data.buffer;
-
-        assert_eq!(pt_buffer, Some(expected_buf), "pt_marker survived GC");
-        assert_eq!(begv_buffer, Some(expected_buf), "begv_marker survived GC");
-        assert_eq!(zv_buffer, Some(expected_buf), "zv_marker survived GC");
+        assert_eq!(
+            (*pt_after).data.buffer,
+            Some(expected_buf),
+            "pt_marker survived GC"
+        );
+        assert_eq!(
+            (*begv_after).data.buffer,
+            Some(expected_buf),
+            "begv_marker survived GC"
+        );
+        assert_eq!(
+            (*zv_after).data.buffer,
+            Some(expected_buf),
+            "zv_marker survived GC"
+        );
 
         assert!(
-            (*pt_ptr).data.marker_id.is_some(),
+            (*pt_after).data.marker_id.is_some(),
             "pt_marker retains its marker_id"
         );
         assert!(
-            (*begv_ptr).data.marker_id.is_some(),
+            (*begv_after).data.marker_id.is_some(),
             "begv_marker retains its marker_id"
         );
         assert!(
-            (*zv_ptr).data.marker_id.is_some(),
+            (*zv_after).data.marker_id.is_some(),
             "zv_marker retains its marker_id"
         );
     }
@@ -1336,7 +1363,8 @@ fn state_markers_survive_gc_without_lisp_references() {
     // The chain must STILL contain all three state markers after GC;
     // `unchain_dead_markers` splices out anything with `header.gc.marked`
     // false, so a post-GC chain containing them proves they were marked
-    // (i.e. they were treated as reachable by the mark phase).
+    // and that the chain head / next links were rewritten to the new
+    // locations.
     let chain_contains_after = unsafe {
         let buffer = eval
             .buffers
@@ -1348,13 +1376,13 @@ fn state_markers_survive_gc_without_lisp_references() {
         let mut curr = *head_slot;
         let mut guard = 0usize;
         while !curr.is_null() && guard < 4096 {
-            if curr == pt_ptr {
+            if curr == pt_after {
                 contains[0] = true;
             }
-            if curr == begv_ptr {
+            if curr == begv_after {
                 contains[1] = true;
             }
-            if curr == zv_ptr {
+            if curr == zv_after {
                 contains[2] = true;
             }
             curr = (*curr).data.next_marker;

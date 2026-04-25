@@ -562,18 +562,26 @@ pub struct GcMarker {
 
 unsafe impl Trace for GcMarker {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
-    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+    fn relocate(&self, relocator: &mut dyn Relocator) {
+        let marker = self as *const GcMarker as *mut GcMarker;
+        unsafe {
+            super::gc::relocate_marker_ptr_slot(&mut (*marker).data.next_marker, relocator);
+        }
+    }
     fn finalize(&self) {
         let marker = self as *const GcMarker as *mut GcMarker;
         super::gc::with_tagged_heap(|heap| unsafe {
             heap.unlink_marker_from_registered_chains(marker);
+        });
+        super::gc::with_tagged_heap(|heap| {
+            heap.unregister_marker_ptr(marker);
         });
     }
     fn type_flags() -> TypeFlags {
         TypeFlags::FINALIZABLE
     }
     fn move_policy() -> MovePolicy {
-        MovePolicy::Pinned
+        MovePolicy::Movable
     }
 }
 

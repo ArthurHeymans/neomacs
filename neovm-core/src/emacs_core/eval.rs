@@ -4801,6 +4801,13 @@ impl Context {
         }
     }
 
+    pub(crate) fn relocate_marker_raw_roots(
+        &mut self,
+        visit: &mut dyn FnMut(&mut *mut crate::tagged::header::MarkerObj),
+    ) {
+        self.buffers.relocate_marker_raw_roots(visit);
+    }
+
     #[cfg(test)]
     fn root_requires_mutable_relocation(value: Value) -> bool {
         value.is_cons()
@@ -4816,6 +4823,7 @@ impl Context {
             || value.is_window()
             || value.is_frame()
             || value.is_timer()
+            || value.is_marker()
             || value.is_overlay()
             || value.is_bignum()
             || matches!(value.kind(), ValueKind::Veclike(VecLikeType::Subr))
