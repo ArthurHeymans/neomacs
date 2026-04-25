@@ -2379,9 +2379,6 @@ impl HeapCore {
 
     pub(crate) fn record_collection_stats(&mut self, cycle: CollectionStats) {
         self.stats.collections.saturating_add_assign(cycle);
-        if cycle.pause_nanos > 0 {
-            self.pause_stats.record(cycle.pause_nanos);
-        }
         if cycle.major_collections > 0 {
             let live_after = self.storage_stats().total_live_bytes();
             self.pacer.record_completed_cycle(&cycle, live_after);
@@ -2394,8 +2391,18 @@ impl HeapCore {
         }
     }
 
+    pub(crate) fn record_pause_sample(&self, pause_nanos: u64) {
+        self.pause_stats.record(pause_nanos);
+    }
+
     /// Return a snapshot of recent stop-the-world pause statistics (P50/P95/P99
     /// of pause nanoseconds over a bounded rolling window).
+    ///
+    /// Samples correspond to individual stop-the-world slices, not
+    /// necessarily whole completed GC cycles. Incremental major
+    /// reclaim therefore contributes one sample per reclaim-prepare
+    /// or reclaim-commit assist instead of one summed sample only
+    /// when the cycle finally completes.
     pub fn pause_histogram(&self) -> PauseHistogram {
         self.pause_stats.snapshot()
     }

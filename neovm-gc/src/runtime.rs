@@ -250,6 +250,7 @@ impl<'heap> CollectorRuntime<'heap> {
             }
         }
         cycle.pause_nanos = pause_start.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        self.heap.record_pause_sample(cycle.pause_nanos);
         self.record_completed_cycle(
             cycle,
             CollectionPlan {
@@ -636,6 +637,7 @@ impl<'heap> CollectorRuntime<'heap> {
         let Some(request) = request else {
             return Ok(false);
         };
+        let pause_start = Instant::now();
         let (mark_steps_delta, mark_rounds_delta) = {
             let objects = self.heap.objects();
             prepare_active_reclaim(
@@ -648,6 +650,7 @@ impl<'heap> CollectorRuntime<'heap> {
             build_prepared_active_reclaim(&request, mark_steps_delta, mark_rounds_delta, |plan| {
                 self.prepare_reclaim_for_plan(plan)
             })?;
+        let pause_nanos = elapsed_nanos(pause_start.elapsed());
         let prepared = self
             .heap
             .collector_handle()
@@ -658,6 +661,7 @@ impl<'heap> CollectorRuntime<'heap> {
                 self.heap.old_config(),
                 |kind| self.heap.plan_for(kind),
             );
+        self.heap.record_pause_sample(pause_nanos);
         Ok(prepared)
     }
 
@@ -835,9 +839,10 @@ impl<'heap> CollectorRuntime<'heap> {
             )));
         }
 
-        state.reclaim_commit_pause_nanos = state
-            .reclaim_commit_pause_nanos
-            .saturating_add(elapsed_nanos(pause_start.elapsed()));
+        let pause_nanos = elapsed_nanos(pause_start.elapsed());
+        state.reclaim_commit_pause_nanos =
+            state.reclaim_commit_pause_nanos.saturating_add(pause_nanos);
+        self.heap.record_pause_sample(pause_nanos);
         self.heap
             .collector_handle()
             .restore_major_mark_state_and_refresh(
@@ -972,7 +977,9 @@ impl<'heap> CollectorRuntime<'heap> {
             let roots = self.local.get_mut().roots_mut();
             self.heap.compact_old_gen_physical(roots, density_threshold);
         }
-        cycle.pause_nanos = prior_pause_nanos.saturating_add(elapsed_nanos(pause_start.elapsed()));
+        let current_pause_nanos = elapsed_nanos(pause_start.elapsed());
+        self.heap.record_pause_sample(current_pause_nanos);
+        cycle.pause_nanos = prior_pause_nanos.saturating_add(current_pause_nanos);
         self.record_completed_cycle(cycle, completed_plan);
         cycle
     }
@@ -1010,6 +1017,10 @@ fn prepare_heap_major_reclaim(heap: &mut HeapCore, plan: &CollectionPlan) -> Pre
     heap.restore_flat_store(flat);
     prepared
 }
+
+#[cfg(test)]
+#[path = "runtime_test.rs"]
+mod tests;
 
 fn trace_heap_major_ephemerons(
     heap: &HeapCore,

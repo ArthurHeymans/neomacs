@@ -1,9 +1,10 @@
 //! Rolling pause-time histogram for GC observability.
 //!
 //! Records recent STW pause durations (`pause_nanos`) captured by the
-//! runtime after each completed collection cycle. Exposes percentile
+//! runtime at each stop-the-world slice boundary. Exposes percentile
 //! summaries (P50/P95/P99) over a bounded window so consumers can
-//! monitor pause latency without pulling every cycle's stats.
+//! monitor mutator-visible pause latency without pulling every
+//! collection's raw event stream.
 //!
 //! The histogram is not a fully general tdigest or HDR histogram — it is
 //! a simple ring buffer of recent samples. This is adequate for a
