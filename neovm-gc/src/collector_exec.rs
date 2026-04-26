@@ -166,7 +166,7 @@ impl EphemeronVisitor for MajorEphemeronTracer<'_, '_> {
 
 #[derive(Debug)]
 pub(crate) struct ActiveMajorEphemeronTraceState {
-    candidates: Vec<ObjectLocator>,
+    candidates: Arc<[ObjectKey]>,
     scan_index: usize,
     changed_in_round: bool,
     scanned_candidates: usize,
@@ -188,14 +188,10 @@ pub(crate) struct ActiveMajorEphemeronTraceProgress {
 }
 
 pub(crate) fn begin_active_major_ephemeron_trace(
-    objects: ObjectReadRaw<'_>,
-    ephemeron_candidates: &[ObjectKey],
+    ephemeron_candidates: Arc<[ObjectKey]>,
 ) -> ActiveMajorEphemeronTraceState {
     ActiveMajorEphemeronTraceState {
-        candidates: ephemeron_candidates
-            .iter()
-            .filter_map(|key| objects.locator_of_key(*key))
-            .collect(),
+        candidates: ephemeron_candidates,
         scan_index: 0,
         changed_in_round: false,
         scanned_candidates: 0,
@@ -226,7 +222,7 @@ pub(crate) fn advance_active_major_ephemeron_trace(
             .len()
             .min(start.saturating_add(candidate_scan_budget));
         if start < end {
-            let changed = scan_major_ephemeron_candidate_range(
+            let changed = scan_major_ephemeron_candidate_key_range(
                 objects,
                 &state.candidates[start..end],
                 &mut tracer,
@@ -270,15 +266,18 @@ fn finish_active_ephemeron_round_if_ready(state: &mut ActiveMajorEphemeronTraceS
     true
 }
 
-fn scan_major_ephemeron_candidate_range(
+fn scan_major_ephemeron_candidate_key_range(
     objects: ObjectReadRaw<'_>,
-    ephemeron_candidates: &[ObjectLocator],
+    ephemeron_candidates: &[ObjectKey],
     tracer: &mut MarkTracer<'_>,
     worker_count: usize,
 ) -> bool {
     if worker_count.max(1) == 1 || ephemeron_candidates.len() <= 1 {
         let mut visitor = MajorEphemeronTracer::new(tracer);
-        for &index in ephemeron_candidates {
+        for &key in ephemeron_candidates {
+            let Some(index) = objects.locator_of_key(key) else {
+                continue;
+            };
             let object = objects.get(index);
             if object.is_marked() {
                 object.visit_ephemerons(&mut visitor);
@@ -288,7 +287,7 @@ fn scan_major_ephemeron_candidate_range(
         let _tracer = visitor.finish();
         changed
     } else {
-        scan_major_ephemerons_parallel(objects, ephemeron_candidates, tracer, worker_count)
+        scan_major_ephemeron_keys_parallel(objects, ephemeron_candidates, tracer, worker_count)
     }
 }
 
@@ -1638,9 +1637,9 @@ fn run_stealing_round_minor(
     (total_drained, drained_slices)
 }
 
-fn scan_major_ephemerons_parallel(
+fn scan_major_ephemeron_keys_parallel(
     objects: ObjectReadRaw<'_>,
-    ephemeron_candidates: &[ObjectLocator],
+    ephemeron_candidates: &[ObjectKey],
     tracer: &mut MarkTracer<'_>,
     worker_count: usize,
 ) -> bool {
@@ -1658,10 +1657,14 @@ fn scan_major_ephemerons_parallel(
             }
             handles.push(scope.spawn(move || {
                 let mut worker = shared.tracer(MarkWorklist::default());
+                let objects = shared.objects();
                 let changed = {
                     let mut visitor = MajorEphemeronTracer::new(&mut worker);
-                    for &locator in &ephemeron_candidates[start..end] {
-                        let object = shared.objects().get(locator);
+                    for &key in &ephemeron_candidates[start..end] {
+                        let Some(locator) = objects.locator_of_key(key) else {
+                            continue;
+                        };
+                        let object = objects.get(locator);
                         if object.is_marked() {
                             object.visit_ephemerons(&mut visitor);
                         }

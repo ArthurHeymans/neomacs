@@ -1152,8 +1152,7 @@ fn advance_active_reclaim_ephemerons(
     let objects = core.objects();
     let raw = objects.raw();
     let trace = state.ephemeron_trace_state.get_or_insert_with(|| {
-        let ephemeron_candidates = objects.ephemeron_candidates();
-        begin_active_major_ephemeron_trace(raw.clone(), &ephemeron_candidates)
+        begin_active_major_ephemeron_trace(objects.ephemeron_candidate_snapshot())
     });
     let mark_slice_budget = request.plan.mark_slice_budget.min(budget.max(1)).max(1);
     let progress = advance_active_major_ephemeron_trace(

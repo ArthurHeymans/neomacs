@@ -220,6 +220,10 @@ impl<'a> ObjectStoreReadGuard<'a> {
         self.ephemeron_candidates.as_ref().to_vec()
     }
 
+    pub(crate) fn ephemeron_candidate_snapshot(&self) -> Arc<[ObjectKey]> {
+        Arc::clone(&self.ephemeron_candidates)
+    }
+
     #[inline]
     pub(crate) fn remembered(&self) -> &RememberedSetState {
         self.remembered

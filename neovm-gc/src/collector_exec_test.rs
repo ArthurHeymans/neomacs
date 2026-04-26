@@ -263,7 +263,9 @@ fn active_major_ephemeron_trace_slices_candidate_scan() {
         ..HeapIndexState::default()
     };
     let view = FlatReadView::new(&objects, &indexes);
-    let mut trace = begin_active_major_ephemeron_trace(view.raw(), &[first_key, second_key]);
+    let mut trace = begin_active_major_ephemeron_trace(std::sync::Arc::<[_]>::from(vec![
+        first_key, second_key,
+    ]));
 
     let first_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
     assert!(!first_progress.completed);
@@ -301,7 +303,8 @@ fn active_major_ephemeron_trace_slices_fixpoint_mark_work() {
         ..HeapIndexState::default()
     };
     let view = FlatReadView::new(&objects, &indexes);
-    let mut trace = begin_active_major_ephemeron_trace(view.raw(), &[holder_key]);
+    let mut trace =
+        begin_active_major_ephemeron_trace(std::sync::Arc::<[_]>::from(vec![holder_key]));
 
     let first_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
     assert!(!first_progress.completed);
