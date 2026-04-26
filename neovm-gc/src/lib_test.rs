@@ -11895,6 +11895,29 @@ fn nursery_tlab_invalidated_by_minor_collection() {
 }
 
 #[test]
+fn pinned_mutator_fast_path_no_longer_blocks_stop_the_world_collect() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    mutator.pin_safepoint();
+
+    let worker_heap = heap.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        worker_heap
+            .collect(CollectionKind::Minor)
+            .expect("minor collect from helper thread");
+        done_tx
+            .send(())
+            .expect("signal stop-the-world collection completion");
+    });
+
+    done_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("idle pinned mutator should not block stop-the-world collection");
+    worker.join().expect("join stop-the-world helper thread");
+}
+
+#[test]
 fn nursery_tlab_force_invalidation_via_test_helper() {
     // The test-only helper Mutator::invalidate_nursery_tlab
     // drops the current slab so the next alloc has to

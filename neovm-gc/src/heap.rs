@@ -243,12 +243,14 @@ pub(crate) struct AllocationCommit {
 /// Global heap object.
 ///
 /// `Heap` owns one shared heap state containing a safepoint
-/// lock plus a storage lock. Mutators hold a safepoint read
-/// guard while they operate so collector / compaction paths
-/// can stop the world by taking the safepoint write guard.
-/// The common nursery-TLAB path can therefore avoid taking
-/// the storage write lock until it actually needs to touch
-/// shared heap state.
+/// lock plus a storage lock. Mutators take short-lived
+/// safepoint read guards only around allocation / barrier
+/// critical sections, so collector / compaction paths can
+/// still stop the world by taking the safepoint write guard
+/// without being blocked by an otherwise idle persistent
+/// mutator. The common nursery-TLAB path can therefore avoid
+/// taking the storage write lock until it actually needs to
+/// touch shared heap state.
 ///
 /// `Heap` is `Clone` via `Arc::clone` — passing the heap to
 /// another thread or storing additional handles is cheap.
@@ -644,9 +646,10 @@ impl Heap {
     /// Takes `&self` so multiple mutators can coexist
     /// against the same heap at the type level. Each mutator
     /// owns its own [`crate::mutator::MutatorLocal`] and
-    /// holds a safepoint read guard while it operates,
-    /// taking the heap-core write lock only when it needs to
-    /// touch shared heap state.
+    /// takes operation-scoped safepoint read guards while it
+    /// allocates or mutates heap edges, taking the heap-core
+    /// write lock only when it needs to touch shared heap
+    /// state.
     pub fn mutator(&self) -> Mutator<'_> {
         Mutator::new(self)
     }

@@ -424,8 +424,10 @@ impl TaggedHeap {
         let gc_shared: &'static neovm_gc::SharedHeap = unsafe { &*shared_box };
 
         // Persistent Mutator on the direct heap. Pin its
-        // safepoint read guard so subsequent allocations reuse
-        // one `ObjectPublishLocal` across calls.
+        // safepoint fast-path state so subsequent allocations
+        // reuse one `ObjectPublishLocal` across calls without
+        // holding the safepoint read lock for the mutator's
+        // full lifetime.
         let mut mutator = gc_heap.mutator();
         mutator.pin_safepoint();
         let gc_mutator = Some(Box::new(mutator));
@@ -1351,16 +1353,15 @@ impl TaggedHeap {
         self.with_mutator(|m| m.advance_auto_compaction()) > 0
     }
 
-    /// Yield the mutator's persistent safepoint read guard so the
-    /// background collector can take its write guard and finish a
-    /// pending STW phase.
+    /// Yield the VM thread briefly so the background collector can
+    /// take the safepoint write guard and finish a pending STW phase.
     ///
     /// Fast-gated on `has_active_major_mark`: the common case
     /// (no background mark session in flight) is a single
     /// atomic load and early return, so this is cheap enough to
     /// call from every safe point. Only when the worker has
     /// actually started a concurrent Major do we pay for the
-    /// RwLock release/re-acquire pair.
+    /// scheduler yield.
     pub(crate) fn yield_to_background_collector(&mut self) {
         if self.gc_background_worker.is_none() {
             return;

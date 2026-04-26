@@ -286,15 +286,31 @@ impl MutatorLocal {
     }
 }
 
+fn enter_safepoint_read<'heap>(
+    heap: &'heap Heap,
+    handle_scope_state: &mut crate::root::HandleScopeState<'heap>,
+    local: &mut MutatorLocal,
+) -> std::sync::RwLockReadGuard<'heap, ()> {
+    let needs_refresh = !handle_scope_state.has_safepoint();
+    let safepoint = heap.read_safepoint();
+    if needs_refresh {
+        handle_scope_state.ensure_safepoint();
+        local.refresh_safepoint_fast_path_state(heap);
+    }
+    safepoint
+}
+
 /// Mutator view onto the heap.
 ///
 /// Holds a shared `&Heap` borrow plus a per-mutator
 /// `MutatorLocal`. Multiple mutators can coexist against
 /// the same heap because they all borrow `&Heap`.
 /// Collector-style operations take the safepoint write lock
-/// through `with_runtime`; the common allocation path holds
-/// only a safepoint read lock and takes the heap-core write
-/// lock only when it actually needs shared heap state.
+/// through `with_runtime`; the common allocation and barrier
+/// paths take short-lived safepoint read guards only around
+/// the critical sections that must not overlap a stop-the-
+/// world phase, and take the heap-core write lock only when
+/// they actually need shared heap state.
 #[derive(Debug)]
 pub struct Mutator<'heap> {
     heap: &'heap Heap,
@@ -417,11 +433,7 @@ impl<'heap> Mutator<'heap> {
     /// Create a new rooted handle scope backed by this
     /// mutator's per-local root stack.
     pub fn handle_scope<'scope>(&mut self) -> HandleScope<'scope, 'heap> {
-        let had_safepoint = self.handle_scope_state.has_safepoint();
         self.handle_scope_state.begin_scope();
-        if !had_safepoint {
-            self.local.refresh_safepoint_fast_path_state(self.heap);
-        }
         HandleScope::new_with_state(
             self.local.root_stack_ptr(),
             NonNull::from(&mut self.handle_scope_state),
@@ -438,10 +450,8 @@ impl<'heap> Mutator<'heap> {
         scope: &mut HandleScope<'scope, 'handle_heap>,
         value: T,
     ) -> Result<Root<'scope, T>, AllocError> {
-        if !self.handle_scope_state.has_safepoint() {
-            self.handle_scope_state.ensure_safepoint();
-            self.local.refresh_safepoint_fast_path_state(self.heap);
-        }
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         let Self { heap, local, .. } = self;
         if local.prepared_full_reclaim_active() {
             return Err(AllocError::CollectionInProgress);
@@ -683,48 +693,29 @@ impl<'heap> Mutator<'heap> {
     /// The caller must ensure the returned pointer is kept reachable
     /// via a root the GC can discover until the object becomes
     /// unreachable.
-    /// Pin a persistent safepoint read guard on this mutator. Required
-    /// by external-root hosts that use [`alloc_pinned_raw`] without
-    /// opening a `HandleScope`. Without a pinned safepoint, each
-    /// allocation re-entering the safepoint-fast-path would clear the
-    /// mutator's `ObjectPublishLocal` reservations and force a fresh
-    /// 40KB `ObjectStore` chunk per allocation. Safe to call more than
-    /// once; the guard is reference-counted by depth.
+    /// Pin the mutator's safepoint fast-path state on this mutator.
+    ///
+    /// Required by external-root hosts that use [`alloc_pinned_raw`]
+    /// without opening a `HandleScope`. This no longer holds the heap's
+    /// safepoint read lock for the mutator's full lifetime; it just
+    /// keeps the cached nursery-generation / publish-local state hot so
+    /// repeated external-root allocations avoid pathological churn.
     pub fn pin_safepoint(&mut self) {
+        let _safepoint = self.heap.read_safepoint();
         self.handle_scope_state.pin_safepoint();
         self.local.refresh_safepoint_fast_path_state(self.heap);
     }
 
-    /// Yield the persistent safepoint read guard briefly so the
-    /// collector can take its write guard and complete a pending
-    /// STW phase.
+    /// Yield the thread briefly so a pending collector write-side phase
+    /// can run.
     ///
-    /// Drops the read guard, hints the scheduler, then re-acquires
-    /// the guard. If the collector was not waiting for write, the
-    /// main thread takes the read guard again almost immediately
-    /// and keeps working; if it was waiting, the OS scheduler
-    /// hands it the CPU during the hint window, it takes write,
-    /// completes its STW work, and we block briefly on our
-    /// re-acquisition. Net: the background worker's reclaim phase
-    /// can make progress without requiring the mutator to leave
-    /// the pin_safepoint fast-path entirely.
-    ///
-    /// Also refreshes the mutator's safepoint fast-path state
-    /// (nursery generation, TLAB size, etc.) since the brief
-    /// window may have seen a collection complete. Safe to call
-    /// at any time the mutator is quiescent -- typically from a
-    /// VM safe point.
+    /// With operation-scoped safepoint reads there is no longer a
+    /// long-lived mutator-held read guard to drop here; the helper is
+    /// retained for direct-heap persistent-mutator hosts that already
+    /// call it at VM safe points, but it now simply gives the
+    /// scheduler a chance to run the collector thread.
     pub fn yield_safepoint(&mut self) {
-        self.handle_scope_state.release_safepoint();
-        // No explicit scheduler yield here: sched_yield costs
-        // microseconds and, multiplied by every safe point, will
-        // dominate the whole workload. The release/re-acquire
-        // window alone is enough -- if the collector had been
-        // blocked waiting for write_safepoint, it takes the lock
-        // now; our `ensure_safepoint` call below blocks on its
-        // release.
-        self.handle_scope_state.ensure_safepoint();
-        self.local.refresh_safepoint_fast_path_state(self.heap);
+        std::thread::yield_now();
     }
 
     /// Allocate a pinned (non-moving) object and return a raw payload
@@ -738,21 +729,16 @@ impl<'heap> Mutator<'heap> {
     /// system allocator for larger objects. Records are published to
     /// `ObjectStore` so the concurrent marker can discover them.
     ///
-    /// The first call on a fresh mutator pins a safepoint read guard
-    /// so that subsequent allocations reuse the same
+    /// The first call on a fresh mutator activates the safepoint
+    /// fast-path state so that subsequent allocations reuse the same
     /// `ObjectPublishLocal` chunk reservations instead of allocating a
     /// fresh 40KB chunk per call.
     pub fn alloc_pinned_raw<T: Trace + 'static>(
         &mut self,
         value: T,
     ) -> Result<NonNull<T>, AllocError> {
-        if !self.handle_scope_state.has_safepoint() {
-            // First call on a fresh mutator: pin the safepoint so that
-            // subsequent allocations reuse the same
-            // `ObjectPublishLocal` chunk reservations.
-            self.handle_scope_state.pin_safepoint();
-            self.local.refresh_safepoint_fast_path_state(self.heap);
-        }
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         let Self { heap, local, .. } = self;
         if local.prepared_full_reclaim_active() {
             return Err(AllocError::CollectionInProgress);
@@ -821,8 +807,9 @@ impl<'heap> Mutator<'heap> {
     /// an [`ExternalRootRelocator`] when the type is Movable so pointer
     /// rewrites are applied at the end of each evacuation.
     ///
-    /// The first call on a fresh mutator pins a safepoint read guard to
-    /// keep `ObjectPublishLocal` chunk reservations alive across calls.
+    /// The first call on a fresh mutator activates the safepoint
+    /// fast-path state to keep `ObjectPublishLocal` chunk reservations
+    /// alive across calls.
     ///
     /// # Safety
     ///
@@ -835,10 +822,6 @@ impl<'heap> Mutator<'heap> {
         &mut self,
         value: T,
     ) -> Result<NonNull<T>, AllocError> {
-        if !self.handle_scope_state.has_safepoint() {
-            self.handle_scope_state.pin_safepoint();
-            self.local.refresh_safepoint_fast_path_state(self.heap);
-        }
         let mut scope = self.handle_scope();
         let root = self.alloc_typed_scoped(&mut scope, value)?;
         let gc = root.as_gc();
@@ -1121,7 +1104,7 @@ impl<'heap> Mutator<'heap> {
 
     /// Record a post-write barrier for one mutated GC edge.
     ///
-    /// Runs under a mutator-held safepoint read lock plus a
+    /// Runs under an operation-scoped mutator safepoint read lock plus a
     /// `HeapCore` read lock. That safepoint matters for
     /// correctness: it prevents `begin_major_mark` from
     /// starting in the middle of a pointer mutation, so the
@@ -1230,13 +1213,8 @@ impl<'heap> Mutator<'heap> {
         old_erased: Option<GcErased>,
         new_erased: Option<GcErased>,
     ) {
-        let had_safepoint = self.handle_scope_state.has_safepoint();
-        self.handle_scope_state.ensure_safepoint();
-        if !had_safepoint {
-            self.local.refresh_safepoint_fast_path_state(self.heap);
-        }
         let _safepoint =
-            (!self.handle_scope_state.has_safepoint()).then(|| self.heap.read_safepoint());
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         self.post_write_barrier_erased_with_safepoint(owner_erased, slot, old_erased, new_erased);
     }
 
@@ -1270,9 +1248,10 @@ impl<'heap> Mutator<'heap> {
         project: impl FnOnce(&Owner) -> &EdgeCell<Value>,
         new_value: Option<Gc<Value>>,
     ) {
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         let owner_gc = owner.as_gc();
         let owner_ref = unsafe { owner_gc.as_non_null().as_ref() };
-        self.handle_scope_state.ensure_safepoint();
         let edge = project(owner_ref);
         let old_value = edge.replace(new_value);
         self.post_write_barrier_erased_with_safepoint(

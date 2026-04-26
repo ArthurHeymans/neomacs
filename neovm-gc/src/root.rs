@@ -122,53 +122,56 @@ impl<'scope, T: ?Sized> Root<'scope, T> {
 
 #[derive(Debug)]
 pub(crate) struct HandleScopeState<'heap> {
-    heap: &'heap Heap,
     depth: usize,
-    safepoint: Option<std::sync::RwLockReadGuard<'heap, ()>>,
+    safepoint_active: bool,
+    _heap: PhantomData<&'heap Heap>,
 }
 
 impl<'heap> HandleScopeState<'heap> {
-    pub(crate) fn new(heap: &'heap Heap) -> Self {
+    pub(crate) fn new(_heap: &'heap Heap) -> Self {
         Self {
-            heap,
             depth: 0,
-            safepoint: None,
+            safepoint_active: false,
+            _heap: PhantomData,
         }
     }
 
     pub(crate) fn begin_scope(&mut self) {
         self.depth = self.depth.saturating_add(1);
-        self.ensure_safepoint();
     }
 
-    /// Pin the safepoint read guard without matching a `HandleScope`.
+    /// Pin the mutator's safepoint fast-path state without matching a
+    /// `HandleScope`.
+    ///
     /// Used by the tagged-pointer host (neomacs) which manages roots
-    /// externally and never opens a scope, but still needs a persistent
-    /// safepoint so the mutator's `ObjectPublishLocal` reservations
-    /// don't get cleared by the next allocation's safepoint-refresh.
+    /// externally and never opens a scope, but still wants the mutator
+    /// to keep its cached nursery generation / publish reservations hot
+    /// across calls. The actual safepoint lock is now taken per
+    /// allocation or write-barrier critical section rather than being
+    /// held for the mutator's full lifetime.
     pub(crate) fn pin_safepoint(&mut self) {
         self.depth = self.depth.saturating_add(1);
         self.ensure_safepoint();
     }
 
     pub(crate) fn ensure_safepoint(&mut self) {
-        if self.depth > 0 && self.safepoint.is_none() {
-            self.safepoint = Some(self.heap.read_safepoint());
+        if self.depth > 0 {
+            self.safepoint_active = true;
         }
     }
 
     pub(crate) fn has_safepoint(&self) -> bool {
-        self.safepoint.is_some()
+        self.safepoint_active
     }
 
     pub(crate) fn release_safepoint(&mut self) {
-        self.safepoint = None;
+        self.safepoint_active = false;
     }
 
     fn end_scope(&mut self) {
         self.depth = self.depth.saturating_sub(1);
         if self.depth == 0 {
-            self.safepoint = None;
+            self.safepoint_active = false;
         }
     }
 }
