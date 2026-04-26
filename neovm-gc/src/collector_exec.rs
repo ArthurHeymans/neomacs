@@ -14,7 +14,6 @@ use crate::object_store::{FlatReadView, ObjectReadRaw, ObjectReadView};
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};
 use crate::reclaim::{
     PreparedReclaim, finish_prepared_reclaim_cycle,
-    prepare_full_reclaim as orchestrate_full_reclaim,
     prepare_major_reclaim as orchestrate_major_reclaim, prepare_reclaim,
     sweep_minor_and_rebuild_post_collection as rebuild_minor_after_collection,
 };
@@ -601,18 +600,8 @@ pub(crate) fn prepare_full_reclaim_for_plan(
     external_relocator: Option<&crate::heap::ExternalRootRelocator>,
     mut record_phase: impl FnMut(CollectionPhase),
 ) -> Result<PreparedReclaim, AllocError> {
-    struct FullReclaimState<'a> {
-        roots: &'a mut RootStack,
-        objects: &'a mut Vec<ObjectRecord>,
-        indexes: &'a mut HeapIndexState,
-        old_gen: &'a mut OldGenState,
-        old_config: &'a OldGenConfig,
-        nursery_config: &'a NurseryConfig,
-        stats: &'a mut HeapStats,
-        nursery: &'a mut crate::spaces::NurseryState,
-    }
-
-    let mut state = FullReclaimState {
+    let promoted_bytes = prepare_full_reclaim_prefix_for_plan(
+        plan,
         roots,
         objects,
         indexes,
@@ -621,56 +610,54 @@ pub(crate) fn prepare_full_reclaim_for_plan(
         nursery_config,
         stats,
         nursery,
-    };
+        external_relocator,
+        &mut record_phase,
+    )?;
+    Ok(PreparedReclaim {
+        promoted_bytes,
+        ..prepare_reclaim(objects, indexes, old_gen, old_config, plan.kind, plan)
+    })
+}
+
+pub(crate) fn prepare_full_reclaim_prefix_for_plan(
+    plan: &CollectionPlan,
+    roots: &mut RootStack,
+    objects: &mut Vec<ObjectRecord>,
+    indexes: &mut HeapIndexState,
+    old_gen: &mut OldGenState,
+    old_config: &OldGenConfig,
+    nursery_config: &NurseryConfig,
+    stats: &mut HeapStats,
+    nursery: &mut crate::spaces::NurseryState,
+    external_relocator: Option<&crate::heap::ExternalRootRelocator>,
+    mut record_phase: impl FnMut(CollectionPhase),
+) -> Result<usize, AllocError> {
     record_phase(CollectionPhase::Evacuate);
-    orchestrate_full_reclaim(
-        &mut state,
-        plan,
-        |state| {
-            let evacuation = evacuate_nursery_space(
-                state.objects,
-                state.indexes,
-                state.old_gen,
-                state.old_config,
-                state.nursery_config,
-                state.stats,
-                state.nursery,
-            )?;
-            Ok((evacuation.forwarding, evacuation.promoted_bytes))
-        },
-        |state, forwarding| {
-            relocate_forwarded_roots_and_edges(
-                state.roots,
-                state.objects,
-                state.indexes,
-                forwarding,
-            );
-            if let Some(relocator) = external_relocator {
-                let mut fwd = ForwardingRelocator::new(forwarding);
-                relocator.call(&mut fwd);
-            }
-        },
-        |state, plan, forwarding| {
-            let view = FlatReadView::new(state.objects, state.indexes);
-            process_weak_references_for_candidates(
-                view.raw(),
-                &state.indexes.weak_candidates,
-                plan.kind,
-                plan.worker_count.max(1),
-                forwarding,
-            );
-        },
-        |state, plan| {
-            prepare_reclaim(
-                state.objects,
-                state.indexes,
-                state.old_gen,
-                state.old_config,
-                plan.kind,
-                plan,
-            )
-        },
-    )
+    let evacuation = evacuate_nursery_space(
+        objects,
+        indexes,
+        old_gen,
+        old_config,
+        nursery_config,
+        stats,
+        nursery,
+    )?;
+    let forwarding = evacuation.forwarding;
+    let promoted_bytes = evacuation.promoted_bytes;
+    relocate_forwarded_roots_and_edges(roots, objects, indexes, &forwarding);
+    if let Some(relocator) = external_relocator {
+        let mut fwd = ForwardingRelocator::new(&forwarding);
+        relocator.call(&mut fwd);
+    }
+    let view = FlatReadView::new(objects, indexes);
+    process_weak_references_for_candidates(
+        view.raw(),
+        &indexes.weak_candidates,
+        plan.kind,
+        plan.worker_count.max(1),
+        &forwarding,
+    );
+    Ok(promoted_bytes)
 }
 
 pub(crate) fn execute_collection_plan(

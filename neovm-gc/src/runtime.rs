@@ -5,11 +5,11 @@ use crate::background::{
     SharedCollectorHandle, SharedHeap, SharedHeapError, SharedHeapStatus, SharedRuntimeHandle,
 };
 use crate::collector_exec::{
-    collect_global_sources, execute_collection_plan, prepare_major_reclaim_for_plan,
+    collect_global_sources, execute_collection_plan, prepare_full_reclaim_prefix_for_plan,
     process_weak_references_for_candidates, trace_major_ephemerons_for_candidates,
 };
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{self, build_prepared_active_reclaim, prepare_active_reclaim};
+use crate::collector_session::{self, prepare_active_reclaim};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
 use crate::descriptor::{GcErased, TypeDesc};
 use crate::heap::{AllocError, HeapCore, TryCollectorRuntimeError};
@@ -20,7 +20,7 @@ use crate::plan::{
     RuntimeWorkStatus,
 };
 use crate::reclaim::{
-    PreparedReclaim, advance_active_prepared_reclaim_build, advance_prepared_reclaim_commit,
+    advance_active_prepared_reclaim_build, advance_prepared_reclaim_commit,
     begin_active_prepared_reclaim_build, begin_prepared_reclaim_commit,
     finish_active_prepared_reclaim_build, finish_prepared_reclaim_cycle_with_state,
 };
@@ -687,39 +687,6 @@ impl<'heap> CollectorRuntime<'heap> {
         let Some(request) = request else {
             return Ok(false);
         };
-        if request.plan.kind != CollectionKind::Major {
-            let pause_start = Instant::now();
-            let (mark_steps_delta, mark_rounds_delta) = {
-                let objects = self.heap.objects();
-                prepare_active_reclaim(
-                    &request,
-                    |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
-                    objects.raw(),
-                )
-            };
-            self.heap
-                .collector_handle()
-                .push_phase(CollectionPhase::Remark);
-            let prepared = build_prepared_active_reclaim(
-                &request,
-                mark_steps_delta,
-                mark_rounds_delta,
-                |plan| self.prepare_reclaim_for_plan(plan),
-            )?;
-            let pause_nanos = elapsed_nanos(pause_start.elapsed());
-            let prepared = self
-                .heap
-                .collector_handle()
-                .complete_active_reclaim_prep_and_refresh(
-                    prepared,
-                    &self.heap.storage_stats(),
-                    self.heap.old_gen(),
-                    self.heap.old_config(),
-                    |kind| self.heap.plan_for(kind),
-                );
-            self.heap.record_pause_sample(pause_nanos);
-            return Ok(prepared);
-        }
         let pause_start = Instant::now();
         let Some(mut state) = self.heap.collector_handle().take_major_mark_state() else {
             return Ok(false);
@@ -750,9 +717,58 @@ impl<'heap> CollectorRuntime<'heap> {
             state.ephemerons_processed = true;
         }
 
+        let mut promoted_bytes = 0usize;
+        if state.reclaim_prepare_state.is_none() && request.plan.kind == CollectionKind::Full {
+            self.heap
+                .collector_handle()
+                .push_phase(CollectionPhase::Remark);
+            let mut phases = Vec::new();
+            let roots = self.local.get_mut().roots_mut();
+            let prefix = self.heap.with_flat_store_for_collection(
+                |flat,
+                 old_gen,
+                 old_config,
+                 nursery_config,
+                 stats,
+                 nursery,
+                 _ext_scanner,
+                 ext_relocator| {
+                    prepare_full_reclaim_prefix_for_plan(
+                        &request.plan,
+                        roots,
+                        &mut flat.objects,
+                        &mut flat.indexes,
+                        old_gen,
+                        old_config,
+                        nursery_config,
+                        stats,
+                        nursery,
+                        ext_relocator,
+                        |phase| phases.push(phase),
+                    )
+                },
+            );
+            match prefix {
+                Ok(bytes) => promoted_bytes = bytes,
+                Err(error) => {
+                    self.heap
+                        .collector_handle()
+                        .restore_major_mark_state_and_refresh(
+                            state,
+                            &self.heap.storage_stats(),
+                            self.heap.old_gen(),
+                            self.heap.old_config(),
+                            |kind| self.heap.plan_for(kind),
+                        );
+                    return Err(error);
+                }
+            }
+            self.heap.collector_handle().push_phases(phases);
+        }
+
         let objects = self.heap.objects();
         let raw = objects.raw();
-        if state.reclaim_prepare_state.is_none() {
+        if state.reclaim_prepare_state.is_none() && request.plan.kind == CollectionKind::Major {
             // Weak slots must be filtered before survivor/candidate lists are
             // snapshotted by the incremental reclaim-prep builder.
             let empty_forwarding = ForwardingMap::default();
@@ -771,6 +787,7 @@ impl<'heap> CollectorRuntime<'heap> {
                 objects.finalizable_candidates(),
                 objects.weak_candidates(),
                 objects.ephemeron_candidates(),
+                promoted_bytes,
             )
         });
         let completed = advance_active_prepared_reclaim_build(raw, build, budget);
@@ -787,9 +804,11 @@ impl<'heap> CollectorRuntime<'heap> {
             state.reclaim_prepared = true;
             state.prepared_reclaim = Some(prepared_reclaim);
             state.reclaim_commit_pause_nanos = 0;
-            self.heap
-                .collector_handle()
-                .push_phase(CollectionPhase::Remark);
+            if request.plan.kind == CollectionKind::Major {
+                self.heap
+                    .collector_handle()
+                    .push_phase(CollectionPhase::Remark);
+            }
         }
         self.heap
             .collector_handle()
@@ -1073,48 +1092,6 @@ impl<'heap> CollectorRuntime<'heap> {
         }
     }
 
-    fn prepare_reclaim_for_plan(
-        &mut self,
-        plan: &CollectionPlan,
-    ) -> Result<PreparedReclaim, AllocError> {
-        match plan.kind {
-            CollectionKind::Major => Ok(prepare_heap_major_reclaim(self.heap, plan)),
-            CollectionKind::Full => {
-                let mut phases = Vec::new();
-                let roots = self.local.get_mut().roots_mut();
-                let prepared = self.heap.with_flat_store_for_collection(
-                    |flat,
-                     old_gen,
-                     old_config,
-                     nursery_config,
-                     stats,
-                     nursery,
-                     _ext_scanner,
-                     ext_relocator| {
-                        crate::collector_exec::prepare_full_reclaim_for_plan(
-                            plan,
-                            roots,
-                            &mut flat.objects,
-                            &mut flat.indexes,
-                            old_gen,
-                            old_config,
-                            nursery_config,
-                            stats,
-                            nursery,
-                            ext_relocator,
-                            |phase| phases.push(phase),
-                        )
-                    },
-                )?;
-                self.heap.collector_handle().push_phases(phases);
-                Ok(prepared)
-            }
-            CollectionKind::Minor => Err(AllocError::UnsupportedCollectionKind {
-                kind: CollectionKind::Minor,
-            }),
-        }
-    }
-
     fn finalize_reclaim_cycle(
         &mut self,
         mut cycle: CollectionStats,
@@ -1217,6 +1194,7 @@ fn prepare_active_major_reclaim_with_read_core(
                 objects.finalizable_candidates(),
                 objects.weak_candidates(),
                 objects.ephemeron_candidates(),
+                0,
             )
         });
         advance_active_prepared_reclaim_build(raw, build, budget)
@@ -1246,19 +1224,6 @@ fn prepare_active_major_reclaim_with_read_core(
         |kind| core.plan_for(kind),
     );
     completed
-}
-
-fn prepare_heap_major_reclaim(heap: &mut HeapCore, plan: &CollectionPlan) -> PreparedReclaim {
-    let flat = heap.take_flat_store();
-    let prepared = prepare_major_reclaim_for_plan(
-        plan,
-        &flat.objects,
-        &flat.indexes,
-        heap.old_gen(),
-        heap.old_config(),
-    );
-    heap.restore_flat_store(flat);
-    prepared
 }
 
 #[cfg(test)]

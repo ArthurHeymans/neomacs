@@ -394,6 +394,92 @@ fn full_collect_uses_bounded_active_pipeline() {
 }
 
 #[test]
+fn full_reclaim_prepare_builds_snapshot_in_bounded_slices() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    {
+        let mut scope = mutator.handle_scope();
+        for byte in 0..512u16 {
+            mutator
+                .alloc(
+                    &mut scope,
+                    OldLeaf {
+                        _bytes: [byte as u8; 32],
+                    },
+                )
+                .expect("allocate old leaf");
+        }
+    }
+    drop(mutator);
+
+    let mut plan = heap.plan_for(CollectionKind::Full);
+    plan.mark_slice_budget = usize::MAX;
+    {
+        let mut runtime = heap.collector_runtime();
+        runtime.begin_major_mark(plan).expect("begin full mark");
+        while !runtime
+            .poll_active_major_mark()
+            .expect("poll full mark")
+            .expect("active full mark should stay active")
+            .completed
+        {}
+
+        let prepared = runtime
+            .runtime()
+            .prepare_active_reclaim_if_needed_with_budget(1)
+            .expect("prepare first full reclaim slice");
+        assert!(!prepared);
+        assert_ne!(
+            runtime
+                .active_major_mark_plan()
+                .expect("active plan after partial full prep")
+                .phase,
+            CollectionPhase::Reclaim
+        );
+    }
+
+    assert_eq!(
+        heap.recent_phase_trace(),
+        &[
+            CollectionPhase::InitialMark,
+            CollectionPhase::ConcurrentMark,
+            CollectionPhase::Remark,
+            CollectionPhase::Evacuate,
+        ]
+    );
+
+    let cycle = heap
+        .finish_major_collection()
+        .expect("finish bounded full collection");
+    assert_eq!(cycle.major_collections, 1);
+    assert_eq!(
+        heap.recent_phase_trace(),
+        &[
+            CollectionPhase::InitialMark,
+            CollectionPhase::ConcurrentMark,
+            CollectionPhase::Remark,
+            CollectionPhase::Evacuate,
+            CollectionPhase::Reclaim,
+        ]
+    );
+}
+
+#[test]
 fn execute_major_plan_uses_bounded_active_pipeline() {
     let heap = crate::Heap::new(HeapConfig {
         nursery: NurseryConfig {

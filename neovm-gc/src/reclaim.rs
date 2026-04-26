@@ -1,4 +1,5 @@
 use crate::descriptor::ObjectKey;
+#[cfg(test)]
 use crate::heap::AllocError;
 use crate::index_state::{
     ForwardingMap, HeapIndexState, ObjectIndex, ObjectKeyBuildHasher, ObjectLocator,
@@ -312,6 +313,7 @@ pub(crate) struct PreparedReclaim {
 pub(crate) struct PreparedReclaimBuildState {
     kind: CollectionKind,
     prepared_object_count: usize,
+    promoted_bytes: usize,
     scan_index: usize,
     locators: Vec<ObjectLocator>,
     finalizable_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
@@ -404,11 +406,13 @@ pub(crate) fn begin_active_prepared_reclaim_build(
     finalizable_candidates: Vec<ObjectKey>,
     weak_candidates: Vec<ObjectKey>,
     ephemeron_candidates: Vec<ObjectKey>,
+    promoted_bytes: usize,
 ) -> PreparedReclaimBuildState {
     let prepared_object_count = locators.len();
     PreparedReclaimBuildState {
         kind,
         prepared_object_count,
+        promoted_bytes,
         scan_index: 0,
         locators,
         finalizable_candidate_set: finalizable_candidates
@@ -480,6 +484,7 @@ pub(crate) fn finish_active_prepared_reclaim_build(
 ) -> PreparedReclaim {
     let PreparedReclaimBuildState {
         prepared_object_count,
+        promoted_bytes,
         rebuilt_object_index,
         finalize_indices,
         finalizable_candidates,
@@ -491,7 +496,7 @@ pub(crate) fn finish_active_prepared_reclaim_build(
     } = build;
     PreparedReclaim {
         prepared_object_count,
-        promoted_bytes: 0,
+        promoted_bytes,
         old_gen: PreparedOldGenReclaim::default(),
         indexes: PreparedIndexReclaim {
             rebuilt_object_index,
@@ -515,6 +520,7 @@ pub(crate) fn prepare_major_reclaim(
     prepare_reclaim(plan)
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_full_reclaim<Heap, Forwarding>(
     heap: &mut Heap,
     plan: &CollectionPlan,

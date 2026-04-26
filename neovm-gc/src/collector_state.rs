@@ -2,9 +2,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
 use crate::collector_exec::MarkTracer;
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{self, ActiveReclaimPrepRequest, PreparedActiveReclaim};
+#[cfg(test)]
+use crate::collector_session::PreparedActiveReclaim;
+use crate::collector_session::{self, ActiveReclaimPrepRequest};
 use crate::heap::AllocError;
 use crate::index_state::ObjectLocator;
 use crate::mark::MarkWorklist;
@@ -334,6 +337,7 @@ impl CollectorStateHandle {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_active_collection_reclaim_with_request_and_refresh(
         &self,
         request: ActiveReclaimPrepRequest,
@@ -366,6 +370,7 @@ impl CollectorStateHandle {
         state.active_major_mark_has_prepared_reclaim()
     }
 
+    #[cfg(test)]
     pub(crate) fn complete_active_reclaim_prep_and_refresh(
         &self,
         prepared: PreparedActiveReclaim,
@@ -581,6 +586,7 @@ impl CollectorState {
         true
     }
 
+    #[cfg(test)]
     pub(crate) fn complete_active_major_reclaim_prep(
         &mut self,
         mark_steps_delta: u64,

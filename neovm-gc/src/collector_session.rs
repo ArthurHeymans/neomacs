@@ -1,4 +1,5 @@
 use crate::descriptor::{GcErased, Tracer};
+#[cfg(test)]
 use std::time::{Duration, Instant};
 
 use crate::collector_exec::MarkTracer;
@@ -6,6 +7,7 @@ use crate::collector_state::{CollectorState, MajorMarkUpdate};
 use crate::heap::AllocError;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
+#[cfg(test)]
 use crate::reclaim::PreparedReclaim;
 
 #[derive(Clone, Debug)]
@@ -14,6 +16,7 @@ pub(crate) struct ActiveReclaimPrepRequest {
     pub(crate) ephemerons_processed: bool,
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct PreparedActiveReclaim {
     pub(crate) mark_steps_delta: u64,
@@ -232,6 +235,7 @@ pub(crate) fn prepare_active_reclaim(
     (mark_steps_delta, mark_rounds_delta)
 }
 
+#[cfg(test)]
 pub(crate) fn build_prepared_active_reclaim(
     request: &ActiveReclaimPrepRequest,
     mark_steps_delta: u64,
@@ -248,6 +252,7 @@ pub(crate) fn build_prepared_active_reclaim(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_active_reclaim_request(
     request: ActiveReclaimPrepRequest,
     trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
@@ -279,6 +284,7 @@ pub(crate) fn prepare_active_collection_reclaim_if_needed(
     Ok(complete_active_reclaim_prep(collector, prepared))
 }
 
+#[cfg(test)]
 pub(crate) fn complete_active_reclaim_prep(
     collector: &mut CollectorState,
     prepared: PreparedActiveReclaim,
