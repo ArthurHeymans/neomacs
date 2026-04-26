@@ -89,6 +89,37 @@ fn bench_small_leaf_scoped_batches(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_small_leaf_pinned_external_raw(c: &mut Criterion) {
+    let mut group = c.benchmark_group("alloc_throughput/small_leaf/pinned_external_raw");
+    for &batch in BATCH_SIZES {
+        group.throughput(Throughput::Elements(batch));
+        group.bench_with_input(BenchmarkId::from_parameter(batch), &batch, |b, &batch| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::ZERO;
+                for _ in 0..iters {
+                    let heap = Heap::new(fast_alloc_config());
+                    let mut mutator = heap.mutator();
+                    mutator.pin_safepoint();
+                    let start = Instant::now();
+                    for i in 0..batch {
+                        // Mirrors neomacs's tagged-pointer host: roots live
+                        // outside neovm-gc, while a persistent mutator keeps
+                        // publish reservations and TLAB state hot.
+                        black_box(
+                            mutator
+                                .alloc_external_raw(SmallLeaf(i))
+                                .expect("external raw alloc"),
+                        );
+                    }
+                    total += start.elapsed();
+                }
+                total
+            });
+        });
+    }
+    group.finish();
+}
+
 fn bench_medium_leaf(c: &mut Criterion) {
     let mut group = c.benchmark_group("alloc_throughput/medium_leaf");
     const BATCH: u64 = 10_000;
@@ -147,6 +178,7 @@ criterion_group!(
     benches,
     bench_small_leaf_long_scope,
     bench_small_leaf_scoped_batches,
+    bench_small_leaf_pinned_external_raw,
     bench_medium_leaf,
     bench_large_leaf,
 );
