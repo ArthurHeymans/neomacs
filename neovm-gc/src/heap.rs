@@ -478,8 +478,9 @@ impl Heap {
     #[inline]
     pub(crate) fn read_safepoint(&self) -> std::sync::RwLockReadGuard<'_, ()> {
         loop {
-            while self.safepoint_requested() {
-                std::thread::yield_now();
+            if self.safepoint_requested() {
+                self.wait_for_safepoint_request_to_clear();
+                continue;
             }
             let guard = self
                 .state
@@ -490,7 +491,7 @@ impl Heap {
                 return guard;
             }
             drop(guard);
-            std::thread::yield_now();
+            self.wait_for_safepoint_request_to_clear();
         }
     }
 
