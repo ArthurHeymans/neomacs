@@ -9875,46 +9875,79 @@ fn public_api_shared_clear_compaction_stats_resets_to_zero() {
 }
 
 #[test]
-fn public_api_auto_compaction_hook_fires_in_major_cycle_when_threshold_set() {
-    // Verify the runtime's auto-compaction hook fires when
-    // OldGenConfig::physical_compaction_density_threshold > 0.0,
-    // observable through the public CompactionStats accessor.
+fn public_api_major_cycle_schedules_deferred_auto_compaction_when_threshold_set() {
+    // Verify that a synchronous major cycle now schedules
+    // auto-compaction work instead of running physical compaction
+    // inline, and that the deferred public assist path can then
+    // execute at least one bounded compaction slice.
     use neovm_gc::CollectionKind;
 
+    let old_bytes =
+        neovm_gc::estimated_allocation_size::<OldLeaf>().expect("old leaf allocation size");
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
             ..neovm_gc::spaces::NurseryConfig::default()
         },
+        large: neovm_gc::spaces::LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..neovm_gc::spaces::LargeObjectSpaceConfig::default()
+        },
         old: neovm_gc::spaces::OldGenConfig {
-            region_bytes: 1024,
+            region_bytes: old_bytes.saturating_mul(3),
             line_bytes: 16,
             concurrent_mark_workers: 1,
-            physical_compaction_density_threshold: 0.9,
+            physical_compaction_density_threshold: 0.99,
             ..neovm_gc::spaces::OldGenConfig::default()
         },
         ..HeapConfig::default()
     });
 
-    // Allocate a survivor and run a major cycle. The auto-
-    // compaction hook should fire and the public stats
-    // accessor should reflect at least one cycle.
     shared
         .with_mutator(|mutator| {
             let mut keep = mutator.handle_scope();
-            let _surv = mutator.alloc(&mut keep, Leaf(7)).expect("alloc survivor");
+            let first = mutator
+                .alloc(&mut keep, OldLeaf([10; 32]))
+                .expect("alloc first old leaf");
             mutator
+                .alloc(&mut keep, OldLeaf([11; 32]))
+                .expect("alloc dead old leaf in first block");
+            let third = mutator
+                .alloc(&mut keep, OldLeaf([12; 32]))
+                .expect("alloc third old leaf");
+            let fourth = mutator
+                .alloc(&mut keep, OldLeaf([20; 32]))
+                .expect("alloc fourth old leaf");
+            mutator
+                .alloc(&mut keep, OldLeaf([21; 32]))
+                .expect("alloc dead old leaf in second block");
+            let sixth = mutator
+                .alloc(&mut keep, OldLeaf([22; 32]))
+                .expect("alloc sixth old leaf");
+            let _ = (&first, &third, &fourth, &sixth);
+
+            let cycle = mutator
                 .collect(CollectionKind::Major)
-                .expect("major + auto compact");
+                .expect("major collect with deferred auto compaction");
+            assert_eq!(cycle.major_collections, 1);
+            assert_eq!(
+                mutator.heap().compaction_stats().cycles,
+                0,
+                "major completion should defer physical compaction to later assists"
+            );
+
+            let moved =
+                mutator.advance_auto_compaction_with_byte_budget(old_bytes.saturating_mul(2));
+            assert!(
+                moved > 0,
+                "deferred public auto-compaction assist should move at least one sparse block"
+            );
+            assert!(
+                mutator.heap().compaction_stats().cycles >= 1,
+                "deferred compaction assist should publish compaction stats"
+            );
         })
         .expect("with_mutator");
-
-    // The auto-compaction hook ran on the major commit. The
-    // exact counters depend on whether any block actually
-    // qualified as sparse, so the assertion is best-effort:
-    // cycles is non-decreasing across the call.
-    let stats = shared.compaction_stats().expect("read compaction stats");
-    let _ = stats; // smoke test only -- the call must succeed
 }
 
 #[test]

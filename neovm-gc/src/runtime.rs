@@ -266,23 +266,6 @@ impl<'heap> CollectorRuntime<'heap> {
             },
         )?;
         self.heap.collector_handle().push_phases(phases);
-        // Physical compaction hook (physical-compaction step 6).
-        //
-        // After a synchronous major or full cycle commits, run
-        // physical old-gen compaction if the heap is configured
-        // for it. The hook is gated on
-        // `physical_compaction_density_threshold > 0.0`, so
-        // heaps with the default 0.0 threshold see no behavior
-        // change. Incremental/background majors defer physical
-        // compaction to later mutator-driven assists so the
-        // reclaim finish pause stays bounded.
-        if matches!(plan.kind, CollectionKind::Major | CollectionKind::Full) {
-            let density_threshold = self.heap.old_config().physical_compaction_density_threshold;
-            if density_threshold > 0.0 {
-                let roots = self.local.get_mut().roots_mut();
-                self.heap.compact_old_gen_physical(roots, density_threshold);
-            }
-        }
         cycle.pause_nanos = pause_start.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
         self.heap.record_pause_sample(cycle.pause_nanos);
         self.record_completed_cycle(
@@ -292,6 +275,11 @@ impl<'heap> CollectorRuntime<'heap> {
                 ..plan
             },
         );
+        if matches!(plan.kind, CollectionKind::Major | CollectionKind::Full) {
+            self.heap.schedule_auto_compaction_if_enabled();
+        } else {
+            self.heap.clear_pending_auto_compaction();
+        }
         Ok(cycle)
     }
 
