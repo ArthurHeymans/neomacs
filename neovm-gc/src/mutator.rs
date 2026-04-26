@@ -1102,7 +1102,23 @@ impl<'heap> Mutator<'heap> {
 
     /// Execute one scheduler-provided collection plan.
     pub fn execute_plan(&mut self, plan: CollectionPlan) -> Result<CollectionStats, AllocError> {
-        self.with_runtime(|runtime| runtime.execute_plan(plan))
+        match plan.kind {
+            CollectionKind::Major => self.execute_major_plan_in_bounded_slices(plan),
+            CollectionKind::Minor | CollectionKind::Full => {
+                self.with_runtime(|runtime| runtime.execute_plan(plan))
+            }
+        }
+    }
+
+    fn execute_major_plan_in_bounded_slices(
+        &mut self,
+        plan: CollectionPlan,
+    ) -> Result<CollectionStats, AllocError> {
+        if self.active_major_mark_plan().is_some() {
+            return Err(AllocError::CollectionInProgress);
+        }
+        self.begin_major_mark(crate::runtime::bounded_major_mark_plan(plan))?;
+        self.finish_major_collection()
     }
 
     /// Begin a persistent major-mark session for one scheduler-provided plan.

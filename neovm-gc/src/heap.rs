@@ -1130,7 +1130,23 @@ impl Heap {
 
     /// Execute one scheduler-provided collection plan.
     pub fn execute_plan(&self, plan: CollectionPlan) -> Result<CollectionStats, AllocError> {
-        self.collector_runtime().execute_plan(plan)
+        match plan.kind {
+            CollectionKind::Major => self.execute_major_plan_in_bounded_slices(plan),
+            CollectionKind::Minor | CollectionKind::Full => {
+                self.collector_runtime().execute_plan(plan)
+            }
+        }
+    }
+
+    fn execute_major_plan_in_bounded_slices(
+        &self,
+        plan: CollectionPlan,
+    ) -> Result<CollectionStats, AllocError> {
+        if self.active_major_mark_plan().is_some() {
+            return Err(AllocError::CollectionInProgress);
+        }
+        self.begin_major_mark(crate::runtime::bounded_major_mark_plan(plan))?;
+        self.finish_major_collection()
     }
 
     /// Snapshot of recent stop-the-world pause statistics.

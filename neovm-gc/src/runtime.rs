@@ -784,6 +784,9 @@ impl<'heap> CollectorRuntime<'heap> {
             state.reclaim_prepared = true;
             state.prepared_reclaim = Some(prepared_reclaim);
             state.reclaim_commit_pause_nanos = 0;
+            self.heap
+                .collector_handle()
+                .push_phase(CollectionPhase::Remark);
         }
         self.heap
             .collector_handle()

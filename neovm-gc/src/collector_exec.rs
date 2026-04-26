@@ -1528,15 +1528,25 @@ pub(crate) fn trace_major_ephemerons(
     let mut mark_steps = 0u64;
     let mut mark_rounds = 0u64;
     loop {
-        let mut visitor = MajorEphemeronTracer::new(tracer);
-        for &index in ephemeron_candidates {
-            let object = objects.get(index);
-            if object.is_marked() {
-                object.visit_ephemerons(&mut visitor);
+        let changed = if worker_count.max(1) == 1 || ephemeron_candidates.len() <= 1 {
+            let mut visitor = MajorEphemeronTracer::new(tracer);
+            for &index in ephemeron_candidates {
+                let object = objects.get(index);
+                if object.is_marked() {
+                    object.visit_ephemerons(&mut visitor);
+                }
             }
-        }
-        let changed = visitor.changed;
-        let tracer = visitor.finish();
+            let changed = visitor.changed;
+            let _tracer = visitor.finish();
+            changed
+        } else {
+            scan_major_ephemerons_parallel(
+                objects.clone(),
+                ephemeron_candidates,
+                tracer,
+                worker_count,
+            )
+        };
         let (steps, rounds) = tracer.drain_parallel_until_empty(worker_count.max(1), slice_budget);
         mark_steps = mark_steps.saturating_add(steps);
         mark_rounds = mark_rounds.saturating_add(rounds);
@@ -1545,6 +1555,55 @@ pub(crate) fn trace_major_ephemerons(
         }
     }
     (mark_steps, mark_rounds)
+}
+
+fn scan_major_ephemerons_parallel(
+    objects: ObjectReadRaw<'_>,
+    ephemeron_candidates: &[ObjectLocator],
+    tracer: &mut MarkTracer<'_>,
+    worker_count: usize,
+) -> bool {
+    let workers = worker_count.max(1).min(ephemeron_candidates.len().max(1));
+    let chunk_size = ephemeron_candidates.len().max(1).div_ceil(workers);
+    let shared = ParallelMarkShared::new(objects);
+    let worker_outputs = thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(workers);
+        for worker_index in 0..workers {
+            let shared = shared.clone();
+            let start = worker_index.saturating_mul(chunk_size);
+            let end = (start + chunk_size).min(ephemeron_candidates.len());
+            if start >= end {
+                continue;
+            }
+            handles.push(scope.spawn(move || {
+                let mut worker = shared.tracer(MarkWorklist::default());
+                let changed = {
+                    let mut visitor = MajorEphemeronTracer::new(&mut worker);
+                    for &locator in &ephemeron_candidates[start..end] {
+                        let object = shared.objects().get(locator);
+                        if object.is_marked() {
+                            object.visit_ephemerons(&mut visitor);
+                        }
+                    }
+                    visitor.changed
+                };
+                (changed, worker.into_worklist())
+            }));
+        }
+
+        let mut outputs = Vec::with_capacity(handles.len());
+        for handle in handles {
+            outputs.push(handle.join().expect("parallel ephemeron worker panicked"));
+        }
+        outputs
+    });
+
+    let mut changed = false;
+    for (worker_changed, mut worklist) in worker_outputs {
+        changed |= worker_changed;
+        tracer.worklist.append(&mut worklist);
+    }
+    changed
 }
 
 pub(crate) fn trace_major_ephemerons_for_candidates(

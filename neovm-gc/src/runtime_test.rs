@@ -339,6 +339,52 @@ fn major_collect_uses_bounded_active_pipeline() {
 }
 
 #[test]
+fn execute_major_plan_uses_bounded_active_pipeline() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    {
+        let mut scope = mutator.handle_scope();
+        for byte in 0..5000u16 {
+            mutator
+                .alloc(
+                    &mut scope,
+                    OldLeaf {
+                        _bytes: [byte as u8; 32],
+                    },
+                )
+                .expect("allocate old leaf");
+        }
+    }
+
+    let plan = mutator.plan_for(CollectionKind::Major);
+    let samples_before = heap.pause_histogram().total_samples;
+    let cycle = mutator
+        .execute_plan(plan)
+        .expect("run bounded major execute_plan");
+    assert_eq!(cycle.major_collections, 1);
+    assert!(mutator.active_major_mark_plan().is_none());
+    assert!(
+        heap.pause_histogram().total_samples >= samples_before + 3,
+        "major execute_plan should drain through multiple bounded active-major slices"
+    );
+}
+
+#[test]
 fn adaptive_pause_target_budget_scales_with_observed_throughput() {
     assert_eq!(
         adaptive_pause_target_budget(Duration::from_millis(10), 128, 2_000_000, 64, 1, 4096),
