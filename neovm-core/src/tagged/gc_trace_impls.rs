@@ -63,11 +63,11 @@ impl GcSlot {
 /// are not heap pointers and need no tracing.
 #[inline]
 fn is_heap_tagged(val: TaggedValue) -> bool {
-    // Tags 010 (cons), 011 (veclike), 100 (string), 110 (float)
-    // are heap pointers. Tags 000 (symbol), xx1 (fixnum), 111 (immediate)
-    // are not.
+    // Tags 011 (cons), 100 (string), 101 (veclike), 111 (float)
+    // are heap pointers. Tags 000 (symbol), 001 (unused), and xx10
+    // (fixnum) are not.
     let tag = val.0 & 0b111;
-    matches!(tag, 0b010 | 0b011 | 0b100 | 0b110)
+    matches!(tag, 0b011 | 0b100 | 0b101 | 0b111)
 }
 
 /// Recover a GcErased handle from a tagged heap pointer.

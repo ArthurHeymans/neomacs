@@ -240,10 +240,10 @@ fn note_heap_write_record(record: HeapWriteRecord) {
 // Tag constants (mirrored from value.rs for pointer encoding)
 // ---------------------------------------------------------------------------
 
-const TAG_CONS: usize = 0b010;
-const TAG_VECLIKE: usize = 0b011;
+const TAG_CONS: usize = 0b011;
 const TAG_STRING: usize = 0b100;
-const TAG_FLOAT: usize = 0b110;
+const TAG_VECLIKE: usize = 0b101;
+const TAG_FLOAT: usize = 0b111;
 
 // ---------------------------------------------------------------------------
 // TaggedHeap — the main GC-managed heap
@@ -334,6 +334,7 @@ pub struct TaggedHeap {
     window_registry: FxHashMap<u64, TaggedValue>,
     frame_registry: FxHashMap<u64, TaggedValue>,
     timer_registry: FxHashMap<u64, TaggedValue>,
+    subr_registry: FxHashMap<crate::emacs_core::intern::SymId, TaggedValue>,
 
     /// Owners mutated since the last full collection.
     ///
@@ -517,6 +518,7 @@ impl TaggedHeap {
             window_registry: FxHashMap::default(),
             frame_registry: FxHashMap::default(),
             timer_registry: FxHashMap::default(),
+            subr_registry: FxHashMap::default(),
             write_tracking_mode: WriteTrackingMode::Disabled,
             dirty_owners: Vec::new(),
             dirty_owner_bits: FxHashSet::default(),
@@ -630,6 +632,9 @@ impl TaggedHeap {
         for value in self.timer_registry.values() {
             visit(*value);
         }
+        for value in self.subr_registry.values() {
+            visit(*value);
+        }
     }
 
     fn trace_runtime_roots_mut(&mut self, visit: &mut dyn FnMut(&mut TaggedValue)) {
@@ -643,6 +648,9 @@ impl TaggedHeap {
             visit(value);
         }
         for value in self.timer_registry.values_mut() {
+            visit(value);
+        }
+        for value in self.subr_registry.values_mut() {
             visit(value);
         }
     }
@@ -684,6 +692,18 @@ impl TaggedHeap {
 
     pub fn register_timer_value(&mut self, id: u64, value: TaggedValue) {
         self.timer_registry.insert(id, value);
+    }
+
+    pub fn subr_value(&self, id: crate::emacs_core::intern::SymId) -> Option<TaggedValue> {
+        self.subr_registry.get(&id).copied()
+    }
+
+    pub fn register_subr_value(
+        &mut self,
+        id: crate::emacs_core::intern::SymId,
+        value: TaggedValue,
+    ) {
+        self.subr_registry.insert(id, value);
     }
 
     pub fn dirty_owner_count(&self) -> usize {

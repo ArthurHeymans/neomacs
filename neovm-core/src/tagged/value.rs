@@ -21,7 +21,6 @@
 //! - `t`    = Symbol(1) = `0x8` (intern "t" as SymId(1))
 //! - `Qunbound` = noncanonical Symbol(2), matching GNU's symbol sentinel.
 
-use std::cell::RefCell;
 use std::fmt;
 
 use crate::emacs_core::intern::{
@@ -58,10 +57,6 @@ const FIXNUM_CHECK_MASK: usize = 0b11;
 const FIXNUM_CHECK_VALUE: usize = 0b10;
 const FIXNUM_SHIFT: u32 = 2; // integer stored in bits 2..63
 
-thread_local! {
-    static STATIC_SUBR_OBJECTS: RefCell<Vec<Option<TaggedValue>>> = const { RefCell::new(Vec::new()) };
-}
-
 // ---------------------------------------------------------------------------
 // TaggedValue — the core type
 // ---------------------------------------------------------------------------
@@ -94,27 +89,6 @@ impl PartialEq for TaggedValue {
 impl Eq for TaggedValue {}
 
 fn canonical_subr_object(sym_id: SymId) -> TaggedValue {
-    STATIC_SUBR_OBJECTS.with(|objects| {
-        let idx = sym_id.0 as usize;
-        if let Some(value) = objects.borrow().get(idx).and_then(|value| *value) {
-            return value;
-        }
-
-        let value = allocate_static_subr_object(sym_id);
-        let mut objects = objects.borrow_mut();
-        if objects.len() <= idx {
-            objects.resize_with(idx + 1, || None);
-        }
-        if let Some(existing) = objects[idx] {
-            existing
-        } else {
-            objects[idx] = Some(value);
-            value
-        }
-    })
-}
-
-fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
     let name_id = symbol_name_id(sym_id);
     let entry = crate::emacs_core::eval::lookup_global_subr_entry(sym_id);
     let (function, min_args, max_args, dispatch_kind) = if let Some(entry) = entry {
@@ -134,17 +108,14 @@ fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
         (None, min_args, max_args, dispatch_kind)
     };
 
-    let obj = Box::new(SubrObj {
-        header: super::header::VecLikeHeader::new(VecLikeType::Subr),
-        sym_id,
-        name: name_id,
-        min_args,
-        max_args,
-        dispatch_kind,
-        function,
-    });
-    let ptr = Box::leak(obj) as *mut SubrObj;
-    unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    super::gc::with_tagged_heap(|heap| {
+        if let Some(existing) = heap.subr_value(sym_id) {
+            return existing;
+        }
+        let value = heap.alloc_subr(name_id, function, min_args, max_args, dispatch_kind);
+        heap.register_subr_value(sym_id, value);
+        value
+    })
 }
 
 // ---------------------------------------------------------------------------
