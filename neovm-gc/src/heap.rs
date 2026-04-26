@@ -165,9 +165,6 @@ impl MutatorRegistration {
             self.state
                 .active_sections
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-            heap.state
-                .active_registered_mutators
-                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             if !heap.safepoint_requested() {
                 return RegisteredMutatorReadGuard {
                     _section: ActiveMutatorSection {
@@ -184,15 +181,8 @@ impl MutatorRegistration {
                 previous > 0,
                 "registered mutator active-section count underflow"
             );
-            let active_previous = heap
-                .state
-                .active_registered_mutators
-                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-            debug_assert!(
-                active_previous > 0,
-                "registered mutator global active-section count underflow"
-            );
             self.acknowledge_pending_request(heap);
+            heap.notify_safepoint_waiters();
             heap.wait_for_safepoint_request_to_clear();
         }
     }
@@ -238,22 +228,13 @@ impl Drop for ActiveMutatorSection<'_> {
             .active_sections
             .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         debug_assert!(previous > 0, "active mutator section underflow");
-        let active_previous = self
-            .heap
-            .state
-            .active_registered_mutators
-            .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-        debug_assert!(
-            active_previous > 0,
-            "global active mutator section underflow"
-        );
         if self.heap.safepoint_requested() {
             self.state.acknowledged_epoch.store(
                 self.heap.current_safepoint_epoch(),
                 std::sync::atomic::Ordering::Release,
             );
+            self.heap.notify_safepoint_waiters();
         }
-        self.heap.notify_safepoint_waiters();
     }
 }
 
@@ -374,7 +355,6 @@ struct HeapState {
     safepoint_epoch: std::sync::atomic::AtomicU64,
     safepoint_request_count: std::sync::atomic::AtomicUsize,
     next_mutator_id: std::sync::atomic::AtomicU64,
-    active_registered_mutators: std::sync::atomic::AtomicUsize,
     mutator_registry:
         std::sync::Arc<std::sync::Mutex<HashMap<u64, std::sync::Arc<MutatorSafepointState>>>>,
     core: std::sync::RwLock<HeapCore>,
@@ -439,7 +419,6 @@ impl Heap {
                 safepoint_epoch: std::sync::atomic::AtomicU64::new(0),
                 safepoint_request_count: std::sync::atomic::AtomicUsize::new(0),
                 next_mutator_id: std::sync::atomic::AtomicU64::new(0),
-                active_registered_mutators: std::sync::atomic::AtomicUsize::new(0),
                 mutator_registry: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
                 core: std::sync::RwLock::new(core),
                 allocation_config: config,
@@ -567,16 +546,28 @@ impl Heap {
             guard = self
                 .state
                 .safepoint_wait_cv
-                .wait(guard)
-                .expect("heap safepoint wait lock poisoned");
+                .wait_timeout(guard, std::time::Duration::from_millis(1))
+                .expect("heap safepoint wait lock poisoned")
+                .0;
         }
     }
 
-    fn registered_mutators_quiescent(&self) -> bool {
+    fn active_registered_mutator_count_inner(&self) -> usize {
         self.state
-            .active_registered_mutators
-            .load(std::sync::atomic::Ordering::Acquire)
-            == 0
+            .mutator_registry
+            .lock()
+            .expect("mutator registry lock poisoned")
+            .values()
+            .map(|state| {
+                state
+                    .active_sections
+                    .load(std::sync::atomic::Ordering::Acquire)
+            })
+            .sum()
+    }
+
+    fn registered_mutators_quiescent(&self) -> bool {
+        self.active_registered_mutator_count_inner() == 0
     }
 
     fn wait_for_registered_mutators_to_quiesce(&self) {
@@ -589,11 +580,12 @@ impl Heap {
             .lock()
             .expect("heap safepoint wait lock poisoned");
         while !self.registered_mutators_quiescent() {
-            guard = self
+            let (next_guard, _) = self
                 .state
                 .safepoint_wait_cv
-                .wait(guard)
+                .wait_timeout(guard, std::time::Duration::from_millis(1))
                 .expect("heap safepoint wait lock poisoned");
+            guard = next_guard;
         }
     }
 
@@ -689,9 +681,7 @@ impl Heap {
 
     #[cfg(test)]
     pub(crate) fn active_registered_mutator_count(&self) -> usize {
-        self.state
-            .active_registered_mutators
-            .load(std::sync::atomic::Ordering::Acquire)
+        self.active_registered_mutator_count_inner()
     }
 
     /// Acquire a write guard on the underlying `HeapCore`.
