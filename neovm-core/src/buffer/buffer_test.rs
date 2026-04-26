@@ -1322,12 +1322,18 @@ fn state_markers_survive_gc_without_lisp_references() {
             .expect("state markers should still be present after GC");
         (sm.pt_marker_ptr, sm.begv_marker_ptr, sm.zv_marker_ptr)
     };
-    assert_ne!(pt_after, pt_ptr, "pt state marker should relocate across GC");
+    assert_ne!(
+        pt_after, pt_ptr,
+        "pt state marker should relocate across GC"
+    );
     assert_ne!(
         begv_after, begv_ptr,
         "begv state marker should relocate across GC"
     );
-    assert_ne!(zv_after, zv_ptr, "zv state marker should relocate across GC");
+    assert_ne!(
+        zv_after, zv_ptr,
+        "zv state marker should relocate across GC"
+    );
 
     unsafe {
         assert_eq!(
