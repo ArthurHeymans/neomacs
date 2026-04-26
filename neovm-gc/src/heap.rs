@@ -220,6 +220,7 @@ struct HeapState {
     alloc_counters: std::sync::Arc<crate::stats::AtomicAllocationCounters>,
     barrier_stats: std::sync::Arc<crate::stats::AtomicBarrierStats>,
     safepoint: std::sync::RwLock<()>,
+    safepoint_requested: std::sync::atomic::AtomicBool,
     core: std::sync::RwLock<HeapCore>,
     allocation_config: HeapConfig,
     collector: CollectorStateHandle,
@@ -276,6 +277,7 @@ impl Heap {
                 alloc_counters,
                 barrier_stats,
                 safepoint: std::sync::RwLock::new(()),
+                safepoint_requested: std::sync::atomic::AtomicBool::new(false),
                 core: std::sync::RwLock::new(core),
                 allocation_config: config,
                 collector,
@@ -343,21 +345,56 @@ impl Heap {
     }
 
     /// Acquire a mutator-side safepoint read guard.
+    ///
+    /// If a collector has already requested the safepoint write side,
+    /// new read-side entries wait until that stop-the-world request is
+    /// satisfied instead of racing ahead and extending the pause.
     #[inline]
     pub(crate) fn read_safepoint(&self) -> std::sync::RwLockReadGuard<'_, ()> {
-        self.state
-            .safepoint
-            .read()
-            .expect("heap safepoint lock poisoned")
+        loop {
+            while self
+                .state
+                .safepoint_requested
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                std::thread::yield_now();
+            }
+            let guard = self
+                .state
+                .safepoint
+                .read()
+                .expect("heap safepoint lock poisoned");
+            if !self
+                .state
+                .safepoint_requested
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return guard;
+            }
+            drop(guard);
+            std::thread::yield_now();
+        }
     }
 
     /// Acquire a collector-side safepoint write guard.
+    ///
+    /// Publishes a "safepoint requested" gate before waiting on the
+    /// underlying `RwLock` so fresh mutator-side read entries stop
+    /// immediately while the collector is trying to stop the world.
     #[inline]
     pub(crate) fn write_safepoint(&self) -> std::sync::RwLockWriteGuard<'_, ()> {
         self.state
+            .safepoint_requested
+            .store(true, std::sync::atomic::Ordering::Release);
+        let guard = self
+            .state
             .safepoint
             .write()
-            .expect("heap safepoint lock poisoned")
+            .expect("heap safepoint lock poisoned");
+        self.state
+            .safepoint_requested
+            .store(false, std::sync::atomic::Ordering::Release);
+        guard
     }
 
     #[inline]
@@ -367,7 +404,21 @@ impl Heap {
         std::sync::RwLockWriteGuard<'_, ()>,
         std::sync::TryLockError<std::sync::RwLockWriteGuard<'_, ()>>,
     > {
-        self.state.safepoint.try_write()
+        self.state
+            .safepoint_requested
+            .store(true, std::sync::atomic::Ordering::Release);
+        let result = self.state.safepoint.try_write();
+        self.state
+            .safepoint_requested
+            .store(false, std::sync::atomic::Ordering::Release);
+        result
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_safepoint_requested_for_test(&self, requested: bool) {
+        self.state
+            .safepoint_requested
+            .store(requested, std::sync::atomic::Ordering::Release);
     }
 
     /// Acquire a write guard on the underlying `HeapCore`.

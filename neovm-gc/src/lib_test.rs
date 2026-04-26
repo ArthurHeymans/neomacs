@@ -11918,6 +11918,32 @@ fn pinned_mutator_fast_path_no_longer_blocks_stop_the_world_collect() {
 }
 
 #[test]
+fn safepoint_request_blocks_new_read_entries_until_cleared() {
+    let heap = Heap::new(HeapConfig::default());
+    heap.set_safepoint_requested_for_test(true);
+
+    let worker_heap = heap.clone();
+    let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let _guard = worker_heap.read_safepoint();
+        entered_tx
+            .send(())
+            .expect("signal safepoint read entry after request clears");
+    });
+
+    assert!(
+        entered_rx.recv_timeout(Duration::from_millis(50)).is_err(),
+        "new read-side safepoint entries should block while a stop-the-world request is pending"
+    );
+
+    heap.set_safepoint_requested_for_test(false);
+    entered_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("read-side entry should proceed once the request is cleared");
+    worker.join().expect("join safepoint read helper thread");
+}
+
+#[test]
 fn nursery_tlab_force_invalidation_via_test_helper() {
     // The test-only helper Mutator::invalidate_nursery_tlab
     // drops the current slab so the next alloc has to
