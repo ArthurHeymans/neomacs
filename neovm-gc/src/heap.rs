@@ -23,6 +23,7 @@ use crate::spaces::{
 };
 use crate::stats::{AllocationCounterLocal, CollectionStats, HeapStats, OldRegionStats};
 use core::any::TypeId;
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::collections::HashMap;
 
 /// Heap creation configuration.
@@ -378,7 +379,7 @@ struct HeapState {
     next_mutator_id: std::sync::atomic::AtomicU64,
     mutator_registry:
         std::sync::Arc<std::sync::Mutex<HashMap<u64, std::sync::Arc<MutatorSafepointState>>>>,
-    core: std::sync::RwLock<HeapCore>,
+    core: RwLock<HeapCore>,
     allocation_config: HeapConfig,
     collector: CollectorStateHandle,
     nursery_generation: std::sync::atomic::AtomicU64,
@@ -442,7 +443,7 @@ impl Heap {
                 active_mutator_sections: std::sync::atomic::AtomicUsize::new(0),
                 next_mutator_id: std::sync::atomic::AtomicU64::new(0),
                 mutator_registry: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
-                core: std::sync::RwLock::new(core),
+                core: RwLock::new(core),
                 allocation_config: config,
                 collector,
                 nursery_generation: std::sync::atomic::AtomicU64::new(nursery_generation),
@@ -457,7 +458,7 @@ impl Heap {
     /// This is needed by callers that use `ObjectRecord::allocate_in_arena`
     /// directly (bypassing the Mutator allocation path).
     pub fn type_desc_for<T: Trace + 'static>(&self) -> &'static TypeDesc {
-        let mut core = self.state.core.write().expect("heap core write lock");
+        let mut core = self.state.core.write();
         core.descriptor_for::<T>()
     }
 
@@ -476,7 +477,7 @@ impl Heap {
     where
         F: FnMut(&mut Vec<GcErased>) + Send + 'static,
     {
-        let mut core = self.state.core.write().expect("heap core write lock");
+        let mut core = self.state.core.write();
         core.external_root_scanner = Some(ExternalRootScanner::new(scanner));
     }
 
@@ -499,7 +500,7 @@ impl Heap {
     where
         F: FnMut(&mut dyn crate::descriptor::Relocator) + Send + 'static,
     {
-        let mut core = self.state.core.write().expect("heap core write lock");
+        let mut core = self.state.core.write();
         core.external_root_relocator = Some(ExternalRootRelocator::new(relocator));
     }
 
@@ -702,8 +703,8 @@ impl Heap {
     /// Callers are responsible for holding the appropriate
     /// safepoint guard first.
     #[inline]
-    pub(crate) fn write_core(&self) -> std::sync::RwLockWriteGuard<'_, HeapCore> {
-        self.state.core.write().expect("heap core lock poisoned")
+    pub(crate) fn write_core(&self) -> RwLockWriteGuard<'_, HeapCore> {
+        self.state.core.write()
     }
 
     /// Acquire a read guard on the underlying `HeapCore`.
@@ -711,8 +712,8 @@ impl Heap {
     /// need to traverse heap-owned data structures across
     /// multiple statements.
     #[inline]
-    pub(crate) fn read_core(&self) -> std::sync::RwLockReadGuard<'_, HeapCore> {
-        self.state.core.read().expect("heap core lock poisoned")
+    pub(crate) fn read_core(&self) -> RwLockReadGuard<'_, HeapCore> {
+        self.state.core.read()
     }
 
     // -- Public forwarders --------------------------------------------------
@@ -1087,19 +1088,13 @@ impl Heap {
         })?;
         let refresh_plans = self.take_collector_plans_dirty();
         let guard = match self.state.core.try_write() {
-            Ok(guard) => {
+            Some(guard) => {
                 if refresh_plans {
                     guard.refresh_recommended_plans();
                 }
                 guard
             }
-            Err(std::sync::TryLockError::Poisoned(_)) => {
-                if refresh_plans {
-                    self.mark_collector_plans_dirty();
-                }
-                return Err(TryCollectorRuntimeError::Poisoned);
-            }
-            Err(std::sync::TryLockError::WouldBlock) => {
+            None => {
                 if refresh_plans {
                     self.mark_collector_plans_dirty();
                 }
@@ -1584,7 +1579,7 @@ impl Heap {
 pub struct HeapCollectorRuntime<'a> {
     heap: &'a Heap,
     safepoint: Option<SafepointWriteGuard<'a>>,
-    guard: Option<std::sync::RwLockWriteGuard<'a, HeapCore>>,
+    guard: Option<RwLockWriteGuard<'a, HeapCore>>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
     local: crate::mutator::MutatorLocal,
@@ -1594,7 +1589,7 @@ impl<'a> HeapCollectorRuntime<'a> {
     fn new(
         heap: &'a Heap,
         safepoint: SafepointWriteGuard<'a>,
-        guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
+        guard: RwLockWriteGuard<'a, HeapCore>,
         nursery_generation: &'a std::sync::atomic::AtomicU64,
         collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
     ) -> Self {
@@ -1611,13 +1606,13 @@ impl<'a> HeapCollectorRuntime<'a> {
         }
     }
 
-    fn guard(&self) -> &std::sync::RwLockWriteGuard<'a, HeapCore> {
+    fn guard(&self) -> &RwLockWriteGuard<'a, HeapCore> {
         self.guard
             .as_ref()
             .expect("collector runtime should hold heap core guard")
     }
 
-    fn guard_mut(&mut self) -> &mut std::sync::RwLockWriteGuard<'a, HeapCore> {
+    fn guard_mut(&mut self) -> &mut RwLockWriteGuard<'a, HeapCore> {
         self.acquire_collector_window();
         self.guard
             .as_mut()
@@ -1980,7 +1975,7 @@ impl crate::background::BackgroundCollectionRuntime for HeapCollectorRuntime<'_>
 #[derive(Debug)]
 pub struct HeapCollectorRuntimeWithLocal<'a> {
     _safepoint: SafepointWriteGuard<'a>,
-    guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
+    guard: RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
     local: &'a mut crate::mutator::MutatorLocal,
