@@ -6,13 +6,14 @@ use crate::background::{
 };
 use crate::collector_exec::{
     collect_global_sources, execute_collection_plan, prepare_major_reclaim_for_plan,
-    trace_major_ephemerons_for_candidates,
+    process_weak_references_for_candidates, trace_major_ephemerons_for_candidates,
 };
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
 use crate::collector_session::{self, build_prepared_active_reclaim, prepare_active_reclaim};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
 use crate::descriptor::{GcErased, TypeDesc};
 use crate::heap::{AllocError, HeapCore, TryCollectorRuntimeError};
+use crate::index_state::ForwardingMap;
 use crate::object::SpaceKind;
 use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress,
@@ -753,6 +754,18 @@ impl<'heap> CollectorRuntime<'heap> {
 
         let objects = self.heap.objects();
         let raw = objects.raw();
+        if state.reclaim_prepare_state.is_none() {
+            // Weak slots must be filtered before survivor/candidate lists are
+            // snapshotted by the incremental reclaim-prep builder.
+            let empty_forwarding = ForwardingMap::default();
+            process_weak_references_for_candidates(
+                raw.clone(),
+                &objects.weak_candidates(),
+                request.plan.kind,
+                request.plan.worker_count.max(1),
+                &empty_forwarding,
+            );
+        }
         let build = state.reclaim_prepare_state.get_or_insert_with(|| {
             begin_active_prepared_reclaim_build(
                 request.plan.kind,

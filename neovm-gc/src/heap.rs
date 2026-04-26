@@ -1000,9 +1000,9 @@ impl Heap {
 
     /// Create a collector-side runtime guard bound to this
     /// heap. The returned guard holds the safepoint write
-    /// lock plus the heap-core write lock for its entire
-    /// lifetime, so only one outstanding
-    /// `HeapCollectorRuntime` can exist at a time.
+    /// lock plus the heap-core write lock for its own
+    /// lifetime, so callers should keep it scoped to one
+    /// collector operation or bounded phase.
     pub fn collector_runtime(&self) -> HeapCollectorRuntime<'_> {
         let safepoint = self.write_safepoint();
         let refresh_plans = self.take_collector_plans_dirty();
@@ -1014,6 +1014,7 @@ impl Heap {
             guard
         };
         HeapCollectorRuntime::new(
+            self,
             safepoint,
             guard,
             &self.state.nursery_generation,
@@ -1052,6 +1053,7 @@ impl Heap {
             }
         };
         Ok(HeapCollectorRuntime::new(
+            self,
             safepoint,
             guard,
             &self.state.nursery_generation,
@@ -1061,7 +1063,7 @@ impl Heap {
 
     /// Create a background collection service loop bound to this heap.
     pub fn background_service(&self, config: BackgroundCollectorConfig) -> BackgroundService<'_> {
-        BackgroundService::from_runtime_guard(self.collector_runtime(), config)
+        BackgroundService::from_heap(self, config)
     }
 
     /// Run one stop-the-world collection cycle.
@@ -1473,6 +1475,7 @@ impl Heap {
 /// the operation through it.
 #[derive(Debug)]
 pub struct HeapCollectorRuntime<'a> {
+    heap: &'a Heap,
     _safepoint: SafepointWriteGuard<'a>,
     guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
@@ -1482,6 +1485,7 @@ pub struct HeapCollectorRuntime<'a> {
 
 impl<'a> HeapCollectorRuntime<'a> {
     fn new(
+        heap: &'a Heap,
         safepoint: SafepointWriteGuard<'a>,
         guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
         nursery_generation: &'a std::sync::atomic::AtomicU64,
@@ -1491,6 +1495,7 @@ impl<'a> HeapCollectorRuntime<'a> {
         local.set_alloc_counter_local(guard.alloc_counters.register_local());
         local.set_barrier_stats_local(guard.barrier_stats.register_local());
         Self {
+            heap,
             _safepoint: safepoint,
             guard,
             nursery_generation,
@@ -1664,9 +1669,13 @@ impl<'a> HeapCollectorRuntime<'a> {
     }
 
     /// Convert this collector runtime guard into a background
-    /// service loop.
+    /// service loop. The guard is dropped before the service is
+    /// returned so the service only stops the world for individual
+    /// collector rounds.
     pub fn background_service(self, config: BackgroundCollectorConfig) -> BackgroundService<'a> {
-        BackgroundService::from_runtime_guard(self, config)
+        let heap = self.heap;
+        drop(self);
+        BackgroundService::from_heap(heap, config)
     }
 
     /// Crate-internal access to the underlying `HeapCore`

@@ -307,8 +307,9 @@ fn sweep_rebuilds_block_live_accounting_from_survivors() {
 #[test]
 fn physical_compaction_stress_keeps_heap_bounded_under_repeated_majors() {
     // Stress test: allocate batches of old-gen records, drop
-    // most after each batch, run a major + auto-compaction,
-    // and assert the heap stays bounded over many iterations.
+    // most after each batch, run a major plus deferred
+    // auto-compaction, and assert the heap stays bounded over
+    // many iterations.
     // The compaction telemetry should show real work happening
     // (records_moved > 0 and at least some source blocks
     // reclaimed) over the run.
@@ -356,10 +357,12 @@ fn physical_compaction_stress_keeps_heap_bounded_under_repeated_majors() {
             }
         }
 
-        // Major + auto-compaction.
+        // Major schedules deferred auto-compaction; drain it
+        // while this round's survivor is still rooted.
         mutator
             .collect(CollectionKind::Major)
-            .expect("major + compaction");
+            .expect("major collection");
+        while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
     }
 
     // The heap must NOT have grown unboundedly.
@@ -391,11 +394,11 @@ fn physical_compaction_shrinks_block_hole_bytes_after_major() {
     // Block-side analog of the legacy
     // execute_major_plan_honors_exact_selected_old_regions test:
     // allocate a batch, drop most of them, run a major + auto-
-    // compaction, then assert the per-block hole_bytes (sum
-    // across the pool) actually decreased. This proves physical
-    // compaction does what logical compaction did but for the
-    // block view: it tightens the layout so wasted space goes
-    // down.
+    // compaction, drain the deferred physical-compaction work,
+    // then assert the per-block hole_bytes (sum across the pool)
+    // actually decreased. This proves physical compaction does
+    // what logical compaction did but for the block view: it
+    // tightens the layout so wasted space goes down.
     let heap = Heap::new(HeapConfig {
         nursery: NurseryConfig {
             max_regular_object_bytes: 1,
@@ -445,12 +448,15 @@ fn physical_compaction_shrinks_block_hole_bytes_after_major() {
     let before_blocks = mutator.heap().read_core().old_gen().block_count();
 
     // Run a major cycle. The cycle sweeps the dead chunks from
-    // phase 1, then auto-compaction runs against the now-sparse
-    // blocks, evacuates the survivor into a fresh tightly-packed
-    // target block, and reclaims the old source blocks.
+    // phase 1 and schedules auto-compaction against the now-sparse
+    // blocks.
     mutator
         .collect(CollectionKind::Major)
-        .expect("major + auto compaction");
+        .expect("major collection");
+    // Drain deferred compaction while the survivor remains rooted:
+    // it evacuates the survivor into a fresh tightly-packed target
+    // block and reclaims the old source blocks.
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
     let after_holes: usize = mutator
         .heap()

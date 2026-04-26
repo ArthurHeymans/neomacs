@@ -2689,6 +2689,49 @@ fn collector_runtime_can_create_background_service() {
 }
 
 #[test]
+fn background_service_does_not_hold_collector_runtime_between_calls() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut service = heap.background_service(BackgroundCollectorConfig::default());
+
+    assert!(!heap.has_pending_safepoint_request());
+    {
+        let _runtime = heap
+            .try_collector_runtime()
+            .expect("service construction must not keep collector runtime locked");
+    }
+
+    assert_eq!(
+        service.tick().expect("tick heap-bound local service"),
+        BackgroundCollectionStatus::Idle
+    );
+    assert!(!heap.has_pending_safepoint_request());
+    {
+        let _runtime = heap
+            .try_collector_runtime()
+            .expect("service tick must release collector runtime before returning");
+    }
+}
+
+#[test]
+fn collector_runtime_background_service_drops_source_guard() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut service = heap
+        .collector_runtime()
+        .background_service(BackgroundCollectorConfig::default());
+
+    assert!(!heap.has_pending_safepoint_request());
+    {
+        let _runtime = heap
+            .try_collector_runtime()
+            .expect("runtime-backed service conversion must drop source guard");
+    }
+    assert_eq!(
+        service.tick().expect("tick runtime-backed local service"),
+        BackgroundCollectionStatus::Idle
+    );
+}
+
+#[test]
 fn heap_advance_major_mark_reports_progress_directly() {
     let heap = Heap::new(HeapConfig::default());
     let plan = {
@@ -3674,7 +3717,6 @@ fn poll_active_major_mark_processes_major_weak_edges_before_finish() {
             .target(),
         None
     );
-
     let cycle = mutator
         .finish_active_major_collection_if_ready()
         .expect("finish if ready")
@@ -3752,10 +3794,11 @@ fn poll_active_major_mark_prepares_major_old_region_rebuild_before_finish() {
         .expect("finish if ready")
         .expect("completed cycle");
     assert_eq!(cycle.major_collections, 1);
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
-    // Per-block view after physical compaction: 2 survivors
-    // packed into a fresh target block, total_holes bounded by
-    // line-alignment padding.
+    // Per-block view after deferred physical compaction: 2
+    // survivors packed into a fresh target block, total_holes
+    // bounded by line-alignment padding.
     let blocks = mutator.heap().old_block_region_stats();
     let total_objects: usize = blocks.iter().map(|b| b.object_count).sum();
     let total_holes: usize = blocks.iter().map(|b| b.hole_bytes).sum();
@@ -3843,13 +3886,15 @@ fn poll_active_major_mark_with_physical_compaction_packs_block_view() {
         .expect("finish if ready")
         .expect("completed cycle");
     assert_eq!(cycle.major_collections, 1);
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
-    // Block view: after physical compaction, the original block
-    // is reclaimed and the two survivors are packed into a fresh
-    // target block. The remaining `hole_bytes` must be smaller
-    // than one whole dropped survivor (`old_bytes`) — the only
-    // residual gap is the line-alignment padding inside the
-    // packed block, which is bounded by the block's `line_bytes`.
+    // Block view: after deferred physical compaction, the
+    // original block is reclaimed and the two survivors are packed
+    // into a fresh target block. The remaining `hole_bytes` must
+    // be smaller than one whole dropped survivor (`old_bytes`) —
+    // the only residual gap is the line-alignment padding inside
+    // the packed block, which is bounded by the block's
+    // `line_bytes`.
     let blocks = mutator.heap().old_block_region_stats();
     let total_live: usize = blocks.iter().map(|b| b.live_bytes).sum();
     let total_objects: usize = blocks.iter().map(|b| b.object_count).sum();
@@ -5102,11 +5147,12 @@ fn major_collection_compacts_selected_live_old_region() {
         .collect(CollectionKind::Major)
         .expect("major collect");
     assert_eq!(cycle.major_collections, 1);
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
-    // Per-block view after physical compaction: the original
-    // sparse block is reclaimed and the two survivors are packed
-    // into a fresh target block, so total_holes is bounded by
-    // line-alignment padding (always less than one whole
+    // Per-block view after deferred physical compaction: the
+    // original sparse block is reclaimed and the two survivors are
+    // packed into a fresh target block, so total_holes is bounded
+    // by line-alignment padding (always less than one whole
     // dropped survivor's bytes).
     let blocks = mutator.heap().old_block_region_stats();
     let total_objects: usize = blocks.iter().map(|b| b.object_count).sum();

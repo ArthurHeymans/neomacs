@@ -2888,7 +2888,6 @@ fn public_api_poll_active_major_mark_processes_major_weak_edges_before_finish() 
             .target(),
         None
     );
-
     let cycle = mutator
         .finish_active_major_collection_if_ready()
         .expect("finish if ready")
@@ -2965,10 +2964,11 @@ fn public_api_poll_active_major_mark_prepares_major_old_region_rebuild_before_fi
         .expect("finish if ready")
         .expect("completed cycle");
     assert_eq!(cycle.major_collections, 1);
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
-    // Per-block view after physical compaction: 2 survivors
-    // packed into a fresh target block, total_holes bounded by
-    // line-alignment padding.
+    // Per-block view after deferred physical compaction: 2
+    // survivors packed into a fresh target block, total_holes
+    // bounded by line-alignment padding.
     let blocks = mutator.heap().old_block_region_stats();
     let total_objects: usize = blocks.iter().map(|b| b.object_count).sum();
     let total_holes: usize = blocks.iter().map(|b| b.hole_bytes).sum();
@@ -4948,12 +4948,13 @@ fn public_api_major_collection_compacts_selected_live_old_region() {
         .collect(CollectionKind::Major)
         .expect("major collect");
     assert_eq!(cycle.major_collections, 1);
+    while mutator.advance_auto_compaction_with_byte_budget(usize::MAX) > 0 {}
 
-    // Per-block view after physical compaction: the original
-    // sparse block is reclaimed and the two survivors are
-    // packed into a fresh target block, so total_holes is
-    // bounded by line-alignment padding (always less than one
-    // whole dropped survivor's bytes).
+    // Per-block view after deferred physical compaction: the
+    // original sparse block is reclaimed and the two survivors are
+    // packed into a fresh target block, so total_holes is bounded
+    // by line-alignment padding (always less than one whole
+    // dropped survivor's bytes).
     let blocks = mutator.heap().old_block_region_stats();
     let total_objects: usize = blocks.iter().map(|b| b.object_count).sum();
     let total_holes: usize = blocks.iter().map(|b| b.hole_bytes).sum();

@@ -1759,15 +1759,15 @@ pub struct BackgroundCollector {
 
 /// Collector-owned background service loop bound to one heap.
 ///
-/// Holds an exclusive write guard on the heap core for its
-/// entire lifetime via [`crate::heap::HeapCollectorRuntime`].
-/// Each `tick()` builds a fresh `CollectorRuntime` against
-/// the held guard plus a scratch `MutatorLocal` and runs
-/// the coordinator round through it.
+/// The service keeps only a heap handle and acquires
+/// [`crate::heap::HeapCollectorRuntime`] for individual
+/// collector rounds. This keeps stop-the-world ownership
+/// phase-scoped instead of pinning the heap core and
+/// safepoint token for the service lifetime.
 #[derive(Debug)]
 pub struct BackgroundService<'heap> {
     collector: BackgroundCollector,
-    guard: crate::heap::HeapCollectorRuntime<'heap>,
+    heap: &'heap Heap,
 }
 
 /// Shared background service loop backed by `SharedHeap`.
@@ -2212,15 +2212,11 @@ impl BackgroundCollector {
 mod tests;
 
 impl<'heap> BackgroundService<'heap> {
-    /// Create a new background service loop from a
-    /// write-locked collector runtime guard.
-    pub(crate) fn from_runtime_guard(
-        guard: crate::heap::HeapCollectorRuntime<'heap>,
-        config: BackgroundCollectorConfig,
-    ) -> Self {
+    /// Create a new background service loop bound to one heap.
+    pub(crate) fn from_heap(heap: &'heap Heap, config: BackgroundCollectorConfig) -> Self {
         Self {
             collector: BackgroundCollector::new(config),
-            guard,
+            heap,
         }
     }
 
@@ -2236,74 +2232,98 @@ impl<'heap> BackgroundService<'heap> {
 
     /// Return the active major-mark plan, if one is in progress.
     pub fn active_major_mark_plan(&self) -> Option<crate::plan::CollectionPlan> {
-        self.guard.active_major_mark_plan()
+        self.heap.active_major_mark_plan()
     }
 
     /// Return progress for the active major-mark session, if any.
     pub fn major_mark_progress(&self) -> Option<crate::plan::MajorMarkProgress> {
-        self.guard.major_mark_progress()
+        self.heap.major_mark_progress()
     }
 
     /// Run one background-collection coordinator tick.
     pub fn tick(&mut self) -> Result<BackgroundCollectionStatus, AllocError> {
-        let mut runtime = self.guard.runtime();
-        self.collector.tick(&mut runtime)
+        let heap = self.heap;
+        self.collector.tick_with_rounds(|collector| {
+            let mut runtime = heap.collector_runtime();
+            collector.tick_round(&mut runtime)
+        })
     }
 
     /// Service background collection until no active session remains or one collection finishes.
     pub fn run_until_idle(&mut self) -> Result<Option<CollectionStats>, AllocError> {
-        let mut runtime = self.guard.runtime();
-        self.collector.run_until_idle(&mut runtime)
+        loop {
+            match self.tick()? {
+                BackgroundCollectionStatus::Idle => return Ok(None),
+                BackgroundCollectionStatus::Progress(_) => {}
+                BackgroundCollectionStatus::ReadyToFinish(progress) => {
+                    if progress.completed {
+                        let mut runtime = self.heap.collector_runtime();
+                        if let Some(cycle) = runtime.finish_active_major_collection_if_ready()? {
+                            self.collector.stats.sessions_finished =
+                                self.collector.stats.sessions_finished.saturating_add(1);
+                            return Ok(Some(cycle));
+                        }
+                    }
+                }
+                BackgroundCollectionStatus::Finished(cycle) => return Ok(Some(cycle)),
+            }
+        }
     }
 
     /// Prepare reclaim for the active major collection once mark work is fully drained.
     pub fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError> {
-        self.guard.prepare_active_reclaim_if_needed()
+        self.heap
+            .collector_runtime()
+            .prepare_active_reclaim_if_needed()
     }
 
     /// Commit the active major collection once reclaim has already been prepared.
     pub fn commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
-        self.guard.commit_active_reclaim_if_ready()
+        self.heap
+            .collector_runtime()
+            .commit_active_reclaim_if_ready()
     }
 
     /// Return the number of queued finalizers waiting to run.
     pub fn pending_finalizer_count(&self) -> usize {
-        self.guard.pending_finalizer_count()
+        self.heap.pending_finalizer_count()
     }
 
     /// Run and drain queued finalizers.
     pub fn drain_pending_finalizers(&mut self) -> u64 {
-        self.guard.drain_pending_finalizers()
+        self.heap.drain_pending_finalizers()
     }
 
     /// Run at most `max` queued finalizers and return the number
     /// that actually ran. See [`Heap::drain_pending_finalizers_bounded`].
     pub fn drain_pending_finalizers_bounded(&mut self, max: usize) -> u64 {
-        self.guard.drain_pending_finalizers_bounded(max)
+        self.heap.drain_pending_finalizers_bounded(max)
     }
 
     /// Return runtime-side follow-up work that remains outside GC commit.
     pub fn runtime_work_status(&self) -> RuntimeWorkStatus {
-        self.guard.runtime_work_status()
+        self.heap.runtime_work_status()
     }
 
     /// Finish the active major collection if its mark work is fully drained.
     pub fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
-        self.guard.finish_active_major_collection_if_ready()
+        self.heap
+            .collector_runtime()
+            .finish_active_major_collection_if_ready()
     }
 
     /// Last completed collection plan, if any.
     pub fn last_completed_plan(&self) -> Option<crate::plan::CollectionPlan> {
-        self.guard.last_completed_plan()
+        self.heap.last_completed_plan()
     }
 
     /// Snapshot of heap statistics.
     pub fn heap_stats(&self) -> HeapStats {
-        self.guard.stats()
+        self.heap.stats()
     }
 }
 
