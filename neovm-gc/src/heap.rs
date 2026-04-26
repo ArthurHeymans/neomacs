@@ -168,21 +168,14 @@ impl MutatorRegistration {
             heap.state
                 .active_registered_mutators
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-            let safepoint = heap
-                .state
-                .safepoint
-                .read()
-                .expect("heap safepoint lock poisoned");
             if !heap.safepoint_requested() {
                 return RegisteredMutatorReadGuard {
                     _section: ActiveMutatorSection {
                         heap,
                         state: std::sync::Arc::clone(&self.state),
                     },
-                    _safepoint: safepoint,
                 };
             }
-            drop(safepoint);
             let previous = self
                 .state
                 .active_sections
@@ -265,9 +258,33 @@ impl Drop for ActiveMutatorSection<'_> {
 }
 
 #[derive(Debug)]
+pub(crate) struct SafepointWriteGuard<'a> {
+    heap: &'a Heap,
+    _guard: std::sync::RwLockWriteGuard<'a, ()>,
+}
+
+impl<'a> SafepointWriteGuard<'a> {
+    fn new(heap: &'a Heap, guard: std::sync::RwLockWriteGuard<'a, ()>) -> Self {
+        Self {
+            heap,
+            _guard: guard,
+        }
+    }
+}
+
+impl Drop for SafepointWriteGuard<'_> {
+    fn drop(&mut self) {
+        self.heap
+            .state
+            .safepoint_requested
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.heap.notify_safepoint_waiters();
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct RegisteredMutatorReadGuard<'a> {
     _section: ActiveMutatorSection<'a>,
-    _safepoint: std::sync::RwLockReadGuard<'a, ()>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -611,8 +628,11 @@ impl Heap {
     /// Publishes a "safepoint requested" gate before waiting on the
     /// underlying `RwLock` so fresh mutator-side read entries stop
     /// immediately while the collector is trying to stop the world.
+    /// The pending request stays asserted until the returned guard
+    /// drops so registered mutators remain parked for the full STW
+    /// critical section, not just until the writer lock is acquired.
     #[inline]
-    pub(crate) fn write_safepoint(&self) -> std::sync::RwLockWriteGuard<'_, ()> {
+    pub(crate) fn write_safepoint(&self) -> SafepointWriteGuard<'_> {
         self.begin_safepoint_request();
         self.wait_for_registered_mutators_to_quiesce();
         let guard = self
@@ -620,20 +640,13 @@ impl Heap {
             .safepoint
             .write()
             .expect("heap safepoint lock poisoned");
-        self.state
-            .safepoint_requested
-            .store(false, std::sync::atomic::Ordering::Release);
-        self.notify_safepoint_waiters();
-        guard
+        SafepointWriteGuard::new(self, guard)
     }
 
     #[inline]
     pub(crate) fn try_write_safepoint(
         &self,
-    ) -> Result<
-        std::sync::RwLockWriteGuard<'_, ()>,
-        std::sync::TryLockError<std::sync::RwLockWriteGuard<'_, ()>>,
-    > {
+    ) -> Result<SafepointWriteGuard<'_>, std::sync::TryLockError<SafepointWriteGuard<'_>>> {
         self.begin_safepoint_request();
         if !self.registered_mutators_quiescent() {
             self.state
@@ -642,12 +655,21 @@ impl Heap {
             self.notify_safepoint_waiters();
             return Err(std::sync::TryLockError::WouldBlock);
         }
-        let result = self.state.safepoint.try_write();
-        self.state
-            .safepoint_requested
-            .store(false, std::sync::atomic::Ordering::Release);
-        self.notify_safepoint_waiters();
-        result
+        match self.state.safepoint.try_write() {
+            Ok(guard) => Ok(SafepointWriteGuard::new(self, guard)),
+            Err(std::sync::TryLockError::Poisoned(error)) => {
+                Err(std::sync::TryLockError::Poisoned(
+                    std::sync::PoisonError::new(SafepointWriteGuard::new(self, error.into_inner())),
+                ))
+            }
+            Err(std::sync::TryLockError::WouldBlock) => {
+                self.state
+                    .safepoint_requested
+                    .store(false, std::sync::atomic::Ordering::Release);
+                self.notify_safepoint_waiters();
+                Err(std::sync::TryLockError::WouldBlock)
+            }
+        }
     }
 
     #[cfg(test)]
@@ -1463,7 +1485,7 @@ impl Heap {
 /// the operation through it.
 #[derive(Debug)]
 pub struct HeapCollectorRuntime<'a> {
-    _safepoint: std::sync::RwLockWriteGuard<'a, ()>,
+    _safepoint: SafepointWriteGuard<'a>,
     guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
@@ -1472,7 +1494,7 @@ pub struct HeapCollectorRuntime<'a> {
 
 impl<'a> HeapCollectorRuntime<'a> {
     fn new(
-        safepoint: std::sync::RwLockWriteGuard<'a, ()>,
+        safepoint: SafepointWriteGuard<'a>,
         guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
         nursery_generation: &'a std::sync::atomic::AtomicU64,
         collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
@@ -1736,7 +1758,7 @@ impl crate::background::BackgroundCollectionRuntime for HeapCollectorRuntime<'_>
 #[cfg(test)]
 #[derive(Debug)]
 pub struct HeapCollectorRuntimeWithLocal<'a> {
-    _safepoint: std::sync::RwLockWriteGuard<'a, ()>,
+    _safepoint: SafepointWriteGuard<'a>,
     guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,

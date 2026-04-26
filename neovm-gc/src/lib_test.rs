@@ -11994,6 +11994,35 @@ fn safepoint_request_blocks_new_read_entries_until_cleared() {
 }
 
 #[test]
+fn registered_mutator_entries_block_while_world_stop_guard_is_held() {
+    let heap = Heap::new(HeapConfig::default());
+    let stop = heap.write_safepoint();
+
+    let worker_heap = heap.clone();
+    let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let mut mutator = worker_heap.mutator();
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
+        entered_tx
+            .send(())
+            .expect("signal registered mutator entry after world stop");
+    });
+
+    assert!(
+        entered_rx.recv_timeout(Duration::from_millis(50)).is_err(),
+        "registered mutator entry should block while the stop-the-world guard is held"
+    );
+
+    drop(stop);
+    entered_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("registered mutator entry should proceed once the world stop guard drops");
+    worker
+        .join()
+        .expect("join registered mutator helper thread");
+}
+
+#[test]
 fn registered_mutator_count_tracks_local_lifetime() {
     let heap = Heap::new(HeapConfig::default());
     assert_eq!(heap.registered_mutator_count(), 0);
