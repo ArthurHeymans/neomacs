@@ -488,13 +488,10 @@ impl<'heap> Mutator<'heap> {
         self.heap
     }
 
-    fn alloc_typed_scoped<'scope, 'handle_heap, T: Trace + 'static>(
+    fn alloc_typed_unrooted_after_safepoint<T: Trace + 'static>(
         &mut self,
-        scope: &mut HandleScope<'scope, 'handle_heap>,
         value: T,
-    ) -> Result<Root<'scope, T>, AllocError> {
-        let _safepoint =
-            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
+    ) -> Result<Gc<T>, AllocError> {
         let Self { heap, local, .. } = self;
         if local.prepared_full_reclaim_active() {
             return Err(AllocError::CollectionInProgress);
@@ -697,7 +694,17 @@ impl<'heap> Mutator<'heap> {
                 local.collector_plans_refresh_epoch_seen_mut(),
             );
         }
-        let gc = unsafe { Gc::from_erased(commit.gc) };
+        Ok(unsafe { Gc::from_erased(commit.gc) })
+    }
+
+    fn alloc_typed_scoped<'scope, 'handle_heap, T: Trace + 'static>(
+        &mut self,
+        scope: &mut HandleScope<'scope, 'handle_heap>,
+        value: T,
+    ) -> Result<Root<'scope, T>, AllocError> {
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
+        let gc = self.alloc_typed_unrooted_after_safepoint(value)?;
         Ok(scope.root(gc))
     }
 
@@ -869,13 +876,11 @@ impl<'heap> Mutator<'heap> {
         &mut self,
         value: T,
     ) -> Result<NonNull<T>, AllocError> {
-        let mut scope = self.handle_scope();
-        let root = self.alloc_typed_scoped(&mut scope, value)?;
-        let gc = root.as_gc();
-        let ptr = gc.as_non_null();
-        drop(root);
-        drop(scope);
-        Ok(ptr)
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
+        Ok(self
+            .alloc_typed_unrooted_after_safepoint(value)?
+            .as_non_null())
     }
 
     /// Return whether this mutator currently holds a
