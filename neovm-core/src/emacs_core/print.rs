@@ -923,7 +923,7 @@ fn write_interpreted_closure_stateful(value: &Value, out: &mut String, state: &m
     out.push_str(
         &value
             .closure_params()
-            .map_or_else(|| "nil".to_string(), format_params),
+            .map_or_else(|| "nil".to_string(), |params| format_params(&params)),
     );
     out.push(' ');
     if let Some(body) = value.closure_body_value() {
@@ -963,7 +963,7 @@ fn write_lambda_stateful(value: &Value, out: &mut String, state: &mut PrintState
             } else {
                 let params = value
                     .closure_params()
-                    .map_or_else(|| "nil".to_string(), format_params);
+                    .map_or_else(|| "nil".to_string(), |params| format_params(&params));
                 write!(out, "(lambda {} ", params).unwrap();
                 if let Some(body) = value.closure_body_value() {
                     write_closure_body_forms_stateful(body, out, state);
@@ -980,7 +980,7 @@ fn write_macro_stateful(value: &Value, out: &mut String, state: &mut PrintState)
     with_default_cycle_guard(value, out, state, |out, state| {
         let params = value
             .closure_params()
-            .map_or_else(|| "nil".to_string(), format_params);
+            .map_or_else(|| "nil".to_string(), |params| format_params(&params));
         write!(out, "(macro {} ", params).unwrap();
         if let Some(body) = value.closure_body_value() {
             write_closure_body_forms_stateful(body, out, state);
