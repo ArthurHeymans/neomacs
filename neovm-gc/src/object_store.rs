@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, AtomicUsize, Ordering};
 
 use parking_lot::{RwLock, RwLockReadGuard};
 
@@ -533,6 +533,7 @@ pub(crate) struct ObjectStore {
     shards: Box<[ObjectShard]>,
     remembered: RememberedSetState,
     generation: AtomicU64,
+    object_count: AtomicUsize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -558,6 +559,7 @@ impl Default for ObjectStore {
             shards: shards.into_boxed_slice(),
             remembered: RememberedSetState::default(),
             generation: AtomicU64::new(0),
+            object_count: AtomicUsize::new(0),
         }
     }
 }
@@ -736,16 +738,7 @@ impl ObjectStore {
     }
 
     pub(crate) fn object_count(&self) -> usize {
-        self.shards
-            .iter()
-            .map(|shard| {
-                let chunks = shard.chunks.read();
-                chunks
-                    .iter()
-                    .map(|chunk| chunk.published_len())
-                    .sum::<usize>()
-            })
-            .sum()
+        self.object_count.load(Ordering::Acquire)
     }
 
     pub(crate) fn restore_remembered(&mut self, owners: Vec<ObjectKey>) {
@@ -771,7 +764,9 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved(reservation, shard_index, record)
+        let locator = Self::publish_reserved(reservation, shard_index, record);
+        self.object_count.fetch_add(1, Ordering::Release);
+        locator
     }
 
     pub(crate) fn publish_shared_prepared(
@@ -791,7 +786,9 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved(reservation, shard_index, record)
+        let locator = Self::publish_reserved(reservation, shard_index, record);
+        self.object_count.fetch_add(1, Ordering::Release);
+        locator
     }
 
     pub(crate) fn publish_shared_prepared_without_old_block(
@@ -813,18 +810,21 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved_without_old_block(
+        let locator = Self::publish_reserved_without_old_block(
             reservation,
             shard_index,
             header,
             layout_align_shift,
             memory_kind,
-        )
+        );
+        self.object_count.fetch_add(1, Ordering::Release);
+        locator
     }
 
     pub(crate) fn take_flat(&mut self) -> FlatObjectStore {
         let mut objects = Vec::new();
         let mut remembered = std::mem::take(&mut self.remembered);
+        self.object_count.store(0, Ordering::Release);
         for shard in self.shards.iter_mut() {
             let chunks = shard.chunks.get_mut();
             for chunk in chunks.iter() {
@@ -850,6 +850,7 @@ impl ObjectStore {
 
     pub(crate) fn restore_from_flat(&mut self, mut flat: FlatObjectStore) {
         self.remembered = std::mem::take(&mut flat.indexes.remembered);
+        let restored_count = flat.objects.len();
         for shard in self.shards.iter_mut() {
             shard.clear();
         }
@@ -860,6 +861,7 @@ impl ObjectStore {
             unsafe { self.shards.get_unchecked_mut(shard_index) }
                 .publish_owned_mut(shard_index, object);
         }
+        self.object_count.store(restored_count, Ordering::Release);
         self.bump_generation();
     }
 }

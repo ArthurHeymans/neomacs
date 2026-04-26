@@ -20,6 +20,7 @@ fn mark_only_read_uses_header_locators_without_index_snapshot() {
     let first = ObjectRecord::allocate(desc, SpaceKind::Old, Leaf).expect("allocate first object");
     let first_key = first.object_key();
     let first_locator = store.publish_shared(first, &mut publish_local);
+    assert_eq!(store.object_count(), 1);
 
     let read = store.read_marking();
     assert!(read.index.is_empty());
@@ -31,6 +32,7 @@ fn mark_only_read_uses_header_locators_without_index_snapshot() {
         ObjectRecord::allocate(desc, SpaceKind::Old, Leaf).expect("allocate second object");
     let second_key = second.object_key();
     store.publish_shared(second, &mut publish_local);
+    assert_eq!(store.object_count(), 2);
 
     assert_eq!(raw.locator_of_key(second_key), None);
 }
