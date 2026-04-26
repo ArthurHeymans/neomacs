@@ -11307,6 +11307,49 @@ fn dirty_card_scan_index_avoids_linear_objects_walk() {
     );
 }
 
+#[test]
+fn dirty_card_scan_skips_header_index_when_no_cards_are_dirty() {
+    let heap = Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 8,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    let mut scope = mutator.handle_scope();
+    for _ in 0..64 {
+        let _holder = mutator
+            .alloc(
+                &mut scope,
+                PairHolder {
+                    _pad: [0; 32],
+                    first: EdgeCell::default(),
+                    second: EdgeCell::default(),
+                },
+            )
+            .expect("alloc block-backed parent");
+    }
+    assert_eq!(mutator.heap().dirty_card_count(), 0);
+
+    let mut counter = 0usize;
+    let core = mutator.heap().read_core();
+    let roots = crate::collector_exec::collect_dirty_card_root_locators_with_counter(
+        core.objects().raw(),
+        core.old_gen(),
+        &mut counter,
+    );
+    assert!(roots.is_empty());
+    assert_eq!(
+        counter, 0,
+        "clean-card scan should not build or walk the header index"
+    );
+}
+
 // ----- ConcurrentMarker tests -------------------------------------------
 
 fn fresh_concurrent_marker_shared_heap() -> SharedHeap {

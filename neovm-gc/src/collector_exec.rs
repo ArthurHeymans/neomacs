@@ -485,6 +485,10 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
     old_gen: &OldGenState,
     counter: &mut usize,
 ) -> Vec<usize> {
+    if !old_gen_has_dirty_cards(old_gen) {
+        return Vec::new();
+    }
+
     let mut roots = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -550,6 +554,10 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
     old_gen: &OldGenState,
     counter: &mut usize,
 ) -> Vec<crate::index_state::ObjectLocator> {
+    if !old_gen_has_dirty_cards(old_gen) {
+        return Vec::new();
+    }
+
     let mut roots = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -596,6 +604,13 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
     }
 
     roots
+}
+
+fn old_gen_has_dirty_cards(old_gen: &OldGenState) -> bool {
+    old_gen
+        .blocks()
+        .iter()
+        .any(|block| !block.card_table().dirty_card_indices().is_empty())
 }
 
 /// After a minor GC clears all dirty cards, walk every block-backed
