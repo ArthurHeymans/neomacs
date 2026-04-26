@@ -13,6 +13,7 @@ use crate::reclaim::PreparedReclaim;
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveReclaimPrepRequest {
     pub(crate) plan: CollectionPlan,
+    #[cfg(test)]
     pub(crate) ephemerons_processed: bool,
 }
 
@@ -215,10 +216,12 @@ pub(crate) fn active_reclaim_prep_request(
         .active_major_mark_needs_reclaim_prep_plan()
         .map(|plan| ActiveReclaimPrepRequest {
             plan,
+            #[cfg(test)]
             ephemerons_processed: collector.active_major_mark_ephemerons_processed(),
         })
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_active_reclaim(
     request: &ActiveReclaimPrepRequest,
     trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),

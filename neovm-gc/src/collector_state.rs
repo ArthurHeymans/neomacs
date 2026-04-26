@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration, Instant};
 
+use crate::collector_exec::ActiveMajorEphemeronTraceState;
 #[cfg(test)]
 use crate::collector_exec::MarkTracer;
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
@@ -400,6 +401,7 @@ pub(crate) struct MajorMarkState {
     pub(crate) reclaim_prepare_nanos: u64,
     pub(crate) reclaim_commit_pause_nanos: u64,
     pub(crate) ephemerons_processed: bool,
+    pub(crate) ephemeron_trace_state: Option<ActiveMajorEphemeronTraceState>,
     pub(crate) reclaim_prepared: bool,
     pub(crate) reclaim_prepare_state: Option<PreparedReclaimBuildState>,
     pub(crate) prepared_reclaim: Option<PreparedReclaim>,
@@ -475,10 +477,13 @@ impl CollectorState {
 
     pub(crate) fn active_reclaim_prep_progress(&self) -> Option<(u64, usize)> {
         self.major_mark_state.as_ref().and_then(|state| {
+            if let Some(prep) = state.reclaim_prepare_state.as_ref() {
+                return Some((state.reclaim_prepare_nanos, prep.scanned_objects()));
+            }
             state
-                .reclaim_prepare_state
+                .ephemeron_trace_state
                 .as_ref()
-                .map(|prep| (state.reclaim_prepare_nanos, prep.scanned_objects()))
+                .map(|trace| (state.reclaim_prepare_nanos, trace.scanned_candidates()))
         })
     }
 
@@ -501,6 +506,7 @@ impl CollectorState {
             reclaim_prepare_nanos: 0,
             reclaim_commit_pause_nanos: 0,
             ephemerons_processed: false,
+            ephemeron_trace_state: None,
             reclaim_prepared: false,
             reclaim_prepare_state: None,
             prepared_reclaim: None,
@@ -517,6 +523,7 @@ impl CollectorState {
         state.reclaim_prepare_nanos = 0;
         state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = false;
+        state.ephemeron_trace_state = None;
         state.reclaim_prepared = false;
         state.reclaim_prepare_state = None;
         state.prepared_reclaim = None;
@@ -583,6 +590,7 @@ impl CollectorState {
         state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
         state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
         state.ephemerons_processed = true;
+        state.ephemeron_trace_state = None;
         true
     }
 
@@ -606,6 +614,7 @@ impl CollectorState {
         state.reclaim_prepare_nanos = saturating_duration_nanos(reclaim_prepare_time);
         state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = true;
+        state.ephemeron_trace_state = None;
         state.reclaim_prepared = true;
         state.reclaim_prepare_state = None;
         state.prepared_reclaim = prepared_reclaim;
@@ -630,6 +639,7 @@ impl CollectorState {
             state.reclaim_prepare_nanos = 0;
             state.reclaim_commit_pause_nanos = 0;
             state.ephemerons_processed = false;
+            state.ephemeron_trace_state = None;
             state.reclaim_prepared = false;
             state.reclaim_prepare_state = None;
             state.prepared_reclaim = None;

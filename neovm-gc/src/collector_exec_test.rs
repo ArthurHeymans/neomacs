@@ -1,12 +1,15 @@
 use super::*;
-use crate::descriptor::{Trace, fixed_type_desc};
+use crate::descriptor::{
+    EphemeronVisitor, Relocator, Trace, Tracer, TypeFlags, WeakProcessor, fixed_type_desc,
+};
 use crate::index_state::{HeapIndexState, ObjectIndex, ObjectLocator};
 use crate::object_store::FlatReadView;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};
-use crate::root::RootStack;
+use crate::root::{Gc, RootStack};
 use crate::runtime_state::RuntimeStateHandle;
 use crate::spaces::{NurseryConfig, NurseryState, OldGenConfig, OldGenState};
 use crate::stats::{HeapStats, SpaceStats};
+use crate::weak::{Ephemeron, Weak};
 
 #[derive(Debug)]
 struct Leaf;
@@ -15,6 +18,32 @@ unsafe impl Trace for Leaf {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
 
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
+}
+
+#[derive(Debug)]
+struct EphemeronHolder {
+    pair: Ephemeron<Leaf, Leaf>,
+}
+
+unsafe impl Trace for EphemeronHolder {
+    fn trace(&self, _tracer: &mut dyn Tracer) {}
+
+    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+
+    fn process_weak(&self, processor: &mut dyn WeakProcessor) {
+        self.pair.process(processor);
+    }
+
+    fn visit_ephemerons(&self, visitor: &mut dyn EphemeronVisitor) {
+        self.pair.visit(visitor);
+    }
+
+    fn type_flags() -> TypeFlags
+    where
+        Self: Sized,
+    {
+        TypeFlags::WEAK | TypeFlags::EPHEMERON_KEY
+    }
 }
 
 fn object_index_for(objects: &[ObjectRecord]) -> ObjectIndex {
@@ -203,4 +232,87 @@ fn collect_global_sources_includes_roots_and_immortal_objects() {
     assert!(sources.contains(&rooted_source));
     assert!(sources.contains(&immortal_source));
     assert!(!sources.contains(&nursery_source));
+}
+
+#[test]
+fn active_major_ephemeron_trace_slices_candidate_scan() {
+    let holder_desc = Box::leak(Box::new(fixed_type_desc::<EphemeronHolder>()));
+    let first = ObjectRecord::allocate(
+        holder_desc,
+        SpaceKind::Pinned,
+        EphemeronHolder {
+            pair: Ephemeron::default(),
+        },
+    )
+    .expect("allocate first ephemeron holder");
+    let second = ObjectRecord::allocate(
+        holder_desc,
+        SpaceKind::Pinned,
+        EphemeronHolder {
+            pair: Ephemeron::default(),
+        },
+    )
+    .expect("allocate second ephemeron holder");
+    let first_key = first.object_key();
+    let second_key = second.object_key();
+    first.mark_if_unmarked();
+    second.mark_if_unmarked();
+    let objects = vec![first, second];
+    let indexes = HeapIndexState {
+        object_index: object_index_for(&objects),
+        ..HeapIndexState::default()
+    };
+    let view = FlatReadView::new(&objects, &indexes);
+    let mut trace = begin_active_major_ephemeron_trace(view.raw(), &[first_key, second_key]);
+
+    let first_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
+    assert!(!first_progress.completed);
+    assert_eq!(first_progress.scanned_candidates_delta, 1);
+    assert_eq!(trace.scanned_candidates(), 1);
+
+    let second_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
+    assert!(second_progress.completed);
+    assert_eq!(second_progress.scanned_candidates_delta, 1);
+    assert_eq!(trace.scanned_candidates(), 2);
+}
+
+#[test]
+fn active_major_ephemeron_trace_slices_fixpoint_mark_work() {
+    let leaf_desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
+    let holder_desc = Box::leak(Box::new(fixed_type_desc::<EphemeronHolder>()));
+    let key = ObjectRecord::allocate(leaf_desc, SpaceKind::Pinned, Leaf).expect("allocate key");
+    let value = ObjectRecord::allocate(leaf_desc, SpaceKind::Pinned, Leaf).expect("allocate value");
+    let key_gc = unsafe { Gc::<Leaf>::from_erased(key.erased()) };
+    let value_gc = unsafe { Gc::<Leaf>::from_erased(value.erased()) };
+    let holder = ObjectRecord::allocate(
+        holder_desc,
+        SpaceKind::Pinned,
+        EphemeronHolder {
+            pair: Ephemeron::new(Weak::new(key_gc), Weak::new(value_gc)),
+        },
+    )
+    .expect("allocate ephemeron holder");
+    let holder_key = holder.object_key();
+    key.mark_if_unmarked();
+    holder.mark_if_unmarked();
+    let objects = vec![key, value, holder];
+    let indexes = HeapIndexState {
+        object_index: object_index_for(&objects),
+        ..HeapIndexState::default()
+    };
+    let view = FlatReadView::new(&objects, &indexes);
+    let mut trace = begin_active_major_ephemeron_trace(view.raw(), &[holder_key]);
+
+    let first_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
+    assert!(!first_progress.completed);
+    assert_eq!(first_progress.scanned_candidates_delta, 1);
+    assert_eq!(first_progress.mark_steps_delta, 1);
+    assert_eq!(first_progress.mark_rounds_delta, 1);
+    assert!(objects[1].is_marked());
+
+    let second_progress = advance_active_major_ephemeron_trace(view.raw(), &mut trace, 1, 1, 1);
+    assert!(second_progress.completed);
+    assert_eq!(second_progress.scanned_candidates_delta, 1);
+    assert_eq!(second_progress.mark_steps_delta, 0);
+    assert_eq!(trace.scanned_candidates(), 2);
 }

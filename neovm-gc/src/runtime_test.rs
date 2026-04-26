@@ -1,7 +1,8 @@
 use super::*;
-use crate::descriptor::{Relocator, Trace, Tracer};
+use crate::descriptor::{EphemeronVisitor, Relocator, Trace, Tracer, TypeFlags, WeakProcessor};
 use crate::heap::HeapConfig;
 use crate::spaces::{LargeObjectSpaceConfig, NurseryConfig, OldGenConfig};
+use crate::weak::{Ephemeron, Weak};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -24,6 +25,32 @@ unsafe impl Trace for OldLeaf {
     fn trace(&self, _tracer: &mut dyn Tracer) {}
 
     fn relocate(&self, _relocator: &mut dyn Relocator) {}
+}
+
+#[derive(Debug)]
+struct EphemeronOldHolder {
+    pair: Ephemeron<OldLeaf, OldLeaf>,
+}
+
+unsafe impl Trace for EphemeronOldHolder {
+    fn trace(&self, _tracer: &mut dyn Tracer) {}
+
+    fn relocate(&self, _relocator: &mut dyn Relocator) {}
+
+    fn process_weak(&self, processor: &mut dyn WeakProcessor) {
+        self.pair.process(processor);
+    }
+
+    fn visit_ephemerons(&self, visitor: &mut dyn EphemeronVisitor) {
+        self.pair.visit(visitor);
+    }
+
+    fn type_flags() -> TypeFlags
+    where
+        Self: Sized,
+    {
+        TypeFlags::WEAK | TypeFlags::EPHEMERON_KEY
+    }
 }
 
 #[test]
@@ -556,6 +583,80 @@ fn full_reclaim_prepare_builds_snapshot_in_bounded_slices() {
             CollectionPhase::Reclaim,
         ]
     );
+}
+
+#[test]
+fn active_reclaim_prep_slices_ephemeron_fixpoint_before_snapshot() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    let mut keep_scope = mutator.handle_scope();
+    let (holder_gc, key_gc, value_gc) = {
+        let mut setup_scope = mutator.handle_scope();
+        let key = mutator
+            .alloc(&mut setup_scope, OldLeaf { _bytes: [1; 32] })
+            .expect("allocate ephemeron key");
+        let value = mutator
+            .alloc(&mut setup_scope, OldLeaf { _bytes: [2; 32] })
+            .expect("allocate ephemeron value");
+        let holder = mutator
+            .alloc(
+                &mut setup_scope,
+                EphemeronOldHolder {
+                    pair: Ephemeron::new(Weak::new(key.as_gc()), Weak::new(value.as_gc())),
+                },
+            )
+            .expect("allocate ephemeron holder");
+        (holder.as_gc(), key.as_gc(), value.as_gc())
+    };
+    let _holder = mutator.root(&mut keep_scope, holder_gc);
+    let _key = mutator.root(&mut keep_scope, key_gc);
+
+    mutator
+        .begin_major_mark(CollectionPlan {
+            mark_slice_budget: usize::MAX,
+            ..mutator.plan_for(CollectionKind::Major)
+        })
+        .expect("begin active major mark");
+    while !mutator
+        .poll_active_major_mark()
+        .expect("poll active major mark")
+        .expect("major mark should stay active")
+        .completed
+    {}
+
+    assert_eq!(
+        mutator.active_major_mark_plan().map(|plan| plan.phase),
+        Some(CollectionPhase::Remark)
+    );
+
+    let prepared = mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("stable ephemeron reclaim-prep slice");
+    assert!(prepared);
+    assert_eq!(
+        mutator.active_major_mark_plan().map(|plan| plan.phase),
+        Some(CollectionPhase::Reclaim)
+    );
+
+    let cycle = mutator
+        .finish_major_collection()
+        .expect("finish active major after ephemeron prep");
+    assert_eq!(cycle.major_collections, 1);
+    assert!(mutator.heap().contains(value_gc));
 }
 
 #[test]

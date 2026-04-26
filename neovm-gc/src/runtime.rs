@@ -5,12 +5,13 @@ use crate::background::{
     SharedCollectorHandle, SharedHeap, SharedHeapError, SharedHeapStatus, SharedRuntimeHandle,
 };
 use crate::collector_exec::{
+    advance_active_major_ephemeron_trace, begin_active_major_ephemeron_trace,
     collect_global_sources, execute_collection_plan, prepare_full_reclaim_prefix_for_plan,
-    process_weak_references_for_candidates, trace_major_ephemerons_for_candidates,
+    process_weak_references_for_candidates,
 };
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{self, prepare_active_reclaim};
-use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
+use crate::collector_session;
+use crate::collector_state::{CollectorSharedSnapshot, CollectorState, MajorMarkState};
 use crate::descriptor::{GcErased, TypeDesc};
 use crate::heap::{AllocError, HeapCore, TryCollectorRuntimeError};
 use crate::index_state::ForwardingMap;
@@ -704,17 +705,20 @@ impl<'heap> CollectorRuntime<'heap> {
             return Ok(false);
         }
 
-        if !state.ephemerons_processed {
-            let objects = self.heap.objects();
-            let (mark_steps_delta, mark_rounds_delta) = prepare_active_reclaim(
-                &request,
-                |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
-                objects.raw(),
-            );
-            state.mark_elapsed_nanos = elapsed_nanos(state.mark_started_at.elapsed());
-            state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
-            state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
-            state.ephemerons_processed = true;
+        if !advance_active_reclaim_ephemerons(self.heap, &mut state, &request, budget) {
+            let pause_nanos = elapsed_nanos(pause_start.elapsed());
+            state.reclaim_prepare_nanos = state.reclaim_prepare_nanos.saturating_add(pause_nanos);
+            self.heap.record_pause_sample(pause_nanos);
+            self.heap
+                .collector_handle()
+                .restore_major_mark_state_and_refresh(
+                    state,
+                    &self.heap.storage_stats(),
+                    self.heap.old_gen(),
+                    self.heap.old_config(),
+                    |kind| self.heap.plan_for(kind),
+                );
+            return Ok(false);
         }
 
         let mut promoted_bytes = 0usize;
@@ -1135,6 +1139,40 @@ fn elapsed_nanos(duration: Duration) -> u64 {
     duration.as_nanos().min(u128::from(u64::MAX)) as u64
 }
 
+fn advance_active_reclaim_ephemerons(
+    core: &HeapCore,
+    state: &mut MajorMarkState,
+    request: &collector_session::ActiveReclaimPrepRequest,
+    budget: usize,
+) -> bool {
+    if state.ephemerons_processed {
+        return true;
+    }
+
+    let objects = core.objects();
+    let raw = objects.raw();
+    let trace = state.ephemeron_trace_state.get_or_insert_with(|| {
+        let ephemeron_candidates = objects.ephemeron_candidates();
+        begin_active_major_ephemeron_trace(raw.clone(), &ephemeron_candidates)
+    });
+    let mark_slice_budget = request.plan.mark_slice_budget.min(budget.max(1)).max(1);
+    let progress = advance_active_major_ephemeron_trace(
+        raw,
+        trace,
+        request.plan.worker_count.max(1),
+        budget,
+        mark_slice_budget,
+    );
+    state.mark_elapsed_nanos = elapsed_nanos(state.mark_started_at.elapsed());
+    state.mark_steps = state.mark_steps.saturating_add(progress.mark_steps_delta);
+    state.mark_rounds = state.mark_rounds.saturating_add(progress.mark_rounds_delta);
+    if progress.completed {
+        state.ephemerons_processed = true;
+        state.ephemeron_trace_state = None;
+    }
+    progress.completed
+}
+
 fn prepare_active_major_reclaim_with_read_core(
     core: &HeapCore,
     collector: &mut CollectorState,
@@ -1158,17 +1196,19 @@ fn prepare_active_major_reclaim_with_read_core(
         return false;
     }
 
-    if !state.ephemerons_processed {
-        let objects = core.objects();
-        let (mark_steps_delta, mark_rounds_delta) = prepare_active_reclaim(
-            request,
-            |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
-            objects.raw(),
+    if !advance_active_reclaim_ephemerons(core, &mut state, request, budget) {
+        let pause_nanos = elapsed_nanos(pause_start.elapsed());
+        state.reclaim_prepare_nanos = state.reclaim_prepare_nanos.saturating_add(pause_nanos);
+        core.record_pause_sample(pause_nanos);
+        collector.restore_major_mark_state(state);
+        refresh_cached_collector_plans(
+            collector,
+            &core.storage_stats(),
+            core.old_gen(),
+            core.old_config(),
+            |kind| core.plan_for(kind),
         );
-        state.mark_elapsed_nanos = elapsed_nanos(state.mark_started_at.elapsed());
-        state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
-        state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
-        state.ephemerons_processed = true;
+        return false;
     }
 
     let completed = {
@@ -1229,22 +1269,6 @@ fn prepare_active_major_reclaim_with_read_core(
 #[cfg(test)]
 #[path = "runtime_test.rs"]
 mod tests;
-
-fn trace_heap_major_ephemerons(
-    heap: &HeapCore,
-    tracer: &mut crate::collector_exec::MarkTracer<'_>,
-    plan: &CollectionPlan,
-) -> (u64, u64) {
-    let objects = heap.objects();
-    let ephemeron_candidates = objects.ephemeron_candidates();
-    trace_major_ephemerons_for_candidates(
-        objects.raw(),
-        &ephemeron_candidates,
-        tracer,
-        plan.worker_count.max(1),
-        plan.mark_slice_budget,
-    )
-}
 
 impl SharedCollectorRuntime {
     pub(crate) fn new(heap: SharedHeap) -> Self {
