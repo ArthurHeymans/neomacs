@@ -7602,6 +7602,56 @@ fn shared_try_with_runtime_status_returns_snapshot_when_heap_is_locked() {
 }
 
 #[test]
+fn shared_try_with_runtime_reports_would_block_when_registered_mutator_holds_inner_safepoint() {
+    let heap = Heap::new(HeapConfig::default());
+    let shared = SharedHeap::from_heap(heap.clone());
+    let mut mutator = heap.mutator();
+    let _guard = mutator.enter_registered_safepoint_read_for_test();
+
+    let result = shared.try_with_runtime(|runtime| runtime.recommended_background_plan());
+
+    assert_eq!(result, Err(SharedHeapError::WouldBlock));
+}
+
+#[test]
+fn shared_try_with_runtime_status_returns_snapshot_when_registered_mutator_holds_inner_safepoint() {
+    let heap = Heap::new(HeapConfig::default());
+    let shared = SharedHeap::from_heap(heap.clone());
+    let before = shared
+        .status()
+        .expect("read shared status before inner safepoint contention");
+    let mut mutator = heap.mutator();
+    let _guard = mutator.enter_registered_safepoint_read_for_test();
+
+    let result = shared.try_with_runtime_status(|runtime| runtime.recommended_background_plan());
+
+    match result {
+        Err(SharedHeapAccessError::WouldBlock(status)) => {
+            assert_eq!(status.stats, before.stats);
+            assert_eq!(
+                status.recommended_background_plan,
+                before.recommended_background_plan
+            );
+            assert_eq!(status.active_major_mark_plan, before.active_major_mark_plan);
+        }
+        other => panic!("expected snapshot-backed runtime would-block, got {other:?}"),
+    }
+}
+
+#[test]
+fn shared_collector_runtime_try_update_reports_would_block_for_inner_safepoint_contention() {
+    let heap = Heap::new(HeapConfig::default());
+    let shared = SharedHeap::from_heap(heap.clone());
+    let runtime = shared.collector_runtime();
+    let mut mutator = heap.mutator();
+    let _guard = mutator.enter_registered_safepoint_read_for_test();
+
+    let result = runtime.try_advance_auto_compaction();
+
+    assert_eq!(result, Err(SharedBackgroundError::WouldBlock));
+}
+
+#[test]
 fn shared_snapshot_reads_work_while_heap_lock_is_held_and_refresh_on_drop() {
     let shared = SharedHeap::new(HeapConfig::default());
     let before = shared.stats().expect("read snapshot stats before lock");

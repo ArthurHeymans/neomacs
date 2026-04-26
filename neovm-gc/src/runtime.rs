@@ -12,7 +12,7 @@ use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_pl
 use crate::collector_session::{self, build_prepared_active_reclaim, prepare_active_reclaim};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
 use crate::descriptor::{GcErased, TypeDesc};
-use crate::heap::{AllocError, HeapCore};
+use crate::heap::{AllocError, HeapCore, TryCollectorRuntimeError};
 use crate::object::SpaceKind;
 use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress,
@@ -1334,7 +1334,10 @@ impl SharedCollectorRuntime {
             std::sync::TryLockError::Poisoned(_) => SharedHeapError::LockPoisoned,
             std::sync::TryLockError::WouldBlock => SharedHeapError::WouldBlock,
         })?;
-        let mut guard = heap.collector_runtime();
+        let mut guard = heap.try_collector_runtime().map_err(|error| match error {
+            TryCollectorRuntimeError::Poisoned => SharedHeapError::LockPoisoned,
+            TryCollectorRuntimeError::WouldBlock => SharedHeapError::WouldBlock,
+        })?;
         let mut runtime = guard.runtime();
         Ok(f(&mut runtime))
     }

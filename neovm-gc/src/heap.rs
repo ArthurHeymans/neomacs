@@ -69,6 +69,12 @@ pub enum AllocError {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TryCollectorRuntimeError {
+    Poisoned,
+    WouldBlock,
+}
+
 /// Crate-internal heap owner.
 ///
 /// `HeapCore` owns every field the heap manages: configuration,
@@ -979,6 +985,44 @@ impl Heap {
             &self.state.nursery_generation,
             &self.state.collector_plans_refresh_epoch,
         )
+    }
+
+    /// Create a collector-side runtime guard without
+    /// blocking on safepoint or heap-core contention.
+    pub(crate) fn try_collector_runtime(
+        &self,
+    ) -> Result<HeapCollectorRuntime<'_>, TryCollectorRuntimeError> {
+        let safepoint = self.try_write_safepoint().map_err(|error| match error {
+            std::sync::TryLockError::Poisoned(_) => TryCollectorRuntimeError::Poisoned,
+            std::sync::TryLockError::WouldBlock => TryCollectorRuntimeError::WouldBlock,
+        })?;
+        let refresh_plans = self.take_collector_plans_dirty();
+        let guard = match self.state.core.try_write() {
+            Ok(guard) => {
+                if refresh_plans {
+                    guard.refresh_recommended_plans();
+                }
+                guard
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                if refresh_plans {
+                    self.mark_collector_plans_dirty();
+                }
+                return Err(TryCollectorRuntimeError::Poisoned);
+            }
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if refresh_plans {
+                    self.mark_collector_plans_dirty();
+                }
+                return Err(TryCollectorRuntimeError::WouldBlock);
+            }
+        };
+        Ok(HeapCollectorRuntime::new(
+            safepoint,
+            guard,
+            &self.state.nursery_generation,
+            &self.state.collector_plans_refresh_epoch,
+        ))
     }
 
     /// Create a background collection service loop bound to this heap.

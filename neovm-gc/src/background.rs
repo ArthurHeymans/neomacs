@@ -1,5 +1,5 @@
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState, CollectorStateHandle};
-use crate::heap::{AllocError, AutoCompactionState, Heap};
+use crate::heap::{AllocError, AutoCompactionState, Heap, TryCollectorRuntimeError};
 use crate::mutator::Mutator;
 use crate::pacer::{Pacer, PacerConfig, PacerStats};
 use crate::pause_stats::PauseHistogram;
@@ -1243,11 +1243,16 @@ impl SharedHeap {
         &self,
         f: impl for<'heap> FnOnce(&mut CollectorRuntime<'heap>) -> R,
     ) -> Result<R, SharedHeapError> {
-        self.try_with_heap(|heap| {
-            let mut guard = heap.collector_runtime();
-            let mut runtime = guard.runtime();
-            f(&mut runtime)
-        })
+        let heap = self.try_lock().map_err(|error| match error {
+            TryLockError::Poisoned(_) => SharedHeapError::LockPoisoned,
+            TryLockError::WouldBlock => SharedHeapError::WouldBlock,
+        })?;
+        let mut guard = heap.try_collector_runtime().map_err(|error| match error {
+            TryCollectorRuntimeError::Poisoned => SharedHeapError::LockPoisoned,
+            TryCollectorRuntimeError::WouldBlock => SharedHeapError::WouldBlock,
+        })?;
+        let mut runtime = guard.runtime();
+        Ok(f(&mut runtime))
     }
 
     /// Execute one closure with exclusive access to a collector runtime bound to this heap
@@ -1256,11 +1261,30 @@ impl SharedHeap {
         &self,
         f: impl for<'heap> FnOnce(&mut CollectorRuntime<'heap>) -> R,
     ) -> Result<R, SharedHeapAccessError> {
-        self.try_with_heap_status(|heap| {
-            let mut guard = heap.collector_runtime();
-            let mut runtime = guard.runtime();
-            f(&mut runtime)
-        })
+        let heap = match self.try_lock() {
+            Ok(heap) => heap,
+            Err(TryLockError::Poisoned(_)) => return Err(SharedHeapAccessError::LockPoisoned),
+            Err(TryLockError::WouldBlock) => {
+                return Err(SharedHeapAccessError::WouldBlock(Box::new(
+                    self.status()
+                        .map_err(|_| SharedHeapAccessError::LockPoisoned)?,
+                )));
+            }
+        };
+        let mut guard = match heap.try_collector_runtime() {
+            Ok(guard) => guard,
+            Err(TryCollectorRuntimeError::Poisoned) => {
+                return Err(SharedHeapAccessError::LockPoisoned);
+            }
+            Err(TryCollectorRuntimeError::WouldBlock) => {
+                return Err(SharedHeapAccessError::WouldBlock(Box::new(
+                    self.status()
+                        .map_err(|_| SharedHeapAccessError::LockPoisoned)?,
+                )));
+            }
+        };
+        let mut runtime = guard.runtime();
+        Ok(f(&mut runtime))
     }
 
     /// Create a shared collector-side runtime bound to this heap.
