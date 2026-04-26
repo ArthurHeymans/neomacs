@@ -1262,7 +1262,7 @@ impl<'heap> Mutator<'heap> {
         let core = self.heap.read_core();
         let collector = core.collector_handle_ref();
         if active_major_mark {
-            let objects = core.objects();
+            let objects = core.mark_objects();
             collector
                 .record_active_major_post_write_and_refresh(
                     objects.raw(),
@@ -1270,10 +1270,6 @@ impl<'heap> Mutator<'heap> {
                     old_erased,
                     new_erased,
                     core.config().old.mutator_assist_slices,
-                    || core.storage_stats(),
-                    core.old_gen(),
-                    core.old_config(),
-                    |kind| core.plan_for(kind),
                 )
                 .expect("post-write active major-mark assist should not fail");
         }

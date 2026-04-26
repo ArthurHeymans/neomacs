@@ -243,15 +243,11 @@ impl CollectorStateHandle {
         &self,
         objects: ObjectReadRaw<'_>,
         max_slices: usize,
-        stats: &HeapStats,
-        old_gen: &OldGenState,
-        old_config: &OldGenConfig,
-        plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<Option<MajorMarkProgress>, AllocError> {
         self.with_state(|state| {
             let progress =
                 collector_session::assist_active_major_mark_slices(state, objects, max_slices)?;
-            refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
+            state.refresh_cached_active_major_plans();
             Ok(progress)
         })
     }
@@ -272,22 +268,15 @@ impl CollectorStateHandle {
         })
     }
 
-    /// Hot-path variant: `stats_fn` is only called when the
-    /// post-write assist actually updated collector state and
-    /// therefore needs to refresh the cached plans. The common
-    /// case (no active major-mark session) takes the early
-    /// return inside `record_active_major_reachable_object`
-    /// and the closure is never invoked, so the caller avoids
-    /// computing a full `HeapStats` on every allocation.
+    /// Hot-path variant: when an active major-mark session is
+    /// updated, cached recommendations can be refreshed from
+    /// the active session itself. That avoids a full
+    /// `HeapStats` object-store scan on root/barrier assists.
     pub(crate) fn record_active_major_reachable_object_and_refresh(
         &self,
         objects: ObjectReadRaw<'_>,
         object: crate::descriptor::GcErased,
         assist_slices: usize,
-        stats_fn: impl FnOnce() -> HeapStats,
-        old_gen: &OldGenState,
-        old_config: &OldGenConfig,
-        plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<bool, AllocError> {
         self.with_state(|state| {
             let recorded = collector_session::record_active_major_reachable_object(
@@ -297,18 +286,14 @@ impl CollectorStateHandle {
                 assist_slices,
             )?;
             if recorded {
-                let stats = stats_fn();
-                refresh_cached_collector_plans(state, &stats, old_gen, old_config, plan_for);
+                state.refresh_cached_active_major_plans();
             }
             Ok(recorded)
         })
     }
 
-    /// Hot-path variant: same lazy-`stats` treatment as
-    /// `record_active_major_reachable_object_and_refresh`. In
-    /// the common case (no active major-mark session) the
-    /// closure is never invoked, so the barrier hot path
-    /// avoids computing a full `HeapStats` on every call.
+    /// Hot-path variant: same active-session refresh treatment
+    /// as `record_active_major_reachable_object_and_refresh`.
     pub(crate) fn record_active_major_post_write_and_refresh(
         &self,
         objects: ObjectReadRaw<'_>,
@@ -316,10 +301,6 @@ impl CollectorStateHandle {
         old_value: Option<crate::descriptor::GcErased>,
         new_value: Option<crate::descriptor::GcErased>,
         assist_slices: usize,
-        stats_fn: impl FnOnce() -> HeapStats,
-        old_gen: &OldGenState,
-        old_config: &OldGenConfig,
-        plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<bool, AllocError> {
         self.with_state(|state| {
             let updated = collector_session::record_active_major_post_write(
@@ -331,8 +312,7 @@ impl CollectorStateHandle {
                 assist_slices,
             )?;
             if updated {
-                let stats = stats_fn();
-                refresh_cached_collector_plans(state, &stats, old_gen, old_config, plan_for);
+                state.refresh_cached_active_major_plans();
             }
             Ok(updated)
         })
@@ -449,6 +429,14 @@ impl CollectorState {
             },
             ..state.plan.clone()
         })
+    }
+
+    pub(crate) fn refresh_cached_active_major_plans(&mut self) -> bool {
+        let Some(plan) = self.active_major_mark_plan() else {
+            return false;
+        };
+        self.set_cached_plans(plan.clone(), Some(plan));
+        true
     }
 
     pub(crate) fn major_mark_progress(&self) -> Option<MajorMarkProgress> {

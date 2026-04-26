@@ -106,7 +106,7 @@ pub(crate) struct ObjectReadRaw<'a> {
     shards: Arc<[ObjectShardReadRaw]>,
     index_ptr: *const ObjectIndex,
     _owned_index: Option<Arc<ObjectIndex>>,
-    all_locators: Arc<[ObjectLocator]>,
+    all_locators: Option<Arc<[ObjectLocator]>>,
     object_count: usize,
     _marker: PhantomData<&'a ObjectIndex>,
 }
@@ -134,11 +134,18 @@ impl<'a> ObjectReadRaw<'a> {
     }
 
     pub(crate) fn all_locators(&self) -> Vec<ObjectLocator> {
-        self.all_locators.as_ref().to_vec()
+        self.all_locators
+            .as_deref()
+            .expect("object read did not include an all-locator snapshot")
+            .to_vec()
     }
 
     pub(crate) fn all_locator_snapshot(&self) -> Arc<[ObjectLocator]> {
-        Arc::clone(&self.all_locators)
+        Arc::clone(
+            self.all_locators
+                .as_ref()
+                .expect("object read did not include an all-locator snapshot"),
+        )
     }
 }
 
@@ -185,11 +192,11 @@ pub(crate) struct ObjectStoreReadGuard<'a> {
     _chunk_guards: Vec<RwLockReadGuard<'a, Vec<Arc<ObjectChunk>>>>,
     shards_raw: Arc<[ObjectShardReadRaw]>,
     index: Arc<ObjectIndex>,
-    all_locators: Arc<[ObjectLocator]>,
-    finalizable_candidates: Arc<[ObjectKey]>,
-    weak_candidates: Arc<[ObjectKey]>,
-    ephemeron_candidates: Arc<[ObjectKey]>,
-    immortal_candidates: Arc<[ObjectKey]>,
+    all_locators: Option<Arc<[ObjectLocator]>>,
+    finalizable_candidates: Option<Arc<[ObjectKey]>>,
+    weak_candidates: Option<Arc<[ObjectKey]>>,
+    ephemeron_candidates: Option<Arc<[ObjectKey]>>,
+    immortal_candidates: Option<Arc<[ObjectKey]>>,
     object_count: usize,
     remembered: &'a RememberedSetState,
 }
@@ -201,7 +208,7 @@ impl<'a> ObjectStoreReadGuard<'a> {
             shards: Arc::clone(&self.shards_raw),
             index_ptr: Arc::as_ptr(&self.index),
             _owned_index: Some(Arc::clone(&self.index)),
-            all_locators: Arc::clone(&self.all_locators),
+            all_locators: self.all_locators.as_ref().map(Arc::clone),
             object_count: self.object_count,
             _marker: PhantomData,
         }
@@ -225,23 +232,38 @@ impl<'a> ObjectStoreReadGuard<'a> {
     }
 
     pub(crate) fn finalizable_candidates(&self) -> Vec<ObjectKey> {
-        self.finalizable_candidates.as_ref().to_vec()
+        self.finalizable_candidates
+            .as_deref()
+            .expect("object read did not include finalizable candidates")
+            .to_vec()
     }
 
     pub(crate) fn weak_candidates(&self) -> Vec<ObjectKey> {
-        self.weak_candidates.as_ref().to_vec()
+        self.weak_candidates
+            .as_deref()
+            .expect("object read did not include weak candidates")
+            .to_vec()
     }
 
     pub(crate) fn ephemeron_candidates(&self) -> Vec<ObjectKey> {
-        self.ephemeron_candidates.as_ref().to_vec()
+        self.ephemeron_candidates
+            .as_deref()
+            .expect("object read did not include ephemeron candidates")
+            .to_vec()
     }
 
     pub(crate) fn ephemeron_candidate_snapshot(&self) -> Arc<[ObjectKey]> {
-        Arc::clone(&self.ephemeron_candidates)
+        Arc::clone(
+            self.ephemeron_candidates
+                .as_ref()
+                .expect("object read did not include ephemeron candidates"),
+        )
     }
 
     fn immortal_candidate_locators(&self) -> impl Iterator<Item = ObjectLocator> + '_ {
         self.immortal_candidates
+            .as_deref()
+            .expect("object read did not include immortal candidates")
             .iter()
             .filter_map(|key| self.index.get(key).copied())
     }
@@ -253,9 +275,18 @@ impl<'a> ObjectStoreReadGuard<'a> {
 
     pub(crate) fn candidate_counts(&self) -> (usize, usize, usize) {
         (
-            self.finalizable_candidates.len(),
-            self.weak_candidates.len(),
-            self.ephemeron_candidates.len(),
+            self.finalizable_candidates
+                .as_deref()
+                .expect("object read did not include finalizable candidates")
+                .len(),
+            self.weak_candidates
+                .as_deref()
+                .expect("object read did not include weak candidates")
+                .len(),
+            self.ephemeron_candidates
+                .as_deref()
+                .expect("object read did not include ephemeron candidates")
+                .len(),
         )
     }
 }
@@ -266,7 +297,7 @@ impl ObjectReadView for ObjectStoreReadGuard<'_> {
             shards: Arc::clone(&self.shards_raw),
             index_ptr: Arc::as_ptr(&self.index),
             _owned_index: Some(Arc::clone(&self.index)),
-            all_locators: Arc::clone(&self.all_locators),
+            all_locators: self.all_locators.as_ref().map(Arc::clone),
             object_count: self.object_count,
             _marker: PhantomData,
         }
@@ -327,7 +358,7 @@ impl<'a> FlatReadView<'a> {
             }]),
             index_ptr: &self.indexes.object_index as *const _,
             _owned_index: None,
-            all_locators: self.all_locators(),
+            all_locators: Some(self.all_locators()),
             object_count: self.object_count,
             _marker: PhantomData,
         }
@@ -350,7 +381,7 @@ impl ObjectReadView for FlatReadView<'_> {
             }]),
             index_ptr: &self.indexes.object_index as *const _,
             _owned_index: None,
-            all_locators: self.all_locators(),
+            all_locators: Some(self.all_locators()),
             object_count: self.object_count,
             _marker: PhantomData,
         }
@@ -471,6 +502,19 @@ pub(crate) struct ObjectStore {
     generation: AtomicU64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ObjectReadProfile {
+    Full,
+    MarkOnly,
+}
+
+impl ObjectReadProfile {
+    #[inline]
+    fn includes_metadata(self) -> bool {
+        self == Self::Full
+    }
+}
+
 impl Default for ObjectStore {
     fn default() -> Self {
         let mut shards = Vec::with_capacity(OBJECT_STORE_SHARDS);
@@ -562,6 +606,15 @@ impl ObjectStore {
     }
 
     pub(crate) fn read(&self) -> ObjectStoreReadGuard<'_> {
+        self.read_with_profile(ObjectReadProfile::Full)
+    }
+
+    pub(crate) fn read_marking(&self) -> ObjectStoreReadGuard<'_> {
+        self.read_with_profile(ObjectReadProfile::MarkOnly)
+    }
+
+    fn read_with_profile(&self, profile: ObjectReadProfile) -> ObjectStoreReadGuard<'_> {
+        let includes_metadata = profile.includes_metadata();
         let mut chunk_guards = Vec::with_capacity(self.shards.len());
         let mut shard_raws = Vec::with_capacity(self.shards.len());
         let mut object_count = 0usize;
@@ -582,7 +635,7 @@ impl ObjectStore {
 
         let mut object_index =
             ObjectIndex::with_capacity_and_hasher(object_count, ObjectKeyBuildHasher);
-        let mut all_locators = Vec::with_capacity(object_count);
+        let mut all_locators = includes_metadata.then(|| Vec::with_capacity(object_count));
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
         let mut ephemeron_candidates = Vec::new();
@@ -595,20 +648,24 @@ impl ObjectStore {
                     let locator = ObjectLocator::new(shard_index, base_slot + chunk_offset);
                     let record = unsafe { &*chunk.objects_ptr.add(chunk_offset) };
                     let object_key = record.object_key();
-                    let flags = record.header().desc().flags;
                     object_index.insert(object_key, locator);
-                    all_locators.push(locator);
-                    if flags.contains(TypeFlags::FINALIZABLE) {
-                        finalizable_candidates.push(object_key);
+                    if let Some(all_locators) = all_locators.as_mut() {
+                        all_locators.push(locator);
                     }
-                    if flags.contains(TypeFlags::WEAK) {
-                        weak_candidates.push(object_key);
-                    }
-                    if flags.contains(TypeFlags::EPHEMERON_KEY) {
-                        ephemeron_candidates.push(object_key);
-                    }
-                    if record.space() == SpaceKind::Immortal {
-                        immortal_candidates.push(object_key);
+                    if includes_metadata {
+                        let flags = record.header().desc().flags;
+                        if flags.contains(TypeFlags::FINALIZABLE) {
+                            finalizable_candidates.push(object_key);
+                        }
+                        if flags.contains(TypeFlags::WEAK) {
+                            weak_candidates.push(object_key);
+                        }
+                        if flags.contains(TypeFlags::EPHEMERON_KEY) {
+                            ephemeron_candidates.push(object_key);
+                        }
+                        if record.space() == SpaceKind::Immortal {
+                            immortal_candidates.push(object_key);
+                        }
                     }
                 }
             }
@@ -618,11 +675,11 @@ impl ObjectStore {
             _chunk_guards: chunk_guards,
             shards_raw: Arc::from(shard_raws),
             index: Arc::new(object_index),
-            all_locators: Arc::from(all_locators),
-            finalizable_candidates: Arc::from(finalizable_candidates),
-            weak_candidates: Arc::from(weak_candidates),
-            ephemeron_candidates: Arc::from(ephemeron_candidates),
-            immortal_candidates: Arc::from(immortal_candidates),
+            all_locators: all_locators.map(Arc::from),
+            finalizable_candidates: includes_metadata.then(|| Arc::from(finalizable_candidates)),
+            weak_candidates: includes_metadata.then(|| Arc::from(weak_candidates)),
+            ephemeron_candidates: includes_metadata.then(|| Arc::from(ephemeron_candidates)),
+            immortal_candidates: includes_metadata.then(|| Arc::from(immortal_candidates)),
             object_count,
             remembered: &self.remembered,
         }

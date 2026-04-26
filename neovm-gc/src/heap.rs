@@ -2135,6 +2135,10 @@ impl HeapCore {
         self.objects.read()
     }
 
+    pub(crate) fn mark_objects(&self) -> ObjectStoreReadGuard<'_> {
+        self.objects.read_marking()
+    }
+
     /// Collector and rebuild callers hold the safepoint
     /// write lock before taking `&mut HeapCore`, so they have
     /// exclusive logical access to the shared object store

@@ -527,7 +527,7 @@ impl<'heap> CollectorRuntime<'heap> {
             !self.heap.prepared_full_reclaim_active(),
             "cannot add new roots while prepared full reclaim is active"
         );
-        let objects = self.heap.objects();
+        let objects = self.heap.mark_objects();
         let _ = self
             .heap
             .collector_handle()
@@ -535,10 +535,6 @@ impl<'heap> CollectorRuntime<'heap> {
                 objects.raw(),
                 object,
                 self.heap.config().old.mutator_assist_slices,
-                || self.heap.storage_stats(),
-                self.heap.old_gen(),
-                self.heap.old_config(),
-                |kind| self.heap.plan_for(kind),
             )
             .expect("rooting during active major-mark should not fail");
     }
@@ -570,9 +566,12 @@ impl<'heap> CollectorRuntime<'heap> {
     /// Advance one scheduler-style concurrent major-mark round using the active plan worker count.
     pub fn poll_active_major_mark(&mut self) -> Result<Option<MajorMarkProgress>, AllocError> {
         let progress = {
-            let objects = self.heap.objects();
+            let objects = self.heap.mark_objects();
             self.heap.collector_handle().with_state(|state| {
-                collector_session::poll_active_major_mark_round(state, objects.raw())
+                let progress =
+                    collector_session::poll_active_major_mark_round(state, objects.raw())?;
+                state.refresh_cached_active_major_plans();
+                Ok(progress)
             })
         }?;
         let auto_prepare_major_reclaim =
@@ -586,12 +585,6 @@ impl<'heap> CollectorRuntime<'heap> {
             let _ = self.prepare_active_reclaim_if_needed()?;
             return Ok(progress);
         }
-        self.heap.collector_handle().refresh_cached_plans(
-            &self.heap.storage_stats(),
-            self.heap.old_gen(),
-            self.heap.old_config(),
-            |kind| self.heap.plan_for(kind),
-        );
         Ok(progress)
     }
 
@@ -615,14 +608,7 @@ impl<'heap> CollectorRuntime<'heap> {
         }
         self.heap
             .collector_handle()
-            .assist_active_major_mark_slices_and_refresh(
-                self.heap.objects().raw(),
-                max_slices,
-                &self.heap.storage_stats(),
-                self.heap.old_gen(),
-                self.heap.old_config(),
-                |kind| self.heap.plan_for(kind),
-            )
+            .assist_active_major_mark_slices_and_refresh(self.heap.mark_objects().raw(), max_slices)
     }
 
     /// Finish the current persistent major-mark session and reclaim.
@@ -1762,7 +1748,7 @@ impl SharedCollectorRuntime {
     ) -> Result<Option<MajorMarkProgress>, SharedBackgroundError> {
         let (progress, auto_prepare_major_reclaim) = self
             .with_heap_read_collector_update(|core, collector| {
-                let objects = core.objects();
+                let objects = core.mark_objects();
                 let progress =
                     collector_session::poll_active_major_mark_round(collector, objects.raw())?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
@@ -1770,15 +1756,7 @@ impl SharedCollectorRuntime {
                         && collector_session::active_reclaim_prep_request(collector)
                             .is_some_and(|request| request.plan.kind == CollectionKind::Major)
                 });
-                if !auto_prepare_major_reclaim {
-                    refresh_cached_collector_plans(
-                        collector,
-                        &core.storage_stats(),
-                        core.old_gen(),
-                        core.old_config(),
-                        |kind| core.plan_for(kind),
-                    );
-                }
+                collector.refresh_cached_active_major_plans();
                 Ok((progress, auto_prepare_major_reclaim))
             })
             .map_err(Self::map_shared_heap_error)?
@@ -1799,7 +1777,7 @@ impl SharedCollectorRuntime {
     ) -> Result<Option<MajorMarkProgress>, SharedBackgroundError> {
         let (progress, auto_prepare_major_reclaim) = self
             .try_with_heap_read_collector_update(|core, collector| {
-                let objects = core.objects();
+                let objects = core.mark_objects();
                 let progress =
                     collector_session::poll_active_major_mark_round(collector, objects.raw())?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
@@ -1807,15 +1785,7 @@ impl SharedCollectorRuntime {
                         && collector_session::active_reclaim_prep_request(collector)
                             .is_some_and(|request| request.plan.kind == CollectionKind::Major)
                 });
-                if !auto_prepare_major_reclaim {
-                    refresh_cached_collector_plans(
-                        collector,
-                        &core.storage_stats(),
-                        core.old_gen(),
-                        core.old_config(),
-                        |kind| core.plan_for(kind),
-                    );
-                }
+                collector.refresh_cached_active_major_plans();
                 Ok((progress, auto_prepare_major_reclaim))
             })
             .map_err(Self::map_shared_heap_error)?
