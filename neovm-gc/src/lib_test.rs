@@ -2145,7 +2145,10 @@ fn heap_drop_runs_pending_finalizers_while_arena_buffers_are_alive() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([7; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([7; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -2917,7 +2920,10 @@ fn collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableOldLeaf([71; 32], finalize_count.clone()))
+            .alloc(
+                &mut scope,
+                FinalizableOldLeaf([71; 32], finalize_count.clone()),
+            )
             .expect("alloc finalizable old leaf");
     }
 
@@ -3888,7 +3894,10 @@ fn poll_active_major_mark_prepares_major_finalizer_before_finish() {
     {
         let mut scope = mutator.handle_scope();
         mutator
-            .alloc(&mut scope, FinalizableOldLeaf([42; 32], finalize_count.clone()))
+            .alloc(
+                &mut scope,
+                FinalizableOldLeaf([42; 32], finalize_count.clone()),
+            )
             .expect("alloc finalizable old leaf");
     }
 
@@ -5346,7 +5355,10 @@ fn major_collection_finalizes_dead_old_object() {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
         let leaf = mutator
-            .alloc(&mut scope, FinalizableOldLeaf([42; 32], finalize_count.clone()))
+            .alloc(
+                &mut scope,
+                FinalizableOldLeaf([42; 32], finalize_count.clone()),
+            )
             .expect("alloc finalizable old leaf");
         assert_eq!(mutator.heap().space_of(leaf.as_gc()), Some(SpaceKind::Old));
         assert_eq!(unsafe { leaf.as_gc().as_non_null().as_ref() }.0[0], 42);
@@ -6364,10 +6376,13 @@ fn background_service_drains_pending_finalizers() {
     {
         let mut mutator = heap.mutator();
         {
-                let mut scope = mutator.handle_scope();
-                mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([75; 32], finalize_count.clone()))
-                    .expect("alloc finalizable old leaf");
+            let mut scope = mutator.handle_scope();
+            mutator
+                .alloc(
+                    &mut scope,
+                    FinalizableOldLeaf([75; 32], finalize_count.clone()),
+                )
+                .expect("alloc finalizable old leaf");
         }
         let cycle = mutator
             .collect(CollectionKind::Major)
@@ -6911,7 +6926,10 @@ fn shared_collector_runtime_drain_pending_finalizers_runs_queued_finalizers() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([73; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([73; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -6964,7 +6982,10 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_read_locked(
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([74; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([74; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -7019,7 +7040,10 @@ fn shared_collector_runtime_drains_pending_finalizers_while_heap_is_write_locked
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([79; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([79; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8215,7 +8239,10 @@ fn shared_background_service_drains_pending_finalizers() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([77; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([77; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8275,7 +8302,10 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_read_locked
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([78; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([78; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -8325,7 +8355,10 @@ fn shared_background_service_drains_pending_finalizers_while_heap_is_write_locke
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([80; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([80; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9386,7 +9419,10 @@ fn shared_heap_wait_for_change_wakes_on_runtime_only_drain() {
             {
                 let mut scope = mutator.handle_scope();
                 mutator
-                    .alloc(&mut scope, FinalizableOldLeaf([91; 32], finalize_count.clone()))
+                    .alloc(
+                        &mut scope,
+                        FinalizableOldLeaf([91; 32], finalize_count.clone()),
+                    )
                     .expect("alloc finalizable old leaf");
             }
             let cycle = mutator
@@ -9803,7 +9839,10 @@ fn shared_background_service_wait_for_background_change_reports_pending_finalize
                 {
                     let mut scope = mutator.handle_scope();
                     mutator
-                        .alloc(&mut scope, FinalizableOldLeaf([79; 32], finalize_count.clone()))
+                        .alloc(
+                            &mut scope,
+                            FinalizableOldLeaf([79; 32], finalize_count.clone()),
+                        )
                         .expect("alloc finalizable old leaf");
                 }
                 let cycle = mutator

@@ -1,12 +1,12 @@
 use neovm_gc::{
-    estimated_allocation_size, BarrierKind, CollectionKind, CollectionPhase, ConcurrentMarker,
-    ConcurrentMarkerConfig, EdgeCell, Ephemeron, EphemeronVisitor, Heap, HeapConfig, MovePolicy,
-    PacerConfig, Relocator, RuntimeWorkStatus, Trace, Tracer, TypeFlags, Weak, WeakCell,
-    WeakProcessor,
+    BarrierKind, CollectionKind, CollectionPhase, ConcurrentMarker, ConcurrentMarkerConfig,
+    EdgeCell, Ephemeron, EphemeronVisitor, Heap, HeapConfig, MovePolicy, PacerConfig, Relocator,
+    RuntimeWorkStatus, Trace, Tracer, TypeFlags, Weak, WeakCell, WeakProcessor,
+    estimated_allocation_size,
 };
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -1223,8 +1223,8 @@ fn public_api_execute_major_plan_visits_ephemerons_on_multiple_threads_when_work
 }
 
 #[test]
-fn public_api_execute_major_plan_processes_weak_edges_on_multiple_threads_when_worker_count_is_high(
-) {
+fn public_api_execute_major_plan_processes_weak_edges_on_multiple_threads_when_worker_count_is_high()
+ {
     let seen_threads = Arc::new(Mutex::new(HashSet::new()));
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();
@@ -1528,9 +1528,11 @@ fn public_api_collector_runtime_prepare_active_reclaim_moves_full_session_to_rec
             ..plan.clone()
         })
     );
-    assert!(runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
+    assert!(
+        runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
     assert_eq!(
         runtime.active_major_mark_plan(),
         Some(neovm_gc::CollectionPlan {
@@ -1538,9 +1540,11 @@ fn public_api_collector_runtime_prepare_active_reclaim_moves_full_session_to_rec
             ..plan.clone()
         })
     );
-    assert!(!runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("second reclaim preparation should be a no-op"));
+    assert!(
+        !runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("second reclaim preparation should be a no-op")
+    );
 
     let stats = runtime
         .finish_active_major_collection_if_ready()
@@ -1768,13 +1772,17 @@ fn public_api_collector_runtime_commit_active_reclaim_returns_none_before_full_r
             .expect("commit before full reclaim is prepared"),
         None
     );
-    assert!(runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
-    assert!(runtime
-        .commit_active_reclaim_if_ready()
-        .expect("commit prepared full reclaim")
-        .is_some());
+    assert!(
+        runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
+    assert!(
+        runtime
+            .commit_active_reclaim_if_ready()
+            .expect("commit prepared full reclaim")
+            .is_some()
+    );
 }
 
 #[test]
@@ -1829,9 +1837,11 @@ fn public_api_collector_runtime_prepare_active_major_reclaim_moves_major_session
             ..plan.clone()
         })
     );
-    assert!(!runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("prepared major reclaim should already be complete"));
+    assert!(
+        !runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("prepared major reclaim should already be complete")
+    );
 }
 
 #[test]
@@ -2072,9 +2082,11 @@ fn public_api_mutator_prepare_active_major_reclaim_moves_session_to_reclaim() {
             ..plan.clone()
         })
     );
-    assert!(mutator
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent major reclaim"));
+    assert!(
+        mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent major reclaim")
+    );
     assert_eq!(
         mutator.active_major_mark_plan(),
         Some(neovm_gc::CollectionPlan {
@@ -2082,9 +2094,11 @@ fn public_api_mutator_prepare_active_major_reclaim_moves_session_to_reclaim() {
             ..plan.clone()
         })
     );
-    assert!(!mutator
-        .prepare_active_reclaim_if_needed()
-        .expect("second reclaim preparation should be a no-op"));
+    assert!(
+        !mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("second reclaim preparation should be a no-op")
+    );
     let cycle = mutator
         .finish_active_major_collection_if_ready()
         .expect("finish prepared major reclaim")
@@ -2146,9 +2160,11 @@ fn public_api_mutator_commit_active_reclaim_requires_reclaim_phase() {
         None
     );
 
-    assert!(mutator
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent major reclaim"));
+    assert!(
+        mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent major reclaim")
+    );
     let cycle = mutator
         .commit_active_reclaim_if_ready()
         .expect("commit prepared major reclaim")
@@ -2211,13 +2227,17 @@ fn public_api_mutator_commit_active_reclaim_returns_none_before_full_reclaim_is_
             .expect("commit before full reclaim prep"),
         None
     );
-    assert!(mutator
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
-    assert!(mutator
-        .commit_active_reclaim_if_ready()
-        .expect("commit prepared full reclaim")
-        .is_some());
+    assert!(
+        mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
+    assert!(
+        mutator
+            .commit_active_reclaim_if_ready()
+            .expect("commit prepared full reclaim")
+            .is_some()
+    );
 }
 
 #[test]
@@ -2331,10 +2351,12 @@ fn public_api_persistent_major_mark_barrier_keeps_new_value() {
         .get()
         .expect("barrier-retained target");
     assert_eq!(unsafe { next.as_non_null().as_ref() }.label, 2);
-    assert!(mutator
-        .recent_barrier_events()
-        .iter()
-        .any(|event| event.kind == BarrierKind::PostWrite));
+    assert!(
+        mutator
+            .recent_barrier_events()
+            .iter()
+            .any(|event| event.kind == BarrierKind::PostWrite)
+    );
 }
 
 #[test]
@@ -5296,9 +5318,11 @@ fn public_api_shared_background_service_prepare_active_reclaim_moves_full_sessio
         .expect("seed and drain full mark");
 
     let mut service = shared.background_service(neovm_gc::BackgroundCollectorConfig::default());
-    assert!(service
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
+    assert!(
+        service
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
     assert_eq!(
         service
             .active_major_mark_plan()
@@ -5308,9 +5332,11 @@ fn public_api_shared_background_service_prepare_active_reclaim_moves_full_sessio
             ..plan.clone()
         })
     );
-    assert!(!service
-        .try_prepare_active_reclaim_if_needed()
-        .expect("second reclaim preparation should be a no-op"));
+    assert!(
+        !service
+            .try_prepare_active_reclaim_if_needed()
+            .expect("second reclaim preparation should be a no-op")
+    );
     let cycle = service
         .finish_active_major_collection_if_ready()
         .expect("finish prepared full reclaim")
@@ -5384,9 +5410,11 @@ fn public_api_shared_background_service_commit_active_reclaim_requires_reclaim_p
         })
     );
 
-    assert!(service
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
+    assert!(
+        service
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
     let cycle = service
         .commit_active_reclaim_if_ready()
         .expect("commit prepared full reclaim")
@@ -5535,10 +5563,12 @@ fn public_api_shared_collector_runtime_begin_and_poll_work_while_heap_is_read_lo
         .expect("poll major mark under read lock")
         .expect("active major-mark progress");
     assert!(progress.completed || progress.remaining_work > 0);
-    assert!(runtime
-        .active_major_mark_plan()
-        .expect("inspect active shared major-mark plan")
-        .is_some());
+    assert!(
+        runtime
+            .active_major_mark_plan()
+            .expect("inspect active shared major-mark plan")
+            .is_some()
+    );
     assert_eq!(
         runtime.try_finish_active_major_collection_if_ready(),
         Err(neovm_gc::SharedBackgroundError::WouldBlock)
@@ -5705,9 +5735,11 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
             ..plan.clone()
         })
     );
-    assert!(runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare persistent full reclaim"));
+    assert!(
+        runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare persistent full reclaim")
+    );
     assert_eq!(
         runtime
             .active_major_mark_plan()
@@ -5717,9 +5749,11 @@ fn public_api_shared_collector_runtime_prepare_active_reclaim_moves_full_session
             ..plan.clone()
         })
     );
-    assert!(!runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("second reclaim preparation should be a no-op"));
+    assert!(
+        !runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("second reclaim preparation should be a no-op")
+    );
 
     let stats = runtime
         .finish_active_major_collection_if_ready()
@@ -5969,8 +6003,8 @@ fn public_api_shared_collector_runtime_drains_pending_finalizers_while_heap_is_w
 }
 
 #[test]
-fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_heap_is_read_locked(
-) {
+fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_heap_is_read_locked()
+ {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6020,9 +6054,11 @@ fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_
     let runtime = shared.collector_runtime();
     let _guard = shared.read().expect("read-lock shared heap");
 
-    assert!(runtime
-        .prepare_active_reclaim_if_needed()
-        .expect("prepare major reclaim under read lock"));
+    assert!(
+        runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("prepare major reclaim under read lock")
+    );
     assert_eq!(
         runtime
             .active_major_mark_plan()
@@ -6155,8 +6191,8 @@ fn public_api_shared_collector_runtime_try_finish_prepares_major_reclaim_while_h
 }
 
 #[test]
-fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked(
-) {
+fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked()
+ {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         large: neovm_gc::spaces::LargeObjectSpaceConfig {
             threshold_bytes: 64,
@@ -6203,8 +6239,8 @@ fn public_api_shared_collector_runtime_try_commit_returns_none_from_snapshot_bef
 }
 
 #[test]
-fn public_api_shared_collector_runtime_background_observation_stays_stable_under_lock_and_refreshes_on_drop(
-) {
+fn public_api_shared_collector_runtime_background_observation_stays_stable_under_lock_and_refreshes_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6307,8 +6343,8 @@ fn public_api_shared_collector_runtime_wait_for_background_change_reports_old_wo
 }
 
 #[test]
-fn public_api_shared_collector_runtime_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_collector_runtime_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6429,8 +6465,8 @@ fn public_api_shared_try_with_mutator_status_returns_snapshot_when_heap_is_locke
 }
 
 #[test]
-fn public_api_shared_try_with_mutator_status_reports_active_major_mark_snapshot_when_heap_is_locked(
-) {
+fn public_api_shared_try_with_mutator_status_reports_active_major_mark_snapshot_when_heap_is_locked()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6625,8 +6661,8 @@ fn public_api_shared_status_supports_parallel_snapshot_readers() {
 }
 
 #[test]
-fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6711,8 +6747,8 @@ fn public_api_shared_snapshot_major_mark_progress_reads_work_while_heap_lock_is_
 }
 
 #[test]
-fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6785,8 +6821,8 @@ fn public_api_shared_snapshot_recommended_background_plan_reads_work_while_heap_
 }
 
 #[test]
-fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -6843,8 +6879,8 @@ fn public_api_shared_snapshot_recommended_plan_reads_work_while_heap_lock_is_hel
 }
 
 #[test]
-fn public_api_shared_collector_runtime_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_collector_runtime_recommended_plan_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7359,8 +7395,8 @@ fn public_api_shared_background_service_drains_pending_finalizers_while_heap_is_
 }
 
 #[test]
-fn public_api_shared_background_service_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop(
-) {
+fn public_api_shared_background_service_status_reads_work_while_heap_lock_is_held_and_refresh_on_drop()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7443,8 +7479,8 @@ fn public_api_shared_background_service_try_tick_returns_idle_from_snapshot_when
 }
 
 #[test]
-fn public_api_shared_background_service_try_run_until_idle_returns_idle_from_snapshot_when_heap_is_locked(
-) {
+fn public_api_shared_background_service_try_run_until_idle_returns_idle_from_snapshot_when_heap_is_locked()
+ {
     let shared = neovm_gc::SharedHeap::new(HeapConfig::default());
     let mut service = shared.background_service(neovm_gc::BackgroundCollectorConfig::default());
     let _guard = shared.lock().expect("lock shared heap");
@@ -7479,8 +7515,8 @@ fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_wh
 }
 
 #[test]
-fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_active_not_ready_session(
-) {
+fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_active_not_ready_session()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7517,8 +7553,8 @@ fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_ac
 }
 
 #[test]
-fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_for_active_not_ready_session(
-) {
+fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_for_active_not_ready_session()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7558,8 +7594,8 @@ fn public_api_shared_background_service_try_finish_returns_none_from_snapshot_fo
 }
 
 #[test]
-fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_completed_active_session_when_heap_is_locked(
-) {
+fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_completed_active_session_when_heap_is_locked()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7605,8 +7641,8 @@ fn public_api_shared_background_service_finish_returns_none_from_snapshot_for_co
 }
 
 #[test]
-fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked(
-) {
+fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_before_reclaim_when_heap_is_locked()
+ {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         large: neovm_gc::spaces::LargeObjectSpaceConfig {
             threshold_bytes: 64,
@@ -7654,8 +7690,8 @@ fn public_api_shared_background_service_try_commit_returns_none_from_snapshot_be
 }
 
 #[test]
-fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session(
-) {
+fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7763,8 +7799,8 @@ fn public_api_shared_background_service_tick_returns_progress_from_snapshot_for_
 }
 
 #[test]
-fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish(
-) {
+fn public_api_shared_background_service_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -7886,8 +7922,8 @@ fn public_api_shared_background_service_tick_aggregates_multiple_rounds_with_sho
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_aggregates_multiple_rounds_with_short_lock_windows(
-) {
+fn public_api_shared_background_service_try_tick_aggregates_multiple_rounds_with_short_lock_windows()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8103,15 +8139,17 @@ fn public_api_shared_background_service_tick_starts_active_session_while_heap_is
     assert!(service.stats().ticks > 0);
     assert_eq!(service.stats().sessions_started, 1);
     assert!(service.stats().rounds > 0);
-    assert!(shared
-        .active_major_mark_plan()
-        .expect("read shared active plan after shared-read auto-start")
-        .is_some());
+    assert!(
+        shared
+            .active_major_mark_plan()
+            .expect("read shared active plan after shared-read auto-start")
+            .is_some()
+    );
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session(
-) {
+fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8169,8 +8207,8 @@ fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for
 }
 
 #[test]
-fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish(
-) {
+fn public_api_shared_background_service_try_tick_returns_ready_from_snapshot_for_completed_active_session_with_auto_finish()
+ {
     let shared = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
             max_regular_object_bytes: 1,
@@ -8687,8 +8725,8 @@ fn public_api_shared_collector_runtime_can_spawn_background_worker() {
 }
 
 #[test]
-fn public_api_shared_background_service_wait_for_background_change_reports_pending_finalizer_change(
-) {
+fn public_api_shared_background_service_wait_for_background_change_reports_pending_finalizer_change()
+ {
     let finalize_count = new_public_finalize_counter();
 
     let shared = Heap::new(HeapConfig {
@@ -10317,14 +10355,16 @@ fn public_api_multi_mutator_each_mutator_owns_independent_barrier_ring() {
     // event.
     assert_eq!(m1.barrier_event_count(), 1);
     assert_eq!(m2.barrier_event_count(), 1);
-    assert!(m1
-        .recent_barrier_events()
-        .iter()
-        .any(|e| e.kind == BarrierKind::PostWrite));
-    assert!(m2
-        .recent_barrier_events()
-        .iter()
-        .any(|e| e.kind == BarrierKind::PostWrite));
+    assert!(
+        m1.recent_barrier_events()
+            .iter()
+            .any(|e| e.kind == BarrierKind::PostWrite)
+    );
+    assert!(
+        m2.recent_barrier_events()
+            .iter()
+            .any(|e| e.kind == BarrierKind::PostWrite)
+    );
 
     // The heap-wide cumulative counters reflect both events
     // because the AtomicBarrierStats counters are shared
