@@ -1381,7 +1381,7 @@ impl Heap {
         &self,
         gc: GcErased,
     ) -> Result<AllocationCommit, AllocError> {
-        let read = self.state.objects.read();
+        let read = self.state.objects.read_marking();
         let recorded = self.state.collector.record_active_major_reachable_object(
             read.raw(),
             gc,
@@ -2711,7 +2711,7 @@ impl HeapCore {
             alloc_counter_local,
         );
         let recorded = if self.collector.has_active_major_mark() {
-            let read = self.objects.read();
+            let read = self.objects.read_marking();
             self.collector.record_active_major_reachable_object(
                 read.raw(),
                 gc,
