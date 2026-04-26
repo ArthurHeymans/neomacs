@@ -1190,16 +1190,13 @@ impl TaggedHeap {
     /// edge updates. After the mark phase, the sweep reclaims dead
     /// objects from pinned span pools.
     ///
-    /// Currently this runs one full Major cycle synchronously
-    /// (begin_mark + mark + remark + reclaim). An earlier attempt
-    /// split the work across safe points via `begin_major_mark` +
-    /// `assist_major_mark` + `finish_major_collection`, but the
-    /// sweep/reclaim phase (finish_major_collection) still has to
-    /// run in a single STW step, and that's where most of the cost
-    /// is -- splitting the mark alone didn't reduce observed pause
-    /// times. Meaningful pause reduction needs either (a) a
-    /// background worker thread (requires SharedHeap) or (b) a
-    /// cheaper sweep inside neovm-gc.
+    /// Explicit `gc_collect_exact` still runs one completed Major or
+    /// Full cycle synchronously so `(garbage-collect)` and tests get a
+    /// finished collection. Organic threshold-driven Major sessions use
+    /// `begin_major_mark` + bounded mark/prep/commit assists across safe
+    /// points; if an explicit collection starts while one is in flight,
+    /// the active session is drained through those bounded phases before
+    /// the synchronous cycle begins.
     ///
     /// Enabled by default; set `NEOVM_GC_ENABLE_COLLECTION=0` to
     /// disable (useful for bisecting whether a regression involves
@@ -1311,10 +1308,7 @@ impl TaggedHeap {
                 }
                 Some(_) => match self.with_mutator(|m| m.poll_active_major_mark()) {
                     Ok(Some(progress)) if !progress.completed && progress.drained_objects == 0 => {
-                        match self.with_mutator(|m| m.finish_major_collection()) {
-                            Ok(_) => self.finish_incremental_major_step(),
-                            Err(_) => self.gc_major_in_progress = false,
-                        }
+                        self.gc_major_in_progress = false;
                     }
                     Ok(Some(_)) => {}
                     Ok(None) => {
