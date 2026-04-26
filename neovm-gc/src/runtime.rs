@@ -1397,6 +1397,42 @@ impl SharedCollectorRuntime {
         ))
     }
 
+    fn shared_reclaim_commit_budget(&self) -> Result<usize, SharedBackgroundError> {
+        let Some((pause_nanos, scanned_objects)) = self
+            .collector
+            .active_reclaim_commit_progress()
+            .map_err(Self::map_shared_heap_error)?
+        else {
+            return Ok(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET);
+        };
+        Ok(adaptive_pause_target_budget(
+            self.heap.pacer_config().target_pause,
+            scanned_objects,
+            pause_nanos,
+            DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
+            1,
+            MAX_RECLAIM_COMMIT_SLICE_BUDGET,
+        ))
+    }
+
+    fn try_shared_reclaim_commit_budget(&self) -> Result<usize, SharedBackgroundError> {
+        let Some((pause_nanos, scanned_objects)) = self
+            .collector
+            .try_active_reclaim_commit_progress()
+            .map_err(Self::map_shared_heap_error)?
+        else {
+            return Ok(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET);
+        };
+        Ok(adaptive_pause_target_budget(
+            self.heap.pacer_config().target_pause,
+            scanned_objects,
+            pause_nanos,
+            DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
+            1,
+            MAX_RECLAIM_COMMIT_SLICE_BUDGET,
+        ))
+    }
+
     /// Return current heap statistics.
     pub fn stats(&self) -> Result<HeapStats, SharedBackgroundError> {
         self.runtime
@@ -1883,7 +1919,8 @@ impl SharedCollectorRuntime {
     pub fn advance_active_reclaim_commit(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
-        self.advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+        let budget = self.shared_reclaim_commit_budget()?;
+        self.advance_active_reclaim_commit_with_budget(budget)
     }
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice
@@ -1991,7 +2028,8 @@ impl SharedCollectorRuntime {
     pub fn try_advance_active_reclaim_commit(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
-        self.try_advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
+        let budget = self.try_shared_reclaim_commit_budget()?;
+        self.try_advance_active_reclaim_commit_with_budget(budget)
     }
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice
@@ -2074,9 +2112,8 @@ impl SharedCollectorRuntime {
                 Ok(false) | Err(SharedBackgroundError::WouldBlock) => {}
                 Err(error) => return Err(error),
             }
-            match self
-                .try_advance_active_reclaim_commit_with_budget(DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET)
-            {
+            let commit_budget = self.try_shared_reclaim_commit_budget()?;
+            match self.try_advance_active_reclaim_commit_with_budget(commit_budget) {
                 Ok(Some(cycle)) => Ok(BackgroundCollectionStatus::Finished(cycle)),
                 Ok(None) | Err(SharedBackgroundError::WouldBlock) => {
                     Ok(BackgroundCollectionStatus::ReadyToFinish(progress))
@@ -2107,9 +2144,10 @@ impl SharedCollectorRuntime {
             match self.try_prepare_active_reclaim_if_needed() {
                 Ok(true) => Ok(BackgroundCollectionStatus::ReadyToFinish(progress)),
                 Ok(false) => {
-                    if let Some(cycle) = self.try_advance_active_reclaim_commit_with_budget(
-                        DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
-                    )? {
+                    let commit_budget = self.try_shared_reclaim_commit_budget()?;
+                    if let Some(cycle) =
+                        self.try_advance_active_reclaim_commit_with_budget(commit_budget)?
+                    {
                         Ok(BackgroundCollectionStatus::Finished(cycle))
                     } else {
                         Ok(BackgroundCollectionStatus::ReadyToFinish(progress))

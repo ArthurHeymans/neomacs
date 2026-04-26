@@ -339,6 +339,85 @@ fn major_collect_uses_bounded_active_pipeline() {
 }
 
 #[test]
+fn shared_collector_runtime_reclaim_commit_budget_adapts_after_observed_slice() {
+    let shared = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        pacer: crate::pacer::PacerConfig {
+            target_pause: std::time::Duration::from_secs(1),
+            ..crate::pacer::PacerConfig::default()
+        },
+        ..HeapConfig::default()
+    })
+    .into_shared();
+    let plan = shared
+        .with_mutator(|mutator| {
+            let mut scope = mutator.handle_scope();
+            for byte in 0..512u16 {
+                mutator
+                    .alloc(
+                        &mut scope,
+                        OldLeaf {
+                            _bytes: [byte as u8; 32],
+                        },
+                    )
+                    .expect("allocate old leaf");
+            }
+            CollectionPlan {
+                mark_slice_budget: usize::MAX,
+                ..mutator.plan_for(CollectionKind::Major)
+            }
+        })
+        .expect("seed shared heap and compute major plan");
+    let runtime = shared.collector_runtime();
+
+    runtime
+        .begin_major_mark(plan)
+        .expect("begin shared major mark");
+    while !runtime
+        .poll_active_major_mark()
+        .expect("poll shared major mark")
+        .expect("active major mark should stay active")
+        .completed
+    {}
+    while !runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("prepare shared major reclaim")
+    {}
+
+    assert_eq!(
+        runtime
+            .shared_reclaim_commit_budget()
+            .expect("read initial shared reclaim commit budget"),
+        DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET
+    );
+    assert!(
+        runtime
+            .advance_active_reclaim_commit_with_budget(1)
+            .expect("advance first shared reclaim commit slice")
+            .is_none()
+    );
+    let adaptive_budget = runtime
+        .shared_reclaim_commit_budget()
+        .expect("read adaptive shared reclaim commit budget");
+    assert!(
+        adaptive_budget > DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET,
+        "observed small shared commit slice should grow the next budget, got {adaptive_budget}"
+    );
+}
+
+#[test]
 fn full_collect_uses_bounded_active_pipeline() {
     let heap = crate::Heap::new(HeapConfig {
         nursery: NurseryConfig {

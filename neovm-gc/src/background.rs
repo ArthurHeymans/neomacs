@@ -389,6 +389,18 @@ impl SharedCollectorHandle {
         self.with_state(|state| state.active_reclaim_prep_progress())
     }
 
+    pub(crate) fn active_reclaim_commit_progress(
+        &self,
+    ) -> Result<Option<(u64, usize)>, SharedHeapError> {
+        self.with_state(|state| state.active_reclaim_commit_progress())
+    }
+
+    pub(crate) fn try_active_reclaim_commit_progress(
+        &self,
+    ) -> Result<Option<(u64, usize)>, SharedHeapError> {
+        self.try_with_state(|state| state.active_reclaim_commit_progress())
+    }
+
     fn publish_snapshot(
         &self,
         next_collector: CollectorSharedSnapshot,
