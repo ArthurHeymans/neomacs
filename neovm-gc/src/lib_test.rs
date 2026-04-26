@@ -11944,6 +11944,54 @@ fn safepoint_request_blocks_new_read_entries_until_cleared() {
 }
 
 #[test]
+fn registered_mutator_count_tracks_local_lifetime() {
+    let heap = Heap::new(HeapConfig::default());
+    assert_eq!(heap.registered_mutator_count(), 0);
+
+    let mut local = crate::mutator::MutatorLocal::new_registered(&heap);
+    assert_eq!(heap.registered_mutator_count(), 1);
+
+    let mutator = crate::mutator::Mutator::from_local(&heap, std::mem::take(&mut local));
+    assert_eq!(heap.registered_mutator_count(), 1);
+    local = mutator.into_local();
+    assert_eq!(heap.registered_mutator_count(), 1);
+
+    local.release(&heap);
+    assert_eq!(heap.registered_mutator_count(), 0);
+}
+
+#[test]
+fn yield_safepoint_acknowledges_pending_request_epoch() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    let request_epoch = heap.begin_safepoint_request_for_test();
+
+    let worker_heap = heap.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        worker_heap.set_safepoint_requested_for_test(false);
+        done_tx
+            .send(())
+            .expect("signal pending safepoint request cleared");
+    });
+
+    assert!(
+        done_rx.recv_timeout(Duration::from_millis(10)).is_err(),
+        "helper should not clear the pending safepoint request immediately"
+    );
+    mutator.yield_safepoint();
+    done_rx
+        .recv_timeout(Duration::from_millis(100))
+        .expect("helper should clear the pending safepoint request");
+    assert!(
+        mutator.acknowledged_safepoint_epoch() >= request_epoch,
+        "yield should acknowledge the pending safepoint request epoch",
+    );
+    worker.join().expect("join safepoint request clearer");
+}
+
+#[test]
 fn nursery_tlab_force_invalidation_via_test_helper() {
     // The test-only helper Mutator::invalidate_nursery_tlab
     // drops the current slab so the next alloc has to

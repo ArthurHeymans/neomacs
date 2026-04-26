@@ -1356,17 +1356,18 @@ impl TaggedHeap {
     /// Yield the VM thread briefly so the background collector can
     /// take the safepoint write guard and finish a pending STW phase.
     ///
-    /// Fast-gated on `has_active_major_mark`: the common case
-    /// (no background mark session in flight) is a single
-    /// atomic load and early return, so this is cheap enough to
-    /// call from every safe point. Only when the worker has
-    /// actually started a concurrent Major do we pay for the
-    /// scheduler yield.
+    /// Fast-gated on "background worker present and either a
+    /// concurrent major mark or a pending stop-the-world request":
+    /// the common case is a pair of atomic loads and early return, so
+    /// this remains cheap enough to call from every safe point. When
+    /// the worker needs a bounded reclaim / compaction stop-the-world
+    /// phase, the VM now cooperates even if major mark has already
+    /// finished.
     pub(crate) fn yield_to_background_collector(&mut self) {
         if self.gc_background_worker.is_none() {
             return;
         }
-        if !self.gc_heap.has_active_major_mark() {
+        if !self.gc_heap.has_active_major_mark() && !self.gc_heap.has_pending_safepoint_request() {
             return;
         }
         if let Some(mutator) = self.gc_mutator.as_mut() {

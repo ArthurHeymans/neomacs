@@ -135,6 +135,92 @@ impl std::fmt::Debug for ExternalRootRelocator {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct MutatorSafepointState {
+    active_sections: std::sync::atomic::AtomicUsize,
+    acknowledged_epoch: std::sync::atomic::AtomicU64,
+}
+
+#[derive(Debug)]
+pub(crate) struct MutatorRegistration {
+    id: u64,
+    state: std::sync::Arc<MutatorSafepointState>,
+    registry:
+        std::sync::Weak<std::sync::Mutex<HashMap<u64, std::sync::Arc<MutatorSafepointState>>>>,
+}
+
+impl MutatorRegistration {
+    pub(crate) fn enter<'a>(&self, heap: &'a Heap) -> ActiveMutatorSection<'a> {
+        loop {
+            self.state
+                .active_sections
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            if !heap.safepoint_requested() {
+                return ActiveMutatorSection {
+                    heap,
+                    state: std::sync::Arc::clone(&self.state),
+                };
+            }
+            self.state
+                .active_sections
+                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+            self.acknowledge_pending_request(heap);
+            while heap.safepoint_requested() {
+                std::thread::yield_now();
+            }
+        }
+    }
+
+    pub(crate) fn acknowledge_pending_request(&self, heap: &Heap) {
+        if heap.safepoint_requested() {
+            self.state.acknowledged_epoch.store(
+                heap.current_safepoint_epoch(),
+                std::sync::atomic::Ordering::Release,
+            );
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn acknowledged_epoch(&self) -> u64 {
+        self.state
+            .acknowledged_epoch
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+}
+
+impl Drop for MutatorRegistration {
+    fn drop(&mut self) {
+        if let Some(registry) = self.registry.upgrade() {
+            registry
+                .lock()
+                .expect("mutator registry lock poisoned")
+                .remove(&self.id);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ActiveMutatorSection<'a> {
+    heap: &'a Heap,
+    state: std::sync::Arc<MutatorSafepointState>,
+}
+
+impl Drop for ActiveMutatorSection<'_> {
+    fn drop(&mut self) {
+        let previous = self
+            .state
+            .active_sections
+            .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        debug_assert!(previous > 0, "active mutator section underflow");
+        if self.heap.safepoint_requested() {
+            self.state.acknowledged_epoch.store(
+                self.heap.current_safepoint_epoch(),
+                std::sync::atomic::Ordering::Release,
+            );
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct AutoCompactionState {
     pub(crate) pending: bool,
@@ -221,6 +307,10 @@ struct HeapState {
     barrier_stats: std::sync::Arc<crate::stats::AtomicBarrierStats>,
     safepoint: std::sync::RwLock<()>,
     safepoint_requested: std::sync::atomic::AtomicBool,
+    safepoint_epoch: std::sync::atomic::AtomicU64,
+    next_mutator_id: std::sync::atomic::AtomicU64,
+    mutator_registry:
+        std::sync::Arc<std::sync::Mutex<HashMap<u64, std::sync::Arc<MutatorSafepointState>>>>,
     core: std::sync::RwLock<HeapCore>,
     allocation_config: HeapConfig,
     collector: CollectorStateHandle,
@@ -278,6 +368,9 @@ impl Heap {
                 barrier_stats,
                 safepoint: std::sync::RwLock::new(()),
                 safepoint_requested: std::sync::atomic::AtomicBool::new(false),
+                safepoint_epoch: std::sync::atomic::AtomicU64::new(0),
+                next_mutator_id: std::sync::atomic::AtomicU64::new(0),
+                mutator_registry: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
                 core: std::sync::RwLock::new(core),
                 allocation_config: config,
                 collector,
@@ -352,11 +445,7 @@ impl Heap {
     #[inline]
     pub(crate) fn read_safepoint(&self) -> std::sync::RwLockReadGuard<'_, ()> {
         loop {
-            while self
-                .state
-                .safepoint_requested
-                .load(std::sync::atomic::Ordering::Acquire)
-            {
+            while self.safepoint_requested() {
                 std::thread::yield_now();
             }
             let guard = self
@@ -364,15 +453,75 @@ impl Heap {
                 .safepoint
                 .read()
                 .expect("heap safepoint lock poisoned");
-            if !self
-                .state
-                .safepoint_requested
-                .load(std::sync::atomic::Ordering::Acquire)
-            {
+            if !self.safepoint_requested() {
                 return guard;
             }
             drop(guard);
             std::thread::yield_now();
+        }
+    }
+
+    #[inline]
+    pub(crate) fn safepoint_requested(&self) -> bool {
+        self.state
+            .safepoint_requested
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    #[inline]
+    pub(crate) fn current_safepoint_epoch(&self) -> u64 {
+        self.state
+            .safepoint_epoch
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn begin_safepoint_request(&self) {
+        self.state
+            .safepoint_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.state
+            .safepoint_requested
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
+
+    fn wait_for_registered_mutators_to_quiesce(&self) {
+        loop {
+            let registrations = self
+                .state
+                .mutator_registry
+                .lock()
+                .expect("mutator registry lock poisoned")
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            if registrations.iter().all(|registration| {
+                registration
+                    .active_sections
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    == 0
+            }) {
+                return;
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    pub(crate) fn register_mutator(&self) -> MutatorRegistration {
+        let id = self
+            .state
+            .next_mutator_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let state = std::sync::Arc::new(MutatorSafepointState::default());
+        self.state
+            .mutator_registry
+            .lock()
+            .expect("mutator registry lock poisoned")
+            .insert(id, std::sync::Arc::clone(&state));
+        MutatorRegistration {
+            id,
+            state,
+            registry: std::sync::Arc::downgrade(&self.state.mutator_registry),
         }
     }
 
@@ -383,9 +532,8 @@ impl Heap {
     /// immediately while the collector is trying to stop the world.
     #[inline]
     pub(crate) fn write_safepoint(&self) -> std::sync::RwLockWriteGuard<'_, ()> {
-        self.state
-            .safepoint_requested
-            .store(true, std::sync::atomic::Ordering::Release);
+        self.begin_safepoint_request();
+        self.wait_for_registered_mutators_to_quiesce();
         let guard = self
             .state
             .safepoint
@@ -404,9 +552,8 @@ impl Heap {
         std::sync::RwLockWriteGuard<'_, ()>,
         std::sync::TryLockError<std::sync::RwLockWriteGuard<'_, ()>>,
     > {
-        self.state
-            .safepoint_requested
-            .store(true, std::sync::atomic::Ordering::Release);
+        self.begin_safepoint_request();
+        self.wait_for_registered_mutators_to_quiesce();
         let result = self.state.safepoint.try_write();
         self.state
             .safepoint_requested
@@ -419,6 +566,21 @@ impl Heap {
         self.state
             .safepoint_requested
             .store(requested, std::sync::atomic::Ordering::Release);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn begin_safepoint_request_for_test(&self) -> u64 {
+        self.begin_safepoint_request();
+        self.current_safepoint_epoch()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn registered_mutator_count(&self) -> usize {
+        self.state
+            .mutator_registry
+            .lock()
+            .expect("mutator registry lock poisoned")
+            .len()
     }
 
     /// Acquire a write guard on the underlying `HeapCore`.
@@ -557,6 +719,11 @@ impl Heap {
     /// Active major-mark plan, if one is in progress.
     pub fn active_major_mark_plan(&self) -> Option<CollectionPlan> {
         self.read_core().active_major_mark_plan()
+    }
+
+    /// Whether a collector thread has requested a stop-the-world phase.
+    pub fn has_pending_safepoint_request(&self) -> bool {
+        self.safepoint_requested()
     }
 
     /// Active major-mark progress, if any.

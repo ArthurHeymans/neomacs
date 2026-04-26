@@ -2,7 +2,7 @@ use crate::background::BackgroundCollectionRuntime;
 use crate::barrier::{BarrierEvent, BarrierKind};
 use crate::descriptor::{GcErased, Trace, TypeDesc};
 use crate::edge::EdgeCell;
-use crate::heap::{AllocError, Heap};
+use crate::heap::{ActiveMutatorSection, AllocError, Heap, MutatorRegistration};
 use crate::object::SpaceKind;
 use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPlan, MajorMarkProgress,
@@ -125,6 +125,8 @@ pub struct MutatorLocal {
     /// when this mutator acquired its current safepoint
     /// read guard.
     prepared_full_reclaim_active: bool,
+    /// Registration in the heap's safepoint handshake set.
+    safepoint_registration: Option<MutatorRegistration>,
 }
 
 impl Default for MutatorLocal {
@@ -141,6 +143,7 @@ impl Default for MutatorLocal {
             nursery_generation: 0,
             nursery_tlab_bytes: 0,
             prepared_full_reclaim_active: false,
+            safepoint_registration: None,
         }
     }
 }
@@ -168,6 +171,41 @@ impl MutatorLocal {
     /// Mutable accessor for the root stack.
     pub(crate) fn roots_mut(&mut self) -> &mut RootStack {
         &mut self.roots
+    }
+
+    fn ensure_safepoint_registration(&mut self, heap: &Heap) {
+        if self.safepoint_registration.is_none() {
+            self.safepoint_registration = Some(heap.register_mutator());
+        }
+    }
+
+    fn enter_registered_safepoint_section<'heap>(
+        &mut self,
+        heap: &'heap Heap,
+    ) -> ActiveMutatorSection<'heap> {
+        self.ensure_safepoint_registration(heap);
+        self.safepoint_registration
+            .as_ref()
+            .expect("mutator registration should exist after ensure")
+            .enter(heap)
+    }
+
+    fn acknowledge_pending_safepoint_request(&self, heap: &Heap) -> bool {
+        if !heap.safepoint_requested() {
+            return false;
+        }
+        if let Some(registration) = self.safepoint_registration.as_ref() {
+            registration.acknowledge_pending_request(heap);
+        }
+        true
+    }
+
+    #[cfg(test)]
+    fn acknowledged_safepoint_epoch(&self) -> u64 {
+        self.safepoint_registration
+            .as_ref()
+            .map(MutatorRegistration::acknowledged_epoch)
+            .unwrap_or(0)
     }
 
     fn cached_alloc_profile<T: Trace + 'static>(&self) -> Option<CachedAllocProfile> {
@@ -290,14 +328,31 @@ fn enter_safepoint_read<'heap>(
     heap: &'heap Heap,
     handle_scope_state: &mut crate::root::HandleScopeState<'heap>,
     local: &mut MutatorLocal,
-) -> std::sync::RwLockReadGuard<'heap, ()> {
+) -> MutatorSafepointReadGuard<'heap> {
     let needs_refresh = !handle_scope_state.has_safepoint();
-    let safepoint = heap.read_safepoint();
-    if needs_refresh {
-        handle_scope_state.ensure_safepoint();
-        local.refresh_safepoint_fast_path_state(heap);
+    loop {
+        let section = local.enter_registered_safepoint_section(heap);
+        let safepoint = heap.read_safepoint();
+        if heap.safepoint_requested() {
+            drop(safepoint);
+            drop(section);
+            std::thread::yield_now();
+            continue;
+        }
+        if needs_refresh {
+            handle_scope_state.ensure_safepoint();
+            local.refresh_safepoint_fast_path_state(heap);
+        }
+        return MutatorSafepointReadGuard {
+            _section: section,
+            _safepoint: safepoint,
+        };
     }
-    safepoint
+}
+
+struct MutatorSafepointReadGuard<'heap> {
+    _section: ActiveMutatorSection<'heap>,
+    _safepoint: std::sync::RwLockReadGuard<'heap, ()>,
 }
 
 /// Mutator view onto the heap.
@@ -320,11 +375,7 @@ pub struct Mutator<'heap> {
 
 impl<'heap> Mutator<'heap> {
     pub(crate) fn new(heap: &'heap Heap) -> Self {
-        let mut local = MutatorLocal::default();
-        local.set_alloc_counter_local(heap.allocation_counter_local());
-        local.set_barrier_stats_local(heap.barrier_stats_local());
-        local.set_nursery_generation(heap.current_nursery_generation());
-        local.nursery_tlab_bytes = heap.nursery_tlab_bytes();
+        let local = MutatorLocal::new_registered(heap);
         Self {
             heap,
             local,
@@ -345,7 +396,8 @@ impl<'heap> Mutator<'heap> {
     /// its counter slots live in `heap`'s shared pools and would
     /// alias or dangle if the local was registered against a
     /// different heap.
-    pub fn from_local(heap: &'heap Heap, local: MutatorLocal) -> Self {
+    pub fn from_local(heap: &'heap Heap, mut local: MutatorLocal) -> Self {
+        local.ensure_safepoint_registration(heap);
         Self {
             heap,
             local,
@@ -387,6 +439,7 @@ impl MutatorLocal {
         local.set_barrier_stats_local(heap.barrier_stats_local());
         local.set_nursery_generation(heap.current_nursery_generation());
         local.nursery_tlab_bytes = heap.nursery_tlab_bytes();
+        local.ensure_safepoint_registration(heap);
         local
     }
 
@@ -399,6 +452,7 @@ impl MutatorLocal {
     pub fn release(&mut self, heap: &Heap) {
         heap.release_barrier_stats_local(&mut self.barrier_stats_local);
         heap.release_allocation_counter_local(&mut self.alloc_counter_local);
+        self.safepoint_registration = None;
     }
 }
 
@@ -701,9 +755,9 @@ impl<'heap> Mutator<'heap> {
     /// keeps the cached nursery-generation / publish-local state hot so
     /// repeated external-root allocations avoid pathological churn.
     pub fn pin_safepoint(&mut self) {
-        let _safepoint = self.heap.read_safepoint();
+        let _safepoint =
+            enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         self.handle_scope_state.pin_safepoint();
-        self.local.refresh_safepoint_fast_path_state(self.heap);
     }
 
     /// Yield the thread briefly so a pending collector write-side phase
@@ -715,6 +769,12 @@ impl<'heap> Mutator<'heap> {
     /// call it at VM safe points, but it now simply gives the
     /// scheduler a chance to run the collector thread.
     pub fn yield_safepoint(&mut self) {
+        if self.local.acknowledge_pending_safepoint_request(self.heap) {
+            while self.heap.safepoint_requested() {
+                std::thread::yield_now();
+            }
+            return;
+        }
         std::thread::yield_now();
     }
 
@@ -836,6 +896,11 @@ impl<'heap> Mutator<'heap> {
     #[cfg(test)]
     pub(crate) fn has_nursery_tlab(&self) -> bool {
         self.local.tlab.is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn acknowledged_safepoint_epoch(&self) -> u64 {
+        self.local.acknowledged_safepoint_epoch()
     }
 
     /// Number of live root slots in this mutator's local
