@@ -633,21 +633,26 @@ pub(crate) fn prepare_full_reclaim_prefix_for_plan(
     mut record_phase: impl FnMut(CollectionPhase),
 ) -> Result<usize, AllocError> {
     record_phase(CollectionPhase::Evacuate);
-    let evacuation = evacuate_nursery_space(
-        objects,
-        indexes,
-        old_gen,
-        old_config,
-        nursery_config,
-        stats,
-        nursery,
-    )?;
-    let forwarding = evacuation.forwarding;
-    let promoted_bytes = evacuation.promoted_bytes;
-    relocate_forwarded_roots_and_edges(roots, objects, indexes, &forwarding);
-    if let Some(relocator) = external_relocator {
-        let mut fwd = ForwardingRelocator::new(&forwarding);
-        relocator.call(&mut fwd);
+    let (forwarding, promoted_bytes) = if stats.nursery.live_bytes == 0 {
+        (ForwardingMap::default(), 0)
+    } else {
+        let evacuation = evacuate_nursery_space(
+            objects,
+            indexes,
+            old_gen,
+            old_config,
+            nursery_config,
+            stats,
+            nursery,
+        )?;
+        (evacuation.forwarding, evacuation.promoted_bytes)
+    };
+    if !forwarding.is_empty() {
+        relocate_forwarded_roots_and_edges(roots, objects, indexes, &forwarding);
+        if let Some(relocator) = external_relocator {
+            let mut fwd = ForwardingRelocator::new(&forwarding);
+            relocator.call(&mut fwd);
+        }
     }
     let view = FlatReadView::new(objects, indexes);
     process_weak_references_for_candidates(
