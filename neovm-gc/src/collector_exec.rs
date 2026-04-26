@@ -824,8 +824,12 @@ pub(crate) fn execute_collection_plan(
 ) -> Result<CollectionStats, AllocError> {
     let before_bytes = stats.total_live_bytes();
     let nursery_bytes_before = stats.nursery.live_bytes;
-    for object in objects.iter() {
-        object.clear_mark();
+    if !matches!(plan.kind, CollectionKind::Minor) {
+        // Minor post-sweep rebuild clears marks on retained records; avoid
+        // paying a whole-heap pre-clear for every nursery cycle.
+        for object in objects.iter() {
+            object.clear_mark();
+        }
     }
 
     let view = FlatReadView::new(objects, indexes);
