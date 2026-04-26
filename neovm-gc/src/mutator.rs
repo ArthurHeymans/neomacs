@@ -1121,13 +1121,20 @@ impl<'heap> Mutator<'heap> {
     }
 
     /// Finish the active major collection if its mark work is fully drained.
+    ///
+    /// Reclaim commit is pause-bounded, so large collections may require
+    /// repeated polling before this returns the completed cycle.
     pub fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
         self.with_runtime(|runtime| runtime.finish_active_major_collection_if_ready())
     }
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared.
+    ///
+    /// This default path is pause-bounded; callers should continue polling
+    /// until it returns the completed cycle.
     pub fn commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {

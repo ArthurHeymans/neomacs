@@ -41,10 +41,12 @@ pub trait BackgroundCollectionRuntime {
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
     fn advance_active_reclaim_commit(&mut self) -> Result<Option<CollectionStats>, AllocError>;
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared. This default path is pause-bounded.
     fn commit_active_reclaim_if_ready(&mut self) -> Result<Option<CollectionStats>, AllocError>;
 
     /// Finish the active major collection if its mark work is fully drained.
+    /// Reclaim commit is pause-bounded and may require repeated polling.
     fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError>;
@@ -2283,7 +2285,8 @@ impl<'heap> BackgroundService<'heap> {
             .prepare_active_reclaim_if_needed()
     }
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared. This default path is pause-bounded.
     pub fn commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
@@ -2314,6 +2317,7 @@ impl<'heap> BackgroundService<'heap> {
     }
 
     /// Finish the active major collection if its mark work is fully drained.
+    /// Reclaim commit is pause-bounded and may require repeated polling.
     pub fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
@@ -2485,7 +2489,8 @@ impl SharedBackgroundService {
         self.runtime.try_prepare_active_reclaim_if_needed()
     }
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared. This default path is pause-bounded.
     pub fn commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
@@ -2535,8 +2540,9 @@ impl SharedBackgroundService {
         self.runtime.try_drain_pending_finalizers_bounded(max)
     }
 
-    /// Commit the active major collection once reclaim has already been prepared, without
-    /// blocking on heap lock contention.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared, without blocking on heap lock contention. This default
+    /// path is pause-bounded.
     pub fn try_commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
@@ -2544,6 +2550,7 @@ impl SharedBackgroundService {
     }
 
     /// Finish the active major collection if its mark work is fully drained.
+    /// Reclaim commit is pause-bounded and may require repeated polling.
     pub fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
@@ -2555,7 +2562,8 @@ impl SharedBackgroundService {
     }
 
     /// Finish the active major collection if its mark work is fully drained, without blocking on
-    /// heap lock contention.
+    /// heap lock contention. Reclaim commit is pause-bounded and may require
+    /// repeated polling.
     pub fn try_finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {

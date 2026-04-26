@@ -1786,6 +1786,83 @@ fn public_api_collector_runtime_commit_active_reclaim_returns_none_before_full_r
 }
 
 #[test]
+fn public_api_mutator_commit_active_reclaim_if_ready_uses_bounded_commit_slices() {
+    let heap = Heap::new(HeapConfig {
+        nursery: neovm_gc::spaces::NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..neovm_gc::spaces::NurseryConfig::default()
+        },
+        large: neovm_gc::spaces::LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..neovm_gc::spaces::LargeObjectSpaceConfig::default()
+        },
+        old: neovm_gc::spaces::OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..neovm_gc::spaces::OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    let mut scope = mutator.handle_scope();
+    for byte in 0..300u16 {
+        mutator
+            .alloc(&mut scope, Leaf(u64::from(byte)))
+            .expect("allocate old leaf");
+    }
+
+    mutator
+        .begin_major_mark(neovm_gc::CollectionPlan {
+            mark_slice_budget: usize::MAX,
+            ..mutator.plan_for(CollectionKind::Major)
+        })
+        .expect("begin major mark");
+    let progress = mutator
+        .poll_active_major_mark()
+        .expect("poll active major mark")
+        .expect("major-mark session should stay active");
+    assert!(progress.completed);
+    while mutator
+        .active_major_mark_plan()
+        .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
+    {
+        mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("advance reclaim prep");
+    }
+
+    let samples_before_commit = heap.pause_histogram().total_samples;
+    let first = mutator
+        .commit_active_reclaim_if_ready()
+        .expect("first bounded reclaim commit");
+    assert!(
+        first.is_none(),
+        "default commit should not finish a large reclaim in one pause"
+    );
+    assert_eq!(
+        mutator.active_major_mark_plan().map(|plan| plan.phase),
+        Some(CollectionPhase::Reclaim)
+    );
+    assert_eq!(
+        heap.pause_histogram().total_samples,
+        samples_before_commit + 1
+    );
+
+    let mut commit_slices = 1usize;
+    while mutator
+        .commit_active_reclaim_if_ready()
+        .expect("follow-up bounded reclaim commit")
+        .is_none()
+    {
+        commit_slices = commit_slices.saturating_add(1);
+        assert!(commit_slices < 16, "reclaim commit did not converge");
+    }
+    commit_slices = commit_slices.saturating_add(1);
+    assert!(commit_slices > 1);
+    assert!(mutator.active_major_mark_plan().is_none());
+}
+
+#[test]
 fn public_api_collector_runtime_prepare_active_major_reclaim_moves_major_session_to_reclaim() {
     let heap = Heap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {

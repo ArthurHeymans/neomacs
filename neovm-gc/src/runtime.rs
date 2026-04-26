@@ -803,6 +803,8 @@ impl<'heap> CollectorRuntime<'heap> {
     }
 
     /// Finish the active major collection if its mark work is fully drained.
+    /// This advances reclaim commit by one bounded pause slice. Large
+    /// collections may therefore return `Ok(None)` until callers poll again.
     pub fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
@@ -910,7 +912,11 @@ impl<'heap> CollectorRuntime<'heap> {
         advance.moved_records
     }
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared.
+    ///
+    /// The default commit path is pause-bounded; callers should continue
+    /// polling until it returns the completed cycle.
     pub fn commit_active_reclaim_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError> {
@@ -931,7 +937,7 @@ impl<'heap> CollectorRuntime<'heap> {
         {
             return Ok(None);
         }
-        self.advance_active_reclaim_commit_impl(usize::MAX)
+        self.advance_active_reclaim_commit()
     }
 
     fn advance_active_reclaim_commit_impl(
@@ -960,9 +966,6 @@ impl<'heap> CollectorRuntime<'heap> {
         let Some(mut state) = self.heap.collector_handle().take_major_mark_state() else {
             return Ok(None);
         };
-        if state.plan.kind == CollectionKind::Major && state.prepared_reclaim.is_none() {
-            state.prepared_reclaim = Some(prepare_heap_major_reclaim(self.heap, &active_plan));
-        }
         let reclaim_plan = CollectionPlan {
             phase: CollectionPhase::Reclaim,
             ..state.plan.clone()
@@ -1984,7 +1987,11 @@ impl SharedCollectorRuntime {
         }
     }
 
-    /// Commit the active major collection once reclaim has already been prepared.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared.
+    ///
+    /// The default commit path is pause-bounded; callers should continue
+    /// polling until it returns the completed cycle.
     pub fn commit_active_reclaim_if_ready(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
@@ -2014,6 +2021,9 @@ impl SharedCollectorRuntime {
 
     /// Finish the active major collection if its mark work is fully drained, without blocking on
     /// heap contention.
+    ///
+    /// This advances reclaim commit by one bounded pause slice. Large
+    /// collections may therefore return `Ok(None)` until callers poll again.
     pub fn try_finish_active_major_collection_if_ready(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {
@@ -2083,8 +2093,11 @@ impl SharedCollectorRuntime {
         .map_err(SharedBackgroundError::Collection)
     }
 
-    /// Commit the active major collection once reclaim has already been prepared, without
-    /// blocking on heap contention.
+    /// Advance commit for the active major collection once reclaim has already
+    /// been prepared, without blocking on heap contention.
+    ///
+    /// The default commit path is pause-bounded; callers should continue
+    /// polling until it returns the completed cycle.
     pub fn try_commit_active_reclaim_if_ready(
         &self,
     ) -> Result<Option<CollectionStats>, SharedBackgroundError> {

@@ -1303,10 +1303,7 @@ impl TaggedHeap {
                 Some(CollectionPhase::Reclaim) => {
                     match self.with_mutator(|m| m.commit_active_reclaim_if_ready()) {
                         Ok(Some(_)) => self.finish_incremental_major_step(),
-                        Ok(None) => match self.with_mutator(|m| m.finish_major_collection()) {
-                            Ok(_) => self.finish_incremental_major_step(),
-                            Err(_) => self.gc_major_in_progress = false,
-                        },
+                        Ok(None) => {}
                         Err(_) => {
                             self.gc_major_in_progress = false;
                         }
