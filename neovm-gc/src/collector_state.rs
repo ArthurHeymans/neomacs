@@ -52,6 +52,10 @@ pub(crate) struct CollectorStateHandle {
     /// safepoint write lock, then publish the mirror before
     /// releasing that lock.
     has_active_major_mark_mirror: Arc<AtomicBool>,
+    /// Lock-free mirror for the allocation barrier. This remains true while
+    /// an active major session can still accept newly-published objects into
+    /// the mark worklist, and turns false once the session reaches reclaim.
+    active_major_mark_records_allocations_mirror: Arc<AtomicBool>,
     /// Lock-free mirror of [`CollectorState::has_prepared_full_reclaim`].
     ///
     /// Used by the barrier and allocation assertions that
@@ -82,6 +86,10 @@ impl CollectorStateHandle {
     fn refresh_mirrors(&self, state: &CollectorState) {
         self.has_active_major_mark_mirror
             .store(state.has_active_major_mark(), Ordering::Release);
+        self.active_major_mark_records_allocations_mirror.store(
+            state.active_major_mark_records_allocations(),
+            Ordering::Release,
+        );
         self.has_prepared_full_reclaim_mirror
             .store(state.has_prepared_full_reclaim(), Ordering::Release);
     }
@@ -151,6 +159,13 @@ impl CollectorStateHandle {
     /// the heap safepoint lock; advisory elsewhere.
     pub(crate) fn has_active_major_mark(&self) -> bool {
         self.has_active_major_mark_mirror.load(Ordering::Acquire)
+    }
+
+    /// Lock-free hot-path read used by allocation barriers to avoid building a
+    /// mark snapshot after active major marking has already reached reclaim.
+    pub(crate) fn active_major_mark_records_allocations(&self) -> bool {
+        self.active_major_mark_records_allocations_mirror
+            .load(Ordering::Acquire)
     }
 
     /// Lock-free hot-path read. See
@@ -263,6 +278,22 @@ impl CollectorStateHandle {
                 state,
                 objects,
                 object,
+                assist_slices,
+            )
+        })
+    }
+
+    pub(crate) fn record_active_major_reachable_locator(
+        &self,
+        objects: ObjectReadRaw<'_>,
+        locator: ObjectLocator,
+        assist_slices: usize,
+    ) -> Result<bool, AllocError> {
+        self.with_state(|state| {
+            collector_session::record_active_major_reachable_locator(
+                state,
+                objects,
+                locator,
                 assist_slices,
             )
         })
@@ -477,6 +508,12 @@ impl CollectorState {
 
     pub(crate) fn has_active_major_mark(&self) -> bool {
         self.major_mark_state.is_some()
+    }
+
+    pub(crate) fn active_major_mark_records_allocations(&self) -> bool {
+        self.major_mark_state
+            .as_ref()
+            .is_some_and(|state| !(state.worklist.is_empty() && state.reclaim_prepared))
     }
 
     pub(crate) fn begin_major_mark(

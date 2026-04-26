@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use crate::collector_exec::MarkTracer;
 use crate::collector_state::{CollectorState, MajorMarkUpdate};
 use crate::heap::AllocError;
+use crate::index_state::ObjectLocator;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
 #[cfg(test)]
@@ -128,6 +129,23 @@ pub(crate) fn mark_active_major_session_object(
     collector.enqueue_active_major_mark_index(object_index)
 }
 
+pub(crate) fn mark_active_major_session_locator(
+    collector: &mut CollectorState,
+    objects: ObjectReadRaw<'_>,
+    locator: ObjectLocator,
+) -> bool {
+    if !collector.has_active_major_mark() {
+        return false;
+    }
+
+    let record = objects.get(locator);
+    if !record.mark_if_unmarked() {
+        return false;
+    }
+
+    collector.enqueue_active_major_mark_index(locator)
+}
+
 pub(crate) fn record_active_major_reachable_object(
     collector: &mut CollectorState,
     objects: ObjectReadRaw<'_>,
@@ -143,6 +161,27 @@ pub(crate) fn record_active_major_reachable_object(
     }
 
     let _enqueued = mark_active_major_session_object(collector, objects.clone(), object);
+    if assist_slices > 0 {
+        let _progress = assist_active_major_mark_slices(collector, objects, assist_slices)?;
+    }
+    Ok(true)
+}
+
+pub(crate) fn record_active_major_reachable_locator(
+    collector: &mut CollectorState,
+    objects: ObjectReadRaw<'_>,
+    locator: ObjectLocator,
+    assist_slices: usize,
+) -> Result<bool, AllocError> {
+    if !collector.has_active_major_mark()
+        || collector
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+    {
+        return Ok(false);
+    }
+
+    let _enqueued = mark_active_major_session_locator(collector, objects.clone(), locator);
     if assist_slices > 0 {
         let _progress = assist_active_major_mark_slices(collector, objects, assist_slices)?;
     }

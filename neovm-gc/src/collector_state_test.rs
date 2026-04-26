@@ -512,6 +512,7 @@ fn collector_state_handle_atomic_mirrors_track_state_transitions() {
     let handle = CollectorStateHandle::default();
     // Starting state: both flags false.
     assert!(!handle.has_active_major_mark());
+    assert!(!handle.active_major_mark_records_allocations());
     assert!(!handle.has_prepared_full_reclaim());
 
     // Transition to active major-mark through with_state.
@@ -524,6 +525,10 @@ fn collector_state_handle_atomic_mirrors_track_state_transitions() {
     assert!(
         handle.has_active_major_mark(),
         "has_active_major_mark atomic should be true after begin_major_mark",
+    );
+    assert!(
+        handle.active_major_mark_records_allocations(),
+        "allocation-recording mirror should be true before reclaim",
     );
     assert!(
         !handle.has_prepared_full_reclaim(),
@@ -546,6 +551,10 @@ fn collector_state_handle_atomic_mirrors_track_state_transitions() {
     });
     assert!(handle.has_active_major_mark());
     assert!(
+        !handle.active_major_mark_records_allocations(),
+        "allocation-recording mirror should turn false once reclaim is prepared",
+    );
+    assert!(
         handle.has_prepared_full_reclaim(),
         "has_prepared_full_reclaim atomic should track Full + reclaim_prepared state",
     );
@@ -557,6 +566,10 @@ fn collector_state_handle_atomic_mirrors_track_state_transitions() {
     assert!(
         !handle.has_active_major_mark(),
         "has_active_major_mark should reset after take_major_mark_state",
+    );
+    assert!(
+        !handle.active_major_mark_records_allocations(),
+        "allocation-recording mirror should reset when major-mark state is gone",
     );
     assert!(
         !handle.has_prepared_full_reclaim(),
@@ -574,5 +587,9 @@ fn collector_state_handle_atomic_mirrors_track_state_transitions() {
     assert!(
         handle.has_active_major_mark(),
         "try_with_state must refresh has_active_major_mark mirror",
+    );
+    assert!(
+        handle.active_major_mark_records_allocations(),
+        "try_with_state must refresh allocation-recording mirror",
     );
 }

@@ -3,6 +3,7 @@ use crate::barrier::BarrierKind;
 use crate::collector_exec::{ForwardingRelocator, collect_global_sources};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorStateHandle};
 use crate::descriptor::{GcErased, Trace, TypeDesc, fixed_type_desc};
+use crate::index_state::ObjectLocator;
 use crate::mutator::Mutator;
 use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord, SpaceKind};
 use crate::object_store::{
@@ -1266,19 +1267,20 @@ impl Heap {
         alloc_counter_local: &mut AllocationCounterLocal,
     ) -> Result<AllocationCommit, AllocError> {
         let gc = record.erased();
-        self.state
+        let locator = self
+            .state
             .objects
             .publish_shared_prepared(record, publish_local);
         self.state
             .alloc_counters
             .record_nursery_allocation(total_size, alloc_counter_local);
-        if !self.state.collector.has_active_major_mark() {
+        if !self.state.collector.active_major_mark_records_allocations() {
             return Ok(AllocationCommit {
                 gc,
                 plans_dirty: true,
             });
         }
-        self.commit_allocated_record_shared_active_major(gc)
+        self.commit_allocated_record_shared_active_major(gc, locator)
     }
 
     #[inline(always)]
@@ -1292,7 +1294,8 @@ impl Heap {
         alloc_counter_local: &mut AllocationCounterLocal,
     ) -> Result<AllocationCommit, AllocError> {
         let gc = unsafe { GcErased::from_header(header) };
-        self.state
+        let locator = self
+            .state
             .objects
             .publish_shared_prepared_without_old_block(
                 header,
@@ -1303,13 +1306,13 @@ impl Heap {
         self.state
             .alloc_counters
             .record_nursery_allocation(total_size, alloc_counter_local);
-        if !self.state.collector.has_active_major_mark() {
+        if !self.state.collector.active_major_mark_records_allocations() {
             return Ok(AllocationCommit {
                 gc,
                 plans_dirty: true,
             });
         }
-        self.commit_allocated_record_shared_active_major(gc)
+        self.commit_allocated_record_shared_active_major(gc, locator)
     }
 
     #[inline(always)]
@@ -1324,7 +1327,7 @@ impl Heap {
         prepared_publish: bool,
         gc: GcErased,
     ) -> Result<AllocationCommit, AllocError> {
-        self.publish_and_account_allocated_record(
+        let locator = self.publish_and_account_allocated_record(
             record,
             space,
             total_size,
@@ -1333,13 +1336,13 @@ impl Heap {
             alloc_counter_local,
             prepared_publish,
         );
-        if !self.state.collector.has_active_major_mark() {
+        if !self.state.collector.active_major_mark_records_allocations() {
             return Ok(AllocationCommit {
                 gc,
                 plans_dirty: true,
             });
         }
-        self.commit_allocated_record_shared_active_major(gc)
+        self.commit_allocated_record_shared_active_major(gc, locator)
     }
 
     #[inline(always)]
@@ -1352,17 +1355,17 @@ impl Heap {
         publish_local: &mut ObjectPublishLocal,
         alloc_counter_local: &mut AllocationCounterLocal,
         prepared_publish: bool,
-    ) {
+    ) -> ObjectLocator {
         let old_placement = (space == SpaceKind::Old)
             .then(|| record.old_block_placement())
             .flatten();
-        if prepared_publish {
+        let locator = if prepared_publish {
             self.state
                 .objects
-                .publish_shared_prepared(record, publish_local);
+                .publish_shared_prepared(record, publish_local)
         } else {
-            self.state.objects.publish_shared(record, publish_local);
-        }
+            self.state.objects.publish_shared(record, publish_local)
+        };
         if let Some(placement) = old_placement {
             self.read_core()
                 .old_gen()
@@ -1374,17 +1377,19 @@ impl Heap {
             old_reserved_bytes,
             alloc_counter_local,
         );
+        locator
     }
 
     #[cold]
     fn commit_allocated_record_shared_active_major(
         &self,
         gc: GcErased,
+        locator: ObjectLocator,
     ) -> Result<AllocationCommit, AllocError> {
         let read = self.state.objects.read_marking();
-        let recorded = self.state.collector.record_active_major_reachable_object(
+        let recorded = self.state.collector.record_active_major_reachable_locator(
             read.raw(),
-            gc,
+            locator,
             self.state.allocation_config.old.mutator_assist_slices,
         )?;
         Ok(AllocationCommit {
@@ -2695,11 +2700,11 @@ impl HeapCore {
         let old_placement = (space == SpaceKind::Old)
             .then(|| record.old_block_placement())
             .flatten();
-        if prepared_publish {
-            self.objects.publish_shared_prepared(record, publish_local);
+        let locator = if prepared_publish {
+            self.objects.publish_shared_prepared(record, publish_local)
         } else {
-            self.objects.publish_shared(record, publish_local);
-        }
+            self.objects.publish_shared(record, publish_local)
+        };
         if let Some(placement) = old_placement {
             self.old_gen
                 .record_block_object_accounting_for_placement_shared(placement);
@@ -2710,11 +2715,11 @@ impl HeapCore {
             old_reserved_bytes,
             alloc_counter_local,
         );
-        let recorded = if self.collector.has_active_major_mark() {
+        let recorded = if self.collector.active_major_mark_records_allocations() {
             let read = self.objects.read_marking();
-            self.collector.record_active_major_reachable_object(
+            self.collector.record_active_major_reachable_locator(
                 read.raw(),
-                gc,
+                locator,
                 self.config.old.mutator_assist_slices,
             )?
         } else {

@@ -196,6 +196,31 @@ fn record_active_major_reachable_object_marks_and_enqueues_object() {
 }
 
 #[test]
+fn record_active_major_reachable_locator_marks_and_enqueues_object() {
+    let mut state = CollectorState::default();
+    let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
+    let object =
+        ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate pinned leaf");
+    let indexes = flat_indexes([(object.object_key(), 0usize)]);
+    let objects = [object];
+    let view = FlatReadView::new(&objects, &indexes);
+    state.begin_major_mark(major_plan(), MarkWorklist::default());
+
+    let recorded = record_active_major_reachable_locator(&mut state, view.raw(), flat(0), 0)
+        .expect("record active major reachable locator");
+
+    assert!(recorded);
+    assert!(objects[0].is_marked());
+    assert_eq!(
+        state
+            .major_mark_progress()
+            .expect("major mark progress after reachable locator")
+            .remaining_work,
+        1
+    );
+}
+
+#[test]
 fn record_active_major_post_write_marks_satb_and_incremental_targets() {
     let mut state = CollectorState::default();
     let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
