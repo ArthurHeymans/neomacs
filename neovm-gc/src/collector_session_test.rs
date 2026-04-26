@@ -87,6 +87,30 @@ fn begin_major_mark_seeds_sources_into_initial_worklist() {
 }
 
 #[test]
+fn begin_major_mark_does_not_rescan_heap_to_clear_marks() {
+    let mut state = CollectorState::default();
+    let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
+    let object =
+        ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate pinned leaf");
+    let indexes = flat_indexes([(object.object_key(), 0usize)]);
+    let objects = [object];
+    let view = FlatReadView::new(&objects, &indexes);
+    assert!(objects[0].mark_if_unmarked());
+
+    begin_major_mark(&mut state, view.raw(), major_plan(), std::iter::empty())
+        .expect("begin major mark");
+
+    assert!(objects[0].is_marked());
+    assert_eq!(
+        state
+            .major_mark_progress()
+            .expect("major mark progress")
+            .remaining_work,
+        0
+    );
+}
+
+#[test]
 fn mark_active_major_session_object_marks_and_enqueues_existing_record() {
     let mut state = CollectorState::default();
     let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));

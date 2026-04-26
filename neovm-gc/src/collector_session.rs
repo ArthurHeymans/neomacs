@@ -36,9 +36,9 @@ pub(crate) fn begin_major_mark(
     }
 
     collector.clear_recent_phase_trace();
-    for locator in objects.all_locators() {
-        objects.get(locator).clear_mark();
-    }
+    // Reclaim commit and minor post-sweep rebuild clear survivor marks.
+    // Do not rescan the whole heap here; active old-gen session startup
+    // should be O(roots), not O(heap).
 
     collector.push_phase(CollectionPhase::InitialMark);
     if plan.concurrent {
