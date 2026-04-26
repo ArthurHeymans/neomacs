@@ -329,10 +329,11 @@ impl<'a> MajorMarkSession<'a> {
     }
 
     pub(crate) fn run_ephemeron_fixpoint_parallel(&mut self) {
+        let locators = self.objects.all_locator_snapshot();
         loop {
             let changed = if self.worker_count.max(1) == 1 || self.objects.len() <= 1 {
                 let mut visitor = MajorEphemeronTracer::new(&mut self.tracer);
-                for locator in self.objects.all_locators() {
+                for &locator in locators.iter() {
                     let object = self.objects.get(locator);
                     if object.is_marked() {
                         object.visit_ephemerons(&mut visitor);
@@ -342,7 +343,7 @@ impl<'a> MajorMarkSession<'a> {
                 let _tracer = visitor.finish();
                 changed
             } else {
-                self.scan_ephemerons_parallel()
+                self.scan_ephemerons_parallel(Arc::clone(&locators))
             };
             let (steps, rounds) = self
                 .tracer
@@ -355,8 +356,7 @@ impl<'a> MajorMarkSession<'a> {
         }
     }
 
-    fn scan_ephemerons_parallel(&mut self) -> bool {
-        let locators = Arc::new(self.objects.all_locators());
+    fn scan_ephemerons_parallel(&mut self, locators: Arc<[ObjectLocator]>) -> bool {
         let workers = self.worker_count.max(1).min(locators.len().max(1));
         let chunk_size = locators.len().max(1).div_ceil(workers);
         let shared = ParallelMarkShared::new(self.objects.clone());
@@ -1714,9 +1714,9 @@ pub(crate) fn trace_minor_ephemerons(
     let mut mark_steps = 0u64;
     let mut mark_rounds = 0u64;
     loop {
-        let changed = if worker_count.max(1) == 1 || objects.len() <= 1 {
+        let changed = if worker_count.max(1) == 1 || ephemeron_candidates.len() <= 1 {
             let mut visitor = MinorEphemeronTracer::new(tracer);
-            for locator in objects.all_locators() {
+            for &locator in ephemeron_candidates {
                 let object = objects.get(locator);
                 let survives = object.space() != SpaceKind::Nursery || object.is_marked();
                 if survives {

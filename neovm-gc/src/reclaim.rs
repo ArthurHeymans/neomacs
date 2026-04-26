@@ -14,6 +14,7 @@ use crate::spaces::{
 };
 use crate::stats::{CollectionStats, HeapStats, PreparedHeapStats};
 use std::collections::HashSet;
+use std::sync::Arc;
 
 /// Physical old-gen compaction helper (physical-compaction step 3).
 ///
@@ -315,7 +316,7 @@ pub(crate) struct PreparedReclaimBuildState {
     prepared_object_count: usize,
     promoted_bytes: usize,
     scan_index: usize,
-    locators: Vec<ObjectLocator>,
+    locators: Arc<[ObjectLocator]>,
     finalizable_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
     weak_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
     ephemeron_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
@@ -402,7 +403,7 @@ pub(crate) fn prepare_reclaim(
 
 pub(crate) fn begin_active_prepared_reclaim_build(
     kind: CollectionKind,
-    locators: Vec<ObjectLocator>,
+    locators: Arc<[ObjectLocator]>,
     finalizable_candidates: Vec<ObjectKey>,
     weak_candidates: Vec<ObjectKey>,
     ephemeron_candidates: Vec<ObjectKey>,

@@ -789,7 +789,7 @@ impl<'heap> CollectorRuntime<'heap> {
         let build = state.reclaim_prepare_state.get_or_insert_with(|| {
             begin_active_prepared_reclaim_build(
                 request.plan.kind,
-                raw.all_locators(),
+                raw.all_locator_snapshot(),
                 objects.finalizable_candidates(),
                 objects.weak_candidates(),
                 objects.ephemeron_candidates(),
@@ -1231,7 +1231,7 @@ fn prepare_active_major_reclaim_with_read_core(
         let build = state.reclaim_prepare_state.get_or_insert_with(|| {
             begin_active_prepared_reclaim_build(
                 request.plan.kind,
-                raw.all_locators(),
+                raw.all_locator_snapshot(),
                 objects.finalizable_candidates(),
                 objects.weak_candidates(),
                 objects.ephemeron_candidates(),

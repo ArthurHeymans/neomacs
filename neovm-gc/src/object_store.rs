@@ -136,6 +136,10 @@ impl<'a> ObjectReadRaw<'a> {
     pub(crate) fn all_locators(&self) -> Vec<ObjectLocator> {
         self.all_locators.as_ref().to_vec()
     }
+
+    pub(crate) fn all_locator_snapshot(&self) -> Arc<[ObjectLocator]> {
+        Arc::clone(&self.all_locators)
+    }
 }
 
 unsafe impl Send for ObjectReadRaw<'_> {}
