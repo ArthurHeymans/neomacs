@@ -222,10 +222,8 @@ fn collect_global_sources_includes_roots_and_immortal_objects() {
     let mut roots = RootStack::default();
     roots.push(rooted_source);
 
-    let indexes = HeapIndexState {
-        object_index: object_index_for(&objects),
-        ..HeapIndexState::default()
-    };
+    let mut indexes = HeapIndexState::default();
+    indexes.rebuild_from_objects(&objects);
     let view = FlatReadView::new(&objects, &indexes);
     let sources = super::collect_global_sources(&roots, &view, None);
 

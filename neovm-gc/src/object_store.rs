@@ -5,11 +5,11 @@ use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 
 use parking_lot::{RwLock, RwLockReadGuard};
 
-use crate::descriptor::{ObjectKey, TypeFlags};
+use crate::descriptor::{GcErased, ObjectKey, TypeFlags};
 use crate::index_state::{
     HeapIndexState, ObjectIndex, ObjectKeyBuildHasher, ObjectLocator, RememberedSetState,
 };
-use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord};
+use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord, SpaceKind};
 
 pub(crate) const OBJECT_STORE_SHARDS: usize = 4;
 const OBJECT_STORE_CHUNK_CAPACITY: usize = 1024;
@@ -163,6 +163,16 @@ pub(crate) trait ObjectReadView {
     fn all_locators(&self) -> Vec<ObjectLocator> {
         self.raw().all_locators()
     }
+
+    fn immortal_sources(&self) -> Vec<GcErased> {
+        let raw = self.raw();
+        raw.all_locators()
+            .into_iter()
+            .map(|locator| raw.get(locator))
+            .filter(|object| object.space() == SpaceKind::Immortal)
+            .map(ObjectRecord::erased)
+            .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -174,6 +184,7 @@ pub(crate) struct ObjectStoreReadGuard<'a> {
     finalizable_candidates: Arc<[ObjectKey]>,
     weak_candidates: Arc<[ObjectKey]>,
     ephemeron_candidates: Arc<[ObjectKey]>,
+    immortal_candidates: Arc<[ObjectKey]>,
     object_count: usize,
     remembered: &'a RememberedSetState,
 }
@@ -224,6 +235,12 @@ impl<'a> ObjectStoreReadGuard<'a> {
         Arc::clone(&self.ephemeron_candidates)
     }
 
+    fn immortal_candidate_locators(&self) -> impl Iterator<Item = ObjectLocator> + '_ {
+        self.immortal_candidates
+            .iter()
+            .filter_map(|key| self.index.get(key).copied())
+    }
+
     #[inline]
     pub(crate) fn remembered(&self) -> &RememberedSetState {
         self.remembered
@@ -248,6 +265,13 @@ impl ObjectReadView for ObjectStoreReadGuard<'_> {
             object_count: self.object_count,
             _marker: PhantomData,
         }
+    }
+
+    fn immortal_sources(&self) -> Vec<GcErased> {
+        let raw = self.raw();
+        self.immortal_candidate_locators()
+            .map(|locator| raw.get(locator).erased())
+            .collect()
     }
 }
 
@@ -324,6 +348,17 @@ impl ObjectReadView for FlatReadView<'_> {
             object_count: self.object_count,
             _marker: PhantomData,
         }
+    }
+
+    fn immortal_sources(&self) -> Vec<GcErased> {
+        self.indexes
+            .candidate_indices(&self.indexes.immortal_candidates)
+            .into_iter()
+            .map(|locator| {
+                debug_assert_eq!(locator.shard, 0);
+                self.objects[locator.slot].erased()
+            })
+            .collect()
     }
 }
 
@@ -543,6 +578,7 @@ impl ObjectStore {
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
         let mut ephemeron_candidates = Vec::new();
+        let mut immortal_candidates = Vec::new();
 
         for (shard_index, shard) in shard_raws.iter().enumerate() {
             for (chunk_index, chunk) in shard.chunks.iter().enumerate() {
@@ -563,6 +599,9 @@ impl ObjectStore {
                     if flags.contains(TypeFlags::EPHEMERON_KEY) {
                         ephemeron_candidates.push(object_key);
                     }
+                    if record.space() == SpaceKind::Immortal {
+                        immortal_candidates.push(object_key);
+                    }
                 }
             }
         }
@@ -575,6 +614,7 @@ impl ObjectStore {
             finalizable_candidates: Arc::from(finalizable_candidates),
             weak_candidates: Arc::from(weak_candidates),
             ephemeron_candidates: Arc::from(ephemeron_candidates),
+            immortal_candidates: Arc::from(immortal_candidates),
             object_count,
             remembered: &self.remembered,
         }
@@ -681,6 +721,7 @@ impl ObjectStore {
                 object.object_key(),
                 ObjectLocator::flat(slot),
                 object.header().desc(),
+                object.space(),
             );
         }
         FlatObjectStore { objects, indexes }

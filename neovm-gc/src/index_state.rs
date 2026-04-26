@@ -172,6 +172,7 @@ pub(crate) struct HeapIndexState {
     pub(crate) finalizable_candidates: Vec<ObjectKey>,
     pub(crate) weak_candidates: Vec<ObjectKey>,
     pub(crate) ephemeron_candidates: Vec<ObjectKey>,
+    pub(crate) immortal_candidates: Vec<ObjectKey>,
     pub(crate) remembered: RememberedSetState,
 }
 
@@ -182,6 +183,7 @@ pub(crate) struct PreparedIndexReclaim {
     pub(crate) finalizable_candidates: Vec<ObjectKey>,
     pub(crate) weak_candidates: Vec<ObjectKey>,
     pub(crate) ephemeron_candidates: Vec<ObjectKey>,
+    pub(crate) immortal_candidates: Vec<ObjectKey>,
     pub(crate) remembered_owners: Vec<ObjectKey>,
 }
 
@@ -463,9 +465,13 @@ impl HeapIndexState {
         object_key: ObjectKey,
         locator: ObjectLocator,
         desc: &'static TypeDesc,
+        space: SpaceKind,
     ) {
         self.object_index.insert(object_key, locator);
         self.record_descriptor_candidates(object_key, desc);
+        if space == SpaceKind::Immortal {
+            self.immortal_candidates.push(object_key);
+        }
     }
 
     pub(crate) fn record_descriptor_candidates(
@@ -548,9 +554,11 @@ impl HeapIndexState {
         self.finalizable_candidates.clear();
         self.weak_candidates.clear();
         self.ephemeron_candidates.clear();
+        self.immortal_candidates.clear();
         self.finalizable_candidates.reserve(capacity);
         self.weak_candidates.reserve(capacity);
         self.ephemeron_candidates.reserve(capacity);
+        self.immortal_candidates.reserve(capacity);
     }
 
     pub(crate) fn begin_post_sweep_rebuild(&mut self, capacity: usize) -> PostSweepIndexRebuild {
@@ -581,6 +589,7 @@ impl HeapIndexState {
         let weak_candidate_set: HashSet<_> = self.weak_candidates.iter().copied().collect();
         let ephemeron_candidate_set: HashSet<_> =
             self.ephemeron_candidates.iter().copied().collect();
+        let immortal_candidate_set: HashSet<_> = self.immortal_candidates.iter().copied().collect();
 
         let mut rebuilt_object_index =
             ObjectIndex::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
@@ -588,6 +597,7 @@ impl HeapIndexState {
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
         let mut ephemeron_candidates = Vec::new();
+        let mut immortal_candidates = Vec::new();
         for (rebuilt_index, survivor) in survivors.iter().enumerate() {
             let object_key = objects[survivor.object_index].object_key();
             rebuilt_object_index.insert(object_key, ObjectLocator::flat(rebuilt_index));
@@ -600,6 +610,9 @@ impl HeapIndexState {
             }
             if ephemeron_candidate_set.contains(&object_key) {
                 ephemeron_candidates.push(object_key);
+            }
+            if immortal_candidate_set.contains(&object_key) {
+                immortal_candidates.push(object_key);
             }
         }
 
@@ -621,6 +634,7 @@ impl HeapIndexState {
             finalizable_candidates,
             weak_candidates,
             ephemeron_candidates,
+            immortal_candidates,
             remembered_owners,
         }
     }
@@ -630,6 +644,7 @@ impl HeapIndexState {
         self.finalizable_candidates = prepared.finalizable_candidates;
         self.weak_candidates = prepared.weak_candidates;
         self.ephemeron_candidates = prepared.ephemeron_candidates;
+        self.immortal_candidates = prepared.immortal_candidates;
         self.remembered.replace(prepared.remembered_owners);
     }
 
@@ -640,6 +655,7 @@ impl HeapIndexState {
                 object.object_key(),
                 ObjectLocator::flat(index),
                 object.header().desc(),
+                object.space(),
             );
         }
         self.rebuild_remembered_owners_from_objects(objects);

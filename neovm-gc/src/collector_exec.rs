@@ -430,13 +430,7 @@ pub(crate) fn collect_global_sources(
     objects: &impl ObjectReadView,
     external_scanner: Option<&crate::heap::ExternalRootScanner>,
 ) -> Vec<GcErased> {
-    let raw = objects.raw();
-    let immortal_sources = raw
-        .all_locators()
-        .into_iter()
-        .map(|locator| raw.get(locator))
-        .filter(|object| object.space() == SpaceKind::Immortal)
-        .map(ObjectRecord::erased);
+    let immortal_sources = objects.immortal_sources();
     let mut sources: Vec<GcErased> = roots.iter().chain(immortal_sources).collect();
     if let Some(scanner) = external_scanner {
         scanner.call(&mut sources);

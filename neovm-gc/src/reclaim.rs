@@ -504,6 +504,7 @@ pub(crate) fn finish_active_prepared_reclaim_build(
             finalizable_candidates,
             weak_candidates,
             ephemeron_candidates,
+            immortal_candidates: Vec::new(),
             remembered_owners: Vec::new(),
         },
         survivors,
@@ -879,7 +880,7 @@ pub(crate) fn sweep_minor_and_rebuild_post_collection(
         let total_size = object.total_size();
         let index = rebuilt_objects.len();
         rebuilt_objects.push(object);
-        indexes.record_allocated_object(object_key, ObjectLocator::flat(index), desc);
+        indexes.record_allocated_object(object_key, ObjectLocator::flat(index), desc, space);
         rebuilt_stats.record_live_object(space, total_size);
     }
 

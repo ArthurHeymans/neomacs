@@ -107,12 +107,26 @@ fn heap_index_state_record_allocated_object_updates_index_and_candidates() {
     let object_key = object.object_key();
     let mut indexes = HeapIndexState::default();
 
-    indexes.record_allocated_object(object_key, flat(3), desc);
+    indexes.record_allocated_object(object_key, flat(3), desc, object.space());
 
     assert_eq!(indexes.object_index.get(&object_key), Some(&flat(3)));
     assert!(indexes.finalizable_candidates.is_empty());
     assert!(indexes.weak_candidates.is_empty());
     assert!(indexes.ephemeron_candidates.is_empty());
+    assert!(indexes.immortal_candidates.is_empty());
+}
+
+#[test]
+fn heap_index_state_record_allocated_object_tracks_immortal_candidates() {
+    let desc = leaf_desc();
+    let object =
+        ObjectRecord::allocate(desc, SpaceKind::Immortal, Leaf).expect("allocate immortal object");
+    let object_key = object.object_key();
+    let mut indexes = HeapIndexState::default();
+
+    indexes.record_allocated_object(object_key, flat(3), desc, object.space());
+
+    assert_eq!(indexes.immortal_candidates, vec![object_key]);
 }
 
 #[test]
@@ -157,7 +171,12 @@ fn heap_index_state_prepare_reclaim_state_rebuilds_candidates_and_remembered_own
     ];
     let mut indexes = HeapIndexState::default();
     for (index, object) in objects.iter().enumerate() {
-        indexes.record_allocated_object(object.object_key(), flat(index), object.header().desc());
+        indexes.record_allocated_object(
+            object.object_key(),
+            flat(index),
+            object.header().desc(),
+            object.space(),
+        );
     }
     indexes.record_remembered_owner(objects[3].erased());
 
@@ -199,7 +218,7 @@ fn begin_post_sweep_rebuild_preserves_dead_finalizable_membership() {
         .expect("allocate finalizable object");
     let object_key = object.object_key();
     let mut indexes = HeapIndexState::default();
-    indexes.record_allocated_object(object_key, flat(0), finalizable_desc);
+    indexes.record_allocated_object(object_key, flat(0), finalizable_desc, object.space());
 
     let rebuild = indexes.begin_post_sweep_rebuild(4);
 
@@ -224,17 +243,19 @@ fn heap_index_state_apply_storage_stats_reports_candidate_and_remembered_counts(
     )
     .expect("allocate weak ephemeron");
     let mut indexes = HeapIndexState::default();
-    indexes.record_allocated_object(owner.object_key(), flat(0), desc);
-    indexes.record_allocated_object(target.object_key(), flat(1), desc);
+    indexes.record_allocated_object(owner.object_key(), flat(0), desc, owner.space());
+    indexes.record_allocated_object(target.object_key(), flat(1), desc, target.space());
     indexes.record_allocated_object(
         finalizable.object_key(),
         flat(2),
         finalizable.header().desc(),
+        finalizable.space(),
     );
     indexes.record_allocated_object(
         weak_ephemeron.object_key(),
         flat(3),
         weak_ephemeron.header().desc(),
+        weak_ephemeron.space(),
     );
     indexes.record_remembered_owner(owner.erased());
 
@@ -259,7 +280,7 @@ fn heap_index_state_record_remembered_edge_if_needed_only_keeps_old_to_nursery()
     let objects = vec![owner, nursery_target, old_target];
     let mut indexes = HeapIndexState::default();
     for (index, object) in objects.iter().enumerate() {
-        indexes.record_allocated_object(object.object_key(), flat(index), desc);
+        indexes.record_allocated_object(object.object_key(), flat(index), desc, object.space());
     }
 
     let old_gen = crate::spaces::OldGenState::default();

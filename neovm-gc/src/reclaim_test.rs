@@ -138,6 +138,7 @@ fn advance_prepared_reclaim_commit_removes_dead_keys_before_final_commit() {
             object.object_key(),
             locator(index),
             object.header().desc(),
+            object.space(),
         );
     }
 
@@ -196,6 +197,7 @@ fn apply_prepared_reclaim_preserves_post_prepare_allocations() {
                 object.object_key(),
                 locator(index),
                 object.header().desc(),
+                object.space(),
             );
         }
 
