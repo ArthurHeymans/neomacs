@@ -22,8 +22,7 @@ use crate::plan::{
 use crate::reclaim::{
     PreparedReclaim, advance_active_prepared_reclaim_build, advance_prepared_reclaim_commit,
     begin_active_prepared_reclaim_build, begin_prepared_reclaim_commit,
-    finish_active_prepared_reclaim_build, finish_prepared_reclaim_cycle,
-    finish_prepared_reclaim_cycle_with_state,
+    finish_active_prepared_reclaim_build, finish_prepared_reclaim_cycle_with_state,
 };
 use crate::stats::{CollectionStats, HeapStats};
 use std::sync::atomic::AtomicBool;
@@ -614,43 +613,28 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Finish the current persistent major-mark session and reclaim.
     pub fn finish_major_collection(&mut self) -> Result<CollectionStats, AllocError> {
-        if self
-            .active_major_mark_plan()
-            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
-            && let Some(cycle) = self.commit_active_reclaim_if_ready()?
-        {
-            return Ok(cycle);
-        }
-        if self
-            .active_major_mark_plan()
-            .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
-            && self.prepare_active_reclaim_if_needed_with_budget(usize::MAX)?
-            && let Some(cycle) = self.commit_active_reclaim_if_ready()?
-        {
-            return Ok(cycle);
-        }
-        let pause_start = Instant::now();
-        let Some(state) = self.heap.collector_handle().take_major_mark_state() else {
+        if self.active_major_mark_plan().is_none() {
             return Err(AllocError::NoCollectionInProgress);
-        };
-        let before_bytes = self.heap.stats().total_live_bytes();
-        self.heap
-            .collector_handle()
-            .push_phase(CollectionPhase::Remark);
-        let mut state = state;
-        {
-            let objects = self.heap.objects();
-            collector_session::finish_major_mark(&mut state, objects.raw(), |tracer, plan| {
-                trace_heap_major_ephemerons(self.heap, tracer, plan)
-            });
         }
-        let finished = collector_session::finish_active_collection(state, |plan| {
-            self.prepare_reclaim_for_plan(plan)
-        })?;
-        self.heap
-            .collector_handle()
-            .push_phase(CollectionPhase::Reclaim);
-        Ok(self.commit_finished_active_collection(finished, before_bytes, 0, pause_start))
+
+        loop {
+            if let Some(cycle) = self.finish_active_major_collection_if_ready()? {
+                return Ok(cycle);
+            }
+            let Some(plan) = self.active_major_mark_plan() else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            if plan.phase == CollectionPhase::Reclaim {
+                continue;
+            }
+            let Some(progress) = self.poll_active_major_mark()? else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            debug_assert!(
+                progress.completed || progress.drained_objects > 0,
+                "active major mark should either complete or drain at least one object per poll"
+            );
+        }
     }
 
     /// Prepare reclaim for the active major collection once mark work is fully drained.
@@ -1112,41 +1096,6 @@ impl<'heap> CollectorRuntime<'heap> {
                 kind: CollectionKind::Minor,
             }),
         }
-    }
-
-    fn commit_finished_active_collection(
-        &mut self,
-        finished: crate::collector_session::FinishedActiveCollection,
-        before_bytes: usize,
-        prior_pause_nanos: u64,
-        pause_start: Instant,
-    ) -> CollectionStats {
-        let runtime_state = self.heap.runtime_state_handle();
-        let runtime_state_for_callback = runtime_state.clone();
-        let cycle = self
-            .heap
-            .with_flat_store_for_reclaim_commit(|flat, old_gen, stats| {
-                finish_prepared_reclaim_cycle(
-                    &mut flat.objects,
-                    &mut flat.indexes,
-                    old_gen,
-                    stats,
-                    &runtime_state,
-                    before_bytes,
-                    finished.mark_steps,
-                    finished.mark_rounds,
-                    finished.mark_elapsed_nanos,
-                    finished.reclaim_prepare_nanos,
-                    finished.prepared_reclaim,
-                    move |object| runtime_state_for_callback.enqueue_pending_finalizer(object),
-                )
-            });
-        self.finalize_reclaim_cycle(
-            cycle,
-            finished.completed_plan,
-            prior_pause_nanos,
-            pause_start,
-        )
     }
 
     fn finalize_reclaim_cycle(

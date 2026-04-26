@@ -231,6 +231,69 @@ fn commit_active_reclaim_if_ready_uses_bounded_commit_slices() {
 }
 
 #[test]
+fn finish_major_collection_drains_reclaim_with_bounded_commit_slices() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    let mut scope = mutator.handle_scope();
+    for byte in 0..5000u16 {
+        mutator
+            .alloc(
+                &mut scope,
+                OldLeaf {
+                    _bytes: [byte as u8; 32],
+                },
+            )
+            .expect("allocate old leaf");
+    }
+
+    mutator
+        .begin_major_mark(CollectionPlan {
+            mark_slice_budget: usize::MAX,
+            ..mutator.plan_for(CollectionKind::Major)
+        })
+        .expect("begin major mark");
+    let progress = mutator
+        .poll_active_major_mark()
+        .expect("poll active major mark")
+        .expect("major-mark session should stay active");
+    assert!(progress.completed);
+    while mutator
+        .active_major_mark_plan()
+        .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
+    {
+        mutator
+            .prepare_active_reclaim_if_needed()
+            .expect("advance reclaim prep");
+    }
+
+    let samples_before_finish = heap.pause_histogram().total_samples;
+    let cycle = mutator
+        .finish_major_collection()
+        .expect("finish active major collection");
+    assert_eq!(cycle.major_collections, 1);
+    assert!(
+        heap.pause_histogram().total_samples >= samples_before_finish + 3,
+        "large synchronous finish should drain reclaim through multiple bounded commit slices"
+    );
+    assert!(mutator.active_major_mark_plan().is_none());
+}
+
+#[test]
 fn adaptive_pause_target_budget_scales_with_observed_throughput() {
     assert_eq!(
         adaptive_pause_target_budget(Duration::from_millis(10), 128, 2_000_000, 64, 1, 4096),
