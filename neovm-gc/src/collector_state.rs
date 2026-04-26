@@ -359,6 +359,23 @@ impl CollectorStateHandle {
         })
     }
 
+    pub(crate) fn record_active_major_post_write_erased_and_refresh(
+        &self,
+        owner: crate::descriptor::GcErased,
+        old_value: Option<crate::descriptor::GcErased>,
+        new_value: Option<crate::descriptor::GcErased>,
+    ) -> Result<bool, AllocError> {
+        self.with_state(|state| {
+            let updated = collector_session::record_active_major_post_write_erased(
+                state, owner, old_value, new_value,
+            )?;
+            if updated {
+                state.refresh_cached_active_major_plans();
+            }
+            Ok(updated)
+        })
+    }
+
     #[cfg(test)]
     pub(crate) fn prepare_active_collection_reclaim_with_request_and_refresh(
         &self,

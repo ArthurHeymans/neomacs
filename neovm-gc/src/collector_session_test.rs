@@ -285,6 +285,42 @@ fn record_active_major_post_write_marks_satb_and_incremental_targets() {
 }
 
 #[test]
+fn record_active_major_post_write_erased_marks_via_header_locators() {
+    let mut state = CollectorState::default();
+    let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
+    let owner = ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate owner leaf");
+    let old_value =
+        ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate old target leaf");
+    let new_value =
+        ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate new target leaf");
+    owner.set_store_locator(flat(0));
+    old_value.set_store_locator(flat(1));
+    new_value.set_store_locator(flat(2));
+    let objects = [owner, old_value, new_value];
+    objects[0].mark_if_unmarked();
+    state.begin_major_mark(major_plan(), MarkWorklist::default());
+
+    let recorded = record_active_major_post_write_erased(
+        &mut state,
+        objects[0].erased(),
+        Some(objects[1].erased()),
+        Some(objects[2].erased()),
+    )
+    .expect("record active major post write erased");
+
+    assert!(recorded);
+    assert!(objects[1].is_marked());
+    assert!(objects[2].is_marked());
+    assert_eq!(
+        state
+            .major_mark_progress()
+            .expect("major mark progress after erased post write")
+            .remaining_work,
+        2
+    );
+}
+
+#[test]
 fn prepare_active_reclaim_plan_moves_major_session_to_reclaim() {
     let mut state = CollectorState::default();
     let plan = major_plan();

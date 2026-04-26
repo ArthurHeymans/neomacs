@@ -1262,16 +1262,27 @@ impl<'heap> Mutator<'heap> {
         let core = self.heap.read_core();
         let collector = core.collector_handle_ref();
         if active_major_mark {
-            let objects = core.mark_objects();
-            collector
-                .record_active_major_post_write_and_refresh(
-                    objects.raw(),
-                    owner_erased,
-                    old_erased,
-                    new_erased,
-                    core.config().old.mutator_assist_slices,
-                )
-                .expect("post-write active major-mark assist should not fail");
+            let assist_slices = core.config().old.mutator_assist_slices;
+            if assist_slices == 0 {
+                collector
+                    .record_active_major_post_write_erased_and_refresh(
+                        owner_erased,
+                        old_erased,
+                        new_erased,
+                    )
+                    .expect("post-write active major-mark update should not fail");
+            } else {
+                let objects = core.mark_objects();
+                collector
+                    .record_active_major_post_write_and_refresh(
+                        objects.raw(),
+                        owner_erased,
+                        old_erased,
+                        new_erased,
+                        assist_slices,
+                    )
+                    .expect("post-write active major-mark assist should not fail");
+            }
         }
 
         if needs_remembered_edge {

@@ -6,6 +6,7 @@ use crate::collector_exec::MarkTracer;
 use crate::collector_state::{CollectorState, MajorMarkUpdate};
 use crate::heap::AllocError;
 use crate::index_state::ObjectLocator;
+use crate::object::SpaceKind;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
 #[cfg(test)]
@@ -163,6 +164,14 @@ pub(crate) fn mark_active_major_session_erased_locator(
     collector.enqueue_active_major_mark_index(locator)
 }
 
+fn mark_active_major_session_erased(collector: &mut CollectorState, object: GcErased) -> bool {
+    let header = unsafe { object.header().as_ref() };
+    let Some(locator) = header.store_locator() else {
+        return false;
+    };
+    mark_active_major_session_erased_locator(collector, object, locator)
+}
+
 pub(crate) fn record_active_major_reachable_object(
     collector: &mut CollectorState,
     objects: ObjectReadRaw<'_>,
@@ -230,6 +239,11 @@ fn is_marked_active_major_session_object(objects: ObjectReadRaw<'_>, object: GcE
     record.space() == crate::object::SpaceKind::Immortal || record.is_marked()
 }
 
+fn is_marked_active_major_session_erased(object: GcErased) -> bool {
+    let header = unsafe { object.header().as_ref() };
+    header.space() == SpaceKind::Immortal || header.is_marked()
+}
+
 pub(crate) fn record_active_major_post_write(
     collector: &mut CollectorState,
     objects: ObjectReadRaw<'_>,
@@ -256,6 +270,31 @@ pub(crate) fn record_active_major_post_write(
     }
     if assist_slices > 0 {
         let _progress = assist_active_major_mark_slices(collector, objects, assist_slices)?;
+    }
+    Ok(true)
+}
+
+pub(crate) fn record_active_major_post_write_erased(
+    collector: &mut CollectorState,
+    owner: GcErased,
+    old_value: Option<GcErased>,
+    new_value: Option<GcErased>,
+) -> Result<bool, AllocError> {
+    if !collector.has_active_major_mark()
+        || collector
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+    {
+        return Ok(false);
+    }
+
+    if let Some(value) = old_value {
+        let _enqueued = mark_active_major_session_erased(collector, value);
+    }
+    if is_marked_active_major_session_erased(owner)
+        && let Some(value) = new_value
+    {
+        let _enqueued = mark_active_major_session_erased(collector, value);
     }
     Ok(true)
 }
