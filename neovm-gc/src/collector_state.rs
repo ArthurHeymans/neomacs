@@ -4,9 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::collector_exec::MarkTracer;
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{
-    self, ActiveReclaimPrepRequest, FinishedActiveCollection, PreparedActiveReclaim,
-};
+use crate::collector_session::{self, ActiveReclaimPrepRequest, PreparedActiveReclaim};
 use crate::heap::AllocError;
 use crate::index_state::ObjectLocator;
 use crate::mark::MarkWorklist;
@@ -336,28 +334,6 @@ impl CollectorStateHandle {
         })
     }
 
-    pub(crate) fn poll_active_major_mark_with_completion_and_refresh(
-        &self,
-        objects: ObjectReadRaw<'_>,
-        trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-        prepare_major_reclaim: impl FnOnce(&CollectionPlan) -> PreparedReclaim,
-        stats: &HeapStats,
-        old_gen: &OldGenState,
-        old_config: &OldGenConfig,
-        plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
-    ) -> Result<Option<MajorMarkProgress>, AllocError> {
-        self.with_state(|state| {
-            let progress = collector_session::poll_active_major_mark_with_completion(
-                state,
-                objects,
-                trace_ephemerons,
-                prepare_major_reclaim,
-            )?;
-            refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
-            Ok(progress)
-        })
-    }
-
     pub(crate) fn prepare_active_collection_reclaim_with_request_and_refresh(
         &self,
         request: ActiveReclaimPrepRequest,
@@ -404,38 +380,6 @@ impl CollectorStateHandle {
                 refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             }
             completed
-        })
-    }
-
-    pub(crate) fn finish_active_collection_if_ready(
-        &self,
-        objects: ObjectReadRaw<'_>,
-        trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-        prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-    ) -> Result<Option<FinishedActiveCollection>, AllocError> {
-        self.with_state(|state| {
-            collector_session::finish_active_collection_if_ready(
-                state,
-                objects,
-                trace_ephemerons,
-                prepare_reclaim,
-            )
-        })
-    }
-
-    pub(crate) fn finish_active_collection_now(
-        &self,
-        objects: ObjectReadRaw<'_>,
-        trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-        prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-    ) -> Result<FinishedActiveCollection, AllocError> {
-        self.with_state(|state| {
-            collector_session::finish_active_collection_now(
-                state,
-                objects,
-                trace_ephemerons,
-                prepare_reclaim,
-            )
         })
     }
 }
@@ -525,11 +469,12 @@ impl CollectorState {
     }
 
     pub(crate) fn active_reclaim_prep_progress(&self) -> Option<(u64, usize)> {
-        self.major_mark_state
-            .as_ref()
-            .and_then(|state| state.reclaim_prepare_state.as_ref().map(|prep| {
-                (state.reclaim_prepare_nanos, prep.scanned_objects())
-            }))
+        self.major_mark_state.as_ref().and_then(|state| {
+            state
+                .reclaim_prepare_state
+                .as_ref()
+                .map(|prep| (state.reclaim_prepare_nanos, prep.scanned_objects()))
+        })
     }
 
     pub(crate) fn has_active_major_mark(&self) -> bool {

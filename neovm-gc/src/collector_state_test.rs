@@ -351,67 +351,6 @@ fn collector_state_handle_begin_major_mark_and_refresh_updates_recommended_plan(
 }
 
 #[test]
-fn collector_state_handle_finish_active_collection_if_ready_finishes_prepared_session() {
-    let handle = CollectorStateHandle::default();
-    let empty_indexes = HeapIndexState::default();
-    let empty_objects: [ObjectRecord; 0] = [];
-    let view = FlatReadView::new(&empty_objects, &empty_indexes);
-    handle.with_state(|state| {
-        state.begin_major_mark(major_plan(), MarkWorklist::default());
-        assert!(state.complete_active_major_reclaim_prep(
-            2,
-            3,
-            Duration::from_nanos(11),
-            Some(prepared_reclaim()),
-        ));
-    });
-
-    let finished = handle
-        .finish_active_collection_if_ready(
-            view.raw(),
-            |_tracer, _plan| panic!("prepared session should not re-run remark"),
-            |_plan| Ok(prepared_reclaim()),
-        )
-        .expect("finish prepared active collection through handle")
-        .expect("prepared session should finish");
-
-    assert_eq!(finished.completed_plan.phase, CollectionPhase::Reclaim);
-    assert_eq!(finished.reclaim_prepare_nanos, 11);
-    assert!(!handle.has_active_major_mark());
-}
-
-#[test]
-fn collector_state_handle_finish_active_collection_now_finishes_prepared_session() {
-    let handle = CollectorStateHandle::default();
-    let empty_indexes = HeapIndexState::default();
-    let empty_objects: [ObjectRecord; 0] = [];
-    let view = FlatReadView::new(&empty_objects, &empty_indexes);
-    handle.with_state(|state| {
-        state.begin_major_mark(major_plan(), MarkWorklist::default());
-        assert!(state.complete_active_major_reclaim_prep(
-            5,
-            7,
-            Duration::from_nanos(13),
-            Some(prepared_reclaim()),
-        ));
-    });
-
-    let finished = handle
-        .finish_active_collection_now(
-            view.raw(),
-            |_tracer, _plan| panic!("prepared session should not re-run remark"),
-            |_plan| Ok(prepared_reclaim()),
-        )
-        .expect("finish prepared active collection immediately through handle");
-
-    assert_eq!(finished.completed_plan.phase, CollectionPhase::Reclaim);
-    assert_eq!(finished.mark_steps, 5);
-    assert_eq!(finished.mark_rounds, 7);
-    assert_eq!(finished.reclaim_prepare_nanos, 13);
-    assert!(!handle.has_active_major_mark());
-}
-
-#[test]
 fn collector_state_handle_prepare_active_collection_reclaim_and_refresh_updates_major_plan() {
     let handle = CollectorStateHandle::default();
     let empty_indexes = HeapIndexState::default();

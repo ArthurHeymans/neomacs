@@ -2,7 +2,7 @@ use crate::descriptor::{GcErased, Tracer};
 use std::time::{Duration, Instant};
 
 use crate::collector_exec::MarkTracer;
-use crate::collector_state::{CollectorState, MajorMarkState, MajorMarkUpdate};
+use crate::collector_state::{CollectorState, MajorMarkUpdate};
 use crate::heap::AllocError;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
@@ -20,16 +20,6 @@ pub(crate) struct PreparedActiveReclaim {
     pub(crate) mark_rounds_delta: u64,
     pub(crate) reclaim_prepare_time: Duration,
     pub(crate) prepared_reclaim: Option<PreparedReclaim>,
-}
-
-#[derive(Debug)]
-pub(crate) struct FinishedActiveCollection {
-    pub(crate) completed_plan: CollectionPlan,
-    pub(crate) mark_steps: u64,
-    pub(crate) mark_rounds: u64,
-    pub(crate) mark_elapsed_nanos: u64,
-    pub(crate) reclaim_prepare_nanos: u64,
-    pub(crate) prepared_reclaim: PreparedReclaim,
 }
 
 pub(crate) fn begin_major_mark(
@@ -215,26 +205,6 @@ pub(crate) fn poll_active_major_mark_round(
         .map(Some)
 }
 
-pub(crate) fn poll_active_major_mark_with_completion(
-    collector: &mut CollectorState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-    prepare_major_reclaim: impl FnOnce(&CollectionPlan) -> PreparedReclaim,
-) -> Result<Option<MajorMarkProgress>, AllocError> {
-    let progress = poll_active_major_mark_round(collector, objects.clone())?;
-    if let Some(progress) = progress.as_ref()
-        && progress.completed
-    {
-        complete_drained_major_mark_round(
-            collector,
-            objects,
-            trace_ephemerons,
-            prepare_major_reclaim,
-        );
-    }
-    Ok(progress)
-}
-
 pub(crate) fn active_reclaim_prep_request(
     collector: &CollectorState,
 ) -> Option<ActiveReclaimPrepRequest> {
@@ -324,142 +294,6 @@ pub(crate) fn complete_active_reclaim_prep(
         "active major reclaim prep should only complete while the session stays active"
     );
     completed
-}
-
-pub(crate) fn take_or_prepare_reclaim_for_finish(
-    state: &mut MajorMarkState,
-    prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-) -> Result<(PreparedReclaim, u64), AllocError> {
-    let mut reclaim_prepare_nanos = state.reclaim_prepare_nanos;
-    if state.reclaim_prepared
-        && let Some(prepared_reclaim) = state.prepared_reclaim.take()
-    {
-        return Ok((prepared_reclaim, reclaim_prepare_nanos));
-    }
-
-    let request = ActiveReclaimPrepRequest {
-        plan: state.plan.clone(),
-        ephemerons_processed: state.ephemerons_processed,
-    };
-    let prepared = build_prepared_active_reclaim(&request, 0, 0, prepare_reclaim)?;
-    if reclaim_prepare_nanos == 0 {
-        reclaim_prepare_nanos = saturating_duration_nanos(prepared.reclaim_prepare_time);
-    }
-    let prepared_reclaim = prepared
-        .prepared_reclaim
-        .expect("finish-time rebuild must materialize reclaim state");
-    Ok((prepared_reclaim, reclaim_prepare_nanos))
-}
-
-pub(crate) fn finish_active_collection(
-    mut state: MajorMarkState,
-    prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-) -> Result<FinishedActiveCollection, AllocError> {
-    let (prepared_reclaim, reclaim_prepare_nanos) =
-        take_or_prepare_reclaim_for_finish(&mut state, prepare_reclaim)?;
-
-    Ok(FinishedActiveCollection {
-        completed_plan: CollectionPlan {
-            phase: CollectionPhase::Reclaim,
-            ..state.plan
-        },
-        mark_steps: state.mark_steps,
-        mark_rounds: state.mark_rounds,
-        mark_elapsed_nanos: state.mark_elapsed_nanos,
-        reclaim_prepare_nanos,
-        prepared_reclaim,
-    })
-}
-
-pub(crate) fn finish_active_collection_now(
-    collector: &mut CollectorState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-    prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-) -> Result<FinishedActiveCollection, AllocError> {
-    let Some(state) = collector.take_major_mark_state() else {
-        return Err(AllocError::NoCollectionInProgress);
-    };
-    finalize_active_collection_state(state, objects, trace_ephemerons, prepare_reclaim)
-}
-
-pub(crate) fn finalize_active_collection_state(
-    mut state: MajorMarkState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-    prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-) -> Result<FinishedActiveCollection, AllocError> {
-    finish_major_mark(&mut state, objects, trace_ephemerons);
-    finish_active_collection(state, prepare_reclaim)
-}
-
-pub(crate) fn finish_active_collection_if_ready(
-    collector: &mut CollectorState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-    prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
-) -> Result<Option<FinishedActiveCollection>, AllocError> {
-    if !collector.active_major_mark_is_ready() {
-        return Ok(None);
-    }
-    finish_active_collection_now(collector, objects, trace_ephemerons, prepare_reclaim).map(Some)
-}
-
-pub(crate) fn complete_drained_major_mark_round(
-    collector: &mut CollectorState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-    prepare_major_reclaim: impl FnOnce(&CollectionPlan) -> PreparedReclaim,
-) -> bool {
-    let Some(plan) = collector.active_major_mark_needs_reclaim_prep_plan() else {
-        return false;
-    };
-    if collector.active_major_mark_ephemerons_processed()
-        || !matches!(plan.kind, CollectionKind::Major | CollectionKind::Full)
-    {
-        return false;
-    }
-
-    let mut tracer = MarkTracer::with_worklist(objects, Default::default());
-    let (ephemeron_steps, ephemeron_rounds) = trace_ephemerons(&mut tracer, &plan);
-    if plan.kind == CollectionKind::Major {
-        let reclaim_prepare_start = Instant::now();
-        let prepared_reclaim = prepare_major_reclaim(&plan);
-        collector.complete_active_major_reclaim_prep(
-            ephemeron_steps,
-            ephemeron_rounds,
-            reclaim_prepare_start.elapsed(),
-            Some(prepared_reclaim),
-        )
-    } else {
-        collector.complete_active_major_remark(ephemeron_steps, ephemeron_rounds)
-    }
-}
-
-pub(crate) fn finish_major_mark(
-    state: &mut MajorMarkState,
-    objects: ObjectReadRaw<'_>,
-    trace_ephemerons: impl FnOnce(&mut MarkTracer<'_>, &CollectionPlan) -> (u64, u64),
-) {
-    if state.ephemerons_processed {
-        return;
-    }
-
-    let mut tracer = MarkTracer::with_worklist(objects, core::mem::take(&mut state.worklist));
-    let (mark_steps, mark_rounds) = tracer
-        .drain_parallel_until_empty(state.plan.worker_count.max(1), state.plan.mark_slice_budget);
-    state.mark_steps = state.mark_steps.saturating_add(mark_steps);
-    state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds);
-    let (ephemeron_steps, ephemeron_rounds) = trace_ephemerons(&mut tracer, &state.plan);
-    state.mark_steps = state.mark_steps.saturating_add(ephemeron_steps);
-    state.mark_rounds = state.mark_rounds.saturating_add(ephemeron_rounds);
-    state.worklist = tracer.into_worklist();
-    state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
-    state.ephemerons_processed = true;
-}
-
-fn saturating_duration_nanos(duration: Duration) -> u64 {
-    duration.as_nanos().min(u128::from(u64::MAX)) as u64
 }
 
 #[cfg(test)]
