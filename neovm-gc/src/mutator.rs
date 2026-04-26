@@ -950,6 +950,9 @@ impl<'heap> Mutator<'heap> {
     ///
     /// Returns the number of records physically evacuated.
     pub fn compact_old_gen_physical(&mut self, density_threshold: f64) -> usize {
+        if self.heap.storage_stats().old.reserved_bytes == 0 {
+            return 0;
+        }
         self.handle_scope_state.release_safepoint();
         let _safepoint = self.heap.write_safepoint();
         let mut guard = self.heap.write_core();
@@ -965,6 +968,9 @@ impl<'heap> Mutator<'heap> {
         density_threshold: f64,
         max_passes: usize,
     ) -> usize {
+        if max_passes == 0 || self.heap.storage_stats().old.reserved_bytes == 0 {
+            return 0;
+        }
         self.handle_scope_state.release_safepoint();
         let _safepoint = self.heap.write_safepoint();
         let mut guard = self.heap.write_core();
@@ -976,6 +982,9 @@ impl<'heap> Mutator<'heap> {
     /// borrow so scoped roots created from the same mutator
     /// stay valid across the call.
     pub fn compact_old_gen_blocks(&mut self, block_indices: &[usize]) -> usize {
+        if block_indices.is_empty() {
+            return 0;
+        }
         self.handle_scope_state.release_safepoint();
         let _safepoint = self.heap.write_safepoint();
         let mut guard = self.heap.write_core();
@@ -1050,6 +1059,10 @@ impl<'heap> Mutator<'heap> {
     /// Opportunistic compaction trigger. Mirrors
     /// [`Heap::compact_old_gen_if_fragmented`].
     pub fn compact_old_gen_if_fragmented(&mut self, fragmentation_threshold: f64) -> (f64, usize) {
+        let frag = self.heap.old_gen_fragmentation_ratio();
+        if frag < fragmentation_threshold {
+            return (frag, 0);
+        }
         self.handle_scope_state.release_safepoint();
         let _safepoint = self.heap.write_safepoint();
         let mut guard = self.heap.write_core();

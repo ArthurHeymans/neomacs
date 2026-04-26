@@ -12173,6 +12173,75 @@ fn pinned_mutator_fast_path_no_longer_blocks_stop_the_world_collect() {
 }
 
 #[test]
+fn heap_noop_compaction_wrappers_skip_safepoint_when_mutator_active() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut active_mutator = heap.mutator();
+    let active_guard = active_mutator.enter_registered_safepoint_read_for_test();
+
+    let worker_heap = heap.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let results = (
+            worker_heap.compact_old_gen_physical(1.0),
+            worker_heap.compact_old_gen_blocks(&[]),
+            worker_heap.compact_old_gen_if_fragmented(1.0),
+            worker_heap.compact_old_gen_aggressive(1.0, 0),
+            worker_heap.has_pending_safepoint_request(),
+        );
+        done_tx
+            .send(results)
+            .expect("send heap no-op compaction results");
+    });
+
+    let (physical, blocks, fragmented, aggressive, requested) = done_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("heap no-op compaction should not wait for safepoint");
+    assert_eq!(physical, 0);
+    assert_eq!(blocks, 0);
+    assert_eq!(fragmented, (0.0, 0));
+    assert_eq!(aggressive, 0);
+    assert!(!requested);
+
+    drop(active_guard);
+    worker.join().expect("join heap no-op compaction helper");
+}
+
+#[test]
+fn mutator_noop_compaction_wrappers_skip_safepoint_when_another_mutator_active() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut active_mutator = heap.mutator();
+    let active_guard = active_mutator.enter_registered_safepoint_read_for_test();
+
+    let worker_heap = heap.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let mut caller = worker_heap.mutator();
+        let results = (
+            caller.compact_old_gen_physical(1.0),
+            caller.compact_old_gen_blocks(&[]),
+            caller.compact_old_gen_if_fragmented(1.0),
+            caller.compact_old_gen_aggressive(1.0, 0),
+            caller.heap().has_pending_safepoint_request(),
+        );
+        done_tx
+            .send(results)
+            .expect("send mutator no-op compaction results");
+    });
+
+    let (physical, blocks, fragmented, aggressive, requested) = done_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("mutator no-op compaction should not wait for safepoint");
+    assert_eq!(physical, 0);
+    assert_eq!(blocks, 0);
+    assert_eq!(fragmented, (0.0, 0));
+    assert_eq!(aggressive, 0);
+    assert!(!requested);
+
+    drop(active_guard);
+    worker.join().expect("join mutator no-op compaction helper");
+}
+
+#[test]
 fn safepoint_request_blocks_new_read_entries_until_cleared() {
     let heap = Heap::new(HeapConfig::default());
     heap.set_safepoint_requested_for_test(true);

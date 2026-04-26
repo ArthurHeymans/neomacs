@@ -743,6 +743,9 @@ impl Heap {
 
     /// Run physical old-gen compaction.
     pub fn compact_old_gen_physical(&self, density_threshold: f64) -> usize {
+        if self.storage_stats().old.reserved_bytes == 0 {
+            return 0;
+        }
         let mut roots = crate::root::RootStack::default();
         let _safepoint = self.write_safepoint();
         let mut core = self.write_core();
@@ -751,6 +754,9 @@ impl Heap {
 
     /// Run targeted block compaction.
     pub fn compact_old_gen_blocks(&self, block_indices: &[usize]) -> usize {
+        if block_indices.is_empty() {
+            return 0;
+        }
         let mut roots = crate::root::RootStack::default();
         let _safepoint = self.write_safepoint();
         let mut core = self.write_core();
@@ -779,6 +785,10 @@ impl Heap {
 
     /// Opportunistic compaction trigger.
     pub fn compact_old_gen_if_fragmented(&self, fragmentation_threshold: f64) -> (f64, usize) {
+        let frag = self.old_gen_fragmentation_ratio();
+        if frag < fragmentation_threshold {
+            return (frag, 0);
+        }
         let mut roots = crate::root::RootStack::default();
         let _safepoint = self.write_safepoint();
         let mut core = self.write_core();
@@ -793,6 +803,9 @@ impl Heap {
 
     /// Aggressive compaction wrapper.
     pub fn compact_old_gen_aggressive(&self, density_threshold: f64, max_passes: usize) -> usize {
+        if max_passes == 0 || self.storage_stats().old.reserved_bytes == 0 {
+            return 0;
+        }
         let mut roots = crate::root::RootStack::default();
         let _safepoint = self.write_safepoint();
         let mut core = self.write_core();
