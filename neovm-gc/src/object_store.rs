@@ -693,6 +693,19 @@ impl ObjectStore {
         self.remembered.effective_len()
     }
 
+    pub(crate) fn object_count(&self) -> usize {
+        self.shards
+            .iter()
+            .map(|shard| {
+                let chunks = shard.chunks.read();
+                chunks
+                    .iter()
+                    .map(|chunk| chunk.published_len())
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
     pub(crate) fn restore_remembered(&mut self, owners: Vec<ObjectKey>) {
         self.remembered.replace(owners);
     }

@@ -2749,15 +2749,21 @@ impl HeapCore {
     }
 
     pub(crate) fn storage_stats(&self) -> HeapStats {
+        self.storage_stats_snapshot(true)
+    }
+
+    fn planning_stats(&self) -> HeapStats {
+        self.storage_stats_snapshot(false)
+    }
+
+    fn storage_stats_snapshot(&self, include_candidate_counts: bool) -> HeapStats {
         let mut stats = self.stats;
         // Overlay the atomic allocation counters so observers
         // see the latest live_bytes / reserved_bytes even if
         // the non-atomic `self.stats` copy is stale (it is
         // only refreshed at GC-time boundaries).
         self.alloc_counters.apply_to(&mut stats);
-        let read = self.objects.read();
-        let (finalizable, weak, ephemeron) = read.candidate_counts();
-        let explicit_owners = read.remembered().effective_len();
+        let explicit_owners = self.objects.effective_remembered_len();
         stats.remembered_explicit_edges = explicit_owners;
         stats.remembered_explicit_owners = explicit_owners;
         stats.remembered_edges = explicit_owners;
@@ -2767,9 +2773,13 @@ impl HeapCore {
         stats.remembered_dirty_card_owners = dirty_cards;
         stats.remembered_edges = stats.remembered_edges.saturating_add(dirty_cards);
         stats.remembered_owners = stats.remembered_owners.saturating_add(dirty_cards);
-        stats.finalizable_candidates = finalizable;
-        stats.weak_candidates = weak;
-        stats.ephemeron_candidates = ephemeron;
+        if include_candidate_counts {
+            let read = self.objects.read();
+            let (finalizable, weak, ephemeron) = read.candidate_counts();
+            stats.finalizable_candidates = finalizable;
+            stats.weak_candidates = weak;
+            stats.ephemeron_candidates = ephemeron;
+        }
         // Cache the old-gen block bump cursor sum into the shared
         // stats surface so `SharedHeap::old_gen_fragmentation_ratio`
         // can read it from the cached snapshot without taking the
@@ -2807,7 +2817,7 @@ impl HeapCore {
 
     /// Build a scheduler-visible collection plan from current heap state.
     pub fn plan_for(&self, kind: CollectionKind) -> CollectionPlan {
-        let stats = self.storage_stats();
+        let stats = self.planning_stats();
         crate::collector_policy::build_plan(
             kind,
             self.object_count(),
@@ -2830,7 +2840,7 @@ impl HeapCore {
 
     pub(crate) fn refresh_recommended_plans(&self) {
         self.collector.refresh_cached_plans(
-            &self.storage_stats(),
+            &self.planning_stats(),
             &self.old_gen,
             &self.config.old,
             |kind| self.plan_for(kind),
@@ -2897,7 +2907,7 @@ impl HeapCore {
 
     /// Number of live objects currently tracked by the heap.
     pub fn object_count(&self) -> usize {
-        self.objects().len()
+        self.objects.object_count()
     }
 
     /// Return the number of queued finalizers waiting to run.
@@ -3086,7 +3096,7 @@ impl HeapCore {
         space: SpaceKind,
         bytes: usize,
     ) -> Option<CollectionPlan> {
-        let stats = self.storage_stats();
+        let stats = self.planning_stats();
         crate::collector_policy::allocation_pressure_plan(
             &stats,
             &self.config.nursery,
@@ -3101,7 +3111,7 @@ impl HeapCore {
     pub(crate) fn record_collection_stats(&mut self, cycle: CollectionStats) {
         self.stats.collections.saturating_add_assign(cycle);
         if cycle.major_collections > 0 {
-            let live_after = self.storage_stats().total_live_bytes();
+            let live_after = self.planning_stats().total_live_bytes();
             self.pacer.record_completed_cycle(&cycle, live_after);
         }
         if cycle.minor_collections > 0 {
