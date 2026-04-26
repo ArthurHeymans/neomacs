@@ -11992,6 +11992,19 @@ fn yield_safepoint_acknowledges_pending_request_epoch() {
 }
 
 #[test]
+fn try_write_safepoint_returns_would_block_for_active_registered_mutator() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    let _guard = mutator.enter_registered_safepoint_read_for_test();
+
+    let result = heap.try_write_safepoint();
+    assert!(
+        matches!(result, Err(std::sync::TryLockError::WouldBlock)),
+        "nonblocking safepoint writes should report WouldBlock while a registered mutator is active"
+    );
+}
+
+#[test]
 fn nursery_tlab_force_invalidation_via_test_helper() {
     // The test-only helper Mutator::invalidate_nursery_tlab
     // drops the current slab so the next alloc has to

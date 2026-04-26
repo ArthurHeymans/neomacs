@@ -150,24 +150,40 @@ pub(crate) struct MutatorRegistration {
 }
 
 impl MutatorRegistration {
-    pub(crate) fn enter<'a>(&self, heap: &'a Heap) -> ActiveMutatorSection<'a> {
+    pub(crate) fn enter_read<'a>(&self, heap: &'a Heap) -> RegisteredMutatorReadGuard<'a> {
         loop {
+            while heap.safepoint_requested() {
+                self.acknowledge_pending_request(heap);
+                heap.wait_for_safepoint_request_to_clear();
+            }
             self.state
                 .active_sections
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            let safepoint = heap
+                .state
+                .safepoint
+                .read()
+                .expect("heap safepoint lock poisoned");
             if !heap.safepoint_requested() {
-                return ActiveMutatorSection {
-                    heap,
-                    state: std::sync::Arc::clone(&self.state),
+                return RegisteredMutatorReadGuard {
+                    _section: ActiveMutatorSection {
+                        heap,
+                        state: std::sync::Arc::clone(&self.state),
+                    },
+                    _safepoint: safepoint,
                 };
             }
-            self.state
+            drop(safepoint);
+            let previous = self
+                .state
                 .active_sections
                 .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+            debug_assert!(
+                previous > 0,
+                "registered mutator active-section count underflow"
+            );
             self.acknowledge_pending_request(heap);
-            while heap.safepoint_requested() {
-                std::thread::yield_now();
-            }
+            heap.wait_for_safepoint_request_to_clear();
         }
     }
 
@@ -218,7 +234,14 @@ impl Drop for ActiveMutatorSection<'_> {
                 std::sync::atomic::Ordering::Release,
             );
         }
+        self.heap.notify_safepoint_waiters();
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct RegisteredMutatorReadGuard<'a> {
+    _section: ActiveMutatorSection<'a>,
+    _safepoint: std::sync::RwLockReadGuard<'a, ()>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -306,6 +329,8 @@ struct HeapState {
     alloc_counters: std::sync::Arc<crate::stats::AtomicAllocationCounters>,
     barrier_stats: std::sync::Arc<crate::stats::AtomicBarrierStats>,
     safepoint: std::sync::RwLock<()>,
+    safepoint_wait: std::sync::Mutex<()>,
+    safepoint_wait_cv: std::sync::Condvar,
     safepoint_requested: std::sync::atomic::AtomicBool,
     safepoint_epoch: std::sync::atomic::AtomicU64,
     next_mutator_id: std::sync::atomic::AtomicU64,
@@ -367,6 +392,8 @@ impl Heap {
                 alloc_counters,
                 barrier_stats,
                 safepoint: std::sync::RwLock::new(()),
+                safepoint_wait: std::sync::Mutex::new(()),
+                safepoint_wait_cv: std::sync::Condvar::new(),
                 safepoint_requested: std::sync::atomic::AtomicBool::new(false),
                 safepoint_epoch: std::sync::atomic::AtomicU64::new(0),
                 next_mutator_id: std::sync::atomic::AtomicU64::new(0),
@@ -484,25 +511,57 @@ impl Heap {
             .store(true, std::sync::atomic::Ordering::Release);
     }
 
-    fn wait_for_registered_mutators_to_quiesce(&self) {
-        loop {
-            let registrations = self
+    fn notify_safepoint_waiters(&self) {
+        self.state.safepoint_wait_cv.notify_all();
+    }
+
+    pub(crate) fn wait_for_safepoint_request_to_clear(&self) {
+        if !self.safepoint_requested() {
+            return;
+        }
+        let mut guard = self
+            .state
+            .safepoint_wait
+            .lock()
+            .expect("heap safepoint wait lock poisoned");
+        while self.safepoint_requested() {
+            guard = self
                 .state
-                .mutator_registry
-                .lock()
-                .expect("mutator registry lock poisoned")
-                .values()
-                .cloned()
-                .collect::<Vec<_>>();
-            if registrations.iter().all(|registration| {
+                .safepoint_wait_cv
+                .wait(guard)
+                .expect("heap safepoint wait lock poisoned");
+        }
+    }
+
+    fn registered_mutators_quiescent(&self) -> bool {
+        self.state
+            .mutator_registry
+            .lock()
+            .expect("mutator registry lock poisoned")
+            .values()
+            .all(|registration| {
                 registration
                     .active_sections
                     .load(std::sync::atomic::Ordering::Acquire)
                     == 0
-            }) {
-                return;
-            }
-            std::thread::yield_now();
+            })
+    }
+
+    fn wait_for_registered_mutators_to_quiesce(&self) {
+        if self.registered_mutators_quiescent() {
+            return;
+        }
+        let mut guard = self
+            .state
+            .safepoint_wait
+            .lock()
+            .expect("heap safepoint wait lock poisoned");
+        while !self.registered_mutators_quiescent() {
+            guard = self
+                .state
+                .safepoint_wait_cv
+                .wait(guard)
+                .expect("heap safepoint wait lock poisoned");
         }
     }
 
@@ -542,6 +601,7 @@ impl Heap {
         self.state
             .safepoint_requested
             .store(false, std::sync::atomic::Ordering::Release);
+        self.notify_safepoint_waiters();
         guard
     }
 
@@ -553,11 +613,18 @@ impl Heap {
         std::sync::TryLockError<std::sync::RwLockWriteGuard<'_, ()>>,
     > {
         self.begin_safepoint_request();
-        self.wait_for_registered_mutators_to_quiesce();
+        if !self.registered_mutators_quiescent() {
+            self.state
+                .safepoint_requested
+                .store(false, std::sync::atomic::Ordering::Release);
+            self.notify_safepoint_waiters();
+            return Err(std::sync::TryLockError::WouldBlock);
+        }
         let result = self.state.safepoint.try_write();
         self.state
             .safepoint_requested
             .store(false, std::sync::atomic::Ordering::Release);
+        self.notify_safepoint_waiters();
         result
     }
 
@@ -566,6 +633,9 @@ impl Heap {
         self.state
             .safepoint_requested
             .store(requested, std::sync::atomic::Ordering::Release);
+        if !requested {
+            self.notify_safepoint_waiters();
+        }
     }
 
     #[cfg(test)]

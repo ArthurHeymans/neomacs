@@ -2,7 +2,7 @@ use crate::background::BackgroundCollectionRuntime;
 use crate::barrier::{BarrierEvent, BarrierKind};
 use crate::descriptor::{GcErased, Trace, TypeDesc};
 use crate::edge::EdgeCell;
-use crate::heap::{ActiveMutatorSection, AllocError, Heap, MutatorRegistration};
+use crate::heap::{AllocError, Heap, MutatorRegistration, RegisteredMutatorReadGuard};
 use crate::object::SpaceKind;
 use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPlan, MajorMarkProgress,
@@ -179,15 +179,15 @@ impl MutatorLocal {
         }
     }
 
-    fn enter_registered_safepoint_section<'heap>(
+    fn enter_registered_safepoint_read<'heap>(
         &mut self,
         heap: &'heap Heap,
-    ) -> ActiveMutatorSection<'heap> {
+    ) -> RegisteredMutatorReadGuard<'heap> {
         self.ensure_safepoint_registration(heap);
         self.safepoint_registration
             .as_ref()
             .expect("mutator registration should exist after ensure")
-            .enter(heap)
+            .enter_read(heap)
     }
 
     fn acknowledge_pending_safepoint_request(&self, heap: &Heap) -> bool {
@@ -328,31 +328,14 @@ fn enter_safepoint_read<'heap>(
     heap: &'heap Heap,
     handle_scope_state: &mut crate::root::HandleScopeState<'heap>,
     local: &mut MutatorLocal,
-) -> MutatorSafepointReadGuard<'heap> {
+) -> RegisteredMutatorReadGuard<'heap> {
     let needs_refresh = !handle_scope_state.has_safepoint();
-    loop {
-        let section = local.enter_registered_safepoint_section(heap);
-        let safepoint = heap.read_safepoint();
-        if heap.safepoint_requested() {
-            drop(safepoint);
-            drop(section);
-            std::thread::yield_now();
-            continue;
-        }
-        if needs_refresh {
-            handle_scope_state.ensure_safepoint();
-            local.refresh_safepoint_fast_path_state(heap);
-        }
-        return MutatorSafepointReadGuard {
-            _section: section,
-            _safepoint: safepoint,
-        };
+    let guard = local.enter_registered_safepoint_read(heap);
+    if needs_refresh {
+        handle_scope_state.ensure_safepoint();
+        local.refresh_safepoint_fast_path_state(heap);
     }
-}
-
-struct MutatorSafepointReadGuard<'heap> {
-    _section: ActiveMutatorSection<'heap>,
-    _safepoint: std::sync::RwLockReadGuard<'heap, ()>,
+    guard
 }
 
 /// Mutator view onto the heap.
@@ -770,9 +753,7 @@ impl<'heap> Mutator<'heap> {
     /// scheduler a chance to run the collector thread.
     pub fn yield_safepoint(&mut self) {
         if self.local.acknowledge_pending_safepoint_request(self.heap) {
-            while self.heap.safepoint_requested() {
-                std::thread::yield_now();
-            }
+            self.heap.wait_for_safepoint_request_to_clear();
             return;
         }
         std::thread::yield_now();
@@ -896,6 +877,13 @@ impl<'heap> Mutator<'heap> {
     #[cfg(test)]
     pub(crate) fn has_nursery_tlab(&self) -> bool {
         self.local.tlab.is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn enter_registered_safepoint_read_for_test(
+        &mut self,
+    ) -> RegisteredMutatorReadGuard<'_> {
+        self.local.enter_registered_safepoint_read(self.heap)
     }
 
     #[cfg(test)]
