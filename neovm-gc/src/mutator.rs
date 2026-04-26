@@ -226,6 +226,11 @@ impl MutatorLocal {
         self.publish_local.clear();
     }
 
+    fn safepoint_fast_path_state_stale(&self, heap: &Heap) -> bool {
+        self.nursery_generation != heap.current_nursery_generation()
+            || self.prepared_full_reclaim_active != heap.prepared_full_reclaim_active()
+    }
+
     fn set_nursery_generation(&mut self, generation: u64) {
         self.nursery_generation = generation;
         if self
@@ -332,7 +337,7 @@ fn enter_safepoint_read<'heap>(
 ) -> RegisteredMutatorReadGuard<'heap> {
     let needs_refresh = !handle_scope_state.has_safepoint();
     let guard = local.enter_registered_safepoint_read(heap);
-    if needs_refresh {
+    if needs_refresh || local.safepoint_fast_path_state_stale(heap) {
         handle_scope_state.ensure_safepoint();
         local.refresh_safepoint_fast_path_state(heap);
     }
@@ -878,6 +883,11 @@ impl<'heap> Mutator<'heap> {
     #[cfg(test)]
     pub(crate) fn has_nursery_tlab(&self) -> bool {
         self.local.tlab.is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn nursery_tlab_generation_for_test(&self) -> Option<u64> {
+        self.local.tlab.as_ref().map(|tlab| tlab.generation())
     }
 
     #[cfg(test)]

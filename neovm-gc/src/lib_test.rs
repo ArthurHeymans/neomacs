@@ -12205,6 +12205,47 @@ fn nursery_tlab_invalidated_by_minor_collection() {
 }
 
 #[test]
+fn pinned_mutator_refreshes_tlab_after_external_minor_collection() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    mutator.pin_safepoint();
+    {
+        let mut scope = mutator.handle_scope();
+        mutator
+            .alloc(&mut scope, Leaf(42))
+            .expect("initial alloc reserves tlab");
+    }
+    let stale_generation = mutator
+        .nursery_tlab_generation_for_test()
+        .expect("initial allocation should reserve a tlab");
+
+    let worker_heap = heap.clone();
+    let worker = thread::spawn(move || {
+        worker_heap
+            .collect(CollectionKind::Minor)
+            .expect("minor collect from helper thread");
+    });
+    worker.join().expect("join minor collection helper");
+
+    let current_generation = heap.current_nursery_generation();
+    assert_ne!(
+        stale_generation, current_generation,
+        "minor collection should advance the nursery generation",
+    );
+    {
+        let mut scope = mutator.handle_scope();
+        mutator
+            .alloc(&mut scope, Leaf(43))
+            .expect("post-collection alloc refills tlab");
+    }
+    assert_eq!(
+        mutator.nursery_tlab_generation_for_test(),
+        Some(current_generation),
+        "pinned mutator must refresh cached generation before reusing its tlab",
+    );
+}
+
+#[test]
 fn pinned_mutator_fast_path_no_longer_blocks_stop_the_world_collect() {
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();
