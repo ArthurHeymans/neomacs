@@ -221,6 +221,29 @@ fn record_active_major_reachable_locator_marks_and_enqueues_object() {
 }
 
 #[test]
+fn record_active_major_reachable_erased_locator_marks_without_object_view() {
+    let mut state = CollectorState::default();
+    let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));
+    let object =
+        ObjectRecord::allocate(desc, SpaceKind::Pinned, Leaf).expect("allocate pinned leaf");
+    state.begin_major_mark(major_plan(), MarkWorklist::default());
+
+    let recorded =
+        record_active_major_reachable_erased_locator(&mut state, object.erased(), flat(0))
+            .expect("record active major reachable erased locator");
+
+    assert!(recorded);
+    assert!(object.is_marked());
+    assert_eq!(
+        state
+            .major_mark_progress()
+            .expect("major mark progress after erased locator")
+            .remaining_work,
+        1
+    );
+}
+
+#[test]
 fn record_active_major_post_write_marks_satb_and_incremental_targets() {
     let mut state = CollectorState::default();
     let desc = Box::leak(Box::new(fixed_type_desc::<Leaf>()));

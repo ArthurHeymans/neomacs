@@ -1386,12 +1386,19 @@ impl Heap {
         gc: GcErased,
         locator: ObjectLocator,
     ) -> Result<AllocationCommit, AllocError> {
-        let read = self.state.objects.read_marking();
-        let recorded = self.state.collector.record_active_major_reachable_locator(
-            read.raw(),
-            locator,
-            self.state.allocation_config.old.mutator_assist_slices,
-        )?;
+        let assist_slices = self.state.allocation_config.old.mutator_assist_slices;
+        let recorded = if assist_slices == 0 {
+            self.state
+                .collector
+                .record_active_major_reachable_erased_locator(gc, locator)?
+        } else {
+            let read = self.state.objects.read_marking();
+            self.state.collector.record_active_major_reachable_locator(
+                read.raw(),
+                locator,
+                assist_slices,
+            )?
+        };
         Ok(AllocationCommit {
             gc,
             plans_dirty: !recorded,
@@ -2715,13 +2722,19 @@ impl HeapCore {
             old_reserved_bytes,
             alloc_counter_local,
         );
+        let assist_slices = self.config.old.mutator_assist_slices;
         let recorded = if self.collector.active_major_mark_records_allocations() {
-            let read = self.objects.read_marking();
-            self.collector.record_active_major_reachable_locator(
-                read.raw(),
-                locator,
-                self.config.old.mutator_assist_slices,
-            )?
+            if assist_slices == 0 {
+                self.collector
+                    .record_active_major_reachable_erased_locator(gc, locator)?
+            } else {
+                let read = self.objects.read_marking();
+                self.collector.record_active_major_reachable_locator(
+                    read.raw(),
+                    locator,
+                    assist_slices,
+                )?
+            }
         } else {
             false
         };

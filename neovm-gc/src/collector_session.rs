@@ -146,6 +146,23 @@ pub(crate) fn mark_active_major_session_locator(
     collector.enqueue_active_major_mark_index(locator)
 }
 
+pub(crate) fn mark_active_major_session_erased_locator(
+    collector: &mut CollectorState,
+    object: GcErased,
+    locator: ObjectLocator,
+) -> bool {
+    if !collector.has_active_major_mark() {
+        return false;
+    }
+
+    let header = unsafe { object.header().as_ref() };
+    if !header.mark_if_unmarked() {
+        return false;
+    }
+
+    collector.enqueue_active_major_mark_index(locator)
+}
+
 pub(crate) fn record_active_major_reachable_object(
     collector: &mut CollectorState,
     objects: ObjectReadRaw<'_>,
@@ -164,6 +181,23 @@ pub(crate) fn record_active_major_reachable_object(
     if assist_slices > 0 {
         let _progress = assist_active_major_mark_slices(collector, objects, assist_slices)?;
     }
+    Ok(true)
+}
+
+pub(crate) fn record_active_major_reachable_erased_locator(
+    collector: &mut CollectorState,
+    object: GcErased,
+    locator: ObjectLocator,
+) -> Result<bool, AllocError> {
+    if !collector.has_active_major_mark()
+        || collector
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase == CollectionPhase::Reclaim)
+    {
+        return Ok(false);
+    }
+
+    let _enqueued = mark_active_major_session_erased_locator(collector, object, locator);
     Ok(true)
 }
 

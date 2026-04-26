@@ -299,6 +299,16 @@ impl CollectorStateHandle {
         })
     }
 
+    pub(crate) fn record_active_major_reachable_erased_locator(
+        &self,
+        object: crate::descriptor::GcErased,
+        locator: ObjectLocator,
+    ) -> Result<bool, AllocError> {
+        self.with_state(|state| {
+            collector_session::record_active_major_reachable_erased_locator(state, object, locator)
+        })
+    }
+
     /// Hot-path variant: when an active major-mark session is
     /// updated, cached recommendations can be refreshed from
     /// the active session itself. That avoids a full
