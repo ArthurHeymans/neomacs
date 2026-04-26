@@ -20,12 +20,165 @@
 //! neovm-gc`.
 
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
-use neovm_gc::{CollectionKind, Heap};
+use neovm_gc::spaces::{LargeObjectSpaceConfig, NurseryConfig, OldGenConfig};
+use neovm_gc::{
+    CollectionKind, Heap, HeapConfig, Relocator, Trace, Tracer, estimated_allocation_size,
+};
 use std::time::{Duration, Instant};
 
 #[path = "common/mod.rs"]
 mod common;
 use common::*;
+
+#[derive(Debug)]
+struct OldLeaf {
+    _bytes: [u8; 32],
+}
+
+unsafe impl Trace for OldLeaf {
+    fn trace(&self, _: &mut dyn Tracer) {}
+    fn relocate(&self, _: &mut dyn Relocator) {}
+}
+
+fn drive_major_mark_to_completion(mutator: &mut neovm_gc::Mutator<'_>) {
+    let plan = mutator.plan_for(CollectionKind::Major);
+    mutator.begin_major_mark(plan).expect("begin major mark");
+    while !mutator
+        .poll_active_major_mark()
+        .expect("poll active major mark")
+        .expect("major-mark session should stay active")
+        .completed
+    {}
+}
+
+fn bench_incremental_major_reclaim_commit_slice(c: &mut Criterion) {
+    let mut group = c.benchmark_group("collection_latency/incremental_major/reclaim_commit_slice");
+    group.throughput(Throughput::Elements(64));
+    group.bench_function("dead_old_4096/budget64", |b| {
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                let heap = Heap::new(HeapConfig {
+                    nursery: NurseryConfig {
+                        max_regular_object_bytes: 1,
+                        ..NurseryConfig::default()
+                    },
+                    large: LargeObjectSpaceConfig {
+                        threshold_bytes: usize::MAX,
+                        ..LargeObjectSpaceConfig::default()
+                    },
+                    old: OldGenConfig {
+                        mutator_assist_slices: 0,
+                        ..OldGenConfig::default()
+                    },
+                    ..HeapConfig::default()
+                });
+                let mut mutator = heap.mutator();
+                {
+                    let mut scope = mutator.handle_scope();
+                    for byte in 0..4_096u64 {
+                        mutator
+                            .alloc(
+                                &mut scope,
+                                OldLeaf {
+                                    _bytes: [(byte & 0xff) as u8; 32],
+                                },
+                            )
+                            .expect("alloc dead old leaf");
+                    }
+                }
+
+                drive_major_mark_to_completion(&mut mutator);
+                while !mutator
+                    .prepare_active_reclaim_if_needed()
+                    .expect("prepare active reclaim")
+                {}
+
+                let start = Instant::now();
+                black_box(
+                    mutator
+                        .advance_active_reclaim_commit_with_budget(64)
+                        .expect("advance reclaim commit slice"),
+                );
+                total += start.elapsed();
+            }
+            total
+        });
+    });
+    group.finish();
+}
+
+fn bench_deferred_auto_compaction_slice(c: &mut Criterion) {
+    let old_bytes = estimated_allocation_size::<OldLeaf>().expect("old leaf allocation size");
+    let mut group = c.benchmark_group("collection_latency/incremental_major/auto_compaction_slice");
+    group.throughput(Throughput::Bytes((old_bytes.saturating_mul(2)) as u64));
+    group.bench_function("two_sparse_blocks/budget2_records", |b| {
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                let heap = Heap::new(HeapConfig {
+                    nursery: NurseryConfig {
+                        max_regular_object_bytes: 1,
+                        ..NurseryConfig::default()
+                    },
+                    large: LargeObjectSpaceConfig {
+                        threshold_bytes: usize::MAX,
+                        ..LargeObjectSpaceConfig::default()
+                    },
+                    old: OldGenConfig {
+                        region_bytes: old_bytes.saturating_mul(3),
+                        line_bytes: 16,
+                        physical_compaction_density_threshold: 0.99,
+                        ..OldGenConfig::default()
+                    },
+                    ..HeapConfig::default()
+                });
+                let mut mutator = heap.mutator();
+                let mut keep_scope = mutator.handle_scope();
+                mutator
+                    .alloc(&mut keep_scope, OldLeaf { _bytes: [10; 32] })
+                    .expect("alloc first live old leaf");
+                {
+                    let mut dead_scope = mutator.handle_scope();
+                    mutator
+                        .alloc(&mut dead_scope, OldLeaf { _bytes: [11; 32] })
+                        .expect("alloc dead old leaf in first sparse block");
+                }
+                mutator
+                    .alloc(&mut keep_scope, OldLeaf { _bytes: [12; 32] })
+                    .expect("alloc third live old leaf");
+                mutator
+                    .alloc(&mut keep_scope, OldLeaf { _bytes: [20; 32] })
+                    .expect("alloc fourth live old leaf");
+                {
+                    let mut dead_scope = mutator.handle_scope();
+                    mutator
+                        .alloc(&mut dead_scope, OldLeaf { _bytes: [21; 32] })
+                        .expect("alloc dead old leaf in second sparse block");
+                }
+                mutator
+                    .alloc(&mut keep_scope, OldLeaf { _bytes: [22; 32] })
+                    .expect("alloc sixth live old leaf");
+
+                drive_major_mark_to_completion(&mut mutator);
+                let cycle = mutator
+                    .finish_active_major_collection_if_ready()
+                    .expect("finish active major collection")
+                    .expect("completed major collection");
+                assert_eq!(cycle.major_collections, 1);
+
+                let start = Instant::now();
+                black_box(
+                    mutator.advance_auto_compaction_with_byte_budget(old_bytes.saturating_mul(2)),
+                );
+                total += start.elapsed();
+                drop(keep_scope);
+            }
+            total
+        });
+    });
+    group.finish();
+}
 
 fn bench_minor_gc_small_nursery(c: &mut Criterion) {
     // A minor cycle with a modest nursery load. Most
@@ -139,5 +292,7 @@ criterion_group!(
     bench_minor_gc_small_nursery,
     bench_minor_gc_all_survive,
     bench_major_gc_small,
+    bench_incremental_major_reclaim_commit_slice,
+    bench_deferred_auto_compaction_slice,
 );
 criterion_main!(benches);
