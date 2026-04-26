@@ -164,14 +164,15 @@ pub(crate) trait ObjectReadView {
         self.raw().all_locators()
     }
 
-    fn immortal_sources(&self) -> Vec<GcErased> {
+    fn extend_immortal_sources(&self, sources: &mut Vec<GcErased>) {
         let raw = self.raw();
-        raw.all_locators()
-            .into_iter()
-            .map(|locator| raw.get(locator))
-            .filter(|object| object.space() == SpaceKind::Immortal)
-            .map(ObjectRecord::erased)
-            .collect()
+        sources.extend(
+            raw.all_locators()
+                .into_iter()
+                .map(|locator| raw.get(locator))
+                .filter(|object| object.space() == SpaceKind::Immortal)
+                .map(ObjectRecord::erased),
+        );
     }
 }
 
@@ -267,11 +268,12 @@ impl ObjectReadView for ObjectStoreReadGuard<'_> {
         }
     }
 
-    fn immortal_sources(&self) -> Vec<GcErased> {
+    fn extend_immortal_sources(&self, sources: &mut Vec<GcErased>) {
         let raw = self.raw();
-        self.immortal_candidate_locators()
-            .map(|locator| raw.get(locator).erased())
-            .collect()
+        sources.extend(
+            self.immortal_candidate_locators()
+                .map(|locator| raw.get(locator).erased()),
+        );
     }
 }
 
@@ -350,15 +352,17 @@ impl ObjectReadView for FlatReadView<'_> {
         }
     }
 
-    fn immortal_sources(&self) -> Vec<GcErased> {
-        self.indexes
-            .candidate_indices(&self.indexes.immortal_candidates)
-            .into_iter()
-            .map(|locator| {
-                debug_assert_eq!(locator.shard, 0);
-                self.objects[locator.slot].erased()
-            })
-            .collect()
+    fn extend_immortal_sources(&self, sources: &mut Vec<GcErased>) {
+        sources.extend(
+            self.indexes
+                .immortal_candidates
+                .iter()
+                .filter_map(|key| self.indexes.object_index.get(key).copied())
+                .map(|locator| {
+                    debug_assert_eq!(locator.shard, 0);
+                    self.objects[locator.slot].erased()
+                }),
+        );
     }
 }
 
