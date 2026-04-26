@@ -12011,6 +12011,19 @@ fn registered_mutator_count_tracks_local_lifetime() {
 }
 
 #[test]
+fn active_registered_mutator_count_tracks_read_guard_lifetime() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+
+    assert_eq!(heap.active_registered_mutator_count(), 0);
+    {
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
+        assert_eq!(heap.active_registered_mutator_count(), 1);
+    }
+    assert_eq!(heap.active_registered_mutator_count(), 0);
+}
+
+#[test]
 fn yield_safepoint_acknowledges_pending_request_epoch() {
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();
