@@ -294,6 +294,51 @@ fn finish_major_collection_drains_reclaim_with_bounded_commit_slices() {
 }
 
 #[test]
+fn major_collect_uses_bounded_active_pipeline() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    {
+        let mut scope = mutator.handle_scope();
+        for byte in 0..5000u16 {
+            mutator
+                .alloc(
+                    &mut scope,
+                    OldLeaf {
+                        _bytes: [byte as u8; 32],
+                    },
+                )
+                .expect("allocate old leaf");
+        }
+    }
+
+    let samples_before = heap.pause_histogram().total_samples;
+    let cycle = mutator
+        .collect(CollectionKind::Major)
+        .expect("run bounded major collect");
+    assert_eq!(cycle.major_collections, 1);
+    assert!(mutator.active_major_mark_plan().is_none());
+    assert!(
+        heap.pause_histogram().total_samples >= samples_before + 3,
+        "major collect should drain through multiple bounded active-major slices"
+    );
+}
+
+#[test]
 fn adaptive_pause_target_budget_scales_with_observed_throughput() {
     assert_eq!(
         adaptive_pause_target_budget(Duration::from_millis(10), 128, 2_000_000, 64, 1, 4096),
@@ -522,10 +567,10 @@ fn synchronous_major_collect_defers_auto_compaction_to_bounded_assists() {
         0,
         "synchronous major completion should schedule, not inline, physical compaction"
     );
-    assert_eq!(
-        heap.pause_histogram().total_samples,
-        pause_samples_before + 1,
-        "synchronous major should still record exactly one collection pause before deferred compaction"
+    let after_major_samples = heap.pause_histogram().total_samples;
+    assert!(
+        after_major_samples > pause_samples_before,
+        "major collect should record its bounded collection pauses before deferred compaction"
     );
 
     let budget_bytes = old_bytes.saturating_mul(2);
@@ -537,7 +582,7 @@ fn synchronous_major_collect_defers_auto_compaction_to_bounded_assists() {
     assert_eq!(heap.compaction_stats().cycles, 1);
     assert_eq!(
         heap.pause_histogram().total_samples,
-        pause_samples_before + 2
+        after_major_samples + 1
     );
 
     let mut extra_slices = 0u64;

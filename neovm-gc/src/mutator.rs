@@ -5,7 +5,7 @@ use crate::edge::EdgeCell;
 use crate::heap::{AllocError, Heap, MutatorRegistration, RegisteredMutatorReadGuard};
 use crate::object::SpaceKind;
 use crate::plan::{
-    BackgroundCollectionStatus, CollectionKind, CollectionPlan, MajorMarkProgress,
+    BackgroundCollectionStatus, CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress,
     RuntimeWorkStatus,
 };
 use crate::root::{Gc, HandleScope, Root, RootStack};
@@ -920,7 +920,25 @@ impl<'heap> Mutator<'heap> {
 
     /// Run one collection cycle against this mutator's heap.
     pub fn collect(&mut self, kind: CollectionKind) -> Result<CollectionStats, AllocError> {
-        self.with_runtime(|runtime| runtime.collect(kind))
+        match kind {
+            CollectionKind::Major => self.collect_major_in_bounded_slices(),
+            CollectionKind::Minor | CollectionKind::Full => {
+                self.with_runtime(|runtime| runtime.collect(kind))
+            }
+        }
+    }
+
+    fn collect_major_in_bounded_slices(&mut self) -> Result<CollectionStats, AllocError> {
+        match self.active_major_mark_plan() {
+            Some(plan) if plan.kind == CollectionKind::Major => {}
+            Some(_) => return Err(AllocError::CollectionInProgress),
+            None => {
+                let plan =
+                    crate::runtime::bounded_major_mark_plan(self.plan_for(CollectionKind::Major));
+                self.begin_major_mark(plan)?;
+            }
+        }
+        self.finish_major_collection()
     }
 
     /// Run physical old-gen compaction against this mutator's
@@ -1099,7 +1117,32 @@ impl<'heap> Mutator<'heap> {
 
     /// Finish the current persistent major-mark session and reclaim.
     pub fn finish_major_collection(&mut self) -> Result<CollectionStats, AllocError> {
-        self.with_runtime(|runtime| runtime.finish_major_collection())
+        loop {
+            let Some(plan) = self.active_major_mark_plan() else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            if plan.phase == CollectionPhase::Reclaim
+                || self
+                    .major_mark_progress()
+                    .is_some_and(|progress| progress.completed)
+            {
+                if let Some(cycle) =
+                    self.with_runtime(|runtime| runtime.finish_active_major_collection_if_ready())?
+                {
+                    return Ok(cycle);
+                }
+                continue;
+            }
+
+            let Some(progress) = self.with_runtime(|runtime| runtime.poll_active_major_mark())?
+            else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            debug_assert!(
+                progress.completed || progress.drained_objects > 0,
+                "active major mark should either complete or drain at least one object per poll"
+            );
+        }
     }
 
     /// Advance up to `max_slices` of the active major-mark session.

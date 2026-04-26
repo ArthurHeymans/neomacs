@@ -41,9 +41,20 @@ const MAX_RECLAIM_PREP_SLICE_BUDGET: usize = 16 * 1024;
 /// concurrent mark slice size from `CollectionPlan::mark_slice_budget`.
 pub const DEFAULT_RECLAIM_COMMIT_SLICE_BUDGET: usize = 64;
 const MAX_RECLAIM_COMMIT_SLICE_BUDGET: usize = 4096;
+pub(crate) const DEFAULT_MAJOR_MARK_SLICE_BUDGET: usize = 1024;
 const DEFAULT_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 256 * 1024;
 const MIN_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 64 * 1024;
 const MAX_AUTO_COMPACTION_SLICE_BUDGET_BYTES: usize = 8 * 1024 * 1024;
+
+pub(crate) fn bounded_major_mark_plan(mut plan: CollectionPlan) -> CollectionPlan {
+    if matches!(plan.kind, CollectionKind::Major | CollectionKind::Full) {
+        plan.mark_slice_budget = plan
+            .mark_slice_budget
+            .max(1)
+            .min(DEFAULT_MAJOR_MARK_SLICE_BUDGET);
+    }
+    plan
+}
 
 fn adaptive_pause_target_budget(
     target_pause: Duration,
