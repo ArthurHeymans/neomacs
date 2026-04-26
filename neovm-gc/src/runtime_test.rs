@@ -366,6 +366,13 @@ fn synchronous_major_collect_defers_auto_compaction_to_bounded_assists() {
         .expect("run synchronous major collect");
     assert_eq!(cycle.major_collections, 1);
     assert_eq!(
+        mutator.runtime_work_status(),
+        RuntimeWorkStatus::PendingAutoCompaction {
+            remaining_bytes: old_bytes.saturating_mul(4),
+        },
+        "synchronous major completion should publish deferred auto-compaction work"
+    );
+    assert_eq!(
         heap.compaction_stats().cycles,
         0,
         "synchronous major completion should schedule, not inline, physical compaction"
@@ -383,7 +390,10 @@ fn synchronous_major_collect_defers_auto_compaction_to_bounded_assists() {
         "first deferred compaction assist should move one sparse block"
     );
     assert_eq!(heap.compaction_stats().cycles, 1);
-    assert_eq!(heap.pause_histogram().total_samples, pause_samples_before + 2);
+    assert_eq!(
+        heap.pause_histogram().total_samples,
+        pause_samples_before + 2
+    );
 
     let mut extra_slices = 0u64;
     while extra_slices < 8 {

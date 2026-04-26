@@ -411,6 +411,10 @@ impl Heap {
         self.read_core().runtime_work_status()
     }
 
+    pub(crate) fn auto_compaction_state(&self) -> AutoCompactionState {
+        self.read_core().auto_compaction_state()
+    }
+
     /// Run physical old-gen compaction.
     pub fn compact_old_gen_physical(&self, density_threshold: f64) -> usize {
         let mut roots = crate::root::RootStack::default();
@@ -1357,6 +1361,14 @@ impl crate::background::BackgroundCollectionRuntime for HeapCollectorRuntime<'_>
     fn commit_active_reclaim_if_ready(&mut self) -> Result<Option<CollectionStats>, AllocError> {
         HeapCollectorRuntime::commit_active_reclaim_if_ready(self)
     }
+
+    fn runtime_work_status(&self) -> RuntimeWorkStatus {
+        HeapCollectorRuntime::runtime_work_status(self)
+    }
+
+    fn advance_auto_compaction(&mut self) -> usize {
+        HeapCollectorRuntime::advance_auto_compaction(self)
+    }
 }
 
 /// Test-only guard returned by
@@ -1735,7 +1747,8 @@ impl HeapCore {
             .compacted_bytes
             .saturating_add(selected_bytes)
             >= self.auto_compaction.target_bytes;
-        let remaining = moved_records > 0 && !reached_target && !self.auto_compaction_candidates().is_empty();
+        let remaining =
+            moved_records > 0 && !reached_target && !self.auto_compaction_candidates().is_empty();
         if !remaining {
             self.auto_compaction.pending = false;
         }
@@ -2187,9 +2200,22 @@ impl HeapCore {
         self.runtime_state.snapshot()
     }
 
+    pub(crate) fn pending_auto_compaction_bytes(&self) -> usize {
+        if !self.auto_compaction.pending {
+            return 0;
+        }
+        self.auto_compaction
+            .target_bytes
+            .saturating_sub(self.auto_compaction.compacted_bytes)
+            .max(1)
+    }
+
     /// Return runtime-side follow-up work that remains outside GC commit.
     pub fn runtime_work_status(&self) -> RuntimeWorkStatus {
-        self.runtime_state.runtime_work_status()
+        RuntimeWorkStatus::from_pending_work(
+            self.runtime_state.pending_finalizer_count(),
+            self.pending_auto_compaction_bytes(),
+        )
     }
 
     pub(crate) fn collector_shared_snapshot(&self) -> CollectorSharedSnapshot {

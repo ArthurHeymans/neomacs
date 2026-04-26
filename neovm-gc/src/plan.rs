@@ -100,15 +100,50 @@ pub enum RuntimeWorkStatus {
         /// Number of queued finalizers waiting to run.
         count: usize,
     },
+    /// Deferred post-major physical compaction is still pending.
+    PendingAutoCompaction {
+        /// Remaining live bytes the deferred compaction queue still targets.
+        remaining_bytes: usize,
+    },
+    /// Both queued finalizers and deferred auto-compaction remain pending.
+    PendingFinalizersAndAutoCompaction {
+        /// Number of queued finalizers waiting to run.
+        count: usize,
+        /// Remaining live bytes the deferred compaction queue still targets.
+        remaining_bytes: usize,
+    },
 }
 
 impl RuntimeWorkStatus {
     pub(crate) const fn from_pending_finalizers(count: usize) -> Self {
-        if count == 0 {
-            Self::Idle
-        } else {
-            Self::PendingFinalizers { count }
+        Self::from_pending_work(count, 0)
+    }
+
+    pub(crate) const fn from_pending_work(
+        pending_finalizers: usize,
+        pending_auto_compaction_bytes: usize,
+    ) -> Self {
+        match (pending_finalizers > 0, pending_auto_compaction_bytes > 0) {
+            (false, false) => Self::Idle,
+            (true, false) => Self::PendingFinalizers {
+                count: pending_finalizers,
+            },
+            (false, true) => Self::PendingAutoCompaction {
+                remaining_bytes: pending_auto_compaction_bytes,
+            },
+            (true, true) => Self::PendingFinalizersAndAutoCompaction {
+                count: pending_finalizers,
+                remaining_bytes: pending_auto_compaction_bytes,
+            },
         }
+    }
+
+    /// Whether deferred post-major auto-compaction work is still pending.
+    pub const fn has_pending_auto_compaction(self) -> bool {
+        matches!(
+            self,
+            Self::PendingAutoCompaction { .. } | Self::PendingFinalizersAndAutoCompaction { .. }
+        )
     }
 }
 

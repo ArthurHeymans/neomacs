@@ -45,12 +45,14 @@ unsafe impl Trace for OldLeaf {
 struct FakeRuntime {
     active_plan: Option<CollectionPlan>,
     recommended_plan: Option<CollectionPlan>,
+    runtime_work: RuntimeWorkStatus,
     poll_results: VecDeque<Result<Option<MajorMarkProgress>, AllocError>>,
     prepare_results: VecDeque<Result<bool, AllocError>>,
     advance_results: VecDeque<Result<Option<CollectionStats>, AllocError>>,
     begin_calls: usize,
     prepare_calls: usize,
     advance_calls: usize,
+    auto_compaction_calls: usize,
     commit_calls: usize,
     finish_calls: usize,
 }
@@ -60,12 +62,14 @@ impl FakeRuntime {
         Self {
             active_plan: Some(major_reclaim_plan()),
             recommended_plan: None,
+            runtime_work: RuntimeWorkStatus::Idle,
             poll_results: VecDeque::new(),
             prepare_results: VecDeque::new(),
             advance_results: VecDeque::new(),
             begin_calls: 0,
             prepare_calls: 0,
             advance_calls: 0,
+            auto_compaction_calls: 0,
             commit_calls: 0,
             finish_calls: 0,
         }
@@ -117,6 +121,16 @@ impl BackgroundCollectionRuntime for FakeRuntime {
     ) -> Result<Option<CollectionStats>, AllocError> {
         self.finish_calls = self.finish_calls.saturating_add(1);
         Ok(None)
+    }
+
+    fn runtime_work_status(&self) -> RuntimeWorkStatus {
+        self.runtime_work
+    }
+
+    fn advance_auto_compaction(&mut self) -> usize {
+        self.auto_compaction_calls = self.auto_compaction_calls.saturating_add(1);
+        self.runtime_work = RuntimeWorkStatus::Idle;
+        1
     }
 }
 
@@ -184,6 +198,36 @@ fn repeated_ticks_finish_after_multiple_reclaim_assists() {
     ));
     assert_eq!(runtime.advance_calls, 2);
     assert_eq!(collector.stats().sessions_finished, 1);
+}
+
+#[test]
+fn idle_tick_services_pending_auto_compaction_without_starting_major_mark() {
+    let mut runtime = FakeRuntime {
+        active_plan: None,
+        recommended_plan: None,
+        runtime_work: RuntimeWorkStatus::PendingAutoCompaction {
+            remaining_bytes: 64,
+        },
+        poll_results: VecDeque::new(),
+        prepare_results: VecDeque::new(),
+        advance_results: VecDeque::new(),
+        begin_calls: 0,
+        prepare_calls: 0,
+        advance_calls: 0,
+        auto_compaction_calls: 0,
+        commit_calls: 0,
+        finish_calls: 0,
+    };
+
+    let mut collector = BackgroundCollector::new(BackgroundCollectorConfig::default());
+    let status = collector
+        .tick(&mut runtime)
+        .expect("background tick should service deferred auto compaction");
+
+    assert_eq!(status, BackgroundCollectionStatus::Idle);
+    assert_eq!(runtime.begin_calls, 0);
+    assert_eq!(runtime.auto_compaction_calls, 1);
+    assert_eq!(runtime.runtime_work, RuntimeWorkStatus::Idle);
 }
 
 #[test]

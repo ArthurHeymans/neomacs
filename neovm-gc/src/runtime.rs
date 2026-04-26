@@ -654,14 +654,11 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Prepare reclaim for the active major collection once mark work is fully drained.
     pub fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError> {
-        let Some((pause_nanos, scanned_objects)) = self
-            .heap
-            .collector_handle()
-            .active_reclaim_prep_progress()
+        let Some((pause_nanos, scanned_objects)) =
+            self.heap.collector_handle().active_reclaim_prep_progress()
         else {
-            return self.prepare_active_reclaim_if_needed_with_budget(
-                DEFAULT_RECLAIM_PREP_SLICE_BUDGET,
-            );
+            return self
+                .prepare_active_reclaim_if_needed_with_budget(DEFAULT_RECLAIM_PREP_SLICE_BUDGET);
         };
         let budget = adaptive_pause_target_budget(
             self.heap.pacer().config().target_pause,
@@ -729,13 +726,15 @@ impl<'heap> CollectorRuntime<'heap> {
             return Ok(false);
         };
         if !state.worklist.is_empty() || state.reclaim_prepared {
-            self.heap.collector_handle().restore_major_mark_state_and_refresh(
-                state,
-                &self.heap.storage_stats(),
-                self.heap.old_gen(),
-                self.heap.old_config(),
-                |kind| self.heap.plan_for(kind),
-            );
+            self.heap
+                .collector_handle()
+                .restore_major_mark_state_and_refresh(
+                    state,
+                    &self.heap.storage_stats(),
+                    self.heap.old_gen(),
+                    self.heap.old_config(),
+                    |kind| self.heap.plan_for(kind),
+                );
             return Ok(false);
         }
 
@@ -778,13 +777,15 @@ impl<'heap> CollectorRuntime<'heap> {
             state.prepared_reclaim = Some(prepared_reclaim);
             state.reclaim_commit_pause_nanos = 0;
         }
-        self.heap.collector_handle().restore_major_mark_state_and_refresh(
-            state,
-            &self.heap.storage_stats(),
-            self.heap.old_gen(),
-            self.heap.old_config(),
-            |kind| self.heap.plan_for(kind),
-        );
+        self.heap
+            .collector_handle()
+            .restore_major_mark_state_and_refresh(
+                state,
+                &self.heap.storage_stats(),
+                self.heap.old_gen(),
+                self.heap.old_config(),
+                |kind| self.heap.plan_for(kind),
+            );
         Ok(completed)
     }
 
@@ -1035,6 +1036,9 @@ impl<'heap> CollectorRuntime<'heap> {
         &mut self,
     ) -> Result<BackgroundCollectionStatus, AllocError> {
         if self.active_major_mark_plan().is_none() {
+            if self.runtime_work_status().has_pending_auto_compaction() {
+                let _ = self.advance_auto_compaction();
+            }
             return Ok(BackgroundCollectionStatus::Idle);
         }
 
@@ -1395,6 +1399,21 @@ impl SharedCollectorRuntime {
         self.runtime
             .runtime_work_status()
             .map_err(Self::map_shared_heap_error)
+    }
+
+    /// Advance one deferred post-major auto-compaction slice.
+    pub fn advance_auto_compaction(&self) -> Result<usize, SharedBackgroundError> {
+        self.with_runtime_update(|runtime| Ok(runtime.advance_auto_compaction()))
+            .map_err(Self::map_shared_heap_error)?
+            .map_err(SharedBackgroundError::Collection)
+    }
+
+    /// Advance one deferred post-major auto-compaction slice without
+    /// blocking on heap contention.
+    pub fn try_advance_auto_compaction(&self) -> Result<usize, SharedBackgroundError> {
+        self.try_with_runtime_update(|runtime| Ok(runtime.advance_auto_compaction()))
+            .map_err(Self::map_shared_heap_error)?
+            .map_err(SharedBackgroundError::Collection)
     }
 
     /// Run and drain queued finalizers.
@@ -1983,6 +2002,9 @@ impl SharedCollectorRuntime {
         &self,
     ) -> Result<BackgroundCollectionStatus, SharedBackgroundError> {
         if self.active_major_mark_plan()?.is_none() {
+            if self.runtime_work_status()?.has_pending_auto_compaction() {
+                let _ = self.advance_auto_compaction()?;
+            }
             return Ok(BackgroundCollectionStatus::Idle);
         }
 
@@ -2015,6 +2037,9 @@ impl SharedCollectorRuntime {
         &self,
     ) -> Result<BackgroundCollectionStatus, SharedBackgroundError> {
         if self.active_major_mark_plan()?.is_none() {
+            if self.runtime_work_status()?.has_pending_auto_compaction() {
+                let _ = self.try_advance_auto_compaction()?;
+            }
             return Ok(BackgroundCollectionStatus::Idle);
         }
 
@@ -2077,6 +2102,14 @@ impl BackgroundCollectionRuntime for CollectorRuntime<'_> {
 
     fn commit_active_reclaim_if_ready(&mut self) -> Result<Option<CollectionStats>, AllocError> {
         self.commit_active_reclaim_if_ready()
+    }
+
+    fn runtime_work_status(&self) -> RuntimeWorkStatus {
+        self.runtime_work_status()
+    }
+
+    fn advance_auto_compaction(&mut self) -> usize {
+        self.advance_auto_compaction()
     }
 }
 
@@ -2149,5 +2182,15 @@ impl BackgroundCollectionRuntime for SharedCollectorRuntime {
             }
             SharedBackgroundError::Collection(error) => error,
         })
+    }
+
+    fn runtime_work_status(&self) -> RuntimeWorkStatus {
+        SharedCollectorRuntime::runtime_work_status(self)
+            .expect("shared collector runtime should not be poisoned")
+    }
+
+    fn advance_auto_compaction(&mut self) -> usize {
+        SharedCollectorRuntime::advance_auto_compaction(self)
+            .expect("shared collector runtime should not be poisoned")
     }
 }

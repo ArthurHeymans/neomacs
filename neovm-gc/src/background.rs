@@ -1,5 +1,5 @@
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState, CollectorStateHandle};
-use crate::heap::{AllocError, Heap};
+use crate::heap::{AllocError, AutoCompactionState, Heap};
 use crate::mutator::Mutator;
 use crate::pacer::{Pacer, PacerConfig, PacerStats};
 use crate::pause_stats::PauseHistogram;
@@ -48,6 +48,12 @@ pub trait BackgroundCollectionRuntime {
     fn finish_active_major_collection_if_ready(
         &mut self,
     ) -> Result<Option<CollectionStats>, AllocError>;
+
+    /// Return runtime-side follow-up work that remains outside GC commit.
+    fn runtime_work_status(&self) -> RuntimeWorkStatus;
+
+    /// Advance one deferred post-major auto-compaction slice.
+    fn advance_auto_compaction(&mut self) -> usize;
 }
 
 /// Background collector coordinator configuration.
@@ -217,6 +223,7 @@ struct SharedHeapSnapshot {
     pauses: PauseHistogram,
     compaction: CompactionStats,
     barriers: BarrierStats,
+    auto_compaction: AutoCompactionState,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -294,6 +301,7 @@ impl SharedHeapSnapshot {
             pauses: heap.pause_histogram(),
             compaction: heap.compaction_stats(),
             barriers: heap.barrier_stats(),
+            auto_compaction: heap.auto_compaction_state(),
         }
     }
 }
@@ -306,6 +314,16 @@ impl SharedRuntimeSnapshot {
             pending_finalizers,
         }
     }
+}
+
+fn pending_auto_compaction_bytes(auto_compaction: AutoCompactionState) -> usize {
+    if !auto_compaction.pending {
+        return 0;
+    }
+    auto_compaction
+        .target_bytes
+        .saturating_sub(auto_compaction.compacted_bytes)
+        .max(1)
 }
 
 impl SharedCollectorHandle {
@@ -592,9 +610,14 @@ impl SharedRuntimeHandle {
     }
 
     pub(crate) fn runtime_work_status(&self) -> Result<RuntimeWorkStatus, SharedHeapError> {
-        self.read_snapshot(|snapshot| {
-            RuntimeWorkStatus::from_pending_finalizers(snapshot.pending_finalizers)
-        })
+        let pending_finalizers = self.read_snapshot(|snapshot| snapshot.pending_finalizers)?;
+        let pending_auto_compaction = self.read_heap_snapshot(|snapshot| {
+            pending_auto_compaction_bytes(snapshot.auto_compaction)
+        })?;
+        Ok(RuntimeWorkStatus::from_pending_work(
+            pending_finalizers,
+            pending_auto_compaction,
+        ))
     }
 
     pub(crate) fn observe_heap_status(&self) -> Result<SharedHeapStatus, SharedHeapError> {
@@ -826,15 +849,17 @@ fn shared_heap_status_from_parts(
     collector_snapshot: &CollectorSharedSnapshot,
 ) -> SharedHeapStatus {
     let stats = shared_heap_stats_from_parts(heap_snapshot, runtime_snapshot);
+    let runtime_work = RuntimeWorkStatus::from_pending_work(
+        runtime_snapshot.pending_finalizers,
+        pending_auto_compaction_bytes(heap_snapshot.auto_compaction),
+    );
     SharedHeapStatus {
         stats,
         pacer: heap_snapshot.pacer,
         pauses: heap_snapshot.pauses,
         compaction: heap_snapshot.compaction,
         barriers: heap_snapshot.barriers,
-        runtime_work: RuntimeWorkStatus::from_pending_finalizers(
-            runtime_snapshot.pending_finalizers,
-        ),
+        runtime_work,
         recommended_plan: collector_snapshot.recommended_plan.clone(),
         recommended_background_plan: collector_snapshot.recommended_background_plan.clone(),
         last_completed_plan: collector_snapshot.last_completed_plan.clone(),
@@ -844,7 +869,7 @@ fn shared_heap_status_from_parts(
 }
 
 fn shared_background_status_from_parts(
-    _heap_snapshot: &SharedHeapSnapshot,
+    heap_snapshot: &SharedHeapSnapshot,
     runtime_snapshot: &SharedRuntimeSnapshot,
     collector_snapshot: &CollectorSharedSnapshot,
 ) -> SharedBackgroundStatus {
@@ -852,8 +877,9 @@ fn shared_background_status_from_parts(
         recommended_background_plan: collector_snapshot.recommended_background_plan.clone(),
         active_major_mark_plan: collector_snapshot.active_major_mark_plan.clone(),
         major_mark_progress: collector_snapshot.major_mark_progress,
-        runtime_work: RuntimeWorkStatus::from_pending_finalizers(
+        runtime_work: RuntimeWorkStatus::from_pending_work(
             runtime_snapshot.pending_finalizers,
+            pending_auto_compaction_bytes(heap_snapshot.auto_compaction),
         ),
         pending_finalizers: runtime_snapshot.pending_finalizers,
     }
@@ -1872,6 +1898,10 @@ impl BackgroundCollector {
         runtime: &mut R,
     ) -> Result<BackgroundCollectionStatus, AllocError> {
         if !self.ensure_active_session(runtime)? {
+            if runtime.runtime_work_status().has_pending_auto_compaction() {
+                self.stats.rounds = self.stats.rounds.saturating_add(1);
+                let _ = runtime.advance_auto_compaction();
+            }
             return Ok(BackgroundCollectionStatus::Idle);
         }
 
@@ -1988,9 +2018,11 @@ impl BackgroundCollector {
     fn snapshot_tick(
         &mut self,
         snapshot: &CollectorSharedSnapshot,
+        pending_auto_compaction: bool,
     ) -> Option<BackgroundCollectionStatus> {
         if snapshot.active_major_mark_plan.is_none()
             && snapshot.recommended_background_plan.is_none()
+            && !pending_auto_compaction
         {
             return Some(self.idle_tick());
         }
@@ -2044,6 +2076,14 @@ impl BackgroundCollector {
         nonblocking: bool,
     ) -> Result<BackgroundCollectionStatus, SharedBackgroundError> {
         if !self.ensure_active_shared_session(runtime, nonblocking)? {
+            if runtime.runtime_work_status()?.has_pending_auto_compaction() {
+                self.stats.rounds = self.stats.rounds.saturating_add(1);
+                if nonblocking {
+                    let _ = runtime.try_advance_auto_compaction()?;
+                } else {
+                    let _ = runtime.advance_auto_compaction()?;
+                }
+            }
             return Ok(BackgroundCollectionStatus::Idle);
         }
 
@@ -2078,7 +2118,8 @@ impl BackgroundCollector {
         runtime: &SharedCollectorRuntime,
     ) -> Result<BackgroundCollectionStatus, SharedBackgroundError> {
         let snapshot = runtime.collector_snapshot()?;
-        if let Some(status) = self.snapshot_tick(&snapshot) {
+        let pending_auto_compaction = runtime.runtime_work_status()?.has_pending_auto_compaction();
+        if let Some(status) = self.snapshot_tick(&snapshot, pending_auto_compaction) {
             return Ok(status);
         }
         match self.try_tick_shared_after_snapshot(runtime) {
@@ -2098,7 +2139,8 @@ impl BackgroundCollector {
         runtime: &SharedCollectorRuntime,
     ) -> Result<BackgroundCollectionStatus, SharedBackgroundError> {
         let snapshot = runtime.collector_snapshot()?;
-        if let Some(status) = self.snapshot_tick(&snapshot) {
+        let pending_auto_compaction = runtime.runtime_work_status()?.has_pending_auto_compaction();
+        if let Some(status) = self.snapshot_tick(&snapshot, pending_auto_compaction) {
             return Ok(status);
         }
         match self.try_tick_shared_after_snapshot(runtime) {
@@ -2611,7 +2653,11 @@ fn worker_loop(
         let snapshot = runtime
             .collector_snapshot()
             .map_err(|_| BackgroundWorkerError::LockPoisoned)?;
-        if let Some(status) = collector.snapshot_tick(&snapshot) {
+        let pending_auto_compaction = runtime
+            .runtime_work_status()
+            .map_err(|_| BackgroundWorkerError::LockPoisoned)?
+            .has_pending_auto_compaction();
+        if let Some(status) = collector.snapshot_tick(&snapshot, pending_auto_compaction) {
             stats.add_loops(1);
             if matches!(status, BackgroundCollectionStatus::Idle) {
                 stats.add_idle_loops(1);

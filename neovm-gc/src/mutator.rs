@@ -1327,4 +1327,12 @@ impl BackgroundCollectionRuntime for Mutator<'_> {
     fn commit_active_reclaim_if_ready(&mut self) -> Result<Option<CollectionStats>, AllocError> {
         self.commit_active_reclaim_if_ready()
     }
+
+    fn runtime_work_status(&self) -> RuntimeWorkStatus {
+        self.runtime_work_status()
+    }
+
+    fn advance_auto_compaction(&mut self) -> usize {
+        self.advance_auto_compaction()
+    }
 }

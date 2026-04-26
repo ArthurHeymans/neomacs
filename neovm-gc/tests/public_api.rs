@@ -9930,6 +9930,14 @@ fn public_api_major_cycle_schedules_deferred_auto_compaction_when_threshold_set(
                 .collect(CollectionKind::Major)
                 .expect("major collect with deferred auto compaction");
             assert_eq!(cycle.major_collections, 1);
+            assert!(
+                matches!(
+                    mutator.runtime_work_status(),
+                    RuntimeWorkStatus::PendingAutoCompaction { remaining_bytes }
+                        if remaining_bytes > 0
+                ),
+                "major completion should expose deferred auto-compaction as pending runtime work"
+            );
             assert_eq!(
                 mutator.heap().compaction_stats().cycles,
                 0,
@@ -9948,6 +9956,89 @@ fn public_api_major_cycle_schedules_deferred_auto_compaction_when_threshold_set(
             );
         })
         .expect("with_mutator");
+}
+
+#[test]
+fn public_api_shared_background_service_tick_services_deferred_auto_compaction() {
+    use neovm_gc::CollectionKind;
+
+    let old_bytes =
+        neovm_gc::estimated_allocation_size::<OldLeaf>().expect("old leaf allocation size");
+    let shared = neovm_gc::SharedHeap::new(HeapConfig {
+        nursery: neovm_gc::spaces::NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..neovm_gc::spaces::NurseryConfig::default()
+        },
+        large: neovm_gc::spaces::LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..neovm_gc::spaces::LargeObjectSpaceConfig::default()
+        },
+        old: neovm_gc::spaces::OldGenConfig {
+            region_bytes: old_bytes.saturating_mul(3),
+            line_bytes: 16,
+            concurrent_mark_workers: 1,
+            physical_compaction_density_threshold: 0.99,
+            ..neovm_gc::spaces::OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+
+    shared
+        .with_mutator(|mutator| {
+            let mut keep = mutator.handle_scope();
+            let first = mutator
+                .alloc(&mut keep, OldLeaf([10; 32]))
+                .expect("alloc first old leaf");
+            mutator
+                .alloc(&mut keep, OldLeaf([11; 32]))
+                .expect("alloc dead old leaf in first block");
+            let third = mutator
+                .alloc(&mut keep, OldLeaf([12; 32]))
+                .expect("alloc third old leaf");
+            let fourth = mutator
+                .alloc(&mut keep, OldLeaf([20; 32]))
+                .expect("alloc fourth old leaf");
+            mutator
+                .alloc(&mut keep, OldLeaf([21; 32]))
+                .expect("alloc dead old leaf in second block");
+            let sixth = mutator
+                .alloc(&mut keep, OldLeaf([22; 32]))
+                .expect("alloc sixth old leaf");
+            let _ = (&first, &third, &fourth, &sixth);
+
+            let cycle = mutator
+                .collect(CollectionKind::Major)
+                .expect("major collect with deferred auto compaction");
+            assert_eq!(cycle.major_collections, 1);
+        })
+        .expect("with_mutator");
+
+    assert!(
+        matches!(
+            shared
+                .collector_runtime()
+                .runtime_work_status()
+                .expect("runtime work status before background tick"),
+            RuntimeWorkStatus::PendingAutoCompaction { remaining_bytes }
+                if remaining_bytes > 0
+        ),
+        "shared collector runtime should publish deferred auto-compaction work"
+    );
+
+    let mut service = shared.background_service(neovm_gc::BackgroundCollectorConfig::default());
+    assert_eq!(
+        service.tick().expect("shared background tick"),
+        neovm_gc::BackgroundCollectionStatus::Idle
+    );
+    assert!(
+        shared
+            .status()
+            .expect("shared status after background tick")
+            .compaction
+            .cycles
+            >= 1,
+        "idle shared background tick should advance deferred auto-compaction"
+    );
 }
 
 #[test]
