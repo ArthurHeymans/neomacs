@@ -73,9 +73,10 @@ pub struct MutatorLocal {
     /// forcing a refill.
     pub(crate) tlab: Option<crate::spaces::nursery_arena::NurseryTlab>,
     /// Bounded diagnostic ring of the most recent barrier
-    /// events this mutator has recorded. Updated by
-    /// [`MutatorLocal::push_barrier_event`] from the barrier
-    /// path in [`crate::runtime::CollectorRuntime::record_post_write_with_local`].
+    /// events this mutator has recorded when
+    /// [`crate::heap::HeapConfig::record_barrier_events`] is
+    /// enabled. Updated by [`MutatorLocal::push_barrier_event`]
+    /// from the barrier path.
     /// External observers read it via
     /// [`Mutator::recent_barrier_events`].
     ///
@@ -1023,7 +1024,10 @@ impl<'heap> Mutator<'heap> {
 
     /// Return the bounded ring of recent barrier events
     /// recorded by this mutator. Events recorded through
-    /// other mutators are not visible here.
+    /// other mutators are not visible here, and the ring is
+    /// only populated when
+    /// [`crate::heap::HeapConfig::record_barrier_events`] is
+    /// enabled.
     ///
     /// Per-mutator ownership of the ring removes contention
     /// on the ring write lock in the multi-mutator target.
@@ -1305,27 +1309,32 @@ impl<'heap> Mutator<'heap> {
         let active_major_mark = self.heap.has_active_major_mark();
         let record_satb = old_erased.is_some() && active_major_mark;
         let heap = self.heap;
+        let record_barrier_events = heap.record_barrier_events();
 
         heap.bump_barrier_stats(BarrierKind::PostWrite, self.local.barrier_stats_local_mut());
-        self.local.push_barrier_event(
-            BarrierKind::PostWrite,
-            owner_erased,
-            slot,
-            old_erased,
-            new_erased,
-        );
-        if record_satb {
-            heap.bump_barrier_stats(
-                BarrierKind::SatbPreWrite,
-                self.local.barrier_stats_local_mut(),
-            );
+        if record_barrier_events {
             self.local.push_barrier_event(
-                BarrierKind::SatbPreWrite,
+                BarrierKind::PostWrite,
                 owner_erased,
                 slot,
                 old_erased,
                 new_erased,
             );
+        }
+        if record_satb {
+            heap.bump_barrier_stats(
+                BarrierKind::SatbPreWrite,
+                self.local.barrier_stats_local_mut(),
+            );
+            if record_barrier_events {
+                self.local.push_barrier_event(
+                    BarrierKind::SatbPreWrite,
+                    owner_erased,
+                    slot,
+                    old_erased,
+                    new_erased,
+                );
+            }
         }
 
         let needs_remembered_edge = new_erased.is_some_and(|target| {

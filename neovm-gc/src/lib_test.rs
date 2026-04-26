@@ -2616,7 +2616,10 @@ fn collector_runtime_prepare_typed_allocation_starts_concurrent_major_session() 
 
 #[test]
 fn collector_runtime_record_post_write_tracks_barrier_events_and_remembered_edge() {
-    let heap = Heap::new(HeapConfig::default());
+    let heap = Heap::new(HeapConfig {
+        record_barrier_events: true,
+        ..HeapConfig::default()
+    });
     let (owner_gc, target_gc) = {
         let mut mutator = heap.mutator();
         let mut scope = mutator.handle_scope();
@@ -3313,6 +3316,7 @@ fn persistent_major_mark_session_post_write_barrier_keeps_newly_reachable_object
             threshold_bytes: usize::MAX,
             ..LargeObjectSpaceConfig::default()
         },
+        record_barrier_events: true,
         ..HeapConfig::default()
     });
     let mut mutator = heap.mutator();
@@ -3384,6 +3388,7 @@ fn persistent_major_mark_session_satb_keeps_overwritten_snapshot_edge() {
             threshold_bytes: usize::MAX,
             ..LargeObjectSpaceConfig::default()
         },
+        record_barrier_events: true,
         ..HeapConfig::default()
     });
     let mut mutator = heap.mutator();
@@ -5595,7 +5600,10 @@ fn minor_collection_promotes_reachable_nursery_objects() {
 
 #[test]
 fn minor_collection_traces_young_objects_reachable_from_old_objects() {
-    let heap = Heap::new(HeapConfig::default());
+    let heap = Heap::new(HeapConfig {
+        record_barrier_events: true,
+        ..HeapConfig::default()
+    });
     let mut mutator = heap.mutator();
     let mut parent_scope = mutator.handle_scope();
     let parent = mutator
@@ -5741,7 +5749,10 @@ fn minor_collection_drops_young_child_without_barrier_on_non_root_old_owner() {
 
 #[test]
 fn minor_collection_keeps_young_child_with_barrier_on_non_root_old_owner() {
-    let heap = Heap::new(HeapConfig::default());
+    let heap = Heap::new(HeapConfig {
+        record_barrier_events: true,
+        ..HeapConfig::default()
+    });
     let mut mutator = heap.mutator();
     let mut root_scope = mutator.handle_scope();
     let root = mutator
@@ -11369,6 +11380,7 @@ fn fresh_concurrent_marker_shared_heap() -> SharedHeap {
             mutator_assist_slices: 0,
             ..crate::spaces::OldGenConfig::default()
         },
+        record_barrier_events: true,
         ..HeapConfig::default()
     })
     .into_shared()

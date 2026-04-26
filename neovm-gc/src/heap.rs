@@ -47,6 +47,11 @@ pub struct HeapConfig {
     /// conservative trigger thresholds. The pacer can also be
     /// reconfigured after construction via [`Heap::set_pacer_config`].
     pub pacer: PacerConfig,
+    /// Retain a bounded per-mutator diagnostic ring of recent
+    /// barrier events. Disabled by default because write barriers
+    /// are a hot path; heap-wide barrier counters remain enabled
+    /// regardless of this flag.
+    pub record_barrier_events: bool,
 }
 
 /// Allocation error for the managed heap.
@@ -1456,6 +1461,11 @@ impl Heap {
             BarrierKind::PostWrite => self.state.barrier_stats.bump_post_write(local),
             BarrierKind::SatbPreWrite => self.state.barrier_stats.bump_satb_pre_write(local),
         }
+    }
+
+    #[inline(always)]
+    pub(crate) fn record_barrier_events(&self) -> bool {
+        self.state.allocation_config.record_barrier_events
     }
 
     pub(crate) fn mark_collector_plans_dirty(&self) {

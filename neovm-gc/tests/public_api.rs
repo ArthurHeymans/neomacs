@@ -2376,6 +2376,7 @@ fn public_api_persistent_major_mark_barrier_keeps_new_value() {
             threshold_bytes: usize::MAX,
             ..neovm_gc::spaces::LargeObjectSpaceConfig::default()
         },
+        record_barrier_events: true,
         ..HeapConfig::default()
     });
     let mut mutator = heap.mutator();
@@ -2486,8 +2487,11 @@ fn public_api_barrier_stats_count_post_write_traffic_outside_major_mark() {
     assert_eq!(mutator.barrier_stats().satb_pre_write, 0);
 
     // clear_barrier_stats resets the cumulative counters but
-    // leaves the diagnostic event ring buffer alone.
+    // leaves the diagnostic event ring buffer alone. The ring is
+    // disabled by default, so this also verifies counters stay
+    // independent from diagnostic event retention.
     let events_before = mutator.barrier_event_count();
+    assert_eq!(events_before, 0);
     mutator.clear_barrier_stats();
     assert_eq!(mutator.barrier_stats().post_write, 0);
     assert_eq!(mutator.barrier_stats().satb_pre_write, 0);
@@ -10602,7 +10606,10 @@ fn public_api_multi_mutator_each_mutator_owns_independent_barrier_ring() {
     // ring. The cumulative heap-wide barrier counters should
     // reflect both events because they atomically aggregate
     // across mutators.
-    let heap = Heap::new(HeapConfig::default());
+    let heap = Heap::new(HeapConfig {
+        record_barrier_events: true,
+        ..HeapConfig::default()
+    });
     let owner_a;
     let target_a;
     let owner_b;
