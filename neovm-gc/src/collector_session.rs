@@ -289,10 +289,6 @@ pub(crate) fn complete_active_reclaim_prep(
         prepared.reclaim_prepare_time,
         prepared.prepared_reclaim,
     );
-    if completed && collector.recent_phase_trace().last().copied() != Some(CollectionPhase::Remark)
-    {
-        collector.push_phase(CollectionPhase::Remark);
-    }
     debug_assert!(
         completed,
         "active major reclaim prep should only complete while the session stays active"

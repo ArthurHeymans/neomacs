@@ -921,20 +921,22 @@ impl<'heap> Mutator<'heap> {
     /// Run one collection cycle against this mutator's heap.
     pub fn collect(&mut self, kind: CollectionKind) -> Result<CollectionStats, AllocError> {
         match kind {
-            CollectionKind::Major => self.collect_major_in_bounded_slices(),
-            CollectionKind::Minor | CollectionKind::Full => {
-                self.with_runtime(|runtime| runtime.collect(kind))
+            CollectionKind::Major | CollectionKind::Full => {
+                self.collect_old_gen_in_bounded_slices(kind)
             }
+            CollectionKind::Minor => self.with_runtime(|runtime| runtime.collect(kind)),
         }
     }
 
-    fn collect_major_in_bounded_slices(&mut self) -> Result<CollectionStats, AllocError> {
+    fn collect_old_gen_in_bounded_slices(
+        &mut self,
+        kind: CollectionKind,
+    ) -> Result<CollectionStats, AllocError> {
         match self.active_major_mark_plan() {
-            Some(plan) if plan.kind == CollectionKind::Major => {}
+            Some(plan) if plan.kind == kind => {}
             Some(_) => return Err(AllocError::CollectionInProgress),
             None => {
-                let plan =
-                    crate::runtime::bounded_major_mark_plan(self.plan_for(CollectionKind::Major));
+                let plan = crate::runtime::bounded_major_mark_plan(self.plan_for(kind));
                 self.begin_major_mark(plan)?;
             }
         }
@@ -1103,14 +1105,14 @@ impl<'heap> Mutator<'heap> {
     /// Execute one scheduler-provided collection plan.
     pub fn execute_plan(&mut self, plan: CollectionPlan) -> Result<CollectionStats, AllocError> {
         match plan.kind {
-            CollectionKind::Major => self.execute_major_plan_in_bounded_slices(plan),
-            CollectionKind::Minor | CollectionKind::Full => {
-                self.with_runtime(|runtime| runtime.execute_plan(plan))
+            CollectionKind::Major | CollectionKind::Full => {
+                self.execute_old_gen_plan_in_bounded_slices(plan)
             }
+            CollectionKind::Minor => self.with_runtime(|runtime| runtime.execute_plan(plan)),
         }
     }
 
-    fn execute_major_plan_in_bounded_slices(
+    fn execute_old_gen_plan_in_bounded_slices(
         &mut self,
         plan: CollectionPlan,
     ) -> Result<CollectionStats, AllocError> {

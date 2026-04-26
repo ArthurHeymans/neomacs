@@ -339,6 +339,61 @@ fn major_collect_uses_bounded_active_pipeline() {
 }
 
 #[test]
+fn full_collect_uses_bounded_active_pipeline() {
+    let heap = crate::Heap::new(HeapConfig {
+        nursery: NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..NurseryConfig::default()
+        },
+        large: LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..LargeObjectSpaceConfig::default()
+        },
+        old: OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let mut mutator = heap.mutator();
+    {
+        let mut scope = mutator.handle_scope();
+        for byte in 0..5000u16 {
+            mutator
+                .alloc(
+                    &mut scope,
+                    OldLeaf {
+                        _bytes: [byte as u8; 32],
+                    },
+                )
+                .expect("allocate old leaf");
+        }
+    }
+
+    let samples_before = heap.pause_histogram().total_samples;
+    let cycle = mutator
+        .collect(CollectionKind::Full)
+        .expect("run bounded full collect");
+    assert_eq!(cycle.major_collections, 1);
+    assert!(mutator.active_major_mark_plan().is_none());
+    assert_eq!(
+        heap.recent_phase_trace(),
+        &[
+            CollectionPhase::InitialMark,
+            CollectionPhase::ConcurrentMark,
+            CollectionPhase::Remark,
+            CollectionPhase::Evacuate,
+            CollectionPhase::Reclaim,
+        ]
+    );
+    assert!(
+        heap.pause_histogram().total_samples >= samples_before + 3,
+        "full collect should drain through multiple active-collection slices"
+    );
+}
+
+#[test]
 fn execute_major_plan_uses_bounded_active_pipeline() {
     let heap = crate::Heap::new(HeapConfig {
         nursery: NurseryConfig {

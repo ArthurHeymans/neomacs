@@ -697,6 +697,9 @@ impl<'heap> CollectorRuntime<'heap> {
                     objects.raw(),
                 )
             };
+            self.heap
+                .collector_handle()
+                .push_phase(CollectionPhase::Remark);
             let prepared = build_prepared_active_reclaim(
                 &request,
                 mark_steps_delta,

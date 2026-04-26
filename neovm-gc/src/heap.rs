@@ -1104,24 +1104,28 @@ impl Heap {
 
     /// Run one collection cycle.
     ///
-    /// Major collections are drained through the persistent
+    /// Major and Full collections are drained through the persistent
     /// active-major pipeline so each mark / reclaim assist drops
-    /// the safepoint before the next slice. Minor and Full
-    /// collections remain single synchronous collection plans.
+    /// the safepoint before the next slice. Minor collections remain
+    /// single synchronous collection plans.
     pub fn collect(&self, kind: CollectionKind) -> Result<CollectionStats, AllocError> {
         match kind {
-            CollectionKind::Major => self.collect_major_in_bounded_slices(),
-            CollectionKind::Minor | CollectionKind::Full => self.collector_runtime().collect(kind),
+            CollectionKind::Major | CollectionKind::Full => {
+                self.collect_old_gen_in_bounded_slices(kind)
+            }
+            CollectionKind::Minor => self.collector_runtime().collect(kind),
         }
     }
 
-    fn collect_major_in_bounded_slices(&self) -> Result<CollectionStats, AllocError> {
+    fn collect_old_gen_in_bounded_slices(
+        &self,
+        kind: CollectionKind,
+    ) -> Result<CollectionStats, AllocError> {
         match self.active_major_mark_plan() {
-            Some(plan) if plan.kind == CollectionKind::Major => {}
+            Some(plan) if plan.kind == kind => {}
             Some(_) => return Err(AllocError::CollectionInProgress),
             None => {
-                let plan =
-                    crate::runtime::bounded_major_mark_plan(self.plan_for(CollectionKind::Major));
+                let plan = crate::runtime::bounded_major_mark_plan(self.plan_for(kind));
                 self.begin_major_mark(plan)?;
             }
         }
@@ -1131,14 +1135,14 @@ impl Heap {
     /// Execute one scheduler-provided collection plan.
     pub fn execute_plan(&self, plan: CollectionPlan) -> Result<CollectionStats, AllocError> {
         match plan.kind {
-            CollectionKind::Major => self.execute_major_plan_in_bounded_slices(plan),
-            CollectionKind::Minor | CollectionKind::Full => {
-                self.collector_runtime().execute_plan(plan)
+            CollectionKind::Major | CollectionKind::Full => {
+                self.execute_old_gen_plan_in_bounded_slices(plan)
             }
+            CollectionKind::Minor => self.collector_runtime().execute_plan(plan),
         }
     }
 
-    fn execute_major_plan_in_bounded_slices(
+    fn execute_old_gen_plan_in_bounded_slices(
         &self,
         plan: CollectionPlan,
     ) -> Result<CollectionStats, AllocError> {
