@@ -2,7 +2,7 @@ use super::*;
 use crate::object::SpaceKind;
 use crate::spaces::{LargeObjectSpaceConfig, NurseryConfig};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -2342,6 +2342,69 @@ fn collector_runtime_finish_major_collection_finishes_active_session_directly() 
         .expect("finish persistent major session directly");
     assert_eq!(cycle.major_collections, 1);
     assert_eq!(runtime.active_major_mark_plan(), None);
+}
+
+#[test]
+fn collector_runtime_finish_major_collection_yields_between_slices() {
+    let heap = Heap::new(HeapConfig {
+        old: crate::spaces::OldGenConfig {
+            mutator_assist_slices: 0,
+            ..crate::spaces::OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    {
+        let mut mutator = heap.mutator();
+        let mut scope = mutator.handle_scope();
+        for byte in 0..512u64 {
+            mutator
+                .alloc(&mut scope, ImmortalLeaf(byte))
+                .expect("alloc immortal leaf");
+        }
+    }
+    let plan = CollectionPlan {
+        mark_slice_budget: 1,
+        ..heap.plan_for(CollectionKind::Major)
+    };
+
+    let mut runtime = heap.collector_runtime();
+    runtime
+        .begin_major_mark(plan)
+        .expect("begin persistent major mark");
+
+    let started = Arc::new(AtomicBool::new(false));
+    let observed_gap = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let helper_heap = heap.clone();
+    let helper_started = Arc::clone(&started);
+    let helper_observed_gap = Arc::clone(&observed_gap);
+    let helper_done = Arc::clone(&done);
+    let waiter = thread::spawn(move || {
+        helper_started.store(true, Ordering::Release);
+        while !helper_done.load(Ordering::Acquire) {
+            if helper_heap.try_collector_runtime().is_ok() {
+                helper_observed_gap.store(true, Ordering::Release);
+                break;
+            }
+            thread::yield_now();
+        }
+    });
+    while !started.load(Ordering::Acquire) {
+        thread::yield_now();
+    }
+
+    let cycle = runtime
+        .finish_major_collection()
+        .expect("finish persistent major session directly");
+    done.store(true, Ordering::Release);
+    waiter.join().expect("join collector gap observer");
+
+    assert_eq!(cycle.major_collections, 1);
+    assert_eq!(runtime.active_major_mark_plan(), None);
+    assert!(
+        observed_gap.load(Ordering::Acquire),
+        "direct collector runtime should release the safepoint between major slices"
+    );
 }
 
 #[test]

@@ -1035,10 +1035,11 @@ impl Heap {
     }
 
     /// Create a collector-side runtime guard bound to this
-    /// heap. The returned guard holds the safepoint write
-    /// lock plus the heap-core write lock for its own
-    /// lifetime, so callers should keep it scoped to one
-    /// collector operation or bounded phase.
+    /// heap. The returned guard acquires the safepoint write
+    /// lock plus the heap-core write lock for collector calls.
+    /// Old-generation drain helpers release and reacquire those
+    /// locks between bounded slices; callers should still keep
+    /// the guard scoped to one collector operation or phase.
     pub fn collector_runtime(&self) -> HeapCollectorRuntime<'_> {
         let safepoint = self.write_safepoint();
         let refresh_plans = self.take_collector_plans_dirty();
@@ -1545,16 +1546,17 @@ impl Heap {
 }
 
 /// Guard type returned by [`Heap::collector_runtime`] that
-/// holds the safepoint write guard plus the heap-core write
-/// guard and a scratch `MutatorLocal` for the duration of
-/// collector operations. Each method builds a fresh
+/// carries a yieldable safepoint write guard plus heap-core
+/// write guard and a scratch `MutatorLocal` for collector
+/// operations. Each method builds a fresh
 /// [`CollectorRuntime`] against the held borrows and runs
-/// the operation through it.
+/// the operation through it; long old-generation drains drop
+/// and reacquire the guards between bounded slices.
 #[derive(Debug)]
 pub struct HeapCollectorRuntime<'a> {
     heap: &'a Heap,
-    _safepoint: SafepointWriteGuard<'a>,
-    guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
+    safepoint: Option<SafepointWriteGuard<'a>>,
+    guard: Option<std::sync::RwLockWriteGuard<'a, HeapCore>>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
     local: crate::mutator::MutatorLocal,
@@ -1573,28 +1575,118 @@ impl<'a> HeapCollectorRuntime<'a> {
         local.set_barrier_stats_local(guard.barrier_stats.register_local());
         Self {
             heap,
-            _safepoint: safepoint,
-            guard,
+            safepoint: Some(safepoint),
+            guard: Some(guard),
             nursery_generation,
             collector_plans_refresh_epoch,
             local,
         }
     }
 
+    fn guard(&self) -> &std::sync::RwLockWriteGuard<'a, HeapCore> {
+        self.guard
+            .as_ref()
+            .expect("collector runtime should hold heap core guard")
+    }
+
+    fn guard_mut(&mut self) -> &mut std::sync::RwLockWriteGuard<'a, HeapCore> {
+        self.acquire_collector_window();
+        self.guard
+            .as_mut()
+            .expect("collector runtime should hold heap core guard")
+    }
+
+    fn acquire_collector_window(&mut self) {
+        if self.guard.is_some() {
+            return;
+        }
+        let safepoint = self.heap.write_safepoint();
+        let refresh_plans = self.heap.take_collector_plans_dirty();
+        let guard = {
+            let guard = self.heap.write_core();
+            if refresh_plans {
+                guard.refresh_recommended_plans();
+            }
+            guard
+        };
+        self.safepoint = Some(safepoint);
+        self.guard = Some(guard);
+    }
+
+    fn release_collector_window(&mut self) {
+        if let Some(guard) = self.guard.take() {
+            self.nursery_generation.store(
+                guard.nursery().generation(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.collector_plans_refresh_epoch
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            drop(guard);
+        }
+        drop(self.safepoint.take());
+    }
+
+    fn yield_collector_window(&mut self) {
+        self.release_collector_window();
+        std::thread::yield_now();
+        self.acquire_collector_window();
+    }
+
+    fn collect_old_gen_in_bounded_slices(
+        &mut self,
+        kind: CollectionKind,
+    ) -> Result<CollectionStats, AllocError> {
+        match self.active_major_mark_plan() {
+            Some(plan) if plan.kind == kind => {}
+            Some(_) => return Err(AllocError::CollectionInProgress),
+            None => {
+                let plan = crate::runtime::bounded_major_mark_plan(self.guard().plan_for(kind));
+                self.begin_major_mark(plan)?;
+            }
+        }
+        self.finish_major_collection()
+    }
+
+    fn execute_old_gen_plan_in_bounded_slices(
+        &mut self,
+        plan: CollectionPlan,
+    ) -> Result<CollectionStats, AllocError> {
+        if self.active_major_mark_plan().is_some() {
+            return Err(AllocError::CollectionInProgress);
+        }
+        self.begin_major_mark(crate::runtime::bounded_major_mark_plan(plan))?;
+        self.finish_major_collection()
+    }
+
     /// Build the inner `CollectorRuntime` from the held heap
     /// core borrow plus this guard's scratch local.
     pub(crate) fn runtime(&mut self) -> CollectorRuntime<'_> {
-        CollectorRuntime::with_local(&mut self.guard, &mut self.local)
+        self.acquire_collector_window();
+        let guard = self
+            .guard
+            .as_mut()
+            .expect("collector runtime should hold heap core guard");
+        CollectorRuntime::with_local(&mut **guard, &mut self.local)
     }
 
     /// Run one stop-the-world collection cycle.
     pub fn collect(&mut self, kind: CollectionKind) -> Result<CollectionStats, AllocError> {
-        self.runtime().collect(kind)
+        match kind {
+            CollectionKind::Major | CollectionKind::Full => {
+                self.collect_old_gen_in_bounded_slices(kind)
+            }
+            CollectionKind::Minor => self.runtime().collect(kind),
+        }
     }
 
     /// Execute one scheduler-provided collection plan.
     pub fn execute_plan(&mut self, plan: CollectionPlan) -> Result<CollectionStats, AllocError> {
-        self.runtime().execute_plan(plan)
+        match plan.kind {
+            CollectionKind::Major | CollectionKind::Full => {
+                self.execute_old_gen_plan_in_bounded_slices(plan)
+            }
+            CollectionKind::Minor => self.runtime().execute_plan(plan),
+        }
     }
 
     /// Begin a persistent major-mark session.
@@ -1622,7 +1714,31 @@ impl<'a> HeapCollectorRuntime<'a> {
 
     /// Finish the current persistent major-mark session.
     pub fn finish_major_collection(&mut self) -> Result<CollectionStats, AllocError> {
-        self.runtime().finish_major_collection()
+        loop {
+            let Some(plan) = self.active_major_mark_plan() else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            if plan.phase == CollectionPhase::Reclaim
+                || self
+                    .major_mark_progress()
+                    .is_some_and(|progress| progress.completed)
+            {
+                if let Some(cycle) = self.finish_active_major_collection_if_ready()? {
+                    return Ok(cycle);
+                }
+                self.yield_collector_window();
+                continue;
+            }
+
+            let Some(progress) = self.poll_active_major_mark()? else {
+                return Err(AllocError::NoCollectionInProgress);
+            };
+            debug_assert!(
+                progress.completed || progress.drained_objects > 0,
+                "active major mark should either complete or drain at least one object per poll"
+            );
+            self.yield_collector_window();
+        }
     }
 
     /// Finish the active major collection if its mark work is fully drained.
@@ -1686,52 +1802,52 @@ impl<'a> HeapCollectorRuntime<'a> {
 
     /// Return current heap statistics.
     pub fn stats(&self) -> HeapStats {
-        self.guard.stats()
+        self.guard().stats()
     }
 
     /// Return the number of queued finalizers waiting to run.
     pub fn pending_finalizer_count(&self) -> usize {
-        self.guard.pending_finalizer_count()
+        self.guard().pending_finalizer_count()
     }
 
     /// Drain queued finalizers.
     pub fn drain_pending_finalizers(&mut self) -> u64 {
-        self.guard.drain_pending_finalizers()
+        self.guard_mut().drain_pending_finalizers()
     }
 
     /// Drain up to `max` queued finalizers.
     pub fn drain_pending_finalizers_bounded(&mut self, max: usize) -> u64 {
-        self.guard.drain_pending_finalizers_bounded(max)
+        self.guard_mut().drain_pending_finalizers_bounded(max)
     }
 
     /// Active major-mark plan, if any.
     pub fn active_major_mark_plan(&self) -> Option<CollectionPlan> {
-        self.guard.active_major_mark_plan()
+        self.guard().active_major_mark_plan()
     }
 
     /// Active major-mark progress, if any.
     pub fn major_mark_progress(&self) -> Option<MajorMarkProgress> {
-        self.guard.major_mark_progress()
+        self.guard().major_mark_progress()
     }
 
     /// Recommend the next background concurrent collection plan, if any.
     pub fn recommended_background_plan(&self) -> Option<CollectionPlan> {
-        self.guard.recommended_background_plan()
+        self.guard().recommended_background_plan()
     }
 
     /// Last completed collection plan, if any.
     pub fn last_completed_plan(&self) -> Option<CollectionPlan> {
-        self.guard.last_completed_plan()
+        self.guard().last_completed_plan()
     }
 
     /// Runtime-side follow-up work.
     pub fn runtime_work_status(&self) -> RuntimeWorkStatus {
-        self.guard.runtime_work_status()
+        self.guard().runtime_work_status()
     }
 
     /// Heap configuration.
     pub fn config(&self) -> HeapConfig {
-        *self.guard.config()
+        *self.guard().config()
     }
 
     /// Prepare a typed allocation pressure check.
@@ -1766,24 +1882,21 @@ impl<'a> HeapCollectorRuntime<'a> {
     /// while the guard is held.
     #[allow(dead_code)]
     pub(crate) fn heap_core(&self) -> &HeapCore {
-        &self.guard
+        self.guard()
     }
 }
 
 impl Drop for HeapCollectorRuntime<'_> {
     fn drop(&mut self) {
-        self.guard
+        self.heap
+            .state
             .barrier_stats
             .release_local(self.local.barrier_stats_local_mut());
-        self.guard
+        self.heap
+            .state
             .alloc_counters
             .release_local(self.local.alloc_counter_local_mut());
-        self.nursery_generation.store(
-            self.guard.nursery().generation(),
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        self.collector_plans_refresh_epoch
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.release_collector_window();
     }
 }
 
