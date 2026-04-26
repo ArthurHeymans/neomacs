@@ -381,6 +381,12 @@ impl SharedCollectorHandle {
         self.state.active_reclaim_prep_request()
     }
 
+    pub(crate) fn active_reclaim_prep_progress(
+        &self,
+    ) -> Result<Option<(u64, usize)>, SharedHeapError> {
+        self.with_state(|state| state.active_reclaim_prep_progress())
+    }
+
     pub(crate) fn prepare_active_collection_reclaim_with_request_and_refresh(
         &self,
         request: crate::collector_session::ActiveReclaimPrepRequest,

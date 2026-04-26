@@ -1189,6 +1189,96 @@ fn elapsed_nanos(duration: Duration) -> u64 {
     duration.as_nanos().min(u128::from(u64::MAX)) as u64
 }
 
+fn prepare_active_major_reclaim_with_read_core(
+    core: &HeapCore,
+    collector: &mut CollectorState,
+    request: &collector_session::ActiveReclaimPrepRequest,
+    budget: usize,
+) -> bool {
+    debug_assert_eq!(request.plan.kind, CollectionKind::Major);
+    let pause_start = Instant::now();
+    let Some(mut state) = collector.take_major_mark_state() else {
+        return false;
+    };
+    if !state.worklist.is_empty() || state.reclaim_prepared {
+        collector.restore_major_mark_state(state);
+        refresh_cached_collector_plans(
+            collector,
+            &core.storage_stats(),
+            core.old_gen(),
+            core.old_config(),
+            |kind| core.plan_for(kind),
+        );
+        return false;
+    }
+
+    if !state.ephemerons_processed {
+        let objects = core.objects();
+        let (mark_steps_delta, mark_rounds_delta) = prepare_active_reclaim(
+            request,
+            |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
+            objects.raw(),
+        );
+        state.mark_elapsed_nanos = elapsed_nanos(state.mark_started_at.elapsed());
+        state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
+        state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
+        state.ephemerons_processed = true;
+    }
+
+    let completed = {
+        let objects = core.objects();
+        let raw = objects.raw();
+        if state.reclaim_prepare_state.is_none() {
+            // Keep the shared/background major path equivalent to the local
+            // runtime path: weak slots are filtered before the survivor and
+            // candidate-list snapshot is built.
+            let empty_forwarding = ForwardingMap::default();
+            process_weak_references_for_candidates(
+                raw.clone(),
+                &objects.weak_candidates(),
+                request.plan.kind,
+                request.plan.worker_count.max(1),
+                &empty_forwarding,
+            );
+        }
+        let build = state.reclaim_prepare_state.get_or_insert_with(|| {
+            begin_active_prepared_reclaim_build(
+                request.plan.kind,
+                raw.all_locators(),
+                objects.finalizable_candidates(),
+                objects.weak_candidates(),
+                objects.ephemeron_candidates(),
+            )
+        });
+        advance_active_prepared_reclaim_build(raw, build, budget)
+    };
+
+    let pause_nanos = elapsed_nanos(pause_start.elapsed());
+    state.reclaim_prepare_nanos = state.reclaim_prepare_nanos.saturating_add(pause_nanos);
+    core.record_pause_sample(pause_nanos);
+    if completed {
+        let prepared_reclaim = finish_active_prepared_reclaim_build(
+            state
+                .reclaim_prepare_state
+                .take()
+                .expect("completed reclaim prep should take build state"),
+        );
+        state.reclaim_prepared = true;
+        state.prepared_reclaim = Some(prepared_reclaim);
+        state.reclaim_commit_state = None;
+    }
+
+    collector.restore_major_mark_state(state);
+    refresh_cached_collector_plans(
+        collector,
+        &core.storage_stats(),
+        core.old_gen(),
+        core.old_config(),
+        |kind| core.plan_for(kind),
+    );
+    completed
+}
+
 fn prepare_heap_major_reclaim(heap: &mut HeapCore, plan: &CollectionPlan) -> PreparedReclaim {
     let flat = heap.take_flat_store();
     let prepared = prepare_major_reclaim_for_plan(
@@ -1355,6 +1445,24 @@ impl SharedCollectorRuntime {
         Ok(f(&mut runtime))
     }
 
+    fn shared_reclaim_prep_budget(&self) -> Result<usize, SharedBackgroundError> {
+        let Some((pause_nanos, scanned_objects)) = self
+            .collector
+            .active_reclaim_prep_progress()
+            .map_err(Self::map_shared_heap_error)?
+        else {
+            return Ok(DEFAULT_RECLAIM_PREP_SLICE_BUDGET);
+        };
+        Ok(adaptive_pause_target_budget(
+            self.heap.pacer_config().target_pause,
+            scanned_objects,
+            pause_nanos,
+            DEFAULT_RECLAIM_PREP_SLICE_BUDGET,
+            1,
+            MAX_RECLAIM_PREP_SLICE_BUDGET,
+        ))
+    }
+
     /// Return current heap statistics.
     pub fn stats(&self) -> Result<HeapStats, SharedBackgroundError> {
         self.runtime
@@ -1483,6 +1591,15 @@ impl SharedCollectorRuntime {
     pub fn active_major_mark_plan(&self) -> Result<Option<CollectionPlan>, SharedBackgroundError> {
         self.collector
             .read_snapshot(|snapshot| snapshot.active_major_mark_plan.clone())
+            .map_err(Self::map_shared_heap_error)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn active_major_mark_has_prepared_reclaim_for_test(
+        &self,
+    ) -> Result<bool, SharedBackgroundError> {
+        self.collector
+            .with_state(|state| state.active_major_mark_has_prepared_reclaim())
             .map_err(Self::map_shared_heap_error)
     }
 
@@ -1734,20 +1851,11 @@ impl SharedCollectorRuntime {
             return Ok(false);
         };
         if request.plan.kind == CollectionKind::Major {
+            let budget = self.shared_reclaim_prep_budget()?;
             let prepared = self
                 .with_heap_read_collector_update(|core, collector| {
-                    let objects = core.objects();
-                    let (mark_steps_delta, mark_rounds_delta) =
-                        collector_session::prepare_active_reclaim(
-                            &request,
-                            |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
-                            objects.raw(),
-                        );
-                    Ok(collector.complete_active_major_reclaim_prep(
-                        mark_steps_delta,
-                        mark_rounds_delta,
-                        Duration::ZERO,
-                        None,
+                    Ok(prepare_active_major_reclaim_with_read_core(
+                        core, collector, &request, budget,
                     ))
                 })
                 .map_err(Self::map_shared_heap_error)?
@@ -1781,20 +1889,11 @@ impl SharedCollectorRuntime {
             return Ok(false);
         };
         if request.plan.kind == CollectionKind::Major {
+            let budget = self.shared_reclaim_prep_budget()?;
             let prepared = self
                 .try_with_heap_read_collector_update(|core, collector| {
-                    let objects = core.objects();
-                    let (mark_steps_delta, mark_rounds_delta) =
-                        collector_session::prepare_active_reclaim(
-                            &request,
-                            |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
-                            objects.raw(),
-                        );
-                    Ok(collector.complete_active_major_reclaim_prep(
-                        mark_steps_delta,
-                        mark_rounds_delta,
-                        Duration::ZERO,
-                        None,
+                    Ok(prepare_active_major_reclaim_with_read_core(
+                        core, collector, &request, budget,
                     ))
                 })
                 .map_err(Self::map_shared_heap_error)?
@@ -1833,8 +1932,7 @@ impl SharedCollectorRuntime {
             })
         {
             match self.try_prepare_active_reclaim_if_needed() {
-                Ok(true) | Err(SharedBackgroundError::WouldBlock) => return Ok(None),
-                Ok(false) => {}
+                Ok(_) | Err(SharedBackgroundError::WouldBlock) => return Ok(None),
                 Err(error) => return Err(error),
             }
         }
@@ -1938,8 +2036,7 @@ impl SharedCollectorRuntime {
             })
         {
             match self.try_prepare_active_reclaim_if_needed() {
-                Ok(true) | Err(SharedBackgroundError::WouldBlock) => return Ok(None),
-                Ok(false) => {}
+                Ok(_) | Err(SharedBackgroundError::WouldBlock) => return Ok(None),
                 Err(error) => return Err(error),
             }
         }

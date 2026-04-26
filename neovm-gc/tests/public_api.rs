@@ -6076,6 +6076,92 @@ fn public_api_shared_collector_runtime_prepare_active_major_reclaim_works_while_
 }
 
 #[test]
+fn public_api_shared_collector_runtime_prepares_active_major_reclaim_in_bounded_slices() {
+    let shared = neovm_gc::SharedHeap::new(HeapConfig {
+        nursery: neovm_gc::spaces::NurseryConfig {
+            max_regular_object_bytes: 1,
+            ..neovm_gc::spaces::NurseryConfig::default()
+        },
+        large: neovm_gc::spaces::LargeObjectSpaceConfig {
+            threshold_bytes: usize::MAX,
+            ..neovm_gc::spaces::LargeObjectSpaceConfig::default()
+        },
+        old: neovm_gc::spaces::OldGenConfig {
+            concurrent_mark_workers: 2,
+            mutator_assist_slices: 0,
+            ..neovm_gc::spaces::OldGenConfig::default()
+        },
+        ..HeapConfig::default()
+    });
+    let plan = shared
+        .with_mutator(|mutator| {
+            let mut scope = mutator.handle_scope();
+            for byte in 0..300u16 {
+                mutator
+                    .alloc(&mut scope, OldLeaf([byte as u8; 32]))
+                    .expect("alloc old leaf");
+            }
+            let plan = neovm_gc::CollectionPlan {
+                mark_slice_budget: usize::MAX,
+                ..mutator.plan_for(CollectionKind::Major)
+            };
+            mutator
+                .begin_major_mark(plan.clone())
+                .expect("begin persistent major mark");
+            while !mutator
+                .advance_major_mark()
+                .expect("advance persistent major mark")
+                .completed
+            {}
+            plan
+        })
+        .expect("seed and drain major mark");
+    let runtime = shared.collector_runtime();
+    let before_pauses = shared
+        .with_heap_read(|heap| heap.pause_histogram().total_samples)
+        .expect("read pause histogram before reclaim prep");
+
+    assert!(
+        !runtime
+            .prepare_active_reclaim_if_needed()
+            .expect("first bounded major reclaim prep")
+    );
+    assert_eq!(
+        runtime
+            .active_major_mark_plan()
+            .expect("inspect active plan after first reclaim-prep slice"),
+        Some(neovm_gc::CollectionPlan {
+            phase: CollectionPhase::Remark,
+            ..plan.clone()
+        })
+    );
+    assert!(
+        shared
+            .with_heap_read(|heap| heap.pause_histogram().total_samples)
+            .expect("read pause histogram after first reclaim-prep slice")
+            > before_pauses
+    );
+
+    let mut slices = 1usize;
+    while !runtime
+        .prepare_active_reclaim_if_needed()
+        .expect("follow-up bounded major reclaim prep")
+    {
+        slices = slices.saturating_add(1);
+        assert!(slices < 32, "shared major reclaim prep did not converge");
+    }
+    assert_eq!(
+        runtime
+            .active_major_mark_plan()
+            .expect("inspect active plan after completed reclaim prep"),
+        Some(neovm_gc::CollectionPlan {
+            phase: CollectionPhase::Reclaim,
+            ..plan
+        })
+    );
+}
+
+#[test]
 fn public_api_shared_collector_runtime_finish_prepares_major_reclaim_while_heap_is_read_locked() {
     let shared = neovm_gc::SharedHeap::new(HeapConfig {
         nursery: neovm_gc::spaces::NurseryConfig {
