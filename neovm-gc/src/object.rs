@@ -1,13 +1,14 @@
 use core::alloc::Layout;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU32, Ordering};
 use std::alloc::{alloc, dealloc};
 
 use crate::descriptor::{
     EphemeronVisitor, GcErased, ObjectKey, Relocator, Trace, TypeDesc, TypeFlags, WeakProcessor,
 };
 use crate::heap::AllocError;
+use crate::index_state::ObjectLocator;
 
 /// Coarse heap space identity.
 #[allow(dead_code)]
@@ -92,11 +93,15 @@ pub(crate) struct ObjectHeader {
     generation: AtomicU8,
     age: AtomicU8,
     mark_bits: AtomicU8,
+    store_locator: AtomicU32,
     forwarding: AtomicPtr<ObjectHeader>,
     moved_out: AtomicBool,
 }
 
 const OBJECT_HEADER_TEMPLATE_SIZE: usize = core::mem::size_of::<ObjectHeader>();
+const OBJECT_LOCATOR_UNSET: u32 = u32::MAX;
+const OBJECT_LOCATOR_SHARD_BITS: u32 = 3;
+const OBJECT_LOCATOR_SHARD_MASK: u32 = (1 << OBJECT_LOCATOR_SHARD_BITS) - 1;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ObjectHeaderTemplate {
@@ -120,6 +125,7 @@ impl ObjectHeaderTemplate {
             generation: AtomicU8::new(space.initial_generation() as u8),
             age: AtomicU8::new(age),
             mark_bits: AtomicU8::new(0),
+            store_locator: AtomicU32::new(OBJECT_LOCATOR_UNSET),
             forwarding: AtomicPtr::new(core::ptr::null_mut()),
             moved_out: AtomicBool::new(false),
         });
@@ -184,6 +190,27 @@ impl ObjectHeader {
         self.mark_bits
             .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
+    }
+
+    #[inline]
+    pub(crate) fn set_store_locator(&self, locator: ObjectLocator) {
+        debug_assert!((locator.shard as u32) <= OBJECT_LOCATOR_SHARD_MASK);
+        debug_assert!(locator.slot <= (u32::MAX as usize >> OBJECT_LOCATOR_SHARD_BITS));
+        let packed = ((locator.slot as u32) << OBJECT_LOCATOR_SHARD_BITS) | locator.shard as u32;
+        debug_assert_ne!(packed, OBJECT_LOCATOR_UNSET);
+        self.store_locator.store(packed, Ordering::Release);
+    }
+
+    #[inline]
+    pub(crate) fn store_locator(&self) -> Option<ObjectLocator> {
+        let packed = self.store_locator.load(Ordering::Acquire);
+        if packed == OBJECT_LOCATOR_UNSET {
+            return None;
+        }
+        Some(ObjectLocator::new(
+            (packed & OBJECT_LOCATOR_SHARD_MASK) as usize,
+            (packed >> OBJECT_LOCATOR_SHARD_BITS) as usize,
+        ))
     }
 
     pub(crate) fn forward_to(&self, new_header: NonNull<ObjectHeader>) {
@@ -503,6 +530,7 @@ impl ObjectRecord {
                 generation: AtomicU8::new(space.initial_generation() as u8),
                 age: AtomicU8::new(age),
                 mark_bits: AtomicU8::new(0),
+                store_locator: AtomicU32::new(OBJECT_LOCATOR_UNSET),
                 forwarding: AtomicPtr::new(core::ptr::null_mut()),
                 moved_out: AtomicBool::new(false),
             });
@@ -566,6 +594,11 @@ impl ObjectRecord {
 
     pub(crate) fn object_key(&self) -> ObjectKey {
         ObjectKey::from_header(self.header)
+    }
+
+    #[inline]
+    pub(crate) fn set_store_locator(&self, locator: ObjectLocator) {
+        self.header().set_store_locator(locator);
     }
 
     pub(crate) fn old_block_placement(&self) -> Option<OldBlockPlacement> {
@@ -823,6 +856,7 @@ impl ObjectRecord {
                 generation: AtomicU8::new(space.initial_generation() as u8),
                 age: AtomicU8::new(self.header().age().saturating_add(1)),
                 mark_bits: AtomicU8::new(0),
+                store_locator: AtomicU32::new(OBJECT_LOCATOR_UNSET),
                 forwarding: AtomicPtr::new(core::ptr::null_mut()),
                 moved_out: AtomicBool::new(false),
             });

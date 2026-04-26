@@ -108,6 +108,7 @@ pub(crate) struct ObjectReadRaw<'a> {
     _owned_index: Option<Arc<ObjectIndex>>,
     all_locators: Option<Arc<[ObjectLocator]>>,
     object_count: usize,
+    lookup_by_header_locator: bool,
     _marker: PhantomData<&'a ObjectIndex>,
 }
 
@@ -130,7 +131,29 @@ impl<'a> ObjectReadRaw<'a> {
 
     #[inline]
     pub(crate) fn locator_of_key(&self, key: ObjectKey) -> Option<ObjectLocator> {
+        if self.lookup_by_header_locator {
+            // Mark-only active-GC snapshots avoid rebuilding a full
+            // ObjectIndex. The keys being traced come from live roots
+            // or edges; reject locators for objects published after
+            // this read snapshot was captured.
+            let header = unsafe { key.header_unchecked() };
+            let locator = unsafe { header.as_ref() }.store_locator()?;
+            return self.contains_locator(locator).then_some(locator);
+        }
         unsafe { (&*self.index_ptr).get(&key).copied() }
+    }
+
+    #[inline]
+    fn contains_locator(&self, locator: ObjectLocator) -> bool {
+        let Some(shard) = self.shards.get(locator.shard) else {
+            return false;
+        };
+        let chunk_index = locator.slot / OBJECT_STORE_CHUNK_CAPACITY;
+        let chunk_offset = locator.slot % OBJECT_STORE_CHUNK_CAPACITY;
+        shard
+            .chunks
+            .get(chunk_index)
+            .is_some_and(|chunk| chunk_offset < chunk.published_len)
     }
 
     pub(crate) fn all_locators(&self) -> Vec<ObjectLocator> {
@@ -198,6 +221,7 @@ pub(crate) struct ObjectStoreReadGuard<'a> {
     ephemeron_candidates: Option<Arc<[ObjectKey]>>,
     immortal_candidates: Option<Arc<[ObjectKey]>>,
     object_count: usize,
+    lookup_by_header_locator: bool,
     remembered: &'a RememberedSetState,
 }
 
@@ -210,6 +234,7 @@ impl<'a> ObjectStoreReadGuard<'a> {
             _owned_index: Some(Arc::clone(&self.index)),
             all_locators: self.all_locators.as_ref().map(Arc::clone),
             object_count: self.object_count,
+            lookup_by_header_locator: self.lookup_by_header_locator,
             _marker: PhantomData,
         }
     }
@@ -299,6 +324,7 @@ impl ObjectReadView for ObjectStoreReadGuard<'_> {
             _owned_index: Some(Arc::clone(&self.index)),
             all_locators: self.all_locators.as_ref().map(Arc::clone),
             object_count: self.object_count,
+            lookup_by_header_locator: self.lookup_by_header_locator,
             _marker: PhantomData,
         }
     }
@@ -360,6 +386,7 @@ impl<'a> FlatReadView<'a> {
             _owned_index: None,
             all_locators: Some(self.all_locators()),
             object_count: self.object_count,
+            lookup_by_header_locator: false,
             _marker: PhantomData,
         }
     }
@@ -383,6 +410,7 @@ impl ObjectReadView for FlatReadView<'_> {
             _owned_index: None,
             all_locators: Some(self.all_locators()),
             object_count: self.object_count,
+            lookup_by_header_locator: false,
             _marker: PhantomData,
         }
     }
@@ -475,7 +503,7 @@ impl ObjectShard {
         self.chunks.get_mut().clear();
     }
 
-    fn publish_owned_mut(&mut self, record: ObjectRecord) {
+    fn publish_owned_mut(&mut self, shard_index: usize, record: ObjectRecord) {
         let chunks = self.chunks.get_mut();
         let needs_chunk = chunks
             .last()
@@ -487,6 +515,11 @@ impl ObjectShard {
         let chunk_index = chunks.len().saturating_sub(1);
         let chunk = chunks[chunk_index].clone();
         let chunk_offset = chunk.published_len();
+        let locator = ObjectLocator::new(
+            shard_index,
+            chunk_index.saturating_mul(OBJECT_STORE_CHUNK_CAPACITY) + chunk_offset,
+        );
+        record.set_store_locator(locator);
         if record.needs_record_drop() {
             chunk.requires_record_drop.store(true, Ordering::Relaxed);
         }
@@ -567,6 +600,8 @@ impl ObjectStore {
     ) -> ObjectLocator {
         let chunk_offset = usize::from(reservation.next_offset);
         let next_offset = reservation.next_offset.saturating_add(1);
+        let locator = ObjectLocator::new(shard_index, reservation.base_slot + chunk_offset);
+        record.set_store_locator(locator);
         if record.needs_record_drop() {
             unsafe { (*reservation.requires_record_drop).store(true, Ordering::Relaxed) };
         }
@@ -574,7 +609,7 @@ impl ObjectStore {
         unsafe { (*reservation.published_len).store(next_offset, Ordering::Release) };
         reservation.next_slot = unsafe { reservation.next_slot.add(1) };
         reservation.next_offset = next_offset;
-        ObjectLocator::new(shard_index, reservation.base_slot + chunk_offset)
+        locator
     }
 
     #[inline(always)]
@@ -587,6 +622,8 @@ impl ObjectStore {
     ) -> ObjectLocator {
         let chunk_offset = usize::from(reservation.next_offset);
         let next_offset = reservation.next_offset.saturating_add(1);
+        let locator = ObjectLocator::new(shard_index, reservation.base_slot + chunk_offset);
+        unsafe { header.as_ref() }.set_store_locator(locator);
         if unsafe { ObjectRecord::published_record_needs_drop(header, memory_kind) } {
             unsafe { (*reservation.requires_record_drop).store(true, Ordering::Relaxed) };
         }
@@ -602,7 +639,7 @@ impl ObjectStore {
         unsafe { (*reservation.published_len).store(next_offset, Ordering::Release) };
         reservation.next_slot = unsafe { reservation.next_slot.add(1) };
         reservation.next_offset = next_offset;
-        ObjectLocator::new(shard_index, reservation.base_slot + chunk_offset)
+        locator
     }
 
     pub(crate) fn read(&self) -> ObjectStoreReadGuard<'_> {
@@ -633,8 +670,8 @@ impl ObjectStore {
             chunk_guards.push(chunk_guard);
         }
 
-        let mut object_index =
-            ObjectIndex::with_capacity_and_hasher(object_count, ObjectKeyBuildHasher);
+        let mut object_index = includes_metadata
+            .then(|| ObjectIndex::with_capacity_and_hasher(object_count, ObjectKeyBuildHasher));
         let mut all_locators = includes_metadata.then(|| Vec::with_capacity(object_count));
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
@@ -648,7 +685,9 @@ impl ObjectStore {
                     let locator = ObjectLocator::new(shard_index, base_slot + chunk_offset);
                     let record = unsafe { &*chunk.objects_ptr.add(chunk_offset) };
                     let object_key = record.object_key();
-                    object_index.insert(object_key, locator);
+                    if let Some(object_index) = object_index.as_mut() {
+                        object_index.insert(object_key, locator);
+                    }
                     if let Some(all_locators) = all_locators.as_mut() {
                         all_locators.push(locator);
                     }
@@ -674,13 +713,16 @@ impl ObjectStore {
         ObjectStoreReadGuard {
             _chunk_guards: chunk_guards,
             shards_raw: Arc::from(shard_raws),
-            index: Arc::new(object_index),
+            index: Arc::new(
+                object_index.unwrap_or_else(|| ObjectIndex::with_hasher(ObjectKeyBuildHasher)),
+            ),
             all_locators: all_locators.map(Arc::from),
             finalizable_candidates: includes_metadata.then(|| Arc::from(finalizable_candidates)),
             weak_candidates: includes_metadata.then(|| Arc::from(weak_candidates)),
             ephemeron_candidates: includes_metadata.then(|| Arc::from(ephemeron_candidates)),
             immortal_candidates: includes_metadata.then(|| Arc::from(immortal_candidates)),
             object_count,
+            lookup_by_header_locator: !includes_metadata,
             remembered: &self.remembered,
         }
     }
@@ -795,6 +837,7 @@ impl ObjectStore {
         indexes.remembered = std::mem::take(&mut remembered);
         indexes.reset_candidate_indexes(objects.len());
         for (slot, object) in objects.iter().enumerate() {
+            object.set_store_locator(ObjectLocator::flat(slot));
             indexes.record_allocated_object(
                 object.object_key(),
                 ObjectLocator::flat(slot),
@@ -814,7 +857,8 @@ impl ObjectStore {
             let object_key = object.object_key();
             let shard_index = shard_index_for_key(object_key);
             debug_assert_eq!(self.shards.len(), OBJECT_STORE_SHARDS);
-            unsafe { self.shards.get_unchecked_mut(shard_index) }.publish_owned_mut(object);
+            unsafe { self.shards.get_unchecked_mut(shard_index) }
+                .publish_owned_mut(shard_index, object);
         }
         self.bump_generation();
     }
@@ -828,3 +872,7 @@ fn shard_index_for_key(key: ObjectKey) -> usize {
         addr ^ addr.rotate_right(13) ^ addr.wrapping_mul(0x9e37_79b9_7f4a_7c15_u64 as usize);
     mixed & OBJECT_STORE_SHARD_MASK
 }
+
+#[cfg(test)]
+#[path = "object_store_test.rs"]
+mod tests;

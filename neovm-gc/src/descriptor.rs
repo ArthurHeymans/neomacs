@@ -55,6 +55,10 @@ impl ObjectKey {
         Self(header.as_ptr() as usize)
     }
 
+    pub(crate) unsafe fn header_unchecked(self) -> NonNull<ObjectHeader> {
+        unsafe { NonNull::new_unchecked(self.0 as *mut ObjectHeader) }
+    }
+
     #[inline]
     pub(crate) fn as_usize(self) -> usize {
         self.0
