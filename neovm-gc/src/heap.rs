@@ -5,7 +5,9 @@ use crate::collector_state::{CollectorSharedSnapshot, CollectorStateHandle};
 use crate::descriptor::{GcErased, Trace, TypeDesc, fixed_type_desc};
 use crate::mutator::Mutator;
 use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord, SpaceKind};
-use crate::object_store::{FlatObjectStore, ObjectPublishLocal, ObjectStore, ObjectStoreReadGuard};
+use crate::object_store::{
+    FlatObjectStore, ObjectPublishLocal, ObjectReadView, ObjectStore, ObjectStoreReadGuard,
+};
 use crate::pacer::{Pacer, PacerConfig, PacerStats};
 use crate::pause_stats::{PauseHistogram, PauseStatsHandle};
 use crate::plan::{
@@ -21,9 +23,6 @@ use crate::spaces::{
 use crate::stats::{AllocationCounterLocal, CollectionStats, HeapStats, OldRegionStats};
 use core::any::TypeId;
 use std::collections::HashMap;
-
-#[cfg(test)]
-use crate::object_store::ObjectReadView;
 
 /// Heap creation configuration.
 ///
@@ -2121,11 +2120,15 @@ impl HeapCore {
         roots: &crate::root::RootStack,
     ) -> Vec<GcErased> {
         let objects = self.objects();
-        let mut sources = collect_global_sources(roots, &objects, None);
-        if let Some(scanner) = &self.external_root_scanner {
-            scanner.call(&mut sources);
-        }
-        sources
+        self.global_sources_with_roots_from_objects(roots, &objects)
+    }
+
+    pub(crate) fn global_sources_with_roots_from_objects(
+        &self,
+        roots: &crate::root::RootStack,
+        objects: &impl ObjectReadView,
+    ) -> Vec<GcErased> {
+        collect_global_sources(roots, objects, self.external_root_scanner.as_ref())
     }
 
     pub(crate) fn objects(&self) -> ObjectStoreReadGuard<'_> {

@@ -552,8 +552,10 @@ impl<'heap> CollectorRuntime<'heap> {
     /// Begin a persistent major-mark session for one scheduler-provided plan.
     pub fn begin_major_mark(&mut self, plan: CollectionPlan) -> Result<(), AllocError> {
         self.heap.clear_pending_auto_compaction();
-        let sources = self.heap.global_sources_with_roots(&self.local.get().roots);
         let objects = self.heap.objects();
+        let sources = self
+            .heap
+            .global_sources_with_roots_from_objects(&self.local.get().roots, &objects);
         self.heap.collector_handle().begin_major_mark_and_refresh(
             objects.raw(),
             plan,
