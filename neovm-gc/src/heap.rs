@@ -260,11 +260,11 @@ impl Drop for ActiveMutatorSection<'_> {
 #[derive(Debug)]
 pub(crate) struct SafepointWriteGuard<'a> {
     heap: &'a Heap,
-    _guard: std::sync::RwLockWriteGuard<'a, ()>,
+    _guard: std::sync::MutexGuard<'a, ()>,
 }
 
 impl<'a> SafepointWriteGuard<'a> {
-    fn new(heap: &'a Heap, guard: std::sync::RwLockWriteGuard<'a, ()>) -> Self {
+    fn new(heap: &'a Heap, guard: std::sync::MutexGuard<'a, ()>) -> Self {
         Self {
             heap,
             _guard: guard,
@@ -274,11 +274,7 @@ impl<'a> SafepointWriteGuard<'a> {
 
 impl Drop for SafepointWriteGuard<'_> {
     fn drop(&mut self) {
-        self.heap
-            .state
-            .safepoint_requested
-            .store(false, std::sync::atomic::Ordering::Release);
-        self.heap.notify_safepoint_waiters();
+        self.heap.end_safepoint_request();
     }
 }
 
@@ -371,11 +367,12 @@ struct HeapState {
     objects: std::sync::Arc<ObjectStore>,
     alloc_counters: std::sync::Arc<crate::stats::AtomicAllocationCounters>,
     barrier_stats: std::sync::Arc<crate::stats::AtomicBarrierStats>,
-    safepoint: std::sync::RwLock<()>,
+    safepoint: std::sync::Mutex<()>,
     safepoint_wait: std::sync::Mutex<()>,
     safepoint_wait_cv: std::sync::Condvar,
     safepoint_requested: std::sync::atomic::AtomicBool,
     safepoint_epoch: std::sync::atomic::AtomicU64,
+    safepoint_request_count: std::sync::atomic::AtomicUsize,
     next_mutator_id: std::sync::atomic::AtomicU64,
     active_registered_mutators: std::sync::atomic::AtomicUsize,
     mutator_registry:
@@ -402,15 +399,15 @@ pub(crate) struct AllocationCommit {
 
 /// Global heap object.
 ///
-/// `Heap` owns one shared heap state containing a safepoint
-/// lock plus a storage lock. Mutators take short-lived
-/// safepoint read guards only around allocation / barrier
-/// critical sections, so collector / compaction paths can
-/// still stop the world by taking the safepoint write guard
-/// without being blocked by an otherwise idle persistent
-/// mutator. The common nursery-TLAB path can therefore avoid
-/// taking the storage write lock until it actually needs to
-/// touch shared heap state.
+/// `Heap` owns one shared heap state containing a stop-the-
+/// world coordination gate plus a storage lock. Registered
+/// mutators coordinate through per-mutator active-section
+/// counters and a shared safepoint-request flag, so
+/// collector / compaction paths can stop the world without
+/// forcing the mutator hot path through one shared lock.
+/// The common nursery-TLAB path can therefore avoid taking
+/// the storage write lock until it actually needs to touch
+/// shared heap state.
 ///
 /// `Heap` is `Clone` via `Arc::clone` — passing the heap to
 /// another thread or storing additional handles is cheap.
@@ -435,11 +432,12 @@ impl Heap {
                 objects,
                 alloc_counters,
                 barrier_stats,
-                safepoint: std::sync::RwLock::new(()),
+                safepoint: std::sync::Mutex::new(()),
                 safepoint_wait: std::sync::Mutex::new(()),
                 safepoint_wait_cv: std::sync::Condvar::new(),
                 safepoint_requested: std::sync::atomic::AtomicBool::new(false),
                 safepoint_epoch: std::sync::atomic::AtomicU64::new(0),
+                safepoint_request_count: std::sync::atomic::AtomicUsize::new(0),
                 next_mutator_id: std::sync::atomic::AtomicU64::new(0),
                 active_registered_mutators: std::sync::atomic::AtomicUsize::new(0),
                 mutator_registry: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -509,31 +507,6 @@ impl Heap {
         SharedHeap::from_heap(self)
     }
 
-    /// Acquire a mutator-side safepoint read guard.
-    ///
-    /// If a collector has already requested the safepoint write side,
-    /// new read-side entries wait until that stop-the-world request is
-    /// satisfied instead of racing ahead and extending the pause.
-    #[inline]
-    pub(crate) fn read_safepoint(&self) -> std::sync::RwLockReadGuard<'_, ()> {
-        loop {
-            if self.safepoint_requested() {
-                self.wait_for_safepoint_request_to_clear();
-                continue;
-            }
-            let guard = self
-                .state
-                .safepoint
-                .read()
-                .expect("heap safepoint lock poisoned");
-            if !self.safepoint_requested() {
-                return guard;
-            }
-            drop(guard);
-            self.wait_for_safepoint_request_to_clear();
-        }
-    }
-
     #[inline]
     pub(crate) fn safepoint_requested(&self) -> bool {
         self.state
@@ -549,12 +522,32 @@ impl Heap {
     }
 
     fn begin_safepoint_request(&self) {
-        self.state
-            .safepoint_epoch
+        let previous = self
+            .state
+            .safepoint_request_count
             .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-        self.state
-            .safepoint_requested
-            .store(true, std::sync::atomic::Ordering::Release);
+        if previous == 0 {
+            self.state
+                .safepoint_epoch
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            self.state
+                .safepoint_requested
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    fn end_safepoint_request(&self) {
+        let previous = self
+            .state
+            .safepoint_request_count
+            .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        debug_assert!(previous > 0, "safepoint request count underflow");
+        if previous == 1 {
+            self.state
+                .safepoint_requested
+                .store(false, std::sync::atomic::Ordering::Release);
+            self.notify_safepoint_waiters();
+        }
     }
 
     fn notify_safepoint_waiters(&self) {
@@ -626,11 +619,11 @@ impl Heap {
     /// Acquire a collector-side safepoint write guard.
     ///
     /// Publishes a "safepoint requested" gate before waiting on the
-    /// underlying `RwLock` so fresh mutator-side read entries stop
+    /// stop-the-world mutex so fresh registered-mutator entries stop
     /// immediately while the collector is trying to stop the world.
     /// The pending request stays asserted until the returned guard
     /// drops so registered mutators remain parked for the full STW
-    /// critical section, not just until the writer lock is acquired.
+    /// critical section, not just until the mutex is acquired.
     #[inline]
     pub(crate) fn write_safepoint(&self) -> SafepointWriteGuard<'_> {
         self.begin_safepoint_request();
@@ -638,7 +631,7 @@ impl Heap {
         let guard = self
             .state
             .safepoint
-            .write()
+            .lock()
             .expect("heap safepoint lock poisoned");
         SafepointWriteGuard::new(self, guard)
     }
@@ -649,13 +642,10 @@ impl Heap {
     ) -> Result<SafepointWriteGuard<'_>, std::sync::TryLockError<SafepointWriteGuard<'_>>> {
         self.begin_safepoint_request();
         if !self.registered_mutators_quiescent() {
-            self.state
-                .safepoint_requested
-                .store(false, std::sync::atomic::Ordering::Release);
-            self.notify_safepoint_waiters();
+            self.end_safepoint_request();
             return Err(std::sync::TryLockError::WouldBlock);
         }
-        match self.state.safepoint.try_write() {
+        match self.state.safepoint.try_lock() {
             Ok(guard) => Ok(SafepointWriteGuard::new(self, guard)),
             Err(std::sync::TryLockError::Poisoned(error)) => {
                 Err(std::sync::TryLockError::Poisoned(
@@ -663,10 +653,7 @@ impl Heap {
                 ))
             }
             Err(std::sync::TryLockError::WouldBlock) => {
-                self.state
-                    .safepoint_requested
-                    .store(false, std::sync::atomic::Ordering::Release);
-                self.notify_safepoint_waiters();
+                self.end_safepoint_request();
                 Err(std::sync::TryLockError::WouldBlock)
             }
         }
@@ -674,6 +661,9 @@ impl Heap {
 
     #[cfg(test)]
     pub(crate) fn set_safepoint_requested_for_test(&self, requested: bool) {
+        self.state
+            .safepoint_request_count
+            .store(usize::from(requested), std::sync::atomic::Ordering::Release);
         self.state
             .safepoint_requested
             .store(requested, std::sync::atomic::Ordering::Release);
@@ -774,7 +764,6 @@ impl Heap {
 
     /// Reset compaction stats.
     pub fn clear_compaction_stats(&self) {
-        let _safepoint = self.read_safepoint();
         self.write_core().clear_compaction_stats();
     }
 
@@ -1102,7 +1091,6 @@ impl Heap {
 
     /// Override the pacer's configuration in place.
     pub fn set_pacer_config(&self, config: PacerConfig) {
-        let _safepoint = self.read_safepoint();
         self.write_core().set_pacer_config(config);
     }
 

@@ -11975,7 +11975,8 @@ fn safepoint_request_blocks_new_read_entries_until_cleared() {
     let worker_heap = heap.clone();
     let (entered_tx, entered_rx) = mpsc::sync_channel(0);
     let worker = thread::spawn(move || {
-        let _guard = worker_heap.read_safepoint();
+        let mut mutator = worker_heap.mutator();
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
         entered_tx
             .send(())
             .expect("signal safepoint read entry after request clears");
