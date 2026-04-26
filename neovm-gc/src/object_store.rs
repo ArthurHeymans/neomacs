@@ -781,9 +781,11 @@ impl ObjectStore {
     ) -> ObjectLocator {
         let object_key = record.object_key();
         let shard_index = shard_index_for_key(object_key);
+        let generation = self.generation();
         let needs_reservation = {
             let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-            reservation.next_offset >= OBJECT_STORE_CHUNK_CAPACITY_U16
+            reservation.generation != generation
+                || reservation.next_offset >= OBJECT_STORE_CHUNK_CAPACITY_U16
         };
         if needs_reservation {
             publish_local.mark_touched(shard_index);
@@ -807,9 +809,11 @@ impl ObjectStore {
     ) -> ObjectLocator {
         let object_key = ObjectKey::from_header(header);
         let shard_index = shard_index_for_key(object_key);
+        let generation = self.generation();
         let needs_reservation = {
             let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-            reservation.next_offset >= OBJECT_STORE_CHUNK_CAPACITY_U16
+            reservation.generation != generation
+                || reservation.next_offset >= OBJECT_STORE_CHUNK_CAPACITY_U16
         };
         if needs_reservation {
             publish_local.mark_touched(shard_index);
