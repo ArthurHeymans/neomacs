@@ -1,15 +1,18 @@
 use crate::descriptor::ObjectKey;
 use crate::heap::AllocError;
 use crate::index_state::{
-    ForwardingMap, HeapIndexState, ObjectKeyBuildHasher, ObjectLocator, PreparedIndexReclaim,
+    ForwardingMap, HeapIndexState, ObjectIndex, ObjectKeyBuildHasher, ObjectLocator,
+    PreparedIndexReclaim,
 };
 use crate::object::{ObjectRecord, OldBlockPlacement, PendingFinalizer, SpaceKind};
+use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPlan};
 use crate::runtime_state::RuntimeStateHandle;
 use crate::spaces::{
     OldBlock, OldGenConfig, OldGenState, OldRegionCollectionStats, PreparedOldGenReclaim,
 };
 use crate::stats::{CollectionStats, HeapStats, PreparedHeapStats};
+use std::collections::HashSet;
 
 /// Physical old-gen compaction helper (physical-compaction step 3).
 ///
@@ -306,6 +309,30 @@ pub(crate) struct PreparedReclaim {
 }
 
 #[derive(Debug)]
+pub(crate) struct PreparedReclaimBuildState {
+    kind: CollectionKind,
+    prepared_object_count: usize,
+    scan_index: usize,
+    locators: Vec<ObjectLocator>,
+    finalizable_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
+    weak_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
+    ephemeron_candidate_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
+    rebuilt_object_index: ObjectIndex,
+    finalize_indices: Vec<usize>,
+    finalizable_candidates: Vec<ObjectKey>,
+    weak_candidates: Vec<ObjectKey>,
+    ephemeron_candidates: Vec<ObjectKey>,
+    survivors: Vec<PreparedReclaimSurvivor>,
+    stats: PreparedHeapStats,
+}
+
+impl PreparedReclaimBuildState {
+    pub(crate) fn scanned_objects(&self) -> usize {
+        self.scan_index
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct PreparedReclaimCommitState {
     scan_index: usize,
     survivor_cursor: usize,
@@ -368,6 +395,114 @@ pub(crate) fn prepare_reclaim(
         indexes: prepared_indexes,
         survivors,
         stats: prepared_stats,
+    }
+}
+
+pub(crate) fn begin_active_prepared_reclaim_build(
+    kind: CollectionKind,
+    locators: Vec<ObjectLocator>,
+    finalizable_candidates: Vec<ObjectKey>,
+    weak_candidates: Vec<ObjectKey>,
+    ephemeron_candidates: Vec<ObjectKey>,
+) -> PreparedReclaimBuildState {
+    let prepared_object_count = locators.len();
+    PreparedReclaimBuildState {
+        kind,
+        prepared_object_count,
+        scan_index: 0,
+        locators,
+        finalizable_candidate_set: finalizable_candidates
+            .into_iter()
+            .collect::<HashSet<_, ObjectKeyBuildHasher>>(),
+        weak_candidate_set: weak_candidates
+            .into_iter()
+            .collect::<HashSet<_, ObjectKeyBuildHasher>>(),
+        ephemeron_candidate_set: ephemeron_candidates
+            .into_iter()
+            .collect::<HashSet<_, ObjectKeyBuildHasher>>(),
+        rebuilt_object_index: ObjectIndex::with_capacity_and_hasher(
+            prepared_object_count,
+            ObjectKeyBuildHasher,
+        ),
+        finalize_indices: Vec::new(),
+        finalizable_candidates: Vec::new(),
+        weak_candidates: Vec::new(),
+        ephemeron_candidates: Vec::new(),
+        survivors: Vec::new(),
+        stats: PreparedHeapStats::default(),
+    }
+}
+
+pub(crate) fn advance_active_prepared_reclaim_build(
+    objects: ObjectReadRaw<'_>,
+    build: &mut PreparedReclaimBuildState,
+    budget: usize,
+) -> bool {
+    let target_scan_index = build
+        .prepared_object_count
+        .min(build.scan_index.saturating_add(budget.max(1)));
+    while build.scan_index < target_scan_index {
+        let object_index = build.scan_index;
+        let object = objects.get(build.locators[object_index]);
+        let object_key = object.object_key();
+        if keep_object_for_collection(build.kind, object) {
+            let rebuilt_index = build.survivors.len();
+            build
+                .rebuilt_object_index
+                .insert(object_key, ObjectLocator::flat(rebuilt_index));
+            build
+                .survivors
+                .push(PreparedReclaimSurvivor { object_index });
+            build
+                .stats
+                .record_live_object(object.space(), object.total_size());
+            if build.finalizable_candidate_set.contains(&object_key) {
+                build.finalizable_candidates.push(object_key);
+            }
+            if build.weak_candidate_set.contains(&object_key) {
+                build.weak_candidates.push(object_key);
+            }
+            if build.ephemeron_candidate_set.contains(&object_key) {
+                build.ephemeron_candidates.push(object_key);
+            }
+        } else if build.finalizable_candidate_set.contains(&object_key)
+            && !object.header().is_moved_out()
+        {
+            build.finalize_indices.push(object_index);
+        }
+        build.scan_index = build.scan_index.saturating_add(1);
+    }
+    build.scan_index >= build.prepared_object_count
+}
+
+pub(crate) fn finish_active_prepared_reclaim_build(
+    build: PreparedReclaimBuildState,
+) -> PreparedReclaim {
+    let PreparedReclaimBuildState {
+        prepared_object_count,
+        rebuilt_object_index,
+        finalize_indices,
+        finalizable_candidates,
+        weak_candidates,
+        ephemeron_candidates,
+        survivors,
+        stats,
+        ..
+    } = build;
+    PreparedReclaim {
+        prepared_object_count,
+        promoted_bytes: 0,
+        old_gen: PreparedOldGenReclaim::default(),
+        indexes: PreparedIndexReclaim {
+            rebuilt_object_index,
+            finalize_indices,
+            finalizable_candidates,
+            weak_candidates,
+            ephemeron_candidates,
+            remembered_owners: Vec::new(),
+        },
+        survivors,
+        stats,
     }
 }
 

@@ -223,9 +223,9 @@ fn reclaim_ready_tick_stays_bounded_even_with_unbounded_mark_budget() {
         .expect("poll active major mark")
         .expect("major-mark session should stay active");
     assert!(progress.completed);
-    assert_eq!(
-        mutator.active_major_mark_plan().map(|plan| plan.phase),
-        Some(crate::plan::CollectionPhase::Reclaim)
+    assert!(
+        mutator.active_major_mark_plan().is_some(),
+        "mark completion should keep the major session active until reclaim finishes"
     );
 
     let mut collector = BackgroundCollector::new(BackgroundCollectorConfig {

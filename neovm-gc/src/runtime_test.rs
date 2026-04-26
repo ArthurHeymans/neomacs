@@ -93,15 +93,31 @@ fn pause_histogram_records_reclaim_prepare_and_each_commit_slice() {
         .expect("major-mark session should stay active");
     assert!(progress.completed);
     assert_eq!(
+        mutator
+            .active_major_mark_plan()
+            .map(|plan| plan.phase == CollectionPhase::Reclaim),
+        Some(false),
+        "the first bounded reclaim-prep slice should not force the session into reclaim yet"
+    );
+
+    let mut prepare_slices = 1u64;
+    let after_initial_prepare = heap.pause_histogram();
+    assert_eq!(
+        after_initial_prepare.total_samples, 1,
+        "the first reclaim-prep slice should record its own stop-the-world sample"
+    );
+    while !mutator
+        .prepare_active_reclaim_if_needed()
+        .expect("follow-up reclaim prep assist")
+    {
+        prepare_slices = prepare_slices.saturating_add(1);
+    }
+    prepare_slices = prepare_slices.saturating_add(1);
+    assert_eq!(
         mutator.active_major_mark_plan().map(|plan| plan.phase),
         Some(CollectionPhase::Reclaim)
     );
-
-    let after_prepare = heap.pause_histogram();
-    assert_eq!(
-        after_prepare.total_samples, 1,
-        "reclaim preparation should record its own stop-the-world sample"
-    );
+    assert_eq!(heap.pause_histogram().total_samples, prepare_slices);
 
     let first = mutator
         .advance_active_reclaim_commit_with_budget(1)
@@ -109,7 +125,7 @@ fn pause_histogram_records_reclaim_prepare_and_each_commit_slice() {
     assert!(first.is_none());
     assert_eq!(
         heap.pause_histogram().total_samples,
-        after_prepare.total_samples + 1,
+        prepare_slices + 1,
         "an incomplete reclaim assist should immediately record one pause sample"
     );
 
@@ -126,8 +142,8 @@ fn pause_histogram_records_reclaim_prepare_and_each_commit_slice() {
     let snapshot = heap.pause_histogram();
     assert_eq!(
         snapshot.total_samples,
-        1 + assists,
-        "expected one sample for reclaim prep plus one sample per reclaim assist"
+        prepare_slices + assists,
+        "expected one sample per reclaim-prep slice plus one sample per reclaim assist"
     );
     assert!(mutator.active_major_mark_plan().is_none());
 }

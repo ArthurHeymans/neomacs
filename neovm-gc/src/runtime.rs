@@ -19,8 +19,10 @@ use crate::plan::{
     RuntimeWorkStatus,
 };
 use crate::reclaim::{
-    PreparedReclaim, advance_prepared_reclaim_commit, begin_prepared_reclaim_commit,
-    finish_prepared_reclaim_cycle, finish_prepared_reclaim_cycle_with_state,
+    PreparedReclaim, advance_active_prepared_reclaim_build, advance_prepared_reclaim_commit,
+    begin_active_prepared_reclaim_build, begin_prepared_reclaim_commit,
+    finish_active_prepared_reclaim_build, finish_prepared_reclaim_cycle,
+    finish_prepared_reclaim_cycle_with_state,
 };
 use crate::stats::{CollectionStats, HeapStats};
 use std::sync::atomic::AtomicBool;
@@ -29,6 +31,9 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 use crate::root::{HandleScope, Root};
 
+/// Default object budget for one bounded reclaim-prep assist.
+pub const DEFAULT_RECLAIM_PREP_SLICE_BUDGET: usize = 256;
+const MAX_RECLAIM_PREP_SLICE_BUDGET: usize = 16 * 1024;
 /// Default object budget for one bounded reclaim-commit assist.
 ///
 /// Reclaim commit runs stop-the-world, so it deliberately uses a
@@ -627,6 +632,14 @@ impl<'heap> CollectorRuntime<'heap> {
         {
             return Ok(cycle);
         }
+        if self
+            .active_major_mark_plan()
+            .is_some_and(|plan| plan.phase != CollectionPhase::Reclaim)
+            && self.prepare_active_reclaim_if_needed_with_budget(usize::MAX)?
+            && let Some(cycle) = self.commit_active_reclaim_if_ready()?
+        {
+            return Ok(cycle);
+        }
         let pause_start = Instant::now();
         let Some(state) = self.heap.collector_handle().take_major_mark_state() else {
             return Err(AllocError::NoCollectionInProgress);
@@ -653,6 +666,32 @@ impl<'heap> CollectorRuntime<'heap> {
 
     /// Prepare reclaim for the active major collection once mark work is fully drained.
     pub fn prepare_active_reclaim_if_needed(&mut self) -> Result<bool, AllocError> {
+        let Some((pause_nanos, scanned_objects)) = self
+            .heap
+            .collector_handle()
+            .active_reclaim_prep_progress()
+        else {
+            return self.prepare_active_reclaim_if_needed_with_budget(
+                DEFAULT_RECLAIM_PREP_SLICE_BUDGET,
+            );
+        };
+        let budget = adaptive_pause_target_budget(
+            self.heap.pacer().config().target_pause,
+            scanned_objects,
+            pause_nanos,
+            DEFAULT_RECLAIM_PREP_SLICE_BUDGET,
+            1,
+            MAX_RECLAIM_PREP_SLICE_BUDGET,
+        );
+        self.prepare_active_reclaim_if_needed_with_budget(budget)
+    }
+
+    /// Prepare reclaim for the active major collection once mark work is
+    /// fully drained, using a bounded object-scan budget.
+    pub fn prepare_active_reclaim_if_needed_with_budget(
+        &mut self,
+        budget: usize,
+    ) -> Result<bool, AllocError> {
         let snapshot = self.heap.collector_shared_snapshot();
         if snapshot.active_major_mark_plan.is_none() {
             return Ok(false);
@@ -667,32 +706,98 @@ impl<'heap> CollectorRuntime<'heap> {
         let Some(request) = request else {
             return Ok(false);
         };
-        let pause_start = Instant::now();
-        let (mark_steps_delta, mark_rounds_delta) = {
-            let objects = self.heap.objects();
-            prepare_active_reclaim(
+        if request.plan.kind != CollectionKind::Major {
+            let pause_start = Instant::now();
+            let (mark_steps_delta, mark_rounds_delta) = {
+                let objects = self.heap.objects();
+                prepare_active_reclaim(
+                    &request,
+                    |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
+                    objects.raw(),
+                )
+            };
+            let prepared = build_prepared_active_reclaim(
                 &request,
-                |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
-                objects.raw(),
-            )
+                mark_steps_delta,
+                mark_rounds_delta,
+                |plan| self.prepare_reclaim_for_plan(plan),
+            )?;
+            let pause_nanos = elapsed_nanos(pause_start.elapsed());
+            let prepared = self
+                .heap
+                .collector_handle()
+                .complete_active_reclaim_prep_and_refresh(
+                    prepared,
+                    &self.heap.storage_stats(),
+                    self.heap.old_gen(),
+                    self.heap.old_config(),
+                    |kind| self.heap.plan_for(kind),
+                );
+            self.heap.record_pause_sample(pause_nanos);
+            return Ok(prepared);
+        }
+        let pause_start = Instant::now();
+        let Some(mut state) = self.heap.collector_handle().take_major_mark_state() else {
+            return Ok(false);
         };
-        let prepared =
-            build_prepared_active_reclaim(&request, mark_steps_delta, mark_rounds_delta, |plan| {
-                self.prepare_reclaim_for_plan(plan)
-            })?;
-        let pause_nanos = elapsed_nanos(pause_start.elapsed());
-        let prepared = self
-            .heap
-            .collector_handle()
-            .complete_active_reclaim_prep_and_refresh(
-                prepared,
+        if !state.worklist.is_empty() || state.reclaim_prepared {
+            self.heap.collector_handle().restore_major_mark_state_and_refresh(
+                state,
                 &self.heap.storage_stats(),
                 self.heap.old_gen(),
                 self.heap.old_config(),
                 |kind| self.heap.plan_for(kind),
             );
+            return Ok(false);
+        }
+
+        if !state.ephemerons_processed {
+            let objects = self.heap.objects();
+            let (mark_steps_delta, mark_rounds_delta) = prepare_active_reclaim(
+                &request,
+                |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
+                objects.raw(),
+            );
+            state.mark_elapsed_nanos = elapsed_nanos(state.mark_started_at.elapsed());
+            state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
+            state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
+            state.ephemerons_processed = true;
+        }
+
+        let objects = self.heap.objects();
+        let raw = objects.raw();
+        let build = state.reclaim_prepare_state.get_or_insert_with(|| {
+            begin_active_prepared_reclaim_build(
+                request.plan.kind,
+                raw.all_locators(),
+                objects.finalizable_candidates(),
+                objects.weak_candidates(),
+                objects.ephemeron_candidates(),
+            )
+        });
+        let completed = advance_active_prepared_reclaim_build(raw, build, budget);
+        let pause_nanos = elapsed_nanos(pause_start.elapsed());
+        state.reclaim_prepare_nanos = state.reclaim_prepare_nanos.saturating_add(pause_nanos);
         self.heap.record_pause_sample(pause_nanos);
-        Ok(prepared)
+        if completed {
+            let prepared_reclaim = finish_active_prepared_reclaim_build(
+                state
+                    .reclaim_prepare_state
+                    .take()
+                    .expect("completed reclaim prep should take build state"),
+            );
+            state.reclaim_prepared = true;
+            state.prepared_reclaim = Some(prepared_reclaim);
+            state.reclaim_commit_pause_nanos = 0;
+        }
+        self.heap.collector_handle().restore_major_mark_state_and_refresh(
+            state,
+            &self.heap.storage_stats(),
+            self.heap.old_gen(),
+            self.heap.old_config(),
+            |kind| self.heap.plan_for(kind),
+        );
+        Ok(completed)
     }
 
     /// Finish the active major collection if its mark work is fully drained.

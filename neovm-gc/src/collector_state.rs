@@ -12,7 +12,7 @@ use crate::index_state::ObjectLocator;
 use crate::mark::MarkWorklist;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
-use crate::reclaim::{PreparedReclaim, PreparedReclaimCommitState};
+use crate::reclaim::{PreparedReclaim, PreparedReclaimBuildState, PreparedReclaimCommitState};
 use crate::spaces::{OldGenConfig, OldGenState};
 use crate::stats::HeapStats;
 
@@ -139,6 +139,10 @@ impl CollectorStateHandle {
 
     pub(crate) fn active_reclaim_commit_progress(&self) -> Option<(u64, usize)> {
         self.lock().active_reclaim_commit_progress()
+    }
+
+    pub(crate) fn active_reclaim_prep_progress(&self) -> Option<(u64, usize)> {
+        self.lock().active_reclaim_prep_progress()
     }
 
     /// Lock-free hot-path read. Exact for callers that hold
@@ -448,6 +452,7 @@ pub(crate) struct MajorMarkState {
     pub(crate) reclaim_commit_pause_nanos: u64,
     pub(crate) ephemerons_processed: bool,
     pub(crate) reclaim_prepared: bool,
+    pub(crate) reclaim_prepare_state: Option<PreparedReclaimBuildState>,
     pub(crate) prepared_reclaim: Option<PreparedReclaim>,
     pub(crate) reclaim_commit_state: Option<PreparedReclaimCommitState>,
 }
@@ -519,6 +524,14 @@ impl CollectorState {
         })
     }
 
+    pub(crate) fn active_reclaim_prep_progress(&self) -> Option<(u64, usize)> {
+        self.major_mark_state
+            .as_ref()
+            .and_then(|state| state.reclaim_prepare_state.as_ref().map(|prep| {
+                (state.reclaim_prepare_nanos, prep.scanned_objects())
+            }))
+    }
+
     pub(crate) fn has_active_major_mark(&self) -> bool {
         self.major_mark_state.is_some()
     }
@@ -539,6 +552,7 @@ impl CollectorState {
             reclaim_commit_pause_nanos: 0,
             ephemerons_processed: false,
             reclaim_prepared: false,
+            reclaim_prepare_state: None,
             prepared_reclaim: None,
             reclaim_commit_state: None,
         });
@@ -554,6 +568,7 @@ impl CollectorState {
         state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = false;
         state.reclaim_prepared = false;
+        state.reclaim_prepare_state = None;
         state.prepared_reclaim = None;
         state.reclaim_commit_state = None;
         true
@@ -641,6 +656,7 @@ impl CollectorState {
         state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = true;
         state.reclaim_prepared = true;
+        state.reclaim_prepare_state = None;
         state.prepared_reclaim = prepared_reclaim;
         state.reclaim_commit_state = None;
         true
@@ -664,6 +680,7 @@ impl CollectorState {
             state.reclaim_commit_pause_nanos = 0;
             state.ephemerons_processed = false;
             state.reclaim_prepared = false;
+            state.reclaim_prepare_state = None;
             state.prepared_reclaim = None;
             state.reclaim_commit_state = None;
         }
