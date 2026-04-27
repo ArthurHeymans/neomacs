@@ -1620,6 +1620,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_and_or_special_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 0)) (+ (if (and t 1 2) 10 0) (or nil 4 (setq x 99)) x))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(14)));
+    }
+
+    #[test]
     fn catches_direct_throw() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));

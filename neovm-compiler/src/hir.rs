@@ -302,6 +302,8 @@ impl Lowerer<'_> {
             Some("if") => self.lower_if(form, items),
             Some("progn") => self.lower_progn(form, &items[1..]),
             Some("prog1") => self.lower_prog1(form, &items[1..]),
+            Some("and") => self.lower_and(form, &items[1..]),
+            Some("or") => self.lower_or(form, &items[1..]),
             Some("let") => self.lower_let(form, &items[1..], false),
             Some("let*") => self.lower_let(form, &items[1..], true),
             Some("lambda") => self.lower_lambda(form, items),
@@ -414,6 +416,72 @@ impl Lowerer<'_> {
                 }],
                 body: Box::new(HirExpr {
                     kind: HirExprKind::Progn(exprs),
+                    span: form.span,
+                }),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_and(&mut self, form: &SurfaceForm, exprs: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((first, rest)) = exprs.split_first() else {
+            return Some(HirExpr {
+                kind: HirExprKind::Const(HirConst::True),
+                span: form.span,
+            });
+        };
+        let first = self.lower_expr(first)?;
+        if rest.is_empty() {
+            return Some(first);
+        }
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(first),
+                then_expr: Box::new(self.lower_and(form, rest)?),
+                else_expr: Box::new(HirExpr {
+                    kind: HirExprKind::Const(HirConst::Nil),
+                    span: form.span,
+                }),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_or(&mut self, form: &SurfaceForm, exprs: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((first, rest)) = exprs.split_first() else {
+            return Some(HirExpr {
+                kind: HirExprKind::Const(HirConst::Nil),
+                span: form.span,
+            });
+        };
+        let first = self.lower_expr(first)?;
+        if rest.is_empty() {
+            return Some(first);
+        }
+        let temp = format!("\0or.{}.{}", form.span.start, rest.len());
+        Some(HirExpr {
+            kind: HirExprKind::Let {
+                mode: BindingMode::Lexical,
+                sequential: true,
+                declarations: Vec::new(),
+                bindings: vec![HirBinding {
+                    name: temp.clone(),
+                    mode: BindingMode::Lexical,
+                    init: first,
+                    span: form.span,
+                }],
+                body: Box::new(HirExpr {
+                    kind: HirExprKind::If {
+                        test: Box::new(HirExpr {
+                            kind: HirExprKind::LexicalGet(temp.clone()),
+                            span: form.span,
+                        }),
+                        then_expr: Box::new(HirExpr {
+                            kind: HirExprKind::LexicalGet(temp),
+                            span: form.span,
+                        }),
+                        else_expr: Box::new(self.lower_or(form, rest)?),
+                    },
                     span: form.span,
                 }),
             },
@@ -1006,6 +1074,19 @@ mod tests {
             panic!("expected expr");
         };
         assert!(matches!(expr.kind, HirExprKind::Let { .. }));
+    }
+
+    #[test]
+    fn lowers_and_or_to_short_circuit_hir() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(progn (and a b) (or a b))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
+        assert!(matches!(exprs[1].kind, HirExprKind::Let { .. }));
     }
 
     #[test]
