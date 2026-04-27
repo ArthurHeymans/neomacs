@@ -22,7 +22,7 @@ SSA CFG: optimization IR with basic blocks, values, and effects
  ↓
 Register IR: executable low-level VM/JIT IR
  ↓
-Execution: register interpreter first, JIT later
+Execution: register interpreter and Cranelift native backend
 ```
 
 ## Goals
@@ -34,7 +34,8 @@ Execution: register interpreter first, JIT later
 - Make each stage inspectable through stable pretty-printers and verifiers.
 - Model lexical binding, dynamic binding, buffer-sensitive symbol access,
   nonlocal control flow, effects, and GC safepoints explicitly.
-- Build a fast register interpreter before attempting a native-code JIT.
+- Keep Register IR backend-independent while using Cranelift for native
+  codegen rather than hand-writing a machine-code backend.
 
 ## Non-Goals
 
@@ -43,7 +44,8 @@ Execution: register interpreter first, JIT later
   milestones.
 - No broad Elisp support by silently falling back inside the compiler. Unknown
   forms should produce explicit diagnostics.
-- No JIT before the Register IR and safepoint metadata are stable.
+- No direct machine-code backend before the Register IR and safepoint metadata
+  are stable. Native JIT work should go through Cranelift first.
 - No attempt to treat dynamic variables or buffer-local variables as ordinary
   SSA locals.
 
@@ -325,12 +327,13 @@ This matters for both correctness and precise root maps.
 
 ## Register IR
 
-Register IR is the execution contract for the interpreter and future JIT. It is
-lower-level than SSA and should make VM state explicit.
+Register IR is the execution contract for the interpreter and backend lowering.
+It is lower-level than SSA and should make VM state explicit.
 
 Register IR should contain:
 
-- Physical or virtual registers.
+- Virtual registers. Physical register allocation belongs to Cranelift unless
+  we later build a custom native backend.
 - Constants.
 - Direct jumps.
 - Calls.
@@ -340,8 +343,27 @@ Register IR should contain:
 - Frame layout metadata.
 - Deopt or reconstruction metadata later.
 
-The register interpreter should be the first execution backend. JIT work should
-wait until Register IR invariants, safepoints, and test coverage are stable.
+The register interpreter remains useful for portability, debugging, and
+semantic validation. Native execution should lower to Cranelift IR, letting
+Cranelift own instruction selection, physical register allocation, verification,
+and machine-code emission.
+
+## Cranelift Backend
+
+Cranelift is the preferred native backend. The compiler should lower the safe,
+explicit subset of SSA or Register IR into Cranelift IR, then use Cranelift for
+optimization, register allocation, stack maps, and eventual JIT/AOT emission.
+
+Initial Cranelift lowering is intentionally conservative:
+
+- Treat Lisp values as an opaque `i64` carrier until the runtime value ABI is
+  finalized.
+- Lower constants, lexical block parameters, direct jumps, conditional branches,
+  and returns.
+- Reject calls, symbol access, dynamic binding, allocation, and nonlocal exits
+  until a runtime ABI and precise safepoint/stack-map contract exist.
+- Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
+  physical register allocation internally.
 
 ## Safepoints And GC Metadata
 
@@ -492,8 +514,9 @@ Suggested dump modes:
 6. Implement SSA verifier and simple optimization passes.
 7. Lower SSA to Register IR.
 8. Implement Register IR verifier and safepoint metadata skeleton.
-9. Add a register interpreter for the supported subset.
-10. Add GNU oracle tests around behavior, initially outside the core compiler.
+9. Add conservative Cranelift IR lowering for the safe SSA/Register IR subset.
+10. Add a register interpreter for the supported subset.
+11. Add GNU oracle tests around behavior, initially outside the core compiler.
 
 ## Design Principle
 

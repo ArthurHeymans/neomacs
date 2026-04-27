@@ -1,15 +1,16 @@
 //! Standalone long-term Elisp compiler pipeline for NeoVM.
 //!
-//! The crate currently implements the front of the pipeline:
+//! The crate currently implements the first inspectable compiler pipeline:
 //!
 //! ```text
-//! .el source -> reader -> surface AST -> expansion boundary -> HIR
+//! .el source -> reader -> surface AST -> expansion boundary -> HIR -> SSA -> RegIR
 //! ```
 //!
-//! Later milestones will fill in SSA CFG, Register IR, safepoints, and the
-//! register interpreter.
+//! Cranelift is the planned native backend. Register IR remains the
+//! Elisp-semantic VM IR; Cranelift lowering is an optional backend layer.
 
 pub mod ast;
+pub mod clif;
 pub mod diagnostic;
 pub mod effects;
 pub mod expand;

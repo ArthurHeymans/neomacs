@@ -55,6 +55,21 @@ Why:
 
 Source: <https://docs.rs/cranelift-entity/latest/cranelift_entity/>
 
+### `cranelift-codegen` and `cranelift-frontend`
+
+Used for the planned native backend.
+
+Why:
+
+- Mature Rust compiler backend from the Bytecode Alliance.
+- Owns Cranelift IR verification, instruction selection, machine lowering, and
+  physical register allocation.
+- Lets NeoVM avoid a custom native code generator while keeping Elisp semantics
+  explicit in HIR/SSA/Register IR.
+
+Source: <https://cranelift.dev/>
+Source: <https://docs.rs/cranelift-frontend/latest/cranelift_frontend/>
+
 ### `indexmap`
 
 Used for deterministic semantic maps such as scopes.
@@ -98,18 +113,6 @@ Do not add until the compiler has stable query boundaries.
 
 Source: <https://rustc-dev-guide.rust-lang.org/queries/salsa.html>
 
-### `cranelift-frontend`
-
-Use as a reference or backend bridge, not as the main Elisp SSA IR.
-
-Reason:
-
-- It can build Cranelift SSA, but NeoVM needs Elisp-specific effects,
-  nonlocal control flow, dynamic binding, buffer-sensitive symbol access, and
-  precise GC safepoint metadata as first-class IR concepts.
-
-Source: <https://docs.rs/cranelift-frontend/latest/cranelift_frontend/>
-
 ### `cranelift-jit`
 
 Use later when native-code JIT work starts.
@@ -117,6 +120,18 @@ Use later when native-code JIT work starts.
 Do not add during front-end/IR bootstrap.
 
 Source: <https://docs.rs/crate/cranelift-jit/latest>
+
+### `regalloc2`
+
+Do not add directly while the native backend is Cranelift.
+
+Reason:
+
+- Cranelift already uses register allocation internally.
+- A direct `regalloc2` dependency is useful only if NeoVM later builds a custom
+  machine-code backend that bypasses Cranelift.
+
+Source: <https://docs.rs/regalloc2/latest/regalloc2/>
 
 ### `chumsky` or `winnow`
 
