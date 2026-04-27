@@ -205,7 +205,8 @@ HIR should encode:
 - Symbol value operations.
 - Function namespace vs value namespace.
 - Calls by value and calls by name.
-- `if`, `progn`, `let`, `let*`, `lambda`, `defun`, and `setq`.
+- `if`, `progn`, `let`, `let*`, `lambda`, function-quoted lambda,
+  `defun`, and `setq`.
 - `catch`, `throw`, `condition-case`, and `unwind-protect`.
 - Declaration effects such as special variables.
 - Source spans.

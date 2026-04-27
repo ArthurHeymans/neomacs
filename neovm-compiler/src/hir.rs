@@ -227,10 +227,7 @@ impl Lowerer<'_> {
                 kind: HirExprKind::Quote(inner.clone()),
                 span: form.span,
             }),
-            SurfaceKind::FunctionQuote(inner) => Some(HirExpr {
-                kind: HirExprKind::FunctionQuote(inner.clone()),
-                span: form.span,
-            }),
+            SurfaceKind::FunctionQuote(inner) => self.lower_function_quote(form, inner),
             SurfaceKind::List(items) => self.lower_list(form, items),
             SurfaceKind::Vector(_) => {
                 self.error(form.span, "vector expressions are not supported yet");
@@ -340,8 +337,21 @@ impl Lowerer<'_> {
             self.error(form.span, "function requires exactly one argument");
             return None;
         }
+        self.lower_function_quote(form, &items[1])
+    }
+
+    fn lower_function_quote(
+        &mut self,
+        form: &SurfaceForm,
+        quoted: &SurfaceForm,
+    ) -> Option<HirExpr> {
+        if let Some(items) = list_items(quoted)
+            && items.first().and_then(SurfaceForm::symbol_name) == Some("lambda")
+        {
+            return self.lower_lambda(form, items);
+        }
         Some(HirExpr {
-            kind: HirExprKind::FunctionQuote(Box::new(items[1].clone())),
+            kind: HirExprKind::FunctionQuote(Box::new(quoted.clone())),
             span: form.span,
         })
     }
@@ -951,5 +961,23 @@ mod tests {
         assert!(matches!(exprs[0].kind, HirExprKind::Catch { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::ConditionCase { .. }));
         assert!(matches!(exprs[2].kind, HirExprKind::UnwindProtect { .. }));
+    }
+
+    #[test]
+    fn function_quoted_lambda_lowers_to_semantic_lambda() {
+        let module =
+            hir(";;; -*- lexical-binding: t; -*-\n(defun make (x) #'(lambda (y) (+ x y)))");
+        let HirItem::Defun(defun) = &module.items[0] else {
+            panic!("expected defun");
+        };
+        let HirExprKind::Lambda { params, body, .. } = &defun.body.kind else {
+            panic!("expected lambda body");
+        };
+        assert_eq!(params, &vec!["y".to_string()]);
+        let HirExprKind::CallNamed { args, .. } = &body.kind else {
+            panic!("expected lambda call body");
+        };
+        assert!(matches!(args[0].kind, HirExprKind::LexicalGet(_)));
+        assert!(matches!(args[1].kind, HirExprKind::LexicalGet(_)));
     }
 }

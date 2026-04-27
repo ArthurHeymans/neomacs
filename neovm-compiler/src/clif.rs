@@ -1656,6 +1656,29 @@ mod tests {
     }
 
     #[test]
+    fn lowers_function_quoted_lambda_to_runtime_materialization() {
+        let artifact = compile_source(
+            "function-lambda.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-adder (x) #'(lambda (y) (+ x y)))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_lambda_1")
+        );
+        assert_eq!(clif.runtime.lambda_templates().len(), 1);
+        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
+        assert_eq!(clif.runtime.lambda_templates()[0].captures, vec!["x"]);
+    }
+
+    #[test]
     fn lowers_if_and_block_params_to_cranelift_ir() {
         let artifact = compile_source(
             "choose.el",
