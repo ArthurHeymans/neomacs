@@ -1,8 +1,8 @@
 use std::fmt::Write;
 
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
-use crate::regir::{RegFunction, RegInstKind, RegTerminator};
-use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
+use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
+use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaModule, SsaTerminator, SsaValueKind};
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 use crate::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxTree};
 
@@ -77,6 +77,18 @@ pub fn dump_ssa(function: &SsaFunction) -> String {
     out
 }
 
+pub fn dump_ssa_module(module: &SsaModule) -> String {
+    let mut out = String::new();
+    for (function_id, function) in module.functions.iter() {
+        let name = function.name.as_deref().unwrap_or("<anonymous>");
+        let _ = writeln!(out, "function {function_id:?} {name}");
+        for line in dump_ssa(function).lines() {
+            let _ = writeln!(out, "  {line}");
+        }
+    }
+    out
+}
+
 pub fn dump_regir(function: &RegFunction) -> String {
     let mut out = String::new();
     let name = function.name.as_deref().unwrap_or("<anonymous>");
@@ -91,6 +103,18 @@ pub fn dump_regir(function: &RegFunction) -> String {
         let _ = write!(out, "  ");
         dump_reg_terminator(&block.terminator, function, &mut out);
         let _ = writeln!(out);
+    }
+    out
+}
+
+pub fn dump_regir_module(module: &RegModule) -> String {
+    let mut out = String::new();
+    for (function_id, function) in module.functions.iter() {
+        let name = function.name.as_deref().unwrap_or("<anonymous>");
+        let _ = writeln!(out, "function {function_id:?} {name}");
+        for line in dump_regir(function).lines() {
+            let _ = writeln!(out, "  {line}");
+        }
     }
     out
 }
@@ -739,7 +763,10 @@ fn const_name(value: &HirConst) -> String {
 mod tests {
     use crate::compile_source;
     use crate::lower::{hir_to_ssa, ssa_to_regir};
-    use crate::pretty::{dump_hir, dump_regir, dump_ssa, dump_surface, dump_syntax};
+    use crate::pretty::{
+        dump_hir, dump_regir, dump_regir_module, dump_ssa, dump_ssa_module, dump_surface,
+        dump_syntax,
+    };
     use crate::verify::{verify_regir, verify_ssa};
 
     #[test]
@@ -751,6 +778,23 @@ mod tests {
         let dump = dump_hir(&artifact.hir.expect("HIR"));
         assert!(dump.contains("defun add2"));
         assert!(dump.contains("lexical-get x"));
+    }
+
+    #[test]
+    fn dumps_module_level_ssa_and_regir() {
+        let artifact = compile_source(
+            "module.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun a (x) x)\n(defun b (y) (+ y 1))",
+        );
+        let ssa_dump = dump_ssa_module(artifact.ssa.as_ref().expect("SSA module"));
+        assert!(ssa_dump.contains("function"));
+        assert!(ssa_dump.contains("a"));
+        assert!(ssa_dump.contains("b"));
+
+        let regir_dump = dump_regir_module(artifact.regir.as_ref().expect("RegIR module"));
+        assert!(regir_dump.contains("function"));
+        assert!(regir_dump.contains("a"));
+        assert!(regir_dump.contains("b"));
     }
 
     #[test]

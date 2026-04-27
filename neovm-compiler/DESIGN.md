@@ -634,6 +634,8 @@ Suggested dump modes:
 --dump-hir
 --dump-ssa
 --dump-regir
+--dump-ssa-module
+--dump-regir-module
 --dump-all
 ```
 
