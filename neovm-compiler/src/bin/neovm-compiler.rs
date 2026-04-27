@@ -110,6 +110,22 @@ fn scan(args: Vec<String>) -> ExitCode {
             }
         };
 
+        // Phase 1: reader only
+        let src = neovm_compiler::source::SourceFile::new(
+            neovm_compiler::source::SourceId::new(0),
+            Some(path.clone()),
+            text.clone(),
+        );
+        let reader_output = neovm_compiler::reader::read_source(&src);
+        if !reader_output.diagnostics.is_empty() {
+            reader_errors += 1;
+            eprintln!("{}: {} reader diagnostics (forms: {})", path, reader_output.diagnostics.len(), reader_output.forms.len());
+            // Don't continue — try expansion too
+        } else {
+            eprintln!("{}: reader OK (forms: {})", path, reader_output.forms.len());
+        }
+
+        // Phase 2: expansion + lowering
         let artifact = compile_source(path, &text);
         let has_reader_errors = artifact.diagnostics.iter().any(|d| {
             d.message.contains("unexpected") || d.message.contains("expected")

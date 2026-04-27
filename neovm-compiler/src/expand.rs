@@ -3,8 +3,13 @@ use std::collections::HashMap;
 use crate::diagnostic::Diagnostic;
 use crate::expand_eval::{MacroEnv, MacroEval};
 use crate::expand_value::{surface_to_value, value_to_surface, MacroValue};
-use crate::source::Span;
+use crate::source::{SourceId, Span};
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
+
+enum Work {
+    Expand(SurfaceForm),
+    RejoinDotted(Span, usize),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExpandOutput {
@@ -16,7 +21,6 @@ pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
     let mut expander = Expander {
         macros: HashMap::new(),
         diagnostics: Vec::new(),
-        expansion_depth: 0,
     };
     let mut expanded_forms = Vec::new();
     for form in forms {
@@ -35,7 +39,6 @@ pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
 struct Expander {
     macros: HashMap<String, MacroDef>,
     diagnostics: Vec<Diagnostic>,
-    expansion_depth: usize,
 }
 
 impl Expander {
@@ -87,25 +90,101 @@ impl Expander {
     }
 
     fn expand_form(&mut self, form: SurfaceForm) -> SurfaceForm {
-        match form.kind {
-            SurfaceKind::List(items) => self.expand_list(form.span, items),
-            SurfaceKind::DottedList(items, tail) => SurfaceForm::new(
-                SurfaceKind::DottedList(
+        // Stack-based tree traversal to avoid blowing the call stack on
+        // deeply nested Elisp forms. Each Work item expands one SurfaceForm.
+        // When expansion produces sub-forms that also need expanding, they
+        // are pushed as Work items instead of recursing.
+        let mut stack = vec![Work::Expand(form)];
+        let mut results: Vec<SurfaceForm> = Vec::new();
+
+        while let Some(work) = stack.pop() {
+            match work {
+                Work::Expand(form) => {
+                    match form.kind {
+                        SurfaceKind::List(items) => {
+                            let expanded = self.expand_single_list(form.span, items);
+                            // expand_single_list may have already fully expanded
+                            // sub-forms (in the non-macro, non-special case) or
+                            // may have returned a form whose sub-forms still need
+                            // expansion. Check by structure.
+                            results.push(expanded);
+                        }
+                        SurfaceKind::DottedList(items, tail) => {
+                            // Push a reunion task, then push sub-forms in reverse
+                            // so they are processed left-to-right.
+                            let count = items.len() + 1; // items + tail
+                            stack.push(Work::RejoinDotted(form.span, count));
+                            stack.push(Work::Expand(*tail));
+                            for item in items.into_iter().rev() {
+                                stack.push(Work::Expand(item));
+                            }
+                        }
+                        SurfaceKind::Vector(_) => {
+                            results.push(form);
+                        }
+                        SurfaceKind::Quote(_)
+                        | SurfaceKind::FunctionQuote(_)
+                        | SurfaceKind::Backquote(_)
+                        | SurfaceKind::Comma(_)
+                        | SurfaceKind::CommaAt(_)
+                        | SurfaceKind::Atom(_) => {
+                            results.push(form);
+                        }
+                    }
+                }
+                Work::RejoinDotted(span, count) => {
+                    // Collect `count` results from the top of results, build DottedList.
+                    let split = results.len() - count;
+                    let tail_idx = split + count - 1;
+                    let tail = results.swap_remove(tail_idx);
+                    let items: Vec<SurfaceForm> = results.drain(split..).collect();
+                    results.push(SurfaceForm::new(
+                        SurfaceKind::DottedList(items, Box::new(tail)),
+                        span,
+                    ));
+                }
+            }
+        }
+
+        results.pop().unwrap_or_else(|| SurfaceForm::new(
+            SurfaceKind::Atom(SurfaceAtom::Nil),
+            Span::new(SourceId::new(0), 0, 0),
+        ))
+    }
+
+    /// Expand a single list form (non-recursive: sub-forms are expanded
+    /// iteratively via the work stack in expand_form).
+    fn expand_single_list(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        let Some(head) = items.first().and_then(SurfaceForm::symbol_name) else {
+            // Empty or non-symbol-headed list: expand each sub-form.
+            return SurfaceForm::new(
+                SurfaceKind::List(
                     items
                         .into_iter()
                         .map(|item| self.expand_form(item))
                         .collect(),
-                    Box::new(self.expand_form(*tail)),
                 ),
-                form.span,
+                span,
+            );
+        };
+        if let Some(def) = self.macros.get(head).cloned() {
+            return self.expand_macro_call(span, items, def);
+        }
+        match head {
+            "quote" | "function" => SurfaceForm::new(SurfaceKind::List(items), span),
+            "push" => self.expand_push(span, items),
+            "pop" => self.expand_pop(span, items),
+            "if-let*" => self.expand_if_let(span, items),
+            "when-let*" => self.expand_when_let(span, items),
+            _ => SurfaceForm::new(
+                SurfaceKind::List(
+                    items
+                        .into_iter()
+                        .map(|item| self.expand_form(item))
+                        .collect(),
+                ),
+                span,
             ),
-            SurfaceKind::Vector(_) => form,
-            SurfaceKind::Quote(_)
-            | SurfaceKind::FunctionQuote(_)
-            | SurfaceKind::Backquote(_)
-            | SurfaceKind::Comma(_)
-            | SurfaceKind::CommaAt(_)
-            | SurfaceKind::Atom(_) => form,
         }
     }
 
@@ -148,17 +227,45 @@ impl Expander {
         items: Vec<SurfaceForm>,
         def: MacroDef,
     ) -> SurfaceForm {
-        if self.expansion_depth >= 100 {
-            self.error(span, "macro expansion exceeded recursion limit");
-            return SurfaceForm::new(SurfaceKind::List(items), span);
+        // First expansion attempt.
+        let mut form = match self.invoke_macro(&def, &items[1..]) {
+            Some(expanded) => expanded,
+            None => {
+                // Expansion failed. Return the original form without further
+                // expansion attempts so we don't loop on failing macros.
+                return SurfaceForm::new(SurfaceKind::List(items), span);
+            }
+        };
+
+        // Iteratively re-expand if the result is another macro call.
+        for _ in 0..100 {
+            let SurfaceKind::List(ref expansion_items) = form.kind else {
+                break;
+            };
+            let Some(head) = expansion_items.first().and_then(SurfaceForm::symbol_name) else {
+                break;
+            };
+            let Some(next_def) = self.macros.get(head).cloned() else {
+                break;
+            };
+            let expansion_span = form.span;
+            let expansion_items = match std::mem::replace(&mut form.kind, SurfaceKind::Atom(SurfaceAtom::Nil)) {
+                SurfaceKind::List(items) => items,
+                _ => unreachable!(),
+            };
+            form = match self.invoke_macro(&next_def, &expansion_items[1..]) {
+                Some(expanded) => expanded,
+                None => {
+                    // Expansion failed. Stop re-expanding to avoid infinite loops.
+                    form = SurfaceForm::new(SurfaceKind::List(expansion_items), expansion_span);
+                    break;
+                }
+            };
         }
-        self.expansion_depth += 1;
-        let expanded = self
-            .invoke_macro(&def, &items[1..])
-            .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::List(items), span));
-        let result = self.expand_form(expanded);
-        self.expansion_depth -= 1;
-        result
+
+        // Tree-expand sub-forms (but don't recurse back into expand_macro_call
+        // for this form — only for nested sub-forms).
+        self.expand_form(form)
     }
 
     fn invoke_macro(&mut self, def: &MacroDef, args: &[SurfaceForm]) -> Option<SurfaceForm> {

@@ -24,7 +24,7 @@ struct Token {
 
 #[derive(Logos, Clone, Debug, PartialEq)]
 enum TokenKind {
-    #[regex(r"[ \t\r\n]+")]
+    #[regex(r"[ \t\r\n\x0c\x0b]+")]
     Whitespace,
     #[regex(r";[^\n]*", allow_greedy = true)]
     Comment,
@@ -207,7 +207,19 @@ impl Parser<'_> {
     }
 
     fn parse_form(&mut self) -> bool {
-        self.bump_trivia();
+        loop {
+            self.bump_trivia();
+            let Some(token) = self.peek().cloned() else {
+                return false;
+            };
+            match token.kind {
+                TokenKind::Whitespace | TokenKind::Comment => {
+                    self.bump();
+                    continue;
+                }
+                _ => break,
+            }
+        }
         let Some(token) = self.peek().cloned() else {
             return false;
         };
@@ -225,8 +237,7 @@ impl Parser<'_> {
                 false
             }
             TokenKind::Whitespace | TokenKind::Comment => {
-                self.bump();
-                self.parse_form()
+                unreachable!("trivia handled by loop above")
             }
             TokenKind::String(_)
             | TokenKind::Char(_)
