@@ -358,8 +358,8 @@ Initial Cranelift lowering is intentionally conservative:
 
 - Treat Lisp values as an opaque `i64` carrier until the runtime value ABI is
   finalized.
-- Lower constants, lexical block parameters, direct jumps, conditional branches,
-  and returns.
+- Lower constants, lexical block parameters, lexical mutation through Cranelift
+  frontend variables, direct jumps, conditional branches, and returns.
 - Lower direct named calls through a declared runtime ABI first. Primitive
   inlining can come later after type and semantic metadata exist.
 - Lower symbol value reads and writes through declared runtime ABI calls so
@@ -429,6 +429,11 @@ __neomacs_rt_unbind_dynamic(vmctx: i64, count: i64)
 The compiler emits `unbind_dynamic` on normal scope exit. Nonlocal exits still
 need explicit unwind-edge lowering before Cranelift can support `throw`,
 `condition-case`, or `unwind-protect`.
+
+Mutable lexical locals lower to Cranelift frontend variables, not ad-hoc
+compiler-side value maps. Each declared lexical variable is marked as needing
+Cranelift stack-map metadata so future GC integration can spill/reload roots
+around safepoints using Cranelift's supported mechanism.
 
 Every Cranelift runtime ABI call is also a compiler safepoint. The current
 metadata records:

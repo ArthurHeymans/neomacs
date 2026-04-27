@@ -7,7 +7,7 @@ use cranelift_codegen::ir::{
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings;
 use cranelift_codegen::verifier::verify_function;
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, ModuleDeclarations};
 use lasso::{Key, Rodeo, Spur};
 
@@ -481,7 +481,7 @@ impl<'a> ClifLowerer<'a> {
                 builder,
                 block_map,
                 value_map,
-                lexical_values: HashMap::new(),
+                lexical_vars: HashMap::new(),
                 runtime_func_refs: HashMap::new(),
                 vmctx: None,
                 runtime: &mut self.runtime,
@@ -528,6 +528,7 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::FunctionQuote(_)
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
+                    | SsaInstKind::LexicalSet { .. }
                     | SsaInstKind::DeclareSpecial(_)
                     | SsaInstKind::SymbolGet(_)
                     | SsaInstKind::SymbolSet { .. }
@@ -536,11 +537,6 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::CallNamed { .. }
                     | SsaInstKind::Funcall { .. }
                     | SsaInstKind::Apply { .. } => {}
-                    SsaInstKind::LexicalSet { .. } => {
-                        self.unsupported(
-                            "lexical set lowering needs mutable lexical environment analysis",
-                        );
-                    }
                     SsaInstKind::CatchBegin { .. }
                     | SsaInstKind::CatchEnd
                     | SsaInstKind::Throw { .. }
@@ -584,7 +580,7 @@ struct ClifBlockLowerer<'a> {
     builder: FunctionBuilder<'a>,
     block_map: HashMap<BlockId, ir::Block>,
     value_map: HashMap<ValueId, ir::Value>,
-    lexical_values: HashMap<String, ir::Value>,
+    lexical_vars: HashMap<String, Variable>,
     runtime_func_refs: HashMap<FuncId, FuncRef>,
     vmctx: Option<ir::Value>,
     runtime: &'a mut ClifRuntimeAbi,
@@ -683,19 +679,37 @@ impl ClifBlockLowerer<'_> {
                     self.error("lexical get instruction has no result");
                     return;
                 };
-                let Some(value) = self.lexical_values.get(name).copied() else {
+                let Some(var) = self.lexical_var(name) else {
                     self.error(format!(
                         "unknown lexical binding `{name}` in Cranelift lowering"
                     ));
                     return;
                 };
+                let value = self.builder.use_var(var);
                 self.value_map.insert(result, value);
             }
             SsaInstKind::BindLexical { name, value } => {
                 let Some(value) = self.value(*value) else {
                     return;
                 };
-                self.lexical_values.insert(name.clone(), value);
+                self.def_lexical(name, value);
+            }
+            SsaInstKind::LexicalSet { name, value } => {
+                let Some(result) = inst.result else {
+                    self.error("lexical set instruction has no result");
+                    return;
+                };
+                let Some(value) = self.value(*value) else {
+                    return;
+                };
+                let Some(var) = self.lexical_var(name) else {
+                    self.error(format!(
+                        "unknown lexical binding `{name}` in Cranelift lowering"
+                    ));
+                    return;
+                };
+                self.builder.def_var(var, value);
+                self.value_map.insert(result, value);
             }
             SsaInstKind::DeclareSpecial(_) => {}
             SsaInstKind::SymbolGet(name) => {
@@ -810,8 +824,7 @@ impl ClifBlockLowerer<'_> {
                 };
                 self.value_map.insert(result, result_value);
             }
-            SsaInstKind::LexicalSet { .. }
-            | SsaInstKind::CatchBegin { .. }
+            SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd
             | SsaInstKind::Throw { .. }
             | SsaInstKind::ConditionCaseBegin { .. }
@@ -897,6 +910,22 @@ impl ClifBlockLowerer<'_> {
             return None;
         };
         Some(block)
+    }
+
+    fn def_lexical(&mut self, name: &str, value: ir::Value) {
+        let var = if let Some(var) = self.lexical_vars.get(name).copied() {
+            var
+        } else {
+            let var = self.builder.declare_var(types::I64);
+            self.builder.declare_var_needs_stack_map(var);
+            self.lexical_vars.insert(name.to_string(), var);
+            var
+        };
+        self.builder.def_var(var, value);
+    }
+
+    fn lexical_var(&self, name: &str) -> Option<Variable> {
+        self.lexical_vars.get(name).copied()
     }
 
     fn error(&mut self, message: impl Into<String>) {
@@ -1418,6 +1447,45 @@ mod tests {
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("brif"));
         assert!(dump.contains("jump"));
+        assert!(dump.contains("return"));
+    }
+
+    #[test]
+    fn lowers_lexical_set_to_cranelift_variable() {
+        let artifact = compile_source(
+            "set-local.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun set-local () (let ((x 1)) (setq x 2) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(clif.safepoints.entries.len(), 0);
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("iconst.i64 2"));
+        assert!(dump.contains("return"));
+    }
+
+    #[test]
+    fn lowers_lexical_set_across_branch_merge() {
+        let artifact = compile_source(
+            "set-branch.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun set-branch (flag) (let ((x 1)) (if flag (setq x 2) (setq x 3)) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(clif.safepoints.entries.len(), 0);
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("iconst.i64 2"));
+        assert!(dump.contains("iconst.i64 3"));
         assert!(dump.contains("return"));
     }
 
