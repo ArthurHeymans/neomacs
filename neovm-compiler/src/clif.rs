@@ -41,6 +41,8 @@ pub struct ClifRuntimeAbi {
     declarations: ModuleDeclarations,
     symbols: Rodeo,
     call_named_by_arity: HashMap<usize, FuncId>,
+    funcall_by_arity: HashMap<usize, FuncId>,
+    apply_by_arity: HashMap<usize, FuncId>,
     symbol_get: Option<FuncId>,
     symbol_set: Option<FuncId>,
 }
@@ -51,6 +53,8 @@ impl Default for ClifRuntimeAbi {
             declarations: ModuleDeclarations::default(),
             symbols: Rodeo::default(),
             call_named_by_arity: HashMap::new(),
+            funcall_by_arity: HashMap::new(),
+            apply_by_arity: HashMap::new(),
             symbol_get: None,
             symbol_set: None,
         }
@@ -103,6 +107,42 @@ impl ClifRuntimeAbi {
         Ok(RuntimeFuncImport { id, signature })
     }
 
+    fn funcall(&mut self, arity: usize, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        if let Some(id) = self.funcall_by_arity.get(&arity).copied() {
+            return Ok(RuntimeFuncImport {
+                id,
+                signature: indirect_call_signature(arity, call_conv),
+            });
+        }
+
+        let name = format!("__neomacs_rt_funcall_{arity}");
+        let signature = indirect_call_signature(arity, call_conv);
+        let (id, _) = self
+            .declarations
+            .declare_function(&name, Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.funcall_by_arity.insert(arity, id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn apply(&mut self, arity: usize, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        if let Some(id) = self.apply_by_arity.get(&arity).copied() {
+            return Ok(RuntimeFuncImport {
+                id,
+                signature: indirect_call_signature(arity, call_conv),
+            });
+        }
+
+        let name = format!("__neomacs_rt_apply_{arity}");
+        let signature = indirect_call_signature(arity, call_conv);
+        let (id, _) = self
+            .declarations
+            .declare_function(&name, Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.apply_by_arity.insert(arity, id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
     fn symbol_get(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
         let signature = symbol_get_signature(call_conv);
         if let Some(id) = self.symbol_get {
@@ -141,6 +181,17 @@ fn call_named_signature(arity: usize, call_conv: CallConv) -> Signature {
     let mut signature = Signature::new(call_conv);
     signature.params.push(AbiParam::new(types::I64)); // vmctx
     signature.params.push(AbiParam::new(types::I64)); // interned function symbol
+    for _ in 0..arity {
+        signature.params.push(AbiParam::new(types::I64));
+    }
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn indirect_call_signature(arity: usize, call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // callee
     for _ in 0..arity {
         signature.params.push(AbiParam::new(types::I64));
     }
@@ -286,7 +337,9 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::DeclareSpecial(_)
                     | SsaInstKind::SymbolGet(_)
                     | SsaInstKind::SymbolSet { .. }
-                    | SsaInstKind::CallNamed { .. } => {}
+                    | SsaInstKind::CallNamed { .. }
+                    | SsaInstKind::Funcall { .. }
+                    | SsaInstKind::Apply { .. } => {}
                     SsaInstKind::Const(SsaConst::Float(_)) => {
                         self.unsupported("float constants need Lisp value encoding");
                     }
@@ -308,9 +361,6 @@ impl<'a> ClifLowerer<'a> {
                         self.unsupported(
                             "dynamic binding needs runtime dynamic environment support",
                         );
-                    }
-                    SsaInstKind::Funcall { .. } | SsaInstKind::Apply { .. } => {
-                        self.unsupported("calls need a Cranelift runtime ABI");
                     }
                     SsaInstKind::CatchBegin { .. }
                     | SsaInstKind::CatchEnd
@@ -406,7 +456,7 @@ impl ClifBlockLowerer<'_> {
                     return;
                 };
                 let Some(value) =
-                    self.emit_symbol_runtime_call(RuntimeImportKind::SymbolGet, name, &[])
+                    self.emit_symbol_access_runtime_call(RuntimeImportKind::SymbolGet, name, &[])
                 else {
                     return;
                 };
@@ -420,9 +470,11 @@ impl ClifBlockLowerer<'_> {
                 let Some(value) = self.value(*value) else {
                     return;
                 };
-                let Some(value) =
-                    self.emit_symbol_runtime_call(RuntimeImportKind::SymbolSet, name, &[value])
-                else {
+                let Some(value) = self.emit_symbol_access_runtime_call(
+                    RuntimeImportKind::SymbolSet,
+                    name,
+                    &[value],
+                ) else {
                     return;
                 };
                 self.value_map.insert(result, value);
@@ -436,7 +488,44 @@ impl ClifBlockLowerer<'_> {
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
                     return;
                 };
-                let Some(result_value) = self.emit_runtime_call(func_ref, name, &args) else {
+                let Some(result_value) = self.emit_symbol_runtime_call(func_ref, name, &args)
+                else {
+                    return;
+                };
+                self.value_map.insert(result, result_value);
+            }
+            SsaInstKind::Funcall { callee, args } => {
+                let Some(result) = inst.result else {
+                    self.error("funcall instruction has no result");
+                    return;
+                };
+                let Some(callee) = self.value(*callee) else {
+                    return;
+                };
+                let args = self.value_args(args);
+                let Some(func_ref) = self.funcall_ref(args.len()) else {
+                    return;
+                };
+                let Some(result_value) = self.emit_indirect_runtime_call(func_ref, callee, &args)
+                else {
+                    return;
+                };
+                self.value_map.insert(result, result_value);
+            }
+            SsaInstKind::Apply { callee, args } => {
+                let Some(result) = inst.result else {
+                    self.error("apply instruction has no result");
+                    return;
+                };
+                let Some(callee) = self.value(*callee) else {
+                    return;
+                };
+                let args = self.value_args(args);
+                let Some(func_ref) = self.apply_ref(args.len()) else {
+                    return;
+                };
+                let Some(result_value) = self.emit_indirect_runtime_call(func_ref, callee, &args)
+                else {
                     return;
                 };
                 self.value_map.insert(result, result_value);
@@ -445,8 +534,6 @@ impl ClifBlockLowerer<'_> {
             | SsaInstKind::FunctionQuote(_)
             | SsaInstKind::LexicalSet { .. }
             | SsaInstKind::BindDynamic { .. }
-            | SsaInstKind::Funcall { .. }
-            | SsaInstKind::Apply { .. }
             | SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd
             | SsaInstKind::Throw { .. }
@@ -576,6 +663,32 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_ref(import)
     }
 
+    fn funcall_ref(&mut self, arity: usize) -> Option<FuncRef> {
+        let import = match self.runtime.funcall(arity, self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift funcall runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn apply_ref(&mut self, arity: usize) -> Option<FuncRef> {
+        let import = match self.runtime.apply(arity, self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift apply runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
         if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
             return Some(func_ref);
@@ -599,7 +712,7 @@ impl ClifBlockLowerer<'_> {
         Some(func_ref)
     }
 
-    fn emit_symbol_runtime_call(
+    fn emit_symbol_access_runtime_call(
         &mut self,
         kind: RuntimeImportKind,
         name: &str,
@@ -609,10 +722,10 @@ impl ClifBlockLowerer<'_> {
             RuntimeImportKind::SymbolGet => self.symbol_get_ref(),
             RuntimeImportKind::SymbolSet => self.symbol_set_ref(),
         }?;
-        self.emit_runtime_call(func_ref, name, args)
+        self.emit_symbol_runtime_call(func_ref, name, args)
     }
 
-    fn emit_runtime_call(
+    fn emit_symbol_runtime_call(
         &mut self,
         func_ref: FuncRef,
         symbol_name: &str,
@@ -634,6 +747,28 @@ impl ClifBlockLowerer<'_> {
         let call = self.builder.ins().call(func_ref, &call_args);
         let Some(result) = self.builder.inst_results(call).first().copied() else {
             self.error("runtime call produced no result");
+            return None;
+        };
+        Some(result)
+    }
+
+    fn emit_indirect_runtime_call(
+        &mut self,
+        func_ref: FuncRef,
+        callee: ir::Value,
+        args: &[ir::Value],
+    ) -> Option<ir::Value> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("indirect runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let mut call_args = Vec::with_capacity(args.len() + 2);
+        call_args.push(vmctx);
+        call_args.push(callee);
+        call_args.extend_from_slice(args);
+        let call = self.builder.ins().call(func_ref, &call_args);
+        let Some(result) = self.builder.inst_results(call).first().copied() else {
+            self.error("indirect runtime call produced no result");
             return None;
         };
         Some(result)
@@ -774,9 +909,9 @@ mod tests {
     }
 
     #[test]
-    fn reports_indirect_calls_until_runtime_abi_exists() {
+    fn lowers_funcall_to_runtime_abi_call() {
         let artifact = compile_source(
-            "call.el",
+            "funcall.el",
             ";;; -*- lexical-binding: t; -*-\n(defun call-it (f x) (funcall f x))",
         );
         let hir = artifact.hir.expect("HIR");
@@ -785,11 +920,35 @@ mod tests {
         assert_eq!(verify_ssa(&ssa.value), Vec::new());
 
         let clif = ssa_to_clif(&ssa.value);
-        assert!(clif.function.is_none());
+        assert_eq!(clif.diagnostics, Vec::new());
         assert!(
-            clif.diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.message.contains("runtime ABI"))
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_funcall_1")
         );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_apply_to_runtime_abi_call() {
+        let artifact = compile_source(
+            "apply.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun apply-it (f x xs) (apply f x xs))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_apply_2")
+        );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
     }
 }

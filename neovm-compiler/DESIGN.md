@@ -364,8 +364,10 @@ Initial Cranelift lowering is intentionally conservative:
   inlining can come later after type and semantic metadata exist.
 - Lower symbol value reads and writes through declared runtime ABI calls so
   dynamic and buffer-local semantics stay in the runtime.
-- Reject indirect calls, dynamic binding, allocation, and nonlocal exits until
-  the runtime ABI and precise safepoint/stack-map contract exist.
+- Lower `funcall` and `apply` through declared runtime ABI calls so indirect
+  function semantics stay in the runtime.
+- Reject dynamic binding, allocation, and nonlocal exits until the runtime ABI
+  and precise safepoint/stack-map contract exist.
 - Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
   physical register allocation internally.
 
@@ -386,6 +388,13 @@ Symbol value access uses fixed imports:
 ```text
 __neomacs_rt_symbol_get(vmctx: i64, symbol_id: i64) -> i64
 __neomacs_rt_symbol_set(vmctx: i64, symbol_id: i64, value: i64) -> i64
+```
+
+Indirect calls use arity-specialized imports:
+
+```text
+__neomacs_rt_funcall_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
+__neomacs_rt_apply_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 ```
 
 `symbol_id` is a compiler-owned interned symbol key. This is not the final
