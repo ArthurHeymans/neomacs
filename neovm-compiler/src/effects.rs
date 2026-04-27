@@ -41,6 +41,18 @@ impl Effects {
         }
     }
 
+    pub fn single(effect: Effect) -> Self {
+        Self {
+            effects: vec![effect],
+        }
+    }
+
+    pub fn new(effects: impl IntoIterator<Item = Effect>) -> Self {
+        Self {
+            effects: effects.into_iter().collect(),
+        }
+    }
+
     pub fn contains(&self, effect: Effect) -> bool {
         self.effects.contains(&effect)
     }

@@ -1,7 +1,10 @@
+use cranelift_entity::EntityRef;
+
 use crate::diagnostic::Diagnostic;
 use crate::hir::{HirExpr, HirExprKind, HirItem, HirModule};
+use crate::ids::{BlockId, ValueId};
 use crate::regir::RegFunction;
-use crate::ssa::SsaFunction;
+use crate::ssa::{SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
 use crate::surface::SurfaceForm;
 
 pub fn verify_surface(_forms: &[SurfaceForm]) -> Vec<Diagnostic> {
@@ -19,12 +22,148 @@ pub fn verify_hir(module: &HirModule) -> Vec<Diagnostic> {
     diagnostics
 }
 
-pub fn verify_ssa(_function: &SsaFunction) -> Vec<Diagnostic> {
-    Vec::new()
+pub fn verify_ssa(function: &SsaFunction) -> Vec<Diagnostic> {
+    let mut verifier = SsaVerifier {
+        function,
+        diagnostics: Vec::new(),
+    };
+    verifier.verify();
+    verifier.diagnostics
 }
 
 pub fn verify_regir(_function: &RegFunction) -> Vec<Diagnostic> {
     Vec::new()
+}
+
+struct SsaVerifier<'a> {
+    function: &'a SsaFunction,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl SsaVerifier<'_> {
+    fn verify(&mut self) {
+        if let Some(entry) = self.function.entry {
+            self.check_block(entry);
+        } else {
+            self.error("SSA function has no entry block");
+        }
+        for (block_id, block) in self.function.blocks.iter() {
+            for (index, param) in block.params.iter().copied().enumerate() {
+                self.check_value(param);
+                match &self.function.values[param].kind {
+                    SsaValueKind::BlockParam {
+                        block,
+                        index: param_index,
+                        ..
+                    } if *block == block_id && *param_index == index => {}
+                    _ => self.error(format!("SSA block param {param:?} has inconsistent owner")),
+                }
+            }
+            for (inst_index, inst) in block.instructions.iter().enumerate() {
+                if let Some(result) = inst.result {
+                    self.check_value(result);
+                    match &self.function.values[result].kind {
+                        SsaValueKind::InstResult { block, inst }
+                            if *block == block_id && *inst == inst_index => {}
+                        _ => self.error(format!("SSA result {result:?} has inconsistent owner")),
+                    }
+                }
+                self.verify_inst(&inst.kind);
+            }
+            self.verify_terminator(&block.terminator);
+        }
+    }
+
+    fn verify_inst(&mut self, kind: &SsaInstKind) {
+        match kind {
+            SsaInstKind::LexicalSet { value, .. }
+            | SsaInstKind::SymbolSet { value, .. }
+            | SsaInstKind::BindLexical { value, .. }
+            | SsaInstKind::BindDynamic { value, .. }
+            | SsaInstKind::CatchBegin { tag: value } => self.check_value(*value),
+            SsaInstKind::Throw { tag, value } => {
+                self.check_value(*tag);
+                self.check_value(*value);
+            }
+            SsaInstKind::CallNamed { args, .. } => self.check_values(args),
+            SsaInstKind::Funcall { callee, args } | SsaInstKind::Apply { callee, args } => {
+                self.check_value(*callee);
+                self.check_values(args);
+            }
+            SsaInstKind::Const(_)
+            | SsaInstKind::Quote(_)
+            | SsaInstKind::FunctionQuote(_)
+            | SsaInstKind::LexicalGet(_)
+            | SsaInstKind::SymbolGet(_)
+            | SsaInstKind::DeclareSpecial(_)
+            | SsaInstKind::CatchEnd
+            | SsaInstKind::ConditionCaseBegin { .. }
+            | SsaInstKind::ConditionCaseHandler { .. }
+            | SsaInstKind::ConditionCaseEnd
+            | SsaInstKind::UnwindProtectBegin
+            | SsaInstKind::UnwindProtectCleanup
+            | SsaInstKind::UnwindProtectEnd => {}
+        }
+    }
+
+    fn verify_terminator(&mut self, terminator: &SsaTerminator) {
+        match terminator {
+            SsaTerminator::Return(value) => {
+                if let Some(value) = value {
+                    self.check_value(*value);
+                }
+            }
+            SsaTerminator::Jump { target, args } => self.check_branch_args(*target, args),
+            SsaTerminator::BranchIfNil {
+                test,
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+            } => {
+                self.check_value(*test);
+                self.check_branch_args(*then_target, then_args);
+                self.check_branch_args(*else_target, else_args);
+            }
+            SsaTerminator::Unreachable => {}
+        }
+    }
+
+    fn check_branch_args(&mut self, target: BlockId, args: &[ValueId]) {
+        self.check_block(target);
+        if let Some(block) = self.function.blocks.get(target)
+            && block.params.len() != args.len()
+        {
+            self.error(format!(
+                "SSA branch to {target:?} passes {} args for {} params",
+                args.len(),
+                block.params.len()
+            ));
+        }
+        self.check_values(args);
+    }
+
+    fn check_values(&mut self, values: &[ValueId]) {
+        for value in values {
+            self.check_value(*value);
+        }
+    }
+
+    fn check_block(&mut self, block: BlockId) {
+        if block.index() >= self.function.blocks.len() {
+            self.error(format!("SSA references unknown block {block:?}"));
+        }
+    }
+
+    fn check_value(&mut self, value: ValueId) {
+        if value.index() >= self.function.values.len() {
+            self.error(format!("SSA references unknown value {value:?}"));
+        }
+    }
+
+    fn error(&mut self, message: impl Into<String>) {
+        self.diagnostics.push(Diagnostic::error(message));
+    }
 }
 
 fn verify_hir_expr(expr: &HirExpr, diagnostics: &mut Vec<Diagnostic>) {

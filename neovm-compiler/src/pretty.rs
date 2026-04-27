@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
+use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 use crate::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxTree};
 
@@ -33,6 +34,44 @@ pub fn dump_hir(module: &HirModule) -> String {
                 dump_hir_expr(&defun.body, 1, &mut out);
             }
         }
+    }
+    out
+}
+
+pub fn dump_ssa(function: &SsaFunction) -> String {
+    let mut out = String::new();
+    let name = function.name.as_deref().unwrap_or("<anonymous>");
+    let _ = writeln!(out, "ssa {name}");
+    for (block_id, block) in function.blocks.iter() {
+        let params = block
+            .params
+            .iter()
+            .map(|value| value_name(function, *value))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(out, "{block_id:?}({params}):");
+        for inst in &block.instructions {
+            if let Some(result) = inst.result {
+                let _ = write!(out, "  {} = ", value_name(function, result));
+            } else {
+                let _ = write!(out, "  ");
+            }
+            dump_ssa_inst(&inst.kind, function, &mut out);
+            let effects = inst
+                .effects
+                .as_slice()
+                .iter()
+                .map(|effect| format!("{effect:?}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            if !effects.is_empty() {
+                let _ = write!(out, " ; effects={effects}");
+            }
+            let _ = writeln!(out);
+        }
+        let _ = write!(out, "  ");
+        dump_terminator(&block.terminator, function, &mut out);
+        let _ = writeln!(out);
     }
     out
 }
@@ -93,6 +132,156 @@ fn dump_syntax_node(node: &SyntaxNode, indent: usize, out: &mut String) {
                 let _ = writeln!(out, "{pad}{:?} {:?}", token.kind(), token.text());
             }
         }
+    }
+}
+
+fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
+    match kind {
+        SsaInstKind::Const(value) => {
+            let _ = write!(out, "const {}", ssa_const_name(value));
+        }
+        SsaInstKind::Quote(_) => {
+            let _ = write!(out, "quote <surface>");
+        }
+        SsaInstKind::FunctionQuote(_) => {
+            let _ = write!(out, "function-quote <surface>");
+        }
+        SsaInstKind::LexicalGet(name) => {
+            let _ = write!(out, "lexical-get {name}");
+        }
+        SsaInstKind::LexicalSet { name, value } => {
+            let _ = write!(out, "lexical-set {name}, {}", value_name(function, *value));
+        }
+        SsaInstKind::SymbolGet(name) => {
+            let _ = write!(out, "symbol-get {name}");
+        }
+        SsaInstKind::SymbolSet { name, value } => {
+            let _ = write!(out, "symbol-set {name}, {}", value_name(function, *value));
+        }
+        SsaInstKind::BindLexical { name, value } => {
+            let _ = write!(out, "bind-lexical {name}, {}", value_name(function, *value));
+        }
+        SsaInstKind::BindDynamic { name, value } => {
+            let _ = write!(out, "bind-dynamic {name}, {}", value_name(function, *value));
+        }
+        SsaInstKind::DeclareSpecial(names) => {
+            let _ = write!(out, "declare-special ({})", names.join(" "));
+        }
+        SsaInstKind::CallNamed { name, args } => {
+            let _ = write!(out, "call-named {name} {}", value_names(function, args));
+        }
+        SsaInstKind::Funcall { callee, args } => {
+            let _ = write!(
+                out,
+                "funcall {} {}",
+                value_name(function, *callee),
+                value_names(function, args)
+            );
+        }
+        SsaInstKind::Apply { callee, args } => {
+            let _ = write!(
+                out,
+                "apply {} {}",
+                value_name(function, *callee),
+                value_names(function, args)
+            );
+        }
+        SsaInstKind::CatchBegin { tag } => {
+            let _ = write!(out, "catch-begin {}", value_name(function, *tag));
+        }
+        SsaInstKind::CatchEnd => {
+            let _ = write!(out, "catch-end");
+        }
+        SsaInstKind::Throw { tag, value } => {
+            let _ = write!(
+                out,
+                "throw {}, {}",
+                value_name(function, *tag),
+                value_name(function, *value)
+            );
+        }
+        SsaInstKind::ConditionCaseBegin { var } => {
+            let _ = write!(
+                out,
+                "condition-case-begin {}",
+                var.as_deref().unwrap_or("nil")
+            );
+        }
+        SsaInstKind::ConditionCaseHandler { .. } => {
+            let _ = write!(out, "condition-case-handler <pattern>");
+        }
+        SsaInstKind::ConditionCaseEnd => {
+            let _ = write!(out, "condition-case-end");
+        }
+        SsaInstKind::UnwindProtectBegin => {
+            let _ = write!(out, "unwind-protect-begin");
+        }
+        SsaInstKind::UnwindProtectCleanup => {
+            let _ = write!(out, "unwind-protect-cleanup");
+        }
+        SsaInstKind::UnwindProtectEnd => {
+            let _ = write!(out, "unwind-protect-end");
+        }
+    }
+}
+
+fn dump_terminator(terminator: &SsaTerminator, function: &SsaFunction, out: &mut String) {
+    match terminator {
+        SsaTerminator::Return(Some(value)) => {
+            let _ = write!(out, "return {}", value_name(function, *value));
+        }
+        SsaTerminator::Return(None) => {
+            let _ = write!(out, "return");
+        }
+        SsaTerminator::Jump { target, args } => {
+            let _ = write!(out, "jump {target:?}({})", value_names(function, args));
+        }
+        SsaTerminator::BranchIfNil {
+            test,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => {
+            let _ = write!(
+                out,
+                "branch-if-nil {} then {then_target:?}({}) else {else_target:?}({})",
+                value_name(function, *test),
+                value_names(function, then_args),
+                value_names(function, else_args)
+            );
+        }
+        SsaTerminator::Unreachable => {
+            let _ = write!(out, "unreachable");
+        }
+    }
+}
+
+fn value_names(function: &SsaFunction, values: &[crate::ids::ValueId]) -> String {
+    values
+        .iter()
+        .map(|value| value_name(function, *value))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn value_name(function: &SsaFunction, value: crate::ids::ValueId) -> String {
+    match &function.values[value].kind {
+        SsaValueKind::BlockParam {
+            name: Some(name), ..
+        } => format!("{value:?}.{name}"),
+        _ => format!("{value:?}"),
+    }
+}
+
+fn ssa_const_name(value: &SsaConst) -> String {
+    match value {
+        SsaConst::Nil => "nil".to_string(),
+        SsaConst::True => "t".to_string(),
+        SsaConst::Int(value) => format!("int {value}"),
+        SsaConst::Float(value) => format!("float {value}"),
+        SsaConst::String(value) => format!("string {value:?}"),
+        SsaConst::Char(value) => format!("char {value}"),
     }
 }
 
@@ -273,7 +462,9 @@ fn const_name(value: &HirConst) -> String {
 #[cfg(test)]
 mod tests {
     use crate::compile_source;
-    use crate::pretty::{dump_hir, dump_surface, dump_syntax};
+    use crate::lower::hir_to_ssa;
+    use crate::pretty::{dump_hir, dump_ssa, dump_surface, dump_syntax};
+    use crate::verify::verify_ssa;
 
     #[test]
     fn dumps_hir_for_simple_defun() {
@@ -330,6 +521,34 @@ defun add2 (x y)
   call-named +
     lexical-get x
     lexical-get y
+"###);
+    }
+
+    #[test]
+    fn snapshots_ssa_dump_for_if() {
+        let artifact = compile_source(
+            "sample.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun choose (x y) (if x x y))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let lowered = hir_to_ssa(&hir);
+        assert_eq!(lowered.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&lowered.value), Vec::new());
+        insta::assert_snapshot!(dump_ssa(&lowered.value), @r###"
+ssa choose
+block0(v0.x, v1.y):
+  bind-lexical x, v0.x ; effects=Pure
+  bind-lexical y, v1.y ; effects=Pure
+  v2 = lexical-get x ; effects=ReadLexical
+  branch-if-nil v2 then block2() else block1()
+block1():
+  v4 = lexical-get x ; effects=ReadLexical
+  jump block3(v4)
+block2():
+  v5 = lexical-get y ; effects=ReadLexical
+  jump block3(v5)
+block3(v3.if.result):
+  return v3.if.result
 "###);
     }
 }
