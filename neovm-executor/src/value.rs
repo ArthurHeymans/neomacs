@@ -1,59 +1,59 @@
 use std::fmt;
 
 const TAG_BITS: u32 = 3;
-const TAG_MASK: usize = (1 << TAG_BITS) - 1;
-const FIXNUM_TAG: usize = 0b000;
-const HEAP_TAG: usize = 0b001;
-const CHAR_TAG: usize = 0b010;
-const SPECIAL_TAG: usize = 0b110;
+const TAG_MASK: u64 = (1 << TAG_BITS) - 1;
+const FIXNUM_TAG: u64 = 0b000;
+const HEAP_TAG: u64 = 0b001;
+const CHAR_TAG: u64 = 0b010;
+const SPECIAL_TAG: u64 = 0b110;
 
-const NIL_BITS: usize = SPECIAL_TAG;
-const TRUE_BITS: usize = (1 << TAG_BITS) | SPECIAL_TAG;
+const NIL_BITS: u64 = SPECIAL_TAG;
+const TRUE_BITS: u64 = (1 << TAG_BITS) | SPECIAL_TAG;
 
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("neovm-executor currently requires a 64-bit target for LispValue ABI bits");
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LispValue(usize);
+pub struct LispValue(u64);
 
 impl LispValue {
     pub const NIL: Self = Self(NIL_BITS);
     pub const TRUE: Self = Self(TRUE_BITS);
 
-    pub const fn from_bits(bits: usize) -> Self {
+    pub const fn from_bits(bits: u64) -> Self {
         Self(bits)
     }
 
-    pub const fn to_bits(self) -> usize {
+    pub const fn to_bits(self) -> u64 {
         self.0
     }
 
     pub const fn from_abi_i64(bits: i64) -> Self {
-        Self(bits as usize)
+        Self(bits as u64)
     }
 
     pub const fn to_abi_i64(self) -> i64 {
         self.0 as i64
     }
 
-    pub fn from_fixnum(value: isize) -> Option<Self> {
+    pub fn from_fixnum(value: i64) -> Option<Self> {
         if !(Self::FIXNUM_MIN..=Self::FIXNUM_MAX).contains(&value) {
             return None;
         }
-        Some(Self(((value as usize) << TAG_BITS) | FIXNUM_TAG))
+        Some(Self(((value as u64) << TAG_BITS) | FIXNUM_TAG))
     }
 
-    pub fn expect_fixnum(value: isize) -> Self {
+    pub fn expect_fixnum(value: i64) -> Self {
         Self::from_fixnum(value).expect("fixnum value is outside LispValue immediate range")
     }
 
-    pub fn as_fixnum(self) -> Option<isize> {
-        self.is_fixnum().then_some((self.0 as isize) >> TAG_BITS)
+    pub fn as_fixnum(self) -> Option<i64> {
+        self.is_fixnum().then_some((self.0 as i64) >> TAG_BITS)
     }
 
     pub fn from_char(value: char) -> Self {
-        Self(((value as u32 as usize) << TAG_BITS) | CHAR_TAG)
+        Self(((value as u32 as u64) << TAG_BITS) | CHAR_TAG)
     }
 
     pub fn as_char(self) -> Option<char> {
@@ -80,18 +80,21 @@ impl LispValue {
     }
 
     pub(crate) fn from_heap_addr(addr: usize) -> Self {
+        let addr = u64::try_from(addr).expect("heap object address must fit in u64");
         debug_assert_eq!(addr & TAG_MASK, 0, "heap object pointers must be aligned");
         Self(addr | HEAP_TAG)
     }
 
     pub(crate) fn heap_addr(self) -> Option<usize> {
-        self.is_heap().then_some(self.0 & !TAG_MASK)
+        self.is_heap()
+            .then(|| usize::try_from(self.0 & !TAG_MASK).ok())
+            .flatten()
     }
 
-    const FIXNUM_MIN: isize = isize::MIN >> TAG_BITS;
-    const FIXNUM_MAX: isize = isize::MAX >> TAG_BITS;
+    const FIXNUM_MIN: i64 = i64::MIN >> TAG_BITS;
+    const FIXNUM_MAX: i64 = i64::MAX >> TAG_BITS;
 
-    const fn tag(self) -> usize {
+    const fn tag(self) -> u64 {
         self.0 & TAG_MASK
     }
 }

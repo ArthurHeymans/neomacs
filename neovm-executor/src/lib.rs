@@ -1,23 +1,27 @@
 use std::path::Path;
 
+pub mod object_interp;
 pub mod runtime;
 pub mod value;
 
 pub use neovm_compiler::CompileArtifact;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
 pub use neovm_compiler::interp::InterpResult;
+pub use object_interp::ObjectInterpResult;
 pub use runtime::{Runtime, RuntimeError};
 pub use value::LispValue;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Engine {
     Interpreter,
+    ObjectInterpreter,
 }
 
 impl Engine {
     pub fn name(self) -> &'static str {
         match self {
             Self::Interpreter => "interp",
+            Self::ObjectInterpreter => "object-interp",
         }
     }
 }
@@ -26,6 +30,7 @@ impl Engine {
 pub struct ExecuteArtifact {
     pub compile: CompileArtifact,
     pub result: InterpResult,
+    pub object_value: Option<LispValue>,
     pub engine: Engine,
 }
 
@@ -57,6 +62,7 @@ impl Executor {
     ) -> ExecuteArtifact {
         match self.engine {
             Engine::Interpreter => execute_with_interpreter(name, text, args),
+            Engine::ObjectInterpreter => execute_with_object_interpreter(name, text, args),
         }
     }
 
@@ -111,13 +117,63 @@ fn execute_with_interpreter(
     ExecuteArtifact {
         compile,
         result: InterpResult { value, diagnostics },
+        object_value: None,
         engine: Engine::Interpreter,
+    }
+}
+
+fn execute_with_object_interpreter(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    args: &[i64],
+) -> ExecuteArtifact {
+    let compile = neovm_compiler::compile_source(name, text);
+    let mut diagnostics = compile.diagnostics.clone();
+    let mut object_value = None;
+
+    if !diagnostics.iter().any(Diagnostic::is_error) {
+        match &compile.regir {
+            Some(regir) => {
+                diagnostics.extend(neovm_compiler::verify::verify_regir_module(regir));
+                if !diagnostics.iter().any(Diagnostic::is_error) {
+                    let mut runtime = Runtime::new();
+                    let args = args
+                        .iter()
+                        .map(|value| LispValue::from_fixnum(*value))
+                        .collect::<Option<Vec<_>>>();
+                    match args {
+                        Some(args) => {
+                            let result =
+                                object_interp::execute_module_with_args(regir, &args, &mut runtime);
+                            object_value = result.value;
+                            diagnostics.extend(result.diagnostics);
+                        }
+                        None => diagnostics.push(Diagnostic::error(
+                            "object interpreter arguments must fit in LispValue fixnums",
+                        )),
+                    }
+                }
+            }
+            None => diagnostics.push(Diagnostic::error(
+                "execution requires a successfully lowered Register IR module",
+            )),
+        }
+    }
+
+    ExecuteArtifact {
+        compile,
+        result: InterpResult {
+            value: object_value.map(LispValue::to_abi_i64),
+            diagnostics,
+        },
+        object_value,
+        engine: Engine::ObjectInterpreter,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Engine, Executor, execute_source};
+    use super::{Engine, Executor, LispValue, execute_source};
 
     #[test]
     fn executes_runtime_free_source_with_default_interpreter() {
@@ -128,6 +184,7 @@ mod tests {
         );
 
         assert_eq!(artifact.engine, Engine::Interpreter);
+        assert_eq!(artifact.object_value, None);
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(16));
     }
@@ -159,5 +216,31 @@ mod tests {
                 .message
                 .contains("unsupported Register IR interpreter operation")
         }));
+    }
+
+    #[test]
+    fn object_interpreter_executes_pair_primitives() {
+        let executor = Executor::new(Engine::ObjectInterpreter);
+        let artifact = executor.execute_source(
+            "pair.el",
+            ";;; -*- lexical-binding: t; -*-\n(car (cons 1 2))",
+            &[],
+        );
+
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.object_value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn object_interpreter_executes_list_primitives() {
+        let executor = Executor::new(Engine::ObjectInterpreter);
+        let artifact = executor.execute_source(
+            "list.el",
+            ";;; -*- lexical-binding: t; -*-\n(length (reverse (list 1 2 3)))",
+            &[],
+        );
+
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.object_value, Some(LispValue::expect_fixnum(3)));
     }
 }

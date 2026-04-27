@@ -49,8 +49,24 @@ impl Runtime {
         Ok(self.expect_cons(pair)?.cdr)
     }
 
+    pub fn set_car(&mut self, pair: LispValue, car: LispValue) -> Result<LispValue, RuntimeError> {
+        self.expect_cons_mut(pair)?.car = car;
+        Ok(car)
+    }
+
+    pub fn set_cdr(&mut self, pair: LispValue, cdr: LispValue) -> Result<LispValue, RuntimeError> {
+        self.expect_cons_mut(pair)?.cdr = cdr;
+        Ok(cdr)
+    }
+
     pub fn cdr_abi(&mut self, pair: i64) -> i64 {
         self.return_or_record_error(self.cdr(LispValue::from_abi_i64(pair)))
+    }
+
+    pub fn is_cons(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.cons_by_addr(addr).is_some())
     }
 
     pub fn cons_cell_count(&self) -> usize {
@@ -82,16 +98,106 @@ impl Runtime {
                 value,
             });
         };
+        self.cons_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "consp",
+                value,
+            })
+    }
+
+    fn expect_cons_mut(&mut self, value: LispValue) -> Result<&mut Cons, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "consp",
+                value,
+            });
+        };
+        self.cons_by_addr_mut(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "consp",
+                value,
+            })
+    }
+
+    fn cons_by_addr(&self, addr: usize) -> Option<&Cons> {
         for cell in &self.cons_cells {
             let cell_addr = (&**cell as *const Cons) as usize;
             if cell_addr == addr && cell.header.kind == HeapKind::Cons {
-                return Ok(cell);
+                return Some(cell);
             }
         }
-        Err(RuntimeError::WrongTypeArgument {
-            expected: "consp",
-            value,
-        })
+        None
+    }
+
+    fn cons_by_addr_mut(&mut self, addr: usize) -> Option<&mut Cons> {
+        for cell in &mut self.cons_cells {
+            let cell_addr = (&**cell as *const Cons) as usize;
+            if cell_addr == addr && cell.header.kind == HeapKind::Cons {
+                return Some(cell);
+            }
+        }
+        None
+    }
+
+    pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
+        self.equal_with_depth(left, right, 256)
+    }
+
+    fn equal_with_depth(&self, left: LispValue, right: LispValue, depth: usize) -> bool {
+        if left == right {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        let (Some(left_addr), Some(right_addr)) = (left.heap_addr(), right.heap_addr()) else {
+            return false;
+        };
+        let (Some(left), Some(right)) =
+            (self.cons_by_addr(left_addr), self.cons_by_addr(right_addr))
+        else {
+            return false;
+        };
+        self.equal_with_depth(left.car, right.car, depth - 1)
+            && self.equal_with_depth(left.cdr, right.cdr, depth - 1)
+    }
+
+    pub fn format_value(&self, value: LispValue) -> String {
+        self.format_value_with_depth(value, 64)
+    }
+
+    fn format_value_with_depth(&self, value: LispValue, depth: usize) -> String {
+        if depth == 0 {
+            return "#<max-depth>".to_string();
+        }
+        if !self.is_cons(value) {
+            return format!("{value:?}");
+        }
+        let mut parts = Vec::new();
+        let mut current = value;
+        loop {
+            let Some(addr) = current.heap_addr() else {
+                parts.push(".".to_string());
+                parts.push(format!("{current:?}"));
+                break;
+            };
+            let Some(cell) = self.cons_by_addr(addr) else {
+                parts.push(".".to_string());
+                parts.push(format!("{current:?}"));
+                break;
+            };
+            parts.push(self.format_value_with_depth(cell.car, depth - 1));
+            current = cell.cdr;
+            if current.is_nil() {
+                break;
+            }
+            if !self.is_cons(current) {
+                parts.push(".".to_string());
+                parts.push(self.format_value_with_depth(current, depth - 1));
+                break;
+            }
+        }
+        format!("({})", parts.join(" "))
     }
 }
 
@@ -193,6 +299,35 @@ mod tests {
                 value
             })
         );
+    }
+
+    #[test]
+    fn set_car_and_set_cdr_mutate_pairs() {
+        let mut runtime = Runtime::new();
+        let pair = runtime.cons(LispValue::expect_fixnum(1), LispValue::expect_fixnum(2));
+
+        assert_eq!(
+            runtime.set_car(pair, LispValue::expect_fixnum(3)),
+            Ok(LispValue::expect_fixnum(3))
+        );
+        assert_eq!(
+            runtime.set_cdr(pair, LispValue::expect_fixnum(4)),
+            Ok(LispValue::expect_fixnum(4))
+        );
+        assert_eq!(runtime.car(pair), Ok(LispValue::expect_fixnum(3)));
+        assert_eq!(runtime.cdr(pair), Ok(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn equal_compares_cons_structure() {
+        let mut runtime = Runtime::new();
+        let left_tail = runtime.cons(LispValue::expect_fixnum(2), LispValue::NIL);
+        let left = runtime.cons(LispValue::expect_fixnum(1), left_tail);
+        let right_tail = runtime.cons(LispValue::expect_fixnum(2), LispValue::NIL);
+        let right = runtime.cons(LispValue::expect_fixnum(1), right_tail);
+
+        assert!(runtime.equal(left, right));
+        assert!(!runtime.equal(left, LispValue::expect_fixnum(1)));
     }
 
     #[test]

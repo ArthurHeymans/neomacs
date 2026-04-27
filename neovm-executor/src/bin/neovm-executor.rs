@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use neovm_executor::{Engine, Executor, render_diagnostics};
+use neovm_executor::{Engine, Executor, LispValue, render_diagnostics};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -66,7 +66,11 @@ fn run(args: Vec<String>) -> ExitCode {
 
     match artifact.result.value {
         Some(value) => {
-            println!("{value}");
+            if artifact.engine == Engine::ObjectInterpreter {
+                println!("{:?}", LispValue::from_abi_i64(value));
+            } else {
+                println!("{value}");
+            }
             ExitCode::SUCCESS
         }
         None => {
@@ -92,8 +96,9 @@ fn parse_engine(args: Vec<String>) -> Option<(Engine, Vec<String>)> {
 fn parse_engine_value(value: &str) -> Option<Engine> {
     match value {
         "interp" | "interpreter" => Some(Engine::Interpreter),
+        "object-interp" | "object-interpreter" => Some(Engine::ObjectInterpreter),
         _ => {
-            eprintln!("unknown engine `{value}`; supported engines: interp");
+            eprintln!("unknown engine `{value}`; supported engines: interp, object-interp");
             None
         }
     }
@@ -109,5 +114,5 @@ fn parse_i64_args(args: &[String]) -> Result<Vec<i64>, String> {
 }
 
 fn usage() {
-    eprintln!("usage: neovm-executor run [--engine=interp] <file.el> [i64-arg ...]");
+    eprintln!("usage: neovm-executor run [--engine=interp|object-interp] <file.el> [i64-arg ...]");
 }
