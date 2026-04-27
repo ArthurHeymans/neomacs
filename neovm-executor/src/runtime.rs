@@ -39,7 +39,7 @@ impl Runtime {
     }
 
     pub fn string(&mut self, value: impl AsRef<str>) -> LispValue {
-        self.string_from_lisp_data(LispStringData::from_str(value.as_ref()))
+        self.string_from_lisp_data(LispStringData::make_string(value.as_ref()))
     }
 
     pub fn string_from_bytes(
@@ -48,7 +48,12 @@ impl Runtime {
         chars: usize,
         multibyte: bool,
     ) -> LispValue {
-        self.string_from_lisp_data(LispStringData::new(bytes, chars, multibyte))
+        let data = if multibyte {
+            LispStringData::make_multibyte(bytes, chars)
+        } else {
+            LispStringData::make_unibyte(bytes)
+        };
+        self.string_from_lisp_data(data)
     }
 
     fn string_from_lisp_data(&mut self, data: LispStringData) -> LispValue {
@@ -563,7 +568,9 @@ impl Runtime {
             self.string_by_addr(left_addr),
             self.string_by_addr(right_addr),
         ) {
-            return left.data == right.data;
+            return left.data.schars() == right.data.schars()
+                && left.data.sbytes() == right.data.sbytes()
+                && left.data.sdata() == right.data.sdata();
         }
         false
     }
@@ -632,52 +639,136 @@ impl Runtime {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LispStringData {
-    bytes: Vec<u8>,
-    chars: usize,
-    multibyte: bool,
+    size: isize,
+    size_byte: isize,
+    intervals: Option<LispValue>,
+    data: Vec<u8>,
 }
 
 impl LispStringData {
-    pub fn new(bytes: Vec<u8>, chars: usize, multibyte: bool) -> Self {
+    pub const SIZE_BYTE_UNIBYTE: isize = -1;
+    pub const SIZE_BYTE_RODATA: isize = -2;
+    pub const SIZE_BYTE_IMMOVABLE: isize = -3;
+
+    pub fn new(bytes: Vec<u8>, size: isize, size_byte: isize) -> Self {
+        assert!(size >= 0, "Lisp_String size must be nonnegative");
+        let nbytes = if size_byte < 0 { size } else { size_byte };
+        assert!(nbytes >= 0, "Lisp_String byte size must be nonnegative");
+        let nbytes = usize::try_from(nbytes).expect("Lisp_String byte size must fit usize");
+        assert!(
+            bytes.len() >= nbytes,
+            "Lisp_String data must contain at least SBYTES bytes"
+        );
+        let mut data = bytes.into_iter().take(nbytes).collect::<Vec<_>>();
+        data.push(0);
         Self {
-            bytes,
-            chars,
-            multibyte,
+            size,
+            size_byte,
+            intervals: None,
+            data,
         }
     }
 
-    pub fn from_str(value: &str) -> Self {
-        Self {
-            bytes: value.as_bytes().to_vec(),
-            chars: value.chars().count(),
-            multibyte: value.len() != value.chars().count(),
+    pub fn make_string(value: &str) -> Self {
+        let nbytes = value.len();
+        let nchars = value.chars().count();
+        if nbytes == nchars {
+            Self::make_unibyte(value.as_bytes().to_vec())
+        } else {
+            Self::make_multibyte(value.as_bytes().to_vec(), nchars)
         }
+    }
+
+    pub fn make_unibyte(bytes: Vec<u8>) -> Self {
+        let size = isize::try_from(bytes.len()).expect("unibyte string length must fit isize");
+        Self::new(bytes, size, Self::SIZE_BYTE_UNIBYTE)
+    }
+
+    pub fn make_multibyte(bytes: Vec<u8>, chars: usize) -> Self {
+        let size = isize::try_from(chars).expect("multibyte string char length must fit isize");
+        let size_byte =
+            isize::try_from(bytes.len()).expect("multibyte string byte length must fit isize");
+        Self::new(bytes, size, size_byte)
+    }
+
+    pub fn size_raw(&self) -> isize {
+        self.size
+    }
+
+    pub fn size_byte_raw(&self) -> isize {
+        self.size_byte
+    }
+
+    pub fn intervals(&self) -> Option<LispValue> {
+        self.intervals
+    }
+
+    pub fn set_intervals(&mut self, intervals: Option<LispValue>) {
+        self.intervals = intervals;
+    }
+
+    pub fn string_multibyte(&self) -> bool {
+        self.size_byte >= 0
+    }
+
+    pub fn schars(&self) -> usize {
+        usize::try_from(self.size).expect("Lisp_String size must be nonnegative")
+    }
+
+    pub fn sbytes(&self) -> usize {
+        let nbytes = if self.size_byte < 0 {
+            self.size
+        } else {
+            self.size_byte
+        };
+        usize::try_from(nbytes).expect("Lisp_String byte size must be nonnegative")
+    }
+
+    pub fn sdata(&self) -> &[u8] {
+        &self.data[..self.sbytes()]
+    }
+
+    pub fn sdata_with_nul(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn sref(&self, index: usize) -> Option<u8> {
+        self.sdata().get(index).copied()
+    }
+
+    pub fn sset(&mut self, index: usize, value: u8) -> Option<()> {
+        if index >= self.sbytes() {
+            return None;
+        }
+        let slot = self.data.get_mut(index)?;
+        *slot = value;
+        Some(())
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+        self.sdata()
     }
 
     pub fn char_len(&self) -> usize {
-        self.chars
+        self.schars()
     }
 
     pub fn byte_len(&self) -> usize {
-        self.bytes.len()
+        self.sbytes()
     }
 
     pub fn is_multibyte(&self) -> bool {
-        self.multibyte
+        self.string_multibyte()
     }
 
     pub fn as_str(&self) -> Option<&str> {
-        std::str::from_utf8(&self.bytes).ok()
+        std::str::from_utf8(self.sdata()).ok()
     }
 
     fn format_debug(&self) -> String {
         match self.as_str() {
             Some(value) => format!("{value:?}"),
-            None => format!("#<unibyte-string {:?}>", self.bytes),
+            None => format!("#<unibyte-string {:?}>", self.sdata()),
         }
     }
 }
@@ -767,7 +858,7 @@ struct LexicalCell {
 
 #[cfg(test)]
 mod tests {
-    use super::{Runtime, RuntimeError};
+    use super::{LispStringData, Runtime, RuntimeError};
     use crate::LispValue;
 
     #[test]
@@ -865,10 +956,14 @@ mod tests {
         assert!(runtime.is_string(left));
         assert_eq!(runtime.string_contents(left), Ok("alpha"));
         let data = runtime.string_data(left).expect("string data");
-        assert_eq!(data.char_len(), 5);
-        assert_eq!(data.byte_len(), 5);
-        assert_eq!(data.bytes(), b"alpha");
-        assert!(!data.is_multibyte());
+        assert_eq!(data.size_raw(), 5);
+        assert_eq!(data.size_byte_raw(), LispStringData::SIZE_BYTE_UNIBYTE);
+        assert_eq!(data.schars(), 5);
+        assert_eq!(data.sbytes(), 5);
+        assert_eq!(data.sdata(), b"alpha");
+        assert_eq!(data.sdata_with_nul(), b"alpha\0");
+        assert!(!data.string_multibyte());
+        assert_eq!(data.intervals(), None);
         assert_ne!(left, right);
         assert!(runtime.equal(left, right));
         assert_eq!(runtime.format_value(left), "\"alpha\"");
@@ -880,10 +975,33 @@ mod tests {
         let string = runtime.string("λ");
         let data = runtime.string_data(string).expect("string data");
 
-        assert_eq!(data.char_len(), 1);
-        assert_eq!(data.byte_len(), 2);
-        assert_eq!(data.bytes(), "λ".as_bytes());
-        assert!(data.is_multibyte());
+        assert_eq!(data.size_raw(), 1);
+        assert_eq!(data.size_byte_raw(), 2);
+        assert_eq!(data.schars(), 1);
+        assert_eq!(data.sbytes(), 2);
+        assert_eq!(data.sdata(), "λ".as_bytes());
+        assert!(data.string_multibyte());
+    }
+
+    #[test]
+    fn unibyte_strings_allow_nul_and_non_utf8_bytes() {
+        let mut runtime = Runtime::new();
+        let string = runtime.string_from_bytes(vec![b'a', 0, 0xff], 0, false);
+        let data = runtime.string_data(string).expect("string data");
+
+        assert_eq!(data.size_raw(), 3);
+        assert_eq!(data.size_byte_raw(), LispStringData::SIZE_BYTE_UNIBYTE);
+        assert_eq!(data.schars(), 3);
+        assert_eq!(data.sbytes(), 3);
+        assert_eq!(data.sref(1), Some(0));
+        assert_eq!(data.sdata(), &[b'a', 0, 0xff]);
+        assert_eq!(data.sdata_with_nul(), &[b'a', 0, 0xff, 0]);
+        assert_eq!(
+            runtime.string_contents(string),
+            Err(RuntimeError::InvalidStringData(
+                "string is not valid UTF-8".to_string()
+            ))
+        );
     }
 
     #[test]
