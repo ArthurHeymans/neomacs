@@ -401,6 +401,9 @@ Initial Cranelift lowering is intentionally conservative:
   function semantics stay in the runtime.
 - Lower string/float constants and quoted forms through runtime materialization
   calls so allocation, interning, and object identity stay runtime-owned.
+- Lower exact-arity `cons`, `car`, and `cdr` through fixed runtime ABI calls
+  instead of generic named calls. Pair allocation, nil behavior, wrong-type
+  signaling, object representation, and GC interaction stay runtime-owned.
 - Lower lambda values through runtime materialization calls over compiler-owned
   lambda template tables and explicit capture arguments. Callable code
   registration stays runtime-owned until the execution ABI is connected.
@@ -444,6 +447,18 @@ Indirect calls use arity-specialized imports:
 __neomacs_rt_funcall_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 __neomacs_rt_apply_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 ```
+
+Core pair operations use fixed imports:
+
+```text
+__neomacs_rt_cons(vmctx: i64, car: i64, cdr: i64) -> i64
+__neomacs_rt_car(vmctx: i64, pair: i64) -> i64
+__neomacs_rt_cdr(vmctx: i64, pair: i64) -> i64
+```
+
+`cons` allocates and is a safepoint with `car` and `cdr` as roots. `car` and
+`cdr` stay runtime calls because GNU-compatible nil handling and wrong-type
+signaling require real runtime object semantics.
 
 Runtime materialization uses compiler-owned table indexes or immediate payloads:
 

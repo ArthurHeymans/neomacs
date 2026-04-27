@@ -94,6 +94,9 @@ pub enum ClifRuntimeCallKind {
     MakeLexicalCell,
     LexicalCellGet,
     LexicalCellSet,
+    Cons,
+    Car,
+    Cdr,
 }
 
 pub struct ClifRuntimeAbi {
@@ -117,6 +120,9 @@ pub struct ClifRuntimeAbi {
     make_lexical_cell: Option<FuncId>,
     lexical_cell_get: Option<FuncId>,
     lexical_cell_set: Option<FuncId>,
+    cons: Option<FuncId>,
+    car: Option<FuncId>,
+    cdr: Option<FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -142,6 +148,9 @@ impl Default for ClifRuntimeAbi {
             make_lexical_cell: None,
             lexical_cell_get: None,
             lexical_cell_set: None,
+            cons: None,
+            car: None,
+            cdr: None,
         }
     }
 }
@@ -448,6 +457,48 @@ impl ClifRuntimeAbi {
             .declare_function("__neomacs_rt_lexical_cell_set", Linkage::Import, &signature)
             .map_err(|error| error.to_string())?;
         self.lexical_cell_set = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn cons(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = binary_runtime_signature(call_conv);
+        if let Some(id) = self.cons {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_cons", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.cons = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn car(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = unary_runtime_signature(call_conv);
+        if let Some(id) = self.car {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_car", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.car = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn cdr(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = unary_runtime_signature(call_conv);
+        if let Some(id) = self.cdr {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_cdr", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.cdr = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
 }
@@ -1022,6 +1073,14 @@ impl ClifBlockLowerer<'_> {
                     PrimitiveCallLowering::Unknown => {}
                     PrimitiveCallLowering::Error => return,
                 }
+                match self.lower_pair_runtime_call(name, &args) {
+                    PrimitiveCallLowering::Value(value) => {
+                        self.value_map.insert(result, value);
+                        return;
+                    }
+                    PrimitiveCallLowering::Unknown => {}
+                    PrimitiveCallLowering::Error => return,
+                }
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
                     return;
                 };
@@ -1296,6 +1355,46 @@ impl ClifBlockLowerer<'_> {
         }
     }
 
+    fn lower_pair_runtime_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        match (name, args) {
+            ("cons", [car, cdr]) => {
+                let Some(func_ref) = self.cons_ref() else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let Some(value) =
+                    self.emit_runtime_call(func_ref, &[*car, *cdr], ClifRuntimeCallKind::Cons)
+                else {
+                    return PrimitiveCallLowering::Error;
+                };
+                PrimitiveCallLowering::Value(value)
+            }
+            ("car", [pair]) => {
+                let Some(func_ref) = self.car_ref() else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let Some(value) =
+                    self.emit_runtime_call(func_ref, &[*pair], ClifRuntimeCallKind::Car)
+                else {
+                    return PrimitiveCallLowering::Error;
+                };
+                PrimitiveCallLowering::Value(value)
+            }
+            ("cdr", [pair]) => {
+                let Some(func_ref) = self.cdr_ref() else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let Some(value) =
+                    self.emit_runtime_call(func_ref, &[*pair], ClifRuntimeCallKind::Cdr)
+                else {
+                    return PrimitiveCallLowering::Error;
+                };
+                PrimitiveCallLowering::Value(value)
+            }
+            ("cons" | "car" | "cdr", _) => PrimitiveCallLowering::Unknown,
+            _ => PrimitiveCallLowering::Unknown,
+        }
+    }
+
     fn value(&mut self, value: ValueId) -> Option<ir::Value> {
         let Some(value) = self.value_map.get(&value).copied() else {
             self.error(format!("unknown SSA value {value:?} in Cranelift lowering"));
@@ -1518,6 +1617,45 @@ impl ClifBlockLowerer<'_> {
             Err(error) => {
                 self.error(format!(
                     "failed to declare Cranelift lexical cell set runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn cons_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.cons(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift cons runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn car_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.car(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift car runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn cdr_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.cdr(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift cdr runtime call: {error}"
                 ));
                 return None;
             }
@@ -2324,6 +2462,61 @@ mod tests {
         assert!(dump.contains("icmp slt"));
         assert!(dump.contains("band"));
         assert!(dump.contains("select"));
+    }
+
+    #[test]
+    fn lowers_cons_to_pair_runtime_call() {
+        let artifact = compile_source(
+            "cons.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-pair (x y) (cons x y))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let imported_names = clif.runtime.imported_function_names();
+        assert!(imported_names.contains(&"__neomacs_rt_cons"));
+        assert!(!imported_names.contains(&"__neomacs_rt_call_named_2"));
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(&safepoint.kind, ClifRuntimeCallKind::Cons));
+        assert_eq!(safepoint.live_roots.len(), 2);
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_car_cdr_to_pair_runtime_calls() {
+        let artifact = compile_source(
+            "pair-parts.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun pair-parts (pair) (cons (car pair) (cdr pair)))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let imported_names = clif.runtime.imported_function_names();
+        assert!(imported_names.contains(&"__neomacs_rt_car"));
+        assert!(imported_names.contains(&"__neomacs_rt_cdr"));
+        assert!(imported_names.contains(&"__neomacs_rt_cons"));
+        assert!(!imported_names.contains(&"__neomacs_rt_call_named_1"));
+        assert!(!imported_names.contains(&"__neomacs_rt_call_named_2"));
+        let safepoints = clif
+            .safepoints
+            .entries
+            .iter()
+            .map(|(_, safepoint)| safepoint)
+            .collect::<Vec<_>>();
+        assert_eq!(safepoints.len(), 3);
+        assert!(matches!(&safepoints[0].kind, ClifRuntimeCallKind::Car));
+        assert!(matches!(&safepoints[1].kind, ClifRuntimeCallKind::Cdr));
+        assert!(matches!(&safepoints[2].kind, ClifRuntimeCallKind::Cons));
     }
 
     #[test]
