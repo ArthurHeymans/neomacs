@@ -433,6 +433,7 @@ pub(crate) struct MajorMarkState {
     pub(crate) plan: CollectionPlan,
     pub(crate) worklist: MarkWorklist<ObjectLocator>,
     pub(crate) mark_started_at: Instant,
+    pub(crate) reclaim_before_bytes: Option<usize>,
     pub(crate) mark_elapsed_nanos: u64,
     pub(crate) mark_steps: u64,
     pub(crate) mark_rounds: u64,
@@ -552,6 +553,7 @@ impl CollectorState {
             plan,
             worklist,
             mark_started_at: Instant::now(),
+            reclaim_before_bytes: None,
             mark_elapsed_nanos: 0,
             mark_steps: 0,
             mark_rounds: 0,
@@ -572,6 +574,7 @@ impl CollectorState {
         };
         state.worklist.push(index);
         state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
+        state.reclaim_before_bytes = None;
         state.reclaim_prepare_nanos = 0;
         state.reclaim_commit_pause_nanos = 0;
         state.ephemerons_processed = false;
@@ -639,6 +642,7 @@ impl CollectorState {
             return false;
         }
         state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
+        state.reclaim_before_bytes = None;
         state.mark_steps = state.mark_steps.saturating_add(mark_steps_delta);
         state.mark_rounds = state.mark_rounds.saturating_add(mark_rounds_delta);
         state.ephemerons_processed = true;
@@ -685,6 +689,7 @@ impl CollectorState {
         let update = update(&state.plan, state.worklist);
         state.worklist = update.worklist;
         state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
+        state.reclaim_before_bytes = None;
         state.mark_steps = state.mark_steps.saturating_add(update.mark_steps_delta);
         state.mark_rounds = state.mark_rounds.saturating_add(update.mark_rounds_delta);
         if !state.worklist.is_empty() {

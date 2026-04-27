@@ -242,24 +242,37 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
 
 /// Format a Value for human-readable error messages, resolving SymIds and heap-backed values.
 fn format_value_for_error(v: &Value) -> String {
-    match v.kind() {
-        ValueKind::Symbol(sid) => super::intern::resolve_sym(sid).to_string(),
-        ValueKind::String => format!("\"{}\"", load_string_text(v).expect("checked string")),
-        ValueKind::Fixnum(n) => format!("{}", n),
-        ValueKind::Nil => "nil".to_string(),
-        ValueKind::T => "t".to_string(),
-        ValueKind::Cons => {
-            let car = v.cons_car();
-            let cdr = v.cons_cdr();
-            let car_s = format_value_for_error(&car);
-            let cdr_s = format_value_for_error(&cdr);
-            if cdr == Value::NIL {
-                format!("({})", car_s)
-            } else {
-                format!("({} . {})", car_s, cdr_s)
-            }
+    if v.is_nil() {
+        "nil".to_string()
+    } else if v.is_t() {
+        "t".to_string()
+    } else if v.is_unbound() {
+        "#<unbound>".to_string()
+    } else if v.is_fixnum() {
+        format!("{}", v.xfixnum())
+    } else if v.is_symbol() {
+        let sid = v.xsymbol_id();
+        super::intern::try_resolve_sym(sid)
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("<invalid-symbol:{sid:?}:bits={:#x}>", v.bits()))
+    } else if v.is_string() {
+        format!("\"{}\"", load_string_text(v).expect("checked string"))
+    } else if v.is_cons() {
+        let car = v.cons_car();
+        let cdr = v.cons_cdr();
+        let car_s = format_value_for_error(&car);
+        let cdr_s = format_value_for_error(&cdr);
+        if cdr == Value::NIL {
+            format!("({})", car_s)
+        } else {
+            format!("({} . {})", car_s, cdr_s)
         }
-        other => format!("{:?}", v),
+    } else if v.is_veclike() {
+        format!("<veclike:bits={:#x}>", v.bits())
+    } else if v.is_float() {
+        format!("<float:bits={:#x}>", v.bits())
+    } else {
+        format!("<unknown:bits={:#x}>", v.bits())
     }
 }
 
@@ -1583,12 +1596,15 @@ fn streaming_readevalloop_eager_expand_eval(
     macroexpand: Value,
 ) -> Result<Value, EvalError> {
     let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(form);
-    eval.push_specpdl_root(macroexpand);
+    let form_root_index = eval.push_specpdl_root(form);
+    let macroexpand_root_index = eval.push_specpdl_root(macroexpand);
 
     // Step 1: one-level expand (full_p = nil)
     let step1_start = std::time::Instant::now();
-    let expanded = match eval.apply(macroexpand, vec![form, Value::NIL]) {
+    let rooted_macroexpand =
+        eval.specpdl_root_value(macroexpand_root_index, "eager macroexpand function");
+    let rooted_form = eval.specpdl_root_value(form_root_index, "eager load form");
+    let expanded = match eval.apply(rooted_macroexpand, vec![rooted_form, Value::NIL]) {
         Ok(v) => v,
         Err(_) => {
             // Expansion failed (cycle detection, missing macro, etc.).
@@ -1596,7 +1612,8 @@ fn streaming_readevalloop_eager_expand_eval(
             // matching .elc behavior.
             eval.note_eager_macro_perf_step1(step1_start.elapsed());
             tracing::debug!("streaming eager_expand step1 failed, falling back to plain eval");
-            let result = eval.eval_sub(form).map_err(map_flow);
+            let rooted_form = eval.specpdl_root_value(form_root_index, "eager load form");
+            let result = eval.eval_sub(rooted_form).map_err(map_flow);
             eval.restore_specpdl_roots(roots);
             return result;
         }
@@ -1605,8 +1622,12 @@ fn streaming_readevalloop_eager_expand_eval(
 
     // Root the expanded form so it survives GC during progn iteration.
     let expanded_roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(expanded);
-    let result = streaming_readevalloop_eager_expand_eval_inner(eval, expanded, macroexpand);
+    let expanded_root_index = eval.push_specpdl_root(expanded);
+    let rooted_expanded = eval.specpdl_root_value(expanded_root_index, "eager expanded form");
+    let rooted_macroexpand =
+        eval.specpdl_root_value(macroexpand_root_index, "eager macroexpand function");
+    let result =
+        streaming_readevalloop_eager_expand_eval_inner(eval, rooted_expanded, rooted_macroexpand);
     eval.restore_specpdl_roots(expanded_roots);
     eval.restore_specpdl_roots(roots);
     result
@@ -1618,42 +1639,66 @@ fn streaming_readevalloop_eager_expand_eval_inner(
     expanded: Value,
     macroexpand: Value,
 ) -> Result<Value, EvalError> {
+    let entry_roots = eval.save_specpdl_roots();
+    let expanded_root_index = eval.push_specpdl_root(expanded);
+    let macroexpand_root_index = eval.push_specpdl_root(macroexpand);
+
     // Step 2: if (progn ...), iterate subforms
+    let expanded = eval.specpdl_root_value(expanded_root_index, "eager expanded form");
     if expanded.is_cons() && expanded.cons_car().is_symbol_named("progn") {
-        let mut cursor = expanded.cons_cdr();
-        let mut last_val = Value::NIL;
-        while cursor.is_cons() {
+        let branch_roots = eval.save_specpdl_roots();
+        let cursor_root_index = eval.push_specpdl_root(expanded.cons_cdr());
+        let subform_root_index = eval.push_specpdl_root(Value::NIL);
+        let last_root_index = eval.push_specpdl_root(Value::NIL);
+        let result = loop {
+            let cursor = eval.specpdl_root_value(cursor_root_index, "eager progn cursor");
+            if !cursor.is_cons() {
+                break Ok(eval.specpdl_root_value(last_root_index, "eager progn value"));
+            }
             let subform = cursor.cons_car();
-            cursor = cursor.cons_cdr();
-            // Root cursor across recursive expansion+eval (it's a cons tail
-            // that could be collected if we don't protect it).
-            let roots = eval.save_specpdl_roots();
-            eval.push_specpdl_root(cursor);
-            let result = streaming_readevalloop_eager_expand_eval(eval, subform, macroexpand);
-            eval.restore_specpdl_roots(roots);
-            last_val = result?;
-        }
-        return Ok(last_val);
+            let next = cursor.cons_cdr();
+            eval.set_specpdl_root_value(cursor_root_index, next, "eager progn cursor");
+            eval.set_specpdl_root_value(subform_root_index, subform, "eager progn subform");
+            let rooted_subform = eval.specpdl_root_value(subform_root_index, "eager progn subform");
+            let rooted_macroexpand =
+                eval.specpdl_root_value(macroexpand_root_index, "eager macroexpand function");
+            match streaming_readevalloop_eager_expand_eval(eval, rooted_subform, rooted_macroexpand)
+            {
+                Ok(value) => {
+                    eval.set_specpdl_root_value(last_root_index, value, "eager progn value")
+                }
+                Err(err) => break Err(err),
+            }
+        };
+        eval.restore_specpdl_roots(branch_roots);
+        eval.restore_specpdl_roots(entry_roots);
+        return result;
     }
 
     // Step 3: full expand (full_p = t), then eval
     let step3_start = std::time::Instant::now();
-    let fully_expanded = match eval.apply(macroexpand, vec![expanded, Value::T]) {
+    let rooted_macroexpand =
+        eval.specpdl_root_value(macroexpand_root_index, "eager macroexpand function");
+    let rooted_expanded = eval.specpdl_root_value(expanded_root_index, "eager expanded form");
+    let fully_expanded = match eval.apply(rooted_macroexpand, vec![rooted_expanded, Value::T]) {
         Ok(v) => v,
         Err(_) => {
             // Full expansion failed; use the one-level-expanded form.
             tracing::debug!("streaming eager_expand step3 failed, using one-level expansion");
-            expanded
+            eval.specpdl_root_value(expanded_root_index, "eager expanded form")
         }
     };
     eval.note_eager_macro_perf_step3(step3_start.elapsed());
 
     let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(fully_expanded);
+    let fully_expanded_root_index = eval.push_specpdl_root(fully_expanded);
+    let rooted_fully_expanded =
+        eval.specpdl_root_value(fully_expanded_root_index, "eager fully expanded form");
     let step4_start = std::time::Instant::now();
-    let result = eval.eval_sub(fully_expanded).map_err(map_flow);
+    let result = eval.eval_sub(rooted_fully_expanded).map_err(map_flow);
     eval.note_eager_macro_perf_step4(step4_start.elapsed());
     eval.restore_specpdl_roots(roots);
+    eval.restore_specpdl_roots(entry_roots);
     result
 }
 

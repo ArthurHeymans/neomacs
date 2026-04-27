@@ -4721,14 +4721,14 @@ impl Context {
                 SpecBinding::SaveRestriction { state } => {
                     state.trace_roots_mut(visit);
                 }
-                SpecBinding::SaveExcursion { .. }
-                | SpecBinding::SaveCurrentBuffer { .. }
-                | SpecBinding::Nop => {}
+                SpecBinding::SaveExcursion { marker, .. } => visit(marker),
+                SpecBinding::SaveCurrentBuffer { .. } | SpecBinding::Nop => {}
                 _ => {}
             }
         }
         visit(&mut self.lexenv);
         for entry in self.runtime_macro_expansion_cache.values_mut() {
+            visit(&mut entry.function);
             visit(&mut entry.expanded);
         }
         for bucket in self.interpreted_closure_trim_cache.values_mut() {
@@ -4819,7 +4819,6 @@ impl Context {
             || value.is_lambda()
             || value.is_macro()
             || value.is_bytecode()
-            || value.is_buffer()
             || value.is_window()
             || value.is_frame()
             || value.is_timer()
@@ -6300,6 +6299,14 @@ impl Context {
         tracing::debug!("neovm-gc minor cycle: total={}us", elapsed.as_micros());
     }
 
+    fn assist_auto_compaction_from_current_roots(&mut self) -> bool {
+        let ctx_ptr: *mut Context = self;
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(ctx_ptr));
+        let did_work = self.tagged_heap.assist_auto_compaction();
+        GC_RELOCATOR_CONTEXT.with(|slot| slot.set(std::ptr::null_mut()));
+        did_work
+    }
+
     fn gc_collect_from_current_roots(&mut self) {
         let start = std::time::Instant::now();
         *self.lexenv_assq_cache.borrow_mut() = LexenvAssqCache::default();
@@ -6421,7 +6428,7 @@ impl Context {
                 self.gc_collect_minor_from_current_roots();
             } else if self.tagged_heap.has_incremental_major() {
                 self.tagged_heap.assist_incremental_major();
-            } else if self.tagged_heap.assist_auto_compaction() {
+            } else if self.assist_auto_compaction_from_current_roots() {
                 return;
             }
             return;
@@ -6441,7 +6448,7 @@ impl Context {
             self.gc_collect_minor_from_current_roots();
         } else if self.tagged_heap.has_incremental_major() {
             self.tagged_heap.assist_incremental_major();
-        } else if self.tagged_heap.assist_auto_compaction() {
+        } else if self.assist_auto_compaction_from_current_roots() {
             return;
         } else {
             // Fast-gated yield: free when no background mark
@@ -7346,10 +7353,13 @@ impl Context {
 
         let result = self.maybe_grow_eval_stack(|ctx| {
             let specpdl_root_scope = ctx.save_specpdl_roots();
+            let form_root_index = ctx.specpdl.len();
             ctx.push_specpdl_root(form);
-            let result = ctx
-                .maybe_gc_and_quit()
-                .and_then(|()| ctx.eval_sub_cons(form));
+            let result = ctx.maybe_gc_and_quit().and_then(|()| {
+                let rooted_form =
+                    specpdl_gc_root_value(&ctx.specpdl, form_root_index, "eval_sub form");
+                ctx.eval_sub_cons(rooted_form)
+            });
             ctx.restore_specpdl_roots(specpdl_root_scope);
             result
         });
@@ -7377,8 +7387,17 @@ impl Context {
         // the frame UNEVALLED throughout.
         let outer_bt_count = self.specpdl.len();
         self.push_unevalled_backtrace_frame(original_fun, original_args);
-        let dispatch_result =
-            self.eval_sub_cons_dispatch(original_fun, original_args, outer_bt_count);
+        let original_fun_root_index = self.specpdl.len();
+        self.push_specpdl_root(original_fun);
+        let original_args_root_index = self.specpdl.len();
+        self.push_specpdl_root(original_args);
+        let dispatch_result = self.eval_sub_cons_dispatch(
+            original_fun,
+            original_args,
+            outer_bt_count,
+            original_fun_root_index,
+            original_args_root_index,
+        );
         let result = self.dispatch_signal_result_if_needed(dispatch_result);
         self.unbind_to_with_result(outer_bt_count, result)
     }
@@ -7388,6 +7407,8 @@ impl Context {
         original_fun: Value,
         original_args: Value,
         outer_bt_count: usize,
+        original_fun_root_index: usize,
+        original_args_root_index: usize,
     ) -> EvalResult {
         // Resolve function (GNU eval.c:2600-2605)
         let sym_id = original_fun.as_symbol_id();
@@ -7464,6 +7485,11 @@ impl Context {
             // argument forms. Special forms leave the frame UNEVALLED
             // throughout (no `set_backtrace_args_evalled` call),
             // matching GNU eval.c:2618-2619.
+            let original_args = specpdl_gc_root_value(
+                &self.specpdl,
+                original_args_root_index,
+                "eval_sub original args",
+            );
             let result = if surface_sym_id == target_sym_id {
                 self.try_special_form_value_id(surface_sym_id, original_args)
             } else {
@@ -7476,6 +7502,16 @@ impl Context {
 
         // Check for macro (GNU eval.c:2730-2755)
         if func.is_macro() {
+            let original_fun = specpdl_gc_root_value(
+                &self.specpdl,
+                original_fun_root_index,
+                "eval_sub original function",
+            );
+            let original_args = specpdl_gc_root_value(
+                &self.specpdl,
+                original_args_root_index,
+                "eval_sub original args",
+            );
             let arg_values = value_list_to_values(&original_args);
             let bt_count = self.specpdl.len();
             self.push_backtrace_frame(original_fun, &arg_values);
@@ -7491,6 +7527,16 @@ impl Context {
         if cons_head_symbol_id(&func) == Some(macro_symbol()) {
             // Cons-cell macro: (macro . fn) — GNU eval.c:2730
             let macro_fn = func.cons_cdr();
+            let original_fun = specpdl_gc_root_value(
+                &self.specpdl,
+                original_fun_root_index,
+                "eval_sub original function",
+            );
+            let original_args = specpdl_gc_root_value(
+                &self.specpdl,
+                original_args_root_index,
+                "eval_sub original args",
+            );
             let arg_values = value_list_to_values(&original_args);
             let bt_count = self.specpdl.len();
             self.push_backtrace_frame(original_fun, &arg_values);
@@ -7522,6 +7568,11 @@ impl Context {
             && let Some(entry) = lookup_global_subr_entry(sym_id)
             && entry.dispatch_kind != SubrDispatchKind::SpecialForm
         {
+            let original_args = specpdl_gc_root_value(
+                &self.specpdl,
+                original_args_root_index,
+                "eval_sub original args",
+            );
             let numargs = match list_length(&original_args) {
                 Some(n) => n,
                 None => {
@@ -7537,6 +7588,11 @@ impl Context {
                 None => true, // &rest / MANY
             };
             if numargs < min || !max_ok {
+                let original_fun = specpdl_gc_root_value(
+                    &self.specpdl,
+                    original_fun_root_index,
+                    "eval_sub original function",
+                );
                 return Err(signal(
                     "wrong-number-of-arguments",
                     vec![original_fun, Value::fixnum(numargs as i64)],
@@ -7556,6 +7612,11 @@ impl Context {
         // `funcall_general` never sees the invalid value and
         // never emits the resolved fncell contents as signal data.
         if !self.function_value_is_callable(&func) {
+            let original_fun = specpdl_gc_root_value(
+                &self.specpdl,
+                original_fun_root_index,
+                "eval_sub original function",
+            );
             if func.is_nil() {
                 return Err(self.void_function_flow(original_fun));
             }
@@ -7587,21 +7648,41 @@ impl Context {
         //
         // Per-arg roots are popped once `set_backtrace_args_evalled`
         // transfers ownership to the outer frame's args slot.
-        let mut args = Vec::new();
+        let func_root_index = self.specpdl.len();
         self.push_specpdl_root(func);
         let args_roots_base = self.specpdl.len();
-        let mut cursor = original_args;
+        let mut arg_root_indices = Vec::new();
+        let mut cursor = specpdl_gc_root_value(
+            &self.specpdl,
+            original_args_root_index,
+            "eval_sub original args",
+        );
         while cursor.is_cons() {
             let arg_form = cursor.cons_car();
+            let next_cursor = cursor.cons_cdr();
+            let arg_form_root_index = self.specpdl.len();
+            self.push_specpdl_root(arg_form);
+            let next_cursor_root_index = self.specpdl.len();
+            self.push_specpdl_root(next_cursor);
+            let arg_form =
+                specpdl_gc_root_value(&self.specpdl, arg_form_root_index, "eval_sub arg form");
             let arg_val = self.eval_sub(arg_form)?;
+            let arg_val_root_index = self.specpdl.len();
             self.push_specpdl_root(arg_val);
-            args.push(arg_val);
-            cursor = cursor.cons_cdr();
+            arg_root_indices.push(arg_val_root_index);
+            cursor =
+                specpdl_gc_root_value(&self.specpdl, next_cursor_root_index, "eval_sub arg cursor");
         }
+        let args = arg_root_indices
+            .iter()
+            .map(|index| specpdl_gc_root_value(&self.specpdl, *index, "eval_sub evaluated arg"))
+            .collect::<Vec<_>>();
         self.set_backtrace_args_evalled(outer_bt_count, &args);
         self.unbind_to(args_roots_base);
 
-        self.with_specpdl_call_roots(func, args, |ctx, call_roots| {
+        let rooted_func =
+            specpdl_gc_root_value(&self.specpdl, func_root_index, "eval_sub resolved function");
+        self.with_specpdl_call_roots(rooted_func, args, |ctx, call_roots| {
             ctx.maybe_gc_and_quit()?;
             let rooted_func = specpdl_gc_root_value(
                 &ctx.specpdl,
@@ -8324,31 +8405,52 @@ impl Context {
 
         let varlist = tail.cons_car();
         let body = tail.cons_cdr();
-        let mut lexical_bindings: Vec<(SymId, Value)> = Vec::new();
-        let mut dynamic_sym_ids: Vec<(SymId, Value)> = Vec::new();
+        let mut lexical_bindings: Vec<(SymId, Option<usize>, Value)> = Vec::new();
+        let mut dynamic_sym_ids: Vec<(SymId, Option<usize>, Value)> = Vec::new();
         let use_lexical = self.lexical_binding();
         let mut constant_binding_error: Option<String> = None;
         let specpdl_root_scope = self.save_specpdl_roots();
-        let mut bindings = varlist;
+        let varlist_root_index = self.specpdl.len();
+        self.push_specpdl_root(varlist);
+        let body_root_index = self.specpdl.len();
+        self.push_specpdl_root(body);
+        let mut bindings = specpdl_gc_root_value(&self.specpdl, varlist_root_index, "let varlist");
 
         while bindings.is_cons() {
-            let binding = self.unwrap_symbol(bindings.cons_car());
-            bindings = bindings.cons_cdr();
+            let binding_root_index = self.specpdl.len();
+            self.push_specpdl_root(bindings.cons_car());
+            let next_bindings_root_index = self.specpdl.len();
+            self.push_specpdl_root(bindings.cons_cdr());
+            let binding = self.unwrap_symbol(specpdl_gc_root_value(
+                &self.specpdl,
+                binding_root_index,
+                "let binding",
+            ));
             if let Some(id) = binding.as_symbol_id() {
                 if let Some(name) = symbol_sets_constant_error(id) {
                     if constant_binding_error.is_none() {
                         constant_binding_error = Some(name.to_owned());
                     }
+                    bindings = specpdl_gc_root_value(
+                        &self.specpdl,
+                        next_bindings_root_index,
+                        "let bindings cursor",
+                    );
                     continue;
                 }
                 if use_lexical
                     && !self.obarray.is_special_id(id)
                     && !self.lexenv_declares_special_cached_in(self.lexenv, id)
                 {
-                    lexical_bindings.push((id, Value::NIL));
+                    lexical_bindings.push((id, None, Value::NIL));
                 } else {
-                    dynamic_sym_ids.push((id, Value::NIL));
+                    dynamic_sym_ids.push((id, None, Value::NIL));
                 }
+                bindings = specpdl_gc_root_value(
+                    &self.specpdl,
+                    next_bindings_root_index,
+                    "let bindings cursor",
+                );
                 continue;
             }
             if !binding.is_cons() {
@@ -8390,23 +8492,35 @@ impl Context {
                 self.restore_specpdl_roots(specpdl_root_scope);
                 return Err(self.listp_error(binding));
             };
+            let value_root_index = self.specpdl.len();
             self.push_specpdl_root(value);
             if let Some(name) = symbol_sets_constant_error(id) {
                 if constant_binding_error.is_none() {
                     constant_binding_error = Some(name.to_owned());
                 }
+                bindings = specpdl_gc_root_value(
+                    &self.specpdl,
+                    next_bindings_root_index,
+                    "let bindings cursor",
+                );
                 continue;
             }
             if use_lexical
                 && !self.obarray.is_special_id(id)
                 && !self.lexenv_declares_special_cached_in(self.lexenv, id)
             {
-                lexical_bindings.push((id, value));
+                lexical_bindings.push((id, Some(value_root_index), value));
             } else {
-                dynamic_sym_ids.push((id, value));
+                dynamic_sym_ids.push((id, Some(value_root_index), value));
             }
+            bindings = specpdl_gc_root_value(
+                &self.specpdl,
+                next_bindings_root_index,
+                "let bindings cursor",
+            );
         }
         if !bindings.is_nil() {
+            let varlist = specpdl_gc_root_value(&self.specpdl, varlist_root_index, "let varlist");
             self.restore_specpdl_roots(specpdl_root_scope);
             return Err(self.listp_error(varlist));
         }
@@ -8422,17 +8536,24 @@ impl Context {
         // becomes a no-op because specpdl.len() already matches, and the stale
         // LexicalEnv leaks below. This caused lexical binding leaks — closures
         // created in the body captured oversized environments.
-        self.restore_specpdl_roots(specpdl_root_scope);
+        let rooted_body = specpdl_gc_root_value(&self.specpdl, body_root_index, "let body");
 
         let scratch_root_scope = save_scratch_gc_roots();
         let lexical_value_roots_start = save_scratch_gc_roots();
-        for (_, value) in lexical_bindings.iter().copied() {
-            push_scratch_gc_root(value);
+        for (_, root_index, value) in lexical_bindings.iter().copied() {
+            let rooted_value = root_index
+                .map(|index| specpdl_gc_root_value(&self.specpdl, index, "let lexical value"))
+                .unwrap_or(value);
+            push_scratch_gc_root(rooted_value);
         }
         let dynamic_value_roots_start = save_scratch_gc_roots();
-        for (_, value) in dynamic_sym_ids.iter().copied() {
-            push_scratch_gc_root(value);
+        for (_, root_index, value) in dynamic_sym_ids.iter().copied() {
+            let rooted_value = root_index
+                .map(|index| specpdl_gc_root_value(&self.specpdl, index, "let dynamic value"))
+                .unwrap_or(value);
+            push_scratch_gc_root(rooted_value);
         }
+        self.restore_specpdl_roots(specpdl_root_scope);
 
         // Save lexenv AFTER init forms run (matches GNU eval.c:1167:
         //   `lexenv = Vinternal_interpreter_environment;`).
@@ -8458,7 +8579,7 @@ impl Context {
             value: lexenv_at_entry,
         });
         let mut new_lexenv = lexenv_at_entry;
-        for (offset, (sym_id, _)) in lexical_bindings.iter().enumerate() {
+        for (offset, (sym_id, _, _)) in lexical_bindings.iter().enumerate() {
             let rooted_value =
                 read_scratch_gc_root(lexical_value_roots_start + offset).unwrap_or(Value::NIL);
             prepend_lexical_binding_in_specpdl_rooted_env(
@@ -8471,14 +8592,14 @@ impl Context {
         }
         // Install the new lexenv atomically.
         self.lexenv = specpdl_gc_root_value(&self.specpdl, env_root_index, "let lexical env");
-        for (offset, (sym_id, _)) in dynamic_sym_ids.iter().enumerate() {
+        for (offset, (sym_id, _, _)) in dynamic_sym_ids.iter().enumerate() {
             let rooted_value =
                 read_scratch_gc_root(dynamic_value_roots_start + offset).unwrap_or(Value::NIL);
             self.specbind(*sym_id, rooted_value);
         }
         restore_scratch_gc_roots(scratch_root_scope);
 
-        let result = self.sf_progn_value(body);
+        let result = self.sf_progn_value(rooted_body);
         self.unbind_to(specpdl_count);
         result
     }
@@ -8509,12 +8630,24 @@ impl Context {
                 old_lexenv: self.lexenv,
             });
         }
+        let varlist_root_index = self.specpdl.len();
+        self.push_specpdl_root(varlist);
+        let body_root_index = self.specpdl.len();
+        self.push_specpdl_root(body);
 
         let init_result: Result<(), Flow> = (|| {
-            let mut bindings = varlist;
+            let mut bindings =
+                specpdl_gc_root_value(&self.specpdl, varlist_root_index, "let* varlist");
             while bindings.is_cons() {
-                let binding = self.unwrap_symbol(bindings.cons_car());
-                bindings = bindings.cons_cdr();
+                let binding_root_index = self.specpdl.len();
+                self.push_specpdl_root(bindings.cons_car());
+                let next_bindings_root_index = self.specpdl.len();
+                self.push_specpdl_root(bindings.cons_cdr());
+                let binding = self.unwrap_symbol(specpdl_gc_root_value(
+                    &self.specpdl,
+                    binding_root_index,
+                    "let* binding",
+                ));
                 let (id, value) = if let Some(id) = binding.as_symbol_id() {
                     (id, Value::NIL)
                 } else if binding.is_cons() {
@@ -8564,8 +8697,15 @@ impl Context {
                 } else {
                     self.specbind(id, value);
                 }
+                bindings = specpdl_gc_root_value(
+                    &self.specpdl,
+                    next_bindings_root_index,
+                    "let* bindings cursor",
+                );
             }
             if !bindings.is_nil() {
+                let varlist =
+                    specpdl_gc_root_value(&self.specpdl, varlist_root_index, "let* varlist");
                 return Err(self.listp_error(varlist));
             }
             Ok(())
@@ -8575,6 +8715,7 @@ impl Context {
             return Err(error);
         }
 
+        let body = specpdl_gc_root_value(&self.specpdl, body_root_index, "let* body");
         let result = self.sf_progn_value(body);
         self.unbind_to(specpdl_count);
         result
@@ -8787,16 +8928,51 @@ impl Context {
     }
 
     fn sf_progn_value(&mut self, forms: Value) -> EvalResult {
-        let mut cursor = forms;
-        let mut last = Value::NIL;
-        while cursor.is_cons() {
-            last = self.eval_sub(cursor.cons_car())?;
-            cursor = cursor.cons_cdr();
-        }
-        if !cursor.is_nil() {
-            return Err(self.listp_error(forms));
-        }
-        Ok(last)
+        let specpdl_root_scope = self.save_specpdl_roots();
+        let forms_root_index = self.specpdl.len();
+        self.push_specpdl_root(forms);
+        let cursor_root_index = self.specpdl.len();
+        self.push_specpdl_root(forms);
+        let last_root_index = self.specpdl.len();
+        self.push_specpdl_root(Value::NIL);
+
+        let result = (|| -> EvalResult {
+            loop {
+                let cursor =
+                    specpdl_gc_root_value(&self.specpdl, cursor_root_index, "progn cursor");
+                if cursor.is_cons() {
+                    let form_root_index = self.specpdl.len();
+                    self.push_specpdl_root(cursor.cons_car());
+                    set_specpdl_gc_root_value(
+                        &mut self.specpdl,
+                        cursor_root_index,
+                        cursor.cons_cdr(),
+                        "progn cursor",
+                    );
+                    let form = specpdl_gc_root_value(&self.specpdl, form_root_index, "progn form");
+                    let value = self.eval_sub(form)?;
+                    set_specpdl_gc_root_value(
+                        &mut self.specpdl,
+                        last_root_index,
+                        value,
+                        "progn last value",
+                    );
+                    continue;
+                }
+                if !cursor.is_nil() {
+                    let forms =
+                        specpdl_gc_root_value(&self.specpdl, forms_root_index, "progn forms");
+                    return Err(self.listp_error(forms));
+                }
+                return Ok(specpdl_gc_root_value(
+                    &self.specpdl,
+                    last_root_index,
+                    "progn last value",
+                ));
+            }
+        })();
+        self.restore_specpdl_roots(specpdl_root_scope);
+        result
     }
 
     fn sf_prog1_value(&mut self, tail: Value) -> EvalResult {
@@ -10001,8 +10177,18 @@ impl Context {
         }
     }
 
-    pub(crate) fn push_specpdl_root(&mut self, value: Value) {
+    pub(crate) fn push_specpdl_root(&mut self, value: Value) -> usize {
+        let index = self.specpdl.len();
         self.specpdl.push(SpecBinding::GcRoot { value });
+        index
+    }
+
+    pub(crate) fn specpdl_root_value(&self, index: usize, label: &str) -> Value {
+        specpdl_gc_root_value(&self.specpdl, index, label)
+    }
+
+    pub(crate) fn set_specpdl_root_value(&mut self, index: usize, value: Value, label: &str) {
+        set_specpdl_gc_root_value(&mut self.specpdl, index, value, label);
     }
 
     pub(crate) fn record_save_excursion(&mut self) -> Option<usize> {

@@ -266,10 +266,15 @@ impl<'a> Vm<'a> {
         f: impl FnOnce(&mut Self, Vec<Value>) -> T,
     ) -> T {
         self.with_frame_roots(func, &[], |vm| {
-            for value in args.iter().copied() {
-                vm.ctx.push_vm_frame_root(value);
-            }
-            f(vm, args)
+            let arg_slots = args
+                .iter()
+                .map(|value| vm.ctx.push_vm_frame_root_slot(*value))
+                .collect::<Vec<_>>();
+            let rooted_args = arg_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            f(vm, rooted_args)
         })
     }
 
@@ -278,14 +283,20 @@ impl<'a> Vm<'a> {
         func: &ByteCodeExecView,
         function: Value,
         args: Vec<Value>,
-        f: impl FnOnce(&mut Self, Vec<Value>) -> T,
+        f: impl FnOnce(&mut Self, Value, Vec<Value>) -> T,
     ) -> T {
         self.with_frame_roots(func, &[], |vm| {
-            vm.ctx.push_vm_frame_root(function);
-            for value in args.iter().copied() {
-                vm.ctx.push_vm_frame_root(value);
-            }
-            f(vm, args)
+            let function_slot = vm.ctx.push_vm_frame_root_slot(function);
+            let arg_slots = args
+                .iter()
+                .map(|value| vm.ctx.push_vm_frame_root_slot(*value))
+                .collect::<Vec<_>>();
+            let rooted_function = vm.ctx.vm_frame_root_value(function_slot);
+            let rooted_args = arg_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            f(vm, rooted_function, rooted_args)
         })
     }
 
@@ -751,11 +762,12 @@ impl<'a> Vm<'a> {
                     let func_val = stk!().pop().unwrap_or(Value::NIL);
                     let writeback_names = self.writeback_mutating_callable_names(&func_val);
                     let writeback_args = writeback_names.as_ref().map(|_| args.clone());
-                    let result =
-                        vm_try!(
-                            self.with_frame_call_roots(func, func_val, args, |vm, args| vm
-                                .call_function(func_val, args),)
-                        );
+                    let result = vm_try!(self.with_frame_call_roots(
+                        func,
+                        func_val,
+                        args,
+                        |vm, rooted_func, rooted_args| vm.call_function(rooted_func, rooted_args),
+                    ));
                     if let (Some((called_name, alias_target)), Some(writeback_args)) =
                         (writeback_names.as_ref(), writeback_args.as_ref())
                     {
@@ -786,7 +798,9 @@ impl<'a> Vm<'a> {
                             func,
                             func_val,
                             vec![],
-                            |vm, args| vm.call_function(func_val, args),
+                            |vm, rooted_func, rooted_args| {
+                                vm.call_function(rooted_func, rooted_args)
+                            },
                         ));
                         stk_push!(result);
                     } else {
@@ -804,7 +818,9 @@ impl<'a> Vm<'a> {
                             func,
                             func_val,
                             args,
-                            |vm, args| vm.call_function(func_val, args),
+                            |vm, rooted_func, rooted_args| {
+                                vm.call_function(rooted_func, rooted_args)
+                            },
                         ));
                         if let (Some((called_name, alias_target)), Some(writeback_args)) =
                             (writeback_names.as_ref(), writeback_args.as_ref())
@@ -1908,11 +1924,14 @@ impl<'a> Vm<'a> {
                         vm_try!(self.dispatch_vm_builtin_with_frame(func, &name, args,))
                     } else {
                         let func_val = Value::symbol(&name);
-                        vm_try!(
-                            self.with_frame_call_roots(func, func_val, args, |vm, args| {
-                                vm.call_function(func_val, args)
-                            })
-                        )
+                        vm_try!(self.with_frame_call_roots(
+                            func,
+                            func_val,
+                            args,
+                            |vm, rooted_func, rooted_args| {
+                                vm.call_function(rooted_func, rooted_args)
+                            },
+                        ))
                     };
                     if let Some(writeback_args) = writeback_args.as_ref() {
                         let root_scope = self.ctx.save_vm_roots();
@@ -2050,8 +2069,8 @@ impl<'a> Vm<'a> {
         }
 
         let func_val = Value::symbol(name);
-        self.with_frame_call_roots(func, func_val, args, |vm, args| {
-            vm.call_function(func_val, args)
+        self.with_frame_call_roots(func, func_val, args, |vm, rooted_func, rooted_args| {
+            vm.call_function(rooted_func, rooted_args)
         })
         .map(Some)
     }
@@ -2550,7 +2569,28 @@ impl<'a> Vm<'a> {
     }
 
     fn call_function_with_roots(&mut self, function: Value, args: &[Value]) -> EvalResult {
-        self.call_function(function, args.to_vec())
+        self.with_vm_root_scope(|vm| {
+            let function_slot = vm.push_dynamic_vm_root_slot(function);
+            let arg_slots = args
+                .iter()
+                .map(|value| vm.push_dynamic_vm_root_slot(*value))
+                .collect::<Vec<_>>();
+            let rooted_function = vm.ctx.vm_frame_root_value(function_slot);
+            let rooted_args = arg_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            vm.call_function(rooted_function, rooted_args)
+        })
+    }
+
+    fn sequence_element_root_slots(&mut self, sequence: Value) -> Result<Vec<usize>, Flow> {
+        let mut slots = Vec::new();
+        crate::emacs_core::builtins::higher_order::for_each_sequence_element(&sequence, |item| {
+            slots.push(self.push_dynamic_vm_root_slot(item));
+            Ok(())
+        })?;
+        Ok(slots)
     }
 
     fn builtin_run_hooks_shared(&mut self, args: &[Value]) -> EvalResult {
@@ -2853,26 +2893,22 @@ impl<'a> Vm<'a> {
         let func = args[0];
         let sequence = args[1];
         self.with_vm_root_scope(|vm| {
-            vm.push_dynamic_vm_root(func);
-            vm.push_dynamic_vm_root(sequence);
-            let mut results = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function(func, vec![item])
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    results.push(value);
-                    Ok(())
-                },
-            );
-
-            match map_result {
-                Ok(()) => Ok(Value::list(results)),
-                Err(flow) => Err(flow),
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let sequence_slot = vm.push_dynamic_vm_root_slot(sequence);
+            let item_slots =
+                vm.sequence_element_root_slots(vm.ctx.vm_frame_root_value(sequence_slot))?;
+            let mut result_slots = Vec::with_capacity(item_slots.len());
+            for item_slot in item_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let item = vm.ctx.vm_frame_root_value(item_slot);
+                let value = vm.call_function_with_roots(rooted_func, &[item])?;
+                result_slots.push(vm.push_dynamic_vm_root_slot(value));
             }
+            let results = result_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            Ok(Value::list(results))
         })
     }
 
@@ -2881,20 +2917,16 @@ impl<'a> Vm<'a> {
         let func = args[0];
         let sequence = args[1];
         self.with_vm_root_scope(|vm| {
-            vm.push_dynamic_vm_root(func);
-            vm.push_dynamic_vm_root(sequence);
-            crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let result = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function(func, vec![item])
-                    });
-                    result?;
-                    Ok(())
-                },
-            )?;
-            Ok(sequence)
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let sequence_slot = vm.push_dynamic_vm_root_slot(sequence);
+            let item_slots =
+                vm.sequence_element_root_slots(vm.ctx.vm_frame_root_value(sequence_slot))?;
+            for item_slot in item_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let item = vm.ctx.vm_frame_root_value(item_slot);
+                vm.call_function_with_roots(rooted_func, &[item])?;
+            }
+            Ok(vm.ctx.vm_frame_root_value(sequence_slot))
         })
     }
 
@@ -2903,26 +2935,22 @@ impl<'a> Vm<'a> {
         let func = args[0];
         let sequence = args[1];
         self.with_vm_root_scope(|vm| {
-            vm.push_dynamic_vm_root(func);
-            vm.push_dynamic_vm_root(sequence);
-            let mut mapped = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function(func, vec![item])
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    mapped.push(value);
-                    Ok(())
-                },
-            );
-
-            match map_result {
-                Ok(()) => crate::emacs_core::builtins::builtin_nconc(mapped),
-                Err(flow) => Err(flow),
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let sequence_slot = vm.push_dynamic_vm_root_slot(sequence);
+            let item_slots =
+                vm.sequence_element_root_slots(vm.ctx.vm_frame_root_value(sequence_slot))?;
+            let mut mapped_slots = Vec::with_capacity(item_slots.len());
+            for item_slot in item_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let item = vm.ctx.vm_frame_root_value(item_slot);
+                let value = vm.call_function_with_roots(rooted_func, &[item])?;
+                mapped_slots.push(vm.push_dynamic_vm_root_slot(value));
             }
+            let mapped = mapped_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            crate::emacs_core::builtins::builtin_nconc(mapped)
         })
     }
 
@@ -2932,36 +2960,29 @@ impl<'a> Vm<'a> {
         let sequence = args[1];
         let separator = args.get(2).copied().unwrap_or_else(|| Value::string(""));
         self.with_vm_root_scope(|vm| {
-            vm.push_dynamic_vm_root(func);
-            vm.push_dynamic_vm_root(sequence);
-            vm.push_dynamic_vm_root(separator);
-            let mut parts = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function(func, vec![item])
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    parts.push(value);
-                    Ok(())
-                },
-            );
-
-            match map_result {
-                Ok(()) if parts.is_empty() => Ok(Value::string("")),
-                Ok(()) => {
-                    let mut concat_args = Vec::with_capacity(parts.len() * 2 - 1);
-                    for (index, part) in parts.iter().copied().enumerate() {
-                        if index > 0 {
-                            concat_args.push(separator);
-                        }
-                        concat_args.push(part);
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let sequence_slot = vm.push_dynamic_vm_root_slot(sequence);
+            let separator_slot = vm.push_dynamic_vm_root_slot(separator);
+            let item_slots =
+                vm.sequence_element_root_slots(vm.ctx.vm_frame_root_value(sequence_slot))?;
+            let mut part_slots = Vec::with_capacity(item_slots.len());
+            for item_slot in item_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let item = vm.ctx.vm_frame_root_value(item_slot);
+                let value = vm.call_function_with_roots(rooted_func, &[item])?;
+                part_slots.push(vm.push_dynamic_vm_root_slot(value));
+            }
+            if part_slots.is_empty() {
+                Ok(Value::string(""))
+            } else {
+                let mut concat_args = Vec::with_capacity(part_slots.len() * 2 - 1);
+                for (index, part_slot) in part_slots.iter().enumerate() {
+                    if index > 0 {
+                        concat_args.push(vm.ctx.vm_frame_root_value(separator_slot));
                     }
-                    crate::emacs_core::builtins::builtin_concat(concat_args)
+                    concat_args.push(vm.ctx.vm_frame_root_value(*part_slot));
                 }
-                Err(flow) => Err(flow),
+                crate::emacs_core::builtins::builtin_concat(concat_args)
             }
         })
     }
@@ -4048,10 +4069,10 @@ impl<'a> Vm<'a> {
             let list = args[1];
             let test_fn = args[2];
             return self.with_vm_root_scope(|vm| {
-                vm.push_dynamic_vm_root(key);
-                vm.push_dynamic_vm_root(list);
-                vm.push_dynamic_vm_root(test_fn);
-                let mut cursor = list;
+                let key_slot = vm.push_dynamic_vm_root_slot(key);
+                let list_slot = vm.push_dynamic_vm_root_slot(list);
+                let test_fn_slot = vm.push_dynamic_vm_root_slot(test_fn);
+                let mut cursor = vm.ctx.vm_frame_root_value(list_slot);
                 loop {
                     match cursor.kind() {
                         ValueKind::Nil => return Ok(Value::NIL),
@@ -4060,25 +4081,34 @@ impl<'a> Vm<'a> {
                             let pair_cdr = cursor.cons_cdr();
                             if let ValueKind::Cons = pair_car.kind() {
                                 let entry_key = pair_car.cons_car();
-                                let matches = vm.with_vm_root_scope(|vm| {
-                                    vm.push_dynamic_vm_root(cursor);
-                                    vm.push_dynamic_vm_root(pair_car);
-                                    vm.push_dynamic_vm_root(pair_cdr);
-                                    vm.push_dynamic_vm_root(entry_key);
-                                    vm.call_function(test_fn, vec![entry_key, key])
-                                        .map(|value| value.is_truthy())
-                                });
+                                let pair_car_slot = vm.push_dynamic_vm_root_slot(pair_car);
+                                let pair_cdr_slot = vm.push_dynamic_vm_root_slot(pair_cdr);
+                                let entry_key_slot = vm.push_dynamic_vm_root_slot(entry_key);
+                                let rooted_test_fn = vm.ctx.vm_frame_root_value(test_fn_slot);
+                                let rooted_entry_key = vm.ctx.vm_frame_root_value(entry_key_slot);
+                                let rooted_key = vm.ctx.vm_frame_root_value(key_slot);
+                                let matches = vm
+                                    .call_function_with_roots(
+                                        rooted_test_fn,
+                                        &[rooted_entry_key, rooted_key],
+                                    )
+                                    .map(|value| value.is_truthy());
                                 let matches = matches?;
                                 if matches {
-                                    return Ok(pair_car);
+                                    return Ok(vm.ctx.vm_frame_root_value(pair_car_slot));
                                 }
+                                cursor = vm.ctx.vm_frame_root_value(pair_cdr_slot);
+                                continue;
                             }
                             cursor = pair_cdr;
                         }
                         _ => {
                             return Err(signal(
                                 "wrong-type-argument",
-                                vec![Value::symbol("listp"), list],
+                                vec![
+                                    Value::symbol("listp"),
+                                    vm.ctx.vm_frame_root_value(list_slot),
+                                ],
                             ));
                         }
                     }
@@ -4095,27 +4125,33 @@ impl<'a> Vm<'a> {
             let prop = args[1];
             let predicate = args[2];
             return self.with_vm_root_scope(|vm| {
-                vm.push_dynamic_vm_root(plist);
-                vm.push_dynamic_vm_root(prop);
-                vm.push_dynamic_vm_root(predicate);
-                let mut cursor = plist;
+                let plist_slot = vm.push_dynamic_vm_root_slot(plist);
+                let prop_slot = vm.push_dynamic_vm_root_slot(prop);
+                let predicate_slot = vm.push_dynamic_vm_root_slot(predicate);
+                let mut cursor = vm.ctx.vm_frame_root_value(plist_slot);
                 loop {
                     match cursor.kind() {
                         ValueKind::Cons => {
                             let pair_car = cursor.cons_car();
                             let pair_cdr = cursor.cons_cdr();
                             let entry_key = pair_car;
-                            let matches = vm.with_vm_root_scope(|vm| {
-                                vm.push_dynamic_vm_root(cursor);
-                                vm.push_dynamic_vm_root(entry_key);
-                                vm.push_dynamic_vm_root(pair_cdr);
-                                vm.call_function(predicate, vec![entry_key, prop])
-                                    .map(|value| value.is_truthy())
-                            });
+                            let cursor_slot = vm.push_dynamic_vm_root_slot(cursor);
+                            let pair_cdr_slot = vm.push_dynamic_vm_root_slot(pair_cdr);
+                            let entry_key_slot = vm.push_dynamic_vm_root_slot(entry_key);
+                            let rooted_predicate = vm.ctx.vm_frame_root_value(predicate_slot);
+                            let rooted_entry_key = vm.ctx.vm_frame_root_value(entry_key_slot);
+                            let rooted_prop = vm.ctx.vm_frame_root_value(prop_slot);
+                            let matches = vm
+                                .call_function_with_roots(
+                                    rooted_predicate,
+                                    &[rooted_entry_key, rooted_prop],
+                                )
+                                .map(|value| value.is_truthy());
                             let matches = matches?;
                             if matches {
-                                return Ok(cursor);
+                                return Ok(vm.ctx.vm_frame_root_value(cursor_slot));
                             }
+                            let pair_cdr = vm.ctx.vm_frame_root_value(pair_cdr_slot);
 
                             // Match GNU's `plist_member` nil-
                             // terminator rule: an unpaired last key is
@@ -4131,7 +4167,10 @@ impl<'a> Vm<'a> {
                                 _ => {
                                     return Err(signal(
                                         "wrong-type-argument",
-                                        vec![Value::symbol("plistp"), plist],
+                                        vec![
+                                            Value::symbol("plistp"),
+                                            vm.ctx.vm_frame_root_value(plist_slot),
+                                        ],
                                     ));
                                 }
                             }
@@ -4140,7 +4179,10 @@ impl<'a> Vm<'a> {
                         _ => {
                             return Err(signal(
                                 "wrong-type-argument",
-                                vec![Value::symbol("plistp"), plist],
+                                vec![
+                                    Value::symbol("plistp"),
+                                    vm.ctx.vm_frame_root_value(plist_slot),
+                                ],
                             ));
                         }
                     }
@@ -4172,12 +4214,15 @@ impl<'a> Vm<'a> {
         let (func, symbols) =
             crate::emacs_core::hashtab::collect_mapatoms_symbols(&self.ctx.obarray, args.to_vec())?;
         self.with_dynamic_vm_roots(|vm| {
-            vm.push_dynamic_vm_root(func);
-            for sym in symbols.iter().copied() {
-                vm.push_dynamic_vm_root(sym);
-            }
-            for sym in symbols {
-                vm.call_function(func, vec![sym])?;
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let symbol_slots = symbols
+                .iter()
+                .map(|sym| vm.push_dynamic_vm_root_slot(*sym))
+                .collect::<Vec<_>>();
+            for sym_slot in symbol_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let sym = vm.ctx.vm_frame_root_value(sym_slot);
+                vm.call_function_with_roots(rooted_func, &[sym])?;
             }
             Ok(Value::NIL)
         })
@@ -4186,13 +4231,21 @@ impl<'a> Vm<'a> {
     fn builtin_maphash_shared(&mut self, args: &[Value]) -> EvalResult {
         let (func, entries) = crate::emacs_core::hashtab::collect_maphash_entries(args.to_vec())?;
         self.with_dynamic_vm_roots(|vm| {
-            vm.push_dynamic_vm_root(func);
-            for (key, value) in &entries {
-                vm.push_dynamic_vm_root(*key);
-                vm.push_dynamic_vm_root(*value);
-            }
-            for (key, value) in entries {
-                vm.call_function(func, vec![key, value])?;
+            let func_slot = vm.push_dynamic_vm_root_slot(func);
+            let entry_slots = entries
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        vm.push_dynamic_vm_root_slot(*key),
+                        vm.push_dynamic_vm_root_slot(*value),
+                    )
+                })
+                .collect::<Vec<_>>();
+            for (key_slot, value_slot) in entry_slots {
+                let rooted_func = vm.ctx.vm_frame_root_value(func_slot);
+                let key = vm.ctx.vm_frame_root_value(key_slot);
+                let value = vm.ctx.vm_frame_root_value(value_slot);
+                vm.call_function_with_roots(rooted_func, &[key, value])?;
             }
             Ok(Value::NIL)
         })
@@ -4206,7 +4259,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::reader::validate_completing_read_arity(args)?;
         if let Some(function) = crate::emacs_core::reader::completing_read_function_value(&self.ctx)
         {
-            return self.call_function(function, args.to_vec());
+            return self.call_function_with_roots(function, args);
         }
 
         crate::emacs_core::reader::finish_completing_read_in_vm_runtime(&mut self.ctx, args)
@@ -4744,35 +4797,53 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
         }
         let args_root_end = crate::emacs_core::eval::save_scratch_gc_roots();
         let result = self.with_dynamic_vm_roots(move |vm| {
-            vm.push_dynamic_vm_root(form);
-            vm.push_dynamic_vm_root(function);
-            if let Some(environment) = environment {
-                vm.push_dynamic_vm_root(environment);
-            }
-            for value in args.iter().copied() {
-                vm.push_dynamic_vm_root(value);
-            }
-            let expanded = vm.with_macro_expansion_scope(|vm| vm.call_function(function, args))?;
+            let form_slot = vm.push_dynamic_vm_root_slot(form);
+            let function_slot = vm.push_dynamic_vm_root_slot(function);
+            let environment_slot =
+                environment.map(|environment| vm.push_dynamic_vm_root_slot(environment));
+            let arg_slots = args
+                .iter()
+                .map(|value| vm.push_dynamic_vm_root_slot(*value))
+                .collect::<Vec<_>>();
+            let rooted_function = vm.ctx.vm_frame_root_value(function_slot);
+            let rooted_args = arg_slots
+                .iter()
+                .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                .collect::<Vec<_>>();
+            let expanded =
+                vm.with_macro_expansion_scope(|vm| vm.call_function(rooted_function, rooted_args))?;
+            let expanded_slot = vm.push_dynamic_vm_root_slot(expanded);
             let expand_elapsed = expand_start.elapsed();
             let rooted_form = crate::emacs_core::eval::read_scratch_gc_root(form_root_index)
-                .unwrap_or(Value::NIL);
+                .unwrap_or_else(|| vm.ctx.vm_frame_root_value(form_slot));
             let rooted_function =
                 crate::emacs_core::eval::read_scratch_gc_root(function_root_index)
-                    .unwrap_or(Value::NIL);
+                    .unwrap_or_else(|| vm.ctx.vm_frame_root_value(function_slot));
             let rooted_environment =
                 environment_root_index.and_then(crate::emacs_core::eval::read_scratch_gc_root);
+            let rooted_environment = rooted_environment
+                .or_else(|| environment_slot.map(|slot| vm.ctx.vm_frame_root_value(slot)));
             let rooted_args = (args_root_start..args_root_end)
                 .filter_map(crate::emacs_core::eval::read_scratch_gc_root)
                 .collect::<Vec<_>>();
+            let rooted_args = if rooted_args.len() == arg_slots.len() {
+                rooted_args
+            } else {
+                arg_slots
+                    .iter()
+                    .map(|slot| vm.ctx.vm_frame_root_value(*slot))
+                    .collect::<Vec<_>>()
+            };
+            let rooted_expanded = vm.ctx.vm_frame_root_value(expanded_slot);
             vm.ctx.store_runtime_macro_expansion(
                 rooted_form,
                 rooted_function,
                 &rooted_args,
-                &expanded,
+                &rooted_expanded,
                 expand_elapsed,
                 rooted_environment,
             );
-            Ok(expanded)
+            Ok(rooted_expanded)
         });
         crate::emacs_core::eval::restore_scratch_gc_roots(saved_scratch_roots);
         result
@@ -4781,12 +4852,7 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
 
 impl crate::emacs_core::builtins::higher_order::SortRuntime for Vm<'_> {
     fn call_sort_function(&mut self, function: Value, args: Vec<Value>) -> Result<Value, Flow> {
-        self.with_vm_root_scope(|vm| {
-            for arg in args.iter().copied() {
-                vm.push_dynamic_vm_root(arg);
-            }
-            vm.call_function(function, args)
-        })
+        self.call_function_with_roots(function, &args)
     }
 
     fn root_sort_value(&mut self, value: Value) {

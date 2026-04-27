@@ -1176,9 +1176,9 @@ impl<'heap> Mutator<'heap> {
                     .major_mark_progress()
                     .is_some_and(|progress| progress.completed)
             {
-                if let Some(cycle) =
-                    self.with_runtime(|runtime| runtime.finish_active_major_collection_if_ready())?
-                {
+                if let Some(cycle) = self.with_runtime(|runtime| {
+                    runtime.finish_active_major_collection_blocking_if_ready()
+                })? {
                     return Ok(cycle);
                 }
                 continue;

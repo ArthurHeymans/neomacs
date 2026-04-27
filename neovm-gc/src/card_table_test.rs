@@ -22,8 +22,16 @@ fn card_index_of_outside_range_is_none() {
 fn record_write_sets_card_dirty_in_range() {
     let table = CardTable::new(0x1000, 0x1000, 512);
     assert!(!table.is_dirty(0x1000));
+    assert_eq!(table.dirty_count(), 0);
     table.record_write(0x1234);
     assert!(table.is_dirty(0x1234));
+    assert_eq!(table.dirty_count(), 1);
+    table.record_write(0x1235);
+    assert_eq!(
+        table.dirty_count(),
+        1,
+        "re-dirtying the same card must not double count"
+    );
     // Neighboring card unaffected.
     assert!(!table.is_dirty(0x1400));
 }
@@ -38,6 +46,7 @@ fn record_write_outside_range_is_a_no_op() {
         let (start, _) = table.card_range(index);
         assert!(!table.is_dirty(start));
     }
+    assert_eq!(table.dirty_count(), 0);
 }
 
 #[test]
@@ -47,8 +56,10 @@ fn clear_all_restores_every_card_to_clean() {
     table.record_write(0x1600);
     table.record_write(0x1f00);
     assert_eq!(table.dirty_card_indices().len(), 3);
+    assert_eq!(table.dirty_count(), 3);
     table.clear_all();
     assert_eq!(table.dirty_card_indices().len(), 0);
+    assert_eq!(table.dirty_count(), 0);
 }
 
 #[test]

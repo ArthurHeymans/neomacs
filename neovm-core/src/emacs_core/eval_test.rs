@@ -10116,6 +10116,63 @@ fn bytecode_object_relocates_during_minor_gc_and_remains_callable() {
 }
 
 #[test]
+fn bytecode_arglist_relocates_during_minor_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_minor_threshold(1);
+
+    let mut bc =
+        crate::emacs_core::bytecode::ByteCodeFunction::new(LambdaParams::simple(vec![intern(
+            "vm-bytecode-arg",
+        )]));
+    let answer_idx = bc.add_constant(Value::fixnum(7));
+    bc.ops = vec![
+        crate::emacs_core::bytecode::Op::Constant(answer_idx),
+        crate::emacs_core::bytecode::Op::Return,
+    ];
+    bc.max_stack = 1;
+
+    let sym = intern("vm-moving-bytecode-arglist");
+    ev.obarray
+        .set_symbol_value_id(sym, Value::make_bytecode(bc));
+
+    let bytecode = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("bytecode should be rooted in obarray");
+    let initial_arglist = bytecode.get_bytecode_data().expect("bytecode data").arglist;
+    let initial_arglist_ptr = initial_arglist
+        .heap_ptr()
+        .expect("arglist should be a cons");
+
+    let _garbage = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    ev.gc_safe_point_exact();
+
+    let relocated_bytecode = ev
+        .obarray
+        .symbol_value_id(sym)
+        .copied()
+        .expect("bytecode should survive minor");
+    let relocated_arglist = relocated_bytecode
+        .get_bytecode_data()
+        .expect("relocated bytecode data")
+        .arglist;
+    assert_ne!(
+        relocated_arglist
+            .heap_ptr()
+            .expect("relocated arglist cons"),
+        initial_arglist_ptr,
+        "bytecode arglist must be relocated with the bytecode object"
+    );
+    assert_eq!(
+        relocated_arglist.cons_car().as_symbol_name(),
+        Some("vm-bytecode-arg")
+    );
+    assert_eq!(relocated_arglist.cons_cdr(), Value::NIL);
+}
+
+#[test]
 fn interpreted_closure_relocates_across_minor_gc_cycles_and_remains_callable() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

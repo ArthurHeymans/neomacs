@@ -450,6 +450,7 @@ unsafe impl Trace for GcByteCode {
         for val in &data.constants {
             trace_tagged(tracer, *val);
         }
+        trace_tagged(tracer, data.arglist);
         if let Some(env) = data.env {
             trace_tagged(tracer, env);
         }
@@ -466,6 +467,7 @@ unsafe impl Trace for GcByteCode {
         for val in &mut data.constants {
             relocate_tagged(relocator, val);
         }
+        relocate_tagged(relocator, &mut data.arglist);
         if let Some(ref mut env) = data.env {
             relocate_tagged(relocator, env);
         }

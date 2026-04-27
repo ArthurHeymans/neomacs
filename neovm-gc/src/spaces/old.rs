@@ -714,7 +714,7 @@ impl OldGenState {
     pub(crate) fn dirty_card_count(&self) -> usize {
         self.blocks
             .iter()
-            .map(|block| block.card_table().dirty_card_indices().len())
+            .map(|block| block.card_table().dirty_count())
             .sum()
     }
 

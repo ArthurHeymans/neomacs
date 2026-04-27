@@ -25,7 +25,7 @@
 //! via the fast-path range check; callers must ensure they use the
 //! right table for each address space.
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 /// Default card size in bytes. 512B is the canonical choice from G1
 /// and similar collectors: 8 cards cover one 4KB page.
@@ -47,6 +47,9 @@ pub(crate) struct CardTable {
     card_shift: u32,
     /// One entry per card. Each byte is either 0 (clean) or 1 (dirty).
     cards: Box<[AtomicU8]>,
+    /// Number of cards currently known dirty. Maintained on the write-barrier
+    /// fast path so planning stats do not need to scan every card table.
+    dirty_count: AtomicUsize,
 }
 
 /// Card state values. The table uses byte granularity so entries can
@@ -79,6 +82,7 @@ impl CardTable {
             card_size,
             card_shift,
             cards: cards.into_boxed_slice(),
+            dirty_count: AtomicUsize::new(0),
         }
     }
 
@@ -97,6 +101,12 @@ impl CardTable {
     #[allow(dead_code)]
     pub(crate) fn card_size(&self) -> usize {
         self.card_size
+    }
+
+    /// Number of cards currently marked dirty.
+    #[inline]
+    pub(crate) fn dirty_count(&self) -> usize {
+        self.dirty_count.load(Ordering::Acquire)
     }
 
     /// True if `addr` falls inside the table's covered range.
@@ -125,7 +135,9 @@ impl CardTable {
         // Relaxed is sufficient: the barrier only needs to make the
         // dirty bit visible by the next stop-the-world remark, which
         // already contains a full memory fence.
-        self.cards[index].store(CARD_DIRTY, Ordering::Relaxed);
+        if self.cards[index].swap(CARD_DIRTY, Ordering::Relaxed) == CARD_CLEAN {
+            self.dirty_count.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     /// Check whether the card containing `addr` is dirty. Returns
@@ -144,6 +156,7 @@ impl CardTable {
         for card in self.cards.iter() {
             card.store(CARD_CLEAN, Ordering::Relaxed);
         }
+        self.dirty_count.store(0, Ordering::Release);
     }
 
     /// Iterate the card indices that are currently dirty. Useful for

@@ -2644,6 +2644,10 @@ impl HeapCore {
         // before any stop-the-world collector path computes
         // `before_bytes` / `nursery_bytes_before`.
         self.refresh_storage_stats_snapshot();
+        self.take_flat_store_without_stats_refresh()
+    }
+
+    pub(crate) fn take_flat_store_without_stats_refresh(&mut self) -> FlatObjectStore {
         unsafe { self.objects_mut_unchecked() }.take_flat()
     }
 
@@ -2685,7 +2689,11 @@ impl HeapCore {
         &mut self,
         f: impl FnOnce(&mut FlatObjectStore, &mut OldGenState, &mut HeapStats) -> R,
     ) -> R {
-        let mut flat = self.take_flat_store();
+        // Reclaim commit is often pause-sliced. The commit logic
+        // rebuilds heap stats when the cycle finishes, so every
+        // intermediate slice can avoid the full metadata snapshot
+        // that `take_flat_store` performs for normal collections.
+        let mut flat = self.take_flat_store_without_stats_refresh();
         let result = f(&mut flat, &mut self.old_gen, &mut self.stats);
         self.restore_flat_store(flat);
         result
@@ -2790,7 +2798,7 @@ impl HeapCore {
         self.storage_stats_snapshot(true)
     }
 
-    fn planning_stats(&self) -> HeapStats {
+    pub(crate) fn planning_stats(&self) -> HeapStats {
         self.storage_stats_snapshot(false)
     }
 
@@ -2856,10 +2864,14 @@ impl HeapCore {
     /// Build a scheduler-visible collection plan from current heap state.
     pub fn plan_for(&self, kind: CollectionKind) -> CollectionPlan {
         let stats = self.planning_stats();
+        self.plan_for_with_stats(kind, &stats)
+    }
+
+    fn plan_for_with_stats(&self, kind: CollectionKind, stats: &HeapStats) -> CollectionPlan {
         crate::collector_policy::build_plan(
             kind,
             self.object_count(),
-            &stats,
+            stats,
             &self.config.nursery,
             &self.config.old,
             &self.old_gen,
@@ -2877,12 +2889,11 @@ impl HeapCore {
     }
 
     pub(crate) fn refresh_recommended_plans(&self) {
-        self.collector.refresh_cached_plans(
-            &self.planning_stats(),
-            &self.old_gen,
-            &self.config.old,
-            |kind| self.plan_for(kind),
-        );
+        let stats = self.planning_stats();
+        self.collector
+            .refresh_cached_plans(&stats, &self.old_gen, &self.config.old, |kind| {
+                self.plan_for_with_stats(kind, &stats)
+            });
     }
 
     /// Return the phases traversed by the most recently executed collection.
@@ -3142,7 +3153,7 @@ impl HeapCore {
             &self.config.large,
             space,
             bytes,
-            |kind| self.plan_for(kind),
+            |kind| self.plan_for_with_stats(kind, &stats),
         )
     }
 

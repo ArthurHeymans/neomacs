@@ -556,7 +556,7 @@ impl<'heap> CollectorRuntime<'heap> {
             objects.raw(),
             plan,
             sources,
-            &self.heap.storage_stats(),
+            &self.heap.planning_stats(),
             self.heap.old_gen(),
             self.heap.old_config(),
             |kind| self.heap.plan_for(kind),
@@ -618,7 +618,7 @@ impl<'heap> CollectorRuntime<'heap> {
         }
 
         loop {
-            if let Some(cycle) = self.finish_active_major_collection_if_ready()? {
+            if let Some(cycle) = self.finish_active_major_collection_blocking_if_ready()? {
                 return Ok(cycle);
             }
             let Some(plan) = self.active_major_mark_plan() else {
@@ -685,7 +685,7 @@ impl<'heap> CollectorRuntime<'heap> {
                 .collector_handle()
                 .restore_major_mark_state_and_refresh(
                     state,
-                    &self.heap.storage_stats(),
+                    &self.heap.planning_stats(),
                     self.heap.old_gen(),
                     self.heap.old_config(),
                     |kind| self.heap.plan_for(kind),
@@ -701,7 +701,7 @@ impl<'heap> CollectorRuntime<'heap> {
                 .collector_handle()
                 .restore_major_mark_state_and_refresh(
                     state,
-                    &self.heap.storage_stats(),
+                    &self.heap.planning_stats(),
                     self.heap.old_gen(),
                     self.heap.old_config(),
                     |kind| self.heap.plan_for(kind),
@@ -747,7 +747,7 @@ impl<'heap> CollectorRuntime<'heap> {
                         .collector_handle()
                         .restore_major_mark_state_and_refresh(
                             state,
-                            &self.heap.storage_stats(),
+                            &self.heap.planning_stats(),
                             self.heap.old_gen(),
                             self.heap.old_config(),
                             |kind| self.heap.plan_for(kind),
@@ -758,31 +758,43 @@ impl<'heap> CollectorRuntime<'heap> {
             self.heap.collector_handle().push_phases(phases);
         }
 
-        let objects = self.heap.objects();
-        let raw = objects.raw();
-        if state.reclaim_prepare_state.is_none() && request.plan.kind == CollectionKind::Major {
-            // Weak slots must be filtered before survivor/candidate lists are
-            // snapshotted by the incremental reclaim-prep builder.
-            let empty_forwarding = ForwardingMap::default();
-            process_weak_references_for_candidates(
-                raw.clone(),
-                &objects.weak_candidates(),
-                request.plan.kind,
-                request.plan.worker_count.max(1),
-                &empty_forwarding,
-            );
-        }
-        let build = state.reclaim_prepare_state.get_or_insert_with(|| {
-            begin_active_prepared_reclaim_build(
+        let completed = if state.reclaim_prepare_state.is_none() {
+            let objects = self.heap.objects();
+            let raw = objects.raw();
+            if request.plan.kind == CollectionKind::Major {
+                // Weak slots must be filtered before survivor/candidate lists are
+                // snapshotted by the incremental reclaim-prep builder.
+                let empty_forwarding = ForwardingMap::default();
+                process_weak_references_for_candidates(
+                    raw.clone(),
+                    &objects.weak_candidates(),
+                    request.plan.kind,
+                    request.plan.worker_count.max(1),
+                    &empty_forwarding,
+                );
+            }
+            state.reclaim_prepare_state = Some(begin_active_prepared_reclaim_build(
                 request.plan.kind,
                 raw.all_locator_snapshot(),
                 objects.finalizable_candidates(),
                 objects.weak_candidates(),
                 objects.ephemeron_candidates(),
                 promoted_bytes,
-            )
-        });
-        let completed = advance_active_prepared_reclaim_build(raw, build, budget);
+            ));
+            let build = state
+                .reclaim_prepare_state
+                .as_mut()
+                .expect("reclaim prep build state was just initialized");
+            advance_active_prepared_reclaim_build(raw, build, budget)
+        } else {
+            let objects = self.heap.mark_objects();
+            let raw = objects.raw();
+            let build = state
+                .reclaim_prepare_state
+                .as_mut()
+                .expect("reclaim prep build state should exist");
+            advance_active_prepared_reclaim_build(raw, build, budget)
+        };
         let pause_nanos = elapsed_nanos(pause_start.elapsed());
         state.reclaim_prepare_nanos = state.reclaim_prepare_nanos.saturating_add(pause_nanos);
         self.heap.record_pause_sample(pause_nanos);
@@ -806,7 +818,7 @@ impl<'heap> CollectorRuntime<'heap> {
             .collector_handle()
             .restore_major_mark_state_and_refresh(
                 state,
-                &self.heap.storage_stats(),
+                &self.heap.planning_stats(),
                 self.heap.old_gen(),
                 self.heap.old_config(),
                 |kind| self.heap.plan_for(kind),
@@ -856,6 +868,35 @@ impl<'heap> CollectorRuntime<'heap> {
             return Ok(None);
         }
         self.commit_active_reclaim_if_ready()
+    }
+
+    /// Finish the active major collection for callers that are already
+    /// blocking until completion. This preserves bounded reclaim slices for
+    /// background/service APIs, but avoids turning a synchronous `collect` into
+    /// thousands of tiny stop-the-world slices with repeated setup overhead.
+    pub fn finish_active_major_collection_blocking_if_ready(
+        &mut self,
+    ) -> Result<Option<CollectionStats>, AllocError> {
+        loop {
+            let snapshot = self.heap.collector_shared_snapshot();
+            if snapshot.active_major_mark_plan.is_none()
+                || snapshot
+                    .major_mark_progress
+                    .is_some_and(|progress| !progress.completed)
+            {
+                return Ok(None);
+            }
+            let Some(plan) = snapshot.active_major_mark_plan else {
+                return Ok(None);
+            };
+            if plan.phase != CollectionPhase::Reclaim {
+                if !self.prepare_active_reclaim_if_needed_with_budget(usize::MAX)? {
+                    return Ok(None);
+                }
+                continue;
+            }
+            return self.advance_active_reclaim_commit_with_budget(usize::MAX);
+        }
     }
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
@@ -974,7 +1015,6 @@ impl<'heap> CollectorRuntime<'heap> {
         }
 
         let pause_start = Instant::now();
-        let before_bytes = self.heap.stats().total_live_bytes();
         let Some(mut state) = self.heap.collector_handle().take_major_mark_state() else {
             return Ok(None);
         };
@@ -988,6 +1028,14 @@ impl<'heap> CollectorRuntime<'heap> {
                 .collector_handle()
                 .push_phase(CollectionPhase::Reclaim);
         }
+        let before_bytes = match state.reclaim_before_bytes {
+            Some(before_bytes) => before_bytes,
+            None => {
+                let before_bytes = self.heap.planning_stats().total_live_bytes();
+                state.reclaim_before_bytes = Some(before_bytes);
+                before_bytes
+            }
+        };
         let runtime_state = self.heap.runtime_state_handle();
         let runtime_state_for_callback = runtime_state.clone();
         let mut completed_cycle = None;
@@ -1051,7 +1099,7 @@ impl<'heap> CollectorRuntime<'heap> {
             .collector_handle()
             .restore_major_mark_state_and_refresh(
                 state,
-                &self.heap.storage_stats(),
+                &self.heap.planning_stats(),
                 self.heap.old_gen(),
                 self.heap.old_config(),
                 |kind| self.heap.plan_for(kind),
@@ -1115,7 +1163,7 @@ impl<'heap> CollectorRuntime<'heap> {
         self.heap.sync_alloc_counters();
         self.heap.collector_handle().record_completed_plan(
             completed_plan,
-            &self.heap.storage_stats(),
+            &self.heap.planning_stats(),
             self.heap.old_gen(),
             self.heap.old_config(),
             |kind| self.heap.plan_for(kind),
@@ -1175,7 +1223,7 @@ fn prepare_active_major_reclaim_with_read_core(
         collector.restore_major_mark_state(state);
         refresh_cached_collector_plans(
             collector,
-            &core.storage_stats(),
+            &core.planning_stats(),
             core.old_gen(),
             core.old_config(),
             |kind| core.plan_for(kind),
@@ -1190,7 +1238,7 @@ fn prepare_active_major_reclaim_with_read_core(
         collector.restore_major_mark_state(state);
         refresh_cached_collector_plans(
             collector,
-            &core.storage_stats(),
+            &core.planning_stats(),
             core.old_gen(),
             core.old_config(),
             |kind| core.plan_for(kind),
@@ -1198,32 +1246,40 @@ fn prepare_active_major_reclaim_with_read_core(
         return false;
     }
 
-    let completed = {
+    let completed = if state.reclaim_prepare_state.is_none() {
         let objects = core.objects();
         let raw = objects.raw();
-        if state.reclaim_prepare_state.is_none() {
-            // Keep the shared/background major path equivalent to the local
-            // runtime path: weak slots are filtered before the survivor and
-            // candidate-list snapshot is built.
-            let empty_forwarding = ForwardingMap::default();
-            process_weak_references_for_candidates(
-                raw.clone(),
-                &objects.weak_candidates(),
-                request.plan.kind,
-                request.plan.worker_count.max(1),
-                &empty_forwarding,
-            );
-        }
-        let build = state.reclaim_prepare_state.get_or_insert_with(|| {
-            begin_active_prepared_reclaim_build(
-                request.plan.kind,
-                raw.all_locator_snapshot(),
-                objects.finalizable_candidates(),
-                objects.weak_candidates(),
-                objects.ephemeron_candidates(),
-                0,
-            )
-        });
+        // Keep the shared/background major path equivalent to the local
+        // runtime path: weak slots are filtered before the survivor and
+        // candidate-list snapshot is built.
+        let empty_forwarding = ForwardingMap::default();
+        process_weak_references_for_candidates(
+            raw.clone(),
+            &objects.weak_candidates(),
+            request.plan.kind,
+            request.plan.worker_count.max(1),
+            &empty_forwarding,
+        );
+        state.reclaim_prepare_state = Some(begin_active_prepared_reclaim_build(
+            request.plan.kind,
+            raw.all_locator_snapshot(),
+            objects.finalizable_candidates(),
+            objects.weak_candidates(),
+            objects.ephemeron_candidates(),
+            0,
+        ));
+        let build = state
+            .reclaim_prepare_state
+            .as_mut()
+            .expect("reclaim prep build state was just initialized");
+        advance_active_prepared_reclaim_build(raw, build, budget)
+    } else {
+        let objects = core.mark_objects();
+        let raw = objects.raw();
+        let build = state
+            .reclaim_prepare_state
+            .as_mut()
+            .expect("reclaim prep build state should exist");
         advance_active_prepared_reclaim_build(raw, build, budget)
     };
 
@@ -1245,7 +1301,7 @@ fn prepare_active_major_reclaim_with_read_core(
     collector.restore_major_mark_state(state);
     refresh_cached_collector_plans(
         collector,
-        &core.storage_stats(),
+        &core.planning_stats(),
         core.old_gen(),
         core.old_config(),
         |kind| core.plan_for(kind),
@@ -1710,7 +1766,7 @@ impl SharedCollectorRuntime {
             collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,
-                &core.storage_stats(),
+                &core.planning_stats(),
                 core.old_gen(),
                 core.old_config(),
                 |kind| core.plan_for(kind),
@@ -1730,7 +1786,7 @@ impl SharedCollectorRuntime {
             collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,
-                &core.storage_stats(),
+                &core.planning_stats(),
                 core.old_gen(),
                 core.old_config(),
                 |kind| core.plan_for(kind),
