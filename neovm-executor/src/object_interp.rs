@@ -2073,6 +2073,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_dolist_and_dotimes_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((sum 0)) (+ (dolist (x (list 1 2 3) sum) (setq sum (+ sum x))) (dotimes (i 4 sum) (setq sum (+ sum i)))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(18)));
+    }
+
+    #[test]
     fn executes_when_unless_and_cond_forms() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(+ (when t 4) (unless nil 5) (cond ((= 1 2) 10) ((+ 1 2))))",

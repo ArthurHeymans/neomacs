@@ -323,6 +323,8 @@ impl Lowerer<'_> {
             Some("or") => self.lower_or(form, &items[1..]),
             Some("let") => self.lower_let(form, &items[1..], false),
             Some("let*") => self.lower_let(form, &items[1..], true),
+            Some("dolist") => self.lower_dolist(form, &items[1..]),
+            Some("dotimes") => self.lower_dotimes(form, &items[1..]),
             Some("lambda") => self.lower_lambda(form, items),
             Some("declare") => self.lower_declare(form, &items[1..]),
             Some("defvar") => self.lower_defvar(form, &items[1..]),
@@ -676,6 +678,200 @@ impl Lowerer<'_> {
                 declarations,
                 bindings,
                 body: Box::new(body),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_dolist(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.len() < 2 {
+            self.error(form.span, "dolist requires a binding spec and body");
+            return None;
+        }
+        let Some(spec) = list_items(&tail[0]) else {
+            self.error(tail[0].span, "dolist binding spec must be a list");
+            return None;
+        };
+        if !(2..=3).contains(&spec.len()) {
+            self.error(
+                tail[0].span,
+                "dolist binding spec must be (var list [result])",
+            );
+            return None;
+        }
+        let Some(var) = spec[0].symbol_name().map(str::to_string) else {
+            self.error(spec[0].span, "dolist variable must be a symbol");
+            return None;
+        };
+        let list_init = self.lower_expr(&spec[1])?;
+        let list_temp = format!("\0dolist.list.{}", form.span.start);
+        let var_mode = self.binding_mode_for(&var);
+        self.push_scope(
+            std::iter::once(list_temp.clone())
+                .chain((var_mode == BindingMode::Lexical).then_some(var.clone())),
+        );
+        let result = if let Some(result) = spec.get(2) {
+            self.lower_expr(result)?
+        } else {
+            nil_expr(form.span)
+        };
+        let body = self.lower_exprs(&tail[1..])?;
+        self.pop_scope();
+
+        let var_set = assign_expr(
+            var.clone(),
+            var_mode,
+            call_named_expr(
+                "car",
+                vec![lexical_get_expr(&list_temp, form.span)],
+                form.span,
+            ),
+            form.span,
+        );
+        let list_advance = assign_expr(
+            list_temp.clone(),
+            BindingMode::Lexical,
+            call_named_expr(
+                "cdr",
+                vec![lexical_get_expr(&list_temp, form.span)],
+                form.span,
+            ),
+            form.span,
+        );
+        let mut loop_exprs = Vec::with_capacity(body.len() + 2);
+        loop_exprs.push(var_set);
+        loop_exprs.extend(body);
+        loop_exprs.push(list_advance);
+        Some(HirExpr {
+            kind: HirExprKind::Let {
+                mode: BindingMode::Lexical,
+                sequential: false,
+                declarations: Vec::new(),
+                bindings: vec![
+                    HirBinding {
+                        name: list_temp.clone(),
+                        mode: BindingMode::Lexical,
+                        init: list_init,
+                        span: form.span,
+                    },
+                    HirBinding {
+                        name: var,
+                        mode: var_mode,
+                        init: nil_expr(form.span),
+                        span: form.span,
+                    },
+                ],
+                body: Box::new(HirExpr {
+                    kind: HirExprKind::Progn(vec![
+                        HirExpr {
+                            kind: HirExprKind::While {
+                                test: Box::new(lexical_get_expr(&list_temp, form.span)),
+                                body: Box::new(HirExpr {
+                                    kind: HirExprKind::Progn(loop_exprs),
+                                    span: form.span,
+                                }),
+                            },
+                            span: form.span,
+                        },
+                        result,
+                    ]),
+                    span: form.span,
+                }),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_dotimes(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.len() < 2 {
+            self.error(form.span, "dotimes requires a binding spec and body");
+            return None;
+        }
+        let Some(spec) = list_items(&tail[0]) else {
+            self.error(tail[0].span, "dotimes binding spec must be a list");
+            return None;
+        };
+        if !(2..=3).contains(&spec.len()) {
+            self.error(
+                tail[0].span,
+                "dotimes binding spec must be (var count [result])",
+            );
+            return None;
+        }
+        let Some(var) = spec[0].symbol_name().map(str::to_string) else {
+            self.error(spec[0].span, "dotimes variable must be a symbol");
+            return None;
+        };
+        let limit_init = self.lower_expr(&spec[1])?;
+        let limit_temp = format!("\0dotimes.limit.{}", form.span.start);
+        let var_mode = self.binding_mode_for(&var);
+        self.push_scope(
+            std::iter::once(limit_temp.clone())
+                .chain((var_mode == BindingMode::Lexical).then_some(var.clone())),
+        );
+        let result = if let Some(result) = spec.get(2) {
+            self.lower_expr(result)?
+        } else {
+            nil_expr(form.span)
+        };
+        let body = self.lower_exprs(&tail[1..])?;
+        self.pop_scope();
+
+        let var_get = name_get_expr(&var, var_mode, form.span);
+        let var_advance = assign_expr(
+            var.clone(),
+            var_mode,
+            call_named_expr("1+", vec![var_get.clone()], form.span),
+            form.span,
+        );
+        let mut loop_exprs = Vec::with_capacity(body.len() + 1);
+        loop_exprs.extend(body);
+        loop_exprs.push(var_advance);
+        Some(HirExpr {
+            kind: HirExprKind::Let {
+                mode: BindingMode::Lexical,
+                sequential: false,
+                declarations: Vec::new(),
+                bindings: vec![
+                    HirBinding {
+                        name: limit_temp.clone(),
+                        mode: BindingMode::Lexical,
+                        init: limit_init,
+                        span: form.span,
+                    },
+                    HirBinding {
+                        name: var.clone(),
+                        mode: var_mode,
+                        init: HirExpr {
+                            kind: HirExprKind::Const(HirConst::Int(0)),
+                            span: form.span,
+                        },
+                        span: form.span,
+                    },
+                ],
+                body: Box::new(HirExpr {
+                    kind: HirExprKind::Progn(vec![
+                        HirExpr {
+                            kind: HirExprKind::While {
+                                test: Box::new(call_named_expr(
+                                    "<",
+                                    vec![
+                                        name_get_expr(&var, var_mode, form.span),
+                                        lexical_get_expr(&limit_temp, form.span),
+                                    ],
+                                    form.span,
+                                )),
+                                body: Box::new(HirExpr {
+                                    kind: HirExprKind::Progn(loop_exprs),
+                                    span: form.span,
+                                }),
+                            },
+                            span: form.span,
+                        },
+                        result,
+                    ]),
+                    span: form.span,
+                }),
             },
             span: form.span,
         })
@@ -1282,6 +1478,49 @@ fn quote_symbol_expr(name: &str, span: Span) -> HirExpr {
     }
 }
 
+fn lexical_get_expr(name: &str, span: Span) -> HirExpr {
+    HirExpr {
+        kind: HirExprKind::LexicalGet(name.to_string()),
+        span,
+    }
+}
+
+fn name_get_expr(name: &str, mode: BindingMode, span: Span) -> HirExpr {
+    HirExpr {
+        kind: match mode {
+            BindingMode::Lexical => HirExprKind::LexicalGet(name.to_string()),
+            BindingMode::Dynamic => HirExprKind::SymbolGet(name.to_string()),
+        },
+        span,
+    }
+}
+
+fn assign_expr(name: String, mode: BindingMode, value: HirExpr, span: Span) -> HirExpr {
+    HirExpr {
+        kind: match mode {
+            BindingMode::Lexical => HirExprKind::LexicalSet {
+                name,
+                value: Box::new(value),
+            },
+            BindingMode::Dynamic => HirExprKind::SymbolSet {
+                name,
+                value: Box::new(value),
+            },
+        },
+        span,
+    }
+}
+
+fn call_named_expr(name: &str, args: Vec<HirExpr>, span: Span) -> HirExpr {
+    HirExpr {
+        kind: HirExprKind::CallNamed {
+            name: name.to_string(),
+            args,
+        },
+        span,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{compile_source, hir::HirExprKind};
@@ -1397,6 +1636,21 @@ mod tests {
             panic!("expected expr");
         };
         assert!(matches!(expr.kind, HirExprKind::While { .. }));
+    }
+
+    #[test]
+    fn lowers_dolist_and_dotimes_to_hir_loops() {
+        let module = hir(
+            ";;; -*- lexical-binding: t; -*-\n(progn (dolist (x xs sum) (setq sum (+ sum x))) (dotimes (i n sum) (setq sum (+ sum i))))",
+        );
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::Let { .. }));
+        assert!(matches!(exprs[1].kind, HirExprKind::Let { .. }));
     }
 
     #[test]
