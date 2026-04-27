@@ -57,6 +57,10 @@ pub enum HirExprKind {
         then_expr: Box<HirExpr>,
         else_expr: Box<HirExpr>,
     },
+    While {
+        test: Box<HirExpr>,
+        body: Box<HirExpr>,
+    },
     Progn(Vec<HirExpr>),
     Let {
         mode: BindingMode,
@@ -300,6 +304,7 @@ impl Lowerer<'_> {
             Some("quote") => self.lower_quote_form(form, items),
             Some("function") => self.lower_function_form(form, items),
             Some("if") => self.lower_if(form, items),
+            Some("while") => self.lower_while(form, &items[1..]),
             Some("progn") => self.lower_progn(form, &items[1..]),
             Some("prog1") => self.lower_prog1(form, &items[1..]),
             Some("and") => self.lower_and(form, &items[1..]),
@@ -376,6 +381,20 @@ impl Lowerer<'_> {
                 test: Box::new(test),
                 then_expr: Box::new(then_expr),
                 else_expr: Box::new(else_expr),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_while(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((test, body)) = tail.split_first() else {
+            self.error(form.span, "while requires a test expression");
+            return None;
+        };
+        Some(HirExpr {
+            kind: HirExprKind::While {
+                test: Box::new(self.lower_expr(test)?),
+                body: Box::new(self.lower_body(body, form.span)?),
             },
             span: form.span,
         })
@@ -1087,6 +1106,15 @@ mod tests {
         };
         assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::Let { .. }));
+    }
+
+    #[test]
+    fn lowers_while_to_hir_loop_form() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(while (< x 3) (setq x (1+ x)))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        assert!(matches!(expr.kind, HirExprKind::While { .. }));
     }
 
     #[test]

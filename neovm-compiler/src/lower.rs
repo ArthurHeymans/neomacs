@@ -550,6 +550,10 @@ fn collect_lambda_captures(expr: &HirExpr, names: &mut IndexSet<String>) {
             collect_lambda_captures(then_expr, names);
             collect_lambda_captures(else_expr, names);
         }
+        HirExprKind::While { test, body } => {
+            collect_lambda_captures(test, names);
+            collect_lambda_captures(body, names);
+        }
         HirExprKind::Progn(exprs) => {
             for expr in exprs {
                 collect_lambda_captures(expr, names);
@@ -622,6 +626,10 @@ fn collect_mutable_lexicals(expr: &HirExpr, names: &mut IndexSet<String>) {
             collect_mutable_lexicals(test, names);
             collect_mutable_lexicals(then_expr, names);
             collect_mutable_lexicals(else_expr, names);
+        }
+        HirExprKind::While { test, body } => {
+            collect_mutable_lexicals(test, names);
+            collect_mutable_lexicals(body, names);
         }
         HirExprKind::Progn(exprs) => {
             for expr in exprs {
@@ -700,6 +708,10 @@ fn collect_free_lexicals(expr: &HirExpr, bound: &IndexSet<String>, free: &mut In
             collect_free_lexicals(test, bound, free);
             collect_free_lexicals(then_expr, bound, free);
             collect_free_lexicals(else_expr, bound, free);
+        }
+        HirExprKind::While { test, body } => {
+            collect_free_lexicals(test, bound, free);
+            collect_free_lexicals(body, bound, free);
         }
         HirExprKind::Progn(exprs) => {
             for expr in exprs {
@@ -850,6 +862,7 @@ impl SsaBuilder {
                 then_expr,
                 else_expr,
             } => self.lower_if(test, then_expr, else_expr),
+            HirExprKind::While { test, body } => self.lower_while(test, body),
             HirExprKind::Progn(exprs) => self.lower_progn(exprs),
             HirExprKind::Let {
                 declarations,
@@ -1030,6 +1043,38 @@ impl SsaBuilder {
 
         self.current_block = merge_block;
         Some(merge_value)
+    }
+
+    fn lower_while(&mut self, test: &HirExpr, body: &HirExpr) -> Option<ValueId> {
+        let test_block = self.create_block();
+        let body_block = self.create_block();
+        let exit_block = self.create_block();
+        self.set_terminator(SsaTerminator::Jump {
+            target: test_block,
+            args: Vec::new(),
+        });
+
+        self.current_block = test_block;
+        let test_value = self.lower_expr(test)?;
+        self.set_terminator(SsaTerminator::BranchIfNil {
+            test: test_value,
+            then_target: exit_block,
+            then_args: Vec::new(),
+            else_target: body_block,
+            else_args: Vec::new(),
+        });
+
+        self.current_block = body_block;
+        let body_value = self.lower_expr(body);
+        if body_value.is_some() {
+            self.set_terminator(SsaTerminator::Jump {
+                target: test_block,
+                args: Vec::new(),
+            });
+        }
+
+        self.current_block = exit_block;
+        Some(self.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure()))
     }
 
     fn lower_progn(&mut self, exprs: &[HirExpr]) -> Option<ValueId> {

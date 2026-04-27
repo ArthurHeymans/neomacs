@@ -1628,6 +1628,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_while_special_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 0)) (while (< x 3) (setq x (1+ x))) x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn catches_direct_throw() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));

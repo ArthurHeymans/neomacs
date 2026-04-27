@@ -633,6 +633,11 @@ fn dump_hir_expr(expr: &HirExpr, indent: usize, out: &mut String) {
             dump_hir_expr(then_expr, indent + 1, out);
             dump_hir_expr(else_expr, indent + 1, out);
         }
+        HirExprKind::While { test, body } => {
+            let _ = writeln!(out, "{pad}while");
+            dump_hir_expr(test, indent + 1, out);
+            dump_hir_expr(body, indent + 1, out);
+        }
         HirExprKind::Progn(exprs) => {
             let _ = writeln!(out, "{pad}progn");
             for expr in exprs {

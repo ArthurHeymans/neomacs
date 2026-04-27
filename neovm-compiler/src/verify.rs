@@ -471,6 +471,10 @@ fn verify_hir_expr(expr: &HirExpr, diagnostics: &mut Vec<Diagnostic>) {
             verify_hir_expr(then_expr, diagnostics);
             verify_hir_expr(else_expr, diagnostics);
         }
+        HirExprKind::While { test, body } => {
+            verify_hir_expr(test, diagnostics);
+            verify_hir_expr(body, diagnostics);
+        }
         HirExprKind::Progn(exprs) => {
             for expr in exprs {
                 verify_hir_expr(expr, diagnostics);
