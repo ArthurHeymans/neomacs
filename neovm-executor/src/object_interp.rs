@@ -625,6 +625,22 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.cdr(args[0]);
                 self.runtime_value(result)
             }),
+            "car-safe" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_cons(args[0]) {
+                    let result = self.runtime.car(args[0]);
+                    self.runtime_value(result)
+                } else {
+                    Some(LispValue::NIL)
+                }
+            }),
+            "cdr-safe" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_cons(args[0]) {
+                    let result = self.runtime.cdr(args[0]);
+                    self.runtime_value(result)
+                } else {
+                    Some(LispValue::NIL)
+                }
+            }),
             "setcar" => self.exact_arity(name, args, 2).and_then(|_| {
                 let result = self.runtime.set_car(args[0], args[1]);
                 self.runtime_value(result)
@@ -788,6 +804,18 @@ impl Interpreter<'_, '_, '_> {
             "memq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.memq(args[0], args[1])),
+            "member" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.member(args[0], args[1])),
+            "assq" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.assoc(args[0], args[1], false)),
+            "assoc" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.assoc(args[0], args[1], true)),
+            "copy-sequence" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.copy_sequence(args[0])),
             "mapcar" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapcar(args[0], args[1])),
@@ -1159,6 +1187,91 @@ impl Interpreter<'_, '_, '_> {
             let result = self.runtime.cdr(current);
             current = self.runtime_value(result)?;
         }
+    }
+
+    fn member(&mut self, needle: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.runtime.equal(car, needle) {
+                return Some(current);
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn assoc(&mut self, key: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper alist, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let entry_key = self.runtime.car(entry).ok()?;
+                let matched = if use_equal {
+                    self.runtime.equal(entry_key, key)
+                } else {
+                    entry_key == key
+                };
+                if matched {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn copy_sequence(&mut self, sequence: LispValue) -> Option<LispValue> {
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            let values = self.list_values(sequence)?;
+            return Some(make_list(self.runtime, values));
+        }
+        if self.runtime.is_vector(sequence) {
+            let elements = match self.runtime.vector_elements(sequence) {
+                Ok(elements) => elements,
+                Err(error) => {
+                    self.runtime_error(error);
+                    return None;
+                }
+            };
+            return Some(self.runtime.vector(elements));
+        }
+        if self.runtime.is_string(sequence) {
+            let data = match self.runtime.string_data(sequence) {
+                Ok(data) => data,
+                Err(error) => {
+                    self.runtime_error(error);
+                    return None;
+                }
+            };
+            let bytes = data.bytes().to_vec();
+            let chars = data.char_len();
+            let multibyte = data.is_multibyte();
+            return Some(self.runtime.string_from_bytes(bytes, chars, multibyte));
+        }
+        self.error(format!(
+            "copy-sequence expected a sequence, got {}",
+            self.runtime.format_value(sequence)
+        ));
+        None
     }
 
     fn mapcar(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
@@ -1807,6 +1920,8 @@ fn is_primitive_name(name: &str) -> bool {
         "cons"
             | "car"
             | "cdr"
+            | "car-safe"
+            | "cdr-safe"
             | "setcar"
             | "setcdr"
             | "eq"
@@ -1862,6 +1977,10 @@ fn is_primitive_name(name: &str) -> bool {
             | "append"
             | "nth"
             | "memq"
+            | "member"
+            | "assq"
+            | "assoc"
+            | "copy-sequence"
             | "mapcar"
             | "mapc"
             | "+"
@@ -1920,6 +2039,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(nth 1 (reverse (append (list 1) (list 2 3))))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_common_list_and_alist_utilities() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((xs (list (cons 'a 1) (cons \"b\" 2)))) (+ (if (eq (car-safe 1) nil) 1 0) (if (eq (cdr-safe 1) nil) 2 0) (if (member \"b\" (list \"a\" \"b\")) 4 0) (cdr (assq 'a xs)) (cdr (assoc \"b\" xs)) (length (copy-sequence [1 2 3]))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(13)));
     }
 
     #[test]
