@@ -377,6 +377,8 @@ Initial Cranelift lowering is intentionally conservative:
 - Lower lambda values through runtime materialization calls over compiler-owned
   lambda template tables and explicit capture arguments. Callable code
   registration stays runtime-owned until the execution ABI is connected.
+- Lower lambda templates into standalone SSA/Cranelift functions with entry
+  parameters for captures followed by lambda call parameters.
 - Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
   evaluates all initializers before installing bindings; `let*` installs each
   binding before the next initializer.

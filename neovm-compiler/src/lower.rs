@@ -11,7 +11,7 @@ use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, Re
 use crate::safepoint::SafepointEntry;
 use crate::ssa::{
     SsaBlock, SsaCaptureMode, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaLambdaCapture,
-    SsaTerminator, SsaValue, SsaValueKind,
+    SsaLambdaTemplate, SsaTerminator, SsaValue, SsaValueKind,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,6 +71,50 @@ pub fn ssa_to_regir(function: &SsaFunction) -> LowerOutput<RegFunction> {
     LowerOutput {
         value: lowerer.function,
         diagnostics: lowerer.diagnostics,
+    }
+}
+
+pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFunction> {
+    let mut builder = SsaBuilder::new(Some("<lambda>".to_string()));
+    builder.mutable_lexicals = mutable_lexical_names(&template.body);
+    builder.cell_lexicals = cell_lexical_names(&template.body);
+    builder.cell_lexicals.extend(
+        template
+            .captures
+            .iter()
+            .filter(|capture| capture.mode == SsaCaptureMode::Cell)
+            .map(|capture| capture.name.clone()),
+    );
+
+    for declaration in &template.declarations {
+        builder.lower_declaration(declaration);
+    }
+    for capture in &template.captures {
+        let value = builder.append_block_param(builder.current_block, Some(capture.name.clone()));
+        let value = if capture.mode == SsaCaptureMode::Cell {
+            value
+        } else {
+            builder.maybe_box_lexical(&capture.name, value)
+        };
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: capture.name.clone(),
+            value,
+        });
+    }
+    for param in &template.params {
+        let value = builder.append_block_param(builder.current_block, Some(param.clone()));
+        let value = builder.maybe_box_lexical(param, value);
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: param.clone(),
+            value,
+        });
+    }
+
+    let value = builder.lower_expr(&template.body);
+    builder.set_terminator(SsaTerminator::Return(value));
+    LowerOutput {
+        value: builder.function,
+        diagnostics: builder.diagnostics,
     }
 }
 

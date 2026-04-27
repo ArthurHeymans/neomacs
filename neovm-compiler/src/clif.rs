@@ -1616,7 +1616,7 @@ mod tests {
     use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_to_clif};
     use crate::compile_source;
     use crate::ids::PrimaryMap;
-    use crate::lower::hir_to_ssa;
+    use crate::lower::{hir_to_ssa, lambda_template_to_ssa};
     use crate::ssa::{SsaBlock, SsaCaptureMode, SsaFunction, SsaLambdaCapture, SsaTerminator};
     use crate::verify::verify_ssa;
 
@@ -1945,6 +1945,60 @@ mod tests {
             SsaCaptureMode::Cell
         );
         assert!(clif.safepoints.entries.len() >= 4);
+    }
+
+    #[test]
+    fn lowers_lambda_template_body_to_standalone_clif() {
+        let artifact = compile_source(
+            "lambda-body.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-adder (x) (lambda (y) (+ x y)))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+
+        let outer_clif = ssa_to_clif(&ssa.value);
+        assert_eq!(outer_clif.diagnostics, Vec::new());
+        let template = outer_clif.runtime.lambda_templates()[0].clone();
+        let lambda_ssa = lambda_template_to_ssa(&template);
+        assert_eq!(lambda_ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&lambda_ssa.value), Vec::new());
+        let entry = lambda_ssa.value.entry.expect("entry block");
+        assert_eq!(lambda_ssa.value.blocks[entry].params.len(), 2);
+
+        let lambda_clif = ssa_to_clif(&lambda_ssa.value);
+        assert_eq!(lambda_clif.diagnostics, Vec::new());
+        assert!(
+            lambda_clif
+                .runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_call_named_2")
+        );
+    }
+
+    #[test]
+    fn lowers_mutable_lambda_template_body_through_capture_cell() {
+        let artifact = compile_source(
+            "lambda-cell-body.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-counter (x) (lambda () (setq x (+ x 1)) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+
+        let outer_clif = ssa_to_clif(&ssa.value);
+        assert_eq!(outer_clif.diagnostics, Vec::new());
+        let template = outer_clif.runtime.lambda_templates()[0].clone();
+        let lambda_ssa = lambda_template_to_ssa(&template);
+        assert_eq!(lambda_ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&lambda_ssa.value), Vec::new());
+
+        let lambda_clif = ssa_to_clif(&lambda_ssa.value);
+        assert_eq!(lambda_clif.diagnostics, Vec::new());
+        let imported_names = lambda_clif.runtime.imported_function_names();
+        assert!(imported_names.contains(&"__neomacs_rt_lexical_cell_get"));
+        assert!(imported_names.contains(&"__neomacs_rt_lexical_cell_set"));
+        assert!(!imported_names.contains(&"__neomacs_rt_make_lexical_cell"));
     }
 
     #[test]
