@@ -790,6 +790,9 @@ impl Interpreter<'_, '_, '_> {
             "string-to-char" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.string_to_char(args[0])),
+            "format" | "format-message" => self
+                .min_arity(name, args, 1)
+                .and_then(|_| self.format_string(args[0], &args[1..])),
             "vector" => Some(self.runtime.vector(args.to_vec())),
             "aref" => self
                 .exact_arity(name, args, 2)
@@ -1445,6 +1448,60 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
+        let format = self.string_contents_owned(format)?;
+        let mut output = String::new();
+        let mut args = args.iter().copied();
+        let mut chars = format.chars();
+        while let Some(ch) = chars.next() {
+            if ch != '%' {
+                output.push(ch);
+                continue;
+            }
+            let Some(spec) = chars.next() else {
+                self.error("format string ended after `%`");
+                return None;
+            };
+            match spec {
+                '%' => output.push('%'),
+                's' => {
+                    let Some(value) = args.next() else {
+                        self.error("format `%s` requires an argument");
+                        return None;
+                    };
+                    output.push_str(&self.format_princ(value)?);
+                }
+                'S' => {
+                    let Some(value) = args.next() else {
+                        self.error("format `%S` requires an argument");
+                        return None;
+                    };
+                    output.push_str(&self.runtime.format_value(value));
+                }
+                'd' => {
+                    let Some(value) = args.next() else {
+                        self.error("format `%d` requires an argument");
+                        return None;
+                    };
+                    let value = self.fixnum_arg("format", value)?;
+                    output.push_str(&value.to_string());
+                }
+                _ => {
+                    self.error(format!("unsupported format specifier `%{spec}`"));
+                    return None;
+                }
+            }
+        }
+        Some(self.runtime.string(output))
+    }
+
+    fn format_princ(&mut self, value: LispValue) -> Option<String> {
+        if self.runtime.is_string(value) {
+            return self.string_contents_owned(value);
+        }
+        Some(self.runtime.format_value(value))
+    }
+
     fn aref(&mut self, sequence: LispValue, index: LispValue) -> Option<LispValue> {
         let index = self.sequence_index("aref", index)?;
         if self.runtime.is_vector(sequence) {
@@ -1738,6 +1795,17 @@ impl Interpreter<'_, '_, '_> {
         }
         self.error(format!(
             "primitive `{name}` requires {arity} arguments, got {}",
+            args.len()
+        ));
+        None
+    }
+
+    fn min_arity(&mut self, name: &str, args: &[LispValue], min: usize) -> Option<()> {
+        if args.len() >= min {
+            return Some(());
+        }
+        self.error(format!(
+            "primitive `{name}` requires at least {min} arguments, got {}",
             args.len()
         ));
         None
@@ -2084,6 +2152,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-lessp"
             | "char-to-string"
             | "string-to-char"
+            | "format"
+            | "format-message"
             | "vector"
             | "aref"
             | "aset"
@@ -2208,6 +2278,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(let ((s (concat \"a\" (char-to-string ?b) \"c\"))) (+ (length s) (if (string= (substring s 1 -1) \"b\") 10 0) (if (string< \"a\" \"b\") 20 0) (if (eq (string-to-char s) ?a) 30 0)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(63)));
+    }
+
+    #[test]
+    fn executes_basic_format_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(if (string= (format \"%s/%S/%d/%%\" \"x\" 'sym 7) \"x/sym/7/%\") (if (string= (format-message \"%s\" \"ok\") \"ok\") 11 0) 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(11)));
     }
 
     #[test]
