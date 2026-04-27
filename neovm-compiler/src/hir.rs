@@ -593,14 +593,14 @@ impl Lowerer<'_> {
     }
 
     fn lower_if(&mut self, form: &SurfaceForm, items: &[SurfaceForm]) -> Option<HirExpr> {
-        if !(3..=4).contains(&items.len()) {
+        if items.len() < 3 {
             self.error(form.span, "if requires test, then, and optional else");
             return None;
         }
         let test = self.lower_expr(&items[1])?;
         let then_expr = self.lower_expr(&items[2])?;
-        let else_expr = if let Some(else_form) = items.get(3) {
-            self.lower_expr(else_form)?
+        let else_expr = if items.len() > 3 {
+            self.lower_body(&items[3..], form.span)?
         } else {
             nil_expr(form.span)
         };
@@ -2023,6 +2023,18 @@ mod tests {
         assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[2].kind, HirExprKind::If { .. }));
+    }
+
+    #[test]
+    fn lowers_if_with_multiple_else_forms() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(if x 1 2 3)");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::If { else_expr, .. } = &expr.kind else {
+            panic!("expected if");
+        };
+        assert!(matches!(else_expr.kind, HirExprKind::Progn(_)));
     }
 
     #[test]
