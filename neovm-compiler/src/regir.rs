@@ -1,3 +1,4 @@
+use crate::hir::LambdaList;
 use crate::ids::{FunctionId, PrimaryMap, RegBlockId, RegId, SafepointId};
 use crate::safepoint::SafepointTable;
 use crate::ssa::{SsaConst, SsaLambdaTemplate};
@@ -12,6 +13,7 @@ pub struct RegModule {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RegFunction {
     pub name: Option<String>,
+    pub lambda_list: LambdaList,
     pub entry_params: Vec<RegId>,
     pub registers: PrimaryMap<RegId, Reg>,
     pub blocks: PrimaryMap<RegBlockId, RegBlock>,

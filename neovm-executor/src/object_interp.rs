@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use neovm_compiler::diagnostic::Diagnostic;
+use neovm_compiler::hir::LambdaList;
 use neovm_compiler::ids::{FunctionId, RegId};
 use neovm_compiler::lower::{lambda_template_to_ssa, ssa_to_regir};
 use neovm_compiler::regir::{RegFunction, RegInst, RegInstKind, RegModule, RegTerminator};
@@ -574,9 +575,10 @@ impl Interpreter<'_, '_, '_> {
             self.diagnostics.extend(regir.diagnostics);
             return None;
         }
+        let args = self.adapt_lambda_args(&template.params, args)?;
         let mut entry_args = Vec::with_capacity(captures.len() + args.len());
         entry_args.extend(captures);
-        entry_args.extend_from_slice(args);
+        entry_args.extend(args);
         let result = execute_with_module(
             &regir.value,
             &entry_args,
@@ -607,6 +609,46 @@ impl Interpreter<'_, '_, '_> {
         flattened.extend(prefixes.iter().copied());
         flattened.extend(tail);
         self.execute_funcall(callee, &flattened)
+    }
+
+    fn adapt_lambda_args(
+        &mut self,
+        lambda_list: &LambdaList,
+        args: &[LispValue],
+    ) -> Option<Vec<LispValue>> {
+        if args.len() < lambda_list.min_arity() {
+            self.error(format!(
+                "function requires at least {} arguments, got {}",
+                lambda_list.min_arity(),
+                args.len()
+            ));
+            return None;
+        }
+        if let Some(max) = lambda_list.max_arity()
+            && args.len() > max
+        {
+            self.error(format!(
+                "function requires at most {max} arguments, got {}",
+                args.len()
+            ));
+            return None;
+        }
+
+        let mut adapted = Vec::with_capacity(lambda_list.entry_arity());
+        adapted.extend_from_slice(&args[..lambda_list.required.len()]);
+        let optional_start = lambda_list.required.len();
+        for index in 0..lambda_list.optional.len() {
+            adapted.push(
+                args.get(optional_start + index)
+                    .copied()
+                    .unwrap_or(LispValue::NIL),
+            );
+        }
+        if lambda_list.rest.is_some() {
+            let rest_start = args.len().min(optional_start + lambda_list.optional.len());
+            adapted.push(make_list(self.runtime, args[rest_start..].iter().copied()));
+        }
+        Some(adapted)
     }
 
     fn execute_primitive_call(
@@ -1003,9 +1045,10 @@ impl Interpreter<'_, '_, '_> {
             ));
             return None;
         };
+        let args = self.adapt_lambda_args(&function.lambda_list, args)?;
         let result = execute_with_module(
             function,
-            args,
+            &args,
             self.module,
             self.functions_by_name,
             self.runtime,
@@ -2418,6 +2461,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
         assert_eq!(runtime.lexical_cell_count(), 1);
+    }
+
+    #[test]
+    fn executes_optional_and_rest_lambda_lists() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(defun object-opt (x &optional y &rest zs) (+ x (if y y 0) (length zs)))\n(+ (object-opt 1) (object-opt 1 2 3 4) (funcall (lambda (x &optional y &rest zs) (+ x (if y y 0) (length zs))) 5 6 7))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(18)));
     }
 
     #[test]

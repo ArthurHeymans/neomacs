@@ -2002,6 +2002,7 @@ mod tests {
         });
         let ssa = SsaFunction {
             name: Some("trap-only".to_string()),
+            lambda_list: Default::default(),
             values: PrimaryMap::new(),
             blocks,
             entry: Some(entry),
@@ -2152,7 +2153,10 @@ mod tests {
                 .contains(&"__neomacs_rt_lambda_0")
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
-        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["x"]);
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].params.required,
+            vec!["x"]
+        );
         assert!(clif.runtime.lambda_templates()[0].captures.is_empty());
         assert_eq!(clif.safepoints.entries.len(), 1);
         let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
@@ -2186,7 +2190,10 @@ mod tests {
                 .contains(&"__neomacs_rt_lambda_1")
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
-        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].params.required,
+            vec!["y"]
+        );
         assert_eq!(
             capture_names(&clif.runtime.lambda_templates()[0].captures),
             vec!["x"]
@@ -2228,7 +2235,10 @@ mod tests {
                 .contains(&"__neomacs_rt_lambda_1")
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
-        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].params.required,
+            vec!["y"]
+        );
         assert_eq!(
             capture_names(&clif.runtime.lambda_templates()[0].captures),
             vec!["x"]

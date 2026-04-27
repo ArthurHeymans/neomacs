@@ -132,7 +132,8 @@ fn lower_defun_to_ssa_function(defun: &HirDefun) -> LowerOutput<SsaFunction> {
     for declaration in &defun.declarations {
         builder.lower_declaration(declaration);
     }
-    for param in &defun.params {
+    builder.function.lambda_list = defun.params.clone();
+    for param in defun.params.names() {
         let value = builder.append_block_param(builder.current_block, Some(param.clone()));
         let value = builder.maybe_box_lexical(param, value);
         builder.emit_no_result(SsaInstKind::BindLexical {
@@ -195,6 +196,7 @@ pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFu
     for declaration in &template.declarations {
         builder.lower_declaration(declaration);
     }
+    builder.function.lambda_list = template.params.clone();
     for capture in &template.captures {
         let value = builder.append_block_param(builder.current_block, Some(capture.name.clone()));
         let value = if capture.mode == SsaCaptureMode::Cell {
@@ -207,7 +209,7 @@ pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFu
             value,
         });
     }
-    for param in &template.params {
+    for param in template.params.names() {
         let value = builder.append_block_param(builder.current_block, Some(param.clone()));
         let value = builder.maybe_box_lexical(param, value);
         builder.emit_no_result(SsaInstKind::BindLexical {
@@ -238,6 +240,7 @@ impl<'a> RegLowerer<'a> {
     fn new(ssa: &'a SsaFunction) -> Self {
         let mut function = RegFunction {
             name: ssa.name.clone(),
+            lambda_list: ssa.lambda_list.clone(),
             ..RegFunction::default()
         };
         let mut block_map = HashMap::new();
@@ -536,15 +539,15 @@ impl<'a> RegLowerer<'a> {
     }
 }
 
-fn lambda_capture_names(params: &[String], body: &HirExpr) -> Vec<String> {
-    let bound = params.iter().cloned().collect::<IndexSet<_>>();
+fn lambda_capture_names(params: &crate::hir::LambdaList, body: &HirExpr) -> Vec<String> {
+    let bound = params.names().cloned().collect::<IndexSet<_>>();
     let mut free = IndexSet::new();
     collect_free_lexicals(body, &bound, &mut free);
     free.into_iter().collect()
 }
 
 fn lambda_capture_specs(
-    params: &[String],
+    params: &crate::hir::LambdaList,
     body: &HirExpr,
     mutable_lexicals: &IndexSet<String>,
 ) -> Vec<SsaLambdaCapture> {
@@ -853,6 +856,7 @@ impl SsaBuilder {
         Self {
             function: SsaFunction {
                 name,
+                lambda_list: Default::default(),
                 values: PrimaryMap::new(),
                 blocks,
                 entry: Some(entry),

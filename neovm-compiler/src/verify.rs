@@ -580,6 +580,7 @@ mod tests {
         blocks[entry].terminator = SsaTerminator::Return(Some(first));
         let function = SsaFunction {
             name: Some("bad-use-before-def".to_string()),
+            lambda_list: Default::default(),
             values,
             blocks,
             entry: Some(entry),

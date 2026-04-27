@@ -1,5 +1,5 @@
 use crate::effects::Effects;
-use crate::hir::{HirDeclaration, HirExpr};
+use crate::hir::{HirDeclaration, HirExpr, LambdaList};
 use crate::ids::{BlockId, FunctionId, PrimaryMap, ValueId};
 use crate::surface::SurfaceForm;
 
@@ -12,6 +12,7 @@ pub struct SsaModule {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SsaFunction {
     pub name: Option<String>,
+    pub lambda_list: LambdaList,
     pub values: PrimaryMap<ValueId, SsaValue>,
     pub blocks: PrimaryMap<BlockId, SsaBlock>,
     pub entry: Option<BlockId>,
@@ -124,7 +125,7 @@ pub enum SsaInstKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SsaLambdaTemplate {
-    pub params: Vec<String>,
+    pub params: LambdaList,
     pub captures: Vec<SsaLambdaCapture>,
     pub declarations: Vec<HirDeclaration>,
     pub body: Box<HirExpr>,

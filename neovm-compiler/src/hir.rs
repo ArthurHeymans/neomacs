@@ -25,7 +25,7 @@ pub enum HirItem {
 #[derive(Clone, Debug, PartialEq)]
 pub struct HirDefun {
     pub name: String,
-    pub params: Vec<String>,
+    pub params: LambdaList,
     pub declarations: Vec<HirDeclaration>,
     pub body: HirExpr,
     pub span: Span,
@@ -70,7 +70,7 @@ pub enum HirExprKind {
         body: Box<HirExpr>,
     },
     Lambda {
-        params: Vec<String>,
+        params: LambdaList,
         declarations: Vec<HirDeclaration>,
         body: Box<HirExpr>,
     },
@@ -124,6 +124,60 @@ pub enum HirConst {
 pub enum BindingMode {
     Lexical,
     Dynamic,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParamSection {
+    Required,
+    Optional,
+    Rest,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LambdaList {
+    pub required: Vec<String>,
+    pub optional: Vec<String>,
+    pub rest: Option<String>,
+}
+
+impl LambdaList {
+    pub fn names(&self) -> impl Iterator<Item = &String> {
+        self.required
+            .iter()
+            .chain(self.optional.iter())
+            .chain(self.rest.iter())
+    }
+
+    pub fn binding_names(&self) -> Vec<String> {
+        self.names().cloned().collect()
+    }
+
+    pub fn min_arity(&self) -> usize {
+        self.required.len()
+    }
+
+    pub fn max_arity(&self) -> Option<usize> {
+        self.rest
+            .is_none()
+            .then_some(self.required.len() + self.optional.len())
+    }
+
+    pub fn entry_arity(&self) -> usize {
+        self.required.len() + self.optional.len() + usize::from(self.rest.is_some())
+    }
+
+    pub fn display_parts(&self) -> Vec<String> {
+        let mut parts = self.required.clone();
+        if !self.optional.is_empty() {
+            parts.push("&optional".to_string());
+            parts.extend(self.optional.clone());
+        }
+        if let Some(rest) = &self.rest {
+            parts.push("&rest".to_string());
+            parts.push(rest.clone());
+        }
+        parts
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -216,7 +270,7 @@ impl Lowerer<'_> {
         let (declarations, body_forms) = self.split_leading_declarations(&list[3..]);
         self.push_special_scope(special_declared_names(&declarations));
         let lexical_params = params
-            .iter()
+            .names()
             .filter(|name| !self.is_special(name))
             .cloned()
             .collect::<Vec<_>>();
@@ -923,7 +977,7 @@ impl Lowerer<'_> {
         let (declarations, body_forms) = self.split_leading_declarations(&items[2..]);
         self.push_special_scope(special_declared_names(&declarations));
         let lexical_params = params
-            .iter()
+            .names()
             .filter(|name| !self.is_special(name))
             .cloned()
             .collect::<Vec<_>>();
@@ -1315,22 +1369,56 @@ impl Lowerer<'_> {
             .collect::<Option<Vec<_>>>()
     }
 
-    fn parse_param_list(&mut self, form: &SurfaceForm) -> Option<Vec<String>> {
+    fn parse_param_list(&mut self, form: &SurfaceForm) -> Option<LambdaList> {
         let Some(items) = list_items(form) else {
             self.error(form.span, "parameter list must be a proper list");
             return None;
         };
-        let mut params = Vec::new();
+        let mut params = LambdaList::default();
+        let mut section = ParamSection::Required;
         for item in items {
             let Some(name) = item.symbol_name() else {
                 self.error(item.span, "parameter name must be a symbol");
                 return None;
             };
-            if name.starts_with('&') {
-                self.error(item.span, "lambda-list keywords are not supported yet");
-                return None;
+            match name {
+                "&optional" => {
+                    if section != ParamSection::Required {
+                        self.error(item.span, "&optional is out of order");
+                        return None;
+                    }
+                    section = ParamSection::Optional;
+                    continue;
+                }
+                "&rest" => {
+                    if section == ParamSection::Rest {
+                        self.error(item.span, "duplicate &rest");
+                        return None;
+                    }
+                    section = ParamSection::Rest;
+                    continue;
+                }
+                _ if name.starts_with('&') => {
+                    self.error(item.span, "lambda-list keyword is not supported yet");
+                    return None;
+                }
+                _ => {}
             }
-            params.push(name.to_string());
+            match section {
+                ParamSection::Required => params.required.push(name.to_string()),
+                ParamSection::Optional => params.optional.push(name.to_string()),
+                ParamSection::Rest => {
+                    if params.rest.is_some() {
+                        self.error(item.span, "&rest accepts only one parameter");
+                        return None;
+                    }
+                    params.rest = Some(name.to_string());
+                }
+            }
+        }
+        if section == ParamSection::Rest && params.rest.is_none() {
+            self.error(form.span, "&rest requires a parameter");
+            return None;
         }
         Some(params)
     }
@@ -1557,6 +1645,17 @@ mod tests {
     }
 
     #[test]
+    fn parses_optional_and_rest_lambda_lists() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(defun f (x &optional y &rest zs) x)");
+        let HirItem::Defun(defun) = &module.items[0] else {
+            panic!("expected defun");
+        };
+        assert_eq!(defun.params.required, vec!["x".to_string()]);
+        assert_eq!(defun.params.optional, vec!["y".to_string()]);
+        assert_eq!(defun.params.rest, Some("zs".to_string()));
+    }
+
+    #[test]
     fn top_level_symbol_reads_are_symbol_gets() {
         let module = hir("x");
         let HirItem::Expr(expr) = &module.items[0] else {
@@ -1730,7 +1829,7 @@ mod tests {
         let HirExprKind::Lambda { params, body, .. } = &defun.body.kind else {
             panic!("expected lambda body");
         };
-        assert_eq!(params, &vec!["y".to_string()]);
+        assert_eq!(params.required, vec!["y".to_string()]);
         let HirExprKind::CallNamed { args, .. } = &body.kind else {
             panic!("expected lambda call body");
         };

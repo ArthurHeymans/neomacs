@@ -30,7 +30,12 @@ pub fn dump_hir(module: &HirModule) -> String {
                 dump_hir_expr(expr, 1, &mut out);
             }
             HirItem::Defun(defun) => {
-                let _ = writeln!(out, "defun {} ({})", defun.name, defun.params.join(" "));
+                let _ = writeln!(
+                    out,
+                    "defun {} ({})",
+                    defun.name,
+                    defun.params.display_parts().join(" ")
+                );
                 dump_declarations(&defun.declarations, 1, &mut out);
                 dump_hir_expr(&defun.body, 1, &mut out);
             }
@@ -190,7 +195,11 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
             let _ = write!(out, "function-quote <surface>");
         }
         SsaInstKind::Lambda { template, .. } => {
-            let _ = write!(out, "lambda ({})", template.params.join(" "));
+            let _ = write!(
+                out,
+                "lambda ({})",
+                template.params.display_parts().join(" ")
+            );
             if !template.captures.is_empty() {
                 let _ = write!(out, " captures ({})", dump_lambda_captures(template));
             }
@@ -321,7 +330,7 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 out,
                 "{} = lambda ({})",
                 reg_name(function, *dst),
-                template.params.join(" ")
+                template.params.display_parts().join(" ")
             );
             if !captures.is_empty() {
                 let regs = captures
@@ -673,7 +682,7 @@ fn dump_hir_expr(expr: &HirExpr, indent: usize, out: &mut String) {
             declarations,
             body,
         } => {
-            let _ = writeln!(out, "{pad}lambda ({})", params.join(" "));
+            let _ = writeln!(out, "{pad}lambda ({})", params.display_parts().join(" "));
             dump_declarations(declarations, indent + 1, out);
             dump_hir_expr(body, indent + 1, out);
         }
