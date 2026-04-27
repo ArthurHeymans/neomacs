@@ -117,16 +117,54 @@ impl MacroEval {
             Some("cond") => self.eval_cond(span, &items[1..], env),
             Some("and") => self.eval_and(&items[1..], env),
             Some("or") => self.eval_or(&items[1..], env),
+            Some("when") => {
+                // (when cond body...) => (if cond (progn body...))
+                let cond_val = self.eval(&items[1], env)?;
+                if cond_val.is_truthy() {
+                    self.eval_progn(&items[2..], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            Some("unless") => {
+                // (unless cond body...) => (if (not cond) (progn body...))
+                let cond_val = self.eval(&items[1], env)?;
+                if cond_val.is_nil() {
+                    self.eval_progn(&items[2..], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
             Some("let") => self.eval_let(span, &items[1..], env, false),
             Some("let*") => self.eval_let(span, &items[1..], env, true),
             Some("setq") => self.eval_setq(span, &items[1..], env),
             Some("progn") => self.eval_progn(&items[1..], env),
+            Some("while") => self.eval_while(span, &items[1..], env),
 
             Some("car") | Some("first") => {
                 self.eval_unary(span, "car", &items[1..], env, |v| v.car())
             }
+            Some("car-safe") => {
+                self.eval_unary(span, "car-safe", &items[1..], env, |v| {
+                    if v.is_cons() { v.car() } else { MacroValue::Nil }
+                })
+            }
             Some("cdr") | Some("rest") => {
                 self.eval_unary(span, "cdr", &items[1..], env, |v| v.cdr())
+            }
+            Some("cdr-safe") => {
+                self.eval_unary(span, "cdr-safe", &items[1..], env, |v| {
+                    if v.is_cons() { v.cdr() } else { MacroValue::Nil }
+                })
+            }
+            Some("cadr") => {
+                self.eval_unary(span, "cadr", &items[1..], env, |v| v.cdr().car())
+            }
+            Some("caddr") => {
+                self.eval_unary(span, "caddr", &items[1..], env, |v| v.cdr().cdr().car())
+            }
+            Some("cddr") => {
+                self.eval_unary(span, "cddr", &items[1..], env, |v| v.cdr().cdr())
             }
             Some("cons") => self.eval_binary(span, &items[1..], env, MacroValue::cons),
             Some("list") => {
@@ -188,6 +226,32 @@ impl MacroEval {
                     }
                 })
             }
+            Some("make-symbol") => {
+                self.eval_unary(span, "make-symbol", &items[1..], env, |v| {
+                    match v {
+                        MacroValue::String(s) => MacroValue::Symbol(format!(" {}", s)),
+                        other => other.clone(),
+                    }
+                })
+            }
+            Some("downcase") => {
+                self.eval_unary(span, "downcase", &items[1..], env, |v| {
+                    match v {
+                        MacroValue::String(s) => MacroValue::String(s.to_lowercase()),
+                        MacroValue::Symbol(s) => MacroValue::Symbol(s.to_lowercase()),
+                        other => other.clone(),
+                    }
+                })
+            }
+            Some("upcase") => {
+                self.eval_unary(span, "upcase", &items[1..], env, |v| {
+                    match v {
+                        MacroValue::String(s) => MacroValue::String(s.to_uppercase()),
+                        MacroValue::Symbol(s) => MacroValue::Symbol(s.to_uppercase()),
+                        other => other.clone(),
+                    }
+                })
+            }
             Some("concat") => self.eval_concat(span, &items[1..], env),
             Some("substring") => self.eval_substring(span, &items[1..], env),
             Some("string=") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
@@ -204,6 +268,49 @@ impl MacroEval {
                 };
                 self.error(span, format!("macro expansion error: {}", msg_text));
                 Err(())
+            }
+
+            Some("ignore-errors") => {
+                // Best-effort: evaluate body, swallow errors
+                for form in &items[1..] {
+                    let _ = self.eval(form, env);
+                }
+                Ok(MacroValue::Nil)
+            }
+
+            Some("require") => {
+                // At macro expansion time, just return nil (feature already loaded)
+                Ok(MacroValue::Nil)
+            }
+
+            Some("macroexp-warn-and-return") => {
+                // (macroexp-warn-and-return MSG FORM &optional CATEGORY FILE)
+                // Return the form, ignore the warning at macro expansion time.
+                if items.len() >= 3 {
+                    self.eval(&items[2], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("macroexp-let2") => {
+                // (macroexp-let2 VAR SYM BODY)
+                // Bind VAR to SYM and evaluate BODY. If VAR is nil, use SYM directly.
+                if items.len() >= 4 {
+                    let var_name = items[1].symbol_name();
+                    let sym_val = self.eval(&items[2], env)?;
+                    match var_name {
+                        Some(name) if !name.is_empty() => {
+                            env.bind(name.to_string(), sym_val);
+                            let result = self.eval(&items[3], env);
+                            env.remove(name);
+                            result
+                        }
+                        _ => self.eval(&items[3], env),
+                    }
+                } else {
+                    Ok(MacroValue::Nil)
+                }
             }
 
             _ => {
@@ -411,6 +518,32 @@ impl MacroEval {
             i += 2;
         }
         Ok(result)
+    }
+
+    fn eval_while(
+        &mut self,
+        span: Span,
+        args: &[SurfaceForm],
+        env: &mut MacroEnv,
+    ) -> Result<MacroValue, ()> {
+        if args.is_empty() {
+            return Ok(MacroValue::Nil);
+        }
+        let mut iterations = 0;
+        loop {
+            let cond = self.eval(&args[0], env)?;
+            if cond.is_nil() {
+                return Ok(MacroValue::Nil);
+            }
+            for body_form in &args[1..] {
+                self.eval(body_form, env)?;
+            }
+            iterations += 1;
+            if iterations > 10000 {
+                self.error(span, "while loop exceeded iteration limit");
+                return Err(());
+            }
+        }
     }
 
     // --- Function call helpers ---
