@@ -1,0 +1,10 @@
+[package]
+name = "neovm-executor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Execution engines for NeoVM compiler artifacts"
+
+[dependencies]
+neovm-compiler = { path = "../neovm-compiler", version = "0.0.1" }
