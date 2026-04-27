@@ -24,6 +24,14 @@ Each bench file contains one or more criterion `bench_function` / `bench_with_in
 ## Running
 
 ```bash
+# Run the standard reproducible quick baseline wrapper. This writes
+# logs, machine metadata, Criterion estimate paths, and a TSV extract
+# under target/neovm-gc-bench-runs/.
+scripts/neovm-gc-bench-baseline.sh
+
+# Run the same wrapper with production-style Criterion timings.
+scripts/neovm-gc-bench-baseline.sh --full
+
 # Run a specific bench file
 cargo bench --bench alloc_throughput -p neovm-gc
 
@@ -37,7 +45,7 @@ cargo bench --bench alloc_throughput -p neovm-gc -- --save-baseline my-experimen
 cargo bench --bench alloc_throughput -p neovm-gc -- --baseline my-experiment
 ```
 
-Criterion writes HTML reports to `target/criterion/` automatically. Open `target/criterion/report/index.html` in a browser for plots.
+Criterion writes HTML reports to `target/criterion/` automatically. Open `target/criterion/report/index.html` in a browser for plots. The wrapper does not replace Criterion; it makes the run reproducible enough to attach to GC commits and PRs.
 
 ## Reproducibility checklist
 

@@ -129,8 +129,9 @@ The Stage 0 investigation is the canonical example of why profiling catches an O
 ## How to regenerate this file
 
 1. Run all four benches with `cargo bench -p neovm-gc -- --sample-size 10 --warm-up-time 1 --measurement-time 3`.
-2. Copy the median numbers from the output into the tables above.
-3. Note the commit hash the numbers were taken from.
-4. Commit the updated BASELINE.md in the same commit as the code change being measured.
+2. Prefer `scripts/neovm-gc-bench-baseline.sh --quick --save-baseline <name>` for committed measurements so logs, metadata, and Criterion estimates are captured under `target/neovm-gc-bench-runs/`.
+3. Copy the median numbers from the output or generated `criterion-estimates.tsv` into the tables above.
+4. Note the commit hash the numbers were taken from.
+5. Commit the updated BASELINE.md in the same commit as the code change being measured.
 
-A simple machine-parseable export is on the TODO list; for now, manual transcription is the workflow.
+The wrapper emits a machine-parseable `metadata.env`, per-bench logs, a list of Criterion estimate files, and a `criterion-estimates.tsv` extract when `python3` is available. Manual transcription into this file is still required so reviewers can read the baseline in diffs.
