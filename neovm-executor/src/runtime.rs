@@ -13,6 +13,7 @@ pub struct Runtime {
     lexical_cells: Vec<Box<LexicalCell>>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
+    features: Vec<LispValue>,
     pending_error: Option<RuntimeError>,
 }
 
@@ -201,6 +202,10 @@ impl Runtime {
         self.dynamic_bindings.len()
     }
 
+    pub fn feature_count(&self) -> usize {
+        self.features.len()
+    }
+
     pub fn symbol_name(&self, symbol: LispValue) -> Result<String, RuntimeError> {
         if symbol.is_nil() {
             return Ok("nil".to_string());
@@ -325,6 +330,19 @@ impl Runtime {
         }
         self.dynamic_bindings.truncate(len - count);
         Ok(())
+    }
+
+    pub fn provide(&mut self, feature: LispValue) -> Result<LispValue, RuntimeError> {
+        self.expect_symbol(feature)?;
+        if !self.features.contains(&feature) {
+            self.features.push(feature);
+        }
+        Ok(feature)
+    }
+
+    pub fn featurep(&self, feature: LispValue) -> Result<bool, RuntimeError> {
+        self.expect_symbol(feature)?;
+        Ok(self.features.contains(&feature))
     }
 
     pub fn symbol_function(&self, symbol: LispValue) -> Result<Option<LispValue>, RuntimeError> {
@@ -1138,6 +1156,18 @@ mod tests {
         assert_eq!(runtime.unbind_dynamic(1), Ok(()));
         assert_eq!(runtime.dynamic_binding_count(), 0);
         assert_eq!(runtime.symbol_value(symbol), Ok(global));
+    }
+
+    #[test]
+    fn features_track_provided_symbols() {
+        let mut runtime = Runtime::new();
+        let feature = runtime.intern("object-feature");
+
+        assert_eq!(runtime.featurep(feature), Ok(false));
+        assert_eq!(runtime.provide(feature), Ok(feature));
+        assert_eq!(runtime.provide(feature), Ok(feature));
+        assert_eq!(runtime.featurep(feature), Ok(true));
+        assert_eq!(runtime.feature_count(), 1);
     }
 
     #[test]

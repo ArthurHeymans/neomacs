@@ -669,6 +669,17 @@ impl Interpreter<'_, '_, '_> {
             "fboundp" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.fboundp(args[0])),
+            "provide" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.provide(args[0]);
+                self.runtime_value(result)
+            }),
+            "featurep" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.featurep(args[0]);
+                self.runtime_bool(result)
+            }),
+            "require" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
+                self.require_feature(args[0], args.get(2).copied().unwrap_or(LispValue::NIL))
+            }),
             "symbol-function" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.symbol_function(args[0])),
@@ -807,6 +818,30 @@ impl Interpreter<'_, '_, '_> {
                 None
             }
         }
+    }
+
+    fn require_feature(&mut self, feature: LispValue, noerror: LispValue) -> Option<LispValue> {
+        let provided = match self.runtime.featurep(feature) {
+            Ok(provided) => provided,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        if provided {
+            return Some(feature);
+        }
+        if !noerror.is_nil() {
+            return Some(LispValue::NIL);
+        }
+        let error_symbol = self.runtime.intern("error");
+        let message = self.runtime.string("required feature was not provided");
+        let data = make_list(self.runtime, [feature, message]);
+        self.pending_signal = Some(SignaledValue {
+            symbol: error_symbol,
+            data,
+        });
+        None
     }
 
     fn is_callable_name(&self, name: &str) -> bool {
@@ -1467,6 +1502,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "set"
             | "boundp"
             | "fboundp"
+            | "provide"
+            | "featurep"
+            | "require"
             | "symbol-function"
             | "fset"
             | "defalias"
@@ -1594,6 +1632,23 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(progn (fset 'object-my-car 'car) (defalias 'object-my-cdr 'cdr) (+ (funcall 'object-my-car (cons 4 5)) (funcall (symbol-function 'object-my-cdr) (cons 6 7))))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(11)));
+    }
+
+    #[test]
+    fn executes_feature_primitives() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (provide 'object-feature) (+ (if (featurep 'object-feature) 1 0) (if (eq (require 'object-feature) 'object-feature) 2 0) (if (require 'object-missing nil t) 0 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+        assert_eq!(runtime.feature_count(), 1);
+    }
+
+    #[test]
+    fn require_signals_missing_feature() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(condition-case err (require 'object-missing) (error 9))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
     }
 
     #[test]
