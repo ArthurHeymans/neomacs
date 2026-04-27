@@ -1,8 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use cranelift_entity::EntityRef;
 
 use crate::diagnostic::Diagnostic;
 use crate::hir::{HirExpr, HirExprKind, HirItem, HirModule};
 use crate::ids::{BlockId, RegBlockId, RegId, SafepointId, ValueId};
+use crate::liveness::inst_uses;
 use crate::regir::{RegFunction, RegInstKind, RegTerminator};
 use crate::ssa::{SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
 use crate::surface::SurfaceForm;
@@ -170,6 +173,7 @@ impl SsaVerifier<'_> {
         } else {
             self.error("SSA function has no entry block");
         }
+        let dominators = compute_dominators(self.function);
         for (block_id, block) in self.function.blocks.iter() {
             for (index, param) in block.params.iter().copied().enumerate() {
                 self.check_value(param);
@@ -191,53 +195,41 @@ impl SsaVerifier<'_> {
                         _ => self.error(format!("SSA result {result:?} has inconsistent owner")),
                     }
                 }
-                self.verify_inst(&inst.kind);
+                self.verify_inst(block_id, inst_index, &inst.kind, &dominators);
             }
-            self.verify_terminator(&block.terminator);
+            self.verify_terminator(block_id, &block.terminator, &dominators);
         }
     }
 
-    fn verify_inst(&mut self, kind: &SsaInstKind) {
-        match kind {
-            SsaInstKind::LexicalSet { value, .. }
-            | SsaInstKind::SymbolSet { value, .. }
-            | SsaInstKind::BindLexical { value, .. }
-            | SsaInstKind::BindDynamic { value, .. }
-            | SsaInstKind::CatchBegin { tag: value } => self.check_value(*value),
-            SsaInstKind::Throw { tag, value } => {
-                self.check_value(*tag);
-                self.check_value(*value);
-            }
-            SsaInstKind::CallNamed { args, .. } => self.check_values(args),
-            SsaInstKind::Funcall { callee, args } | SsaInstKind::Apply { callee, args } => {
-                self.check_value(*callee);
-                self.check_values(args);
-            }
-            SsaInstKind::Const(_)
-            | SsaInstKind::Quote(_)
-            | SsaInstKind::FunctionQuote(_)
-            | SsaInstKind::LexicalGet(_)
-            | SsaInstKind::SymbolGet(_)
-            | SsaInstKind::UnbindDynamic { .. }
-            | SsaInstKind::DeclareSpecial(_)
-            | SsaInstKind::CatchEnd
-            | SsaInstKind::ConditionCaseBegin { .. }
-            | SsaInstKind::ConditionCaseHandler { .. }
-            | SsaInstKind::ConditionCaseEnd
-            | SsaInstKind::UnwindProtectBegin
-            | SsaInstKind::UnwindProtectCleanup
-            | SsaInstKind::UnwindProtectEnd => {}
+    fn verify_inst(
+        &mut self,
+        block: BlockId,
+        inst_index: usize,
+        kind: &SsaInstKind,
+        dominators: &HashMap<BlockId, HashSet<BlockId>>,
+    ) {
+        for value in inst_uses(kind) {
+            self.check_value(value);
+            self.check_value_dominates(value, block, Some(inst_index), dominators);
         }
     }
 
-    fn verify_terminator(&mut self, terminator: &SsaTerminator) {
+    fn verify_terminator(
+        &mut self,
+        block: BlockId,
+        terminator: &SsaTerminator,
+        dominators: &HashMap<BlockId, HashSet<BlockId>>,
+    ) {
         match terminator {
             SsaTerminator::Return(value) => {
                 if let Some(value) = value {
                     self.check_value(*value);
+                    self.check_value_dominates(*value, block, None, dominators);
                 }
             }
-            SsaTerminator::Jump { target, args } => self.check_branch_args(*target, args),
+            SsaTerminator::Jump { target, args } => {
+                self.check_branch_args(block, *target, args, dominators);
+            }
             SsaTerminator::BranchIfNil {
                 test,
                 then_target,
@@ -246,14 +238,21 @@ impl SsaVerifier<'_> {
                 else_args,
             } => {
                 self.check_value(*test);
-                self.check_branch_args(*then_target, then_args);
-                self.check_branch_args(*else_target, else_args);
+                self.check_value_dominates(*test, block, None, dominators);
+                self.check_branch_args(block, *then_target, then_args, dominators);
+                self.check_branch_args(block, *else_target, else_args, dominators);
             }
             SsaTerminator::Unreachable => {}
         }
     }
 
-    fn check_branch_args(&mut self, target: BlockId, args: &[ValueId]) {
+    fn check_branch_args(
+        &mut self,
+        branch_block: BlockId,
+        target: BlockId,
+        args: &[ValueId],
+        dominators: &HashMap<BlockId, HashSet<BlockId>>,
+    ) {
         self.check_block(target);
         if let Some(block) = self.function.blocks.get(target)
             && block.params.len() != args.len()
@@ -264,12 +263,9 @@ impl SsaVerifier<'_> {
                 block.params.len()
             ));
         }
-        self.check_values(args);
-    }
-
-    fn check_values(&mut self, values: &[ValueId]) {
-        for value in values {
+        for value in args {
             self.check_value(*value);
+            self.check_value_dominates(*value, branch_block, None, dominators);
         }
     }
 
@@ -285,8 +281,114 @@ impl SsaVerifier<'_> {
         }
     }
 
+    fn check_value_dominates(
+        &mut self,
+        value: ValueId,
+        use_block: BlockId,
+        use_inst_index: Option<usize>,
+        dominators: &HashMap<BlockId, HashSet<BlockId>>,
+    ) {
+        let Some(def) = self.function.values.get(value) else {
+            return;
+        };
+        let dominates = match &def.kind {
+            SsaValueKind::BlockParam { block, .. } => {
+                *block == use_block
+                    || dominators
+                        .get(&use_block)
+                        .is_some_and(|blocks| blocks.contains(block))
+            }
+            SsaValueKind::InstResult { block, inst } => {
+                if *block == use_block {
+                    use_inst_index.is_none_or(|use_inst| *inst < use_inst)
+                } else {
+                    dominators
+                        .get(&use_block)
+                        .is_some_and(|blocks| blocks.contains(block))
+                }
+            }
+        };
+        if !dominates {
+            self.error(format!(
+                "SSA value {value:?} does not dominate its use in {use_block:?}"
+            ));
+        }
+    }
+
     fn error(&mut self, message: impl Into<String>) {
         self.diagnostics.push(Diagnostic::error(message));
+    }
+}
+
+fn compute_dominators(function: &SsaFunction) -> HashMap<BlockId, HashSet<BlockId>> {
+    let blocks = function
+        .blocks
+        .iter()
+        .map(|(block, _)| block)
+        .collect::<Vec<_>>();
+    let all_blocks = blocks.iter().copied().collect::<HashSet<_>>();
+    let predecessors = predecessor_map(function);
+    let mut dominators = HashMap::new();
+    for block in &blocks {
+        let initial = if Some(*block) == function.entry {
+            HashSet::from([*block])
+        } else {
+            all_blocks.clone()
+        };
+        dominators.insert(*block, initial);
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for block in &blocks {
+            if Some(*block) == function.entry {
+                continue;
+            }
+            let preds = predecessors.get(block).map(Vec::as_slice).unwrap_or(&[]);
+            let mut next = if let Some((first, rest)) = preds.split_first() {
+                let mut intersection = dominators.get(first).cloned().unwrap_or_default();
+                for pred in rest {
+                    let pred_dominators = dominators.get(pred).cloned().unwrap_or_default();
+                    intersection.retain(|candidate| pred_dominators.contains(candidate));
+                }
+                intersection
+            } else {
+                HashSet::new()
+            };
+            next.insert(*block);
+            if dominators.get(block) != Some(&next) {
+                dominators.insert(*block, next);
+                changed = true;
+            }
+        }
+    }
+
+    dominators
+}
+
+fn predecessor_map(function: &SsaFunction) -> HashMap<BlockId, Vec<BlockId>> {
+    let mut predecessors = HashMap::<BlockId, Vec<BlockId>>::new();
+    for (block, _) in function.blocks.iter() {
+        predecessors.entry(block).or_default();
+    }
+    for (block, body) in function.blocks.iter() {
+        for successor in terminator_successors(&body.terminator) {
+            predecessors.entry(successor).or_default().push(block);
+        }
+    }
+    predecessors
+}
+
+fn terminator_successors(terminator: &SsaTerminator) -> Vec<BlockId> {
+    match terminator {
+        SsaTerminator::Jump { target, .. } => vec![*target],
+        SsaTerminator::BranchIfNil {
+            then_target,
+            else_target,
+            ..
+        } => vec![*then_target, *else_target],
+        SsaTerminator::Return(_) | SsaTerminator::Unreachable => Vec::new(),
     }
 }
 
@@ -360,5 +462,68 @@ fn verify_hir_expr(expr: &HirExpr, diagnostics: &mut Vec<Diagnostic>) {
         | HirExprKind::FunctionQuote(_)
         | HirExprKind::LexicalGet(_)
         | HirExprKind::SymbolGet(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::effects::Effects;
+    use crate::ids::PrimaryMap;
+    use crate::ssa::{
+        SsaBlock, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaTerminator, SsaValue,
+        SsaValueKind,
+    };
+    use crate::verify::verify_ssa;
+
+    #[test]
+    fn ssa_verifier_rejects_use_before_definition() {
+        let mut blocks = PrimaryMap::new();
+        let entry = blocks.push(SsaBlock {
+            params: Vec::new(),
+            instructions: Vec::new(),
+            terminator: SsaTerminator::Unreachable,
+        });
+        let mut values = PrimaryMap::new();
+        let first = values.push(SsaValue {
+            kind: SsaValueKind::InstResult {
+                block: entry,
+                inst: 0,
+            },
+        });
+        let later = values.push(SsaValue {
+            kind: SsaValueKind::InstResult {
+                block: entry,
+                inst: 1,
+            },
+        });
+        blocks[entry].instructions = vec![
+            SsaInst {
+                result: Some(first),
+                kind: SsaInstKind::SymbolSet {
+                    name: "x".to_string(),
+                    value: later,
+                },
+                effects: Effects::pure(),
+            },
+            SsaInst {
+                result: Some(later),
+                kind: SsaInstKind::Const(SsaConst::Int(1)),
+                effects: Effects::pure(),
+            },
+        ];
+        blocks[entry].terminator = SsaTerminator::Return(Some(first));
+        let function = SsaFunction {
+            name: Some("bad-use-before-def".to_string()),
+            values,
+            blocks,
+            entry: Some(entry),
+        };
+
+        let diagnostics = verify_ssa(&function);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("does not dominate"))
+        );
     }
 }

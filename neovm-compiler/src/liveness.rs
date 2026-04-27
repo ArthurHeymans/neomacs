@@ -114,7 +114,7 @@ fn edge_live(
     live
 }
 
-fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
+pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
     match kind {
         SsaInstKind::LexicalSet { value, .. }
         | SsaInstKind::SymbolSet { value, .. }
