@@ -556,10 +556,6 @@ fn list_head_symbol(form: &SurfaceForm) -> Option<&str> {
     items.first().and_then(SurfaceForm::symbol_name)
 }
 
-fn is_nil(form: &SurfaceForm) -> bool {
-    matches!(form.kind, SurfaceKind::Atom(SurfaceAtom::Nil))
-}
-
 fn nil_form(span: Span) -> SurfaceForm {
     symbol_form("nil", span)
 }
@@ -650,13 +646,6 @@ fn lower_macro_body(body: &[SurfaceForm], span: Span) -> SurfaceForm {
                 .collect(),
             span,
         ),
-    }
-}
-
-fn fixnum_value(form: &SurfaceForm) -> Option<i64> {
-    match form.kind {
-        SurfaceKind::Atom(SurfaceAtom::Int(value)) => Some(value),
-        _ => None,
     }
 }
 
