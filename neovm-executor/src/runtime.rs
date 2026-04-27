@@ -1,10 +1,13 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use crate::value::LispValue;
 
 #[derive(Default)]
 pub struct Runtime {
     cons_cells: Vec<Box<Cons>>,
+    symbols: Vec<Box<Symbol>>,
+    strings: Vec<Box<LispString>>,
+    interned_symbols: HashMap<String, LispValue>,
     pending_error: Option<RuntimeError>,
 }
 
@@ -29,6 +32,43 @@ impl Runtime {
     pub fn cons_abi(&mut self, car: i64, cdr: i64) -> i64 {
         self.cons(LispValue::from_abi_i64(car), LispValue::from_abi_i64(cdr))
             .to_abi_i64()
+    }
+
+    pub fn string(&mut self, value: impl Into<String>) -> LispValue {
+        let mut string = Box::new(LispString {
+            header: HeapHeader {
+                kind: HeapKind::String,
+            },
+            value: value.into(),
+        });
+        let addr = (&mut *string as *mut LispString) as usize;
+        self.strings.push(string);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn intern(&mut self, name: &str) -> LispValue {
+        match name {
+            "nil" => return LispValue::NIL,
+            "t" => return LispValue::TRUE,
+            _ => {}
+        }
+        if let Some(symbol) = self.interned_symbols.get(name).copied() {
+            return symbol;
+        }
+        let name = name.to_string();
+        let mut symbol = Box::new(Symbol {
+            header: HeapHeader {
+                kind: HeapKind::Symbol,
+            },
+            name: name.clone(),
+            value: None,
+            function: None,
+        });
+        let addr = (&mut *symbol as *mut Symbol) as usize;
+        let value = LispValue::from_heap_addr(addr);
+        self.symbols.push(symbol);
+        self.interned_symbols.insert(name, value);
+        value
     }
 
     pub fn car(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
@@ -69,8 +109,137 @@ impl Runtime {
             .is_some_and(|addr| self.cons_by_addr(addr).is_some())
     }
 
+    pub fn is_symbol(&self, value: LispValue) -> bool {
+        value.is_nil()
+            || value.is_true()
+            || value
+                .heap_addr()
+                .is_some_and(|addr| self.symbol_by_addr(addr).is_some())
+    }
+
+    pub fn is_string(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.string_by_addr(addr).is_some())
+    }
+
     pub fn cons_cell_count(&self) -> usize {
         self.cons_cells.len()
+    }
+
+    pub fn symbol_count(&self) -> usize {
+        self.symbols.len()
+    }
+
+    pub fn string_count(&self) -> usize {
+        self.strings.len()
+    }
+
+    pub fn symbol_name(&self, symbol: LispValue) -> Result<String, RuntimeError> {
+        if symbol.is_nil() {
+            return Ok("nil".to_string());
+        }
+        if symbol.is_true() {
+            return Ok("t".to_string());
+        }
+        Ok(self.expect_symbol(symbol)?.name.clone())
+    }
+
+    pub fn symbol_name_value(&mut self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
+        let name = self.symbol_name(symbol)?;
+        Ok(self.string(name))
+    }
+
+    pub fn symbol_value(&self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Ok(LispValue::NIL);
+        }
+        if symbol.is_true() {
+            return Ok(LispValue::TRUE);
+        }
+        let symbol = self.expect_symbol(symbol)?;
+        symbol.value.ok_or_else(|| RuntimeError::VoidVariable {
+            name: symbol.name.clone(),
+        })
+    }
+
+    pub fn symbol_value_by_name(&self, name: &str) -> Result<LispValue, RuntimeError> {
+        match name {
+            "nil" => return Ok(LispValue::NIL),
+            "t" => return Ok(LispValue::TRUE),
+            _ => {}
+        }
+        let Some(symbol) = self.interned_symbols.get(name).copied() else {
+            return Err(RuntimeError::VoidVariable {
+                name: name.to_string(),
+            });
+        };
+        self.symbol_value(symbol)
+    }
+
+    pub fn set_symbol_value(
+        &mut self,
+        symbol: LispValue,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "nil".to_string(),
+            });
+        }
+        if symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "t".to_string(),
+            });
+        }
+        self.expect_symbol_mut(symbol)?.value = Some(value);
+        Ok(value)
+    }
+
+    pub fn set_symbol_value_by_name(
+        &mut self,
+        name: &str,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        let symbol = self.intern(name);
+        self.set_symbol_value(symbol, value)
+    }
+
+    pub fn is_bound_symbol(&self, symbol: LispValue) -> Result<bool, RuntimeError> {
+        if symbol.is_nil() || symbol.is_true() {
+            return Ok(true);
+        }
+        Ok(self.expect_symbol(symbol)?.value.is_some())
+    }
+
+    pub fn symbol_function(&self, symbol: LispValue) -> Result<Option<LispValue>, RuntimeError> {
+        if symbol.is_nil() || symbol.is_true() {
+            return Ok(None);
+        }
+        Ok(self.expect_symbol(symbol)?.function)
+    }
+
+    pub fn set_symbol_function(
+        &mut self,
+        symbol: LispValue,
+        function: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "nil".to_string(),
+            });
+        }
+        if symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "t".to_string(),
+            });
+        }
+        self.expect_symbol_mut(symbol)?.function = Some(function);
+        Ok(function)
+    }
+
+    pub fn string_contents(&self, string: LispValue) -> Result<&str, RuntimeError> {
+        Ok(&self.expect_string(string)?.value)
     }
 
     pub fn pending_error(&self) -> Option<&RuntimeError> {
@@ -119,6 +288,48 @@ impl Runtime {
             })
     }
 
+    fn expect_symbol(&self, value: LispValue) -> Result<&Symbol, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "symbolp",
+                value,
+            });
+        };
+        self.symbol_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "symbolp",
+                value,
+            })
+    }
+
+    fn expect_symbol_mut(&mut self, value: LispValue) -> Result<&mut Symbol, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "symbolp",
+                value,
+            });
+        };
+        self.symbol_by_addr_mut(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "symbolp",
+                value,
+            })
+    }
+
+    fn expect_string(&self, value: LispValue) -> Result<&LispString, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "stringp",
+                value,
+            });
+        };
+        self.string_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "stringp",
+                value,
+            })
+    }
+
     fn cons_by_addr(&self, addr: usize) -> Option<&Cons> {
         for cell in &self.cons_cells {
             let cell_addr = (&**cell as *const Cons) as usize;
@@ -139,6 +350,36 @@ impl Runtime {
         None
     }
 
+    fn symbol_by_addr(&self, addr: usize) -> Option<&Symbol> {
+        for symbol in &self.symbols {
+            let symbol_addr = (&**symbol as *const Symbol) as usize;
+            if symbol_addr == addr && symbol.header.kind == HeapKind::Symbol {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+
+    fn symbol_by_addr_mut(&mut self, addr: usize) -> Option<&mut Symbol> {
+        for symbol in &mut self.symbols {
+            let symbol_addr = (&**symbol as *const Symbol) as usize;
+            if symbol_addr == addr && symbol.header.kind == HeapKind::Symbol {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+
+    fn string_by_addr(&self, addr: usize) -> Option<&LispString> {
+        for string in &self.strings {
+            let string_addr = (&**string as *const LispString) as usize;
+            if string_addr == addr && string.header.kind == HeapKind::String {
+                return Some(string);
+            }
+        }
+        None
+    }
+
     pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
         self.equal_with_depth(left, right, 256)
     }
@@ -153,13 +394,19 @@ impl Runtime {
         let (Some(left_addr), Some(right_addr)) = (left.heap_addr(), right.heap_addr()) else {
             return false;
         };
-        let (Some(left), Some(right)) =
+        if let (Some(left), Some(right)) =
             (self.cons_by_addr(left_addr), self.cons_by_addr(right_addr))
-        else {
-            return false;
-        };
-        self.equal_with_depth(left.car, right.car, depth - 1)
-            && self.equal_with_depth(left.cdr, right.cdr, depth - 1)
+        {
+            return self.equal_with_depth(left.car, right.car, depth - 1)
+                && self.equal_with_depth(left.cdr, right.cdr, depth - 1);
+        }
+        if let (Some(left), Some(right)) = (
+            self.string_by_addr(left_addr),
+            self.string_by_addr(right_addr),
+        ) {
+            return left.value == right.value;
+        }
+        false
     }
 
     pub fn format_value(&self, value: LispValue) -> String {
@@ -171,19 +418,19 @@ impl Runtime {
             return "#<max-depth>".to_string();
         }
         if !self.is_cons(value) {
-            return format!("{value:?}");
+            return self.format_atom_value(value);
         }
         let mut parts = Vec::new();
         let mut current = value;
         loop {
             let Some(addr) = current.heap_addr() else {
                 parts.push(".".to_string());
-                parts.push(format!("{current:?}"));
+                parts.push(self.format_atom_value(current));
                 break;
             };
             let Some(cell) = self.cons_by_addr(addr) else {
                 parts.push(".".to_string());
-                parts.push(format!("{current:?}"));
+                parts.push(self.format_atom_value(current));
                 break;
             };
             parts.push(self.format_value_with_depth(cell.car, depth - 1));
@@ -199,6 +446,20 @@ impl Runtime {
         }
         format!("({})", parts.join(" "))
     }
+
+    fn format_atom_value(&self, value: LispValue) -> String {
+        if let Ok(name) = self.symbol_name(value)
+            && self.is_symbol(value)
+        {
+            return name;
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(string) = self.string_by_addr(addr)
+        {
+            return format!("{:?}", string.value);
+        }
+        format!("{value:?}")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -206,6 +467,15 @@ pub enum RuntimeError {
     WrongTypeArgument {
         expected: &'static str,
         value: LispValue,
+    },
+    VoidVariable {
+        name: String,
+    },
+    VoidFunction {
+        name: String,
+    },
+    ConstantSymbol {
+        name: String,
     },
 }
 
@@ -215,6 +485,9 @@ impl fmt::Display for RuntimeError {
             Self::WrongTypeArgument { expected, value } => {
                 write!(f, "wrong type argument: expected {expected}, got {value:?}")
             }
+            Self::VoidVariable { name } => write!(f, "void variable: {name}"),
+            Self::VoidFunction { name } => write!(f, "void function: {name}"),
+            Self::ConstantSymbol { name } => write!(f, "attempt to set constant symbol: {name}"),
         }
     }
 }
@@ -225,6 +498,8 @@ impl std::error::Error for RuntimeError {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HeapKind {
     Cons = 1,
+    Symbol = 2,
+    String = 3,
 }
 
 #[repr(C)]
@@ -237,6 +512,20 @@ struct Cons {
     header: HeapHeader,
     car: LispValue,
     cdr: LispValue,
+}
+
+#[repr(C, align(8))]
+struct Symbol {
+    header: HeapHeader,
+    name: String,
+    value: Option<LispValue>,
+    function: Option<LispValue>,
+}
+
+#[repr(C, align(8))]
+struct LispString {
+    header: HeapHeader,
+    value: String,
 }
 
 #[cfg(test)]
@@ -328,6 +617,51 @@ mod tests {
 
         assert!(runtime.equal(left, right));
         assert!(!runtime.equal(left, LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn strings_are_heap_values_with_structural_equal() {
+        let mut runtime = Runtime::new();
+        let left = runtime.string("alpha");
+        let right = runtime.string("alpha");
+
+        assert!(runtime.is_string(left));
+        assert_eq!(runtime.string_contents(left), Ok("alpha"));
+        assert_ne!(left, right);
+        assert!(runtime.equal(left, right));
+        assert_eq!(runtime.format_value(left), "\"alpha\"");
+    }
+
+    #[test]
+    fn intern_reuses_symbols_and_symbol_name_allocates_string() {
+        let mut runtime = Runtime::new();
+        let left = runtime.intern("alpha");
+        let right = runtime.intern("alpha");
+
+        assert_eq!(left, right);
+        assert!(runtime.is_symbol(left));
+        assert_eq!(runtime.symbol_name(left), Ok("alpha".to_string()));
+        let name = runtime.symbol_name_value(left).expect("symbol name");
+        assert_eq!(runtime.string_contents(name), Ok("alpha"));
+        assert_eq!(runtime.symbol_count(), 1);
+    }
+
+    #[test]
+    fn symbol_value_slots_track_boundp() {
+        let mut runtime = Runtime::new();
+        let symbol = runtime.intern("answer");
+        let value = LispValue::expect_fixnum(42);
+
+        assert_eq!(runtime.is_bound_symbol(symbol), Ok(false));
+        assert_eq!(
+            runtime.symbol_value(symbol),
+            Err(RuntimeError::VoidVariable {
+                name: "answer".to_string()
+            })
+        );
+        assert_eq!(runtime.set_symbol_value(symbol, value), Ok(value));
+        assert_eq!(runtime.is_bound_symbol(symbol), Ok(true));
+        assert_eq!(runtime.symbol_value(symbol), Ok(value));
     }
 
     #[test]

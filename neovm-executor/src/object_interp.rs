@@ -4,8 +4,9 @@ use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::ids::{FunctionId, RegId};
 use neovm_compiler::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
 use neovm_compiler::ssa::SsaConst;
+use neovm_compiler::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
-use crate::{LispValue, Runtime};
+use crate::{LispValue, Runtime, RuntimeError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectInterpResult {
@@ -150,8 +151,19 @@ impl Interpreter<'_, '_, '_> {
     fn execute_inst(&mut self, kind: &RegInstKind) -> bool {
         match kind {
             RegInstKind::LoadConst { dst, value } => {
-                let Some(value) = const_value(value) else {
-                    self.unsupported("heap constants require runtime materialization");
+                let Some(value) = self.const_value(value) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::Quote { dst, form } => {
+                let Some(value) = self.quote_value(form) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::FunctionQuote { dst, form } => {
+                let Some(value) = self.function_quote_value(form) else {
                     return false;
                 };
                 self.set(*dst, value);
@@ -192,18 +204,53 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.set(*dst, value);
             }
-            RegInstKind::Quote { .. }
-            | RegInstKind::FunctionQuote { .. }
-            | RegInstKind::Lambda { .. }
+            RegInstKind::SymbolGet { dst, name } => {
+                let result = self.runtime.symbol_value_by_name(name);
+                let Some(value) = self.runtime_value(result) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::SymbolSet { dst, name, src } => {
+                let Some(value) = self.get(*src) else {
+                    return false;
+                };
+                let result = self.runtime.set_symbol_value_by_name(name, value);
+                let Some(value) = self.runtime_value(result) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::Funcall { dst, callee, args } => {
+                let Some(callee) = self.get(*callee) else {
+                    return false;
+                };
+                let Some(args) = self.get_many(args) else {
+                    return false;
+                };
+                let Some(value) = self.execute_funcall(callee, &args) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::Apply { dst, callee, args } => {
+                let Some(callee) = self.get(*callee) else {
+                    return false;
+                };
+                let Some(args) = self.get_many(args) else {
+                    return false;
+                };
+                let Some(value) = self.execute_apply(callee, &args) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::Lambda { .. }
             | RegInstKind::MakeLexicalCell { .. }
             | RegInstKind::LexicalCellGet { .. }
             | RegInstKind::LexicalCellSet { .. }
-            | RegInstKind::SymbolGet { .. }
-            | RegInstKind::SymbolSet { .. }
             | RegInstKind::BindDynamic { .. }
             | RegInstKind::UnbindDynamic { .. }
-            | RegInstKind::Funcall { .. }
-            | RegInstKind::Apply { .. }
             | RegInstKind::CatchBegin { .. }
             | RegInstKind::CatchEnd
             | RegInstKind::Throw { .. }
@@ -229,6 +276,52 @@ impl Interpreter<'_, '_, '_> {
         }
         self.unsupported(format!("named call `{name}` requires runtime support"));
         None
+    }
+
+    fn execute_funcall(&mut self, callee: LispValue, args: &[LispValue]) -> Option<LispValue> {
+        self.execute_funcall_with_depth(callee, args, 16)
+    }
+
+    fn execute_funcall_with_depth(
+        &mut self,
+        callee: LispValue,
+        args: &[LispValue],
+        depth: usize,
+    ) -> Option<LispValue> {
+        if depth == 0 {
+            self.error("function indirection exceeded object interpreter recursion limit");
+            return None;
+        }
+        let name = match self.runtime.symbol_name(callee) {
+            Ok(name) => name,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        match self.runtime.symbol_function(callee) {
+            Ok(Some(function)) if function != callee => {
+                return self.execute_funcall_with_depth(function, args, depth - 1);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        }
+        self.execute_named_call(&name, args)
+    }
+
+    fn execute_apply(&mut self, callee: LispValue, args: &[LispValue]) -> Option<LispValue> {
+        let Some((last, prefixes)) = args.split_last() else {
+            self.error("apply requires at least one argument list");
+            return None;
+        };
+        let tail = self.list_values(*last)?;
+        let mut flattened = Vec::with_capacity(prefixes.len() + tail.len());
+        flattened.extend(prefixes.iter().copied());
+        flattened.extend(tail);
+        self.execute_funcall(callee, &flattened)
     }
 
     fn execute_primitive_call(
@@ -273,8 +366,42 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_fixnum())),
             "symbolp" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
-            "stringp" => self.exact_arity(name, args, 1).map(|_| LispValue::NIL),
+                .map(|_| bool_value(self.runtime.is_symbol(args[0]))),
+            "stringp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_string(args[0]))),
+            "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.symbol_value(args[0]);
+                self.runtime_value(result)
+            }),
+            "set" => self.exact_arity(name, args, 2).and_then(|_| {
+                let result = self.runtime.set_symbol_value(args[0], args[1]);
+                self.runtime_value(result)
+            }),
+            "boundp" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.is_bound_symbol(args[0]);
+                self.runtime_bool(result)
+            }),
+            "fboundp" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.fboundp(args[0])),
+            "symbol-function" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.symbol_function(args[0])),
+            "intern" => self.exact_arity(name, args, 1).and_then(|_| {
+                let name = match self.runtime.string_contents(args[0]) {
+                    Ok(name) => name.to_string(),
+                    Err(error) => {
+                        self.runtime_error(error);
+                        return None;
+                    }
+                };
+                Some(self.runtime.intern(&name))
+            }),
+            "symbol-name" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.symbol_name_value(args[0]);
+                self.runtime_value(result)
+            }),
             "not" | "null" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil())),
@@ -316,9 +443,69 @@ impl Interpreter<'_, '_, '_> {
             ">=" => self.fixnum_compare(args, |left, right| left >= right),
             "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
+            "funcall" => {
+                let Some((callee, args)) = args.split_first() else {
+                    self.error("funcall requires a function");
+                    return Some(None);
+                };
+                self.execute_funcall(*callee, args)
+            }
+            "apply" => {
+                let Some((callee, args)) = args.split_first() else {
+                    self.error("apply requires a function and arguments");
+                    return Some(None);
+                };
+                self.execute_apply(*callee, args)
+            }
             _ => return None,
         };
         Some(value)
+    }
+
+    fn fboundp(&mut self, symbol: LispValue) -> Option<LispValue> {
+        let name = match self.runtime.symbol_name(symbol) {
+            Ok(name) => name,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        let function = match self.runtime.symbol_function(symbol) {
+            Ok(function) => function,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        Some(bool_value(
+            function.is_some() || self.is_callable_name(&name),
+        ))
+    }
+
+    fn symbol_function(&mut self, symbol: LispValue) -> Option<LispValue> {
+        let name = match self.runtime.symbol_name(symbol) {
+            Ok(name) => name,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        match self.runtime.symbol_function(symbol) {
+            Ok(Some(function)) => Some(function),
+            Ok(None) if self.is_callable_name(&name) => Some(symbol),
+            Ok(None) => {
+                self.runtime_error(RuntimeError::VoidFunction { name });
+                None
+            }
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
+    fn is_callable_name(&self, name: &str) -> bool {
+        is_primitive_name(name) || self.functions_by_name.contains_key(name)
     }
 
     fn execute_module_call(
@@ -342,6 +529,85 @@ impl Interpreter<'_, '_, '_> {
         );
         self.diagnostics.extend(result.diagnostics);
         result.value
+    }
+
+    fn const_value(&mut self, value: &SsaConst) -> Option<LispValue> {
+        match value {
+            SsaConst::Nil => Some(LispValue::NIL),
+            SsaConst::True => Some(LispValue::TRUE),
+            SsaConst::Int(value) => LispValue::from_fixnum(*value),
+            SsaConst::Char(value) => {
+                let code: u32 = (*value).try_into().ok()?;
+                char::from_u32(code).map(LispValue::from_char)
+            }
+            SsaConst::String(value) => Some(self.runtime.string(value.clone())),
+            SsaConst::Float(_) => {
+                self.unsupported("float constants require float object support");
+                None
+            }
+        }
+    }
+
+    fn quote_value(&mut self, form: &SurfaceForm) -> Option<LispValue> {
+        match &form.kind {
+            SurfaceKind::Atom(atom) => self.quote_atom(atom),
+            SurfaceKind::List(items) => {
+                let values = items
+                    .iter()
+                    .map(|item| self.quote_value(item))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(make_list(self.runtime, values))
+            }
+            SurfaceKind::DottedList(items, tail) => {
+                let mut result = self.quote_value(tail)?;
+                for item in items.iter().rev() {
+                    let value = self.quote_value(item)?;
+                    result = self.runtime.cons(value, result);
+                }
+                Some(result)
+            }
+            SurfaceKind::Quote(inner) => self.quote_prefixed_form("quote", inner),
+            SurfaceKind::FunctionQuote(inner) => self.quote_prefixed_form("function", inner),
+            SurfaceKind::Backquote(inner) => self.quote_prefixed_form("quasiquote", inner),
+            SurfaceKind::Comma(inner) => self.quote_prefixed_form("unquote", inner),
+            SurfaceKind::CommaAt(inner) => self.quote_prefixed_form("unquote-splicing", inner),
+            SurfaceKind::Vector(_) => {
+                self.unsupported("quoted vectors require vector object support");
+                None
+            }
+        }
+    }
+
+    fn function_quote_value(&mut self, form: &SurfaceForm) -> Option<LispValue> {
+        if let Some(name) = form.symbol_name() {
+            return Some(self.runtime.intern(name));
+        }
+        self.quote_value(form)
+    }
+
+    fn quote_atom(&mut self, atom: &SurfaceAtom) -> Option<LispValue> {
+        match atom {
+            SurfaceAtom::Nil => Some(LispValue::NIL),
+            SurfaceAtom::True => Some(LispValue::TRUE),
+            SurfaceAtom::Symbol(name) => Some(self.runtime.intern(name)),
+            SurfaceAtom::Int(value) => LispValue::from_fixnum(*value),
+            SurfaceAtom::Char(value) => {
+                let code: u32 = (*value).try_into().ok()?;
+                char::from_u32(code).map(LispValue::from_char)
+            }
+            SurfaceAtom::String(value) => Some(self.runtime.string(value.clone())),
+            SurfaceAtom::Float(_) => {
+                self.unsupported("quoted floats require float object support");
+                None
+            }
+        }
+    }
+
+    fn quote_prefixed_form(&mut self, name: &str, inner: &SurfaceForm) -> Option<LispValue> {
+        let head = self.runtime.intern(name);
+        let value = self.quote_value(inner)?;
+        let tail = self.runtime.cons(value, LispValue::NIL);
+        Some(self.runtime.cons(head, tail))
     }
 
     fn append(&mut self, args: &[LispValue]) -> Option<LispValue> {
@@ -550,6 +816,16 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn runtime_bool(&mut self, result: Result<bool, crate::RuntimeError>) -> Option<LispValue> {
+        match result {
+            Ok(value) => Some(bool_value(value)),
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
     fn get_many(&mut self, regs: &[RegId]) -> Option<Vec<LispValue>> {
         regs.iter().map(|reg| self.get(*reg)).collect()
     }
@@ -610,17 +886,54 @@ fn bool_value(value: bool) -> LispValue {
     }
 }
 
-fn const_value(value: &SsaConst) -> Option<LispValue> {
-    match value {
-        SsaConst::Nil => Some(LispValue::NIL),
-        SsaConst::True => Some(LispValue::TRUE),
-        SsaConst::Int(value) => LispValue::from_fixnum(*value),
-        SsaConst::Char(value) => {
-            let code: u32 = (*value).try_into().ok()?;
-            char::from_u32(code).map(LispValue::from_char)
-        }
-        SsaConst::Float(_) | SsaConst::String(_) => None,
-    }
+fn is_primitive_name(name: &str) -> bool {
+    matches!(
+        name,
+        "cons"
+            | "car"
+            | "cdr"
+            | "setcar"
+            | "setcdr"
+            | "eq"
+            | "eql"
+            | "equal"
+            | "consp"
+            | "listp"
+            | "numberp"
+            | "symbolp"
+            | "stringp"
+            | "symbol-value"
+            | "set"
+            | "boundp"
+            | "fboundp"
+            | "symbol-function"
+            | "intern"
+            | "symbol-name"
+            | "not"
+            | "null"
+            | "list"
+            | "length"
+            | "reverse"
+            | "append"
+            | "nth"
+            | "memq"
+            | "+"
+            | "*"
+            | "-"
+            | "/"
+            | "1+"
+            | "1-"
+            | "="
+            | "<"
+            | "<="
+            | ">"
+            | ">="
+            | "message"
+            | "print"
+            | "prin1"
+            | "funcall"
+            | "apply"
+    )
 }
 
 #[cfg(test)]
@@ -662,5 +975,46 @@ mod tests {
         );
         drop(runtime);
         assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn executes_string_and_symbol_primitives() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(if (symbolp (intern \"alpha\")) (if (stringp (symbol-name 'alpha)) 9 0) 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+        assert_eq!(runtime.symbol_count(), 1);
+    }
+
+    #[test]
+    fn executes_symbol_value_slots() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (set (intern \"object-answer\") 41) (if (boundp 'object-answer) (1+ (symbol-value 'object-answer)) 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_global_symbol_get_and_set() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (setq object-global 5) (1+ object-global))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn executes_funcall_and_apply_on_symbol_functions() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+ (funcall 'car (cons 7 8)) (apply '+ 1 (list 2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(13)));
+    }
+
+    #[test]
+    fn executes_symbol_function_and_fboundp() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(if (fboundp 'car) (funcall (symbol-function 'car) (cons 4 5)) 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
     }
 }
