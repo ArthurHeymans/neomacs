@@ -6,6 +6,7 @@ use crate::surface::SurfaceForm;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RegFunction {
     pub name: Option<String>,
+    pub entry_params: Vec<RegId>,
     pub registers: PrimaryMap<RegId, Reg>,
     pub blocks: PrimaryMap<RegBlockId, RegBlock>,
     pub entry: Option<RegBlockId>,

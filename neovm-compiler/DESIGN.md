@@ -141,7 +141,8 @@ Module responsibilities:
 - `lower.rs`: lowering passes between IR layers.
 - `verify.rs`: invariants for every IR stage.
 - `pretty.rs`: stable textual dumps for tests and debugging.
-- `interp.rs`: future register interpreter.
+- `interp.rs`: small Register IR interpreter for runtime-free lexical/control
+  flow subsets, with explicit diagnostics for runtime-dependent operations.
 
 ## Reader And Surface AST
 

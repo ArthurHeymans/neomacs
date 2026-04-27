@@ -104,6 +104,15 @@ impl<'a> RegLowerer<'a> {
             });
             value_map.insert(value_id, reg);
         }
+        if let Some(entry) = ssa.entry
+            && let Some(entry_block) = ssa.blocks.get(entry)
+        {
+            function.entry_params = entry_block
+                .params
+                .iter()
+                .filter_map(|value| value_map.get(value).copied())
+                .collect();
+        }
 
         Self {
             ssa,

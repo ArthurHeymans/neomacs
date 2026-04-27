@@ -71,6 +71,9 @@ impl RegVerifier<'_> {
                 self.check_reg(*root);
             }
         }
+        for reg in &self.function.entry_params {
+            self.check_reg(*reg);
+        }
     }
 
     fn verify_inst(&mut self, kind: &RegInstKind) {
