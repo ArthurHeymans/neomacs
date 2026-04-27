@@ -2076,6 +2076,12 @@ mod tests {
     }
 
     #[test]
+    fn executes_self_evaluating_keyword_symbols() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(if (eq :test ':test) 7 0)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
     fn executes_basic_string_primitives() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(let ((s (concat \"a\" (char-to-string ?b) \"c\"))) (+ (length s) (if (string= (substring s 1 -1) \"b\") 10 0) (if (string< \"a\" \"b\") 20 0) (if (eq (string-to-char s) ?a) 30 0)))",

@@ -286,6 +286,7 @@ impl Lowerer<'_> {
                 kind: HirExprKind::Const(HirConst::Char(*value)),
                 span,
             },
+            SurfaceAtom::Symbol(name) if name.starts_with(':') => quote_symbol_expr(name, span),
             SurfaceAtom::Symbol(name) => {
                 if self.is_lexical(name) {
                     HirExpr {
@@ -1562,6 +1563,15 @@ mod tests {
             panic!("expected expr");
         };
         assert!(matches!(expr.kind, HirExprKind::SymbolGet(_)));
+    }
+
+    #[test]
+    fn keyword_symbols_are_self_evaluating() {
+        let module = hir(":test");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        assert!(matches!(expr.kind, HirExprKind::Quote(_)));
     }
 
     #[test]
