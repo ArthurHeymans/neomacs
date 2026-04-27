@@ -1644,6 +1644,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_defvar_and_defconst_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (defvar object-defvar (+ 1 2)) (defvar object-defvar (error \"skip\")) (defconst object-defconst 7) (+ (symbol-value 'object-defvar) (symbol-value 'object-defconst)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
     fn catches_direct_throw() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));

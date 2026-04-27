@@ -316,6 +316,8 @@ impl Lowerer<'_> {
             Some("let*") => self.lower_let(form, &items[1..], true),
             Some("lambda") => self.lower_lambda(form, items),
             Some("declare") => self.lower_declare(form, &items[1..]),
+            Some("defvar") => self.lower_defvar(form, &items[1..]),
+            Some("defconst") => self.lower_defconst(form, &items[1..]),
             Some("catch") => self.lower_catch(form, &items[1..]),
             Some("throw") => self.lower_throw(form, &items[1..]),
             Some("condition-case") => self.lower_condition_case(form, &items[1..]),
@@ -730,6 +732,82 @@ impl Lowerer<'_> {
         })
     }
 
+    fn lower_defvar(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.is_empty() || tail.len() > 3 {
+            self.error(
+                form.span,
+                "defvar requires a variable name, optional init, and optional docstring",
+            );
+            return None;
+        }
+        let Some(name) = tail[0].symbol_name().map(str::to_string) else {
+            self.error(tail[0].span, "defvar variable name must be a symbol");
+            return None;
+        };
+        let quoted_name = quote_symbol_expr(&name, tail[0].span);
+        let Some(init_form) = tail.get(1) else {
+            return Some(quoted_name);
+        };
+        let boundp = HirExpr {
+            kind: HirExprKind::CallNamed {
+                name: "boundp".to_string(),
+                args: vec![quoted_name.clone()],
+            },
+            span: form.span,
+        };
+        let init = self.lower_expr(init_form)?;
+        let set_then_return = HirExpr {
+            kind: HirExprKind::Progn(vec![
+                HirExpr {
+                    kind: HirExprKind::SymbolSet {
+                        name,
+                        value: Box::new(init),
+                    },
+                    span: form.span,
+                },
+                quoted_name.clone(),
+            ]),
+            span: form.span,
+        };
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(boundp),
+                then_expr: Box::new(quoted_name),
+                else_expr: Box::new(set_then_return),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_defconst(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.len() < 2 || tail.len() > 3 {
+            self.error(
+                form.span,
+                "defconst requires a variable name, init, and optional docstring",
+            );
+            return None;
+        }
+        let Some(name) = tail[0].symbol_name().map(str::to_string) else {
+            self.error(tail[0].span, "defconst variable name must be a symbol");
+            return None;
+        };
+        let quoted_name = quote_symbol_expr(&name, tail[0].span);
+        let init = self.lower_expr(&tail[1])?;
+        Some(HirExpr {
+            kind: HirExprKind::Progn(vec![
+                HirExpr {
+                    kind: HirExprKind::SymbolSet {
+                        name,
+                        value: Box::new(init),
+                    },
+                    span: form.span,
+                },
+                quoted_name,
+            ]),
+            span: form.span,
+        })
+    }
+
     fn lower_declare(&mut self, form: &SurfaceForm, specs: &[SurfaceForm]) -> Option<HirExpr> {
         Some(HirExpr {
             kind: HirExprKind::Declare(self.parse_declarations(specs)),
@@ -1107,6 +1185,16 @@ fn nil_expr(span: Span) -> HirExpr {
     }
 }
 
+fn quote_symbol_expr(name: &str, span: Span) -> HirExpr {
+    HirExpr {
+        kind: HirExprKind::Quote(Box::new(SurfaceForm::new(
+            SurfaceKind::Atom(SurfaceAtom::symbol(name)),
+            span,
+        ))),
+        span,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{compile_source, hir::HirExprKind};
@@ -1229,6 +1317,20 @@ mod tests {
         assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[2].kind, HirExprKind::If { .. }));
+    }
+
+    #[test]
+    fn lowers_defvar_and_defconst_special_forms() {
+        let module =
+            hir(";;; -*- lexical-binding: t; -*-\n(progn (defvar answer 42) (defconst fixed 7))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
+        assert!(matches!(exprs[1].kind, HirExprKind::Progn(_)));
     }
 
     #[test]
