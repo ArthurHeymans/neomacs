@@ -12,10 +12,15 @@ use cranelift_module::{FuncId, Linkage, ModuleDeclarations};
 use lasso::{Key, Rodeo, Spur};
 
 use crate::diagnostic::Diagnostic;
-use crate::ids::{BlockId, PrimaryMap, SafepointId, ValueId};
+use crate::ids::{BlockId, FunctionId, PrimaryMap, SafepointId, ValueId};
 use crate::liveness::SsaSafepointLiveness;
-use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaLambdaTemplate, SsaTerminator};
+use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaLambdaTemplate, SsaModule, SsaTerminator};
 use crate::surface::SurfaceForm;
+
+pub struct ClifModuleLowerOutput {
+    pub functions: PrimaryMap<FunctionId, ClifLowerOutput>,
+    pub diagnostics: Vec<Diagnostic>,
+}
 
 pub struct ClifLowerOutput {
     pub function: Option<Function>,
@@ -26,6 +31,20 @@ pub struct ClifLowerOutput {
 
 pub fn ssa_to_clif(function: &SsaFunction) -> ClifLowerOutput {
     ClifLowerer::new(function).lower()
+}
+
+pub fn ssa_module_to_clif(module: &SsaModule) -> ClifModuleLowerOutput {
+    let mut functions = PrimaryMap::new();
+    let mut diagnostics = Vec::new();
+    for (_, function) in module.functions.iter() {
+        let lowered = ssa_to_clif(function);
+        diagnostics.extend(lowered.diagnostics.iter().cloned());
+        functions.push(lowered);
+    }
+    ClifModuleLowerOutput {
+        functions,
+        diagnostics,
+    }
 }
 
 pub fn verify_clif(function: &Function) -> Vec<Diagnostic> {
@@ -1613,10 +1632,10 @@ enum RuntimeImportKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_to_clif};
+    use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_module_to_clif, ssa_to_clif};
     use crate::compile_source;
     use crate::ids::PrimaryMap;
-    use crate::lower::{hir_to_ssa, lambda_template_to_ssa};
+    use crate::lower::{hir_to_ssa, hir_to_ssa_module, lambda_template_to_ssa};
     use crate::ssa::{SsaBlock, SsaCaptureMode, SsaFunction, SsaLambdaCapture, SsaTerminator};
     use crate::verify::verify_ssa;
 
@@ -1644,6 +1663,24 @@ mod tests {
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("iconst.i64 42"));
         assert!(dump.contains("return"));
+    }
+
+    #[test]
+    fn lowers_ssa_module_to_clif_functions() {
+        let artifact = compile_source(
+            "module.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun a (x) x)\n(defun b (y) (+ y 1))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa_module = hir_to_ssa_module(&hir);
+        assert_eq!(ssa_module.diagnostics, Vec::new());
+
+        let clif_module = ssa_module_to_clif(&ssa_module.value);
+        assert_eq!(clif_module.diagnostics, Vec::new());
+        assert_eq!(clif_module.functions.len(), 2);
+        for (_, function) in clif_module.functions.iter() {
+            assert!(function.function.is_some());
+        }
     }
 
     #[test]

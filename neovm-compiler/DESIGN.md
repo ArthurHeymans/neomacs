@@ -385,6 +385,8 @@ Initial Cranelift lowering is intentionally conservative:
   registration stays runtime-owned until the execution ABI is connected.
 - Lower lambda templates into standalone SSA/Cranelift functions with entry
   parameters for captures followed by lambda call parameters.
+- Lower SSA modules into Cranelift modules function-by-function while retaining
+  per-function runtime ABI metadata.
 - Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
   evaluates all initializers before installing bindings; `let*` installs each
   binding before the next initializer.
