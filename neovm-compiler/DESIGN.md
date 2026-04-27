@@ -391,8 +391,10 @@ Initial Cranelift lowering is intentionally conservative:
   frontend variables, direct jumps, conditional branches, and returns.
 - Lower unreachable SSA terminators to explicit Cranelift traps instead of
   silently assuming control can continue.
-- Lower direct named calls through a declared runtime ABI first. Primitive
-  inlining can come later after type and semantic metadata exist.
+- Inline selected pure integer primitives (`+`, `*`, `-`, `1+`, `1-`,
+  numeric comparisons, `not`, and `null`) into Cranelift integer operations
+  with overflow traps. Lower other direct named calls through a declared
+  runtime ABI until type and semantic metadata can prove stronger facts.
 - Lower symbol value reads and writes through declared runtime ABI calls so
   dynamic and buffer-local semantics stay in the runtime.
 - Lower `funcall` and `apply` through declared runtime ABI calls so indirect

@@ -1009,7 +1009,19 @@ impl ClifBlockLowerer<'_> {
                     self.error("named call instruction has no result");
                     return;
                 };
+                let expected_arity = args.len();
                 let args = self.value_args(args);
+                if args.len() != expected_arity {
+                    return;
+                }
+                match self.lower_pure_integer_call(name, &args) {
+                    PrimitiveCallLowering::Value(value) => {
+                        self.value_map.insert(result, value);
+                        return;
+                    }
+                    PrimitiveCallLowering::Unknown => {}
+                    PrimitiveCallLowering::Error => return,
+                }
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
                     return;
                 };
@@ -1129,6 +1141,159 @@ impl ClifBlockLowerer<'_> {
             .iter()
             .filter_map(|value| self.value(*value))
             .collect()
+    }
+
+    fn lower_pure_integer_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        match name {
+            "+" => PrimitiveCallLowering::Value(self.lower_integer_fold(
+                args,
+                0,
+                Self::emit_checked_iadd,
+            )),
+            "*" => PrimitiveCallLowering::Value(self.lower_integer_fold(
+                args,
+                1,
+                Self::emit_checked_imul,
+            )),
+            "-" => {
+                match args {
+                    [] => {
+                        self.error("primitive `-` requires at least one argument");
+                        PrimitiveCallLowering::Error
+                    }
+                    [value] => {
+                        let zero = self.builder.ins().iconst(types::I64, 0);
+                        PrimitiveCallLowering::Value(self.emit_checked_isub(zero, *value))
+                    }
+                    [first, rest @ ..] => PrimitiveCallLowering::Value(
+                        self.lower_integer_fold_from(*first, rest, Self::emit_checked_isub),
+                    ),
+                }
+            }
+            "1+" => {
+                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let one = self.builder.ins().iconst(types::I64, 1);
+                PrimitiveCallLowering::Value(self.emit_checked_iadd(value, one))
+            }
+            "1-" => {
+                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let one = self.builder.ins().iconst(types::I64, 1);
+                PrimitiveCallLowering::Value(self.emit_checked_isub(value, one))
+            }
+            "=" => {
+                PrimitiveCallLowering::Value(self.lower_integer_chain_compare(args, IntCC::Equal))
+            }
+            "<" => PrimitiveCallLowering::Value(
+                self.lower_integer_chain_compare(args, IntCC::SignedLessThan),
+            ),
+            "<=" => PrimitiveCallLowering::Value(
+                self.lower_integer_chain_compare(args, IntCC::SignedLessThanOrEqual),
+            ),
+            ">" => PrimitiveCallLowering::Value(
+                self.lower_integer_chain_compare(args, IntCC::SignedGreaterThan),
+            ),
+            ">=" => PrimitiveCallLowering::Value(
+                self.lower_integer_chain_compare(args, IntCC::SignedGreaterThanOrEqual),
+            ),
+            "not" | "null" => {
+                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, value, 0);
+                PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_nil))
+            }
+            _ => PrimitiveCallLowering::Unknown,
+        }
+    }
+
+    fn lower_integer_fold(
+        &mut self,
+        args: &[ir::Value],
+        initial: i64,
+        op: fn(&mut Self, ir::Value, ir::Value) -> ir::Value,
+    ) -> ir::Value {
+        let initial = self.builder.ins().iconst(types::I64, initial);
+        self.lower_integer_fold_from(initial, args, op)
+    }
+
+    fn lower_integer_fold_from(
+        &mut self,
+        initial: ir::Value,
+        rest: &[ir::Value],
+        op: fn(&mut Self, ir::Value, ir::Value) -> ir::Value,
+    ) -> ir::Value {
+        rest.iter()
+            .copied()
+            .fold(initial, |acc, value| op(self, acc, value))
+    }
+
+    fn emit_checked_iadd(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
+        let (value, overflow) = self.builder.ins().sadd_overflow(left, right);
+        self.trap_on_integer_overflow(overflow);
+        value
+    }
+
+    fn emit_checked_isub(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
+        let (value, overflow) = self.builder.ins().ssub_overflow(left, right);
+        self.trap_on_integer_overflow(overflow);
+        value
+    }
+
+    fn emit_checked_imul(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
+        let (value, overflow) = self.builder.ins().smul_overflow(left, right);
+        self.trap_on_integer_overflow(overflow);
+        value
+    }
+
+    fn trap_on_integer_overflow(&mut self, overflow: ir::Value) {
+        self.builder
+            .ins()
+            .trapnz(overflow, ir::TrapCode::unwrap_user(2));
+    }
+
+    fn lower_integer_chain_compare(&mut self, args: &[ir::Value], condition: IntCC) -> ir::Value {
+        let Some((first, rest)) = args.split_first() else {
+            return self.builder.ins().iconst(types::I64, 1);
+        };
+        let mut previous = *first;
+        let mut combined = None;
+        for current in rest.iter().copied() {
+            let comparison = self.builder.ins().icmp(condition, previous, current);
+            combined = Some(match combined {
+                Some(acc) => self.builder.ins().band(acc, comparison),
+                None => comparison,
+            });
+            previous = current;
+        }
+        match combined {
+            Some(condition) => self.bool_to_lisp_value(condition),
+            None => self.builder.ins().iconst(types::I64, 1),
+        }
+    }
+
+    fn bool_to_lisp_value(&mut self, condition: ir::Value) -> ir::Value {
+        let true_value = self.builder.ins().iconst(types::I64, 1);
+        let false_value = self.builder.ins().iconst(types::I64, 0);
+        self.builder
+            .ins()
+            .select(condition, true_value, false_value)
+    }
+
+    fn exactly_one_primitive_arg(&mut self, name: &str, args: &[ir::Value]) -> Option<ir::Value> {
+        match args {
+            [value] => Some(*value),
+            _ => {
+                self.error(format!(
+                    "primitive `{name}` requires exactly one argument, got {}",
+                    args.len()
+                ));
+                None
+            }
+        }
     }
 
     fn value(&mut self, value: ValueId) -> Option<ir::Value> {
@@ -1630,6 +1795,12 @@ enum RuntimeImportKind {
     SymbolSet,
 }
 
+enum PrimitiveCallLowering {
+    Value(ir::Value),
+    Unknown,
+    Error,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_module_to_clif, ssa_to_clif};
@@ -2006,11 +2177,13 @@ mod tests {
         let lambda_clif = ssa_to_clif(&lambda_ssa.value);
         assert_eq!(lambda_clif.diagnostics, Vec::new());
         assert!(
-            lambda_clif
+            !lambda_clif
                 .runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
+        let dump = dump_clif(&lambda_clif.function.expect("CLIF function"));
+        assert!(dump.contains("sadd_overflow"));
     }
 
     #[test]
@@ -2097,7 +2270,7 @@ mod tests {
     }
 
     #[test]
-    fn lowers_named_call_to_runtime_abi_call() {
+    fn inlines_pure_integer_named_call() {
         let artifact = compile_source(
             "call.el",
             ";;; -*- lexical-binding: t; -*-\n(defun add1-native (x) (+ x 1))",
@@ -2113,22 +2286,44 @@ mod tests {
             clif.runtime
                 .symbol_key("+")
                 .map(|symbol| clif.runtime.resolve_symbol(symbol)),
-            Some("+")
+            None
         );
         assert!(
-            clif.runtime
+            !clif
+                .runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
-        assert_eq!(clif.safepoints.entries.len(), 1);
-        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
-        assert!(matches!(
-            &safepoint.kind,
-            ClifRuntimeCallKind::CallNamed { name, arity } if name == "+" && *arity == 2
-        ));
-        assert!(!safepoint.live_roots.is_empty());
+        assert_eq!(clif.safepoints.entries.len(), 0);
         let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("call"));
+        assert!(dump.contains("sadd_overflow"));
+        assert!(dump.contains("trapnz"));
+    }
+
+    #[test]
+    fn inlines_integer_comparison_chain() {
+        let artifact = compile_source(
+            "compare.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun ordered (x y z) (if (< x y z) 1 0))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(clif.safepoints.entries.len(), 0);
+        assert!(
+            !clif
+                .runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_call_named_3")
+        );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("icmp slt"));
+        assert!(dump.contains("band"));
+        assert!(dump.contains("select"));
     }
 
     #[test]
@@ -2387,7 +2582,7 @@ mod tests {
     fn records_liveness_pruned_safepoint_roots() {
         let artifact = compile_source(
             "precise-roots.el",
-            ";;; -*- lexical-binding: t; -*-\n(defun precise-roots (x) \"dead\" (+ x 1))",
+            ";;; -*- lexical-binding: t; -*-\n(defun precise-roots (x) (let ((dead \"dead\")) (foo x)))",
         );
         let hir = artifact.hir.expect("HIR");
         let ssa = hir_to_ssa(&hir);
@@ -2409,8 +2604,8 @@ mod tests {
         ));
         assert!(matches!(
             &safepoints[1].kind,
-            ClifRuntimeCallKind::CallNamed { name, arity } if name == "+" && *arity == 2
+            ClifRuntimeCallKind::CallNamed { name, arity } if name == "foo" && *arity == 1
         ));
-        assert_eq!(safepoints[1].live_roots.len(), 2);
+        assert_eq!(safepoints[1].live_roots.len(), 1);
     }
 }
