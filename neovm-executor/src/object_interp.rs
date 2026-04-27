@@ -15,6 +15,42 @@ pub struct ObjectInterpResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ThrownValue {
+    tag: LispValue,
+    value: LispValue,
+}
+
+#[derive(Clone, Debug)]
+struct InternalInterpResult {
+    value: Option<LispValue>,
+    thrown: Option<ThrownValue>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl InternalInterpResult {
+    fn error(message: impl Into<String>) -> Self {
+        Self {
+            value: None,
+            thrown: None,
+            diagnostics: vec![Diagnostic::error(message)],
+        }
+    }
+
+    fn into_public(mut self, runtime: &Runtime) -> ObjectInterpResult {
+        if let Some(thrown) = self.thrown.take() {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "uncaught throw for tag {}",
+                runtime.format_value(thrown.tag)
+            )));
+        }
+        ObjectInterpResult {
+            value: self.value,
+            diagnostics: self.diagnostics,
+        }
+    }
+}
+
 pub fn execute_module_with_args(
     module: &RegModule,
     args: &[LispValue],
@@ -22,7 +58,7 @@ pub fn execute_module_with_args(
 ) -> ObjectInterpResult {
     let functions_by_name = functions_by_name(module);
     let mut fuel = 100_000usize;
-    execute_module_entry(module, &functions_by_name, args, runtime, &mut fuel)
+    execute_module_entry(module, &functions_by_name, args, runtime, &mut fuel).into_public(runtime)
 }
 
 fn execute_module_entry(
@@ -31,22 +67,14 @@ fn execute_module_entry(
     args: &[LispValue],
     runtime: &mut Runtime,
     fuel: &mut usize,
-) -> ObjectInterpResult {
+) -> InternalInterpResult {
     let Some(entry) = module.entry else {
-        return ObjectInterpResult {
-            value: None,
-            diagnostics: vec![Diagnostic::error(
-                "object interpreter requires a module entry function",
-            )],
-        };
+        return InternalInterpResult::error("object interpreter requires a module entry function");
     };
     let Some(function) = module.functions.get(entry) else {
-        return ObjectInterpResult {
-            value: None,
-            diagnostics: vec![Diagnostic::error(format!(
-                "object interpreter references unknown module entry function {entry:?}"
-            ))],
-        };
+        return InternalInterpResult::error(format!(
+            "object interpreter references unknown module entry function {entry:?}"
+        ));
     };
     execute_with_module(function, args, module, functions_by_name, runtime, fuel)
 }
@@ -58,11 +86,13 @@ fn execute_with_module(
     functions_by_name: &HashMap<String, FunctionId>,
     runtime: &mut Runtime,
     fuel: &mut usize,
-) -> ObjectInterpResult {
+) -> InternalInterpResult {
     let interpreter = Interpreter {
         function,
         registers: HashMap::new(),
         lexicals: HashMap::new(),
+        catch_stack: Vec::new(),
+        pending_throw: None,
         module,
         functions_by_name,
         runtime,
@@ -76,6 +106,8 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     function: &'a RegFunction,
     registers: HashMap<RegId, LispValue>,
     lexicals: HashMap<String, LispValue>,
+    catch_stack: Vec<LispValue>,
+    pending_throw: Option<ThrownValue>,
     module: &'a RegModule,
     functions_by_name: &'a HashMap<String, FunctionId>,
     runtime: &'runtime mut Runtime,
@@ -84,7 +116,7 @@ struct Interpreter<'a, 'runtime, 'fuel> {
 }
 
 impl Interpreter<'_, '_, '_> {
-    fn execute(mut self, args: &[LispValue]) -> ObjectInterpResult {
+    fn execute(mut self, args: &[LispValue]) -> InternalInterpResult {
         if args.len() != self.function.entry_params.len() {
             self.error(format!(
                 "object interpreter expected {} arguments, got {}",
@@ -118,6 +150,9 @@ impl Interpreter<'_, '_, '_> {
             };
             for inst in &body.instructions {
                 if !self.execute_inst(&inst.kind) {
+                    if let Some(thrown) = self.pending_throw.take() {
+                        return self.finish_throw(thrown);
+                    }
                     return self.finish(None);
                 }
             }
@@ -302,10 +337,29 @@ impl Interpreter<'_, '_, '_> {
                     return false;
                 }
             }
-            RegInstKind::CatchBegin { .. }
-            | RegInstKind::CatchEnd
-            | RegInstKind::Throw { .. }
-            | RegInstKind::ConditionCaseBegin { .. }
+            RegInstKind::CatchBegin { tag } => {
+                let Some(tag) = self.get(*tag) else {
+                    return false;
+                };
+                self.catch_stack.push(tag);
+            }
+            RegInstKind::CatchEnd => {
+                if self.catch_stack.pop().is_none() {
+                    self.error("object interpreter reached catch end without catch begin");
+                    return false;
+                }
+            }
+            RegInstKind::Throw { tag, value } => {
+                let Some(tag) = self.get(*tag) else {
+                    return false;
+                };
+                let Some(value) = self.get(*value) else {
+                    return false;
+                };
+                self.pending_throw = Some(ThrownValue { tag, value });
+                return false;
+            }
+            RegInstKind::ConditionCaseBegin { .. }
             | RegInstKind::ConditionCaseHandler { .. }
             | RegInstKind::ConditionCaseEnd
             | RegInstKind::UnwindProtectBegin
@@ -400,6 +454,10 @@ impl Interpreter<'_, '_, '_> {
             &mut *self.fuel,
         );
         self.diagnostics.extend(result.diagnostics);
+        if let Some(thrown) = result.thrown {
+            self.pending_throw = Some(thrown);
+            return None;
+        }
         result.value
     }
 
@@ -619,7 +677,19 @@ impl Interpreter<'_, '_, '_> {
             &mut *self.fuel,
         );
         self.diagnostics.extend(result.diagnostics);
+        if let Some(thrown) = result.thrown {
+            self.pending_throw = Some(thrown);
+            return None;
+        }
         result.value
+    }
+
+    fn catch_throw(&mut self, thrown: ThrownValue) -> Result<LispValue, ThrownValue> {
+        let Some(index) = self.catch_stack.iter().rposition(|tag| *tag == thrown.tag) else {
+            return Err(thrown);
+        };
+        self.catch_stack.truncate(index);
+        Ok(thrown.value)
     }
 
     fn const_value(&mut self, value: &SsaConst) -> Option<LispValue> {
@@ -944,10 +1014,22 @@ impl Interpreter<'_, '_, '_> {
         self.diagnostics.push(Diagnostic::error(message));
     }
 
-    fn finish(self, value: Option<LispValue>) -> ObjectInterpResult {
-        ObjectInterpResult {
+    fn finish(self, value: Option<LispValue>) -> InternalInterpResult {
+        InternalInterpResult {
             value,
+            thrown: None,
             diagnostics: self.diagnostics,
+        }
+    }
+
+    fn finish_throw(mut self, thrown: ThrownValue) -> InternalInterpResult {
+        match self.catch_throw(thrown) {
+            Ok(value) => self.finish(Some(value)),
+            Err(thrown) => InternalInterpResult {
+                value: None,
+                thrown: Some(thrown),
+                diagnostics: self.diagnostics,
+            },
         }
     }
 }
@@ -1031,15 +1113,20 @@ fn is_primitive_name(name: &str) -> bool {
 mod tests {
     use neovm_compiler::compile_source;
 
-    use crate::object_interp::execute_module_with_args;
+    use crate::object_interp::{ObjectInterpResult, execute_module_with_args};
     use crate::{LispValue, Runtime};
 
-    fn execute(source: &str) -> (Option<LispValue>, Runtime) {
+    fn execute_result(source: &str) -> (ObjectInterpResult, Runtime) {
         let artifact = compile_source("object.el", source);
         assert_eq!(artifact.diagnostics, Vec::new());
         let regir = artifact.regir.expect("RegIR");
         let mut runtime = Runtime::new();
         let result = execute_module_with_args(&regir, &[], &mut runtime);
+        (result, runtime)
+    }
+
+    fn execute(source: &str) -> (Option<LispValue>, Runtime) {
+        let (result, runtime) = execute_result(source);
         assert_eq!(result.diagnostics, Vec::new());
         (result.value, runtime)
     }
@@ -1158,5 +1245,31 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(12)));
         assert_eq!(runtime.dynamic_binding_count(), 0);
+    }
+
+    #[test]
+    fn catches_direct_throw() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn propagates_throw_across_function_object() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(catch 'tag (funcall (lambda () (throw 'tag 7))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn reports_uncaught_throw() {
+        let (result, _) = execute_result(";;; -*- lexical-binding: t; -*-\n(throw 'tag 1)");
+        assert_eq!(result.value, None);
+        assert_eq!(result.diagnostics.len(), 1);
+        assert!(
+            result.diagnostics[0]
+                .message
+                .contains("uncaught throw for tag tag")
+        );
     }
 }
