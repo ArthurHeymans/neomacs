@@ -442,10 +442,13 @@ metadata records:
 
 - The Cranelift call instruction.
 - The runtime call kind.
-- The currently known SSA/Cranelift Lisp-value roots.
+- Liveness-pruned SSA/Cranelift Lisp-value roots used by or live across that
+  call.
 
-This starts conservative; later liveness analysis should shrink root sets and
-connect them to Cranelift stack maps or explicit frame maps.
+This is still conservative about value types because all Lisp values currently
+use an opaque `i64` carrier, but dead SSA values are no longer retained in
+safepoint root metadata. Later work should connect these root sets to emitted
+Cranelift stack maps or explicit frame maps.
 
 ## Safepoints And GC Metadata
 

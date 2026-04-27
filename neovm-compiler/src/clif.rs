@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
@@ -403,6 +403,155 @@ fn indexed_runtime_signature(call_conv: CallConv) -> Signature {
     signature
 }
 
+#[derive(Clone, Debug, Default)]
+struct SsaSafepointLiveness {
+    roots_by_inst: HashMap<(BlockId, usize), Vec<ValueId>>,
+}
+
+impl SsaSafepointLiveness {
+    fn compute(function: &SsaFunction) -> Self {
+        let mut live_in = HashMap::<BlockId, HashSet<ValueId>>::new();
+        for (block_id, _) in function.blocks.iter() {
+            live_in.insert(block_id, HashSet::new());
+        }
+
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (block_id, block) in function.blocks.iter().rev() {
+                let mut live = terminator_live_in(function, &block.terminator, &live_in);
+                for inst in block.instructions.iter().rev() {
+                    if let Some(result) = inst.result {
+                        live.remove(&result);
+                    }
+                    for value in inst_uses(&inst.kind) {
+                        live.insert(value);
+                    }
+                }
+                if live_in.get(&block_id) != Some(&live) {
+                    live_in.insert(block_id, live);
+                    changed = true;
+                }
+            }
+        }
+
+        let mut roots_by_inst = HashMap::new();
+        for (block_id, block) in function.blocks.iter() {
+            let mut live = terminator_live_in(function, &block.terminator, &live_in);
+            for (index, inst) in block.instructions.iter().enumerate().rev() {
+                let uses = inst_uses(&inst.kind);
+                let mut roots = live.clone();
+                if let Some(result) = inst.result {
+                    roots.remove(&result);
+                }
+                roots.extend(uses.iter().copied());
+                roots_by_inst.insert((block_id, index), sorted_values(roots));
+
+                if let Some(result) = inst.result {
+                    live.remove(&result);
+                }
+                live.extend(uses);
+            }
+        }
+
+        Self { roots_by_inst }
+    }
+
+    fn roots_for(&self, block: BlockId, inst: usize) -> &[ValueId] {
+        self.roots_by_inst
+            .get(&(block, inst))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+}
+
+fn terminator_live_in(
+    function: &SsaFunction,
+    terminator: &SsaTerminator,
+    live_in: &HashMap<BlockId, HashSet<ValueId>>,
+) -> HashSet<ValueId> {
+    match terminator {
+        SsaTerminator::Return(value) => value.iter().copied().collect(),
+        SsaTerminator::Jump { target, args } => edge_live(function, *target, args, live_in),
+        SsaTerminator::BranchIfNil {
+            test,
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+        } => {
+            let mut live = edge_live(function, *then_target, then_args, live_in);
+            live.extend(edge_live(function, *else_target, else_args, live_in));
+            live.insert(*test);
+            live
+        }
+        SsaTerminator::Unreachable => HashSet::new(),
+    }
+}
+
+fn edge_live(
+    function: &SsaFunction,
+    target: BlockId,
+    args: &[ValueId],
+    live_in: &HashMap<BlockId, HashSet<ValueId>>,
+) -> HashSet<ValueId> {
+    let mut live = HashSet::new();
+    let Some(target_live) = live_in.get(&target) else {
+        return live;
+    };
+    let Some(target_block) = function.blocks.get(target) else {
+        return live;
+    };
+    for value in target_live {
+        if let Some(index) = target_block.params.iter().position(|param| param == value) {
+            if let Some(arg) = args.get(index) {
+                live.insert(*arg);
+            }
+        } else {
+            live.insert(*value);
+        }
+    }
+    live
+}
+
+fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
+    match kind {
+        SsaInstKind::LexicalSet { value, .. }
+        | SsaInstKind::SymbolSet { value, .. }
+        | SsaInstKind::BindLexical { value, .. }
+        | SsaInstKind::BindDynamic { value, .. }
+        | SsaInstKind::CatchBegin { tag: value } => vec![*value],
+        SsaInstKind::Throw { tag, value } => vec![*tag, *value],
+        SsaInstKind::CallNamed { args, .. } => args.clone(),
+        SsaInstKind::Funcall { callee, args } | SsaInstKind::Apply { callee, args } => {
+            let mut uses = Vec::with_capacity(args.len() + 1);
+            uses.push(*callee);
+            uses.extend(args);
+            uses
+        }
+        SsaInstKind::Const(_)
+        | SsaInstKind::Quote(_)
+        | SsaInstKind::FunctionQuote(_)
+        | SsaInstKind::LexicalGet(_)
+        | SsaInstKind::SymbolGet(_)
+        | SsaInstKind::UnbindDynamic { .. }
+        | SsaInstKind::DeclareSpecial(_)
+        | SsaInstKind::CatchEnd
+        | SsaInstKind::ConditionCaseBegin { .. }
+        | SsaInstKind::ConditionCaseHandler { .. }
+        | SsaInstKind::ConditionCaseEnd
+        | SsaInstKind::UnwindProtectBegin
+        | SsaInstKind::UnwindProtectCleanup
+        | SsaInstKind::UnwindProtectEnd => Vec::new(),
+    }
+}
+
+fn sorted_values(values: HashSet<ValueId>) -> Vec<ValueId> {
+    let mut values = values.into_iter().collect::<Vec<_>>();
+    values.sort();
+    values
+}
+
 struct ClifLowerer<'a> {
     ssa: &'a SsaFunction,
     runtime: ClifRuntimeAbi,
@@ -476,6 +625,7 @@ impl<'a> ClifLowerer<'a> {
             }
         }
 
+        let liveness = SsaSafepointLiveness::compute(self.ssa);
         let (state_diagnostics, safepoints) = {
             let mut state = ClifBlockLowerer {
                 builder,
@@ -486,6 +636,8 @@ impl<'a> ClifLowerer<'a> {
                 vmctx: None,
                 runtime: &mut self.runtime,
                 safepoints: ClifSafepointTable::default(),
+                safepoint_liveness: liveness,
+                current_inst: None,
                 call_conv,
                 diagnostics: Vec::new(),
             };
@@ -494,9 +646,11 @@ impl<'a> ClifLowerer<'a> {
             for (block_id, block) in self.ssa.blocks.iter() {
                 let clif_block = state.block_map[&block_id];
                 state.builder.switch_to_block(clif_block);
-                for inst in &block.instructions {
+                for (inst_index, inst) in block.instructions.iter().enumerate() {
+                    state.current_inst = Some((block_id, inst_index));
                     state.lower_inst(inst);
                 }
+                state.current_inst = None;
                 state.lower_terminator(&block.terminator);
             }
 
@@ -581,6 +735,8 @@ struct ClifBlockLowerer<'a> {
     vmctx: Option<ir::Value>,
     runtime: &'a mut ClifRuntimeAbi,
     safepoints: ClifSafepointTable,
+    safepoint_liveness: SsaSafepointLiveness,
+    current_inst: Option<(BlockId, usize)>,
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
 }
@@ -1259,14 +1415,24 @@ impl ClifBlockLowerer<'_> {
     }
 
     fn record_safepoint(&mut self, call_inst: ir::Inst, kind: ClifRuntimeCallKind) {
-        let mut live_roots = self
-            .value_map
-            .iter()
-            .map(|(ssa_value, clif_value)| ClifLiveRoot {
-                ssa_value: *ssa_value,
-                clif_value: *clif_value,
-            })
-            .collect::<Vec<_>>();
+        let Some((block, inst)) = self.current_inst else {
+            self.error("safepoint recorded outside an SSA instruction");
+            return;
+        };
+        let mut live_roots = Vec::new();
+        let roots = self.safepoint_liveness.roots_for(block, inst).to_vec();
+        for ssa_value in roots {
+            let Some(clif_value) = self.value_map.get(&ssa_value).copied() else {
+                self.error(format!(
+                    "safepoint references unknown SSA value {ssa_value:?}"
+                ));
+                continue;
+            };
+            live_roots.push(ClifLiveRoot {
+                ssa_value,
+                clif_value,
+            });
+        }
         live_roots.sort_by_key(|root| root.ssa_value);
         self.safepoints.entries.push(ClifSafepoint {
             call_inst,
@@ -1776,5 +1942,36 @@ mod tests {
                 .iter()
                 .all(|safepoint| !safepoint.live_roots.is_empty())
         );
+    }
+
+    #[test]
+    fn records_liveness_pruned_safepoint_roots() {
+        let artifact = compile_source(
+            "precise-roots.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun precise-roots (x) \"dead\" (+ x 1))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let safepoints = clif
+            .safepoints
+            .entries
+            .iter()
+            .map(|(_, safepoint)| safepoint)
+            .collect::<Vec<_>>();
+        assert_eq!(safepoints.len(), 2);
+        assert!(matches!(
+            &safepoints[0].kind,
+            ClifRuntimeCallKind::StringConst { value } if value == "dead"
+        ));
+        assert!(matches!(
+            &safepoints[1].kind,
+            ClifRuntimeCallKind::CallNamed { name, arity } if name == "+" && *arity == 2
+        ));
+        assert_eq!(safepoints[1].live_roots.len(), 2);
     }
 }
