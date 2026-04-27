@@ -1636,6 +1636,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_when_unless_and_cond_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+ (when t 4) (unless nil 5) (cond ((= 1 2) 10) ((+ 1 2))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
     fn catches_direct_throw() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));

@@ -305,6 +305,9 @@ impl Lowerer<'_> {
             Some("function") => self.lower_function_form(form, items),
             Some("if") => self.lower_if(form, items),
             Some("while") => self.lower_while(form, &items[1..]),
+            Some("when") => self.lower_when(form, &items[1..]),
+            Some("unless") => self.lower_unless(form, &items[1..]),
+            Some("cond") => self.lower_cond(form, &items[1..]),
             Some("progn") => self.lower_progn(form, &items[1..]),
             Some("prog1") => self.lower_prog1(form, &items[1..]),
             Some("and") => self.lower_and(form, &items[1..]),
@@ -395,6 +398,101 @@ impl Lowerer<'_> {
             kind: HirExprKind::While {
                 test: Box::new(self.lower_expr(test)?),
                 body: Box::new(self.lower_body(body, form.span)?),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_when(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((test, body)) = tail.split_first() else {
+            self.error(form.span, "when requires a test expression");
+            return None;
+        };
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(self.lower_expr(test)?),
+                then_expr: Box::new(self.lower_body(body, form.span)?),
+                else_expr: Box::new(nil_expr(form.span)),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_unless(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((test, body)) = tail.split_first() else {
+            self.error(form.span, "unless requires a test expression");
+            return None;
+        };
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(self.lower_expr(test)?),
+                then_expr: Box::new(nil_expr(form.span)),
+                else_expr: Box::new(self.lower_body(body, form.span)?),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_cond(&mut self, form: &SurfaceForm, clauses: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((clause, rest)) = clauses.split_first() else {
+            return Some(nil_expr(form.span));
+        };
+        let Some(items) = list_items(clause) else {
+            self.error(clause.span, "cond clause must be a list");
+            return None;
+        };
+        let Some((test, body)) = items.split_first() else {
+            self.error(clause.span, "cond clause cannot be empty");
+            return None;
+        };
+        let test = self.lower_expr(test)?;
+        let else_expr = self.lower_cond(form, rest)?;
+        if body.is_empty() {
+            return self.lower_cond_test_value_clause(form, test, else_expr, rest.len());
+        }
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(test),
+                then_expr: Box::new(self.lower_body(body, clause.span)?),
+                else_expr: Box::new(else_expr),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_cond_test_value_clause(
+        &mut self,
+        form: &SurfaceForm,
+        test: HirExpr,
+        else_expr: HirExpr,
+        remaining_clauses: usize,
+    ) -> Option<HirExpr> {
+        let temp = format!("\0cond.{}.{}", form.span.start, remaining_clauses);
+        Some(HirExpr {
+            kind: HirExprKind::Let {
+                mode: BindingMode::Lexical,
+                sequential: true,
+                declarations: Vec::new(),
+                bindings: vec![HirBinding {
+                    name: temp.clone(),
+                    mode: BindingMode::Lexical,
+                    init: test,
+                    span: form.span,
+                }],
+                body: Box::new(HirExpr {
+                    kind: HirExprKind::If {
+                        test: Box::new(HirExpr {
+                            kind: HirExprKind::LexicalGet(temp.clone()),
+                            span: form.span,
+                        }),
+                        then_expr: Box::new(HirExpr {
+                            kind: HirExprKind::LexicalGet(temp),
+                            span: form.span,
+                        }),
+                        else_expr: Box::new(else_expr),
+                    },
+                    span: form.span,
+                }),
             },
             span: form.span,
         })
@@ -1115,6 +1213,22 @@ mod tests {
             panic!("expected expr");
         };
         assert!(matches!(expr.kind, HirExprKind::While { .. }));
+    }
+
+    #[test]
+    fn lowers_when_unless_and_cond() {
+        let module = hir(
+            ";;; -*- lexical-binding: t; -*-\n(progn (when a b) (unless a b) (cond (a b) (c)))",
+        );
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
+        assert!(matches!(exprs[1].kind, HirExprKind::If { .. }));
+        assert!(matches!(exprs[2].kind, HirExprKind::If { .. }));
     }
 
     #[test]
