@@ -16,6 +16,8 @@ pub mod clif;
 pub mod diagnostic;
 pub mod effects;
 pub mod expand;
+pub mod expand_eval;
+pub mod expand_value;
 pub mod hir;
 pub mod ids;
 pub mod interp;
