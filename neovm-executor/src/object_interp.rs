@@ -21,10 +21,17 @@ struct ThrownValue {
     value: LispValue,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SignaledValue {
+    symbol: LispValue,
+    data: LispValue,
+}
+
 #[derive(Clone, Debug)]
 struct InternalInterpResult {
     value: Option<LispValue>,
     thrown: Option<ThrownValue>,
+    signaled: Option<SignaledValue>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -33,6 +40,7 @@ impl InternalInterpResult {
         Self {
             value: None,
             thrown: None,
+            signaled: None,
             diagnostics: vec![Diagnostic::error(message)],
         }
     }
@@ -42,6 +50,13 @@ impl InternalInterpResult {
             self.diagnostics.push(Diagnostic::error(format!(
                 "uncaught throw for tag {}",
                 runtime.format_value(thrown.tag)
+            )));
+        }
+        if let Some(signaled) = self.signaled.take() {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "uncaught signal {} with data {}",
+                runtime.format_value(signaled.symbol),
+                runtime.format_value(signaled.data)
             )));
         }
         ObjectInterpResult {
@@ -93,6 +108,7 @@ fn execute_with_module(
         lexicals: HashMap::new(),
         catch_stack: Vec::new(),
         pending_throw: None,
+        pending_signal: None,
         module,
         functions_by_name,
         runtime,
@@ -108,6 +124,7 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     lexicals: HashMap<String, LispValue>,
     catch_stack: Vec<LispValue>,
     pending_throw: Option<ThrownValue>,
+    pending_signal: Option<SignaledValue>,
     module: &'a RegModule,
     functions_by_name: &'a HashMap<String, FunctionId>,
     runtime: &'runtime mut Runtime,
@@ -152,6 +169,9 @@ impl Interpreter<'_, '_, '_> {
                 if !self.execute_inst(&inst.kind) {
                     if let Some(thrown) = self.pending_throw.take() {
                         return self.finish_throw(thrown);
+                    }
+                    if let Some(signaled) = self.pending_signal.take() {
+                        return self.finish_signal(signaled);
                     }
                     return self.finish(None);
                 }
@@ -458,6 +478,10 @@ impl Interpreter<'_, '_, '_> {
             self.pending_throw = Some(thrown);
             return None;
         }
+        if let Some(signaled) = result.signaled {
+            self.pending_signal = Some(signaled);
+            return None;
+        }
         result.value
     }
 
@@ -592,6 +616,19 @@ impl Interpreter<'_, '_, '_> {
             ">=" => self.fixnum_compare(args, |left, right| left >= right),
             "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
+            "signal" => self.exact_arity(name, args, 2).and_then(|_| {
+                self.pending_signal = Some(SignaledValue {
+                    symbol: args[0],
+                    data: args[1],
+                });
+                None
+            }),
+            "error" => {
+                let symbol = self.runtime.intern("error");
+                let data = make_list(self.runtime, args.iter().copied());
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                None
+            }
             "funcall" => {
                 let Some((callee, args)) = args.split_first() else {
                     self.error("funcall requires a function");
@@ -679,6 +716,10 @@ impl Interpreter<'_, '_, '_> {
         self.diagnostics.extend(result.diagnostics);
         if let Some(thrown) = result.thrown {
             self.pending_throw = Some(thrown);
+            return None;
+        }
+        if let Some(signaled) = result.signaled {
+            self.pending_signal = Some(signaled);
             return None;
         }
         result.value
@@ -1018,6 +1059,7 @@ impl Interpreter<'_, '_, '_> {
         InternalInterpResult {
             value,
             thrown: None,
+            signaled: None,
             diagnostics: self.diagnostics,
         }
     }
@@ -1028,8 +1070,18 @@ impl Interpreter<'_, '_, '_> {
             Err(thrown) => InternalInterpResult {
                 value: None,
                 thrown: Some(thrown),
+                signaled: None,
                 diagnostics: self.diagnostics,
             },
+        }
+    }
+
+    fn finish_signal(self, signaled: SignaledValue) -> InternalInterpResult {
+        InternalInterpResult {
+            value: None,
+            thrown: None,
+            signaled: Some(signaled),
+            diagnostics: self.diagnostics,
         }
     }
 }
@@ -1104,6 +1156,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "message"
             | "print"
             | "prin1"
+            | "signal"
+            | "error"
             | "funcall"
             | "apply"
     )
@@ -1270,6 +1324,33 @@ mod tests {
             result.diagnostics[0]
                 .message
                 .contains("uncaught throw for tag tag")
+        );
+    }
+
+    #[test]
+    fn reports_error_as_uncaught_signal() {
+        let (result, _) = execute_result(";;; -*- lexical-binding: t; -*-\n(error \"boom\")");
+        assert_eq!(result.value, None);
+        assert_eq!(result.diagnostics.len(), 1);
+        assert!(
+            result.diagnostics[0]
+                .message
+                .contains("uncaught signal error")
+        );
+        assert!(result.diagnostics[0].message.contains("\"boom\""));
+    }
+
+    #[test]
+    fn reports_signal_as_uncaught_signal() {
+        let (result, _) = execute_result(
+            ";;; -*- lexical-binding: t; -*-\n(signal 'wrong-type-argument (list 'symbolp 1))",
+        );
+        assert_eq!(result.value, None);
+        assert_eq!(result.diagnostics.len(), 1);
+        assert!(
+            result.diagnostics[0]
+                .message
+                .contains("uncaught signal wrong-type-argument")
         );
     }
 }
