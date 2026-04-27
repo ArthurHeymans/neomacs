@@ -156,8 +156,9 @@ impl Expander {
         let expanded = self
             .invoke_macro(&def, &items[1..])
             .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::List(items), span));
+        let result = self.expand_form(expanded);
         self.expansion_depth -= 1;
-        self.expand_form(expanded)
+        result
     }
 
     fn invoke_macro(&mut self, def: &MacroDef, args: &[SurfaceForm]) -> Option<SurfaceForm> {
