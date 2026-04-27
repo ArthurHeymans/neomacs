@@ -4,14 +4,16 @@ use indexmap::IndexSet;
 
 use crate::diagnostic::Diagnostic;
 use crate::effects::{Effect, Effects};
-use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
+use crate::hir::{
+    BindingMode, HirConst, HirDeclaration, HirDefun, HirExpr, HirExprKind, HirItem, HirModule,
+};
 use crate::ids::{BlockId, PrimaryMap, RegBlockId, RegId, ValueId};
 use crate::liveness::SsaSafepointLiveness;
 use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegTerminator};
 use crate::safepoint::SafepointEntry;
 use crate::ssa::{
     SsaBlock, SsaCaptureMode, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaLambdaCapture,
-    SsaLambdaTemplate, SsaTerminator, SsaValue, SsaValueKind,
+    SsaLambdaTemplate, SsaModule, SsaTerminator, SsaValue, SsaValueKind,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -21,48 +23,87 @@ pub struct LowerOutput<T> {
 }
 
 pub fn hir_to_ssa(module: &HirModule) -> LowerOutput<SsaFunction> {
-    let mut diagnostics = Vec::new();
-    let mut builder = SsaBuilder::new(None);
-    for item in &module.items {
-        match item {
-            HirItem::Expr(expr) => {
-                builder.mutable_lexicals = mutable_lexical_names(expr);
-                builder.cell_lexicals = cell_lexical_names(expr);
-                let value = builder.lower_expr(expr);
-                builder.set_terminator(SsaTerminator::Return(value));
-            }
-            HirItem::Defun(defun) => {
-                builder.mutable_lexicals = mutable_lexical_names(&defun.body);
-                builder.cell_lexicals = cell_lexical_names(&defun.body);
-                if builder.function.name.is_none() {
-                    builder.function.name = Some(defun.name.clone());
-                }
-                for declaration in &defun.declarations {
-                    builder.lower_declaration(declaration);
-                }
-                for param in &defun.params {
-                    let value =
-                        builder.append_block_param(builder.current_block, Some(param.clone()));
-                    let value = builder.maybe_box_lexical(param, value);
-                    builder.emit_no_result(SsaInstKind::BindLexical {
-                        name: param.clone(),
-                        value,
-                    });
-                }
-                let value = builder.lower_expr(&defun.body);
-                builder.set_terminator(SsaTerminator::Return(value));
-            }
-        }
-    }
-    if module.items.is_empty() {
-        let nil = builder.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure());
-        builder.set_terminator(SsaTerminator::Return(Some(nil)));
-    }
-    diagnostics.extend(builder.diagnostics);
+    let lowered = hir_to_ssa_module(module);
+    let value = lowered
+        .value
+        .entry
+        .and_then(|entry| lowered.value.functions.get(entry).cloned())
+        .unwrap_or_else(empty_ssa_function);
     LowerOutput {
-        value: builder.function,
+        value,
+        diagnostics: lowered.diagnostics,
+    }
+}
+
+pub fn hir_to_ssa_module(module: &HirModule) -> LowerOutput<SsaModule> {
+    let mut lowered = SsaModule::default();
+    let mut diagnostics = Vec::new();
+    if module.items.is_empty() {
+        let function = empty_ssa_function();
+        let id = lowered.functions.push(function);
+        lowered.entry = Some(id);
+        return LowerOutput {
+            value: lowered,
+            diagnostics,
+        };
+    }
+
+    for item in &module.items {
+        let function = match item {
+            HirItem::Expr(expr) => lower_expr_to_ssa_function(expr),
+            HirItem::Defun(defun) => lower_defun_to_ssa_function(defun),
+        };
+        diagnostics.extend(function.diagnostics);
+        let id = lowered.functions.push(function.value);
+        lowered.entry.get_or_insert(id);
+    }
+
+    LowerOutput {
+        value: lowered,
         diagnostics,
     }
+}
+
+fn lower_expr_to_ssa_function(expr: &HirExpr) -> LowerOutput<SsaFunction> {
+    let mut builder = SsaBuilder::new(None);
+    builder.mutable_lexicals = mutable_lexical_names(expr);
+    builder.cell_lexicals = cell_lexical_names(expr);
+    let value = builder.lower_expr(expr);
+    builder.set_terminator(SsaTerminator::Return(value));
+    LowerOutput {
+        value: builder.function,
+        diagnostics: builder.diagnostics,
+    }
+}
+
+fn lower_defun_to_ssa_function(defun: &HirDefun) -> LowerOutput<SsaFunction> {
+    let mut builder = SsaBuilder::new(Some(defun.name.clone()));
+    builder.mutable_lexicals = mutable_lexical_names(&defun.body);
+    builder.cell_lexicals = cell_lexical_names(&defun.body);
+    for declaration in &defun.declarations {
+        builder.lower_declaration(declaration);
+    }
+    for param in &defun.params {
+        let value = builder.append_block_param(builder.current_block, Some(param.clone()));
+        let value = builder.maybe_box_lexical(param, value);
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: param.clone(),
+            value,
+        });
+    }
+    let value = builder.lower_expr(&defun.body);
+    builder.set_terminator(SsaTerminator::Return(value));
+    LowerOutput {
+        value: builder.function,
+        diagnostics: builder.diagnostics,
+    }
+}
+
+fn empty_ssa_function() -> SsaFunction {
+    let mut builder = SsaBuilder::new(None);
+    let nil = builder.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure());
+    builder.set_terminator(SsaTerminator::Return(Some(nil)));
+    builder.function
 }
 
 pub fn ssa_to_regir(function: &SsaFunction) -> LowerOutput<RegFunction> {
@@ -1113,5 +1154,35 @@ impl SsaBuilder {
 
     fn set_terminator(&mut self, terminator: SsaTerminator) {
         self.function.blocks[self.current_block].terminator = terminator;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compile_source;
+    use crate::lower::hir_to_ssa_module;
+    use crate::verify::verify_ssa;
+
+    #[test]
+    fn module_lowering_emits_one_ssa_function_per_top_level_item() {
+        let artifact = compile_source(
+            "module.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun a (x) x)\n(defun b (y) (+ y 1))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let lowered = hir_to_ssa_module(&hir);
+        assert_eq!(lowered.diagnostics, Vec::new());
+        assert_eq!(lowered.value.functions.len(), 2);
+
+        let names = lowered
+            .value
+            .functions
+            .iter()
+            .map(|(_, function)| function.name.as_deref())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec![Some("a"), Some("b")]);
+        for (_, function) in lowered.value.functions.iter() {
+            assert_eq!(verify_ssa(function), Vec::new());
+        }
     }
 }

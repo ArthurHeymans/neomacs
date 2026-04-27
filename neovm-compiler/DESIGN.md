@@ -93,6 +93,7 @@ SafepointId
 Diagnostic
 SurfaceForm
 HirExpr
+SsaModule
 SsaFunction
 RegFunction
 ```
@@ -287,6 +288,11 @@ SSA is represented as a control-flow graph. Use block parameters instead of
 separate phi instructions.
 
 ```text
+Module {
+  functions: Vec<Function>
+  entry: FunctionId
+}
+
 Function {
   blocks: Vec<Block>
 }

@@ -18,6 +18,10 @@ pub struct LocalId(u32);
 entity_impl!(LocalId, "local");
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionId(u32);
+entity_impl!(FunctionId, "fn");
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BlockId(u32);
 entity_impl!(BlockId, "block");
 

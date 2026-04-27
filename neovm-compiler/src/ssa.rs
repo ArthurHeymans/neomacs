@@ -1,7 +1,13 @@
 use crate::effects::Effects;
 use crate::hir::{HirDeclaration, HirExpr};
-use crate::ids::{BlockId, PrimaryMap, ValueId};
+use crate::ids::{BlockId, FunctionId, PrimaryMap, ValueId};
 use crate::surface::SurfaceForm;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SsaModule {
+    pub functions: PrimaryMap<FunctionId, SsaFunction>,
+    pub entry: Option<FunctionId>,
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SsaFunction {
