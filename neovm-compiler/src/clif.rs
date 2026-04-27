@@ -41,6 +41,8 @@ pub struct ClifRuntimeAbi {
     declarations: ModuleDeclarations,
     symbols: Rodeo,
     call_named_by_arity: HashMap<usize, FuncId>,
+    symbol_get: Option<FuncId>,
+    symbol_set: Option<FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -49,6 +51,8 @@ impl Default for ClifRuntimeAbi {
             declarations: ModuleDeclarations::default(),
             symbols: Rodeo::default(),
             call_named_by_arity: HashMap::new(),
+            symbol_get: None,
+            symbol_set: None,
         }
     }
 }
@@ -98,6 +102,34 @@ impl ClifRuntimeAbi {
         self.call_named_by_arity.insert(arity, id);
         Ok(RuntimeFuncImport { id, signature })
     }
+
+    fn symbol_get(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = symbol_get_signature(call_conv);
+        if let Some(id) = self.symbol_get {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_symbol_get", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.symbol_get = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn symbol_set(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = symbol_set_signature(call_conv);
+        if let Some(id) = self.symbol_set {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_symbol_set", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.symbol_set = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
 }
 
 struct RuntimeFuncImport {
@@ -112,6 +144,23 @@ fn call_named_signature(arity: usize, call_conv: CallConv) -> Signature {
     for _ in 0..arity {
         signature.params.push(AbiParam::new(types::I64));
     }
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn symbol_get_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // interned variable symbol
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn symbol_set_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // interned variable symbol
+    signature.params.push(AbiParam::new(types::I64)); // value
     signature.returns.push(AbiParam::new(types::I64));
     signature
 }
@@ -235,6 +284,8 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
                     | SsaInstKind::DeclareSpecial(_)
+                    | SsaInstKind::SymbolGet(_)
+                    | SsaInstKind::SymbolSet { .. }
                     | SsaInstKind::CallNamed { .. } => {}
                     SsaInstKind::Const(SsaConst::Float(_)) => {
                         self.unsupported("float constants need Lisp value encoding");
@@ -252,9 +303,6 @@ impl<'a> ClifLowerer<'a> {
                         self.unsupported(
                             "lexical set lowering needs mutable lexical environment analysis",
                         );
-                    }
-                    SsaInstKind::SymbolGet(_) | SsaInstKind::SymbolSet { .. } => {
-                        self.unsupported("symbol access needs runtime and buffer-local semantics");
                     }
                     SsaInstKind::BindDynamic { .. } => {
                         self.unsupported(
@@ -352,31 +400,43 @@ impl ClifBlockLowerer<'_> {
                 self.lexical_values.insert(name.clone(), value);
             }
             SsaInstKind::DeclareSpecial(_) => {}
+            SsaInstKind::SymbolGet(name) => {
+                let Some(result) = inst.result else {
+                    self.error("symbol get instruction has no result");
+                    return;
+                };
+                let Some(value) =
+                    self.emit_symbol_runtime_call(RuntimeImportKind::SymbolGet, name, &[])
+                else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
+            SsaInstKind::SymbolSet { name, value } => {
+                let Some(result) = inst.result else {
+                    self.error("symbol set instruction has no result");
+                    return;
+                };
+                let Some(value) = self.value(*value) else {
+                    return;
+                };
+                let Some(value) =
+                    self.emit_symbol_runtime_call(RuntimeImportKind::SymbolSet, name, &[value])
+                else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
             SsaInstKind::CallNamed { name, args } => {
                 let Some(result) = inst.result else {
                     self.error("named call instruction has no result");
                     return;
                 };
-                let Some(vmctx) = self.vmctx else {
-                    self.error("named call lowering requires a vmctx parameter");
-                    return;
-                };
                 let args = self.value_args(args);
-                let symbol = self.runtime.intern_symbol(name);
-                let symbol = self
-                    .builder
-                    .ins()
-                    .iconst(types::I64, symbol.into_usize() as i64);
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
                     return;
                 };
-                let mut call_args = Vec::with_capacity(args.len() + 2);
-                call_args.push(vmctx);
-                call_args.push(symbol);
-                call_args.extend(args);
-                let call = self.builder.ins().call(func_ref, &call_args);
-                let Some(result_value) = self.builder.inst_results(call).first().copied() else {
-                    self.error("runtime named call produced no result");
+                let Some(result_value) = self.emit_runtime_call(func_ref, name, &args) else {
                     return;
                 };
                 self.value_map.insert(result, result_value);
@@ -384,8 +444,6 @@ impl ClifBlockLowerer<'_> {
             SsaInstKind::Quote(_)
             | SsaInstKind::FunctionQuote(_)
             | SsaInstKind::LexicalSet { .. }
-            | SsaInstKind::SymbolGet(_)
-            | SsaInstKind::SymbolSet { .. }
             | SsaInstKind::BindDynamic { .. }
             | SsaInstKind::Funcall { .. }
             | SsaInstKind::Apply { .. }
@@ -489,6 +547,36 @@ impl ClifBlockLowerer<'_> {
                 return None;
             }
         };
+        self.runtime_func_ref(import)
+    }
+
+    fn symbol_get_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.symbol_get(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift symbol get runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn symbol_set_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.symbol_set(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift symbol set runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
         if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
             return Some(func_ref);
         }
@@ -510,6 +598,51 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_refs.insert(import.id, func_ref);
         Some(func_ref)
     }
+
+    fn emit_symbol_runtime_call(
+        &mut self,
+        kind: RuntimeImportKind,
+        name: &str,
+        args: &[ir::Value],
+    ) -> Option<ir::Value> {
+        let func_ref = match kind {
+            RuntimeImportKind::SymbolGet => self.symbol_get_ref(),
+            RuntimeImportKind::SymbolSet => self.symbol_set_ref(),
+        }?;
+        self.emit_runtime_call(func_ref, name, args)
+    }
+
+    fn emit_runtime_call(
+        &mut self,
+        func_ref: FuncRef,
+        symbol_name: &str,
+        args: &[ir::Value],
+    ) -> Option<ir::Value> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let symbol = self.runtime.intern_symbol(symbol_name);
+        let symbol = self
+            .builder
+            .ins()
+            .iconst(types::I64, symbol.into_usize() as i64);
+        let mut call_args = Vec::with_capacity(args.len() + 2);
+        call_args.push(vmctx);
+        call_args.push(symbol);
+        call_args.extend_from_slice(args);
+        let call = self.builder.ins().call(func_ref, &call_args);
+        let Some(result) = self.builder.inst_results(call).first().copied() else {
+            self.error("runtime call produced no result");
+            return None;
+        };
+        Some(result)
+    }
+}
+
+enum RuntimeImportKind {
+    SymbolGet,
+    SymbolSet,
 }
 
 #[cfg(test)]
@@ -579,6 +712,62 @@ mod tests {
             clif.runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
+        );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_symbol_get_to_runtime_abi_call() {
+        let artifact = compile_source(
+            "symbol-get.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun read-global () global-value)",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(
+            clif.runtime
+                .symbol_key("global-value")
+                .map(|symbol| clif.runtime.resolve_symbol(symbol)),
+            Some("global-value")
+        );
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_symbol_get")
+        );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_symbol_set_to_runtime_abi_call() {
+        let artifact = compile_source(
+            "symbol-set.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun write-global () (setq global-value 7))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(
+            clif.runtime
+                .symbol_key("global-value")
+                .map(|symbol| clif.runtime.resolve_symbol(symbol)),
+            Some("global-value")
+        );
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_symbol_set")
         );
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
