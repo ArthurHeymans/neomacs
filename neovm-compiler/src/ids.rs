@@ -30,6 +30,10 @@ pub struct RegId(u32);
 entity_impl!(RegId, "r");
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RegBlockId(u32);
+entity_impl!(RegBlockId, "rblock");
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SafepointId(u32);
 entity_impl!(SafepointId, "sp");
 

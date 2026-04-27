@@ -2,8 +2,8 @@ use cranelift_entity::EntityRef;
 
 use crate::diagnostic::Diagnostic;
 use crate::hir::{HirExpr, HirExprKind, HirItem, HirModule};
-use crate::ids::{BlockId, ValueId};
-use crate::regir::RegFunction;
+use crate::ids::{BlockId, RegBlockId, RegId, SafepointId, ValueId};
+use crate::regir::{RegFunction, RegInstKind, RegTerminator};
 use crate::ssa::{SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
 use crate::surface::SurfaceForm;
 
@@ -31,13 +31,135 @@ pub fn verify_ssa(function: &SsaFunction) -> Vec<Diagnostic> {
     verifier.diagnostics
 }
 
-pub fn verify_regir(_function: &RegFunction) -> Vec<Diagnostic> {
-    Vec::new()
+pub fn verify_regir(function: &RegFunction) -> Vec<Diagnostic> {
+    let mut verifier = RegVerifier {
+        function,
+        diagnostics: Vec::new(),
+    };
+    verifier.verify();
+    verifier.diagnostics
 }
 
 struct SsaVerifier<'a> {
     function: &'a SsaFunction,
     diagnostics: Vec<Diagnostic>,
+}
+
+struct RegVerifier<'a> {
+    function: &'a RegFunction,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl RegVerifier<'_> {
+    fn verify(&mut self) {
+        if let Some(entry) = self.function.entry {
+            self.check_block(entry);
+        } else {
+            self.error("Register IR function has no entry block");
+        }
+        for (_, block) in self.function.blocks.iter() {
+            for inst in &block.instructions {
+                self.verify_inst(&inst.kind);
+            }
+            self.verify_terminator(&block.terminator);
+        }
+        for (_, safepoint) in self.function.safepoints.entries.iter() {
+            for root in &safepoint.live_roots {
+                self.check_reg(*root);
+            }
+        }
+    }
+
+    fn verify_inst(&mut self, kind: &RegInstKind) {
+        match kind {
+            RegInstKind::LoadConst { dst, .. }
+            | RegInstKind::Quote { dst, .. }
+            | RegInstKind::FunctionQuote { dst, .. }
+            | RegInstKind::LexicalGet { dst, .. }
+            | RegInstKind::SymbolGet { dst, .. } => self.check_reg(*dst),
+            RegInstKind::Move { dst, src } => {
+                self.check_reg(*dst);
+                self.check_reg(*src);
+            }
+            RegInstKind::LexicalSet { dst, src, .. } | RegInstKind::SymbolSet { dst, src, .. } => {
+                self.check_reg(*dst);
+                self.check_reg(*src);
+            }
+            RegInstKind::BindLexical { src, .. } | RegInstKind::BindDynamic { src, .. } => {
+                self.check_reg(*src);
+            }
+            RegInstKind::CallNamed { dst, args, .. } => {
+                self.check_reg(*dst);
+                self.check_regs(args);
+            }
+            RegInstKind::Funcall { dst, callee, args }
+            | RegInstKind::Apply { dst, callee, args } => {
+                self.check_reg(*dst);
+                self.check_reg(*callee);
+                self.check_regs(args);
+            }
+            RegInstKind::CatchBegin { tag } => self.check_reg(*tag),
+            RegInstKind::Throw { tag, value } => {
+                self.check_reg(*tag);
+                self.check_reg(*value);
+            }
+            RegInstKind::Safepoint { id } => self.check_safepoint(*id),
+            RegInstKind::DeclareSpecial { .. }
+            | RegInstKind::CatchEnd
+            | RegInstKind::ConditionCaseBegin { .. }
+            | RegInstKind::ConditionCaseHandler { .. }
+            | RegInstKind::ConditionCaseEnd
+            | RegInstKind::UnwindProtectBegin
+            | RegInstKind::UnwindProtectCleanup
+            | RegInstKind::UnwindProtectEnd => {}
+        }
+    }
+
+    fn verify_terminator(&mut self, terminator: &RegTerminator) {
+        match terminator {
+            RegTerminator::Return(Some(reg)) => self.check_reg(*reg),
+            RegTerminator::Return(None) => {}
+            RegTerminator::Jump { target } => self.check_block(*target),
+            RegTerminator::BranchIfNil {
+                test,
+                then_target,
+                else_target,
+            } => {
+                self.check_reg(*test);
+                self.check_block(*then_target);
+                self.check_block(*else_target);
+            }
+            RegTerminator::Unreachable => {}
+        }
+    }
+
+    fn check_regs(&mut self, regs: &[RegId]) {
+        for reg in regs {
+            self.check_reg(*reg);
+        }
+    }
+
+    fn check_reg(&mut self, reg: RegId) {
+        if reg.index() >= self.function.registers.len() {
+            self.error(format!("Register IR references unknown register {reg:?}"));
+        }
+    }
+
+    fn check_block(&mut self, block: RegBlockId) {
+        if block.index() >= self.function.blocks.len() {
+            self.error(format!("Register IR references unknown block {block:?}"));
+        }
+    }
+
+    fn check_safepoint(&mut self, id: SafepointId) {
+        if id.index() >= self.function.safepoints.entries.len() {
+            self.error(format!("Register IR references unknown safepoint {id:?}"));
+        }
+    }
+
+    fn error(&mut self, message: impl Into<String>) {
+        self.diagnostics.push(Diagnostic::error(message));
+    }
 }
 
 impl SsaVerifier<'_> {

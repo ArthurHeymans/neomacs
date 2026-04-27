@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use crate::diagnostic::Diagnostic;
 use crate::effects::{Effect, Effects};
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
-use crate::ids::{BlockId, PrimaryMap, ValueId};
-use crate::regir::RegFunction;
+use crate::ids::{BlockId, PrimaryMap, RegBlockId, RegId, ValueId};
+use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegTerminator};
+use crate::safepoint::SafepointEntry;
 use crate::ssa::{
     SsaBlock, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaTerminator, SsaValue, SsaValueKind,
 };
@@ -53,12 +56,272 @@ pub fn hir_to_ssa(module: &HirModule) -> LowerOutput<SsaFunction> {
     }
 }
 
-pub fn ssa_to_regir(_function: &SsaFunction) -> LowerOutput<RegFunction> {
+pub fn ssa_to_regir(function: &SsaFunction) -> LowerOutput<RegFunction> {
+    let mut lowerer = RegLowerer::new(function);
+    lowerer.lower();
     LowerOutput {
-        value: RegFunction::default(),
-        diagnostics: vec![Diagnostic::note(
-            "SSA to Register IR lowering is not implemented yet",
-        )],
+        value: lowerer.function,
+        diagnostics: lowerer.diagnostics,
+    }
+}
+
+struct RegLowerer<'a> {
+    ssa: &'a SsaFunction,
+    function: RegFunction,
+    block_map: HashMap<BlockId, RegBlockId>,
+    value_map: HashMap<ValueId, RegId>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<'a> RegLowerer<'a> {
+    fn new(ssa: &'a SsaFunction) -> Self {
+        let mut function = RegFunction {
+            name: ssa.name.clone(),
+            ..RegFunction::default()
+        };
+        let mut block_map = HashMap::new();
+        for (block_id, _) in ssa.blocks.iter() {
+            let reg_block = function.blocks.push(RegBlock {
+                instructions: Vec::new(),
+                terminator: RegTerminator::Unreachable,
+            });
+            block_map.insert(block_id, reg_block);
+        }
+        function.entry = ssa.entry.and_then(|entry| block_map.get(&entry).copied());
+
+        let mut value_map = HashMap::new();
+        for (value_id, value) in ssa.values.iter() {
+            let name = match &value.kind {
+                SsaValueKind::BlockParam { name, .. } => name.clone(),
+                SsaValueKind::InstResult { .. } => None,
+            };
+            let reg = function.registers.push(Reg {
+                kind: RegKind::LispValue,
+                name,
+            });
+            value_map.insert(value_id, reg);
+        }
+
+        Self {
+            ssa,
+            function,
+            block_map,
+            value_map,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn lower(&mut self) {
+        for (block_id, block) in self.ssa.blocks.iter() {
+            let Some(reg_block) = self.block_map.get(&block_id).copied() else {
+                self.diagnostics.push(Diagnostic::error(format!(
+                    "missing register block for {block_id:?}"
+                )));
+                continue;
+            };
+            for inst in &block.instructions {
+                self.lower_inst(reg_block, inst);
+            }
+            self.lower_terminator(reg_block, &block.terminator);
+        }
+    }
+
+    fn lower_inst(&mut self, block: RegBlockId, inst: &SsaInst) {
+        let reg_inst = match &inst.kind {
+            SsaInstKind::Const(value) => RegInstKind::LoadConst {
+                dst: self.result_reg(inst),
+                value: value.clone(),
+            },
+            SsaInstKind::Quote(form) => RegInstKind::Quote {
+                dst: self.result_reg(inst),
+                form: form.clone(),
+            },
+            SsaInstKind::FunctionQuote(form) => RegInstKind::FunctionQuote {
+                dst: self.result_reg(inst),
+                form: form.clone(),
+            },
+            SsaInstKind::LexicalGet(name) => RegInstKind::LexicalGet {
+                dst: self.result_reg(inst),
+                name: name.clone(),
+            },
+            SsaInstKind::LexicalSet { name, value } => RegInstKind::LexicalSet {
+                dst: self.result_reg(inst),
+                name: name.clone(),
+                src: self.value_reg(*value),
+            },
+            SsaInstKind::SymbolGet(name) => RegInstKind::SymbolGet {
+                dst: self.result_reg(inst),
+                name: name.clone(),
+            },
+            SsaInstKind::SymbolSet { name, value } => RegInstKind::SymbolSet {
+                dst: self.result_reg(inst),
+                name: name.clone(),
+                src: self.value_reg(*value),
+            },
+            SsaInstKind::BindLexical { name, value } => RegInstKind::BindLexical {
+                name: name.clone(),
+                src: self.value_reg(*value),
+            },
+            SsaInstKind::BindDynamic { name, value } => RegInstKind::BindDynamic {
+                name: name.clone(),
+                src: self.value_reg(*value),
+            },
+            SsaInstKind::DeclareSpecial(names) => RegInstKind::DeclareSpecial {
+                names: names.clone(),
+            },
+            SsaInstKind::CallNamed { name, args } => RegInstKind::CallNamed {
+                dst: self.result_reg(inst),
+                name: name.clone(),
+                args: self.value_regs(args),
+            },
+            SsaInstKind::Funcall { callee, args } => RegInstKind::Funcall {
+                dst: self.result_reg(inst),
+                callee: self.value_reg(*callee),
+                args: self.value_regs(args),
+            },
+            SsaInstKind::Apply { callee, args } => RegInstKind::Apply {
+                dst: self.result_reg(inst),
+                callee: self.value_reg(*callee),
+                args: self.value_regs(args),
+            },
+            SsaInstKind::CatchBegin { tag } => RegInstKind::CatchBegin {
+                tag: self.value_reg(*tag),
+            },
+            SsaInstKind::CatchEnd => RegInstKind::CatchEnd,
+            SsaInstKind::Throw { tag, value } => RegInstKind::Throw {
+                tag: self.value_reg(*tag),
+                value: self.value_reg(*value),
+            },
+            SsaInstKind::ConditionCaseBegin { var } => {
+                RegInstKind::ConditionCaseBegin { var: var.clone() }
+            }
+            SsaInstKind::ConditionCaseHandler { pattern } => RegInstKind::ConditionCaseHandler {
+                pattern: pattern.clone(),
+            },
+            SsaInstKind::ConditionCaseEnd => RegInstKind::ConditionCaseEnd,
+            SsaInstKind::UnwindProtectBegin => RegInstKind::UnwindProtectBegin,
+            SsaInstKind::UnwindProtectCleanup => RegInstKind::UnwindProtectCleanup,
+            SsaInstKind::UnwindProtectEnd => RegInstKind::UnwindProtectEnd,
+        };
+        self.emit(block, reg_inst);
+        if self.needs_safepoint(&inst.kind) {
+            self.emit_safepoint(block);
+        }
+    }
+
+    fn lower_terminator(&mut self, block: RegBlockId, terminator: &SsaTerminator) {
+        let reg_terminator = match terminator {
+            SsaTerminator::Return(value) => {
+                RegTerminator::Return(value.map(|value| self.value_reg(value)))
+            }
+            SsaTerminator::Jump { target, args } => {
+                self.emit_branch_moves(block, *target, args);
+                RegTerminator::Jump {
+                    target: self.block_reg(*target),
+                }
+            }
+            SsaTerminator::BranchIfNil {
+                test,
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+            } => {
+                self.emit_branch_moves(block, *then_target, then_args);
+                self.emit_branch_moves(block, *else_target, else_args);
+                RegTerminator::BranchIfNil {
+                    test: self.value_reg(*test),
+                    then_target: self.block_reg(*then_target),
+                    else_target: self.block_reg(*else_target),
+                }
+            }
+            SsaTerminator::Unreachable => RegTerminator::Unreachable,
+        };
+        self.function.blocks[block].terminator = reg_terminator;
+    }
+
+    fn emit_branch_moves(&mut self, block: RegBlockId, target: BlockId, args: &[ValueId]) {
+        let Some(target_block) = self.ssa.blocks.get(target) else {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "unknown SSA branch target {target:?}"
+            )));
+            return;
+        };
+        for (param, arg) in target_block.params.iter().zip(args.iter()) {
+            self.emit(
+                block,
+                RegInstKind::Move {
+                    dst: self.value_reg(*param),
+                    src: self.value_reg(*arg),
+                },
+            );
+        }
+        if target_block.params.len() != args.len() {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "branch to {target:?} has {} args for {} params",
+                args.len(),
+                target_block.params.len()
+            )));
+        }
+    }
+
+    fn needs_safepoint(&self, kind: &SsaInstKind) -> bool {
+        matches!(
+            kind,
+            SsaInstKind::Quote(_)
+                | SsaInstKind::SymbolGet(_)
+                | SsaInstKind::SymbolSet { .. }
+                | SsaInstKind::BindDynamic { .. }
+                | SsaInstKind::CallNamed { .. }
+                | SsaInstKind::Funcall { .. }
+                | SsaInstKind::Apply { .. }
+                | SsaInstKind::CatchBegin { .. }
+                | SsaInstKind::Throw { .. }
+                | SsaInstKind::ConditionCaseBegin { .. }
+                | SsaInstKind::ConditionCaseHandler { .. }
+                | SsaInstKind::UnwindProtectBegin
+                | SsaInstKind::UnwindProtectCleanup
+        )
+    }
+
+    fn emit(&mut self, block: RegBlockId, kind: RegInstKind) {
+        self.function.blocks[block]
+            .instructions
+            .push(RegInst { kind });
+    }
+
+    fn emit_safepoint(&mut self, block: RegBlockId) {
+        let live_roots = self
+            .function
+            .registers
+            .iter()
+            .map(|(reg, _)| reg)
+            .collect::<Vec<_>>();
+        let id = self
+            .function
+            .safepoints
+            .entries
+            .push(SafepointEntry { live_roots });
+        self.emit(block, RegInstKind::Safepoint { id });
+    }
+
+    fn result_reg(&self, inst: &SsaInst) -> RegId {
+        let result = inst
+            .result
+            .expect("SSA instruction expected to have a result");
+        self.value_reg(result)
+    }
+
+    fn value_reg(&self, value: ValueId) -> RegId {
+        self.value_map[&value]
+    }
+
+    fn value_regs(&self, values: &[ValueId]) -> Vec<RegId> {
+        values.iter().map(|value| self.value_reg(*value)).collect()
+    }
+
+    fn block_reg(&self, block: BlockId) -> RegBlockId {
+        self.block_map[&block]
     }
 }
 

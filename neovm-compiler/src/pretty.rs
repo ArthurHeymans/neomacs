@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
+use crate::regir::{RegFunction, RegInstKind, RegTerminator};
 use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 use crate::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxTree};
@@ -71,6 +72,24 @@ pub fn dump_ssa(function: &SsaFunction) -> String {
         }
         let _ = write!(out, "  ");
         dump_terminator(&block.terminator, function, &mut out);
+        let _ = writeln!(out);
+    }
+    out
+}
+
+pub fn dump_regir(function: &RegFunction) -> String {
+    let mut out = String::new();
+    let name = function.name.as_deref().unwrap_or("<anonymous>");
+    let _ = writeln!(out, "regir {name}");
+    for (block_id, block) in function.blocks.iter() {
+        let _ = writeln!(out, "{block_id:?}:");
+        for inst in &block.instructions {
+            let _ = write!(out, "  ");
+            dump_reg_inst(&inst.kind, function, &mut out);
+            let _ = writeln!(out);
+        }
+        let _ = write!(out, "  ");
+        dump_reg_terminator(&block.terminator, function, &mut out);
         let _ = writeln!(out);
     }
     out
@@ -225,6 +244,139 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
     }
 }
 
+fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
+    match kind {
+        RegInstKind::LoadConst { dst, value } => {
+            let _ = write!(
+                out,
+                "{} = const {}",
+                reg_name(function, *dst),
+                ssa_const_name(value)
+            );
+        }
+        RegInstKind::Quote { dst, .. } => {
+            let _ = write!(out, "{} = quote <surface>", reg_name(function, *dst));
+        }
+        RegInstKind::FunctionQuote { dst, .. } => {
+            let _ = write!(
+                out,
+                "{} = function-quote <surface>",
+                reg_name(function, *dst)
+            );
+        }
+        RegInstKind::Move { dst, src } => {
+            let _ = write!(
+                out,
+                "move {}, {}",
+                reg_name(function, *dst),
+                reg_name(function, *src)
+            );
+        }
+        RegInstKind::LexicalGet { dst, name } => {
+            let _ = write!(out, "{} = lexical-get {name}", reg_name(function, *dst));
+        }
+        RegInstKind::LexicalSet { dst, name, src } => {
+            let _ = write!(
+                out,
+                "{} = lexical-set {name}, {}",
+                reg_name(function, *dst),
+                reg_name(function, *src)
+            );
+        }
+        RegInstKind::SymbolGet { dst, name } => {
+            let _ = write!(out, "{} = symbol-get {name}", reg_name(function, *dst));
+        }
+        RegInstKind::SymbolSet { dst, name, src } => {
+            let _ = write!(
+                out,
+                "{} = symbol-set {name}, {}",
+                reg_name(function, *dst),
+                reg_name(function, *src)
+            );
+        }
+        RegInstKind::BindLexical { name, src } => {
+            let _ = write!(out, "bind-lexical {name}, {}", reg_name(function, *src));
+        }
+        RegInstKind::BindDynamic { name, src } => {
+            let _ = write!(out, "bind-dynamic {name}, {}", reg_name(function, *src));
+        }
+        RegInstKind::DeclareSpecial { names } => {
+            let _ = write!(out, "declare-special ({})", names.join(" "));
+        }
+        RegInstKind::CallNamed { dst, name, args } => {
+            let _ = write!(
+                out,
+                "{} = call-named {name} {}",
+                reg_name(function, *dst),
+                reg_names(function, args)
+            );
+        }
+        RegInstKind::Funcall { dst, callee, args } => {
+            let _ = write!(
+                out,
+                "{} = funcall {} {}",
+                reg_name(function, *dst),
+                reg_name(function, *callee),
+                reg_names(function, args)
+            );
+        }
+        RegInstKind::Apply { dst, callee, args } => {
+            let _ = write!(
+                out,
+                "{} = apply {} {}",
+                reg_name(function, *dst),
+                reg_name(function, *callee),
+                reg_names(function, args)
+            );
+        }
+        RegInstKind::CatchBegin { tag } => {
+            let _ = write!(out, "catch-begin {}", reg_name(function, *tag));
+        }
+        RegInstKind::CatchEnd => {
+            let _ = write!(out, "catch-end");
+        }
+        RegInstKind::Throw { tag, value } => {
+            let _ = write!(
+                out,
+                "throw {}, {}",
+                reg_name(function, *tag),
+                reg_name(function, *value)
+            );
+        }
+        RegInstKind::ConditionCaseBegin { var } => {
+            let _ = write!(
+                out,
+                "condition-case-begin {}",
+                var.as_deref().unwrap_or("nil")
+            );
+        }
+        RegInstKind::ConditionCaseHandler { .. } => {
+            let _ = write!(out, "condition-case-handler <pattern>");
+        }
+        RegInstKind::ConditionCaseEnd => {
+            let _ = write!(out, "condition-case-end");
+        }
+        RegInstKind::UnwindProtectBegin => {
+            let _ = write!(out, "unwind-protect-begin");
+        }
+        RegInstKind::UnwindProtectCleanup => {
+            let _ = write!(out, "unwind-protect-cleanup");
+        }
+        RegInstKind::UnwindProtectEnd => {
+            let _ = write!(out, "unwind-protect-end");
+        }
+        RegInstKind::Safepoint { id } => {
+            let roots = function.safepoints.entries[*id]
+                .live_roots
+                .iter()
+                .map(|reg| reg_name(function, *reg))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(out, "safepoint {id:?} roots=({roots})");
+        }
+    }
+}
+
 fn dump_terminator(terminator: &SsaTerminator, function: &SsaFunction, out: &mut String) {
     match terminator {
         SsaTerminator::Return(Some(value)) => {
@@ -257,6 +409,34 @@ fn dump_terminator(terminator: &SsaTerminator, function: &SsaFunction, out: &mut
     }
 }
 
+fn dump_reg_terminator(terminator: &RegTerminator, function: &RegFunction, out: &mut String) {
+    match terminator {
+        RegTerminator::Return(Some(reg)) => {
+            let _ = write!(out, "return {}", reg_name(function, *reg));
+        }
+        RegTerminator::Return(None) => {
+            let _ = write!(out, "return");
+        }
+        RegTerminator::Jump { target } => {
+            let _ = write!(out, "jump {target:?}");
+        }
+        RegTerminator::BranchIfNil {
+            test,
+            then_target,
+            else_target,
+        } => {
+            let _ = write!(
+                out,
+                "branch-if-nil {} then {then_target:?} else {else_target:?}",
+                reg_name(function, *test)
+            );
+        }
+        RegTerminator::Unreachable => {
+            let _ = write!(out, "unreachable");
+        }
+    }
+}
+
 fn value_names(function: &SsaFunction, values: &[crate::ids::ValueId]) -> String {
     values
         .iter()
@@ -271,6 +451,20 @@ fn value_name(function: &SsaFunction, value: crate::ids::ValueId) -> String {
             name: Some(name), ..
         } => format!("{value:?}.{name}"),
         _ => format!("{value:?}"),
+    }
+}
+
+fn reg_names(function: &RegFunction, regs: &[crate::ids::RegId]) -> String {
+    regs.iter()
+        .map(|reg| reg_name(function, *reg))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn reg_name(function: &RegFunction, reg: crate::ids::RegId) -> String {
+    match &function.registers[reg].name {
+        Some(name) => format!("{reg:?}.{name}"),
+        None => format!("{reg:?}"),
     }
 }
 
@@ -462,9 +656,9 @@ fn const_name(value: &HirConst) -> String {
 #[cfg(test)]
 mod tests {
     use crate::compile_source;
-    use crate::lower::hir_to_ssa;
-    use crate::pretty::{dump_hir, dump_ssa, dump_surface, dump_syntax};
-    use crate::verify::verify_ssa;
+    use crate::lower::{hir_to_ssa, ssa_to_regir};
+    use crate::pretty::{dump_hir, dump_regir, dump_ssa, dump_surface, dump_syntax};
+    use crate::verify::{verify_regir, verify_ssa};
 
     #[test]
     fn dumps_hir_for_simple_defun() {
@@ -549,6 +743,46 @@ block2():
   jump block3(v5)
 block3(v3.if.result):
   return v3.if.result
+"###);
+    }
+
+    #[test]
+    fn snapshots_register_ir_dump_for_if_and_call() {
+        let artifact = compile_source(
+            "sample.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun choose (x y) (if x (+ x 1) (funcall f y)))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+        let regir = ssa_to_regir(&ssa.value);
+        assert_eq!(regir.diagnostics, Vec::new());
+        assert_eq!(verify_regir(&regir.value), Vec::new());
+        insta::assert_snapshot!(dump_regir(&regir.value), @r###"
+regir choose
+rblock0:
+  bind-lexical x, r0.x
+  bind-lexical y, r1.y
+  r2 = lexical-get x
+  branch-if-nil r2 then rblock2 else rblock1
+rblock1:
+  r4 = lexical-get x
+  r5 = const int 1
+  r6 = call-named + r4, r5
+  safepoint sp0 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  move r3.if.result, r6
+  jump rblock3
+rblock2:
+  r7 = symbol-get f
+  safepoint sp1 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  r8 = lexical-get y
+  r9 = funcall r7 r8
+  safepoint sp2 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  move r3.if.result, r9
+  jump rblock3
+rblock3:
+  return r3.if.result
 "###);
     }
 }

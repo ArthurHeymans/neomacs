@@ -1,14 +1,21 @@
-use crate::ids::{PrimaryMap, RegId, SafepointId};
+use crate::ids::{PrimaryMap, RegBlockId, RegId, SafepointId};
+use crate::safepoint::SafepointTable;
+use crate::ssa::SsaConst;
+use crate::surface::SurfaceForm;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct RegFunction {
+    pub name: Option<String>,
     pub registers: PrimaryMap<RegId, Reg>,
-    pub instructions: Vec<RegInst>,
+    pub blocks: PrimaryMap<RegBlockId, RegBlock>,
+    pub entry: Option<RegBlockId>,
+    pub safepoints: SafepointTable,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reg {
     pub kind: RegKind,
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,15 +24,118 @@ pub enum RegKind {
     MachineWord,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegBlock {
+    pub instructions: Vec<RegInst>,
+    pub terminator: RegTerminator,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct RegInst {
     pub kind: RegInstKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RegInstKind {
-    LoadNil { dst: RegId },
-    Move { dst: RegId, src: RegId },
-    Safepoint { id: SafepointId },
-    Return { src: RegId },
+    LoadConst {
+        dst: RegId,
+        value: SsaConst,
+    },
+    Quote {
+        dst: RegId,
+        form: SurfaceForm,
+    },
+    FunctionQuote {
+        dst: RegId,
+        form: SurfaceForm,
+    },
+    Move {
+        dst: RegId,
+        src: RegId,
+    },
+    LexicalGet {
+        dst: RegId,
+        name: String,
+    },
+    LexicalSet {
+        dst: RegId,
+        name: String,
+        src: RegId,
+    },
+    SymbolGet {
+        dst: RegId,
+        name: String,
+    },
+    SymbolSet {
+        dst: RegId,
+        name: String,
+        src: RegId,
+    },
+    BindLexical {
+        name: String,
+        src: RegId,
+    },
+    BindDynamic {
+        name: String,
+        src: RegId,
+    },
+    DeclareSpecial {
+        names: Vec<String>,
+    },
+    CallNamed {
+        dst: RegId,
+        name: String,
+        args: Vec<RegId>,
+    },
+    Funcall {
+        dst: RegId,
+        callee: RegId,
+        args: Vec<RegId>,
+    },
+    Apply {
+        dst: RegId,
+        callee: RegId,
+        args: Vec<RegId>,
+    },
+    CatchBegin {
+        tag: RegId,
+    },
+    CatchEnd,
+    Throw {
+        tag: RegId,
+        value: RegId,
+    },
+    ConditionCaseBegin {
+        var: Option<String>,
+    },
+    ConditionCaseHandler {
+        pattern: SurfaceForm,
+    },
+    ConditionCaseEnd,
+    UnwindProtectBegin,
+    UnwindProtectCleanup,
+    UnwindProtectEnd,
+    Safepoint {
+        id: SafepointId,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RegTerminator {
+    Return(Option<RegId>),
+    Jump {
+        target: RegBlockId,
+    },
+    BranchIfNil {
+        test: RegId,
+        then_target: RegBlockId,
+        else_target: RegBlockId,
+    },
+    Unreachable,
+}
+
+impl Default for RegTerminator {
+    fn default() -> Self {
+        Self::Unreachable
+    }
 }
