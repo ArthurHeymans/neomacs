@@ -304,10 +304,15 @@ impl Lowerer<'_> {
                 self.error(form.span, "dotted-list expressions are not supported here");
                 None
             }
-            SurfaceKind::Backquote(_) | SurfaceKind::Comma(_) | SurfaceKind::CommaAt(_) => {
+            SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
+            SurfaceKind::Comma(_) => {
+                self.error(form.span, "comma is only valid inside backquote");
+                None
+            }
+            SurfaceKind::CommaAt(_) => {
                 self.error(
                     form.span,
-                    "backquote syntax requires macroexpansion support",
+                    "unquote-splicing is only valid inside a backquote list or vector",
                 );
                 None
             }
@@ -441,6 +446,150 @@ impl Lowerer<'_> {
             kind: HirExprKind::FunctionQuote(Box::new(quoted.clone())),
             span: form.span,
         })
+    }
+
+    fn lower_quasiquote(&mut self, form: &SurfaceForm, inner: &SurfaceForm) -> Option<HirExpr> {
+        let mut expr = self.lower_quasiquote_form(inner, 1)?;
+        expr.span = form.span;
+        Some(expr)
+    }
+
+    fn lower_quasiquote_form(&mut self, form: &SurfaceForm, depth: usize) -> Option<HirExpr> {
+        match &form.kind {
+            SurfaceKind::Comma(inner) if depth == 1 => self.lower_expr(inner),
+            SurfaceKind::Comma(inner) => {
+                self.lower_quasiquote_prefixed("unquote", inner, depth - 1, form.span)
+            }
+            SurfaceKind::CommaAt(_) if depth == 1 => {
+                self.error(
+                    form.span,
+                    "unquote-splicing is only valid inside a backquote list or vector",
+                );
+                None
+            }
+            SurfaceKind::CommaAt(inner) => {
+                self.lower_quasiquote_prefixed("unquote-splicing", inner, depth - 1, form.span)
+            }
+            SurfaceKind::Backquote(inner) => {
+                self.lower_quasiquote_prefixed("quasiquote", inner, depth + 1, form.span)
+            }
+            SurfaceKind::Quote(inner) => {
+                self.lower_quasiquote_prefixed("quote", inner, depth, form.span)
+            }
+            SurfaceKind::FunctionQuote(inner) => {
+                self.lower_quasiquote_prefixed("function", inner, depth, form.span)
+            }
+            SurfaceKind::List(items) => self.lower_quasiquote_list(form, items, depth),
+            SurfaceKind::DottedList(items, tail) => {
+                self.lower_quasiquote_dotted_list(form, items, tail, depth)
+            }
+            SurfaceKind::Vector(items) => self.lower_quasiquote_vector(form, items, depth),
+            SurfaceKind::Atom(_) => Some(quote_form_expr(form.clone(), form.span)),
+        }
+    }
+
+    fn lower_quasiquote_prefixed(
+        &mut self,
+        name: &str,
+        inner: &SurfaceForm,
+        depth: usize,
+        span: Span,
+    ) -> Option<HirExpr> {
+        if let SurfaceKind::CommaAt(splice) = &inner.kind
+            && depth == 1
+        {
+            return Some(append_expr(
+                vec![
+                    list_expr(vec![quote_symbol_expr(name, span)], span),
+                    self.lower_expr(splice)?,
+                ],
+                span,
+            ));
+        }
+        Some(list_expr(
+            vec![
+                quote_symbol_expr(name, span),
+                self.lower_quasiquote_form(inner, depth)?,
+            ],
+            span,
+        ))
+    }
+
+    fn lower_quasiquote_list(
+        &mut self,
+        form: &SurfaceForm,
+        items: &[SurfaceForm],
+        depth: usize,
+    ) -> Option<HirExpr> {
+        let (parts, has_splice) = self.lower_quasiquote_list_parts(items, depth, form.span)?;
+        if has_splice {
+            Some(append_expr(parts, form.span))
+        } else {
+            Some(list_expr(parts, form.span))
+        }
+    }
+
+    fn lower_quasiquote_dotted_list(
+        &mut self,
+        form: &SurfaceForm,
+        items: &[SurfaceForm],
+        tail: &SurfaceForm,
+        depth: usize,
+    ) -> Option<HirExpr> {
+        let (mut parts, has_splice) = self.lower_quasiquote_list_parts(items, depth, form.span)?;
+        let tail = self.lower_quasiquote_form(tail, depth)?;
+        if has_splice {
+            parts.push(tail);
+            return Some(append_expr(parts, form.span));
+        }
+        let mut result = tail;
+        for item in parts.into_iter().rev() {
+            result = call_named_expr("cons", vec![item, result], form.span);
+        }
+        Some(result)
+    }
+
+    fn lower_quasiquote_vector(
+        &mut self,
+        form: &SurfaceForm,
+        items: &[SurfaceForm],
+        depth: usize,
+    ) -> Option<HirExpr> {
+        let (parts, has_splice) = self.lower_quasiquote_list_parts(items, depth, form.span)?;
+        if !has_splice {
+            return Some(call_named_expr("vector", parts, form.span));
+        }
+        Some(HirExpr {
+            kind: HirExprKind::Apply {
+                callee: Box::new(quote_symbol_expr("vector", form.span)),
+                args: vec![append_expr(parts, form.span)],
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_quasiquote_list_parts(
+        &mut self,
+        items: &[SurfaceForm],
+        depth: usize,
+        span: Span,
+    ) -> Option<(Vec<HirExpr>, bool)> {
+        let mut parts = Vec::new();
+        let mut segment = Vec::new();
+        let mut has_splice = false;
+        for item in items {
+            if let SurfaceKind::CommaAt(inner) = &item.kind
+                && depth == 1
+            {
+                flush_quasiquote_segment(&mut parts, &mut segment, span);
+                parts.push(self.lower_expr(inner)?);
+                has_splice = true;
+                continue;
+            }
+            segment.push(self.lower_quasiquote_form(item, depth)?);
+        }
+        flush_quasiquote_segment(&mut parts, &mut segment, span);
+        Some((parts, has_splice))
     }
 
     fn lower_if(&mut self, form: &SurfaceForm, items: &[SurfaceForm]) -> Option<HirExpr> {
@@ -1580,14 +1729,18 @@ fn nil_expr(span: Span) -> HirExpr {
     }
 }
 
-fn quote_symbol_expr(name: &str, span: Span) -> HirExpr {
+fn quote_form_expr(form: SurfaceForm, span: Span) -> HirExpr {
     HirExpr {
-        kind: HirExprKind::Quote(Box::new(SurfaceForm::new(
-            SurfaceKind::Atom(SurfaceAtom::symbol(name)),
-            span,
-        ))),
+        kind: HirExprKind::Quote(Box::new(form)),
         span,
     }
+}
+
+fn quote_symbol_expr(name: &str, span: Span) -> HirExpr {
+    quote_form_expr(
+        SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::symbol(name)), span),
+        span,
+    )
 }
 
 fn lexical_get_expr(name: &str, span: Span) -> HirExpr {
@@ -1630,6 +1783,24 @@ fn call_named_expr(name: &str, args: Vec<HirExpr>, span: Span) -> HirExpr {
             args,
         },
         span,
+    }
+}
+
+fn list_expr(args: Vec<HirExpr>, span: Span) -> HirExpr {
+    call_named_expr("list", args, span)
+}
+
+fn append_expr(parts: Vec<HirExpr>, span: Span) -> HirExpr {
+    if parts.is_empty() {
+        nil_expr(span)
+    } else {
+        call_named_expr("append", parts, span)
+    }
+}
+
+fn flush_quasiquote_segment(parts: &mut Vec<HirExpr>, segment: &mut Vec<HirExpr>, span: Span) {
+    if !segment.is_empty() {
+        parts.push(list_expr(std::mem::take(segment), span));
     }
 }
 
@@ -1694,6 +1865,37 @@ mod tests {
             panic!("expected expr");
         };
         assert!(matches!(expr.kind, HirExprKind::Quote(_)));
+    }
+
+    #[test]
+    fn lowers_backquote_with_unquote_and_splicing() {
+        let module = hir(";;; -*- lexical-binding: t; -*-
+(let ((x 2) (xs (list 3 4)))
+  `(a ,x ,@xs b))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Let { body, .. } = &expr.kind else {
+            panic!("expected let");
+        };
+        let HirExprKind::CallNamed { name, .. } = &body.kind else {
+            panic!("expected backquote list to lower to append");
+        };
+        assert_eq!(name, "append");
+    }
+
+    #[test]
+    fn lowers_backquote_vector_with_splicing() {
+        let module = hir(";;; -*- lexical-binding: t; -*-
+(let ((x 2) (xs (list 3 4)))
+  `[a ,x ,@xs b])");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Let { body, .. } = &expr.kind else {
+            panic!("expected let");
+        };
+        assert!(matches!(body.kind, HirExprKind::Apply { .. }));
     }
 
     #[test]

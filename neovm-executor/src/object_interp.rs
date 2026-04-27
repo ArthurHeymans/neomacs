@@ -2284,6 +2284,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_backquote_with_unquote_and_splicing() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 2) (xs (list 3 4))) (if (and (equal `(a ,x ,@xs b) '(a 2 3 4 b)) (equal `[a ,x ,@xs b] [a 2 3 4 b]) (equal `(a ,@(list 1 2) . z) '(a 1 2 . z)) (equal `',@(list 1 2) '(quote 1 2))) 9 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
     fn executes_sequence_mapping_primitives() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(let ((sum 0)) (mapc (lambda (x) (setq sum (+ sum x))) [1 2 3]) (+ sum (length (mapcar '1+ (list 1 2 3))) (if (equal (mapcar 'char-to-string \"ab\") (list \"a\" \"b\")) 10 0)))",
