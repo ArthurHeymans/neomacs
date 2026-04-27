@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cranelift_entity::EntityRef;
 
 use crate::diagnostic::Diagnostic;
-use crate::regir::{RegFunction, RegInstKind, RegTerminator};
+use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
 use crate::ssa::SsaConst;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,6 +14,30 @@ pub struct InterpResult {
 
 pub fn execute(function: &RegFunction) -> InterpResult {
     execute_with_args(function, &[])
+}
+
+pub fn execute_module(module: &RegModule) -> InterpResult {
+    execute_module_with_args(module, &[])
+}
+
+pub fn execute_module_with_args(module: &RegModule, args: &[i64]) -> InterpResult {
+    let Some(entry) = module.entry else {
+        return InterpResult {
+            value: None,
+            diagnostics: vec![Diagnostic::error(
+                "Register IR interpreter requires a module entry function",
+            )],
+        };
+    };
+    let Some(function) = module.functions.get(entry) else {
+        return InterpResult {
+            value: None,
+            diagnostics: vec![Diagnostic::error(format!(
+                "Register IR interpreter references unknown module entry function {entry:?}"
+            ))],
+        };
+    };
+    execute_with_args(function, args)
 }
 
 pub fn execute_with_args(function: &RegFunction, args: &[i64]) -> InterpResult {
@@ -213,7 +237,7 @@ fn const_value(value: &SsaConst) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use crate::compile_source;
-    use crate::interp::{execute, execute_with_args};
+    use crate::interp::{execute, execute_module_with_args, execute_with_args};
     use crate::lower::{hir_to_ssa, ssa_to_regir};
     use crate::verify::{verify_regir, verify_ssa};
 
@@ -256,5 +280,17 @@ mod tests {
         let true_result = execute_with_args(&regir.value, &[3, 7]);
         assert_eq!(true_result.diagnostics, Vec::new());
         assert_eq!(true_result.value, Some(3));
+    }
+
+    #[test]
+    fn executes_module_entry_with_arguments() {
+        let artifact = compile_source(
+            "choose.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun choose (x y) (if x x y))",
+        );
+        let regir = artifact.regir.expect("RegIR module");
+        let result = execute_module_with_args(&regir, &[0, 9]);
+        assert_eq!(result.diagnostics, Vec::new());
+        assert_eq!(result.value, Some(9));
     }
 }

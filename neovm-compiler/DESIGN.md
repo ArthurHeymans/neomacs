@@ -362,6 +362,19 @@ semantic validation. Native execution should lower to Cranelift IR, letting
 Cranelift own instruction selection, physical register allocation, verification,
 and machine-code emission.
 
+The current execution API can compile a source/file to a Register IR module and
+run the module entry function for the runtime-free subset: immediate constants,
+lexical binds/reads/writes, branches, jumps, and returns. Runtime-dependent
+operations such as calls, symbol access, heap constants, lambda materialization,
+dynamic binding, and nonlocal control return explicit diagnostics instead of
+falling back silently.
+
+The development CLI entrypoint is:
+
+```text
+neovm-compiler run <file.el> [i64-arg ...]
+```
+
 ## Cranelift Backend
 
 Cranelift is the preferred native backend. The compiler should lower the safe,

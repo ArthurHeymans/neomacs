@@ -9,6 +9,8 @@
 //! Cranelift is the planned native backend. Register IR remains the
 //! Elisp-semantic VM IR; Cranelift lowering is an optional backend layer.
 
+use std::path::Path;
+
 pub mod ast;
 pub mod clif;
 pub mod diagnostic;
@@ -31,6 +33,7 @@ pub mod verify;
 
 use diagnostic::Diagnostic;
 use hir::HirModule;
+use interp::InterpResult;
 use regir::RegModule;
 use source::{SourceFile, SourceId};
 use ssa::SsaModule;
@@ -47,6 +50,12 @@ pub struct CompileArtifact {
     pub ssa: Option<SsaModule>,
     pub regir: Option<RegModule>,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExecuteArtifact {
+    pub compile: CompileArtifact,
+    pub result: InterpResult,
 }
 
 impl CompileArtifact {
@@ -102,6 +111,43 @@ pub fn compile_source(name: impl Into<String>, text: impl Into<String>) -> Compi
     }
 }
 
+pub fn execute_source(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    args: &[i64],
+) -> ExecuteArtifact {
+    let compile = compile_source(name, text);
+    let mut diagnostics = compile.diagnostics.clone();
+    let mut value = None;
+
+    if !diagnostics.iter().any(Diagnostic::is_error) {
+        match &compile.regir {
+            Some(regir) => {
+                diagnostics.extend(verify::verify_regir_module(regir));
+                if !diagnostics.iter().any(Diagnostic::is_error) {
+                    let result = interp::execute_module_with_args(regir, args);
+                    value = result.value;
+                    diagnostics.extend(result.diagnostics);
+                }
+            }
+            None => diagnostics.push(Diagnostic::error(
+                "execution requires a successfully lowered Register IR module",
+            )),
+        }
+    }
+
+    ExecuteArtifact {
+        compile,
+        result: InterpResult { value, diagnostics },
+    }
+}
+
+pub fn execute_file(path: impl AsRef<Path>, args: &[i64]) -> std::io::Result<ExecuteArtifact> {
+    let path = path.as_ref();
+    let text = std::fs::read_to_string(path)?;
+    Ok(execute_source(path.display().to_string(), text, args))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +176,27 @@ mod tests {
         assert!(artifact.hir.is_none());
         assert!(artifact.ssa.is_none());
         assert!(artifact.regir.is_none());
+    }
+
+    #[test]
+    fn executes_source_entry_for_runtime_free_subset() {
+        let artifact = execute_source(
+            "expr.el",
+            ";;; -*- lexical-binding: t; -*-\n(if nil 1 2)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(2));
+    }
+
+    #[test]
+    fn execution_reports_runtime_dependent_operations() {
+        let artifact = execute_source("call.el", ";;; -*- lexical-binding: t; -*-\n(+ 1 2)", &[]);
+        assert!(artifact.result.value.is_none());
+        assert!(artifact.result.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("unsupported Register IR interpreter operation")
+        }));
     }
 }
