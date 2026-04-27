@@ -18,8 +18,8 @@ pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
     };
     let mut expanded_forms = Vec::new();
     for form in forms {
-        if let Some(name) = expander.register_top_level_macro(&form) {
-            expanded_forms.push(quote_form(symbol_form(&name, form.span), form.span));
+        if let Some(defalias_form) = expander.register_top_level_macro(&form) {
+            expanded_forms.push(defalias_form);
         } else {
             expanded_forms.push(expander.expand_form(form));
         }
@@ -37,7 +37,7 @@ struct Expander {
 }
 
 impl Expander {
-    fn register_top_level_macro(&mut self, form: &SurfaceForm) -> Option<String> {
+    fn register_top_level_macro(&mut self, form: &SurfaceForm) -> Option<SurfaceForm> {
         let SurfaceKind::List(items) = &form.kind else {
             return None;
         };
@@ -75,15 +75,13 @@ impl Expander {
         } else {
             body.to_vec()
         };
-        self.macros.insert(
-            name.clone(),
-            MacroDef {
-                params,
-                body,
-                span: form.span,
-            },
-        );
-        Some(name)
+        let def = MacroDef {
+            params,
+            body,
+            span: form.span,
+        };
+        self.macros.insert(name.clone(), def.clone());
+        Some(macro_defalias_form(&name, &def, form.span))
     }
 
     fn expand_form(&mut self, form: SurfaceForm) -> SurfaceForm {
@@ -1042,8 +1040,85 @@ fn quote_form(inner: SurfaceForm, span: Span) -> SurfaceForm {
     SurfaceForm::new(SurfaceKind::Quote(Box::new(inner)), span)
 }
 
+fn function_quote_form(inner: SurfaceForm, span: Span) -> SurfaceForm {
+    SurfaceForm::new(SurfaceKind::FunctionQuote(Box::new(inner)), span)
+}
+
 fn list_form(items: Vec<SurfaceForm>, span: Span) -> SurfaceForm {
     SurfaceForm::new(SurfaceKind::List(items), span)
+}
+
+fn macro_defalias_form(name: &str, def: &MacroDef, span: Span) -> SurfaceForm {
+    let body = if let Some(environment) = &def.params.environment {
+        vec![list_form(
+            vec![
+                symbol_form("let", span),
+                list_form(
+                    vec![list_form(
+                        vec![symbol_form(environment, span), nil_form(span)],
+                        span,
+                    )],
+                    span,
+                ),
+                lower_macro_body(&def.body, span),
+            ],
+            span,
+        )]
+    } else {
+        def.body.clone()
+    };
+    let lambda = list_form(
+        std::iter::once(symbol_form("lambda", span))
+            .chain(std::iter::once(macro_lambda_params_form(&def.params, span)))
+            .chain(body)
+            .collect(),
+        span,
+    );
+    list_form(
+        vec![
+            symbol_form("defalias", span),
+            quote_form(symbol_form(name, span), span),
+            list_form(
+                vec![
+                    symbol_form("cons", span),
+                    quote_form(symbol_form("macro", span), span),
+                    function_quote_form(lambda, span),
+                ],
+                span,
+            ),
+        ],
+        span,
+    )
+}
+
+fn macro_lambda_params_form(params: &MacroParams, span: Span) -> SurfaceForm {
+    let mut items = params
+        .required
+        .iter()
+        .map(|name| symbol_form(name, span))
+        .collect::<Vec<_>>();
+    if !params.optional.is_empty() {
+        items.push(symbol_form("&optional", span));
+        items.extend(params.optional.iter().map(|name| symbol_form(name, span)));
+    }
+    if let Some(rest) = &params.rest {
+        items.push(symbol_form("&rest", span));
+        items.push(symbol_form(rest, span));
+    }
+    list_form(items, span)
+}
+
+fn lower_macro_body(body: &[SurfaceForm], span: Span) -> SurfaceForm {
+    match body {
+        [] => nil_form(span),
+        [only] => only.clone(),
+        _ => list_form(
+            std::iter::once(symbol_form("progn", span))
+                .chain(body.iter().cloned())
+                .collect(),
+            span,
+        ),
+    }
 }
 
 fn fixnum_value(form: &SurfaceForm) -> Option<i64> {
@@ -1169,6 +1244,8 @@ mod tests {
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"inc\""));
+        assert!(rendered.contains("\"defalias\""));
+        assert!(rendered.contains("\"macro\""));
         assert!(rendered.contains("\"setq\""));
         assert!(!rendered.contains("\"defmacro\""));
     }
