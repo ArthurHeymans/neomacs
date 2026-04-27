@@ -14,6 +14,7 @@ use lasso::{Key, Rodeo, Spur};
 use crate::diagnostic::Diagnostic;
 use crate::ids::{BlockId, PrimaryMap, SafepointId, ValueId};
 use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator};
+use crate::surface::SurfaceForm;
 
 pub struct ClifLowerOutput {
     pub function: Option<Function>,
@@ -63,16 +64,26 @@ pub enum ClifRuntimeCallKind {
     Apply { arity: usize },
     SymbolGet { name: String },
     SymbolSet { name: String },
+    StringConst { value: String },
+    FloatConst { bits: u64 },
+    Quote { index: usize },
+    FunctionQuote { index: usize },
 }
 
 pub struct ClifRuntimeAbi {
     declarations: ModuleDeclarations,
     symbols: Rodeo,
+    strings: Rodeo,
+    quoted_forms: Vec<SurfaceForm>,
     call_named_by_arity: HashMap<usize, FuncId>,
     funcall_by_arity: HashMap<usize, FuncId>,
     apply_by_arity: HashMap<usize, FuncId>,
     symbol_get: Option<FuncId>,
     symbol_set: Option<FuncId>,
+    string_const: Option<FuncId>,
+    float_const: Option<FuncId>,
+    quote: Option<FuncId>,
+    function_quote: Option<FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -80,11 +91,17 @@ impl Default for ClifRuntimeAbi {
         Self {
             declarations: ModuleDeclarations::default(),
             symbols: Rodeo::default(),
+            strings: Rodeo::default(),
+            quoted_forms: Vec::new(),
             call_named_by_arity: HashMap::new(),
             funcall_by_arity: HashMap::new(),
             apply_by_arity: HashMap::new(),
             symbol_get: None,
             symbol_set: None,
+            string_const: None,
+            float_const: None,
+            quote: None,
+            function_quote: None,
         }
     }
 }
@@ -104,6 +121,35 @@ impl ClifRuntimeAbi {
 
     pub fn resolve_symbol(&self, symbol: Spur) -> &str {
         self.symbols.resolve(&symbol)
+    }
+
+    pub fn intern_string(&mut self, value: &str) -> Spur {
+        self.strings.get_or_intern(value)
+    }
+
+    pub fn string_key(&self, value: &str) -> Option<Spur> {
+        self.strings.get(value)
+    }
+
+    pub fn resolve_string(&self, string: Spur) -> &str {
+        self.strings.resolve(&string)
+    }
+
+    pub fn intern_quoted_form(&mut self, form: SurfaceForm) -> usize {
+        if let Some(index) = self
+            .quoted_forms
+            .iter()
+            .position(|existing| existing == &form)
+        {
+            return index;
+        }
+        let index = self.quoted_forms.len();
+        self.quoted_forms.push(form);
+        index
+    }
+
+    pub fn quoted_forms(&self) -> &[SurfaceForm] {
+        &self.quoted_forms
     }
 
     pub fn imported_function_names(&self) -> Vec<&str> {
@@ -198,6 +244,62 @@ impl ClifRuntimeAbi {
         self.symbol_set = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
+
+    fn string_const(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.string_const {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_string_const", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.string_const = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn float_const(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.float_const {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_float_const", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.float_const = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn quote(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.quote {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_quote", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.quote = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn function_quote(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.function_quote {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_function_quote", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.function_quote = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
 }
 
 struct RuntimeFuncImport {
@@ -240,6 +342,14 @@ fn symbol_set_signature(call_conv: CallConv) -> Signature {
     signature.params.push(AbiParam::new(types::I64)); // vmctx
     signature.params.push(AbiParam::new(types::I64)); // interned variable symbol
     signature.params.push(AbiParam::new(types::I64)); // value
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn indexed_runtime_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // compiler-owned table index/bits
     signature.returns.push(AbiParam::new(types::I64));
     signature
 }
@@ -364,9 +474,9 @@ impl<'a> ClifLowerer<'a> {
         for (_, block) in self.ssa.blocks.iter() {
             for inst in &block.instructions {
                 match &inst.kind {
-                    SsaInstKind::Const(
-                        SsaConst::Nil | SsaConst::True | SsaConst::Int(_) | SsaConst::Char(_),
-                    )
+                    SsaInstKind::Const(_)
+                    | SsaInstKind::Quote(_)
+                    | SsaInstKind::FunctionQuote(_)
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
                     | SsaInstKind::DeclareSpecial(_)
@@ -375,18 +485,6 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::CallNamed { .. }
                     | SsaInstKind::Funcall { .. }
                     | SsaInstKind::Apply { .. } => {}
-                    SsaInstKind::Const(SsaConst::Float(_)) => {
-                        self.unsupported("float constants need Lisp value encoding");
-                    }
-                    SsaInstKind::Const(SsaConst::String(_)) => {
-                        self.unsupported("string constants need allocation and GC metadata");
-                    }
-                    SsaInstKind::Quote(_) => {
-                        self.unsupported("quote lowering needs runtime object materialization");
-                    }
-                    SsaInstKind::FunctionQuote(_) => {
-                        self.unsupported("function quote lowering needs function object support");
-                    }
                     SsaInstKind::LexicalSet { .. } => {
                         self.unsupported(
                             "lexical set lowering needs mutable lexical environment analysis",
@@ -457,15 +555,82 @@ impl ClifBlockLowerer<'_> {
                     self.error("constant instruction has no result");
                     return;
                 };
-                let value = match value {
+                let immediate = match value {
                     SsaConst::Nil => 0,
                     SsaConst::True => 1,
                     SsaConst::Int(value) => *value,
                     SsaConst::Char(value) => *value,
-                    SsaConst::Float(_) | SsaConst::String(_) => unreachable!(),
+                    SsaConst::Float(value) => {
+                        let bits = value.to_bits();
+                        let Some(func_ref) = self.float_const_ref() else {
+                            return;
+                        };
+                        let Some(value) = self.emit_indexed_runtime_call(
+                            func_ref,
+                            bits as i64,
+                            ClifRuntimeCallKind::FloatConst { bits },
+                        ) else {
+                            return;
+                        };
+                        self.value_map.insert(result, value);
+                        return;
+                    }
+                    SsaConst::String(value) => {
+                        let string = self.runtime.intern_string(value).into_usize() as i64;
+                        let Some(func_ref) = self.string_const_ref() else {
+                            return;
+                        };
+                        let Some(value) = self.emit_indexed_runtime_call(
+                            func_ref,
+                            string,
+                            ClifRuntimeCallKind::StringConst {
+                                value: value.clone(),
+                            },
+                        ) else {
+                            return;
+                        };
+                        self.value_map.insert(result, value);
+                        return;
+                    }
                 };
-                let clif_value = self.builder.ins().iconst(types::I64, value);
+                let clif_value = self.builder.ins().iconst(types::I64, immediate);
                 self.value_map.insert(result, clif_value);
+            }
+            SsaInstKind::Quote(form) => {
+                let Some(result) = inst.result else {
+                    self.error("quote instruction has no result");
+                    return;
+                };
+                let index = self.runtime.intern_quoted_form(form.clone());
+                let Some(func_ref) = self.quote_ref() else {
+                    return;
+                };
+                let Some(value) = self.emit_indexed_runtime_call(
+                    func_ref,
+                    index as i64,
+                    ClifRuntimeCallKind::Quote { index },
+                ) else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
+            SsaInstKind::FunctionQuote(form) => {
+                let Some(result) = inst.result else {
+                    self.error("function quote instruction has no result");
+                    return;
+                };
+                let index = self.runtime.intern_quoted_form(form.clone());
+                let Some(func_ref) = self.function_quote_ref() else {
+                    return;
+                };
+                let Some(value) = self.emit_indexed_runtime_call(
+                    func_ref,
+                    index as i64,
+                    ClifRuntimeCallKind::FunctionQuote { index },
+                ) else {
+                    return;
+                };
+                self.value_map.insert(result, value);
             }
             SsaInstKind::LexicalGet(name) => {
                 let Some(result) = inst.result else {
@@ -571,9 +736,7 @@ impl ClifBlockLowerer<'_> {
                 };
                 self.value_map.insert(result, result_value);
             }
-            SsaInstKind::Quote(_)
-            | SsaInstKind::FunctionQuote(_)
-            | SsaInstKind::LexicalSet { .. }
+            SsaInstKind::LexicalSet { .. }
             | SsaInstKind::BindDynamic { .. }
             | SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd
@@ -730,6 +893,58 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_ref(import)
     }
 
+    fn string_const_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.string_const(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift string constant runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn float_const_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.float_const(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift float constant runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn quote_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.quote(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift quote runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn function_quote_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.function_quote(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift function quote runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
         if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
             return Some(func_ref);
@@ -858,6 +1073,26 @@ impl ClifBlockLowerer<'_> {
         Some(result)
     }
 
+    fn emit_indexed_runtime_call(
+        &mut self,
+        func_ref: FuncRef,
+        value: i64,
+        kind: ClifRuntimeCallKind,
+    ) -> Option<ir::Value> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("indexed runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let value = self.builder.ins().iconst(types::I64, value);
+        let call = self.builder.ins().call(func_ref, &[vmctx, value]);
+        self.record_safepoint(call, kind);
+        let Some(result) = self.builder.inst_results(call).first().copied() else {
+            self.error("indexed runtime call produced no result");
+            return None;
+        };
+        Some(result)
+    }
+
     fn record_safepoint(&mut self, call_inst: ir::Inst, kind: ClifRuntimeCallKind) {
         let mut live_roots = self
             .value_map
@@ -905,6 +1140,126 @@ mod tests {
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("iconst.i64 42"));
         assert!(dump.contains("return"));
+    }
+
+    #[test]
+    fn lowers_string_constant_to_runtime_materialization() {
+        let artifact = compile_source(
+            "string.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun stringy () \"hello\")",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(
+            clif.runtime
+                .string_key("hello")
+                .map(|string| clif.runtime.resolve_string(string)),
+            Some("hello")
+        );
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_string_const")
+        );
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::StringConst { value } if value == "hello"
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_float_constant_to_runtime_materialization() {
+        let artifact = compile_source(
+            "float.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun pi-ish () 3.5)",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_float_const")
+        );
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::FloatConst { bits } if *bits == 3.5f64.to_bits()
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_quote_to_runtime_materialization() {
+        let artifact = compile_source(
+            "quote.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun quoted () '(a b))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_quote")
+        );
+        assert_eq!(clif.runtime.quoted_forms().len(), 1);
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::Quote { index } if *index == 0
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_function_quote_to_runtime_materialization() {
+        let artifact = compile_source(
+            "function-quote.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun quoted-fn () #'foo)",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_function_quote")
+        );
+        assert_eq!(clif.runtime.quoted_forms().len(), 1);
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::FunctionQuote { index } if *index == 0
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
     }
 
     #[test]

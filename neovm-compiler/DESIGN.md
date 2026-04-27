@@ -366,8 +366,10 @@ Initial Cranelift lowering is intentionally conservative:
   dynamic and buffer-local semantics stay in the runtime.
 - Lower `funcall` and `apply` through declared runtime ABI calls so indirect
   function semantics stay in the runtime.
-- Reject dynamic binding, allocation, and nonlocal exits until the runtime ABI
-  and precise safepoint/stack-map contract exist.
+- Lower string/float constants and quoted forms through runtime materialization
+  calls so allocation, interning, and object identity stay runtime-owned.
+- Reject dynamic binding and nonlocal exits until the runtime ABI and precise
+  safepoint/stack-map contract exist.
 - Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
   physical register allocation internally.
 
@@ -397,9 +399,22 @@ __neomacs_rt_funcall_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 __neomacs_rt_apply_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 ```
 
+Runtime materialization uses compiler-owned table indexes or immediate payloads:
+
+```text
+__neomacs_rt_string_const(vmctx: i64, string_id: i64) -> i64
+__neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64
+__neomacs_rt_quote(vmctx: i64, quote_id: i64) -> i64
+__neomacs_rt_function_quote(vmctx: i64, quote_id: i64) -> i64
+```
+
 `symbol_id` is a compiler-owned interned symbol key. This is not the final
 runtime object representation; it is the bridge needed before runtime symbol
 tables, precise stack maps, and JIT execution are connected.
+
+`string_id` and `quote_id` are also compiler-owned keys into per-function
+metadata tables. Float constants pass the exact IEEE-754 bit pattern as an
+opaque payload for the runtime to materialize.
 
 Every Cranelift runtime ABI call is also a compiler safepoint. The current
 metadata records:
