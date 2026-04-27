@@ -188,39 +188,6 @@ impl Expander {
         }
     }
 
-    fn expand_list(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
-        let Some(head) = items.first().and_then(SurfaceForm::symbol_name) else {
-            return SurfaceForm::new(
-                SurfaceKind::List(
-                    items
-                        .into_iter()
-                        .map(|item| self.expand_form(item))
-                        .collect(),
-                ),
-                span,
-            );
-        };
-        if let Some(def) = self.macros.get(head).cloned() {
-            return self.expand_macro_call(span, items, def);
-        }
-        match head {
-            "quote" | "function" => SurfaceForm::new(SurfaceKind::List(items), span),
-            "push" => self.expand_push(span, items),
-            "pop" => self.expand_pop(span, items),
-            "if-let*" => self.expand_if_let(span, items),
-            "when-let*" => self.expand_when_let(span, items),
-            _ => SurfaceForm::new(
-                SurfaceKind::List(
-                    items
-                        .into_iter()
-                        .map(|item| self.expand_form(item))
-                        .collect(),
-                ),
-                span,
-            ),
-        }
-    }
-
     fn expand_macro_call(
         &mut self,
         span: Span,

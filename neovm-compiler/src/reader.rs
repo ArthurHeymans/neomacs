@@ -48,10 +48,10 @@ enum TokenKind {
     CommaAt,
     #[token(",")]
     Comma,
-    #[regex(r#""([^"\\]|\\.)*""#, parse_string)]
+    #[token("\"", lex_string)]
     String(String),
     #[regex(
-        r#"\?(\\[^\s()\[\]'"`,;]+|[^\s()\[\]'"`,;])"#,
+        r#"\?(\\[CMASH]-\\[CMASH]-.|\\[CMASH]-.|\\.|[^\s()\[\]'"`,;])"#,
         parse_char,
         priority = 4
     )]
@@ -115,12 +115,12 @@ pub fn read_source(source: &SourceFile) -> ReaderOutput {
 
 fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Token> {
     let mut lexer = TokenKind::lexer(&source.text);
-    let mut tokens = Vec::new();
+    let mut raw_tokens = Vec::new();
     while let Some(result) = lexer.next() {
         let range = lexer.span();
         let span = source.span(range.start, range.end);
         match result {
-            Ok(kind) => tokens.push(Token {
+            Ok(kind) => raw_tokens.push(Token {
                 kind,
                 span,
                 text: lexer.slice().to_string(),
@@ -128,13 +128,64 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
             Err(()) => diagnostics.push(Diagnostic::error("invalid reader token").with_span(span)),
         }
     }
+
+    // Post-process: Logos can't match ?( as Char because ( is claimed by
+    // LParen. Merge bare `?` Symbol followed by a single-char delimiter
+    // token into a Char token.
+    let mut tokens = Vec::with_capacity(raw_tokens.len());
+    let mut i = 0;
+    while i < raw_tokens.len() {
+        let tok = &raw_tokens[i];
+        if matches!(&tok.kind, TokenKind::Symbol(s) if s == "?") && i + 1 < raw_tokens.len() {
+            let next = &raw_tokens[i + 1];
+            let ch: Option<char> = match &next.kind {
+                TokenKind::LParen => Some('('),
+                TokenKind::RParen => Some(')'),
+                TokenKind::LBracket => Some('['),
+                TokenKind::RBracket => Some(']'),
+                TokenKind::Quote => Some('\''),
+                TokenKind::Backquote => Some('`'),
+                TokenKind::Comma => Some(','),
+                _ => None,
+            };
+            if let Some(ch) = ch {
+                let span = tok.span;
+                tokens.push(Token {
+                    kind: TokenKind::Char(ch as i64),
+                    span,
+                    text: format!("?{ch}"),
+                });
+                i += 2;
+                continue;
+            }
+        }
+        tokens.push(raw_tokens[i].clone());
+        i += 1;
+    }
     tokens
 }
 
-fn parse_string(lexer: &mut logos::Lexer<'_, TokenKind>) -> String {
-    let slice = lexer.slice();
-    let body = &slice[1..slice.len() - 1];
-    decode_escapes(body)
+fn lex_string(lexer: &mut logos::Lexer<'_, TokenKind>) -> String {
+    let remainder = lexer.remainder();
+    let bytes = remainder.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                lexer.bump(i + 1);
+                let body = &remainder[..i];
+                return decode_escapes(body);
+            }
+            b'\\' => {
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    lexer.bump(remainder.len());
+    String::new()
 }
 
 fn parse_char(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<i64> {
