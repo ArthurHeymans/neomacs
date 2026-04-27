@@ -648,6 +648,16 @@ impl Interpreter<'_, '_, '_> {
             "numberp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_fixnum())),
+            "integerp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(args[0].is_fixnum())),
+            "natnump" | "wholenump" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(args[0].as_fixnum().is_some_and(|value| value >= 0))),
+            "zerop" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.fixnum_arg(name, args[0]))
+                .map(|value| bool_value(value == 0)),
             "symbolp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_symbol(args[0]))),
@@ -733,12 +743,30 @@ impl Interpreter<'_, '_, '_> {
             "not" | "null" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil())),
+            "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
+            "ignore" => Some(LispValue::NIL),
             "list" => Some(make_list(self.runtime, args.iter().copied())),
             "length" => self
                 .exact_arity(name, args, 1)
-                .and_then(|_| self.list_length(args[0]))
+                .and_then(|_| self.length(args[0]))
                 .and_then(|length| i64::try_from(length).ok())
                 .and_then(|length| self.fixnum(length, "length")),
+            "concat" => self.concat(args),
+            "substring" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.substring(args[0], args[1], args.get(2).copied())),
+            "string=" | "string-equal" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_equal(args[0], args[1])),
+            "string<" | "string-lessp" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_lessp(args[0], args[1])),
+            "char-to-string" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.char_to_string(args[0])),
+            "string-to-char" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.string_to_char(args[0])),
             "reverse" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
@@ -1112,6 +1140,135 @@ impl Interpreter<'_, '_, '_> {
             let result = self.runtime.cdr(current);
             current = self.runtime_value(result)?;
         }
+    }
+
+    fn length(&mut self, value: LispValue) -> Option<usize> {
+        if self.runtime.is_string(value) {
+            return match self.runtime.string_data(value) {
+                Ok(data) => Some(data.char_len()),
+                Err(error) => {
+                    self.runtime_error(error);
+                    None
+                }
+            };
+        }
+        self.list_length(value)
+    }
+
+    fn concat(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let mut bytes = Vec::new();
+        let mut chars = 0usize;
+        let mut multibyte = false;
+        for arg in args {
+            let data = match self.runtime.string_data(*arg) {
+                Ok(data) => data,
+                Err(error) => {
+                    self.runtime_error(error);
+                    return None;
+                }
+            };
+            bytes.extend_from_slice(data.bytes());
+            chars += data.char_len();
+            multibyte |= data.is_multibyte();
+        }
+        Some(self.runtime.string_from_bytes(bytes, chars, multibyte))
+    }
+
+    fn substring(
+        &mut self,
+        string: LispValue,
+        start: LispValue,
+        end: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let contents = self.string_contents_owned(string)?;
+        let chars = contents.chars().collect::<Vec<_>>();
+        let len = i64::try_from(chars.len()).ok()?;
+        let start = self.normalized_string_index("substring", start, len)?;
+        let end = match end {
+            Some(value) if !value.is_nil() => {
+                self.normalized_string_index("substring", value, len)?
+            }
+            _ => len,
+        };
+        if start > end {
+            self.error("substring start is after end");
+            return None;
+        }
+        let start = usize::try_from(start).ok()?;
+        let end = usize::try_from(end).ok()?;
+        Some(
+            self.runtime
+                .string(chars[start..end].iter().collect::<String>()),
+        )
+    }
+
+    fn normalized_string_index(&mut self, name: &str, index: LispValue, len: i64) -> Option<i64> {
+        let index = self.fixnum_arg(name, index)?;
+        let normalized = if index < 0 { len + index } else { index };
+        if !(0..=len).contains(&normalized) {
+            self.error(format!("primitive `{name}` string index out of range"));
+            return None;
+        }
+        Some(normalized)
+    }
+
+    fn string_equal(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
+        let left = self.string_bytes(left)?;
+        let right = self.string_bytes(right)?;
+        Some(bool_value(left == right))
+    }
+
+    fn string_lessp(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
+        let left = self.string_contents_owned(left)?;
+        let right = self.string_contents_owned(right)?;
+        Some(bool_value(left < right))
+    }
+
+    fn char_to_string(&mut self, value: LispValue) -> Option<LispValue> {
+        let ch = self.char_arg("char-to-string", value)?;
+        Some(self.runtime.string(ch.to_string()))
+    }
+
+    fn string_to_char(&mut self, value: LispValue) -> Option<LispValue> {
+        let contents = self.string_contents_owned(value)?;
+        match contents.chars().next() {
+            Some(ch) => Some(LispValue::from_char(ch)),
+            None => self.fixnum(0, "string-to-char"),
+        }
+    }
+
+    fn string_bytes(&mut self, value: LispValue) -> Option<Vec<u8>> {
+        match self.runtime.string_data(value) {
+            Ok(data) => Some(data.bytes().to_vec()),
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
+    fn string_contents_owned(&mut self, value: LispValue) -> Option<String> {
+        match self.runtime.string_contents(value) {
+            Ok(contents) => Some(contents.to_string()),
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
+    fn char_arg(&mut self, name: &str, value: LispValue) -> Option<char> {
+        if let Some(ch) = value.as_char() {
+            return Some(ch);
+        }
+        if let Some(code) = value.as_fixnum()
+            && let Ok(code) = u32::try_from(code)
+            && let Some(ch) = char::from_u32(code)
+        {
+            return Some(ch);
+        }
+        self.error(format!("primitive `{name}` expected a character"));
+        None
     }
 
     fn list_length(&mut self, list: LispValue) -> Option<usize> {
@@ -1538,6 +1695,10 @@ fn is_primitive_name(name: &str) -> bool {
             | "consp"
             | "listp"
             | "numberp"
+            | "integerp"
+            | "natnump"
+            | "wholenump"
+            | "zerop"
             | "symbolp"
             | "stringp"
             | "symbol-value"
@@ -1561,8 +1722,18 @@ fn is_primitive_name(name: &str) -> bool {
             | "symbol-name"
             | "not"
             | "null"
+            | "identity"
+            | "ignore"
             | "list"
             | "length"
+            | "concat"
+            | "substring"
+            | "string="
+            | "string-equal"
+            | "string<"
+            | "string-lessp"
+            | "char-to-string"
+            | "string-to-char"
             | "reverse"
             | "append"
             | "nth"
@@ -1641,6 +1812,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(9)));
         assert_eq!(runtime.symbol_count(), 1);
+    }
+
+    #[test]
+    fn executes_basic_string_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((s (concat \"a\" (char-to-string ?b) \"c\"))) (+ (length s) (if (string= (substring s 1 -1) \"b\") 10 0) (if (string< \"a\" \"b\") 20 0) (if (eq (string-to-char s) ?a) 30 0)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(63)));
+    }
+
+    #[test]
+    fn executes_basic_numeric_and_utility_predicates() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+ (if (integerp 1) 1 0) (if (natnump 0) 2 0) (if (wholenump -1) 0 4) (if (zerop 0) 8 0) (identity 16) (if (ignore 1 2 3) 0 32))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(63)));
     }
 
     #[test]
