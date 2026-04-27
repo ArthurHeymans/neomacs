@@ -4,6 +4,7 @@ use crate::diagnostic::Diagnostic;
 use crate::effects::{Effect, Effects};
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
 use crate::ids::{BlockId, PrimaryMap, RegBlockId, RegId, ValueId};
+use crate::liveness::SsaSafepointLiveness;
 use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegTerminator};
 use crate::safepoint::SafepointEntry;
 use crate::ssa::{
@@ -70,6 +71,8 @@ struct RegLowerer<'a> {
     function: RegFunction,
     block_map: HashMap<BlockId, RegBlockId>,
     value_map: HashMap<ValueId, RegId>,
+    safepoint_liveness: SsaSafepointLiveness,
+    current_inst: Option<(BlockId, usize)>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -107,6 +110,8 @@ impl<'a> RegLowerer<'a> {
             function,
             block_map,
             value_map,
+            safepoint_liveness: SsaSafepointLiveness::compute(ssa),
+            current_inst: None,
             diagnostics: Vec::new(),
         }
     }
@@ -119,9 +124,11 @@ impl<'a> RegLowerer<'a> {
                 )));
                 continue;
             };
-            for inst in &block.instructions {
+            for (inst_index, inst) in block.instructions.iter().enumerate() {
+                self.current_inst = Some((block_id, inst_index));
                 self.lower_inst(reg_block, inst);
             }
+            self.current_inst = None;
             self.lower_terminator(reg_block, &block.terminator);
         }
     }
@@ -295,12 +302,23 @@ impl<'a> RegLowerer<'a> {
     }
 
     fn emit_safepoint(&mut self, block: RegBlockId) {
-        let live_roots = self
-            .function
-            .registers
-            .iter()
-            .map(|(reg, _)| reg)
-            .collect::<Vec<_>>();
+        let Some((ssa_block, inst)) = self.current_inst else {
+            self.diagnostics.push(Diagnostic::error(
+                "safepoint emitted outside an SSA instruction",
+            ));
+            return;
+        };
+        let mut live_roots = Vec::new();
+        let roots = self.safepoint_liveness.roots_for(ssa_block, inst).to_vec();
+        for value in roots {
+            let Some(reg) = self.value_map.get(&value).copied() else {
+                self.diagnostics.push(Diagnostic::error(format!(
+                    "safepoint references unknown SSA value {value:?}"
+                )));
+                continue;
+            };
+            live_roots.push(reg);
+        }
         let id = self
             .function
             .safepoints

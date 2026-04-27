@@ -17,6 +17,7 @@ pub mod expand;
 pub mod hir;
 pub mod ids;
 pub mod interp;
+pub mod liveness;
 pub mod lower;
 pub mod pretty;
 pub mod reader;

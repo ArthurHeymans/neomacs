@@ -114,6 +114,7 @@ src/expand.rs
 src/hir.rs
 src/effects.rs
 src/ssa.rs
+src/liveness.rs
 src/regir.rs
 src/safepoint.rs
 src/lower.rs
@@ -134,6 +135,7 @@ Module responsibilities:
 - `hir.rs`: Elisp semantic AST after expansion.
 - `effects.rs`: effect classification for calls and runtime operations.
 - `ssa.rs`: CFG-shaped SSA IR.
+- `liveness.rs`: SSA value liveness for precise safepoint root sets.
 - `regir.rs`: low-level register execution IR.
 - `safepoint.rs`: safepoint IDs, live root maps, and future stack-map metadata.
 - `lower.rs`: lowering passes between IR layers.
@@ -558,7 +560,7 @@ Register IR verifier:
 
 - Registers are defined before use.
 - Jumps target valid labels.
-- Calls and safepoints have live-root metadata.
+- Calls and safepoints have liveness-pruned live-root metadata.
 - Frame metadata is internally consistent.
 
 ## Pretty Dumps

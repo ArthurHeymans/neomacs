@@ -776,15 +776,15 @@ rblock1:
   r4 = lexical-get x
   r5 = const int 1
   r6 = call-named + r4, r5
-  safepoint sp0 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  safepoint sp0 roots=(r4, r5)
   move r3.if.result, r6
   jump rblock3
 rblock2:
   r7 = symbol-get f
-  safepoint sp1 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  safepoint sp1 roots=()
   r8 = lexical-get y
   r9 = funcall r7 r8
-  safepoint sp2 roots=(r0.x, r1.y, r2, r3.if.result, r4, r5, r6, r7, r8, r9)
+  safepoint sp2 roots=(r7, r8)
   move r3.if.result, r9
   jump rblock3
 rblock3:
