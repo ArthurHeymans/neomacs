@@ -1420,8 +1420,15 @@ mod tests {
     use crate::compile_source;
     use crate::ids::PrimaryMap;
     use crate::lower::hir_to_ssa;
-    use crate::ssa::{SsaBlock, SsaFunction, SsaTerminator};
+    use crate::ssa::{SsaBlock, SsaCaptureMode, SsaFunction, SsaLambdaCapture, SsaTerminator};
     use crate::verify::verify_ssa;
+
+    fn capture_names(captures: &[SsaLambdaCapture]) -> Vec<&str> {
+        captures
+            .iter()
+            .map(|capture| capture.name.as_str())
+            .collect()
+    }
 
     #[test]
     fn lowers_constant_return_to_cranelift_ir() {
@@ -1603,10 +1610,7 @@ mod tests {
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
         assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["x"]);
-        assert_eq!(
-            clif.runtime.lambda_templates()[0].captures,
-            Vec::<String>::new()
-        );
+        assert!(clif.runtime.lambda_templates()[0].captures.is_empty());
         assert_eq!(clif.safepoints.entries.len(), 1);
         let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
         assert!(matches!(
@@ -1640,7 +1644,14 @@ mod tests {
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
         assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
-        assert_eq!(clif.runtime.lambda_templates()[0].captures, vec!["x"]);
+        assert_eq!(
+            capture_names(&clif.runtime.lambda_templates()[0].captures),
+            vec!["x"]
+        );
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].captures[0].mode,
+            SsaCaptureMode::Value
+        );
         assert_eq!(clif.safepoints.entries.len(), 1);
         let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
         assert_eq!(safepoint.live_roots.len(), 1);
@@ -1675,7 +1686,38 @@ mod tests {
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
         assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
-        assert_eq!(clif.runtime.lambda_templates()[0].captures, vec!["x"]);
+        assert_eq!(
+            capture_names(&clif.runtime.lambda_templates()[0].captures),
+            vec!["x"]
+        );
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].captures[0].mode,
+            SsaCaptureMode::Value
+        );
+    }
+
+    #[test]
+    fn marks_mutable_lambda_captures_as_cells() {
+        let artifact = compile_source(
+            "mutable-capture.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-counter (x) (lambda () (setq x (+ x 1)) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(clif.runtime.lambda_templates().len(), 1);
+        assert_eq!(
+            capture_names(&clif.runtime.lambda_templates()[0].captures),
+            vec!["x"]
+        );
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].captures[0].mode,
+            SsaCaptureMode::Cell
+        );
     }
 
     #[test]

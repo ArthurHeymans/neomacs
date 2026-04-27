@@ -10,7 +10,8 @@ use crate::liveness::SsaSafepointLiveness;
 use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegTerminator};
 use crate::safepoint::SafepointEntry;
 use crate::ssa::{
-    SsaBlock, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaTerminator, SsaValue, SsaValueKind,
+    SsaBlock, SsaCaptureMode, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaLambdaCapture,
+    SsaTerminator, SsaValue, SsaValueKind,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,10 +26,12 @@ pub fn hir_to_ssa(module: &HirModule) -> LowerOutput<SsaFunction> {
     for item in &module.items {
         match item {
             HirItem::Expr(expr) => {
+                builder.mutable_lexicals = mutable_lexical_names(expr);
                 let value = builder.lower_expr(expr);
                 builder.set_terminator(SsaTerminator::Return(value));
             }
             HirItem::Defun(defun) => {
+                builder.mutable_lexicals = mutable_lexical_names(&defun.body);
                 if builder.function.name.is_none() {
                     builder.function.name = Some(defun.name.clone());
                 }
@@ -371,6 +374,102 @@ fn lambda_capture_names(params: &[String], body: &HirExpr) -> Vec<String> {
     free.into_iter().collect()
 }
 
+fn lambda_capture_specs(
+    params: &[String],
+    body: &HirExpr,
+    mutable_lexicals: &IndexSet<String>,
+) -> Vec<SsaLambdaCapture> {
+    lambda_capture_names(params, body)
+        .into_iter()
+        .map(|name| {
+            let mode = if mutable_lexicals.contains(&name) {
+                SsaCaptureMode::Cell
+            } else {
+                SsaCaptureMode::Value
+            };
+            SsaLambdaCapture { name, mode }
+        })
+        .collect()
+}
+
+fn mutable_lexical_names(expr: &HirExpr) -> IndexSet<String> {
+    let mut names = IndexSet::new();
+    collect_mutable_lexicals(expr, &mut names);
+    names
+}
+
+fn collect_mutable_lexicals(expr: &HirExpr, names: &mut IndexSet<String>) {
+    match &expr.kind {
+        HirExprKind::Const(_)
+        | HirExprKind::Quote(_)
+        | HirExprKind::FunctionQuote(_)
+        | HirExprKind::LexicalGet(_)
+        | HirExprKind::SymbolGet(_)
+        | HirExprKind::Declare(_) => {}
+        HirExprKind::LexicalSet { name, value } => {
+            names.insert(name.clone());
+            collect_mutable_lexicals(value, names);
+        }
+        HirExprKind::SymbolSet { value, .. } => {
+            collect_mutable_lexicals(value, names);
+        }
+        HirExprKind::If {
+            test,
+            then_expr,
+            else_expr,
+        } => {
+            collect_mutable_lexicals(test, names);
+            collect_mutable_lexicals(then_expr, names);
+            collect_mutable_lexicals(else_expr, names);
+        }
+        HirExprKind::Progn(exprs) => {
+            for expr in exprs {
+                collect_mutable_lexicals(expr, names);
+            }
+        }
+        HirExprKind::Let { bindings, body, .. } => {
+            for binding in bindings {
+                collect_mutable_lexicals(&binding.init, names);
+            }
+            collect_mutable_lexicals(body, names);
+        }
+        HirExprKind::Lambda { body, .. } => {
+            collect_mutable_lexicals(body, names);
+        }
+        HirExprKind::Catch { tag, body } => {
+            collect_mutable_lexicals(tag, names);
+            collect_mutable_lexicals(body, names);
+        }
+        HirExprKind::Throw { tag, value } => {
+            collect_mutable_lexicals(tag, names);
+            collect_mutable_lexicals(value, names);
+        }
+        HirExprKind::ConditionCase { body, handlers, .. } => {
+            collect_mutable_lexicals(body, names);
+            for handler in handlers {
+                collect_mutable_lexicals(&handler.body, names);
+            }
+        }
+        HirExprKind::UnwindProtect { body, cleanup } => {
+            collect_mutable_lexicals(body, names);
+            collect_mutable_lexicals(cleanup, names);
+        }
+        HirExprKind::Funcall { callee, args }
+        | HirExprKind::Apply { callee, args }
+        | HirExprKind::CallValue { callee, args } => {
+            collect_mutable_lexicals(callee, names);
+            for arg in args {
+                collect_mutable_lexicals(arg, names);
+            }
+        }
+        HirExprKind::CallNamed { args, .. } => {
+            for arg in args {
+                collect_mutable_lexicals(arg, names);
+            }
+        }
+    }
+}
+
 fn collect_free_lexicals(expr: &HirExpr, bound: &IndexSet<String>, free: &mut IndexSet<String>) {
     match &expr.kind {
         HirExprKind::Const(_)
@@ -478,6 +577,7 @@ fn collect_free_lexicals(expr: &HirExpr, bound: &IndexSet<String>, free: &mut In
 struct SsaBuilder {
     function: SsaFunction,
     current_block: BlockId,
+    mutable_lexicals: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -497,6 +597,7 @@ impl SsaBuilder {
                 entry: Some(entry),
             },
             current_block: entry,
+            mutable_lexicals: IndexSet::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -601,12 +702,12 @@ impl SsaBuilder {
                 declarations,
                 body,
             } => {
-                let capture_names = lambda_capture_names(params, body);
-                let captures = capture_names
+                let capture_specs = lambda_capture_specs(params, body, &self.mutable_lexicals);
+                let captures = capture_specs
                     .iter()
-                    .map(|name| {
+                    .map(|capture| {
                         self.emit_value(
-                            SsaInstKind::LexicalGet(name.clone()),
+                            SsaInstKind::LexicalGet(capture.name.clone()),
                             Effects::single(Effect::ReadLexical),
                         )
                     })
@@ -615,7 +716,7 @@ impl SsaBuilder {
                     SsaInstKind::Lambda {
                         template: crate::ssa::SsaLambdaTemplate {
                             params: params.clone(),
-                            captures: capture_names,
+                            captures: capture_specs,
                             declarations: declarations.clone(),
                             body: body.clone(),
                         },

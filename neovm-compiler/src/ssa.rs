@@ -109,9 +109,21 @@ pub enum SsaInstKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SsaLambdaTemplate {
     pub params: Vec<String>,
-    pub captures: Vec<String>,
+    pub captures: Vec<SsaLambdaCapture>,
     pub declarations: Vec<HirDeclaration>,
     pub body: Box<HirExpr>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SsaLambdaCapture {
+    pub name: String,
+    pub mode: SsaCaptureMode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SsaCaptureMode {
+    Value,
+    Cell,
 }
 
 #[derive(Clone, Debug, PartialEq)]

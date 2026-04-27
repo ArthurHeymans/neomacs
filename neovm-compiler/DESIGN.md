@@ -430,16 +430,18 @@ metadata tables. Float constants pass the exact IEEE-754 bit pattern as an
 opaque payload for the runtime to materialize.
 
 `lambda_id` is a compiler-owned key into a lambda template table containing the
-lambda parameters, capture names, declarations, and HIR body. The arity suffix
-is the number of captured lexical payloads passed after `lambda_id`. This
-records semantic closure shape and makes capture roots visible to safepoint
-metadata without pretending the compiler can already register callable machine
-code.
+lambda parameters, capture names, capture modes, declarations, and HIR body.
+Capture mode is `value` for immutable payloads and `cell` for mutable lexical
+bindings that must preserve GNU Emacs closure mutation semantics. The arity
+suffix is the number of captured lexical payloads passed after `lambda_id`.
+This records semantic closure shape and makes capture roots visible to
+safepoint metadata without pretending the compiler can already register
+callable machine code.
 
-Captured mutable lexical variables still need closure-cell lowering before JIT
-execution can exactly match GNU Emacs for every closure case. The current ABI
-is intentionally shaped so those payloads can become cell pointers without
-changing safepoint/root visibility.
+Captured mutable lexical variables still need closure-cell allocation/lowering
+before JIT execution can exactly match GNU Emacs for every closure case. The
+current ABI is intentionally shaped so `cell` payloads can become binding-cell
+pointers without changing safepoint/root visibility.
 
 Dynamic binding uses fixed imports:
 

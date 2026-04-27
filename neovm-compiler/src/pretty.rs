@@ -168,7 +168,7 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::Lambda { template, .. } => {
             let _ = write!(out, "lambda ({})", template.params.join(" "));
             if !template.captures.is_empty() {
-                let _ = write!(out, " captures ({})", template.captures.join(" "));
+                let _ = write!(out, " captures ({})", dump_lambda_captures(template));
             }
             let _ = write!(out, " <hir>");
         }
@@ -286,12 +286,12 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 template.params.join(" ")
             );
             if !captures.is_empty() {
-                let names = captures
+                let regs = captures
                     .iter()
                     .map(|capture| reg_name(function, *capture))
                     .collect::<Vec<_>>()
                     .join(" ");
-                let _ = write!(out, " captures ({names})");
+                let _ = write!(out, " captures ({regs})");
             }
             let _ = write!(out, " <hir>");
         }
@@ -409,6 +409,15 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
             let _ = write!(out, "safepoint {id:?} roots=({roots})");
         }
     }
+}
+
+fn dump_lambda_captures(template: &crate::ssa::SsaLambdaTemplate) -> String {
+    template
+        .captures
+        .iter()
+        .map(|capture| format!("{}:{:?}", capture.name, capture.mode).to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn dump_terminator(terminator: &SsaTerminator, function: &SsaFunction, out: &mut String) {
