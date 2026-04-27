@@ -120,7 +120,10 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::SymbolSet { value, .. }
         | SsaInstKind::BindLexical { value, .. }
         | SsaInstKind::BindDynamic { value, .. }
+        | SsaInstKind::MakeLexicalCell { initial: value }
+        | SsaInstKind::LexicalCellGet { cell: value }
         | SsaInstKind::CatchBegin { tag: value } => vec![*value],
+        SsaInstKind::LexicalCellSet { cell, value } => vec![*cell, *value],
         SsaInstKind::Throw { tag, value } => vec![*tag, *value],
         SsaInstKind::CallNamed { args, .. } => args.clone(),
         SsaInstKind::Funcall { callee, args } | SsaInstKind::Apply { callee, args } => {

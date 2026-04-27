@@ -93,6 +93,19 @@ impl RegVerifier<'_> {
                 self.check_reg(*dst);
                 self.check_reg(*src);
             }
+            RegInstKind::MakeLexicalCell { dst, initial } => {
+                self.check_reg(*dst);
+                self.check_reg(*initial);
+            }
+            RegInstKind::LexicalCellGet { dst, cell } => {
+                self.check_reg(*dst);
+                self.check_reg(*cell);
+            }
+            RegInstKind::LexicalCellSet { dst, cell, src } => {
+                self.check_reg(*dst);
+                self.check_reg(*cell);
+                self.check_reg(*src);
+            }
             RegInstKind::LexicalSet { dst, src, .. } | RegInstKind::SymbolSet { dst, src, .. } => {
                 self.check_reg(*dst);
                 self.check_reg(*src);

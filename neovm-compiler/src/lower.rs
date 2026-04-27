@@ -27,11 +27,13 @@ pub fn hir_to_ssa(module: &HirModule) -> LowerOutput<SsaFunction> {
         match item {
             HirItem::Expr(expr) => {
                 builder.mutable_lexicals = mutable_lexical_names(expr);
+                builder.cell_lexicals = cell_lexical_names(expr);
                 let value = builder.lower_expr(expr);
                 builder.set_terminator(SsaTerminator::Return(value));
             }
             HirItem::Defun(defun) => {
                 builder.mutable_lexicals = mutable_lexical_names(&defun.body);
+                builder.cell_lexicals = cell_lexical_names(&defun.body);
                 if builder.function.name.is_none() {
                     builder.function.name = Some(defun.name.clone());
                 }
@@ -41,6 +43,7 @@ pub fn hir_to_ssa(module: &HirModule) -> LowerOutput<SsaFunction> {
                 for param in &defun.params {
                     let value =
                         builder.append_block_param(builder.current_block, Some(param.clone()));
+                    let value = builder.maybe_box_lexical(param, value);
                     builder.emit_no_result(SsaInstKind::BindLexical {
                         name: param.clone(),
                         value,
@@ -175,6 +178,19 @@ impl<'a> RegLowerer<'a> {
                 name: name.clone(),
                 src: self.value_reg(*value),
             },
+            SsaInstKind::MakeLexicalCell { initial } => RegInstKind::MakeLexicalCell {
+                dst: self.result_reg(inst),
+                initial: self.value_reg(*initial),
+            },
+            SsaInstKind::LexicalCellGet { cell } => RegInstKind::LexicalCellGet {
+                dst: self.result_reg(inst),
+                cell: self.value_reg(*cell),
+            },
+            SsaInstKind::LexicalCellSet { cell, value } => RegInstKind::LexicalCellSet {
+                dst: self.result_reg(inst),
+                cell: self.value_reg(*cell),
+                src: self.value_reg(*value),
+            },
             SsaInstKind::SymbolGet(name) => RegInstKind::SymbolGet {
                 dst: self.result_reg(inst),
                 name: name.clone(),
@@ -299,6 +315,9 @@ impl<'a> RegLowerer<'a> {
                 | SsaInstKind::Quote(_)
                 | SsaInstKind::FunctionQuote(_)
                 | SsaInstKind::Lambda { .. }
+                | SsaInstKind::MakeLexicalCell { .. }
+                | SsaInstKind::LexicalCellGet { .. }
+                | SsaInstKind::LexicalCellSet { .. }
                 | SsaInstKind::SymbolGet(_)
                 | SsaInstKind::SymbolSet { .. }
                 | SsaInstKind::BindDynamic { .. }
@@ -396,6 +415,85 @@ fn mutable_lexical_names(expr: &HirExpr) -> IndexSet<String> {
     let mut names = IndexSet::new();
     collect_mutable_lexicals(expr, &mut names);
     names
+}
+
+fn cell_lexical_names(expr: &HirExpr) -> IndexSet<String> {
+    let mutable = mutable_lexical_names(expr);
+    let mut captured = IndexSet::new();
+    collect_lambda_captures(expr, &mut captured);
+    mutable
+        .into_iter()
+        .filter(|name| captured.contains(name))
+        .collect()
+}
+
+fn collect_lambda_captures(expr: &HirExpr, names: &mut IndexSet<String>) {
+    match &expr.kind {
+        HirExprKind::Const(_)
+        | HirExprKind::Quote(_)
+        | HirExprKind::FunctionQuote(_)
+        | HirExprKind::LexicalGet(_)
+        | HirExprKind::SymbolGet(_)
+        | HirExprKind::Declare(_) => {}
+        HirExprKind::LexicalSet { value, .. } | HirExprKind::SymbolSet { value, .. } => {
+            collect_lambda_captures(value, names);
+        }
+        HirExprKind::If {
+            test,
+            then_expr,
+            else_expr,
+        } => {
+            collect_lambda_captures(test, names);
+            collect_lambda_captures(then_expr, names);
+            collect_lambda_captures(else_expr, names);
+        }
+        HirExprKind::Progn(exprs) => {
+            for expr in exprs {
+                collect_lambda_captures(expr, names);
+            }
+        }
+        HirExprKind::Let { bindings, body, .. } => {
+            for binding in bindings {
+                collect_lambda_captures(&binding.init, names);
+            }
+            collect_lambda_captures(body, names);
+        }
+        HirExprKind::Lambda { params, body, .. } => {
+            names.extend(lambda_capture_names(params, body));
+            collect_lambda_captures(body, names);
+        }
+        HirExprKind::Catch { tag, body } => {
+            collect_lambda_captures(tag, names);
+            collect_lambda_captures(body, names);
+        }
+        HirExprKind::Throw { tag, value } => {
+            collect_lambda_captures(tag, names);
+            collect_lambda_captures(value, names);
+        }
+        HirExprKind::ConditionCase { body, handlers, .. } => {
+            collect_lambda_captures(body, names);
+            for handler in handlers {
+                collect_lambda_captures(&handler.body, names);
+            }
+        }
+        HirExprKind::UnwindProtect { body, cleanup } => {
+            collect_lambda_captures(body, names);
+            collect_lambda_captures(cleanup, names);
+        }
+        HirExprKind::Funcall { callee, args }
+        | HirExprKind::Apply { callee, args }
+        | HirExprKind::CallValue { callee, args } => {
+            collect_lambda_captures(callee, names);
+            for arg in args {
+                collect_lambda_captures(arg, names);
+            }
+        }
+        HirExprKind::CallNamed { args, .. } => {
+            for arg in args {
+                collect_lambda_captures(arg, names);
+            }
+        }
+    }
 }
 
 fn collect_mutable_lexicals(expr: &HirExpr, names: &mut IndexSet<String>) {
@@ -578,6 +676,7 @@ struct SsaBuilder {
     function: SsaFunction,
     current_block: BlockId,
     mutable_lexicals: IndexSet<String>,
+    cell_lexicals: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -598,6 +697,7 @@ impl SsaBuilder {
             },
             current_block: entry,
             mutable_lexicals: IndexSet::new(),
+            cell_lexicals: IndexSet::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -623,23 +723,14 @@ impl SsaBuilder {
                 SsaInstKind::FunctionQuote((**form).clone()),
                 Effects::pure(),
             )),
-            HirExprKind::LexicalGet(name) => Some(self.emit_value(
-                SsaInstKind::LexicalGet(name.clone()),
-                Effects::single(Effect::ReadLexical),
-            )),
+            HirExprKind::LexicalGet(name) => Some(self.emit_lexical_get(name)),
             HirExprKind::SymbolGet(name) => Some(self.emit_value(
                 SsaInstKind::SymbolGet(name.clone()),
                 Effects::single(Effect::ReadSymbol),
             )),
             HirExprKind::LexicalSet { name, value } => {
                 let value = self.lower_expr(value)?;
-                Some(self.emit_value(
-                    SsaInstKind::LexicalSet {
-                        name: name.clone(),
-                        value,
-                    },
-                    Effects::single(Effect::ReadLexical),
-                ))
+                Some(self.emit_lexical_set(name, value))
             }
             HirExprKind::SymbolSet { name, value } => {
                 let value = self.lower_expr(value)?;
@@ -705,12 +796,7 @@ impl SsaBuilder {
                 let capture_specs = lambda_capture_specs(params, body, &self.mutable_lexicals);
                 let captures = capture_specs
                     .iter()
-                    .map(|capture| {
-                        self.emit_value(
-                            SsaInstKind::LexicalGet(capture.name.clone()),
-                            Effects::single(Effect::ReadLexical),
-                        )
-                    })
+                    .map(|capture| self.emit_lexical_capture(&capture.name))
                     .collect::<Vec<_>>();
                 Some(self.emit_value(
                     SsaInstKind::Lambda {
@@ -867,10 +953,61 @@ impl SsaBuilder {
         }
     }
 
+    fn emit_lexical_get(&mut self, name: &str) -> ValueId {
+        let binding = self.emit_lexical_capture(name);
+        if self.cell_lexicals.contains(name) {
+            self.emit_value(
+                SsaInstKind::LexicalCellGet { cell: binding },
+                Effects::single(Effect::ReadLexical),
+            )
+        } else {
+            binding
+        }
+    }
+
+    fn emit_lexical_capture(&mut self, name: &str) -> ValueId {
+        self.emit_value(
+            SsaInstKind::LexicalGet(name.to_string()),
+            Effects::single(Effect::ReadLexical),
+        )
+    }
+
+    fn emit_lexical_set(&mut self, name: &str, value: ValueId) -> ValueId {
+        if self.cell_lexicals.contains(name) {
+            let cell = self.emit_lexical_capture(name);
+            self.emit_value(
+                SsaInstKind::LexicalCellSet { cell, value },
+                Effects::single(Effect::WriteLexical),
+            )
+        } else {
+            self.emit_value(
+                SsaInstKind::LexicalSet {
+                    name: name.to_string(),
+                    value,
+                },
+                Effects::single(Effect::WriteLexical),
+            )
+        }
+    }
+
     fn emit_binding(&mut self, mode: BindingMode, name: String, value: ValueId) {
         match mode {
-            BindingMode::Lexical => self.emit_no_result(SsaInstKind::BindLexical { name, value }),
+            BindingMode::Lexical => {
+                let value = self.maybe_box_lexical(&name, value);
+                self.emit_no_result(SsaInstKind::BindLexical { name, value });
+            }
             BindingMode::Dynamic => self.emit_no_result(SsaInstKind::BindDynamic { name, value }),
+        }
+    }
+
+    fn maybe_box_lexical(&mut self, name: &str, value: ValueId) -> ValueId {
+        if self.cell_lexicals.contains(name) {
+            self.emit_value(
+                SsaInstKind::MakeLexicalCell { initial: value },
+                Effects::new([Effect::Allocate, Effect::MayGc]),
+            )
+        } else {
+            value
         }
     }
 

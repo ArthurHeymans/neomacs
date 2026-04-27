@@ -72,6 +72,9 @@ pub enum ClifRuntimeCallKind {
     Quote { index: usize },
     FunctionQuote { index: usize },
     Lambda { index: usize, capture_count: usize },
+    MakeLexicalCell,
+    LexicalCellGet,
+    LexicalCellSet,
 }
 
 pub struct ClifRuntimeAbi {
@@ -92,6 +95,9 @@ pub struct ClifRuntimeAbi {
     quote: Option<FuncId>,
     function_quote: Option<FuncId>,
     lambda_by_capture_count: HashMap<usize, FuncId>,
+    make_lexical_cell: Option<FuncId>,
+    lexical_cell_get: Option<FuncId>,
+    lexical_cell_set: Option<FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -114,6 +120,9 @@ impl Default for ClifRuntimeAbi {
             quote: None,
             function_quote: None,
             lambda_by_capture_count: HashMap::new(),
+            make_lexical_cell: None,
+            lexical_cell_get: None,
+            lexical_cell_set: None,
         }
     }
 }
@@ -376,6 +385,52 @@ impl ClifRuntimeAbi {
         self.lambda_by_capture_count.insert(capture_count, id);
         Ok(RuntimeFuncImport { id, signature })
     }
+
+    fn make_lexical_cell(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = unary_runtime_signature(call_conv);
+        if let Some(id) = self.make_lexical_cell {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function(
+                "__neomacs_rt_make_lexical_cell",
+                Linkage::Import,
+                &signature,
+            )
+            .map_err(|error| error.to_string())?;
+        self.make_lexical_cell = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn lexical_cell_get(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = unary_runtime_signature(call_conv);
+        if let Some(id) = self.lexical_cell_get {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_lexical_cell_get", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.lexical_cell_get = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn lexical_cell_set(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = binary_runtime_signature(call_conv);
+        if let Some(id) = self.lexical_cell_set {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_lexical_cell_set", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.lexical_cell_set = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
 }
 
 struct RuntimeFuncImport {
@@ -441,6 +496,23 @@ fn indexed_runtime_signature(call_conv: CallConv) -> Signature {
     let mut signature = Signature::new(call_conv);
     signature.params.push(AbiParam::new(types::I64)); // vmctx
     signature.params.push(AbiParam::new(types::I64)); // compiler-owned table index/bits
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn unary_runtime_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // value/cell
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn binary_runtime_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // cell
+    signature.params.push(AbiParam::new(types::I64)); // value
     signature.returns.push(AbiParam::new(types::I64));
     signature
 }
@@ -585,6 +657,9 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
                     | SsaInstKind::LexicalSet { .. }
+                    | SsaInstKind::MakeLexicalCell { .. }
+                    | SsaInstKind::LexicalCellGet { .. }
+                    | SsaInstKind::LexicalCellSet { .. }
                     | SsaInstKind::DeclareSpecial(_)
                     | SsaInstKind::SymbolGet(_)
                     | SsaInstKind::SymbolSet { .. }
@@ -790,6 +865,67 @@ impl ClifBlockLowerer<'_> {
                 };
                 self.builder.def_var(var, value);
                 self.value_map.insert(result, value);
+            }
+            SsaInstKind::MakeLexicalCell { initial } => {
+                let Some(result) = inst.result else {
+                    self.error("make lexical cell instruction has no result");
+                    return;
+                };
+                let Some(initial) = self.value(*initial) else {
+                    return;
+                };
+                let Some(func_ref) = self.make_lexical_cell_ref() else {
+                    return;
+                };
+                let Some(value) = self.emit_runtime_call(
+                    func_ref,
+                    &[initial],
+                    ClifRuntimeCallKind::MakeLexicalCell,
+                ) else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
+            SsaInstKind::LexicalCellGet { cell } => {
+                let Some(result) = inst.result else {
+                    self.error("lexical cell get instruction has no result");
+                    return;
+                };
+                let Some(cell) = self.value(*cell) else {
+                    return;
+                };
+                let Some(func_ref) = self.lexical_cell_get_ref() else {
+                    return;
+                };
+                let Some(value) =
+                    self.emit_runtime_call(func_ref, &[cell], ClifRuntimeCallKind::LexicalCellGet)
+                else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
+            SsaInstKind::LexicalCellSet { cell, value } => {
+                let Some(result) = inst.result else {
+                    self.error("lexical cell set instruction has no result");
+                    return;
+                };
+                let Some(cell) = self.value(*cell) else {
+                    return;
+                };
+                let Some(value) = self.value(*value) else {
+                    return;
+                };
+                let Some(func_ref) = self.lexical_cell_set_ref() else {
+                    return;
+                };
+                let Some(result_value) = self.emit_runtime_call(
+                    func_ref,
+                    &[cell, value],
+                    ClifRuntimeCallKind::LexicalCellSet,
+                ) else {
+                    return;
+                };
+                self.value_map.insert(result, result_value);
             }
             SsaInstKind::DeclareSpecial(_) => {}
             SsaInstKind::SymbolGet(name) => {
@@ -1166,6 +1302,45 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_ref(import)
     }
 
+    fn make_lexical_cell_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.make_lexical_cell(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift lexical cell allocation runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn lexical_cell_get_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.lexical_cell_get(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift lexical cell get runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn lexical_cell_set_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.lexical_cell_set(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift lexical cell set runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
         if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
             return Some(func_ref);
@@ -1187,6 +1362,28 @@ impl ClifBlockLowerer<'_> {
         });
         self.runtime_func_refs.insert(import.id, func_ref);
         Some(func_ref)
+    }
+
+    fn emit_runtime_call(
+        &mut self,
+        func_ref: FuncRef,
+        args: &[ir::Value],
+        kind: ClifRuntimeCallKind,
+    ) -> Option<ir::Value> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let mut call_args = Vec::with_capacity(args.len() + 1);
+        call_args.push(vmctx);
+        call_args.extend_from_slice(args);
+        let call = self.builder.ins().call(func_ref, &call_args);
+        self.record_safepoint(call, kind);
+        let Some(result) = self.builder.inst_results(call).first().copied() else {
+            self.error("runtime call produced no result");
+            return None;
+        };
+        Some(result)
     }
 
     fn emit_symbol_access_runtime_call(
@@ -1709,6 +1906,11 @@ mod tests {
 
         let clif = ssa_to_clif(&ssa.value);
         assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_make_lexical_cell")
+        );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
         assert_eq!(
             capture_names(&clif.runtime.lambda_templates()[0].captures),
@@ -1718,6 +1920,31 @@ mod tests {
             clif.runtime.lambda_templates()[0].captures[0].mode,
             SsaCaptureMode::Cell
         );
+    }
+
+    #[test]
+    fn lowers_captured_mutation_to_lexical_cell_runtime_calls() {
+        let artifact = compile_source(
+            "captured-mutation.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun bump (x) (let ((f (lambda () x))) (setq x (+ x 1)) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let imported_names = clif.runtime.imported_function_names();
+        assert!(imported_names.contains(&"__neomacs_rt_make_lexical_cell"));
+        assert!(imported_names.contains(&"__neomacs_rt_lexical_cell_get"));
+        assert!(imported_names.contains(&"__neomacs_rt_lexical_cell_set"));
+        assert!(imported_names.contains(&"__neomacs_rt_lambda_1"));
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].captures[0].mode,
+            SsaCaptureMode::Cell
+        );
+        assert!(clif.safepoints.entries.len() >= 4);
     }
 
     #[test]

@@ -68,6 +68,19 @@ pub enum RegInstKind {
         name: String,
         src: RegId,
     },
+    MakeLexicalCell {
+        dst: RegId,
+        initial: RegId,
+    },
+    LexicalCellGet {
+        dst: RegId,
+        cell: RegId,
+    },
+    LexicalCellSet {
+        dst: RegId,
+        cell: RegId,
+        src: RegId,
+    },
     SymbolGet {
         dst: RegId,
         name: String,

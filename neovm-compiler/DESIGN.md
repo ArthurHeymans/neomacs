@@ -380,6 +380,9 @@ Initial Cranelift lowering is intentionally conservative:
 - Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
   evaluates all initializers before installing bindings; `let*` installs each
   binding before the next initializer.
+- Lower captured mutable lexical bindings through runtime lexical-cell
+  allocation and get/set calls. Lambda materialization receives the cell
+  payload so mutation remains visible through closures.
 - Reject nonlocal exits until the runtime ABI and precise safepoint/stack-map
   contract exist.
 - Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
@@ -419,6 +422,9 @@ __neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64
 __neomacs_rt_quote(vmctx: i64, quote_id: i64) -> i64
 __neomacs_rt_function_quote(vmctx: i64, quote_id: i64) -> i64
 __neomacs_rt_lambda_N(vmctx: i64, lambda_id: i64, capture0: i64, ...) -> i64
+__neomacs_rt_make_lexical_cell(vmctx: i64, initial: i64) -> i64
+__neomacs_rt_lexical_cell_get(vmctx: i64, cell: i64) -> i64
+__neomacs_rt_lexical_cell_set(vmctx: i64, cell: i64, value: i64) -> i64
 ```
 
 `symbol_id` is a compiler-owned interned symbol key. This is not the final
@@ -438,9 +444,9 @@ This records semantic closure shape and makes capture roots visible to
 safepoint metadata without pretending the compiler can already register
 callable machine code.
 
-Captured mutable lexical variables still need closure-cell allocation/lowering
-before JIT execution can exactly match GNU Emacs for every closure case. The
-current ABI is intentionally shaped so `cell` payloads can become binding-cell
+Captured mutable lexical variables now lower through compiler-visible cell
+operations. JIT execution still needs runtime implementations for those imports,
+but the compiler-side ABI is already shaped so `cell` payloads are binding-cell
 pointers without changing safepoint/root visibility.
 
 Dynamic binding uses fixed imports:

@@ -2,6 +2,7 @@
 pub enum Effect {
     Pure,
     ReadLexical,
+    WriteLexical,
     ReadSymbol,
     WriteSymbol,
     BindDynamic,

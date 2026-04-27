@@ -139,6 +139,9 @@ impl Interpreter<'_> {
             RegInstKind::Quote { .. }
             | RegInstKind::FunctionQuote { .. }
             | RegInstKind::Lambda { .. }
+            | RegInstKind::MakeLexicalCell { .. }
+            | RegInstKind::LexicalCellGet { .. }
+            | RegInstKind::LexicalCellSet { .. }
             | RegInstKind::SymbolGet { .. }
             | RegInstKind::SymbolSet { .. }
             | RegInstKind::BindDynamic { .. }

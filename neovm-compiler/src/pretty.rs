@@ -178,6 +178,20 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::LexicalSet { name, value } => {
             let _ = write!(out, "lexical-set {name}, {}", value_name(function, *value));
         }
+        SsaInstKind::MakeLexicalCell { initial } => {
+            let _ = write!(out, "make-lexical-cell {}", value_name(function, *initial));
+        }
+        SsaInstKind::LexicalCellGet { cell } => {
+            let _ = write!(out, "lexical-cell-get {}", value_name(function, *cell));
+        }
+        SsaInstKind::LexicalCellSet { cell, value } => {
+            let _ = write!(
+                out,
+                "lexical-cell-set {}, {}",
+                value_name(function, *cell),
+                value_name(function, *value)
+            );
+        }
         SsaInstKind::SymbolGet(name) => {
             let _ = write!(out, "symbol-get {name}");
         }
@@ -311,6 +325,31 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 out,
                 "{} = lexical-set {name}, {}",
                 reg_name(function, *dst),
+                reg_name(function, *src)
+            );
+        }
+        RegInstKind::MakeLexicalCell { dst, initial } => {
+            let _ = write!(
+                out,
+                "{} = make-lexical-cell {}",
+                reg_name(function, *dst),
+                reg_name(function, *initial)
+            );
+        }
+        RegInstKind::LexicalCellGet { dst, cell } => {
+            let _ = write!(
+                out,
+                "{} = lexical-cell-get {}",
+                reg_name(function, *dst),
+                reg_name(function, *cell)
+            );
+        }
+        RegInstKind::LexicalCellSet { dst, cell, src } => {
+            let _ = write!(
+                out,
+                "{} = lexical-cell-set {}, {}",
+                reg_name(function, *dst),
+                reg_name(function, *cell),
                 reg_name(function, *src)
             );
         }

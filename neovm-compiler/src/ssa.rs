@@ -57,6 +57,16 @@ pub enum SsaInstKind {
         name: String,
         value: ValueId,
     },
+    MakeLexicalCell {
+        initial: ValueId,
+    },
+    LexicalCellGet {
+        cell: ValueId,
+    },
+    LexicalCellSet {
+        cell: ValueId,
+        value: ValueId,
+    },
     SymbolGet(String),
     SymbolSet {
         name: String,
