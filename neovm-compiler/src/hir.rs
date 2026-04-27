@@ -301,6 +301,7 @@ impl Lowerer<'_> {
             Some("function") => self.lower_function_form(form, items),
             Some("if") => self.lower_if(form, items),
             Some("progn") => self.lower_progn(form, &items[1..]),
+            Some("prog1") => self.lower_prog1(form, &items[1..]),
             Some("let") => self.lower_let(form, &items[1..], false),
             Some("let*") => self.lower_let(form, &items[1..], true),
             Some("lambda") => self.lower_lambda(form, items),
@@ -381,6 +382,41 @@ impl Lowerer<'_> {
     fn lower_progn(&mut self, form: &SurfaceForm, body: &[SurfaceForm]) -> Option<HirExpr> {
         Some(HirExpr {
             kind: HirExprKind::Progn(self.lower_exprs(body)?),
+            span: form.span,
+        })
+    }
+
+    fn lower_prog1(&mut self, form: &SurfaceForm, body: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((first, rest)) = body.split_first() else {
+            self.error(form.span, "prog1 requires at least one argument");
+            return None;
+        };
+        let first = self.lower_expr(first)?;
+        if rest.is_empty() {
+            return Some(first);
+        }
+        let temp = format!("\0prog1.{}", form.span.start);
+        let mut exprs = self.lower_exprs(rest)?;
+        exprs.push(HirExpr {
+            kind: HirExprKind::LexicalGet(temp.clone()),
+            span: form.span,
+        });
+        Some(HirExpr {
+            kind: HirExprKind::Let {
+                mode: BindingMode::Lexical,
+                sequential: true,
+                declarations: Vec::new(),
+                bindings: vec![HirBinding {
+                    name: temp,
+                    mode: BindingMode::Lexical,
+                    init: first,
+                    span: form.span,
+                }],
+                body: Box::new(HirExpr {
+                    kind: HirExprKind::Progn(exprs),
+                    span: form.span,
+                }),
+            },
             span: form.span,
         })
     }
@@ -961,6 +997,15 @@ mod tests {
         assert!(matches!(exprs[0].kind, HirExprKind::Catch { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::ConditionCase { .. }));
         assert!(matches!(exprs[2].kind, HirExprKind::UnwindProtect { .. }));
+    }
+
+    #[test]
+    fn lowers_prog1_to_internal_lexical_temp() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(prog1 1 (message \"side\"))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        assert!(matches!(expr.kind, HirExprKind::Let { .. }));
     }
 
     #[test]
