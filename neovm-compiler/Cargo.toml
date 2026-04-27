@@ -1,0 +1,20 @@
+[package]
+name = "neovm-compiler"
+version = "0.0.1"
+edition = "2024"
+authors = ["Eval Exec <execvy@gmail.com>"]
+license = "GPL-3.0-or-later"
+description = "Standalone long-term Elisp compiler pipeline for NeoVM"
+
+[workspace]
+
+[dependencies]
+ariadne = "0.6.0"
+cranelift-entity = "0.131.0"
+indexmap = "2.14.0"
+logos = "0.16.1"
+num_enum = "0.7.6"
+rowan = "0.16.1"
+
+[dev-dependencies]
+insta = "1.47.2"
