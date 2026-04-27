@@ -2292,6 +2292,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_top_level_defmacro_expansions() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(defmacro object-inc (var) `(setq ,var (1+ ,var)))\n(defmacro object-sum (&rest body) `(progn ,@body))\n(let ((x 1)) (object-inc x) (object-sum (setq x (+ x 2)) x))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
     fn executes_common_list_and_alist_utilities() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(let ((xs (list (cons 'a 1) (cons \"b\" 2)))) (+ (if (eq (car-safe 1) nil) 1 0) (if (eq (cdr-safe 1) nil) 2 0) (if (member \"b\" (list \"a\" \"b\")) 4 0) (cdr (assq 'a xs)) (cdr (assoc \"b\" xs)) (length (copy-sequence [1 2 3]))))",
