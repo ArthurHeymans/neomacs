@@ -672,6 +672,14 @@ impl Interpreter<'_, '_, '_> {
             "symbol-function" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.symbol_function(args[0])),
+            "fset" => self.exact_arity(name, args, 2).and_then(|_| {
+                let result = self.runtime.set_symbol_function(args[0], args[1]);
+                self.runtime_value(result)
+            }),
+            "defalias" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
+                let result = self.runtime.set_symbol_function(args[0], args[1]);
+                self.runtime_value(result).map(|_| args[0])
+            }),
             "intern" => self.exact_arity(name, args, 1).and_then(|_| {
                 let name = match self.runtime.string_contents(args[0]) {
                     Ok(name) => name.to_string(),
@@ -1171,6 +1179,23 @@ impl Interpreter<'_, '_, '_> {
         None
     }
 
+    fn min_max_arity(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        min: usize,
+        max: usize,
+    ) -> Option<()> {
+        if (min..=max).contains(&args.len()) {
+            return Some(());
+        }
+        self.error(format!(
+            "primitive `{name}` requires {min} to {max} arguments, got {}",
+            args.len()
+        ));
+        None
+    }
+
     fn runtime_error(&mut self, error: crate::RuntimeError) {
         self.error(error.to_string());
     }
@@ -1443,6 +1468,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "boundp"
             | "fboundp"
             | "symbol-function"
+            | "fset"
+            | "defalias"
             | "intern"
             | "symbol-name"
             | "not"
@@ -1559,6 +1586,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(if (fboundp 'car) (funcall (symbol-function 'car) (cons 4 5)) 0)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn executes_fset_and_defalias() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (fset 'object-my-car 'car) (defalias 'object-my-cdr 'cdr) (+ (funcall 'object-my-car (cons 4 5)) (funcall (symbol-function 'object-my-cdr) (cons 6 7))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(11)));
     }
 
     #[test]
