@@ -31,7 +31,9 @@ pub mod verify;
 
 use diagnostic::Diagnostic;
 use hir::HirModule;
+use regir::RegModule;
 use source::{SourceFile, SourceId};
+use ssa::SsaModule;
 use surface::SurfaceForm;
 use syntax::SyntaxTree;
 
@@ -42,6 +44,8 @@ pub struct CompileArtifact {
     pub syntax: SyntaxTree,
     pub surface: Vec<SurfaceForm>,
     pub hir: Option<HirModule>,
+    pub ssa: Option<SsaModule>,
+    pub regir: Option<RegModule>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -66,20 +70,34 @@ pub fn compile_source(name: impl Into<String>, text: impl Into<String>) -> Compi
     diagnostics.extend(reader_output.diagnostics);
     diagnostics.extend(expand_output.diagnostics);
 
-    let hir = if diagnostics.iter().any(Diagnostic::is_error) {
-        None
-    } else {
+    let mut hir = None;
+    let mut ssa = None;
+    let mut regir = None;
+
+    if !diagnostics.iter().any(Diagnostic::is_error) {
         let hir_output =
             hir::lower_expanded_forms(&source, expand_output.forms.clone(), source.lexical_binding);
         diagnostics.extend(hir_output.diagnostics);
-        Some(hir_output.module)
-    };
+        if !diagnostics.iter().any(Diagnostic::is_error) {
+            let ssa_output = lower::hir_to_ssa_module(&hir_output.module);
+            diagnostics.extend(ssa_output.diagnostics);
+            if !diagnostics.iter().any(Diagnostic::is_error) {
+                let regir_output = lower::ssa_module_to_regir(&ssa_output.value);
+                diagnostics.extend(regir_output.diagnostics);
+                regir = Some(regir_output.value);
+            }
+            ssa = Some(ssa_output.value);
+        }
+        hir = Some(hir_output.module);
+    }
 
     CompileArtifact {
         source,
         syntax: reader_output.syntax,
         surface: expand_output.forms,
         hir,
+        ssa,
+        regir,
         diagnostics,
     }
 }
@@ -100,6 +118,8 @@ mod tests {
         let hir = artifact.hir.expect("HIR should be present");
         assert!(hir.lexical_binding);
         assert_eq!(hir.items.len(), 1);
+        assert_eq!(artifact.ssa.expect("SSA module").functions.len(), 1);
+        assert_eq!(artifact.regir.expect("RegIR module").functions.len(), 1);
     }
 
     #[test]
@@ -108,5 +128,7 @@ mod tests {
 
         assert!(artifact.has_errors());
         assert!(artifact.hir.is_none());
+        assert!(artifact.ssa.is_none());
+        assert!(artifact.regir.is_none());
     }
 }

@@ -622,6 +622,9 @@ CompileArtifact {
 }
 ```
 
+The current public artifact carries HIR, SSA module, and Register IR module
+when earlier stages are error-free.
+
 Suggested dump modes:
 
 ```text
