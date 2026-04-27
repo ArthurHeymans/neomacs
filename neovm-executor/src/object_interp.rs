@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::ids::{FunctionId, RegId};
 use neovm_compiler::lower::{lambda_template_to_ssa, ssa_to_regir};
-use neovm_compiler::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
+use neovm_compiler::regir::{RegFunction, RegInst, RegInstKind, RegModule, RegTerminator};
 use neovm_compiler::ssa::SsaConst;
 use neovm_compiler::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
@@ -165,7 +165,18 @@ impl Interpreter<'_, '_, '_> {
                 ));
                 return self.finish(None);
             };
-            for inst in &body.instructions {
+            let mut inst_index = 0;
+            while inst_index < body.instructions.len() {
+                let inst = &body.instructions[inst_index];
+                if matches!(inst.kind, RegInstKind::ConditionCaseHandler { .. }) {
+                    let Some(end_index) = find_condition_case_end(&body.instructions, inst_index)
+                    else {
+                        self.error("object interpreter reached condition-case handler without end");
+                        return self.finish(None);
+                    };
+                    inst_index = end_index + 1;
+                    continue;
+                }
                 if !self.execute_inst(&inst.kind) {
                     if let Some(thrown) = self.pending_throw.take() {
                         return self.finish_throw(thrown);
@@ -175,6 +186,7 @@ impl Interpreter<'_, '_, '_> {
                     }
                     return self.finish(None);
                 }
+                inst_index += 1;
             }
             match &body.terminator {
                 RegTerminator::Return(value) => {
@@ -381,8 +393,8 @@ impl Interpreter<'_, '_, '_> {
             }
             RegInstKind::ConditionCaseBegin { .. }
             | RegInstKind::ConditionCaseHandler { .. }
-            | RegInstKind::ConditionCaseEnd
-            | RegInstKind::UnwindProtectBegin
+            | RegInstKind::ConditionCaseEnd => {}
+            RegInstKind::UnwindProtectBegin
             | RegInstKind::UnwindProtectCleanup
             | RegInstKind::UnwindProtectEnd => {
                 self.unsupported("instruction requires object runtime support");
@@ -1094,6 +1106,19 @@ fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {
         .collect()
 }
 
+fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (index, inst) in instructions.iter().enumerate().skip(handler_index + 1) {
+        match &inst.kind {
+            RegInstKind::ConditionCaseBegin { .. } => depth += 1,
+            RegInstKind::ConditionCaseEnd if depth == 0 => return Some(index),
+            RegInstKind::ConditionCaseEnd => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
 fn make_list(runtime: &mut Runtime, values: impl IntoIterator<Item = LispValue>) -> LispValue {
     values
         .into_iter()
@@ -1352,5 +1377,13 @@ mod tests {
                 .message
                 .contains("uncaught signal wrong-type-argument")
         );
+    }
+
+    #[test]
+    fn condition_case_skips_handlers_on_normal_completion() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 1)) (condition-case err (setq x 2) (error (setq x 99))) x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 }
