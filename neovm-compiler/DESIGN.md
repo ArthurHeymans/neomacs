@@ -360,6 +360,8 @@ Initial Cranelift lowering is intentionally conservative:
   finalized.
 - Lower constants, lexical block parameters, lexical mutation through Cranelift
   frontend variables, direct jumps, conditional branches, and returns.
+- Lower unreachable SSA terminators to explicit Cranelift traps instead of
+  silently assuming control can continue.
 - Lower direct named calls through a declared runtime ABI first. Primitive
   inlining can come later after type and semantic metadata exist.
 - Lower symbol value reads and writes through declared runtime ABI calls so

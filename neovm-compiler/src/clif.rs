@@ -552,10 +552,6 @@ impl<'a> ClifLowerer<'a> {
                     }
                 }
             }
-
-            if matches!(block.terminator, SsaTerminator::Unreachable) {
-                self.unsupported("unreachable terminators need trap lowering");
-            }
         }
     }
 
@@ -877,7 +873,7 @@ impl ClifBlockLowerer<'_> {
                     .brif(is_nil, then_target, &then_args, else_target, &else_args);
             }
             SsaTerminator::Unreachable => {
-                unreachable!("unsupported subset checked before lowering")
+                self.builder.ins().trap(ir::TrapCode::unwrap_user(1));
             }
         }
     }
@@ -1289,7 +1285,9 @@ enum RuntimeImportKind {
 mod tests {
     use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_to_clif};
     use crate::compile_source;
+    use crate::ids::PrimaryMap;
     use crate::lower::hir_to_ssa;
+    use crate::ssa::{SsaBlock, SsaFunction, SsaTerminator};
     use crate::verify::verify_ssa;
 
     #[test]
@@ -1309,6 +1307,27 @@ mod tests {
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("iconst.i64 42"));
         assert!(dump.contains("return"));
+    }
+
+    #[test]
+    fn lowers_unreachable_terminator_to_trap() {
+        let mut blocks = PrimaryMap::new();
+        let entry = blocks.push(SsaBlock {
+            params: Vec::new(),
+            instructions: Vec::new(),
+            terminator: SsaTerminator::Unreachable,
+        });
+        let ssa = SsaFunction {
+            name: Some("trap-only".to_string()),
+            values: PrimaryMap::new(),
+            blocks,
+            entry: Some(entry),
+        };
+
+        let clif = ssa_to_clif(&ssa);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("trap user1"));
     }
 
     #[test]
