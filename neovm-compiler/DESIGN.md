@@ -360,10 +360,29 @@ Initial Cranelift lowering is intentionally conservative:
   finalized.
 - Lower constants, lexical block parameters, direct jumps, conditional branches,
   and returns.
-- Reject calls, symbol access, dynamic binding, allocation, and nonlocal exits
-  until a runtime ABI and precise safepoint/stack-map contract exist.
+- Lower direct named calls through a declared runtime ABI first. Primitive
+  inlining can come later after type and semantic metadata exist.
+- Reject indirect calls, symbol access, dynamic binding, allocation, and
+  nonlocal exits until the runtime ABI and precise safepoint/stack-map contract
+  exist.
 - Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
   physical register allocation internally.
+
+The initial generated function ABI is:
+
+```text
+compiled_elisp_fn(vmctx: i64, arg0: i64, ...) -> i64
+```
+
+Direct named calls use arity-specialized imports:
+
+```text
+__neomacs_rt_call_named_N(vmctx: i64, symbol_id: i64, arg0: i64, ...) -> i64
+```
+
+`symbol_id` is a compiler-owned interned symbol key. This is not the final
+runtime object representation; it is the bridge needed before runtime symbol
+tables, precise stack maps, and JIT execution are connected.
 
 ## Safepoints And GC Metadata
 

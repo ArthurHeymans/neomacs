@@ -2,26 +2,27 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    self, AbiParam, BlockArg, Function, InstBuilder, Signature, UserFuncName, types,
+    self, AbiParam, BlockArg, FuncRef, Function, InstBuilder, Signature, UserFuncName, types,
 };
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings;
 use cranelift_codegen::verifier::verify_function;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_module::{FuncId, Linkage, ModuleDeclarations};
+use lasso::{Key, Rodeo, Spur};
 
 use crate::diagnostic::Diagnostic;
 use crate::ids::{BlockId, ValueId};
 use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator};
 
-#[derive(Debug)]
 pub struct ClifLowerOutput {
     pub function: Option<Function>,
+    pub runtime: ClifRuntimeAbi,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 pub fn ssa_to_clif(function: &SsaFunction) -> ClifLowerOutput {
-    let mut lowerer = ClifLowerer::new(function);
-    lowerer.lower()
+    ClifLowerer::new(function).lower()
 }
 
 pub fn verify_clif(function: &Function) -> Vec<Diagnostic> {
@@ -36,8 +37,88 @@ pub fn dump_clif(function: &Function) -> String {
     format!("{}", function.display())
 }
 
+pub struct ClifRuntimeAbi {
+    declarations: ModuleDeclarations,
+    symbols: Rodeo,
+    call_named_by_arity: HashMap<usize, FuncId>,
+}
+
+impl Default for ClifRuntimeAbi {
+    fn default() -> Self {
+        Self {
+            declarations: ModuleDeclarations::default(),
+            symbols: Rodeo::default(),
+            call_named_by_arity: HashMap::new(),
+        }
+    }
+}
+
+impl ClifRuntimeAbi {
+    pub fn declarations(&self) -> &ModuleDeclarations {
+        &self.declarations
+    }
+
+    pub fn intern_symbol(&mut self, name: &str) -> Spur {
+        self.symbols.get_or_intern(name)
+    }
+
+    pub fn symbol_key(&self, name: &str) -> Option<Spur> {
+        self.symbols.get(name)
+    }
+
+    pub fn resolve_symbol(&self, symbol: Spur) -> &str {
+        self.symbols.resolve(&symbol)
+    }
+
+    pub fn imported_function_names(&self) -> Vec<&str> {
+        self.declarations
+            .get_functions()
+            .filter_map(|(_, declaration)| declaration.name.as_deref())
+            .collect()
+    }
+
+    fn call_named(
+        &mut self,
+        arity: usize,
+        call_conv: CallConv,
+    ) -> Result<RuntimeFuncImport, String> {
+        if let Some(id) = self.call_named_by_arity.get(&arity).copied() {
+            return Ok(RuntimeFuncImport {
+                id,
+                signature: call_named_signature(arity, call_conv),
+            });
+        }
+
+        let name = format!("__neomacs_rt_call_named_{arity}");
+        let signature = call_named_signature(arity, call_conv);
+        let (id, _) = self
+            .declarations
+            .declare_function(&name, Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.call_named_by_arity.insert(arity, id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+}
+
+struct RuntimeFuncImport {
+    id: FuncId,
+    signature: Signature,
+}
+
+fn call_named_signature(arity: usize, call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // interned function symbol
+    for _ in 0..arity {
+        signature.params.push(AbiParam::new(types::I64));
+    }
+    signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
 struct ClifLowerer<'a> {
     ssa: &'a SsaFunction,
+    runtime: ClifRuntimeAbi,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -45,11 +126,13 @@ impl<'a> ClifLowerer<'a> {
     fn new(ssa: &'a SsaFunction) -> Self {
         Self {
             ssa,
+            runtime: ClifRuntimeAbi::default(),
             diagnostics: Vec::new(),
         }
     }
 
-    fn lower(&mut self) -> ClifLowerOutput {
+    fn lower(mut self) -> ClifLowerOutput {
+        let call_conv = CallConv::SystemV;
         self.check_supported_subset();
         if !self.diagnostics.is_empty() {
             return self.finish(None);
@@ -68,7 +151,8 @@ impl<'a> ClifLowerer<'a> {
             return self.finish(None);
         };
 
-        let mut signature = Signature::new(CallConv::SystemV);
+        let mut signature = Signature::new(call_conv);
+        signature.params.push(AbiParam::new(types::I64)); // vmctx
         for _ in &entry_block.params {
             signature.params.push(AbiParam::new(types::I64));
         }
@@ -79,6 +163,7 @@ impl<'a> ClifLowerer<'a> {
         let mut builder = FunctionBuilder::new(&mut function, &mut builder_context);
         let mut block_map = HashMap::new();
         let mut value_map = HashMap::new();
+        let mut entry_vmctx = None;
 
         for (block_id, _) in self.ssa.blocks.iter() {
             let clif_block = builder.create_block();
@@ -88,12 +173,10 @@ impl<'a> ClifLowerer<'a> {
         for (block_id, block) in self.ssa.blocks.iter() {
             let clif_block = block_map[&block_id];
             if block_id == entry {
-                builder.append_block_params_for_function_params(clif_block);
-                for (ssa_param, clif_param) in block
-                    .params
-                    .iter()
-                    .zip(builder.block_params(clif_block).iter().copied())
-                {
+                let vmctx = builder.append_block_param(clif_block, types::I64);
+                entry_vmctx = Some(vmctx);
+                for ssa_param in &block.params {
+                    let clif_param = builder.append_block_param(clif_block, types::I64);
                     value_map.insert(*ssa_param, clif_param);
                 }
             } else {
@@ -109,8 +192,13 @@ impl<'a> ClifLowerer<'a> {
             block_map,
             value_map,
             lexical_values: HashMap::new(),
+            runtime_func_refs: HashMap::new(),
+            vmctx: None,
+            runtime: &mut self.runtime,
+            call_conv,
             diagnostics: Vec::new(),
         };
+        state.vmctx = entry_vmctx;
 
         for (block_id, block) in self.ssa.blocks.iter() {
             let clif_block = state.block_map[&block_id];
@@ -146,7 +234,8 @@ impl<'a> ClifLowerer<'a> {
                     )
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
-                    | SsaInstKind::DeclareSpecial(_) => {}
+                    | SsaInstKind::DeclareSpecial(_)
+                    | SsaInstKind::CallNamed { .. } => {}
                     SsaInstKind::Const(SsaConst::Float(_)) => {
                         self.unsupported("float constants need Lisp value encoding");
                     }
@@ -172,9 +261,7 @@ impl<'a> ClifLowerer<'a> {
                             "dynamic binding needs runtime dynamic environment support",
                         );
                     }
-                    SsaInstKind::CallNamed { .. }
-                    | SsaInstKind::Funcall { .. }
-                    | SsaInstKind::Apply { .. } => {
+                    SsaInstKind::Funcall { .. } | SsaInstKind::Apply { .. } => {
                         self.unsupported("calls need a Cranelift runtime ABI");
                     }
                     SsaInstKind::CatchBegin { .. }
@@ -206,10 +293,11 @@ impl<'a> ClifLowerer<'a> {
         )));
     }
 
-    fn finish(&mut self, function: Option<Function>) -> ClifLowerOutput {
+    fn finish(self, function: Option<Function>) -> ClifLowerOutput {
         ClifLowerOutput {
             function,
-            diagnostics: std::mem::take(&mut self.diagnostics),
+            runtime: self.runtime,
+            diagnostics: self.diagnostics,
         }
     }
 }
@@ -219,6 +307,10 @@ struct ClifBlockLowerer<'a> {
     block_map: HashMap<BlockId, ir::Block>,
     value_map: HashMap<ValueId, ir::Value>,
     lexical_values: HashMap<String, ir::Value>,
+    runtime_func_refs: HashMap<FuncId, FuncRef>,
+    vmctx: Option<ir::Value>,
+    runtime: &'a mut ClifRuntimeAbi,
+    call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -260,13 +352,41 @@ impl ClifBlockLowerer<'_> {
                 self.lexical_values.insert(name.clone(), value);
             }
             SsaInstKind::DeclareSpecial(_) => {}
+            SsaInstKind::CallNamed { name, args } => {
+                let Some(result) = inst.result else {
+                    self.error("named call instruction has no result");
+                    return;
+                };
+                let Some(vmctx) = self.vmctx else {
+                    self.error("named call lowering requires a vmctx parameter");
+                    return;
+                };
+                let args = self.value_args(args);
+                let symbol = self.runtime.intern_symbol(name);
+                let symbol = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, symbol.into_usize() as i64);
+                let Some(func_ref) = self.call_named_ref(args.len()) else {
+                    return;
+                };
+                let mut call_args = Vec::with_capacity(args.len() + 2);
+                call_args.push(vmctx);
+                call_args.push(symbol);
+                call_args.extend(args);
+                let call = self.builder.ins().call(func_ref, &call_args);
+                let Some(result_value) = self.builder.inst_results(call).first().copied() else {
+                    self.error("runtime named call produced no result");
+                    return;
+                };
+                self.value_map.insert(result, result_value);
+            }
             SsaInstKind::Quote(_)
             | SsaInstKind::FunctionQuote(_)
             | SsaInstKind::LexicalSet { .. }
             | SsaInstKind::SymbolGet(_)
             | SsaInstKind::SymbolSet { .. }
             | SsaInstKind::BindDynamic { .. }
-            | SsaInstKind::CallNamed { .. }
             | SsaInstKind::Funcall { .. }
             | SsaInstKind::Apply { .. }
             | SsaInstKind::CatchBegin { .. }
@@ -328,10 +448,16 @@ impl ClifBlockLowerer<'_> {
     }
 
     fn values(&mut self, values: &[ValueId]) -> Vec<BlockArg> {
+        self.value_args(values)
+            .into_iter()
+            .map(BlockArg::Value)
+            .collect()
+    }
+
+    fn value_args(&mut self, values: &[ValueId]) -> Vec<ir::Value> {
         values
             .iter()
             .filter_map(|value| self.value(*value))
-            .map(BlockArg::Value)
             .collect()
     }
 
@@ -353,6 +479,36 @@ impl ClifBlockLowerer<'_> {
 
     fn error(&mut self, message: impl Into<String>) {
         self.diagnostics.push(Diagnostic::error(message));
+    }
+
+    fn call_named_ref(&mut self, arity: usize) -> Option<FuncRef> {
+        let import = match self.runtime.call_named(arity, self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!("failed to declare Cranelift runtime call: {error}"));
+                return None;
+            }
+        };
+        if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
+            return Some(func_ref);
+        }
+
+        let signature = self.builder.import_signature(import.signature);
+        let user_name = self
+            .builder
+            .func
+            .declare_imported_user_function(ir::UserExternalName {
+                namespace: 0,
+                index: import.id.as_u32(),
+            });
+        let func_ref = self.builder.import_function(ir::ExtFuncData {
+            name: ir::ExternalName::user(user_name),
+            signature,
+            colocated: false,
+            patchable: false,
+        });
+        self.runtime_func_refs.insert(import.id, func_ref);
+        Some(func_ref)
     }
 }
 
@@ -401,10 +557,38 @@ mod tests {
     }
 
     #[test]
-    fn reports_runtime_operations_until_cranelift_abi_exists() {
+    fn lowers_named_call_to_runtime_abi_call() {
         let artifact = compile_source(
             "call.el",
             ";;; -*- lexical-binding: t; -*-\n(defun add1-native (x) (+ x 1))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(
+            clif.runtime
+                .symbol_key("+")
+                .map(|symbol| clif.runtime.resolve_symbol(symbol)),
+            Some("+")
+        );
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_call_named_2")
+        );
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn reports_indirect_calls_until_runtime_abi_exists() {
+        let artifact = compile_source(
+            "call.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun call-it (f x) (funcall f x))",
         );
         let hir = artifact.hir.expect("HIR");
         let ssa = hir_to_ssa(&hir);

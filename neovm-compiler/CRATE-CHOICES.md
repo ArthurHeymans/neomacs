@@ -70,6 +70,20 @@ Why:
 Source: <https://cranelift.dev/>
 Source: <https://docs.rs/cranelift-frontend/latest/cranelift_frontend/>
 
+### `cranelift-module`
+
+Used for Cranelift-level runtime ABI declarations.
+
+Why:
+
+- Mature module declaration layer from Cranelift.
+- Gives us `FuncId`, `Linkage`, and declaration merging instead of inventing
+  our own import table.
+- Keeps the path open for `cranelift-jit` and `cranelift-object`, both of
+  which are built around the same module abstractions.
+
+Source: <https://docs.rs/cranelift-module/latest/cranelift_module/>
+
 ### `indexmap`
 
 Used for deterministic semantic maps such as scopes.
@@ -91,6 +105,19 @@ Why:
 - Supports spans, labels, notes, and multi-file rendering.
 
 Source: <https://docs.rs/ariadne/latest/ariadne/>
+
+### `lasso`
+
+Used for compiler-owned symbol interning.
+
+Why:
+
+- Mature, fast string interner.
+- Avoids raw symbol strings in runtime ABI calls.
+- Lets generated Cranelift code pass compact symbol IDs while the compiler
+  keeps stable name resolution metadata.
+
+Source: <https://docs.rs/lasso/latest/lasso/>
 
 ### `insta`
 
