@@ -9,6 +9,7 @@ pub struct Runtime {
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
     vectors: Vec<Box<VectorObject>>,
+    hash_tables: Vec<Box<HashTableObject>>,
     functions: Vec<Box<FunctionObject>>,
     lexical_cells: Vec<Box<LexicalCell>>,
     interned_symbols: HashMap<String, LispValue>,
@@ -26,6 +27,7 @@ impl Default for Runtime {
             symbols: Vec::new(),
             strings: Vec::new(),
             vectors: Vec::new(),
+            hash_tables: Vec::new(),
             functions: Vec::new(),
             lexical_cells: Vec::new(),
             interned_symbols: HashMap::new(),
@@ -100,6 +102,19 @@ impl Runtime {
         });
         let addr = (&mut *vector as *mut VectorObject) as usize;
         self.vectors.push(vector);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn hash_table(&mut self, test: HashTableTest) -> LispValue {
+        let mut table = Box::new(HashTableObject {
+            header: HeapHeader {
+                kind: HeapKind::HashTable,
+            },
+            test,
+            entries: Vec::new(),
+        });
+        let addr = (&mut *table as *mut HashTableObject) as usize;
+        self.hash_tables.push(table);
         LispValue::from_heap_addr(addr)
     }
 
@@ -212,6 +227,12 @@ impl Runtime {
             .is_some_and(|addr| self.vector_by_addr(addr).is_some())
     }
 
+    pub fn is_hash_table(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.hash_table_by_addr(addr).is_some())
+    }
+
     pub fn is_function(&self, value: LispValue) -> bool {
         value
             .heap_addr()
@@ -232,6 +253,10 @@ impl Runtime {
 
     pub fn vector_count(&self) -> usize {
         self.vectors.len()
+    }
+
+    pub fn hash_table_count_allocated(&self) -> usize {
+        self.hash_tables.len()
     }
 
     pub fn function_count(&self) -> usize {
@@ -560,6 +585,69 @@ impl Runtime {
         Ok(value)
     }
 
+    pub fn hash_table_count(&self, table: LispValue) -> Result<usize, RuntimeError> {
+        Ok(self.expect_hash_table(table)?.entries.len())
+    }
+
+    pub fn gethash(
+        &self,
+        key: LispValue,
+        table: LispValue,
+    ) -> Result<Option<LispValue>, RuntimeError> {
+        let table_object = self.expect_hash_table(table)?;
+        Ok(self
+            .hash_table_entry_index(table_object, key)
+            .map(|index| table_object.entries[index].value))
+    }
+
+    pub fn puthash(
+        &mut self,
+        key: LispValue,
+        value: LispValue,
+        table: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        let index = {
+            let table_object = self.expect_hash_table(table)?;
+            self.hash_table_entry_index(table_object, key)
+        };
+        let table_object = self.expect_hash_table_mut(table)?;
+        if let Some(index) = index {
+            table_object.entries[index].value = value;
+        } else {
+            table_object.entries.push(HashEntry { key, value });
+        }
+        Ok(value)
+    }
+
+    pub fn remhash(&mut self, key: LispValue, table: LispValue) -> Result<LispValue, RuntimeError> {
+        let index = {
+            let table_object = self.expect_hash_table(table)?;
+            self.hash_table_entry_index(table_object, key)
+        };
+        let table_object = self.expect_hash_table_mut(table)?;
+        if let Some(index) = index {
+            table_object.entries.remove(index);
+        }
+        Ok(LispValue::NIL)
+    }
+
+    pub fn clrhash(&mut self, table: LispValue) -> Result<LispValue, RuntimeError> {
+        self.expect_hash_table_mut(table)?.entries.clear();
+        Ok(table)
+    }
+
+    pub fn hash_table_entries(
+        &self,
+        table: LispValue,
+    ) -> Result<Vec<(LispValue, LispValue)>, RuntimeError> {
+        Ok(self
+            .expect_hash_table(table)?
+            .entries
+            .iter()
+            .map(|entry| (entry.key, entry.value))
+            .collect())
+    }
+
     pub fn function_parts(
         &self,
         function: LispValue,
@@ -708,6 +796,37 @@ impl Runtime {
             })
     }
 
+    fn expect_hash_table(&self, value: LispValue) -> Result<&HashTableObject, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            });
+        };
+        self.hash_table_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            })
+    }
+
+    fn expect_hash_table_mut(
+        &mut self,
+        value: LispValue,
+    ) -> Result<&mut HashTableObject, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            });
+        };
+        self.hash_table_by_addr_mut(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            })
+    }
+
     fn expect_function(&self, value: LispValue) -> Result<&FunctionObject, RuntimeError> {
         let Some(addr) = value.heap_addr() else {
             return Err(RuntimeError::WrongTypeArgument {
@@ -823,6 +942,26 @@ impl Runtime {
         None
     }
 
+    fn hash_table_by_addr(&self, addr: usize) -> Option<&HashTableObject> {
+        for table in &self.hash_tables {
+            let table_addr = (&**table as *const HashTableObject) as usize;
+            if table_addr == addr && table.header.kind == HeapKind::HashTable {
+                return Some(table);
+            }
+        }
+        None
+    }
+
+    fn hash_table_by_addr_mut(&mut self, addr: usize) -> Option<&mut HashTableObject> {
+        for table in &mut self.hash_tables {
+            let table_addr = (&**table as *const HashTableObject) as usize;
+            if table_addr == addr && table.header.kind == HeapKind::HashTable {
+                return Some(table);
+            }
+        }
+        None
+    }
+
     fn function_by_addr(&self, addr: usize) -> Option<&FunctionObject> {
         for function in &self.functions {
             let function_addr = (&**function as *const FunctionObject) as usize;
@@ -863,6 +1002,13 @@ impl Runtime {
         let pair = self.cons_by_addr(pair_cell.heap_addr()?)?;
         self.cons_by_addr(pair.cdr.heap_addr()?)?;
         Some(pair.cdr)
+    }
+
+    fn hash_table_entry_index(&self, table: &HashTableObject, key: LispValue) -> Option<usize> {
+        table.entries.iter().position(|entry| match table.test {
+            HashTableTest::Eq | HashTableTest::Eql => entry.key == key,
+            HashTableTest::Equal => self.equal(entry.key, key),
+        })
     }
 
     pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
@@ -965,6 +1111,11 @@ impl Runtime {
                 .map(|value| self.format_value_with_depth(*value, 63))
                 .collect::<Vec<_>>();
             return format!("[{}]", elements.join(" "));
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(table) = self.hash_table_by_addr(addr)
+        {
+            return format!("#<hash-table count {}>", table.entries.len());
         }
         if self.is_function(value) {
             return "#<function>".to_string();
@@ -1167,6 +1318,13 @@ impl fmt::Display for RuntimeError {
 
 impl std::error::Error for RuntimeError {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HashTableTest {
+    Eq,
+    Eql,
+    Equal,
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HeapKind {
@@ -1174,8 +1332,9 @@ enum HeapKind {
     Symbol = 2,
     String = 3,
     Vector = 4,
-    Function = 5,
-    LexicalCell = 6,
+    HashTable = 5,
+    Function = 6,
+    LexicalCell = 7,
 }
 
 #[repr(C)]
@@ -1209,6 +1368,19 @@ struct LispString {
 struct VectorObject {
     header: HeapHeader,
     elements: Vec<LispValue>,
+}
+
+#[repr(C, align(8))]
+struct HashTableObject {
+    header: HeapHeader,
+    test: HashTableTest,
+    entries: Vec<HashEntry>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HashEntry {
+    key: LispValue,
+    value: LispValue,
 }
 
 #[repr(C, align(8))]
@@ -1378,6 +1550,25 @@ mod tests {
 
         assert!(runtime.equal(left, right));
         assert!(!runtime.equal(left, different));
+    }
+
+    #[test]
+    fn hash_tables_store_entries_with_configured_test() {
+        let mut runtime = Runtime::new();
+        let table = runtime.hash_table(super::HashTableTest::Equal);
+        let left_key = runtime.string("key");
+        let right_key = runtime.string("key");
+        let value = LispValue::expect_fixnum(42);
+
+        assert!(runtime.is_hash_table(table));
+        assert_eq!(runtime.hash_table_count_allocated(), 1);
+        assert_eq!(runtime.hash_table_count(table), Ok(0));
+        assert_eq!(runtime.puthash(left_key, value, table), Ok(value));
+        assert_eq!(runtime.gethash(right_key, table), Ok(Some(value)));
+        assert_eq!(runtime.hash_table_count(table), Ok(1));
+        assert_eq!(runtime.remhash(right_key, table), Ok(LispValue::NIL));
+        assert_eq!(runtime.gethash(left_key, table), Ok(None));
+        assert_eq!(runtime.clrhash(table), Ok(table));
     }
 
     #[test]

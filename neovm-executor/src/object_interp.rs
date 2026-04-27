@@ -7,6 +7,7 @@ use neovm_compiler::regir::{RegFunction, RegInst, RegInstKind, RegModule, RegTer
 use neovm_compiler::ssa::SsaConst;
 use neovm_compiler::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
+use crate::runtime::HashTableTest;
 use crate::{LispValue, Runtime, RuntimeError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -683,6 +684,9 @@ impl Interpreter<'_, '_, '_> {
             "vectorp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_vector(args[0]))),
+            "hash-table-p" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_hash_table(args[0]))),
             "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.symbol_value(args[0]);
                 self.runtime_value(result)
@@ -793,6 +797,29 @@ impl Interpreter<'_, '_, '_> {
             "aset" => self
                 .exact_arity(name, args, 3)
                 .and_then(|_| self.aset(args[0], args[1], args[2])),
+            "make-hash-table" => self.make_hash_table(args),
+            "hash-table-count" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.hash_table_count(args[0]);
+                self.runtime_usize(result, name)
+            }),
+            "gethash" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.gethash(args[0], args[1], args.get(2).copied())),
+            "puthash" => self.exact_arity(name, args, 3).and_then(|_| {
+                let result = self.runtime.puthash(args[0], args[1], args[2]);
+                self.runtime_value(result)
+            }),
+            "remhash" => self.exact_arity(name, args, 2).and_then(|_| {
+                let result = self.runtime.remhash(args[0], args[1]);
+                self.runtime_value(result)
+            }),
+            "clrhash" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.clrhash(args[0]);
+                self.runtime_value(result)
+            }),
+            "maphash" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.maphash(args[0], args[1])),
             "reverse" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
@@ -1461,6 +1488,76 @@ impl Interpreter<'_, '_, '_> {
         None
     }
 
+    fn make_hash_table(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if !args.len().is_multiple_of(2) {
+            self.error("make-hash-table requires keyword/value pairs");
+            return None;
+        }
+        let mut test = HashTableTest::Eql;
+        for pair in args.chunks_exact(2) {
+            let keyword = match self.runtime.symbol_name(pair[0]) {
+                Ok(name) => name,
+                Err(error) => {
+                    self.runtime_error(error);
+                    return None;
+                }
+            };
+            if keyword == ":test" {
+                test = self.hash_table_test_arg(pair[1])?;
+            }
+        }
+        Some(self.runtime.hash_table(test))
+    }
+
+    fn hash_table_test_arg(&mut self, value: LispValue) -> Option<HashTableTest> {
+        let name = match self.runtime.symbol_name(value) {
+            Ok(name) => name,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        match name.as_str() {
+            "eq" => Some(HashTableTest::Eq),
+            "eql" => Some(HashTableTest::Eql),
+            "equal" => Some(HashTableTest::Equal),
+            _ => {
+                self.error(format!("unsupported hash table test `{name}`"));
+                None
+            }
+        }
+    }
+
+    fn gethash(
+        &mut self,
+        key: LispValue,
+        table: LispValue,
+        default: Option<LispValue>,
+    ) -> Option<LispValue> {
+        match self.runtime.gethash(key, table) {
+            Ok(Some(value)) => Some(value),
+            Ok(None) => Some(default.unwrap_or(LispValue::NIL)),
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
+    fn maphash(&mut self, function: LispValue, table: LispValue) -> Option<LispValue> {
+        let entries = match self.runtime.hash_table_entries(table) {
+            Ok(entries) => entries,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        for (key, value) in entries {
+            self.execute_funcall(function, &[key, value])?;
+        }
+        Some(LispValue::NIL)
+    }
+
     fn sequence_index(&mut self, name: &str, value: LispValue) -> Option<usize> {
         let value = self.fixnum_arg(name, value)?;
         if value < 0 {
@@ -1683,6 +1780,22 @@ impl Interpreter<'_, '_, '_> {
     fn runtime_bool(&mut self, result: Result<bool, crate::RuntimeError>) -> Option<LispValue> {
         match result {
             Ok(value) => Some(bool_value(value)),
+            Err(error) => {
+                self.runtime_error(error);
+                None
+            }
+        }
+    }
+
+    fn runtime_usize(
+        &mut self,
+        result: Result<usize, crate::RuntimeError>,
+        name: &str,
+    ) -> Option<LispValue> {
+        match result {
+            Ok(value) => i64::try_from(value)
+                .ok()
+                .and_then(|value| self.fixnum(value, name)),
             Err(error) => {
                 self.runtime_error(error);
                 None
@@ -1937,6 +2050,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "symbolp"
             | "stringp"
             | "vectorp"
+            | "hash-table-p"
             | "symbol-value"
             | "set"
             | "boundp"
@@ -1973,6 +2087,13 @@ fn is_primitive_name(name: &str) -> bool {
             | "vector"
             | "aref"
             | "aset"
+            | "make-hash-table"
+            | "hash-table-count"
+            | "gethash"
+            | "puthash"
+            | "remhash"
+            | "clrhash"
+            | "maphash"
             | "reverse"
             | "append"
             | "nth"
@@ -2096,6 +2217,15 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
         assert_eq!(runtime.vector_count(), 3);
+    }
+
+    #[test]
+    fn executes_hash_table_primitives() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((h (make-hash-table :test 'equal)) (sum 0)) (puthash \"a\" 2 h) (puthash \"b\" 3 h) (maphash (lambda (k v) (setq sum (+ sum v))) h) (remhash \"b\" h) (+ (gethash \"a\" h) (gethash \"missing\" h 4) (hash-table-count h) sum (if (hash-table-p h) 7 0) (hash-table-count (clrhash h))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(19)));
+        assert_eq!(runtime.hash_table_count_allocated(), 1);
     }
 
     #[test]
