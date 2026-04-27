@@ -1179,7 +1179,7 @@ impl SsaBuilder {
 mod tests {
     use crate::compile_source;
     use crate::lower::{hir_to_ssa_module, ssa_module_to_regir};
-    use crate::verify::verify_ssa;
+    use crate::verify::{verify_regir_module, verify_ssa, verify_ssa_module};
 
     #[test]
     fn module_lowering_emits_one_ssa_function_per_top_level_item() {
@@ -1190,6 +1190,7 @@ mod tests {
         let hir = artifact.hir.expect("HIR");
         let lowered = hir_to_ssa_module(&hir);
         assert_eq!(lowered.diagnostics, Vec::new());
+        assert_eq!(verify_ssa_module(&lowered.value), Vec::new());
         assert_eq!(lowered.value.functions.len(), 2);
 
         let names = lowered
@@ -1216,6 +1217,7 @@ mod tests {
 
         let regir = ssa_module_to_regir(&ssa.value);
         assert_eq!(regir.diagnostics, Vec::new());
+        assert_eq!(verify_regir_module(&regir.value), Vec::new());
         assert_eq!(regir.value.functions.len(), 2);
         assert_eq!(regir.value.entry, ssa.value.entry);
     }

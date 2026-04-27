@@ -6,8 +6,8 @@ use crate::diagnostic::Diagnostic;
 use crate::hir::{HirExpr, HirExprKind, HirItem, HirModule};
 use crate::ids::{BlockId, RegBlockId, RegId, SafepointId, ValueId};
 use crate::liveness::inst_uses;
-use crate::regir::{RegFunction, RegInstKind, RegTerminator};
-use crate::ssa::{SsaFunction, SsaInstKind, SsaTerminator, SsaValueKind};
+use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
+use crate::ssa::{SsaFunction, SsaInstKind, SsaModule, SsaTerminator, SsaValueKind};
 use crate::surface::SurfaceForm;
 
 pub fn verify_surface(_forms: &[SurfaceForm]) -> Vec<Diagnostic> {
@@ -34,6 +34,25 @@ pub fn verify_ssa(function: &SsaFunction) -> Vec<Diagnostic> {
     verifier.diagnostics
 }
 
+pub fn verify_ssa_module(module: &SsaModule) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    if let Some(entry) = module.entry {
+        if entry.index() >= module.functions.len() {
+            diagnostics.push(Diagnostic::error(format!(
+                "SSA module references unknown entry function {entry:?}"
+            )));
+        }
+    } else {
+        diagnostics.push(Diagnostic::error("SSA module has no entry function"));
+    }
+    for (function_id, function) in module.functions.iter() {
+        diagnostics.extend(verify_ssa(function).into_iter().map(|diagnostic| {
+            diagnostic.with_note(format!("in SSA function {function_id:?}"), None)
+        }));
+    }
+    diagnostics
+}
+
 pub fn verify_regir(function: &RegFunction) -> Vec<Diagnostic> {
     let mut verifier = RegVerifier {
         function,
@@ -41,6 +60,27 @@ pub fn verify_regir(function: &RegFunction) -> Vec<Diagnostic> {
     };
     verifier.verify();
     verifier.diagnostics
+}
+
+pub fn verify_regir_module(module: &RegModule) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    if let Some(entry) = module.entry {
+        if entry.index() >= module.functions.len() {
+            diagnostics.push(Diagnostic::error(format!(
+                "Register IR module references unknown entry function {entry:?}"
+            )));
+        }
+    } else {
+        diagnostics.push(Diagnostic::error(
+            "Register IR module has no entry function",
+        ));
+    }
+    for (function_id, function) in module.functions.iter() {
+        diagnostics.extend(verify_regir(function).into_iter().map(|diagnostic| {
+            diagnostic.with_note(format!("in Register IR function {function_id:?}"), None)
+        }));
+    }
+    diagnostics
 }
 
 struct SsaVerifier<'a> {

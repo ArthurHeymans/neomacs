@@ -589,6 +589,7 @@ HIR verifier:
 
 SSA verifier:
 
+- Module entry function exists.
 - Block IDs exist.
 - Terminator targets exist.
 - Branch argument counts match target block parameter counts.
@@ -598,6 +599,7 @@ SSA verifier:
 
 Register IR verifier:
 
+- Module entry function exists.
 - Registers are defined before use.
 - Jumps target valid labels.
 - Calls and safepoints have liveness-pruned live-root metadata.
