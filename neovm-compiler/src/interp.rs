@@ -160,6 +160,15 @@ impl Interpreter<'_> {
                 self.lexicals.insert(name.clone(), value);
             }
             RegInstKind::DeclareSpecial { .. } | RegInstKind::Safepoint { .. } => {}
+            RegInstKind::CallNamed { dst, name, args } => {
+                let Some(args) = self.get_many(args) else {
+                    return false;
+                };
+                let Some(value) = self.execute_primitive_call(name, &args) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
             RegInstKind::Quote { .. }
             | RegInstKind::FunctionQuote { .. }
             | RegInstKind::Lambda { .. }
@@ -170,7 +179,6 @@ impl Interpreter<'_> {
             | RegInstKind::SymbolSet { .. }
             | RegInstKind::BindDynamic { .. }
             | RegInstKind::UnbindDynamic { .. }
-            | RegInstKind::CallNamed { .. }
             | RegInstKind::Funcall { .. }
             | RegInstKind::Apply { .. }
             | RegInstKind::CatchBegin { .. }
@@ -187,6 +195,59 @@ impl Interpreter<'_> {
             }
         }
         true
+    }
+
+    fn execute_primitive_call(&mut self, name: &str, args: &[i64]) -> Option<i64> {
+        let value = match name {
+            "+" => checked_fold(0, args, i64::checked_add),
+            "*" => checked_fold(1, args, i64::checked_mul),
+            "-" => match args {
+                [] => {
+                    self.error("primitive `-` requires at least one argument");
+                    return None;
+                }
+                [value] => value.checked_neg(),
+                [first, rest @ ..] => checked_fold(*first, rest, i64::checked_sub),
+            },
+            "1+" => {
+                let Some(value) = exactly_one_arg(name, args, self) else {
+                    return None;
+                };
+                value.checked_add(1)
+            }
+            "1-" => {
+                let Some(value) = exactly_one_arg(name, args, self) else {
+                    return None;
+                };
+                value.checked_sub(1)
+            }
+            "=" => Some(bool_value(args.windows(2).all(|pair| pair[0] == pair[1]))),
+            "<" => Some(bool_value(args.windows(2).all(|pair| pair[0] < pair[1]))),
+            "<=" => Some(bool_value(args.windows(2).all(|pair| pair[0] <= pair[1]))),
+            ">" => Some(bool_value(args.windows(2).all(|pair| pair[0] > pair[1]))),
+            ">=" => Some(bool_value(args.windows(2).all(|pair| pair[0] >= pair[1]))),
+            "not" | "null" => {
+                let Some(value) = exactly_one_arg(name, args, self) else {
+                    return None;
+                };
+                Some(bool_value(value == 0))
+            }
+            _ => {
+                self.unsupported(format!("named call `{name}` requires runtime support"));
+                return None;
+            }
+        };
+        match value {
+            Some(value) => Some(value),
+            None => {
+                self.error(format!("integer overflow in primitive `{name}`"));
+                None
+            }
+        }
+    }
+
+    fn get_many(&mut self, regs: &[crate::ids::RegId]) -> Option<Vec<i64>> {
+        regs.iter().map(|reg| self.get(*reg)).collect()
     }
 
     fn get(&mut self, reg: crate::ids::RegId) -> Option<i64> {
@@ -222,6 +283,29 @@ impl Interpreter<'_> {
             diagnostics: self.diagnostics,
         }
     }
+}
+
+fn checked_fold(initial: i64, rest: &[i64], op: impl Fn(i64, i64) -> Option<i64>) -> Option<i64> {
+    rest.iter()
+        .copied()
+        .try_fold(initial, |acc, value| op(acc, value))
+}
+
+fn exactly_one_arg(name: &str, args: &[i64], interpreter: &mut Interpreter<'_>) -> Option<i64> {
+    match args {
+        [value] => Some(*value),
+        _ => {
+            interpreter.error(format!(
+                "primitive `{name}` requires exactly one argument, got {}",
+                args.len()
+            ));
+            None
+        }
+    }
+}
+
+fn bool_value(value: bool) -> i64 {
+    if value { 1 } else { 0 }
 }
 
 fn const_value(value: &SsaConst) -> Option<i64> {
@@ -292,5 +376,27 @@ mod tests {
         let result = execute_module_with_args(&regir, &[0, 9]);
         assert_eq!(result.diagnostics, Vec::new());
         assert_eq!(result.value, Some(9));
+    }
+
+    #[test]
+    fn executes_integer_primitives() {
+        let artifact = crate::execute_source(
+            "arith.el",
+            ";;; -*- lexical-binding: t; -*-\n(if (<= (1- 3) 2) (+ 10 (* 2 3)) 0)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(16));
+    }
+
+    #[test]
+    fn executes_integer_primitive_entry_with_arguments() {
+        let artifact = crate::execute_source(
+            "entry.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun dec-if-positive (x) (if (> x 0) (1- x) 0))",
+            &[8],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(7));
     }
 }

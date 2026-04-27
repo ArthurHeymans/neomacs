@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn execution_reports_runtime_dependent_operations() {
-        let artifact = execute_source("call.el", ";;; -*- lexical-binding: t; -*-\n(+ 1 2)", &[]);
+        let artifact = execute_source("call.el", ";;; -*- lexical-binding: t; -*-\n(foo 1 2)", &[]);
         assert!(artifact.result.value.is_none());
         assert!(artifact.result.diagnostics.iter().any(|diagnostic| {
             diagnostic
