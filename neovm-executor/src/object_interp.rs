@@ -2630,6 +2630,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_common_macro_like_wrapper_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+ (eval-and-compile 1) (eval-when-compile 2) (with-no-warnings 3) (condition-case-unless-debug err (error \"boom\") (error 4)) (if (ignore-errors (error \"boom\")) 99 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
     fn condition_case_binds_signal_data() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(condition-case err (signal 'wrong-type-argument (list 'symbolp 1)) (wrong-type-argument (eq (car err) 'wrong-type-argument)))",

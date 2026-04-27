@@ -373,6 +373,9 @@ impl Lowerer<'_> {
             Some("unless") => self.lower_unless(form, &items[1..]),
             Some("cond") => self.lower_cond(form, &items[1..]),
             Some("progn") => self.lower_progn(form, &items[1..]),
+            Some("eval-and-compile" | "eval-when-compile" | "with-no-warnings") => {
+                self.lower_progn(form, &items[1..])
+            }
             Some("prog1") => self.lower_prog1(form, &items[1..]),
             Some("and") => self.lower_and(form, &items[1..]),
             Some("or") => self.lower_or(form, &items[1..]),
@@ -390,6 +393,8 @@ impl Lowerer<'_> {
             Some("catch") => self.lower_catch(form, &items[1..]),
             Some("throw") => self.lower_throw(form, &items[1..]),
             Some("condition-case") => self.lower_condition_case(form, &items[1..]),
+            Some("condition-case-unless-debug") => self.lower_condition_case(form, &items[1..]),
+            Some("ignore-errors") => self.lower_ignore_errors(form, &items[1..]),
             Some("unwind-protect") => self.lower_unwind_protect(form, &items[1..]),
             Some("funcall") => self.lower_funcall(form, &items[1..]),
             Some("apply") => self.lower_apply(form, &items[1..]),
@@ -1234,6 +1239,24 @@ impl Lowerer<'_> {
         })
     }
 
+    fn lower_ignore_errors(&mut self, form: &SurfaceForm, body: &[SurfaceForm]) -> Option<HirExpr> {
+        Some(HirExpr {
+            kind: HirExprKind::ConditionCase {
+                var: None,
+                body: Box::new(self.lower_body(body, form.span)?),
+                handlers: vec![HirConditionHandler {
+                    pattern: SurfaceForm::new(
+                        SurfaceKind::Atom(SurfaceAtom::symbol("error")),
+                        form.span,
+                    ),
+                    body: nil_expr(form.span),
+                    span: form.span,
+                }],
+            },
+            span: form.span,
+        })
+    }
+
     fn lower_unwind_protect(
         &mut self,
         form: &SurfaceForm,
@@ -1714,6 +1737,28 @@ mod tests {
         assert!(matches!(exprs[0].kind, HirExprKind::Catch { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::ConditionCase { .. }));
         assert!(matches!(exprs[2].kind, HirExprKind::UnwindProtect { .. }));
+    }
+
+    #[test]
+    fn lowers_common_macro_like_wrapper_forms() {
+        let module = hir(";;; -*- lexical-binding: t; -*-
+(progn
+  (eval-and-compile a)
+  (eval-when-compile b)
+  (with-no-warnings c)
+  (condition-case-unless-debug err (error \"x\") (error err))
+  (ignore-errors (error \"x\")))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::Progn(_)));
+        assert!(matches!(exprs[1].kind, HirExprKind::Progn(_)));
+        assert!(matches!(exprs[2].kind, HirExprKind::Progn(_)));
+        assert!(matches!(exprs[3].kind, HirExprKind::ConditionCase { .. }));
+        assert!(matches!(exprs[4].kind, HirExprKind::ConditionCase { .. }));
     }
 
     #[test]
