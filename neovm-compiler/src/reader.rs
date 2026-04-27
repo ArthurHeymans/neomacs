@@ -51,7 +51,7 @@ enum TokenKind {
     #[token("\"", lex_string)]
     String(String),
     #[regex(
-        r#"\?(\\[CMASH]-\\[CMASH]-.|\\[CMASH]-.|\\.|[^\s()\[\]'"`,;])"#,
+        r#"\?(?:\\[CMASH]-)*(?:\\.|[^\s()\[\]'"`,;])"#,
         parse_char,
         priority = 4
     )]
@@ -129,13 +129,58 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
         }
     }
 
-    // Post-process: Logos can't match ?( as Char because ( is claimed by
-    // LParen. Merge bare `?` Symbol followed by a single-char delimiter
-    // token into a Char token.
+    // Post-process: Logos can't match certain character literal forms:
+    // 1. ?( ?) ?[ ?] ?' ?` ?, — delimiter chars claimed by other tokens
+    // 2. ?; — semicolon claimed by Comment
+    // 3. ?" — double quote claimed by String
+    // 4. ?\C-\; — compound modifier + escaped semicolon, where Logos's
+    //    regex can't extend the match past \C-\ to consume \;
     let mut tokens = Vec::with_capacity(raw_tokens.len());
     let mut i = 0;
     while i < raw_tokens.len() {
         let tok = &raw_tokens[i];
+
+        // Case 4: Char(?\C-\) followed by Comment(;...) — compound escape.
+        // The Char regex matched ?\C-\ but \; was consumed by the Comment.
+        // The Comment text is ;...] — take only the ; as the escaped char,
+        // then re-lex the remainder (e.g. the ] in ;]) as new tokens.
+        if matches!(&tok.kind, TokenKind::Char(_)) && tok.text.ends_with('\\')
+            && i + 1 < raw_tokens.len()
+        {
+            let next = &raw_tokens[i + 1];
+            if matches!(&next.kind, TokenKind::Comment) && next.text.starts_with(';')
+            {
+                let full_text = format!("{};", tok.text);
+                let full_value = parse_char_code(&full_text);
+                if let Some(value) = full_value {
+                    tokens.push(Token {
+                        kind: TokenKind::Char(value),
+                        span: tok.span,
+                        text: full_text,
+                    });
+                    // Re-lex any remaining comment text after the leading ;
+                    let remainder = &next.text[1..];
+                    if !remainder.is_empty() {
+                        let mut sub_lexer = TokenKind::lexer(remainder);
+                        while let Some(sub_result) = sub_lexer.next() {
+                            if let Ok(sub_kind) = sub_result {
+                                // Re-lexed tokens don't have accurate source spans,
+                                // but for structural tokens like ] this is fine.
+                                tokens.push(Token {
+                                    kind: sub_kind,
+                                    span: next.span,
+                                    text: sub_lexer.slice().to_string(),
+                                });
+                            }
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+
+        // Cases 1-3: bare `?` Symbol followed by a delimiter/Comment/String.
         if matches!(&tok.kind, TokenKind::Symbol(s) if s == "?") && i + 1 < raw_tokens.len() {
             let next = &raw_tokens[i + 1];
             let ch: Option<char> = match &next.kind {
@@ -146,6 +191,8 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                 TokenKind::Quote => Some('\''),
                 TokenKind::Backquote => Some('`'),
                 TokenKind::Comma => Some(','),
+                TokenKind::Comment if next.text.starts_with(';') => Some(';'),
+                TokenKind::String(_) => Some('"'),
                 _ => None,
             };
             if let Some(ch) = ch {
@@ -679,23 +726,37 @@ fn parse_escaped_char_code(text: &str) -> Option<i64> {
         return parse_control_meta_char(rest);
     }
     if let Some(rest) = text.strip_prefix("C-") {
-        return Some(control_code(rest.chars().next()?) as i64);
+        let ch = decode_single_escape(rest)?;
+        return Some(control_code(ch) as i64);
     }
     if let Some(rest) = text.strip_prefix("M-") {
-        return Some(0x0800_0000 + rest.chars().next()? as i64);
+        let ch = decode_single_escape(rest)?;
+        return Some(0x0800_0000 + ch as i64);
     }
-    Some(match text.chars().next()? {
-        'a' => 7,
-        'b' => 8,
-        'f' => 12,
-        'n' => 10,
-        'r' => 13,
-        's' => 32,
-        't' => 9,
-        'v' => 11,
-        'e' => 27,
-        other => other as i64,
-    })
+    Some(decode_single_escape_value(text.chars().next()?) as i64)
+}
+
+fn decode_single_escape(text: &str) -> Option<char> {
+    if let Some(rest) = text.strip_prefix('\\') {
+        Some(decode_single_escape_value(rest.chars().next()?))
+    } else {
+        text.chars().next()
+    }
+}
+
+fn decode_single_escape_value(ch: char) -> char {
+    match ch {
+        'a' => '\x07',
+        'b' => '\x08',
+        'f' => '\x0c',
+        'n' => '\n',
+        'r' => '\r',
+        's' => ' ',
+        't' => '\t',
+        'v' => '\x0b',
+        'e' => '\x1b',
+        other => other,
+    }
 }
 
 fn parse_control_meta_char(text: &str) -> Option<i64> {
