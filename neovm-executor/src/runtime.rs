@@ -8,6 +8,7 @@ pub struct Runtime {
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
+    vectors: Vec<Box<VectorObject>>,
     functions: Vec<Box<FunctionObject>>,
     lexical_cells: Vec<Box<LexicalCell>>,
     interned_symbols: HashMap<String, LispValue>,
@@ -24,6 +25,7 @@ impl Default for Runtime {
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
+            vectors: Vec::new(),
             functions: Vec::new(),
             lexical_cells: Vec::new(),
             interned_symbols: HashMap::new(),
@@ -86,6 +88,18 @@ impl Runtime {
         });
         let addr = (&mut *string as *mut LispString) as usize;
         self.strings.push(string);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn vector(&mut self, elements: Vec<LispValue>) -> LispValue {
+        let mut vector = Box::new(VectorObject {
+            header: HeapHeader {
+                kind: HeapKind::Vector,
+            },
+            elements,
+        });
+        let addr = (&mut *vector as *mut VectorObject) as usize;
+        self.vectors.push(vector);
         LispValue::from_heap_addr(addr)
     }
 
@@ -192,6 +206,12 @@ impl Runtime {
             .is_some_and(|addr| self.string_by_addr(addr).is_some())
     }
 
+    pub fn is_vector(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.vector_by_addr(addr).is_some())
+    }
+
     pub fn is_function(&self, value: LispValue) -> bool {
         value
             .heap_addr()
@@ -208,6 +228,10 @@ impl Runtime {
 
     pub fn string_count(&self) -> usize {
         self.strings.len()
+    }
+
+    pub fn vector_count(&self) -> usize {
+        self.vectors.len()
     }
 
     pub fn function_count(&self) -> usize {
@@ -500,6 +524,38 @@ impl Runtime {
         Ok(&self.expect_string(string)?.data)
     }
 
+    pub fn vector_len(&self, vector: LispValue) -> Result<usize, RuntimeError> {
+        Ok(self.expect_vector(vector)?.elements.len())
+    }
+
+    pub fn vector_aref(&self, vector: LispValue, index: usize) -> Result<LispValue, RuntimeError> {
+        self.expect_vector(vector)?
+            .elements
+            .get(index)
+            .copied()
+            .ok_or(RuntimeError::ArgsOutOfRange {
+                value: vector,
+                index,
+            })
+    }
+
+    pub fn vector_aset(
+        &mut self,
+        vector: LispValue,
+        index: usize,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        let vector_object = self.expect_vector_mut(vector)?;
+        let Some(slot) = vector_object.elements.get_mut(index) else {
+            return Err(RuntimeError::ArgsOutOfRange {
+                value: vector,
+                index,
+            });
+        };
+        *slot = value;
+        Ok(value)
+    }
+
     pub fn function_parts(
         &self,
         function: LispValue,
@@ -620,6 +676,34 @@ impl Runtime {
             })
     }
 
+    fn expect_vector(&self, value: LispValue) -> Result<&VectorObject, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            });
+        };
+        self.vector_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            })
+    }
+
+    fn expect_vector_mut(&mut self, value: LispValue) -> Result<&mut VectorObject, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            });
+        };
+        self.vector_by_addr_mut(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            })
+    }
+
     fn expect_function(&self, value: LispValue) -> Result<&FunctionObject, RuntimeError> {
         let Some(addr) = value.heap_addr() else {
             return Err(RuntimeError::WrongTypeArgument {
@@ -715,6 +799,26 @@ impl Runtime {
         None
     }
 
+    fn vector_by_addr(&self, addr: usize) -> Option<&VectorObject> {
+        for vector in &self.vectors {
+            let vector_addr = (&**vector as *const VectorObject) as usize;
+            if vector_addr == addr && vector.header.kind == HeapKind::Vector {
+                return Some(vector);
+            }
+        }
+        None
+    }
+
+    fn vector_by_addr_mut(&mut self, addr: usize) -> Option<&mut VectorObject> {
+        for vector in &mut self.vectors {
+            let vector_addr = (&**vector as *const VectorObject) as usize;
+            if vector_addr == addr && vector.header.kind == HeapKind::Vector {
+                return Some(vector);
+            }
+        }
+        None
+    }
+
     fn function_by_addr(&self, addr: usize) -> Option<&FunctionObject> {
         for function in &self.functions {
             let function_addr = (&**function as *const FunctionObject) as usize;
@@ -785,6 +889,17 @@ impl Runtime {
                 && left.data.sbytes() == right.data.sbytes()
                 && left.data.sdata() == right.data.sdata();
         }
+        if let (Some(left), Some(right)) = (
+            self.vector_by_addr(left_addr),
+            self.vector_by_addr(right_addr),
+        ) {
+            return left.elements.len() == right.elements.len()
+                && left
+                    .elements
+                    .iter()
+                    .zip(&right.elements)
+                    .all(|(left, right)| self.equal_with_depth(*left, *right, depth - 1));
+        }
         false
     }
 
@@ -836,6 +951,16 @@ impl Runtime {
             && let Some(string) = self.string_by_addr(addr)
         {
             return string.data.format_debug();
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(vector) = self.vector_by_addr(addr)
+        {
+            let elements = vector
+                .elements
+                .iter()
+                .map(|value| self.format_value_with_depth(*value, 63))
+                .collect::<Vec<_>>();
+            return format!("[{}]", elements.join(" "));
         }
         if self.is_function(value) {
             return "#<function>".to_string();
@@ -1005,6 +1130,10 @@ pub enum RuntimeError {
         requested: usize,
         available: usize,
     },
+    ArgsOutOfRange {
+        value: LispValue,
+        index: usize,
+    },
     InvalidStringData(String),
 }
 
@@ -1024,6 +1153,9 @@ impl fmt::Display for RuntimeError {
                 f,
                 "dynamic binding underflow: requested {requested}, available {available}"
             ),
+            Self::ArgsOutOfRange { value, index } => {
+                write!(f, "args out of range: value {value:?}, index {index}")
+            }
             Self::InvalidStringData(message) => write!(f, "invalid string data: {message}"),
         }
     }
@@ -1037,8 +1169,9 @@ enum HeapKind {
     Cons = 1,
     Symbol = 2,
     String = 3,
-    Function = 4,
-    LexicalCell = 5,
+    Vector = 4,
+    Function = 5,
+    LexicalCell = 6,
 }
 
 #[repr(C)]
@@ -1066,6 +1199,12 @@ struct Symbol {
 struct LispString {
     header: HeapHeader,
     data: LispStringData,
+}
+
+#[repr(C, align(8))]
+struct VectorObject {
+    header: HeapHeader,
+    elements: Vec<LispValue>,
 }
 
 #[repr(C, align(8))]
@@ -1198,6 +1337,42 @@ mod tests {
         assert_ne!(left, right);
         assert!(runtime.equal(left, right));
         assert_eq!(runtime.format_value(left), "\"alpha\"");
+    }
+
+    #[test]
+    fn vectors_are_heap_values_with_indexed_slots() {
+        let mut runtime = Runtime::new();
+        let first = LispValue::expect_fixnum(1);
+        let second = LispValue::expect_fixnum(2);
+        let vector = runtime.vector(vec![first, second]);
+
+        assert!(runtime.is_vector(vector));
+        assert_eq!(runtime.vector_count(), 1);
+        assert_eq!(runtime.vector_len(vector), Ok(2));
+        assert_eq!(runtime.vector_aref(vector, 1), Ok(second));
+        assert_eq!(runtime.vector_aset(vector, 1, first), Ok(first));
+        assert_eq!(runtime.vector_aref(vector, 1), Ok(first));
+        assert_eq!(runtime.format_value(vector), "[1 1]");
+    }
+
+    #[test]
+    fn equal_compares_vector_structure() {
+        let mut runtime = Runtime::new();
+        let left = runtime.vector(vec![
+            LispValue::expect_fixnum(1),
+            LispValue::expect_fixnum(2),
+        ]);
+        let right = runtime.vector(vec![
+            LispValue::expect_fixnum(1),
+            LispValue::expect_fixnum(2),
+        ]);
+        let different = runtime.vector(vec![
+            LispValue::expect_fixnum(1),
+            LispValue::expect_fixnum(3),
+        ]);
+
+        assert!(runtime.equal(left, right));
+        assert!(!runtime.equal(left, different));
     }
 
     #[test]

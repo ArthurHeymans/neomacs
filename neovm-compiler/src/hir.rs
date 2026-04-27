@@ -242,10 +242,10 @@ impl Lowerer<'_> {
             }),
             SurfaceKind::FunctionQuote(inner) => self.lower_function_quote(form, inner),
             SurfaceKind::List(items) => self.lower_list(form, items),
-            SurfaceKind::Vector(_) => {
-                self.error(form.span, "vector expressions are not supported yet");
-                None
-            }
+            SurfaceKind::Vector(_) => Some(HirExpr {
+                kind: HirExprKind::Quote(Box::new(form.clone())),
+                span: form.span,
+            }),
             SurfaceKind::DottedList(_, _) => {
                 self.error(form.span, "dotted-list expressions are not supported here");
                 None
@@ -1427,6 +1427,15 @@ mod tests {
         };
         assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::Progn(_)));
+    }
+
+    #[test]
+    fn lowers_vector_literals_as_quoted_constants() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n[1 (+ 1 2)]");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        assert!(matches!(expr.kind, HirExprKind::Quote(_)));
     }
 
     #[test]

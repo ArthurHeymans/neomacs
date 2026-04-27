@@ -664,6 +664,9 @@ impl Interpreter<'_, '_, '_> {
             "stringp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_string(args[0]))),
+            "vectorp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_vector(args[0]))),
             "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.symbol_value(args[0]);
                 self.runtime_value(result)
@@ -767,6 +770,13 @@ impl Interpreter<'_, '_, '_> {
             "string-to-char" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.string_to_char(args[0])),
+            "vector" => Some(self.runtime.vector(args.to_vec())),
+            "aref" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.aref(args[0], args[1])),
+            "aset" => self
+                .exact_arity(name, args, 3)
+                .and_then(|_| self.aset(args[0], args[1], args[2])),
             "reverse" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
@@ -1056,9 +1066,12 @@ impl Interpreter<'_, '_, '_> {
             SurfaceKind::Backquote(inner) => self.quote_prefixed_form("quasiquote", inner),
             SurfaceKind::Comma(inner) => self.quote_prefixed_form("unquote", inner),
             SurfaceKind::CommaAt(inner) => self.quote_prefixed_form("unquote-splicing", inner),
-            SurfaceKind::Vector(_) => {
-                self.unsupported("quoted vectors require vector object support");
-                None
+            SurfaceKind::Vector(items) => {
+                let values = items
+                    .iter()
+                    .map(|item| self.quote_value(item))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(self.runtime.vector(values))
             }
         }
     }
@@ -1152,6 +1165,15 @@ impl Interpreter<'_, '_, '_> {
                 }
             };
         }
+        if self.runtime.is_vector(value) {
+            return match self.runtime.vector_len(value) {
+                Ok(len) => Some(len),
+                Err(error) => {
+                    self.runtime_error(error);
+                    None
+                }
+            };
+        }
         self.list_length(value)
     }
 
@@ -1235,6 +1257,58 @@ impl Interpreter<'_, '_, '_> {
             Some(ch) => Some(LispValue::from_char(ch)),
             None => self.fixnum(0, "string-to-char"),
         }
+    }
+
+    fn aref(&mut self, sequence: LispValue, index: LispValue) -> Option<LispValue> {
+        let index = self.sequence_index("aref", index)?;
+        if self.runtime.is_vector(sequence) {
+            let result = self.runtime.vector_aref(sequence, index);
+            return self.runtime_value(result);
+        }
+        if self.runtime.is_string(sequence) {
+            let contents = self.string_contents_owned(sequence)?;
+            let Some(ch) = contents.chars().nth(index) else {
+                self.error("primitive `aref` string index out of range");
+                return None;
+            };
+            return Some(LispValue::from_char(ch));
+        }
+        self.error(format!(
+            "primitive `aref` expected a string or vector, got {}",
+            self.runtime.format_value(sequence)
+        ));
+        None
+    }
+
+    fn aset(
+        &mut self,
+        sequence: LispValue,
+        index: LispValue,
+        value: LispValue,
+    ) -> Option<LispValue> {
+        let index = self.sequence_index("aset", index)?;
+        if self.runtime.is_vector(sequence) {
+            let result = self.runtime.vector_aset(sequence, index, value);
+            return self.runtime_value(result);
+        }
+        if self.runtime.is_string(sequence) {
+            self.unsupported("aset on strings requires mutable multibyte string updates");
+            return None;
+        }
+        self.error(format!(
+            "primitive `aset` expected a vector, got {}",
+            self.runtime.format_value(sequence)
+        ));
+        None
+    }
+
+    fn sequence_index(&mut self, name: &str, value: LispValue) -> Option<usize> {
+        let value = self.fixnum_arg(name, value)?;
+        if value < 0 {
+            self.error(format!("primitive `{name}` index must be nonnegative"));
+            return None;
+        }
+        usize::try_from(value).ok()
     }
 
     fn string_bytes(&mut self, value: LispValue) -> Option<Vec<u8>> {
@@ -1701,6 +1775,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "zerop"
             | "symbolp"
             | "stringp"
+            | "vectorp"
             | "symbol-value"
             | "set"
             | "boundp"
@@ -1734,6 +1809,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-lessp"
             | "char-to-string"
             | "string-to-char"
+            | "vector"
+            | "aref"
+            | "aset"
             | "reverse"
             | "append"
             | "nth"
@@ -1820,6 +1898,15 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(let ((s (concat \"a\" (char-to-string ?b) \"c\"))) (+ (length s) (if (string= (substring s 1 -1) \"b\") 10 0) (if (string< \"a\" \"b\") 20 0) (if (eq (string-to-char s) ?a) 30 0)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(63)));
+    }
+
+    #[test]
+    fn executes_vector_primitives_and_literals() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((v [1 2 3])) (aset v 1 9) (+ (aref v 1) (length v) (if (vectorp (vector 4 5)) 10 0) (if (equal v [1 9 3]) 20 0) (if (eq (aref \"a\" 0) ?a) 0 99)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+        assert_eq!(runtime.vector_count(), 3);
     }
 
     #[test]
