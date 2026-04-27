@@ -12,6 +12,7 @@ pub struct Runtime {
     functions: Vec<Box<FunctionObject>>,
     lexical_cells: Vec<Box<LexicalCell>>,
     interned_symbols: HashMap<String, LispValue>,
+    dynamic_bindings: Vec<DynamicBinding>,
     pending_error: Option<RuntimeError>,
 }
 
@@ -196,6 +197,10 @@ impl Runtime {
         self.lexical_cells.len()
     }
 
+    pub fn dynamic_binding_count(&self) -> usize {
+        self.dynamic_bindings.len()
+    }
+
     pub fn symbol_name(&self, symbol: LispValue) -> Result<String, RuntimeError> {
         if symbol.is_nil() {
             return Ok("nil".to_string());
@@ -217,6 +222,9 @@ impl Runtime {
         }
         if symbol.is_true() {
             return Ok(LispValue::TRUE);
+        }
+        if let Some(value) = self.dynamic_symbol_value(symbol) {
+            return Ok(value);
         }
         let symbol = self.expect_symbol(symbol)?;
         symbol.value.ok_or_else(|| RuntimeError::VoidVariable {
@@ -253,6 +261,10 @@ impl Runtime {
                 name: "t".to_string(),
             });
         }
+        if let Some(index) = self.dynamic_binding_index(symbol) {
+            self.dynamic_bindings[index].value = value;
+            return Ok(value);
+        }
         self.expect_symbol_mut(symbol)?.value = Some(value);
         Ok(value)
     }
@@ -270,7 +282,49 @@ impl Runtime {
         if symbol.is_nil() || symbol.is_true() {
             return Ok(true);
         }
-        Ok(self.expect_symbol(symbol)?.value.is_some())
+        Ok(self.dynamic_symbol_value(symbol).is_some()
+            || self.expect_symbol(symbol)?.value.is_some())
+    }
+
+    pub fn bind_dynamic_by_name(
+        &mut self,
+        name: &str,
+        value: LispValue,
+    ) -> Result<(), RuntimeError> {
+        let symbol = self.intern(name);
+        self.bind_dynamic(symbol, value)
+    }
+
+    pub fn bind_dynamic(
+        &mut self,
+        symbol: LispValue,
+        value: LispValue,
+    ) -> Result<(), RuntimeError> {
+        if symbol.is_nil() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "nil".to_string(),
+            });
+        }
+        if symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "t".to_string(),
+            });
+        }
+        self.expect_symbol(symbol)?;
+        self.dynamic_bindings.push(DynamicBinding { symbol, value });
+        Ok(())
+    }
+
+    pub fn unbind_dynamic(&mut self, count: usize) -> Result<(), RuntimeError> {
+        let len = self.dynamic_bindings.len();
+        if count > len {
+            return Err(RuntimeError::DynamicBindingUnderflow {
+                requested: count,
+                available: len,
+            });
+        }
+        self.dynamic_bindings.truncate(len - count);
+        Ok(())
     }
 
     pub fn symbol_function(&self, symbol: LispValue) -> Result<Option<LispValue>, RuntimeError> {
@@ -337,6 +391,17 @@ impl Runtime {
 
     pub fn take_pending_error(&mut self) -> Option<RuntimeError> {
         self.pending_error.take()
+    }
+
+    fn dynamic_symbol_value(&self, symbol: LispValue) -> Option<LispValue> {
+        self.dynamic_binding_index(symbol)
+            .map(|index| self.dynamic_bindings[index].value)
+    }
+
+    fn dynamic_binding_index(&self, symbol: LispValue) -> Option<usize> {
+        self.dynamic_bindings
+            .iter()
+            .rposition(|binding| binding.symbol == symbol)
     }
 
     fn return_or_record_error(&mut self, result: Result<LispValue, RuntimeError>) -> i64 {
@@ -788,6 +853,10 @@ pub enum RuntimeError {
     ConstantSymbol {
         name: String,
     },
+    DynamicBindingUnderflow {
+        requested: usize,
+        available: usize,
+    },
     InvalidStringData(String),
 }
 
@@ -800,6 +869,13 @@ impl fmt::Display for RuntimeError {
             Self::VoidVariable { name } => write!(f, "void variable: {name}"),
             Self::VoidFunction { name } => write!(f, "void function: {name}"),
             Self::ConstantSymbol { name } => write!(f, "attempt to set constant symbol: {name}"),
+            Self::DynamicBindingUnderflow {
+                requested,
+                available,
+            } => write!(
+                f,
+                "dynamic binding underflow: requested {requested}, available {available}"
+            ),
             Self::InvalidStringData(message) => write!(f, "invalid string data: {message}"),
         }
     }
@@ -853,6 +929,12 @@ struct FunctionObject {
 #[repr(C, align(8))]
 struct LexicalCell {
     header: HeapHeader,
+    value: LispValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DynamicBinding {
+    symbol: LispValue,
     value: LispValue,
 }
 
@@ -1034,6 +1116,49 @@ mod tests {
         assert_eq!(runtime.set_symbol_value(symbol, value), Ok(value));
         assert_eq!(runtime.is_bound_symbol(symbol), Ok(true));
         assert_eq!(runtime.symbol_value(symbol), Ok(value));
+    }
+
+    #[test]
+    fn dynamic_bindings_shadow_globals_and_restore() {
+        let mut runtime = Runtime::new();
+        let symbol = runtime.intern("dyn");
+        let global = LispValue::expect_fixnum(1);
+        let dynamic = LispValue::expect_fixnum(2);
+        let updated_dynamic = LispValue::expect_fixnum(3);
+
+        assert_eq!(runtime.set_symbol_value(symbol, global), Ok(global));
+        assert_eq!(runtime.bind_dynamic(symbol, dynamic), Ok(()));
+        assert_eq!(runtime.dynamic_binding_count(), 1);
+        assert_eq!(runtime.symbol_value(symbol), Ok(dynamic));
+        assert_eq!(
+            runtime.set_symbol_value(symbol, updated_dynamic),
+            Ok(updated_dynamic)
+        );
+        assert_eq!(runtime.symbol_value(symbol), Ok(updated_dynamic));
+        assert_eq!(runtime.unbind_dynamic(1), Ok(()));
+        assert_eq!(runtime.dynamic_binding_count(), 0);
+        assert_eq!(runtime.symbol_value(symbol), Ok(global));
+    }
+
+    #[test]
+    fn nested_dynamic_bindings_use_topmost_value() {
+        let mut runtime = Runtime::new();
+        let symbol = runtime.intern("dyn");
+        let outer = LispValue::expect_fixnum(1);
+        let inner = LispValue::expect_fixnum(2);
+
+        assert_eq!(runtime.bind_dynamic(symbol, outer), Ok(()));
+        assert_eq!(runtime.bind_dynamic(symbol, inner), Ok(()));
+        assert_eq!(runtime.symbol_value(symbol), Ok(inner));
+        assert_eq!(runtime.unbind_dynamic(1), Ok(()));
+        assert_eq!(runtime.symbol_value(symbol), Ok(outer));
+        assert_eq!(runtime.unbind_dynamic(1), Ok(()));
+        assert_eq!(
+            runtime.symbol_value(symbol),
+            Err(RuntimeError::VoidVariable {
+                name: "dyn".to_string()
+            })
+        );
     }
 
     #[test]

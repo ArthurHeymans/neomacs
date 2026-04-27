@@ -287,9 +287,22 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.set(*dst, value);
             }
-            RegInstKind::BindDynamic { .. }
-            | RegInstKind::UnbindDynamic { .. }
-            | RegInstKind::CatchBegin { .. }
+            RegInstKind::BindDynamic { name, src } => {
+                let Some(value) = self.get(*src) else {
+                    return false;
+                };
+                if let Err(error) = self.runtime.bind_dynamic_by_name(name, value) {
+                    self.runtime_error(error);
+                    return false;
+                }
+            }
+            RegInstKind::UnbindDynamic { count } => {
+                if let Err(error) = self.runtime.unbind_dynamic(*count) {
+                    self.runtime_error(error);
+                    return false;
+                }
+            }
+            RegInstKind::CatchBegin { .. }
             | RegInstKind::CatchEnd
             | RegInstKind::Throw { .. }
             | RegInstKind::ConditionCaseBegin { .. }
@@ -1119,5 +1132,31 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
         assert_eq!(runtime.lexical_cell_count(), 1);
+    }
+
+    #[test]
+    fn executes_dynamic_let_under_dynamic_binding_mode() {
+        let (value, runtime) =
+            execute(";;; -*- lexical-binding: nil; -*-\n(let ((x 1)) (+ (let ((x 2)) x) x))");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+        assert_eq!(runtime.dynamic_binding_count(), 0);
+    }
+
+    #[test]
+    fn setq_updates_active_dynamic_binding() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: nil; -*-\n(progn (setq dyn 7) (+ (let ((dyn 4)) (setq dyn 5) dyn) dyn))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+        assert_eq!(runtime.dynamic_binding_count(), 0);
+    }
+
+    #[test]
+    fn executes_declared_special_let_under_lexical_binding() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (setq special-dyn 10) (+ (let ((special-dyn 1)) (declare (special special-dyn)) (setq special-dyn 2) special-dyn) special-dyn))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+        assert_eq!(runtime.dynamic_binding_count(), 0);
     }
 }
