@@ -40,6 +40,18 @@ struct ActiveConditionHandler {
     dynamic_bind_count: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NonlocalExit {
+    Throw(ThrownValue),
+    Signal(SignaledValue),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ActiveUnwindCleanup {
+    stop_index: usize,
+    pending: NonlocalExit,
+}
+
 #[derive(Clone, Debug)]
 struct InternalInterpResult {
     value: Option<LispValue>,
@@ -122,6 +134,7 @@ fn execute_with_module(
         catch_stack: Vec::new(),
         condition_stack: Vec::new(),
         active_condition_handler: None,
+        active_unwind_cleanup: None,
         pending_throw: None,
         pending_signal: None,
         last_value: None,
@@ -141,6 +154,7 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     catch_stack: Vec<LispValue>,
     condition_stack: Vec<ConditionFrame>,
     active_condition_handler: Option<ActiveConditionHandler>,
+    active_unwind_cleanup: Option<ActiveUnwindCleanup>,
     pending_throw: Option<ThrownValue>,
     pending_signal: Option<SignaledValue>,
     last_value: Option<LispValue>,
@@ -188,6 +202,17 @@ impl Interpreter<'_, '_, '_> {
             while inst_index < body.instructions.len() {
                 let inst = &body.instructions[inst_index];
                 if self
+                    .active_unwind_cleanup
+                    .as_ref()
+                    .is_some_and(|cleanup| cleanup.stop_index == inst_index)
+                {
+                    let cleanup = self
+                        .active_unwind_cleanup
+                        .take()
+                        .expect("active unwind cleanup");
+                    return self.finish_nonlocal(cleanup.pending);
+                }
+                if self
                     .active_condition_handler
                     .as_ref()
                     .is_some_and(|handler| handler.stop_index == inst_index)
@@ -220,9 +245,31 @@ impl Interpreter<'_, '_, '_> {
                 }
                 if !self.execute_inst(&inst.kind) {
                     if let Some(thrown) = self.pending_throw.take() {
+                        let already_in_cleanup = self.active_unwind_cleanup.take().is_some();
+                        if !already_in_cleanup {
+                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                                &body.instructions,
+                                inst_index,
+                                NonlocalExit::Throw(thrown),
+                            ) {
+                                inst_index = cleanup_start;
+                                continue;
+                            }
+                        }
                         return self.finish_throw(thrown);
                     }
                     if let Some(signaled) = self.pending_signal.take() {
+                        let already_in_cleanup = self.active_unwind_cleanup.take().is_some();
+                        if !already_in_cleanup {
+                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                                &body.instructions,
+                                inst_index,
+                                NonlocalExit::Signal(signaled),
+                            ) {
+                                inst_index = cleanup_start;
+                                continue;
+                            }
+                        }
                         if let Some(handler_start) = self.enter_condition_handler(
                             &body.instructions,
                             inst_index,
@@ -451,10 +498,7 @@ impl Interpreter<'_, '_, '_> {
             }
             RegInstKind::UnwindProtectBegin
             | RegInstKind::UnwindProtectCleanup
-            | RegInstKind::UnwindProtectEnd => {
-                self.unsupported("instruction requires object runtime support");
-                return false;
-            }
+            | RegInstKind::UnwindProtectEnd => {}
         }
         true
     }
@@ -845,6 +889,20 @@ impl Interpreter<'_, '_, '_> {
         Some(self.last_value.unwrap_or(LispValue::NIL))
     }
 
+    fn enter_unwind_cleanup(
+        &mut self,
+        instructions: &[RegInst],
+        signal_index: usize,
+        pending: NonlocalExit,
+    ) -> Option<usize> {
+        let target = find_unwind_cleanup(instructions, signal_index)?;
+        self.active_unwind_cleanup = Some(ActiveUnwindCleanup {
+            stop_index: target.end_index,
+            pending,
+        });
+        Some(target.cleanup_index + 1)
+    }
+
     fn const_value(&mut self, value: &SsaConst) -> Option<LispValue> {
         match value {
             SsaConst::Nil => Some(LispValue::NIL),
@@ -1197,6 +1255,13 @@ impl Interpreter<'_, '_, '_> {
             diagnostics: self.diagnostics,
         }
     }
+
+    fn finish_nonlocal(self, pending: NonlocalExit) -> InternalInterpResult {
+        match pending {
+            NonlocalExit::Throw(thrown) => self.finish_throw(thrown),
+            NonlocalExit::Signal(signaled) => self.finish_signal(signaled),
+        }
+    }
 }
 
 fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {
@@ -1214,6 +1279,12 @@ struct ConditionHandlerTarget {
     condition_end_index: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct UnwindCleanupTarget {
+    cleanup_index: usize,
+    end_index: usize,
+}
+
 fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Option<usize> {
     let mut depth = 0usize;
     for (index, inst) in instructions.iter().enumerate().skip(handler_index + 1) {
@@ -1221,6 +1292,29 @@ fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Op
             RegInstKind::ConditionCaseBegin { .. } => depth += 1,
             RegInstKind::ConditionCaseEnd if depth == 0 => return Some(index),
             RegInstKind::ConditionCaseEnd => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn find_unwind_cleanup(
+    instructions: &[RegInst],
+    signal_index: usize,
+) -> Option<UnwindCleanupTarget> {
+    let mut depth = 0usize;
+    let mut cleanup_index = None;
+    for (index, inst) in instructions.iter().enumerate().skip(signal_index + 1) {
+        match &inst.kind {
+            RegInstKind::UnwindProtectBegin => depth += 1,
+            RegInstKind::UnwindProtectCleanup if depth == 0 => cleanup_index = Some(index),
+            RegInstKind::UnwindProtectEnd if depth == 0 => {
+                return cleanup_index.map(|cleanup_index| UnwindCleanupTarget {
+                    cleanup_index,
+                    end_index: index,
+                });
+            }
+            RegInstKind::UnwindProtectEnd => depth -= 1,
             _ => {}
         }
     }
@@ -1593,5 +1687,21 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(condition-case err (signal 'wrong-type-argument (list 'symbolp 1)) (wrong-type-argument (eq (car err) 'wrong-type-argument)))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn unwind_protect_runs_cleanup_on_normal_completion() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 0)) (unwind-protect 42 (setq x 5)) x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn unwind_protect_cleanup_can_override_throw() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(catch 'tag (unwind-protect (throw 'tag 7) (throw 'tag 8)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(8)));
     }
 }
