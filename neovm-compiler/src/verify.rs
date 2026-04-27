@@ -88,6 +88,7 @@ impl RegVerifier<'_> {
             RegInstKind::BindLexical { src, .. } | RegInstKind::BindDynamic { src, .. } => {
                 self.check_reg(*src);
             }
+            RegInstKind::UnbindDynamic { .. } => {}
             RegInstKind::CallNamed { dst, args, .. } => {
                 self.check_reg(*dst);
                 self.check_regs(args);
@@ -217,6 +218,7 @@ impl SsaVerifier<'_> {
             | SsaInstKind::FunctionQuote(_)
             | SsaInstKind::LexicalGet(_)
             | SsaInstKind::SymbolGet(_)
+            | SsaInstKind::UnbindDynamic { .. }
             | SsaInstKind::DeclareSpecial(_)
             | SsaInstKind::CatchEnd
             | SsaInstKind::ConditionCaseBegin { .. }

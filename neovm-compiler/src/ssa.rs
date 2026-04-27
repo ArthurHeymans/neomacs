@@ -53,6 +53,7 @@ pub enum SsaInstKind {
     SymbolSet { name: String, value: ValueId },
     BindLexical { name: String, value: ValueId },
     BindDynamic { name: String, value: ValueId },
+    UnbindDynamic { count: usize },
     DeclareSpecial(Vec<String>),
     CallNamed { name: String, args: Vec<ValueId> },
     Funcall { callee: ValueId, args: Vec<ValueId> },

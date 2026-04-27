@@ -79,6 +79,9 @@ pub enum RegInstKind {
         name: String,
         src: RegId,
     },
+    UnbindDynamic {
+        count: usize,
+    },
     DeclareSpecial {
         names: Vec<String>,
     },

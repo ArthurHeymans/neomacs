@@ -368,8 +368,11 @@ Initial Cranelift lowering is intentionally conservative:
   function semantics stay in the runtime.
 - Lower string/float constants and quoted forms through runtime materialization
   calls so allocation, interning, and object identity stay runtime-owned.
-- Reject dynamic binding and nonlocal exits until the runtime ABI and precise
-  safepoint/stack-map contract exist.
+- Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
+  evaluates all initializers before installing bindings; `let*` installs each
+  binding before the next initializer.
+- Reject nonlocal exits until the runtime ABI and precise safepoint/stack-map
+  contract exist.
 - Do not depend on `regalloc2` directly while using Cranelift; Cranelift owns
   physical register allocation internally.
 
@@ -415,6 +418,17 @@ tables, precise stack maps, and JIT execution are connected.
 `string_id` and `quote_id` are also compiler-owned keys into per-function
 metadata tables. Float constants pass the exact IEEE-754 bit pattern as an
 opaque payload for the runtime to materialize.
+
+Dynamic binding uses fixed imports:
+
+```text
+__neomacs_rt_bind_dynamic(vmctx: i64, symbol_id: i64, value: i64)
+__neomacs_rt_unbind_dynamic(vmctx: i64, count: i64)
+```
+
+The compiler emits `unbind_dynamic` on normal scope exit. Nonlocal exits still
+need explicit unwind-edge lowering before Cranelift can support `throw`,
+`condition-case`, or `unwind-protect`.
 
 Every Cranelift runtime ABI call is also a compiler safepoint. The current
 metadata records:

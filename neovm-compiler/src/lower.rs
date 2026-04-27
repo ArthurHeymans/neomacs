@@ -166,6 +166,7 @@ impl<'a> RegLowerer<'a> {
                 name: name.clone(),
                 src: self.value_reg(*value),
             },
+            SsaInstKind::UnbindDynamic { count } => RegInstKind::UnbindDynamic { count: *count },
             SsaInstKind::DeclareSpecial(names) => RegInstKind::DeclareSpecial {
                 names: names.clone(),
             },
@@ -268,10 +269,13 @@ impl<'a> RegLowerer<'a> {
     fn needs_safepoint(&self, kind: &SsaInstKind) -> bool {
         matches!(
             kind,
-            SsaInstKind::Quote(_)
+            SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_))
+                | SsaInstKind::Quote(_)
+                | SsaInstKind::FunctionQuote(_)
                 | SsaInstKind::SymbolGet(_)
                 | SsaInstKind::SymbolSet { .. }
                 | SsaInstKind::BindDynamic { .. }
+                | SsaInstKind::UnbindDynamic { .. }
                 | SsaInstKind::CallNamed { .. }
                 | SsaInstKind::Funcall { .. }
                 | SsaInstKind::Apply { .. }
@@ -409,26 +413,42 @@ impl SsaBuilder {
             HirExprKind::Let {
                 declarations,
                 bindings,
+                sequential,
                 body,
                 ..
             } => {
                 for declaration in declarations {
                     self.lower_declaration(declaration);
                 }
-                for binding in bindings {
-                    let value = self.lower_expr(&binding.init)?;
-                    match binding.mode {
-                        BindingMode::Lexical => self.emit_no_result(SsaInstKind::BindLexical {
-                            name: binding.name.clone(),
-                            value,
-                        }),
-                        BindingMode::Dynamic => self.emit_no_result(SsaInstKind::BindDynamic {
-                            name: binding.name.clone(),
-                            value,
-                        }),
+                let mut dynamic_bind_count = 0;
+                if *sequential {
+                    for binding in bindings {
+                        let value = self.lower_expr(&binding.init)?;
+                        self.emit_binding(binding.mode, binding.name.clone(), value);
+                        if binding.mode == BindingMode::Dynamic {
+                            dynamic_bind_count += 1;
+                        }
+                    }
+                } else {
+                    let mut lowered_bindings = Vec::with_capacity(bindings.len());
+                    for binding in bindings {
+                        let value = self.lower_expr(&binding.init)?;
+                        lowered_bindings.push((binding.mode, binding.name.clone(), value));
+                    }
+                    for (mode, name, value) in lowered_bindings {
+                        self.emit_binding(mode, name, value);
+                        if mode == BindingMode::Dynamic {
+                            dynamic_bind_count += 1;
+                        }
                     }
                 }
-                self.lower_expr(body)
+                let body_value = self.lower_expr(body);
+                if dynamic_bind_count > 0 && body_value.is_some() {
+                    self.emit_no_result(SsaInstKind::UnbindDynamic {
+                        count: dynamic_bind_count,
+                    });
+                }
+                body_value
             }
             HirExprKind::Lambda { .. } => {
                 self.diagnostics.push(
@@ -581,6 +601,13 @@ impl SsaBuilder {
         }
     }
 
+    fn emit_binding(&mut self, mode: BindingMode, name: String, value: ValueId) {
+        match mode {
+            BindingMode::Lexical => self.emit_no_result(SsaInstKind::BindLexical { name, value }),
+            BindingMode::Dynamic => self.emit_no_result(SsaInstKind::BindDynamic { name, value }),
+        }
+    }
+
     fn create_block(&mut self) -> BlockId {
         self.function.blocks.push(SsaBlock {
             params: Vec::new(),
@@ -615,6 +642,7 @@ impl SsaBuilder {
     fn emit_no_result(&mut self, kind: SsaInstKind) {
         let effects = match &kind {
             SsaInstKind::BindDynamic { .. } => Effects::single(Effect::BindDynamic),
+            SsaInstKind::UnbindDynamic { .. } => Effects::single(Effect::UnbindDynamic),
             SsaInstKind::DeclareSpecial(_) => Effects::pure(),
             SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd

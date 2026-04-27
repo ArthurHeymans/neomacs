@@ -64,6 +64,8 @@ pub enum ClifRuntimeCallKind {
     Apply { arity: usize },
     SymbolGet { name: String },
     SymbolSet { name: String },
+    BindDynamic { name: String },
+    UnbindDynamic { count: usize },
     StringConst { value: String },
     FloatConst { bits: u64 },
     Quote { index: usize },
@@ -80,6 +82,8 @@ pub struct ClifRuntimeAbi {
     apply_by_arity: HashMap<usize, FuncId>,
     symbol_get: Option<FuncId>,
     symbol_set: Option<FuncId>,
+    bind_dynamic: Option<FuncId>,
+    unbind_dynamic: Option<FuncId>,
     string_const: Option<FuncId>,
     float_const: Option<FuncId>,
     quote: Option<FuncId>,
@@ -98,6 +102,8 @@ impl Default for ClifRuntimeAbi {
             apply_by_arity: HashMap::new(),
             symbol_get: None,
             symbol_set: None,
+            bind_dynamic: None,
+            unbind_dynamic: None,
             string_const: None,
             float_const: None,
             quote: None,
@@ -245,6 +251,34 @@ impl ClifRuntimeAbi {
         Ok(RuntimeFuncImport { id, signature })
     }
 
+    fn bind_dynamic(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = bind_dynamic_signature(call_conv);
+        if let Some(id) = self.bind_dynamic {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_bind_dynamic", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.bind_dynamic = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn unbind_dynamic(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = unbind_dynamic_signature(call_conv);
+        if let Some(id) = self.unbind_dynamic {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_unbind_dynamic", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.unbind_dynamic = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
     fn string_const(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
         let signature = indexed_runtime_signature(call_conv);
         if let Some(id) = self.string_const {
@@ -343,6 +377,21 @@ fn symbol_set_signature(call_conv: CallConv) -> Signature {
     signature.params.push(AbiParam::new(types::I64)); // interned variable symbol
     signature.params.push(AbiParam::new(types::I64)); // value
     signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn bind_dynamic_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // interned variable symbol
+    signature.params.push(AbiParam::new(types::I64)); // value
+    signature
+}
+
+fn unbind_dynamic_signature(call_conv: CallConv) -> Signature {
+    let mut signature = Signature::new(call_conv);
+    signature.params.push(AbiParam::new(types::I64)); // vmctx
+    signature.params.push(AbiParam::new(types::I64)); // binding count
     signature
 }
 
@@ -482,17 +531,14 @@ impl<'a> ClifLowerer<'a> {
                     | SsaInstKind::DeclareSpecial(_)
                     | SsaInstKind::SymbolGet(_)
                     | SsaInstKind::SymbolSet { .. }
+                    | SsaInstKind::BindDynamic { .. }
+                    | SsaInstKind::UnbindDynamic { .. }
                     | SsaInstKind::CallNamed { .. }
                     | SsaInstKind::Funcall { .. }
                     | SsaInstKind::Apply { .. } => {}
                     SsaInstKind::LexicalSet { .. } => {
                         self.unsupported(
                             "lexical set lowering needs mutable lexical environment analysis",
-                        );
-                    }
-                    SsaInstKind::BindDynamic { .. } => {
-                        self.unsupported(
-                            "dynamic binding needs runtime dynamic environment support",
                         );
                     }
                     SsaInstKind::CatchBegin { .. }
@@ -681,6 +727,34 @@ impl ClifBlockLowerer<'_> {
                 };
                 self.value_map.insert(result, value);
             }
+            SsaInstKind::BindDynamic { name, value } => {
+                let Some(value) = self.value(*value) else {
+                    return;
+                };
+                let Some(func_ref) = self.bind_dynamic_ref() else {
+                    return;
+                };
+                let Some(()) = self.emit_symbol_runtime_void_call_with_kind(
+                    func_ref,
+                    name,
+                    &[value],
+                    ClifRuntimeCallKind::BindDynamic { name: name.clone() },
+                ) else {
+                    return;
+                };
+            }
+            SsaInstKind::UnbindDynamic { count } => {
+                let Some(func_ref) = self.unbind_dynamic_ref() else {
+                    return;
+                };
+                let Some(()) = self.emit_indexed_runtime_void_call(
+                    func_ref,
+                    *count as i64,
+                    ClifRuntimeCallKind::UnbindDynamic { count: *count },
+                ) else {
+                    return;
+                };
+            }
             SsaInstKind::CallNamed { name, args } => {
                 let Some(result) = inst.result else {
                     self.error("named call instruction has no result");
@@ -737,7 +811,6 @@ impl ClifBlockLowerer<'_> {
                 self.value_map.insert(result, result_value);
             }
             SsaInstKind::LexicalSet { .. }
-            | SsaInstKind::BindDynamic { .. }
             | SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd
             | SsaInstKind::Throw { .. }
@@ -860,6 +933,32 @@ impl ClifBlockLowerer<'_> {
             Err(error) => {
                 self.error(format!(
                     "failed to declare Cranelift symbol set runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn bind_dynamic_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.bind_dynamic(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift dynamic bind runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn unbind_dynamic_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.unbind_dynamic(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift dynamic unbind runtime call: {error}"
                 ));
                 return None;
             }
@@ -1035,6 +1134,31 @@ impl ClifBlockLowerer<'_> {
         Some(result)
     }
 
+    fn emit_symbol_runtime_void_call_with_kind(
+        &mut self,
+        func_ref: FuncRef,
+        symbol_name: &str,
+        args: &[ir::Value],
+        kind: ClifRuntimeCallKind,
+    ) -> Option<()> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let symbol = self.runtime.intern_symbol(symbol_name);
+        let symbol = self
+            .builder
+            .ins()
+            .iconst(types::I64, symbol.into_usize() as i64);
+        let mut call_args = Vec::with_capacity(args.len() + 2);
+        call_args.push(vmctx);
+        call_args.push(symbol);
+        call_args.extend_from_slice(args);
+        let call = self.builder.ins().call(func_ref, &call_args);
+        self.record_safepoint(call, kind);
+        Some(())
+    }
+
     fn emit_indirect_runtime_call(
         &mut self,
         func_ref: FuncRef,
@@ -1091,6 +1215,22 @@ impl ClifBlockLowerer<'_> {
             return None;
         };
         Some(result)
+    }
+
+    fn emit_indexed_runtime_void_call(
+        &mut self,
+        func_ref: FuncRef,
+        value: i64,
+        kind: ClifRuntimeCallKind,
+    ) -> Option<()> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("indexed runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let value = self.builder.ins().iconst(types::I64, value);
+        let call = self.builder.ins().call(func_ref, &[vmctx, value]);
+        self.record_safepoint(call, kind);
+        Some(())
     }
 
     fn record_safepoint(&mut self, call_inst: ir::Inst, kind: ClifRuntimeCallKind) {
@@ -1370,6 +1510,94 @@ mod tests {
         );
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_dynamic_binding_to_runtime_scope_calls() {
+        let artifact = compile_source(
+            "dynamic-let.el",
+            ";;; -*- lexical-binding: nil; -*-\n(defun dynamic-let (x) (let ((dyn-value x)) dyn-value))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(
+            clif.runtime
+                .symbol_key("dyn-value")
+                .map(|symbol| clif.runtime.resolve_symbol(symbol)),
+            Some("dyn-value")
+        );
+        let imported_names = clif.runtime.imported_function_names();
+        assert!(imported_names.contains(&"__neomacs_rt_bind_dynamic"));
+        assert!(imported_names.contains(&"__neomacs_rt_symbol_get"));
+        assert!(imported_names.contains(&"__neomacs_rt_unbind_dynamic"));
+        let safepoints = clif
+            .safepoints
+            .entries
+            .iter()
+            .map(|(_, safepoint)| safepoint)
+            .collect::<Vec<_>>();
+        assert_eq!(safepoints.len(), 3);
+        assert!(matches!(
+            &safepoints[0].kind,
+            ClifRuntimeCallKind::BindDynamic { name } if name == "dyn-value"
+        ));
+        assert!(matches!(
+            &safepoints[1].kind,
+            ClifRuntimeCallKind::SymbolGet { name } if name == "dyn-value"
+        ));
+        assert!(matches!(
+            &safepoints[2].kind,
+            ClifRuntimeCallKind::UnbindDynamic { count } if *count == 1
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn dynamic_parallel_let_initializers_run_before_binds() {
+        let artifact = compile_source(
+            "dynamic-parallel-let.el",
+            ";;; -*- lexical-binding: nil; -*-\n(defun dynamic-parallel-let () (let ((a 1) (b a)) b))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let safepoints = clif
+            .safepoints
+            .entries
+            .iter()
+            .map(|(_, safepoint)| safepoint)
+            .collect::<Vec<_>>();
+        assert_eq!(safepoints.len(), 5);
+        assert!(matches!(
+            &safepoints[0].kind,
+            ClifRuntimeCallKind::SymbolGet { name } if name == "a"
+        ));
+        assert!(matches!(
+            &safepoints[1].kind,
+            ClifRuntimeCallKind::BindDynamic { name } if name == "a"
+        ));
+        assert!(matches!(
+            &safepoints[2].kind,
+            ClifRuntimeCallKind::BindDynamic { name } if name == "b"
+        ));
+        assert!(matches!(
+            &safepoints[3].kind,
+            ClifRuntimeCallKind::SymbolGet { name } if name == "b"
+        ));
+        assert!(matches!(
+            &safepoints[4].kind,
+            ClifRuntimeCallKind::UnbindDynamic { count } if *count == 2
+        ));
     }
 
     #[test]

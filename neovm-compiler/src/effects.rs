@@ -5,6 +5,7 @@ pub enum Effect {
     ReadSymbol,
     WriteSymbol,
     BindDynamic,
+    UnbindDynamic,
     Allocate,
     Call,
     MayGc,

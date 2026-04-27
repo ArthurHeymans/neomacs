@@ -183,6 +183,9 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::BindDynamic { name, value } => {
             let _ = write!(out, "bind-dynamic {name}, {}", value_name(function, *value));
         }
+        SsaInstKind::UnbindDynamic { count } => {
+            let _ = write!(out, "unbind-dynamic {count}");
+        }
         SsaInstKind::DeclareSpecial(names) => {
             let _ = write!(out, "declare-special ({})", names.join(" "));
         }
@@ -299,6 +302,9 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
         }
         RegInstKind::BindDynamic { name, src } => {
             let _ = write!(out, "bind-dynamic {name}, {}", reg_name(function, *src));
+        }
+        RegInstKind::UnbindDynamic { count } => {
+            let _ = write!(out, "unbind-dynamic {count}");
         }
         RegInstKind::DeclareSpecial { names } => {
             let _ = write!(out, "declare-special ({})", names.join(" "));
