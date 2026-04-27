@@ -53,6 +53,7 @@ pub enum RegInstKind {
     Lambda {
         dst: RegId,
         template: SsaLambdaTemplate,
+        captures: Vec<RegId>,
     },
     Move {
         dst: RegId,

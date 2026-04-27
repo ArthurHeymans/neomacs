@@ -165,8 +165,12 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::FunctionQuote(_) => {
             let _ = write!(out, "function-quote <surface>");
         }
-        SsaInstKind::Lambda(template) => {
-            let _ = write!(out, "lambda ({}) <hir>", template.params.join(" "));
+        SsaInstKind::Lambda { template, .. } => {
+            let _ = write!(out, "lambda ({})", template.params.join(" "));
+            if !template.captures.is_empty() {
+                let _ = write!(out, " captures ({})", template.captures.join(" "));
+            }
+            let _ = write!(out, " <hir>");
         }
         SsaInstKind::LexicalGet(name) => {
             let _ = write!(out, "lexical-get {name}");
@@ -270,13 +274,26 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 reg_name(function, *dst)
             );
         }
-        RegInstKind::Lambda { dst, template } => {
+        RegInstKind::Lambda {
+            dst,
+            template,
+            captures,
+        } => {
             let _ = write!(
                 out,
-                "{} = lambda ({}) <hir>",
+                "{} = lambda ({})",
                 reg_name(function, *dst),
                 template.params.join(" ")
             );
+            if !captures.is_empty() {
+                let names = captures
+                    .iter()
+                    .map(|capture| reg_name(function, *capture))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let _ = write!(out, " captures ({names})");
+            }
+            let _ = write!(out, " <hir>");
         }
         RegInstKind::Move { dst, src } => {
             let _ = write!(

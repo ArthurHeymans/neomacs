@@ -48,23 +48,58 @@ pub enum SsaInstKind {
     Const(SsaConst),
     Quote(SurfaceForm),
     FunctionQuote(SurfaceForm),
-    Lambda(SsaLambdaTemplate),
+    Lambda {
+        template: SsaLambdaTemplate,
+        captures: Vec<ValueId>,
+    },
     LexicalGet(String),
-    LexicalSet { name: String, value: ValueId },
+    LexicalSet {
+        name: String,
+        value: ValueId,
+    },
     SymbolGet(String),
-    SymbolSet { name: String, value: ValueId },
-    BindLexical { name: String, value: ValueId },
-    BindDynamic { name: String, value: ValueId },
-    UnbindDynamic { count: usize },
+    SymbolSet {
+        name: String,
+        value: ValueId,
+    },
+    BindLexical {
+        name: String,
+        value: ValueId,
+    },
+    BindDynamic {
+        name: String,
+        value: ValueId,
+    },
+    UnbindDynamic {
+        count: usize,
+    },
     DeclareSpecial(Vec<String>),
-    CallNamed { name: String, args: Vec<ValueId> },
-    Funcall { callee: ValueId, args: Vec<ValueId> },
-    Apply { callee: ValueId, args: Vec<ValueId> },
-    CatchBegin { tag: ValueId },
+    CallNamed {
+        name: String,
+        args: Vec<ValueId>,
+    },
+    Funcall {
+        callee: ValueId,
+        args: Vec<ValueId>,
+    },
+    Apply {
+        callee: ValueId,
+        args: Vec<ValueId>,
+    },
+    CatchBegin {
+        tag: ValueId,
+    },
     CatchEnd,
-    Throw { tag: ValueId, value: ValueId },
-    ConditionCaseBegin { var: Option<String> },
-    ConditionCaseHandler { pattern: SurfaceForm },
+    Throw {
+        tag: ValueId,
+        value: ValueId,
+    },
+    ConditionCaseBegin {
+        var: Option<String>,
+    },
+    ConditionCaseHandler {
+        pattern: SurfaceForm,
+    },
     ConditionCaseEnd,
     UnwindProtectBegin,
     UnwindProtectCleanup,
@@ -74,6 +109,7 @@ pub enum SsaInstKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SsaLambdaTemplate {
     pub params: Vec<String>,
+    pub captures: Vec<String>,
     pub declarations: Vec<HirDeclaration>,
     pub body: Box<HirExpr>,
 }

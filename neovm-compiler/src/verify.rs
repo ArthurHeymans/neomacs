@@ -81,9 +81,14 @@ impl RegVerifier<'_> {
             RegInstKind::LoadConst { dst, .. }
             | RegInstKind::Quote { dst, .. }
             | RegInstKind::FunctionQuote { dst, .. }
-            | RegInstKind::Lambda { dst, .. }
             | RegInstKind::LexicalGet { dst, .. }
             | RegInstKind::SymbolGet { dst, .. } => self.check_reg(*dst),
+            RegInstKind::Lambda { dst, captures, .. } => {
+                self.check_reg(*dst);
+                for capture in captures {
+                    self.check_reg(*capture);
+                }
+            }
             RegInstKind::Move { dst, src } => {
                 self.check_reg(*dst);
                 self.check_reg(*src);

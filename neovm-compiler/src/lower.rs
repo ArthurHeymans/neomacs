@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use indexmap::IndexSet;
+
 use crate::diagnostic::Diagnostic;
 use crate::effects::{Effect, Effects};
 use crate::hir::{BindingMode, HirConst, HirDeclaration, HirExpr, HirExprKind, HirItem, HirModule};
@@ -156,9 +158,10 @@ impl<'a> RegLowerer<'a> {
                 dst: self.result_reg(inst),
                 form: form.clone(),
             },
-            SsaInstKind::Lambda(template) => RegInstKind::Lambda {
+            SsaInstKind::Lambda { template, captures } => RegInstKind::Lambda {
                 dst: self.result_reg(inst),
                 template: template.clone(),
+                captures: self.value_regs(captures),
             },
             SsaInstKind::LexicalGet(name) => RegInstKind::LexicalGet {
                 dst: self.result_reg(inst),
@@ -292,7 +295,7 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_))
                 | SsaInstKind::Quote(_)
                 | SsaInstKind::FunctionQuote(_)
-                | SsaInstKind::Lambda(_)
+                | SsaInstKind::Lambda { .. }
                 | SsaInstKind::SymbolGet(_)
                 | SsaInstKind::SymbolSet { .. }
                 | SsaInstKind::BindDynamic { .. }
@@ -358,6 +361,117 @@ impl<'a> RegLowerer<'a> {
 
     fn block_reg(&self, block: BlockId) -> RegBlockId {
         self.block_map[&block]
+    }
+}
+
+fn lambda_capture_names(params: &[String], body: &HirExpr) -> Vec<String> {
+    let bound = params.iter().cloned().collect::<IndexSet<_>>();
+    let mut free = IndexSet::new();
+    collect_free_lexicals(body, &bound, &mut free);
+    free.into_iter().collect()
+}
+
+fn collect_free_lexicals(expr: &HirExpr, bound: &IndexSet<String>, free: &mut IndexSet<String>) {
+    match &expr.kind {
+        HirExprKind::Const(_)
+        | HirExprKind::Quote(_)
+        | HirExprKind::FunctionQuote(_)
+        | HirExprKind::SymbolGet(_)
+        | HirExprKind::Declare(_) => {}
+        HirExprKind::LexicalGet(name) => {
+            if !bound.contains(name) {
+                free.insert(name.clone());
+            }
+        }
+        HirExprKind::LexicalSet { name, value } => {
+            collect_free_lexicals(value, bound, free);
+            if !bound.contains(name) {
+                free.insert(name.clone());
+            }
+        }
+        HirExprKind::SymbolSet { value, .. } => {
+            collect_free_lexicals(value, bound, free);
+        }
+        HirExprKind::If {
+            test,
+            then_expr,
+            else_expr,
+        } => {
+            collect_free_lexicals(test, bound, free);
+            collect_free_lexicals(then_expr, bound, free);
+            collect_free_lexicals(else_expr, bound, free);
+        }
+        HirExprKind::Progn(exprs) => {
+            for expr in exprs {
+                collect_free_lexicals(expr, bound, free);
+            }
+        }
+        HirExprKind::Let {
+            bindings,
+            sequential,
+            body,
+            ..
+        } => {
+            if *sequential {
+                let mut scoped = bound.clone();
+                for binding in bindings {
+                    collect_free_lexicals(&binding.init, &scoped, free);
+                    if binding.mode == BindingMode::Lexical {
+                        scoped.insert(binding.name.clone());
+                    }
+                }
+                collect_free_lexicals(body, &scoped, free);
+            } else {
+                for binding in bindings {
+                    collect_free_lexicals(&binding.init, bound, free);
+                }
+                let mut scoped = bound.clone();
+                for binding in bindings {
+                    if binding.mode == BindingMode::Lexical {
+                        scoped.insert(binding.name.clone());
+                    }
+                }
+                collect_free_lexicals(body, &scoped, free);
+            }
+        }
+        HirExprKind::Lambda { params, body, .. } => {
+            for name in lambda_capture_names(params, body) {
+                if !bound.contains(&name) {
+                    free.insert(name);
+                }
+            }
+        }
+        HirExprKind::Catch { tag, body } => {
+            collect_free_lexicals(tag, bound, free);
+            collect_free_lexicals(body, bound, free);
+        }
+        HirExprKind::Throw { tag, value } => {
+            collect_free_lexicals(tag, bound, free);
+            collect_free_lexicals(value, bound, free);
+        }
+        HirExprKind::ConditionCase { body, handlers, .. } => {
+            collect_free_lexicals(body, bound, free);
+            for handler in handlers {
+                collect_free_lexicals(&handler.body, bound, free);
+            }
+        }
+        HirExprKind::UnwindProtect { body, cleanup } => {
+            collect_free_lexicals(body, bound, free);
+            collect_free_lexicals(cleanup, bound, free);
+        }
+        HirExprKind::Funcall { callee, args }
+        | HirExprKind::Apply { callee, args }
+        | HirExprKind::CallValue { callee, args } => {
+            collect_free_lexicals(callee, bound, free);
+            for arg in args {
+                collect_free_lexicals(arg, bound, free);
+            }
+        }
+        HirExprKind::CallNamed { args, .. } => {
+            for arg in args {
+                collect_free_lexicals(arg, bound, free);
+            }
+        }
     }
 }
 
@@ -486,14 +600,30 @@ impl SsaBuilder {
                 params,
                 declarations,
                 body,
-            } => Some(self.emit_value(
-                SsaInstKind::Lambda(crate::ssa::SsaLambdaTemplate {
-                    params: params.clone(),
-                    declarations: declarations.clone(),
-                    body: body.clone(),
-                }),
-                Effects::new([Effect::Allocate, Effect::MayGc]),
-            )),
+            } => {
+                let capture_names = lambda_capture_names(params, body);
+                let captures = capture_names
+                    .iter()
+                    .map(|name| {
+                        self.emit_value(
+                            SsaInstKind::LexicalGet(name.clone()),
+                            Effects::single(Effect::ReadLexical),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                Some(self.emit_value(
+                    SsaInstKind::Lambda {
+                        template: crate::ssa::SsaLambdaTemplate {
+                            params: params.clone(),
+                            captures: capture_names,
+                            declarations: declarations.clone(),
+                            body: body.clone(),
+                        },
+                        captures,
+                    },
+                    Effects::new([Effect::Allocate, Effect::MayGc]),
+                ))
+            }
             HirExprKind::Declare(declarations) => {
                 for declaration in declarations {
                     self.lower_declaration(declaration);

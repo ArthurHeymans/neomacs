@@ -374,8 +374,8 @@ Initial Cranelift lowering is intentionally conservative:
 - Lower string/float constants and quoted forms through runtime materialization
   calls so allocation, interning, and object identity stay runtime-owned.
 - Lower lambda values through runtime materialization calls over compiler-owned
-  lambda template tables. Closure environment capture and callable code
-  registration stay runtime-owned until the execution ABI is connected.
+  lambda template tables and explicit capture arguments. Callable code
+  registration stays runtime-owned until the execution ABI is connected.
 - Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
   evaluates all initializers before installing bindings; `let*` installs each
   binding before the next initializer.
@@ -417,7 +417,7 @@ __neomacs_rt_string_const(vmctx: i64, string_id: i64) -> i64
 __neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64
 __neomacs_rt_quote(vmctx: i64, quote_id: i64) -> i64
 __neomacs_rt_function_quote(vmctx: i64, quote_id: i64) -> i64
-__neomacs_rt_lambda(vmctx: i64, lambda_id: i64) -> i64
+__neomacs_rt_lambda_N(vmctx: i64, lambda_id: i64, capture0: i64, ...) -> i64
 ```
 
 `symbol_id` is a compiler-owned interned symbol key. This is not the final
@@ -429,9 +429,16 @@ metadata tables. Float constants pass the exact IEEE-754 bit pattern as an
 opaque payload for the runtime to materialize.
 
 `lambda_id` is a compiler-owned key into a lambda template table containing the
-lambda parameters, declarations, and HIR body. This records semantic closure
-shape in the compiler pipeline without pretending the compiler can already
-materialize full runtime closures or register callable machine code.
+lambda parameters, capture names, declarations, and HIR body. The arity suffix
+is the number of captured lexical payloads passed after `lambda_id`. This
+records semantic closure shape and makes capture roots visible to safepoint
+metadata without pretending the compiler can already register callable machine
+code.
+
+Captured mutable lexical variables still need closure-cell lowering before JIT
+execution can exactly match GNU Emacs for every closure case. The current ABI
+is intentionally shaped so those payloads can become cell pointers without
+changing safepoint/root visibility.
 
 Dynamic binding uses fixed imports:
 

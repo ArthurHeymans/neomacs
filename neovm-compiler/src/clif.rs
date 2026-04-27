@@ -71,7 +71,7 @@ pub enum ClifRuntimeCallKind {
     FloatConst { bits: u64 },
     Quote { index: usize },
     FunctionQuote { index: usize },
-    Lambda { index: usize },
+    Lambda { index: usize, capture_count: usize },
 }
 
 pub struct ClifRuntimeAbi {
@@ -91,7 +91,7 @@ pub struct ClifRuntimeAbi {
     float_const: Option<FuncId>,
     quote: Option<FuncId>,
     function_quote: Option<FuncId>,
-    lambda: Option<FuncId>,
+    lambda_by_capture_count: HashMap<usize, FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -113,7 +113,7 @@ impl Default for ClifRuntimeAbi {
             float_const: None,
             quote: None,
             function_quote: None,
-            lambda: None,
+            lambda_by_capture_count: HashMap::new(),
         }
     }
 }
@@ -358,17 +358,22 @@ impl ClifRuntimeAbi {
         Ok(RuntimeFuncImport { id, signature })
     }
 
-    fn lambda(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
-        let signature = indexed_runtime_signature(call_conv);
-        if let Some(id) = self.lambda {
+    fn lambda(
+        &mut self,
+        capture_count: usize,
+        call_conv: CallConv,
+    ) -> Result<RuntimeFuncImport, String> {
+        let signature = lambda_signature(capture_count, call_conv);
+        if let Some(id) = self.lambda_by_capture_count.get(&capture_count).copied() {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
+        let name = format!("__neomacs_rt_lambda_{capture_count}");
         let (id, _) = self
             .declarations
-            .declare_function("__neomacs_rt_lambda", Linkage::Import, &signature)
+            .declare_function(&name, Linkage::Import, &signature)
             .map_err(|error| error.to_string())?;
-        self.lambda = Some(id);
+        self.lambda_by_capture_count.insert(capture_count, id);
         Ok(RuntimeFuncImport { id, signature })
     }
 }
@@ -437,6 +442,14 @@ fn indexed_runtime_signature(call_conv: CallConv) -> Signature {
     signature.params.push(AbiParam::new(types::I64)); // vmctx
     signature.params.push(AbiParam::new(types::I64)); // compiler-owned table index/bits
     signature.returns.push(AbiParam::new(types::I64));
+    signature
+}
+
+fn lambda_signature(capture_count: usize, call_conv: CallConv) -> Signature {
+    let mut signature = indexed_runtime_signature(call_conv);
+    for _ in 0..capture_count {
+        signature.params.push(AbiParam::new(types::I64));
+    }
     signature
 }
 
@@ -568,7 +581,7 @@ impl<'a> ClifLowerer<'a> {
                     SsaInstKind::Const(_)
                     | SsaInstKind::Quote(_)
                     | SsaInstKind::FunctionQuote(_)
-                    | SsaInstKind::Lambda(_)
+                    | SsaInstKind::Lambda { .. }
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
                     | SsaInstKind::LexicalSet { .. }
@@ -715,19 +728,27 @@ impl ClifBlockLowerer<'_> {
                 };
                 self.value_map.insert(result, value);
             }
-            SsaInstKind::Lambda(template) => {
+            SsaInstKind::Lambda { template, captures } => {
                 let Some(result) = inst.result else {
                     self.error("lambda instruction has no result");
                     return;
                 };
                 let index = self.runtime.intern_lambda_template(template.clone());
-                let Some(func_ref) = self.lambda_ref() else {
+                let capture_values = self.value_args(captures);
+                if capture_values.len() != captures.len() {
+                    return;
+                }
+                let Some(func_ref) = self.lambda_ref(capture_values.len()) else {
                     return;
                 };
-                let Some(value) = self.emit_indexed_runtime_call(
+                let Some(value) = self.emit_indexed_runtime_call_with_args(
                     func_ref,
                     index as i64,
-                    ClifRuntimeCallKind::Lambda { index },
+                    &capture_values,
+                    ClifRuntimeCallKind::Lambda {
+                        index,
+                        capture_count: capture_values.len(),
+                    },
                 ) else {
                     return;
                 };
@@ -1132,8 +1153,8 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_ref(import)
     }
 
-    fn lambda_ref(&mut self) -> Option<FuncRef> {
-        let import = match self.runtime.lambda(self.call_conv) {
+    fn lambda_ref(&mut self, capture_count: usize) -> Option<FuncRef> {
+        let import = match self.runtime.lambda(capture_count, self.call_conv) {
             Ok(import) => import,
             Err(error) => {
                 self.error(format!(
@@ -1310,6 +1331,31 @@ impl ClifBlockLowerer<'_> {
         };
         let value = self.builder.ins().iconst(types::I64, value);
         let call = self.builder.ins().call(func_ref, &[vmctx, value]);
+        self.record_safepoint(call, kind);
+        let Some(result) = self.builder.inst_results(call).first().copied() else {
+            self.error("indexed runtime call produced no result");
+            return None;
+        };
+        Some(result)
+    }
+
+    fn emit_indexed_runtime_call_with_args(
+        &mut self,
+        func_ref: FuncRef,
+        value: i64,
+        args: &[ir::Value],
+        kind: ClifRuntimeCallKind,
+    ) -> Option<ir::Value> {
+        let Some(vmctx) = self.vmctx else {
+            self.error("indexed runtime call lowering requires a vmctx parameter");
+            return None;
+        };
+        let value = self.builder.ins().iconst(types::I64, value);
+        let mut call_args = Vec::with_capacity(args.len() + 2);
+        call_args.push(vmctx);
+        call_args.push(value);
+        call_args.extend_from_slice(args);
+        let call = self.builder.ins().call(func_ref, &call_args);
         self.record_safepoint(call, kind);
         let Some(result) = self.builder.inst_results(call).first().copied() else {
             self.error("indexed runtime call produced no result");
@@ -1553,15 +1599,57 @@ mod tests {
         assert!(
             clif.runtime
                 .imported_function_names()
-                .contains(&"__neomacs_rt_lambda")
+                .contains(&"__neomacs_rt_lambda_0")
         );
         assert_eq!(clif.runtime.lambda_templates().len(), 1);
         assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["x"]);
+        assert_eq!(
+            clif.runtime.lambda_templates()[0].captures,
+            Vec::<String>::new()
+        );
         assert_eq!(clif.safepoints.entries.len(), 1);
         let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
         assert!(matches!(
             &safepoint.kind,
-            ClifRuntimeCallKind::Lambda { index } if *index == 0
+            ClifRuntimeCallKind::Lambda {
+                index,
+                capture_count
+            } if *index == 0 && *capture_count == 0
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_lambda_captures_to_runtime_materialization_args() {
+        let artifact = compile_source(
+            "capture.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-adder (x) (lambda (y) (+ x y)))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_lambda_1")
+        );
+        assert_eq!(clif.runtime.lambda_templates().len(), 1);
+        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["y"]);
+        assert_eq!(clif.runtime.lambda_templates()[0].captures, vec!["x"]);
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert_eq!(safepoint.live_roots.len(), 1);
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::Lambda {
+                index,
+                capture_count
+            } if *index == 0 && *capture_count == 1
         ));
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
