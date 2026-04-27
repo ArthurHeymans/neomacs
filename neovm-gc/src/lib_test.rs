@@ -12424,6 +12424,93 @@ fn active_registered_mutator_count_tracks_read_guard_lifetime() {
 }
 
 #[test]
+fn mutator_safepoint_snapshots_track_phase_and_roots() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+
+    let snapshots = heap.mutator_safepoint_snapshots();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(
+        snapshots[0].phase,
+        crate::heap::MutatorSafepointPhase::Parked
+    );
+    assert_eq!(snapshots[0].active_sections, 0);
+    assert_eq!(snapshots[0].published_root_slots, 0);
+
+    {
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
+        let snapshots = heap.mutator_safepoint_snapshots();
+        assert_eq!(
+            snapshots[0].phase,
+            crate::heap::MutatorSafepointPhase::Running
+        );
+        assert_eq!(snapshots[0].active_sections, 1);
+    }
+    let snapshots = heap.mutator_safepoint_snapshots();
+    assert_eq!(
+        snapshots[0].phase,
+        crate::heap::MutatorSafepointPhase::Parked
+    );
+    assert_eq!(snapshots[0].active_sections, 0);
+
+    let mut scope = mutator.handle_scope();
+    let root = mutator.alloc(&mut scope, Leaf(1)).expect("rooted leaf");
+    assert_eq!(
+        heap.mutator_safepoint_snapshots()[0].published_root_slots,
+        1
+    );
+    drop(root);
+    drop(scope);
+
+    {
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
+    }
+    assert_eq!(
+        heap.mutator_safepoint_snapshots()[0].published_root_slots,
+        0
+    );
+}
+
+#[test]
+fn mutator_safepoint_snapshot_reports_waiting_phase() {
+    let heap = Heap::new(HeapConfig::default());
+    heap.set_safepoint_requested_for_test(true);
+
+    let worker_heap = heap.clone();
+    let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let mut mutator = worker_heap.mutator();
+        let _guard = mutator.enter_registered_safepoint_read_for_test();
+        entered_tx
+            .send(())
+            .expect("signal safepoint read entry after wait");
+    });
+
+    let mut saw_waiting = false;
+    for _ in 0..50 {
+        let snapshots = heap.mutator_safepoint_snapshots();
+        if snapshots.iter().any(|snapshot| {
+            snapshot.phase == crate::heap::MutatorSafepointPhase::WaitingForSafepoint
+        }) {
+            saw_waiting = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(saw_waiting, "blocked mutator should publish waiting phase");
+
+    assert!(
+        entered_rx.recv_timeout(Duration::from_millis(10)).is_err(),
+        "waiting mutator should not enter until request clears"
+    );
+    heap.set_safepoint_requested_for_test(false);
+    entered_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("waiting mutator should enter after request clears");
+    worker.join().expect("join waiting mutator helper");
+}
+
+#[test]
 fn yield_safepoint_acknowledges_pending_request_epoch() {
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();

@@ -188,7 +188,7 @@ impl MutatorLocal {
         self.safepoint_registration
             .as_ref()
             .expect("mutator registration should exist after ensure")
-            .enter_read(heap)
+            .enter_read(heap, self.roots.len())
     }
 
     fn acknowledge_pending_safepoint_request(&self, heap: &Heap) -> bool {
@@ -196,9 +196,16 @@ impl MutatorLocal {
             return false;
         }
         if let Some(registration) = self.safepoint_registration.as_ref() {
+            registration.publish_root_count(self.roots.len());
             registration.acknowledge_pending_request(heap);
         }
         true
+    }
+
+    fn publish_safepoint_roots(&self) {
+        if let Some(registration) = self.safepoint_registration.as_ref() {
+            registration.publish_root_count(self.roots.len());
+        }
     }
 
     #[cfg(test)]
@@ -705,7 +712,9 @@ impl<'heap> Mutator<'heap> {
         let _safepoint =
             enter_safepoint_read(self.heap, &mut self.handle_scope_state, &mut self.local);
         let gc = self.alloc_typed_unrooted_after_safepoint(value)?;
-        Ok(scope.root(gc))
+        let root = scope.root(gc);
+        self.local.publish_safepoint_roots();
+        Ok(root)
     }
 
     /// Allocate one managed object.
@@ -931,7 +940,9 @@ impl<'heap> Mutator<'heap> {
         gc: Gc<T>,
     ) -> Root<'scope, T> {
         self.with_runtime(|runtime| runtime.root_during_active_major_mark(gc.erase()));
-        scope.root(gc)
+        let root = scope.root(gc);
+        self.local.publish_safepoint_roots();
+        root
     }
 
     /// Run one collection cycle against this mutator's heap.

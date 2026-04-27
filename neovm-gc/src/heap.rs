@@ -147,10 +147,103 @@ impl std::fmt::Debug for ExternalRootRelocator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MutatorSafepointPhase {
+    Parked,
+    Running,
+    WaitingForSafepoint,
+}
+
+impl MutatorSafepointPhase {
+    const PARKED: u8 = 0;
+    const RUNNING: u8 = 1;
+    const WAITING_FOR_SAFEPOINT: u8 = 2;
+
+    const fn as_u8(self) -> u8 {
+        match self {
+            Self::Parked => Self::PARKED,
+            Self::Running => Self::RUNNING,
+            Self::WaitingForSafepoint => Self::WAITING_FOR_SAFEPOINT,
+        }
+    }
+
+    #[cfg(test)]
+    const fn from_u8(value: u8) -> Self {
+        match value {
+            Self::RUNNING => Self::Running,
+            Self::WAITING_FOR_SAFEPOINT => Self::WaitingForSafepoint,
+            _ => Self::Parked,
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct MutatorSafepointSnapshot {
+    pub(crate) id: u64,
+    pub(crate) phase: MutatorSafepointPhase,
+    pub(crate) active_sections: usize,
+    pub(crate) acknowledged_epoch: u64,
+    pub(crate) published_root_slots: usize,
+}
+
+#[derive(Debug)]
 pub(crate) struct MutatorSafepointState {
+    #[cfg(test)]
+    id: u64,
     active_sections: std::sync::atomic::AtomicUsize,
     acknowledged_epoch: std::sync::atomic::AtomicU64,
+    published_root_slots: std::sync::atomic::AtomicUsize,
+    phase: std::sync::atomic::AtomicU8,
+}
+
+impl MutatorSafepointState {
+    fn new(id: u64) -> Self {
+        #[cfg(not(test))]
+        let _ = id;
+        Self {
+            #[cfg(test)]
+            id,
+            active_sections: std::sync::atomic::AtomicUsize::new(0),
+            acknowledged_epoch: std::sync::atomic::AtomicU64::new(0),
+            published_root_slots: std::sync::atomic::AtomicUsize::new(0),
+            phase: std::sync::atomic::AtomicU8::new(MutatorSafepointPhase::Parked.as_u8()),
+        }
+    }
+
+    fn set_phase(&self, phase: MutatorSafepointPhase) {
+        self.phase
+            .store(phase.as_u8(), std::sync::atomic::Ordering::Release);
+    }
+
+    fn publish_root_count(&self, root_count: usize) {
+        self.published_root_slots
+            .store(root_count, std::sync::atomic::Ordering::Release);
+    }
+
+    fn acknowledge_epoch(&self, epoch: u64) {
+        self.acknowledged_epoch
+            .store(epoch, std::sync::atomic::Ordering::Release);
+    }
+
+    #[cfg(test)]
+    fn snapshot(&self) -> MutatorSafepointSnapshot {
+        MutatorSafepointSnapshot {
+            id: self.id,
+            phase: MutatorSafepointPhase::from_u8(
+                self.phase.load(std::sync::atomic::Ordering::Acquire),
+            ),
+            active_sections: self
+                .active_sections
+                .load(std::sync::atomic::Ordering::Acquire),
+            acknowledged_epoch: self
+                .acknowledged_epoch
+                .load(std::sync::atomic::Ordering::Acquire),
+            published_root_slots: self
+                .published_root_slots
+                .load(std::sync::atomic::Ordering::Acquire),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -162,12 +255,20 @@ pub(crate) struct MutatorRegistration {
 }
 
 impl MutatorRegistration {
-    pub(crate) fn enter_read<'a>(&self, heap: &'a Heap) -> RegisteredMutatorReadGuard<'a> {
+    pub(crate) fn enter_read<'a>(
+        &self,
+        heap: &'a Heap,
+        root_count: usize,
+    ) -> RegisteredMutatorReadGuard<'a> {
+        self.publish_root_count(root_count);
         loop {
             while heap.safepoint_requested() {
+                self.state
+                    .set_phase(MutatorSafepointPhase::WaitingForSafepoint);
                 self.acknowledge_pending_request(heap);
                 heap.wait_for_safepoint_request_to_clear();
             }
+            self.state.set_phase(MutatorSafepointPhase::Running);
             self.state
                 .active_sections
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
@@ -187,6 +288,8 @@ impl MutatorRegistration {
                 previous > 0,
                 "registered mutator active-section count underflow"
             );
+            self.state
+                .set_phase(MutatorSafepointPhase::WaitingForSafepoint);
             self.acknowledge_pending_request(heap);
             heap.notify_safepoint_waiters();
             heap.wait_for_safepoint_request_to_clear();
@@ -195,11 +298,12 @@ impl MutatorRegistration {
 
     pub(crate) fn acknowledge_pending_request(&self, heap: &Heap) {
         if heap.safepoint_requested() {
-            self.state.acknowledged_epoch.store(
-                heap.current_safepoint_epoch(),
-                std::sync::atomic::Ordering::Release,
-            );
+            self.state.acknowledge_epoch(heap.current_safepoint_epoch());
         }
+    }
+
+    pub(crate) fn publish_root_count(&self, root_count: usize) {
+        self.state.publish_root_count(root_count);
     }
 
     #[cfg(test)]
@@ -234,11 +338,10 @@ impl Drop for ActiveMutatorSection<'_> {
             .active_sections
             .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         debug_assert!(previous > 0, "active mutator section underflow");
+        self.state.set_phase(MutatorSafepointPhase::Parked);
         if self.heap.safepoint_requested() {
-            self.state.acknowledged_epoch.store(
-                self.heap.current_safepoint_epoch(),
-                std::sync::atomic::Ordering::Release,
-            );
+            self.state
+                .acknowledge_epoch(self.heap.current_safepoint_epoch());
             self.heap.notify_safepoint_waiters();
         }
     }
@@ -616,7 +719,7 @@ impl Heap {
             .next_mutator_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             + 1;
-        let state = std::sync::Arc::new(MutatorSafepointState::default());
+        let state = std::sync::Arc::new(MutatorSafepointState::new(id));
         self.state
             .mutator_registry
             .lock()
@@ -698,6 +801,17 @@ impl Heap {
             .lock()
             .expect("mutator registry lock poisoned")
             .len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mutator_safepoint_snapshots(&self) -> Vec<MutatorSafepointSnapshot> {
+        let mut snapshots: Vec<_> = self
+            .registered_mutator_state_snapshot()
+            .into_iter()
+            .map(|state| state.snapshot())
+            .collect();
+        snapshots.sort_by_key(|snapshot| snapshot.id);
+        snapshots
     }
 
     #[cfg(test)]
