@@ -12,12 +12,13 @@ use cranelift_module::{FuncId, Linkage, ModuleDeclarations};
 use lasso::{Key, Rodeo, Spur};
 
 use crate::diagnostic::Diagnostic;
-use crate::ids::{BlockId, ValueId};
+use crate::ids::{BlockId, PrimaryMap, SafepointId, ValueId};
 use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator};
 
 pub struct ClifLowerOutput {
     pub function: Option<Function>,
     pub runtime: ClifRuntimeAbi,
+    pub safepoints: ClifSafepointTable,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -35,6 +36,33 @@ pub fn verify_clif(function: &Function) -> Vec<Diagnostic> {
 
 pub fn dump_clif(function: &Function) -> String {
     format!("{}", function.display())
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ClifSafepointTable {
+    pub entries: PrimaryMap<SafepointId, ClifSafepoint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClifSafepoint {
+    pub call_inst: ir::Inst,
+    pub kind: ClifRuntimeCallKind,
+    pub live_roots: Vec<ClifLiveRoot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClifLiveRoot {
+    pub ssa_value: ValueId,
+    pub clif_value: ir::Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClifRuntimeCallKind {
+    CallNamed { name: String, arity: usize },
+    Funcall { arity: usize },
+    Apply { arity: usize },
+    SymbolGet { name: String },
+    SymbolSet { name: String },
 }
 
 pub struct ClifRuntimeAbi {
@@ -219,6 +247,7 @@ fn symbol_set_signature(call_conv: CallConv) -> Signature {
 struct ClifLowerer<'a> {
     ssa: &'a SsaFunction,
     runtime: ClifRuntimeAbi,
+    safepoints: ClifSafepointTable,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -227,6 +256,7 @@ impl<'a> ClifLowerer<'a> {
         Self {
             ssa,
             runtime: ClifRuntimeAbi::default(),
+            safepoints: ClifSafepointTable::default(),
             diagnostics: Vec::new(),
         }
     }
@@ -287,31 +317,36 @@ impl<'a> ClifLowerer<'a> {
             }
         }
 
-        let mut state = ClifBlockLowerer {
-            builder,
-            block_map,
-            value_map,
-            lexical_values: HashMap::new(),
-            runtime_func_refs: HashMap::new(),
-            vmctx: None,
-            runtime: &mut self.runtime,
-            call_conv,
-            diagnostics: Vec::new(),
-        };
-        state.vmctx = entry_vmctx;
+        let (state_diagnostics, safepoints) = {
+            let mut state = ClifBlockLowerer {
+                builder,
+                block_map,
+                value_map,
+                lexical_values: HashMap::new(),
+                runtime_func_refs: HashMap::new(),
+                vmctx: None,
+                runtime: &mut self.runtime,
+                safepoints: ClifSafepointTable::default(),
+                call_conv,
+                diagnostics: Vec::new(),
+            };
+            state.vmctx = entry_vmctx;
 
-        for (block_id, block) in self.ssa.blocks.iter() {
-            let clif_block = state.block_map[&block_id];
-            state.builder.switch_to_block(clif_block);
-            for inst in &block.instructions {
-                state.lower_inst(inst);
+            for (block_id, block) in self.ssa.blocks.iter() {
+                let clif_block = state.block_map[&block_id];
+                state.builder.switch_to_block(clif_block);
+                for inst in &block.instructions {
+                    state.lower_inst(inst);
+                }
+                state.lower_terminator(&block.terminator);
             }
-            state.lower_terminator(&block.terminator);
-        }
 
-        state.builder.seal_all_blocks();
-        state.builder.finalize();
-        self.diagnostics.extend(state.diagnostics);
+            state.builder.seal_all_blocks();
+            state.builder.finalize();
+            (state.diagnostics, state.safepoints)
+        };
+        self.diagnostics.extend(state_diagnostics);
+        self.safepoints = safepoints;
         if !self.diagnostics.is_empty() {
             return self.finish(None);
         }
@@ -395,6 +430,7 @@ impl<'a> ClifLowerer<'a> {
         ClifLowerOutput {
             function,
             runtime: self.runtime,
+            safepoints: self.safepoints,
             diagnostics: self.diagnostics,
         }
     }
@@ -408,6 +444,7 @@ struct ClifBlockLowerer<'a> {
     runtime_func_refs: HashMap<FuncId, FuncRef>,
     vmctx: Option<ir::Value>,
     runtime: &'a mut ClifRuntimeAbi,
+    safepoints: ClifSafepointTable,
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
 }
@@ -524,8 +561,12 @@ impl ClifBlockLowerer<'_> {
                 let Some(func_ref) = self.apply_ref(args.len()) else {
                     return;
                 };
-                let Some(result_value) = self.emit_indirect_runtime_call(func_ref, callee, &args)
-                else {
+                let Some(result_value) = self.emit_indirect_runtime_call_with_kind(
+                    func_ref,
+                    callee,
+                    &args,
+                    ClifRuntimeCallKind::Apply { arity: args.len() },
+                ) else {
                     return;
                 };
                 self.value_map.insert(result, result_value);
@@ -722,7 +763,15 @@ impl ClifBlockLowerer<'_> {
             RuntimeImportKind::SymbolGet => self.symbol_get_ref(),
             RuntimeImportKind::SymbolSet => self.symbol_set_ref(),
         }?;
-        self.emit_symbol_runtime_call(func_ref, name, args)
+        let call_kind = match kind {
+            RuntimeImportKind::SymbolGet => ClifRuntimeCallKind::SymbolGet {
+                name: name.to_string(),
+            },
+            RuntimeImportKind::SymbolSet => ClifRuntimeCallKind::SymbolSet {
+                name: name.to_string(),
+            },
+        };
+        self.emit_symbol_runtime_call_with_kind(func_ref, name, args, call_kind)
     }
 
     fn emit_symbol_runtime_call(
@@ -730,6 +779,24 @@ impl ClifBlockLowerer<'_> {
         func_ref: FuncRef,
         symbol_name: &str,
         args: &[ir::Value],
+    ) -> Option<ir::Value> {
+        self.emit_symbol_runtime_call_with_kind(
+            func_ref,
+            symbol_name,
+            args,
+            ClifRuntimeCallKind::CallNamed {
+                name: symbol_name.to_string(),
+                arity: args.len(),
+            },
+        )
+    }
+
+    fn emit_symbol_runtime_call_with_kind(
+        &mut self,
+        func_ref: FuncRef,
+        symbol_name: &str,
+        args: &[ir::Value],
+        kind: ClifRuntimeCallKind,
     ) -> Option<ir::Value> {
         let Some(vmctx) = self.vmctx else {
             self.error("runtime call lowering requires a vmctx parameter");
@@ -745,6 +812,7 @@ impl ClifBlockLowerer<'_> {
         call_args.push(symbol);
         call_args.extend_from_slice(args);
         let call = self.builder.ins().call(func_ref, &call_args);
+        self.record_safepoint(call, kind);
         let Some(result) = self.builder.inst_results(call).first().copied() else {
             self.error("runtime call produced no result");
             return None;
@@ -758,6 +826,21 @@ impl ClifBlockLowerer<'_> {
         callee: ir::Value,
         args: &[ir::Value],
     ) -> Option<ir::Value> {
+        self.emit_indirect_runtime_call_with_kind(
+            func_ref,
+            callee,
+            args,
+            ClifRuntimeCallKind::Funcall { arity: args.len() },
+        )
+    }
+
+    fn emit_indirect_runtime_call_with_kind(
+        &mut self,
+        func_ref: FuncRef,
+        callee: ir::Value,
+        args: &[ir::Value],
+        kind: ClifRuntimeCallKind,
+    ) -> Option<ir::Value> {
         let Some(vmctx) = self.vmctx else {
             self.error("indirect runtime call lowering requires a vmctx parameter");
             return None;
@@ -767,11 +850,29 @@ impl ClifBlockLowerer<'_> {
         call_args.push(callee);
         call_args.extend_from_slice(args);
         let call = self.builder.ins().call(func_ref, &call_args);
+        self.record_safepoint(call, kind);
         let Some(result) = self.builder.inst_results(call).first().copied() else {
             self.error("indirect runtime call produced no result");
             return None;
         };
         Some(result)
+    }
+
+    fn record_safepoint(&mut self, call_inst: ir::Inst, kind: ClifRuntimeCallKind) {
+        let mut live_roots = self
+            .value_map
+            .iter()
+            .map(|(ssa_value, clif_value)| ClifLiveRoot {
+                ssa_value: *ssa_value,
+                clif_value: *clif_value,
+            })
+            .collect::<Vec<_>>();
+        live_roots.sort_by_key(|root| root.ssa_value);
+        self.safepoints.entries.push(ClifSafepoint {
+            call_inst,
+            kind,
+            live_roots,
+        });
     }
 }
 
@@ -782,7 +883,7 @@ enum RuntimeImportKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::clif::{dump_clif, ssa_to_clif};
+    use crate::clif::{ClifRuntimeCallKind, dump_clif, ssa_to_clif};
     use crate::compile_source;
     use crate::lower::hir_to_ssa;
     use crate::verify::verify_ssa;
@@ -800,6 +901,7 @@ mod tests {
 
         let clif = ssa_to_clif(&ssa.value);
         assert_eq!(clif.diagnostics, Vec::new());
+        assert_eq!(clif.safepoints.entries.len(), 0);
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("iconst.i64 42"));
         assert!(dump.contains("return"));
@@ -848,6 +950,13 @@ mod tests {
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::CallNamed { name, arity } if name == "+" && *arity == 2
+        ));
+        assert!(!safepoint.live_roots.is_empty());
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
     }
@@ -926,6 +1035,12 @@ mod tests {
                 .imported_function_names()
                 .contains(&"__neomacs_rt_funcall_1")
         );
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::Funcall { arity } if *arity == 1
+        ));
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
     }
@@ -948,7 +1063,48 @@ mod tests {
                 .imported_function_names()
                 .contains(&"__neomacs_rt_apply_2")
         );
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::Apply { arity } if *arity == 2
+        ));
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn records_safepoints_for_each_runtime_call() {
+        let artifact = compile_source(
+            "safepoints.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun call-global (f) (funcall f global-value))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let safepoints = clif
+            .safepoints
+            .entries
+            .iter()
+            .map(|(_, safepoint)| safepoint)
+            .collect::<Vec<_>>();
+        assert_eq!(safepoints.len(), 2);
+        assert!(matches!(
+            &safepoints[0].kind,
+            ClifRuntimeCallKind::SymbolGet { name } if name == "global-value"
+        ));
+        assert!(matches!(
+            &safepoints[1].kind,
+            ClifRuntimeCallKind::Funcall { arity } if *arity == 1
+        ));
+        assert!(
+            safepoints
+                .iter()
+                .all(|safepoint| !safepoint.live_roots.is_empty())
+        );
     }
 }

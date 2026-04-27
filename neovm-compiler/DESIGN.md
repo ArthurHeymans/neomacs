@@ -401,6 +401,16 @@ __neomacs_rt_apply_N(vmctx: i64, callee: i64, arg0: i64, ...) -> i64
 runtime object representation; it is the bridge needed before runtime symbol
 tables, precise stack maps, and JIT execution are connected.
 
+Every Cranelift runtime ABI call is also a compiler safepoint. The current
+metadata records:
+
+- The Cranelift call instruction.
+- The runtime call kind.
+- The currently known SSA/Cranelift Lisp-value roots.
+
+This starts conservative; later liveness analysis should shrink root sets and
+connect them to Cranelift stack maps or explicit frame maps.
+
 ## Safepoints And GC Metadata
 
 Modern GC support depends on compiler metadata. The compiler must eventually
