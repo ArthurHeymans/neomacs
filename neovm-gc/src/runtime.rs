@@ -618,7 +618,7 @@ impl<'heap> CollectorRuntime<'heap> {
         }
 
         loop {
-            if let Some(cycle) = self.finish_active_major_collection_blocking_if_ready()? {
+            if let Some(cycle) = self.finish_active_major_collection_if_ready()? {
                 return Ok(cycle);
             }
             let Some(plan) = self.active_major_mark_plan() else {
@@ -868,35 +868,6 @@ impl<'heap> CollectorRuntime<'heap> {
             return Ok(None);
         }
         self.commit_active_reclaim_if_ready()
-    }
-
-    /// Finish the active major collection for callers that are already
-    /// blocking until completion. This preserves bounded reclaim slices for
-    /// background/service APIs, but avoids turning a synchronous `collect` into
-    /// thousands of tiny stop-the-world slices with repeated setup overhead.
-    pub fn finish_active_major_collection_blocking_if_ready(
-        &mut self,
-    ) -> Result<Option<CollectionStats>, AllocError> {
-        loop {
-            let snapshot = self.heap.collector_shared_snapshot();
-            if snapshot.active_major_mark_plan.is_none()
-                || snapshot
-                    .major_mark_progress
-                    .is_some_and(|progress| !progress.completed)
-            {
-                return Ok(None);
-            }
-            let Some(plan) = snapshot.active_major_mark_plan else {
-                return Ok(None);
-            };
-            if plan.phase != CollectionPhase::Reclaim {
-                if !self.prepare_active_reclaim_if_needed_with_budget(usize::MAX)? {
-                    return Ok(None);
-                }
-                continue;
-            }
-            return self.advance_active_reclaim_commit_with_budget(usize::MAX);
-        }
     }
 
     /// Advance the active reclaim commit by one bounded stop-the-world slice.
