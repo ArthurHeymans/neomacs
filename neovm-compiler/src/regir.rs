@@ -1,6 +1,6 @@
 use crate::ids::{PrimaryMap, RegBlockId, RegId, SafepointId};
 use crate::safepoint::SafepointTable;
-use crate::ssa::SsaConst;
+use crate::ssa::{SsaConst, SsaLambdaTemplate};
 use crate::surface::SurfaceForm;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -49,6 +49,10 @@ pub enum RegInstKind {
     FunctionQuote {
         dst: RegId,
         form: SurfaceForm,
+    },
+    Lambda {
+        dst: RegId,
+        template: SsaLambdaTemplate,
     },
     Move {
         dst: RegId,

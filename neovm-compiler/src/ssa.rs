@@ -1,4 +1,5 @@
 use crate::effects::Effects;
+use crate::hir::{HirDeclaration, HirExpr};
 use crate::ids::{BlockId, PrimaryMap, ValueId};
 use crate::surface::SurfaceForm;
 
@@ -47,6 +48,7 @@ pub enum SsaInstKind {
     Const(SsaConst),
     Quote(SurfaceForm),
     FunctionQuote(SurfaceForm),
+    Lambda(SsaLambdaTemplate),
     LexicalGet(String),
     LexicalSet { name: String, value: ValueId },
     SymbolGet(String),
@@ -67,6 +69,13 @@ pub enum SsaInstKind {
     UnwindProtectBegin,
     UnwindProtectCleanup,
     UnwindProtectEnd,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SsaLambdaTemplate {
+    pub params: Vec<String>,
+    pub declarations: Vec<HirDeclaration>,
+    pub body: Box<HirExpr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

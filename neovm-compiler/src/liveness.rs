@@ -132,6 +132,7 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         SsaInstKind::Const(_)
         | SsaInstKind::Quote(_)
         | SsaInstKind::FunctionQuote(_)
+        | SsaInstKind::Lambda(_)
         | SsaInstKind::LexicalGet(_)
         | SsaInstKind::SymbolGet(_)
         | SsaInstKind::UnbindDynamic { .. }

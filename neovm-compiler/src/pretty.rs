@@ -165,6 +165,9 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::FunctionQuote(_) => {
             let _ = write!(out, "function-quote <surface>");
         }
+        SsaInstKind::Lambda(template) => {
+            let _ = write!(out, "lambda ({}) <hir>", template.params.join(" "));
+        }
         SsaInstKind::LexicalGet(name) => {
             let _ = write!(out, "lexical-get {name}");
         }
@@ -265,6 +268,14 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 out,
                 "{} = function-quote <surface>",
                 reg_name(function, *dst)
+            );
+        }
+        RegInstKind::Lambda { dst, template } => {
+            let _ = write!(
+                out,
+                "{} = lambda ({}) <hir>",
+                reg_name(function, *dst),
+                template.params.join(" ")
             );
         }
         RegInstKind::Move { dst, src } => {

@@ -156,6 +156,10 @@ impl<'a> RegLowerer<'a> {
                 dst: self.result_reg(inst),
                 form: form.clone(),
             },
+            SsaInstKind::Lambda(template) => RegInstKind::Lambda {
+                dst: self.result_reg(inst),
+                template: template.clone(),
+            },
             SsaInstKind::LexicalGet(name) => RegInstKind::LexicalGet {
                 dst: self.result_reg(inst),
                 name: name.clone(),
@@ -288,6 +292,7 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_))
                 | SsaInstKind::Quote(_)
                 | SsaInstKind::FunctionQuote(_)
+                | SsaInstKind::Lambda(_)
                 | SsaInstKind::SymbolGet(_)
                 | SsaInstKind::SymbolSet { .. }
                 | SsaInstKind::BindDynamic { .. }
@@ -477,15 +482,18 @@ impl SsaBuilder {
                 }
                 body_value
             }
-            HirExprKind::Lambda { .. } => {
-                self.diagnostics.push(
-                    Diagnostic::error(
-                        "HIR to SSA lowering for lambda values is not implemented yet",
-                    )
-                    .with_span(expr.span),
-                );
-                None
-            }
+            HirExprKind::Lambda {
+                params,
+                declarations,
+                body,
+            } => Some(self.emit_value(
+                SsaInstKind::Lambda(crate::ssa::SsaLambdaTemplate {
+                    params: params.clone(),
+                    declarations: declarations.clone(),
+                    body: body.clone(),
+                }),
+                Effects::new([Effect::Allocate, Effect::MayGc]),
+            )),
             HirExprKind::Declare(declarations) => {
                 for declaration in declarations {
                     self.lower_declaration(declaration);

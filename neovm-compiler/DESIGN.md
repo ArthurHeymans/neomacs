@@ -373,6 +373,9 @@ Initial Cranelift lowering is intentionally conservative:
   function semantics stay in the runtime.
 - Lower string/float constants and quoted forms through runtime materialization
   calls so allocation, interning, and object identity stay runtime-owned.
+- Lower lambda values through runtime materialization calls over compiler-owned
+  lambda template tables. Closure environment capture and callable code
+  registration stay runtime-owned until the execution ABI is connected.
 - Lower scoped dynamic bindings through runtime push/pop calls. Parallel `let`
   evaluates all initializers before installing bindings; `let*` installs each
   binding before the next initializer.
@@ -414,6 +417,7 @@ __neomacs_rt_string_const(vmctx: i64, string_id: i64) -> i64
 __neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64
 __neomacs_rt_quote(vmctx: i64, quote_id: i64) -> i64
 __neomacs_rt_function_quote(vmctx: i64, quote_id: i64) -> i64
+__neomacs_rt_lambda(vmctx: i64, lambda_id: i64) -> i64
 ```
 
 `symbol_id` is a compiler-owned interned symbol key. This is not the final
@@ -423,6 +427,11 @@ tables, precise stack maps, and JIT execution are connected.
 `string_id` and `quote_id` are also compiler-owned keys into per-function
 metadata tables. Float constants pass the exact IEEE-754 bit pattern as an
 opaque payload for the runtime to materialize.
+
+`lambda_id` is a compiler-owned key into a lambda template table containing the
+lambda parameters, declarations, and HIR body. This records semantic closure
+shape in the compiler pipeline without pretending the compiler can already
+materialize full runtime closures or register callable machine code.
 
 Dynamic binding uses fixed imports:
 

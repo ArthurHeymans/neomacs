@@ -138,6 +138,7 @@ impl Interpreter<'_> {
             RegInstKind::DeclareSpecial { .. } | RegInstKind::Safepoint { .. } => {}
             RegInstKind::Quote { .. }
             | RegInstKind::FunctionQuote { .. }
+            | RegInstKind::Lambda { .. }
             | RegInstKind::SymbolGet { .. }
             | RegInstKind::SymbolSet { .. }
             | RegInstKind::BindDynamic { .. }

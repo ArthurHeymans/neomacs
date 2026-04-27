@@ -14,7 +14,7 @@ use lasso::{Key, Rodeo, Spur};
 use crate::diagnostic::Diagnostic;
 use crate::ids::{BlockId, PrimaryMap, SafepointId, ValueId};
 use crate::liveness::SsaSafepointLiveness;
-use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaTerminator};
+use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaLambdaTemplate, SsaTerminator};
 use crate::surface::SurfaceForm;
 
 pub struct ClifLowerOutput {
@@ -71,6 +71,7 @@ pub enum ClifRuntimeCallKind {
     FloatConst { bits: u64 },
     Quote { index: usize },
     FunctionQuote { index: usize },
+    Lambda { index: usize },
 }
 
 pub struct ClifRuntimeAbi {
@@ -78,6 +79,7 @@ pub struct ClifRuntimeAbi {
     symbols: Rodeo,
     strings: Rodeo,
     quoted_forms: Vec<SurfaceForm>,
+    lambda_templates: Vec<SsaLambdaTemplate>,
     call_named_by_arity: HashMap<usize, FuncId>,
     funcall_by_arity: HashMap<usize, FuncId>,
     apply_by_arity: HashMap<usize, FuncId>,
@@ -89,6 +91,7 @@ pub struct ClifRuntimeAbi {
     float_const: Option<FuncId>,
     quote: Option<FuncId>,
     function_quote: Option<FuncId>,
+    lambda: Option<FuncId>,
 }
 
 impl Default for ClifRuntimeAbi {
@@ -98,6 +101,7 @@ impl Default for ClifRuntimeAbi {
             symbols: Rodeo::default(),
             strings: Rodeo::default(),
             quoted_forms: Vec::new(),
+            lambda_templates: Vec::new(),
             call_named_by_arity: HashMap::new(),
             funcall_by_arity: HashMap::new(),
             apply_by_arity: HashMap::new(),
@@ -109,6 +113,7 @@ impl Default for ClifRuntimeAbi {
             float_const: None,
             quote: None,
             function_quote: None,
+            lambda: None,
         }
     }
 }
@@ -157,6 +162,23 @@ impl ClifRuntimeAbi {
 
     pub fn quoted_forms(&self) -> &[SurfaceForm] {
         &self.quoted_forms
+    }
+
+    pub fn intern_lambda_template(&mut self, template: SsaLambdaTemplate) -> usize {
+        if let Some(index) = self
+            .lambda_templates
+            .iter()
+            .position(|existing| existing == &template)
+        {
+            return index;
+        }
+        let index = self.lambda_templates.len();
+        self.lambda_templates.push(template);
+        index
+    }
+
+    pub fn lambda_templates(&self) -> &[SsaLambdaTemplate] {
+        &self.lambda_templates
     }
 
     pub fn imported_function_names(&self) -> Vec<&str> {
@@ -333,6 +355,20 @@ impl ClifRuntimeAbi {
             .declare_function("__neomacs_rt_function_quote", Linkage::Import, &signature)
             .map_err(|error| error.to_string())?;
         self.function_quote = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn lambda(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.lambda {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+
+        let (id, _) = self
+            .declarations
+            .declare_function("__neomacs_rt_lambda", Linkage::Import, &signature)
+            .map_err(|error| error.to_string())?;
+        self.lambda = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
 }
@@ -532,6 +568,7 @@ impl<'a> ClifLowerer<'a> {
                     SsaInstKind::Const(_)
                     | SsaInstKind::Quote(_)
                     | SsaInstKind::FunctionQuote(_)
+                    | SsaInstKind::Lambda(_)
                     | SsaInstKind::LexicalGet(_)
                     | SsaInstKind::BindLexical { .. }
                     | SsaInstKind::LexicalSet { .. }
@@ -673,6 +710,24 @@ impl ClifBlockLowerer<'_> {
                     func_ref,
                     index as i64,
                     ClifRuntimeCallKind::FunctionQuote { index },
+                ) else {
+                    return;
+                };
+                self.value_map.insert(result, value);
+            }
+            SsaInstKind::Lambda(template) => {
+                let Some(result) = inst.result else {
+                    self.error("lambda instruction has no result");
+                    return;
+                };
+                let index = self.runtime.intern_lambda_template(template.clone());
+                let Some(func_ref) = self.lambda_ref() else {
+                    return;
+                };
+                let Some(value) = self.emit_indexed_runtime_call(
+                    func_ref,
+                    index as i64,
+                    ClifRuntimeCallKind::Lambda { index },
                 ) else {
                     return;
                 };
@@ -1077,6 +1132,19 @@ impl ClifBlockLowerer<'_> {
         self.runtime_func_ref(import)
     }
 
+    fn lambda_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.lambda(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift lambda runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
         if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
             return Some(func_ref);
@@ -1464,6 +1532,36 @@ mod tests {
         assert!(matches!(
             &safepoint.kind,
             ClifRuntimeCallKind::FunctionQuote { index } if *index == 0
+        ));
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn lowers_lambda_to_runtime_materialization() {
+        let artifact = compile_source(
+            "lambda.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun make-identity () (lambda (x) x))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        assert!(
+            clif.runtime
+                .imported_function_names()
+                .contains(&"__neomacs_rt_lambda")
+        );
+        assert_eq!(clif.runtime.lambda_templates().len(), 1);
+        assert_eq!(clif.runtime.lambda_templates()[0].params, vec!["x"]);
+        assert_eq!(clif.safepoints.entries.len(), 1);
+        let safepoint = clif.safepoints.entries.iter().next().unwrap().1;
+        assert!(matches!(
+            &safepoint.kind,
+            ClifRuntimeCallKind::Lambda { index } if *index == 0
         ));
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
