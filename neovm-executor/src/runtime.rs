@@ -528,6 +528,10 @@ impl Runtime {
         Ok(self.expect_vector(vector)?.elements.len())
     }
 
+    pub fn vector_elements(&self, vector: LispValue) -> Result<Vec<LispValue>, RuntimeError> {
+        Ok(self.expect_vector(vector)?.elements.clone())
+    }
+
     pub fn vector_aref(&self, vector: LispValue, index: usize) -> Result<LispValue, RuntimeError> {
         self.expect_vector(vector)?
             .elements
@@ -1349,6 +1353,7 @@ mod tests {
         assert!(runtime.is_vector(vector));
         assert_eq!(runtime.vector_count(), 1);
         assert_eq!(runtime.vector_len(vector), Ok(2));
+        assert_eq!(runtime.vector_elements(vector), Ok(vec![first, second]));
         assert_eq!(runtime.vector_aref(vector, 1), Ok(second));
         assert_eq!(runtime.vector_aset(vector, 1, first), Ok(first));
         assert_eq!(runtime.vector_aref(vector, 1), Ok(first));

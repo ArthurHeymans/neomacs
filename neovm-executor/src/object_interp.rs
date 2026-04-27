@@ -788,6 +788,12 @@ impl Interpreter<'_, '_, '_> {
             "memq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.memq(args[0], args[1])),
+            "mapcar" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.mapcar(args[0], args[1])),
+            "mapc" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.mapc(args[0], args[1])),
             "+" => self.fixnum_fold(name, args, 0, i64::checked_add),
             "*" => self.fixnum_fold(name, args, 1, i64::checked_mul),
             "-" => self.fixnum_sub(args),
@@ -1153,6 +1159,46 @@ impl Interpreter<'_, '_, '_> {
             let result = self.runtime.cdr(current);
             current = self.runtime_value(result)?;
         }
+    }
+
+    fn mapcar(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        let mut mapped = Vec::with_capacity(elements.len());
+        for element in elements {
+            mapped.push(self.execute_funcall(function, &[element])?);
+        }
+        Some(make_list(self.runtime, mapped))
+    }
+
+    fn mapc(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
+        for element in self.sequence_values(sequence)? {
+            self.execute_funcall(function, &[element])?;
+        }
+        Some(sequence)
+    }
+
+    fn sequence_values(&mut self, sequence: LispValue) -> Option<Vec<LispValue>> {
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            return self.list_values(sequence);
+        }
+        if self.runtime.is_vector(sequence) {
+            return match self.runtime.vector_elements(sequence) {
+                Ok(elements) => Some(elements),
+                Err(error) => {
+                    self.runtime_error(error);
+                    None
+                }
+            };
+        }
+        if self.runtime.is_string(sequence) {
+            let contents = self.string_contents_owned(sequence)?;
+            return Some(contents.chars().map(LispValue::from_char).collect());
+        }
+        self.error(format!(
+            "expected a sequence, got {}",
+            self.runtime.format_value(sequence)
+        ));
+        None
     }
 
     fn length(&mut self, value: LispValue) -> Option<usize> {
@@ -1816,6 +1862,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "append"
             | "nth"
             | "memq"
+            | "mapcar"
+            | "mapc"
             | "+"
             | "*"
             | "-"
@@ -1872,6 +1920,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(nth 1 (reverse (append (list 1) (list 2 3))))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_sequence_mapping_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((sum 0)) (mapc (lambda (x) (setq sum (+ sum x))) [1 2 3]) (+ sum (length (mapcar '1+ (list 1 2 3))) (if (equal (mapcar 'char-to-string \"ab\") (list \"a\" \"b\")) 10 0)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(19)));
     }
 
     #[test]
