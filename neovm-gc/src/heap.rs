@@ -167,7 +167,6 @@ impl MutatorSafepointPhase {
         }
     }
 
-    #[cfg(test)]
     const fn from_u8(value: u8) -> Self {
         match value {
             Self::RUNNING => Self::Running,
@@ -226,19 +225,32 @@ impl MutatorSafepointState {
             .store(epoch, std::sync::atomic::Ordering::Release);
     }
 
+    fn active_sections(&self) -> usize {
+        self.active_sections
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn acknowledged_epoch(&self) -> u64 {
+        self.acknowledged_epoch
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn phase(&self) -> MutatorSafepointPhase {
+        MutatorSafepointPhase::from_u8(self.phase.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    fn is_ready_for_safepoint_epoch(&self, epoch: u64) -> bool {
+        self.acknowledged_epoch() >= epoch
+            || (self.active_sections() == 0 && self.phase() == MutatorSafepointPhase::Parked)
+    }
+
     #[cfg(test)]
     fn snapshot(&self) -> MutatorSafepointSnapshot {
         MutatorSafepointSnapshot {
             id: self.id,
-            phase: MutatorSafepointPhase::from_u8(
-                self.phase.load(std::sync::atomic::Ordering::Acquire),
-            ),
-            active_sections: self
-                .active_sections
-                .load(std::sync::atomic::Ordering::Acquire),
-            acknowledged_epoch: self
-                .acknowledged_epoch
-                .load(std::sync::atomic::Ordering::Acquire),
+            phase: self.phase(),
+            active_sections: self.active_sections(),
+            acknowledged_epoch: self.acknowledged_epoch(),
             published_root_slots: self
                 .published_root_slots
                 .load(std::sync::atomic::Ordering::Acquire),
@@ -265,8 +277,7 @@ impl MutatorRegistration {
             while heap.safepoint_requested() {
                 self.state
                     .set_phase(MutatorSafepointPhase::WaitingForSafepoint);
-                self.acknowledge_pending_request(heap);
-                heap.wait_for_safepoint_request_to_clear();
+                self.wait_for_safepoint_request_to_clear(heap);
             }
             self.state.set_phase(MutatorSafepointPhase::Running);
             self.state
@@ -290,15 +301,35 @@ impl MutatorRegistration {
             );
             self.state
                 .set_phase(MutatorSafepointPhase::WaitingForSafepoint);
-            self.acknowledge_pending_request(heap);
             heap.notify_safepoint_waiters();
-            heap.wait_for_safepoint_request_to_clear();
+            self.wait_for_safepoint_request_to_clear(heap);
         }
     }
 
     pub(crate) fn acknowledge_pending_request(&self, heap: &Heap) {
         if heap.safepoint_requested() {
             self.state.acknowledge_epoch(heap.current_safepoint_epoch());
+        }
+    }
+
+    pub(crate) fn wait_for_safepoint_request_to_clear(&self, heap: &Heap) {
+        if !heap.safepoint_requested() {
+            return;
+        }
+        let mut guard = heap
+            .state
+            .safepoint_wait
+            .lock()
+            .expect("heap safepoint wait lock poisoned");
+        while heap.safepoint_requested() {
+            self.acknowledge_pending_request(heap);
+            heap.notify_safepoint_waiters();
+            guard = heap
+                .state
+                .safepoint_wait_cv
+                .wait_timeout(guard, std::time::Duration::from_millis(1))
+                .expect("heap safepoint wait lock poisoned")
+                .0;
         }
     }
 
@@ -609,18 +640,23 @@ impl Heap {
             .load(std::sync::atomic::Ordering::Acquire)
     }
 
-    fn begin_safepoint_request(&self) {
+    fn begin_safepoint_request(&self) -> u64 {
         let previous = self
             .state
             .safepoint_request_count
             .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         if previous == 0 {
-            self.state
+            let epoch = self
+                .state
                 .safepoint_epoch
-                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+                + 1;
             self.state
                 .safepoint_requested
                 .store(true, std::sync::atomic::Ordering::Release);
+            epoch
+        } else {
+            self.current_safepoint_epoch()
         }
     }
 
@@ -671,31 +707,36 @@ impl Heap {
             .collect()
     }
 
+    #[cfg(test)]
     fn active_registered_mutator_count_in(
         states: &[std::sync::Arc<MutatorSafepointState>],
     ) -> usize {
-        states
-            .iter()
-            .map(|state| {
-                state
-                    .active_sections
-                    .load(std::sync::atomic::Ordering::Acquire)
-            })
-            .sum()
+        states.iter().map(|state| state.active_sections()).sum()
     }
 
+    #[cfg(test)]
     fn active_registered_mutator_count_inner(&self) -> usize {
         let states = self.registered_mutator_state_snapshot();
         Self::active_registered_mutator_count_in(&states)
     }
 
-    fn registered_mutators_quiescent(&self) -> bool {
-        self.active_registered_mutator_count_inner() == 0
+    fn registered_mutators_ready_for_safepoint_in(
+        states: &[std::sync::Arc<MutatorSafepointState>],
+        epoch: u64,
+    ) -> bool {
+        states
+            .iter()
+            .all(|state| state.is_ready_for_safepoint_epoch(epoch))
     }
 
-    fn wait_for_registered_mutators_to_quiesce(&self) {
+    fn registered_mutators_ready_for_safepoint(&self, epoch: u64) -> bool {
         let states = self.registered_mutator_state_snapshot();
-        if Self::active_registered_mutator_count_in(&states) == 0 {
+        Self::registered_mutators_ready_for_safepoint_in(&states, epoch)
+    }
+
+    fn wait_for_registered_mutators_to_acknowledge(&self, epoch: u64) {
+        let states = self.registered_mutator_state_snapshot();
+        if Self::registered_mutators_ready_for_safepoint_in(&states, epoch) {
             return;
         }
         let mut guard = self
@@ -703,7 +744,7 @@ impl Heap {
             .safepoint_wait
             .lock()
             .expect("heap safepoint wait lock poisoned");
-        while Self::active_registered_mutator_count_in(&states) != 0 {
+        while !Self::registered_mutators_ready_for_safepoint_in(&states, epoch) {
             let (next_guard, _) = self
                 .state
                 .safepoint_wait_cv
@@ -742,8 +783,8 @@ impl Heap {
     /// critical section, not just until the mutex is acquired.
     #[inline]
     pub(crate) fn write_safepoint(&self) -> SafepointWriteGuard<'_> {
-        self.begin_safepoint_request();
-        self.wait_for_registered_mutators_to_quiesce();
+        let epoch = self.begin_safepoint_request();
+        self.wait_for_registered_mutators_to_acknowledge(epoch);
         let guard = self
             .state
             .safepoint
@@ -756,8 +797,8 @@ impl Heap {
     pub(crate) fn try_write_safepoint(
         &self,
     ) -> Result<SafepointWriteGuard<'_>, std::sync::TryLockError<SafepointWriteGuard<'_>>> {
-        self.begin_safepoint_request();
-        if !self.registered_mutators_quiescent() {
+        let epoch = self.begin_safepoint_request();
+        if !self.registered_mutators_ready_for_safepoint(epoch) {
             self.end_safepoint_request();
             return Err(std::sync::TryLockError::WouldBlock);
         }
@@ -790,8 +831,7 @@ impl Heap {
 
     #[cfg(test)]
     pub(crate) fn begin_safepoint_request_for_test(&self) -> u64 {
-        self.begin_safepoint_request();
-        self.current_safepoint_epoch()
+        self.begin_safepoint_request()
     }
 
     #[cfg(test)]

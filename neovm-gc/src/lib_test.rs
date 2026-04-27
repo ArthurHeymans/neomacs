@@ -12511,6 +12511,75 @@ fn mutator_safepoint_snapshot_reports_waiting_phase() {
 }
 
 #[test]
+fn try_write_safepoint_accepts_parked_mutator_without_epoch_ack() {
+    let heap = Heap::new(HeapConfig::default());
+    let _mutator = heap.mutator();
+    let before = heap.mutator_safepoint_snapshots();
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].acknowledged_epoch, 0);
+    assert_eq!(before[0].phase, crate::heap::MutatorSafepointPhase::Parked);
+
+    let stop = match heap.try_write_safepoint() {
+        Ok(stop) => stop,
+        Err(error) => panic!("parked mutator should not block safepoint handshake: {error:?}"),
+    };
+    assert!(heap.current_safepoint_epoch() > before[0].acknowledged_epoch);
+    drop(stop);
+}
+
+#[test]
+fn write_safepoint_waits_for_active_mutator_epoch_acknowledgement() {
+    let heap = Heap::new(HeapConfig::default());
+    let mut mutator = heap.mutator();
+    let active_guard = mutator.enter_registered_safepoint_read_for_test();
+
+    let worker_heap = heap.clone();
+    let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+    let (release_tx, release_rx) = mpsc::sync_channel(0);
+    let worker = thread::spawn(move || {
+        let stop = worker_heap.write_safepoint();
+        let epoch = worker_heap.current_safepoint_epoch();
+        entered_tx
+            .send(epoch)
+            .expect("signal acquired safepoint write guard");
+        release_rx
+            .recv()
+            .expect("wait to release safepoint write guard");
+        drop(stop);
+    });
+
+    let mut saw_request = false;
+    for _ in 0..50 {
+        if heap.has_pending_safepoint_request() {
+            saw_request = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(saw_request, "collector should publish safepoint request");
+    assert!(
+        entered_rx.recv_timeout(Duration::from_millis(10)).is_err(),
+        "collector must wait while active mutator has not acknowledged the epoch"
+    );
+
+    drop(active_guard);
+    let epoch = entered_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("collector should enter after active mutator acknowledges");
+    assert!(
+        heap.mutator_safepoint_snapshots()
+            .iter()
+            .any(|snapshot| snapshot.acknowledged_epoch >= epoch
+                && snapshot.phase == crate::heap::MutatorSafepointPhase::Parked),
+        "active mutator should acknowledge the requested epoch before collector enters"
+    );
+    release_tx
+        .send(())
+        .expect("release safepoint write guard helper");
+    worker.join().expect("join safepoint write helper");
+}
+
+#[test]
 fn yield_safepoint_acknowledges_pending_request_epoch() {
     let heap = Heap::new(HeapConfig::default());
     let mut mutator = heap.mutator();

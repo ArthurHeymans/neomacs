@@ -202,6 +202,14 @@ impl MutatorLocal {
         true
     }
 
+    fn wait_for_pending_safepoint_request_to_clear(&self, heap: &Heap) {
+        if let Some(registration) = self.safepoint_registration.as_ref() {
+            registration.wait_for_safepoint_request_to_clear(heap);
+        } else {
+            heap.wait_for_safepoint_request_to_clear();
+        }
+    }
+
     fn publish_safepoint_roots(&self) {
         if let Some(registration) = self.safepoint_registration.as_ref() {
             registration.publish_root_count(self.roots.len());
@@ -775,7 +783,8 @@ impl<'heap> Mutator<'heap> {
     /// scheduler a chance to run the collector thread.
     pub fn yield_safepoint(&mut self) {
         if self.local.acknowledge_pending_safepoint_request(self.heap) {
-            self.heap.wait_for_safepoint_request_to_clear();
+            self.local
+                .wait_for_pending_safepoint_request_to_clear(self.heap);
             return;
         }
         std::thread::yield_now();
