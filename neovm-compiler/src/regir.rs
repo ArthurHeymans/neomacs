@@ -1,7 +1,13 @@
-use crate::ids::{PrimaryMap, RegBlockId, RegId, SafepointId};
+use crate::ids::{FunctionId, PrimaryMap, RegBlockId, RegId, SafepointId};
 use crate::safepoint::SafepointTable;
 use crate::ssa::{SsaConst, SsaLambdaTemplate};
 use crate::surface::SurfaceForm;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegModule {
+    pub functions: PrimaryMap<FunctionId, RegFunction>,
+    pub entry: Option<FunctionId>,
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RegFunction {

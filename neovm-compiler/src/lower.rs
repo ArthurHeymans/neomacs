@@ -9,7 +9,9 @@ use crate::hir::{
 };
 use crate::ids::{BlockId, PrimaryMap, RegBlockId, RegId, ValueId};
 use crate::liveness::SsaSafepointLiveness;
-use crate::regir::{Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegTerminator};
+use crate::regir::{
+    Reg, RegBlock, RegFunction, RegInst, RegInstKind, RegKind, RegModule, RegTerminator,
+};
 use crate::safepoint::SafepointEntry;
 use crate::ssa::{
     SsaBlock, SsaCaptureMode, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaLambdaCapture,
@@ -112,6 +114,22 @@ pub fn ssa_to_regir(function: &SsaFunction) -> LowerOutput<RegFunction> {
     LowerOutput {
         value: lowerer.function,
         diagnostics: lowerer.diagnostics,
+    }
+}
+
+pub fn ssa_module_to_regir(module: &SsaModule) -> LowerOutput<RegModule> {
+    let mut lowered = RegModule::default();
+    let mut diagnostics = Vec::new();
+    for (function_id, function) in module.functions.iter() {
+        let function = ssa_to_regir(function);
+        diagnostics.extend(function.diagnostics);
+        let lowered_id = lowered.functions.push(function.value);
+        debug_assert_eq!(function_id, lowered_id);
+    }
+    lowered.entry = module.entry;
+    LowerOutput {
+        value: lowered,
+        diagnostics,
     }
 }
 
@@ -1160,7 +1178,7 @@ impl SsaBuilder {
 #[cfg(test)]
 mod tests {
     use crate::compile_source;
-    use crate::lower::hir_to_ssa_module;
+    use crate::lower::{hir_to_ssa_module, ssa_module_to_regir};
     use crate::verify::verify_ssa;
 
     #[test]
@@ -1184,5 +1202,21 @@ mod tests {
         for (_, function) in lowered.value.functions.iter() {
             assert_eq!(verify_ssa(function), Vec::new());
         }
+    }
+
+    #[test]
+    fn module_lowering_emits_one_regir_function_per_ssa_function() {
+        let artifact = compile_source(
+            "module.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun a (x) x)\n(defun b (y) (+ y 1))",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa_module(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+
+        let regir = ssa_module_to_regir(&ssa.value);
+        assert_eq!(regir.diagnostics, Vec::new());
+        assert_eq!(regir.value.functions.len(), 2);
+        assert_eq!(regir.value.entry, ssa.value.entry);
     }
 }

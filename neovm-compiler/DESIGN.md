@@ -95,6 +95,7 @@ SurfaceForm
 HirExpr
 SsaModule
 SsaFunction
+RegModule
 RegFunction
 ```
 
@@ -352,6 +353,9 @@ Register IR should contain:
 - Live register metadata at safepoints.
 - Frame layout metadata.
 - Deopt or reconstruction metadata later.
+
+Register IR has a module container parallel to SSA so every top-level function
+can keep a stable function ID through interpreter and backend-oriented lowering.
 
 The register interpreter remains useful for portability, debugging, and
 semantic validation. Native execution should lower to Cranelift IR, letting
