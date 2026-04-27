@@ -185,20 +185,29 @@ struct Lowerer<'a> {
 impl Lowerer<'_> {
     fn lower_item(&mut self, form: &SurfaceForm) -> Option<HirItem> {
         if let Some(list) = list_items(form)
-            && list.first().and_then(SurfaceForm::symbol_name) == Some("defun")
+            && let Some(kind @ ("defun" | "defsubst")) =
+                list.first().and_then(SurfaceForm::symbol_name)
         {
-            return self.lower_defun(form, list).map(HirItem::Defun);
+            return self.lower_defun(form, list, kind).map(HirItem::Defun);
         }
         self.lower_expr(form).map(HirItem::Expr)
     }
 
-    fn lower_defun(&mut self, form: &SurfaceForm, list: &[SurfaceForm]) -> Option<HirDefun> {
+    fn lower_defun(
+        &mut self,
+        form: &SurfaceForm,
+        list: &[SurfaceForm],
+        kind: &str,
+    ) -> Option<HirDefun> {
         if list.len() < 4 {
-            self.error(form.span, "defun requires a name, arg list, and body");
+            self.error(
+                form.span,
+                format!("{kind} requires a name, arg list, and body"),
+            );
             return None;
         }
         let Some(name) = list[1].symbol_name().map(str::to_string) else {
-            self.error(list[1].span, "defun name must be a symbol");
+            self.error(list[1].span, format!("{kind} name must be a symbol"));
             return None;
         };
         let Some(params) = self.parse_param_list(&list[2]) else {
@@ -1218,6 +1227,15 @@ mod tests {
         };
         assert!(matches!(args[0].kind, HirExprKind::LexicalGet(_)));
         assert!(matches!(args[1].kind, HirExprKind::LexicalGet(_)));
+    }
+
+    #[test]
+    fn defsubst_lowers_like_defun() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(defsubst add1 (x) (1+ x))");
+        let HirItem::Defun(defun) = &module.items[0] else {
+            panic!("expected defun");
+        };
+        assert_eq!(defun.name, "add1");
     }
 
     #[test]

@@ -203,6 +203,19 @@ mod tests {
     }
 
     #[test]
+    fn executes_defsubst_as_module_function() {
+        let executor = Executor::new(Engine::Interpreter);
+        let artifact = executor.execute_source(
+            "defsubst.el",
+            ";;; -*- lexical-binding: t; -*-\n(defsubst add1 (x) (1+ x))",
+            &[4],
+        );
+
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(5));
+    }
+
+    #[test]
     fn reports_runtime_dependent_operation() {
         let artifact = execute_source(
             "unknown.el",
