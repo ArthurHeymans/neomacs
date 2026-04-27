@@ -50,14 +50,33 @@ pub fn hir_to_ssa_module(module: &HirModule) -> LowerOutput<SsaModule> {
         };
     }
 
-    for item in &module.items {
-        let function = match item {
-            HirItem::Expr(expr) => lower_expr_to_ssa_function(expr),
-            HirItem::Defun(defun) => lower_defun_to_ssa_function(defun),
-        };
+    let has_expr = module
+        .items
+        .iter()
+        .any(|item| matches!(item, HirItem::Expr(_)));
+    if has_expr {
+        for item in &module.items {
+            let HirItem::Defun(defun) = item else {
+                continue;
+            };
+            let function = lower_defun_to_ssa_function(defun);
+            diagnostics.extend(function.diagnostics);
+            lowered.functions.push(function.value);
+        }
+        let function = lower_load_entry_to_ssa_function(&module.items);
         diagnostics.extend(function.diagnostics);
         let id = lowered.functions.push(function.value);
-        lowered.entry.get_or_insert(id);
+        lowered.entry = Some(id);
+    } else {
+        for item in &module.items {
+            let HirItem::Defun(defun) = item else {
+                continue;
+            };
+            let function = lower_defun_to_ssa_function(defun);
+            diagnostics.extend(function.diagnostics);
+            let id = lowered.functions.push(function.value);
+            lowered.entry.get_or_insert(id);
+        }
     }
 
     LowerOutput {
@@ -76,6 +95,34 @@ fn lower_expr_to_ssa_function(expr: &HirExpr) -> LowerOutput<SsaFunction> {
         value: builder.function,
         diagnostics: builder.diagnostics,
     }
+}
+
+fn lower_load_entry_to_ssa_function(items: &[HirItem]) -> LowerOutput<SsaFunction> {
+    let exprs = items
+        .iter()
+        .filter_map(|item| match item {
+            HirItem::Expr(expr) => Some(expr.clone()),
+            HirItem::Defun(_) => None,
+        })
+        .collect::<Vec<_>>();
+    debug_assert!(
+        !exprs.is_empty(),
+        "load entry requires top-level expressions"
+    );
+    let span = exprs
+        .first()
+        .zip(exprs.last())
+        .map(|(first, last)| first.span.join(last.span))
+        .unwrap_or(exprs[0].span);
+    let entry = if exprs.len() == 1 {
+        exprs.into_iter().next().expect("one expression")
+    } else {
+        HirExpr {
+            kind: HirExprKind::Progn(exprs),
+            span,
+        }
+    };
+    lower_expr_to_ssa_function(&entry)
 }
 
 fn lower_defun_to_ssa_function(defun: &HirDefun) -> LowerOutput<SsaFunction> {
@@ -1248,6 +1295,25 @@ mod tests {
         for (_, function) in lowered.value.functions.iter() {
             assert_eq!(verify_ssa(function), Vec::new());
         }
+    }
+
+    #[test]
+    fn module_lowering_uses_load_entry_for_top_level_expressions() {
+        let artifact = compile_source(
+            "module.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun add1 (x) (1+ x))\n(setq loaded-value (add1 4))\nloaded-value",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let lowered = hir_to_ssa_module(&hir);
+        assert_eq!(lowered.diagnostics, Vec::new());
+        assert_eq!(verify_ssa_module(&lowered.value), Vec::new());
+        assert_eq!(lowered.value.functions.len(), 2);
+
+        let entry = lowered.value.entry.expect("load entry");
+        let entry = lowered.value.functions.get(entry).expect("entry function");
+        assert_eq!(entry.name, None);
+        let entry_block = entry.entry.expect("entry block");
+        assert_eq!(entry.blocks[entry_block].params, Vec::new());
     }
 
     #[test]

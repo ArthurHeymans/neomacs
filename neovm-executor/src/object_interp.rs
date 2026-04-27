@@ -1687,6 +1687,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_top_level_load_entry_forms_in_order() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(defun object-load-add1 (x) (1+ x))\n(setq object-load-value 1)\n(setq object-load-value (object-load-add1 object-load-value))\nobject-load-value",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn catches_direct_throw() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(catch 'tag (throw 'tag 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
