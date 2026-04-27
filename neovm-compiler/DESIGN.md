@@ -447,8 +447,10 @@ metadata records:
 
 This is still conservative about value types because all Lisp values currently
 use an opaque `i64` carrier, but dead SSA values are no longer retained in
-safepoint root metadata. Later work should connect these root sets to emitted
-Cranelift stack maps or explicit frame maps.
+safepoint root metadata. The Cranelift lowerer also marks each liveness-pruned
+CLIF root with `declare_value_needs_stack_map`, allowing Cranelift's safepoint
+spiller to attach `stack_map=[...]` metadata to runtime calls. Later work should
+thread those emitted stack maps into the runtime/JIT registration path.
 
 ## Safepoints And GC Metadata
 

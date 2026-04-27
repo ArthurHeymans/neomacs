@@ -1428,6 +1428,7 @@ impl ClifBlockLowerer<'_> {
                 ));
                 continue;
             };
+            self.builder.declare_value_needs_stack_map(clif_value);
             live_roots.push(ClifLiveRoot {
                 ssa_value,
                 clif_value,
@@ -1707,6 +1708,23 @@ mod tests {
         assert!(!safepoint.live_roots.is_empty());
         let dump = dump_clif(&clif.function.expect("CLIF function"));
         assert!(dump.contains("call"));
+    }
+
+    #[test]
+    fn marks_live_lexical_roots_for_cranelift_stack_maps() {
+        let artifact = compile_source(
+            "stack-map-live-root.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun stack-map-live-root (x) global-value x)",
+        );
+        let hir = artifact.hir.expect("HIR");
+        let ssa = hir_to_ssa(&hir);
+        assert_eq!(ssa.diagnostics, Vec::new());
+        assert_eq!(verify_ssa(&ssa.value), Vec::new());
+
+        let clif = ssa_to_clif(&ssa.value);
+        assert_eq!(clif.diagnostics, Vec::new());
+        let dump = dump_clif(&clif.function.expect("CLIF function"));
+        assert!(dump.contains("stack_map=["));
     }
 
     #[test]
