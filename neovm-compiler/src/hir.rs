@@ -327,6 +327,9 @@ impl Lowerer<'_> {
             Some("declare") => self.lower_declare(form, &items[1..]),
             Some("defvar") => self.lower_defvar(form, &items[1..]),
             Some("defconst") => self.lower_defconst(form, &items[1..]),
+            Some("defcustom") => self.lower_defcustom(form, &items[1..]),
+            Some("defgroup") => self.lower_defgroup(form, &items[1..]),
+            Some("declare-function") => self.lower_declare_function(form, &items[1..]),
             Some("catch") => self.lower_catch(form, &items[1..]),
             Some("throw") => self.lower_throw(form, &items[1..]),
             Some("condition-case") => self.lower_condition_case(form, &items[1..]),
@@ -815,6 +818,81 @@ impl Lowerer<'_> {
             ]),
             span: form.span,
         })
+    }
+
+    fn lower_defcustom(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.len() < 3 {
+            self.error(
+                form.span,
+                "defcustom requires a variable name, init, docstring, and keyword arguments",
+            );
+            return None;
+        }
+        let Some(name) = tail[0].symbol_name().map(str::to_string) else {
+            self.error(tail[0].span, "defcustom variable name must be a symbol");
+            return None;
+        };
+        let quoted_name = quote_symbol_expr(&name, tail[0].span);
+        let boundp = HirExpr {
+            kind: HirExprKind::CallNamed {
+                name: "boundp".to_string(),
+                args: vec![quoted_name.clone()],
+            },
+            span: form.span,
+        };
+        let init = self.lower_expr(&tail[1])?;
+        let set_then_return = HirExpr {
+            kind: HirExprKind::Progn(vec![
+                HirExpr {
+                    kind: HirExprKind::SymbolSet {
+                        name,
+                        value: Box::new(init),
+                    },
+                    span: form.span,
+                },
+                quoted_name.clone(),
+            ]),
+            span: form.span,
+        };
+        Some(HirExpr {
+            kind: HirExprKind::If {
+                test: Box::new(boundp),
+                then_expr: Box::new(quoted_name),
+                else_expr: Box::new(set_then_return),
+            },
+            span: form.span,
+        })
+    }
+
+    fn lower_defgroup(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some(name_form) = tail.first() else {
+            self.error(form.span, "defgroup requires a group name");
+            return None;
+        };
+        let Some(name) = name_form.symbol_name() else {
+            self.error(name_form.span, "defgroup name must be a symbol");
+            return None;
+        };
+        Some(quote_symbol_expr(name, name_form.span))
+    }
+
+    fn lower_declare_function(
+        &mut self,
+        form: &SurfaceForm,
+        tail: &[SurfaceForm],
+    ) -> Option<HirExpr> {
+        if tail.len() < 2 {
+            self.error(
+                form.span,
+                "declare-function requires a function name and file name",
+            );
+            return None;
+        }
+        if tail[0].symbol_name().is_none() {
+            self.error(tail[0].span, "declare-function name must be a symbol");
+            return None;
+        }
+        Some(nil_expr(form.span))
     }
 
     fn lower_declare(&mut self, form: &SurfaceForm, specs: &[SurfaceForm]) -> Option<HirExpr> {
@@ -1349,6 +1427,24 @@ mod tests {
         };
         assert!(matches!(exprs[0].kind, HirExprKind::If { .. }));
         assert!(matches!(exprs[1].kind, HirExprKind::Progn(_)));
+    }
+
+    #[test]
+    fn lowers_declaration_and_custom_forms_without_evaluating_metadata() {
+        let module = hir(";;; -*- lexical-binding: t; -*-
+(progn
+  (declare-function missing-fn \"file\")
+  (defgroup object-group nil \"doc\" :group 'lisp)
+  (defcustom object-custom (+ 1 2) \"doc\" :type 'integer))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        assert!(matches!(exprs[0].kind, HirExprKind::Const(_)));
+        assert!(matches!(exprs[1].kind, HirExprKind::Quote(_)));
+        assert!(matches!(exprs[2].kind, HirExprKind::If { .. }));
     }
 
     #[test]

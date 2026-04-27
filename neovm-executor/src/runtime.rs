@@ -4,7 +4,6 @@ use neovm_compiler::ssa::SsaLambdaTemplate;
 
 use crate::value::LispValue;
 
-#[derive(Default)]
 pub struct Runtime {
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
@@ -14,7 +13,27 @@ pub struct Runtime {
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
+    nil_plist: LispValue,
+    true_plist: LispValue,
     pending_error: Option<RuntimeError>,
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        Self {
+            cons_cells: Vec::new(),
+            symbols: Vec::new(),
+            strings: Vec::new(),
+            functions: Vec::new(),
+            lexical_cells: Vec::new(),
+            interned_symbols: HashMap::new(),
+            dynamic_bindings: Vec::new(),
+            features: Vec::new(),
+            nil_plist: LispValue::NIL,
+            true_plist: LispValue::NIL,
+            pending_error: None,
+        }
+    }
 }
 
 impl Runtime {
@@ -112,6 +131,7 @@ impl Runtime {
             name: name.clone(),
             value: None,
             function: None,
+            plist: LispValue::NIL,
         });
         let addr = (&mut *symbol as *mut Symbol) as usize;
         let value = LispValue::from_heap_addr(addr);
@@ -343,6 +363,104 @@ impl Runtime {
     pub fn featurep(&self, feature: LispValue) -> Result<bool, RuntimeError> {
         self.expect_symbol(feature)?;
         Ok(self.features.contains(&feature))
+    }
+
+    pub fn symbol_property(
+        &self,
+        symbol: LispValue,
+        property: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Ok(self.plist_get(self.nil_plist, property));
+        }
+        if symbol.is_true() {
+            return Ok(self.plist_get(self.true_plist, property));
+        }
+        let symbol = self.expect_symbol(symbol)?;
+        Ok(self.plist_get(symbol.plist, property))
+    }
+
+    pub fn put_symbol_property(
+        &mut self,
+        symbol: LispValue,
+        property: LispValue,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            self.nil_plist = self.plist_put(self.nil_plist, property, value);
+            return Ok(value);
+        }
+        if symbol.is_true() {
+            self.true_plist = self.plist_put(self.true_plist, property, value);
+            return Ok(value);
+        }
+        let plist = self.expect_symbol(symbol)?.plist;
+        let plist = self.plist_put(plist, property, value);
+        self.expect_symbol_mut(symbol)?.plist = plist;
+        Ok(value)
+    }
+
+    pub fn symbol_plist(&self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Ok(self.nil_plist);
+        }
+        if symbol.is_true() {
+            return Ok(self.true_plist);
+        }
+        Ok(self.expect_symbol(symbol)?.plist)
+    }
+
+    pub fn set_symbol_plist(
+        &mut self,
+        symbol: LispValue,
+        plist: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            self.nil_plist = plist;
+            return Ok(plist);
+        }
+        if symbol.is_true() {
+            self.true_plist = plist;
+            return Ok(plist);
+        }
+        self.expect_symbol_mut(symbol)?.plist = plist;
+        Ok(plist)
+    }
+
+    pub fn plist_get(&self, mut plist: LispValue, property: LispValue) -> LispValue {
+        loop {
+            let Some((found_property, value, next)) = self.plist_pair(plist) else {
+                return LispValue::NIL;
+            };
+            if found_property == property {
+                return value;
+            }
+            plist = next;
+        }
+    }
+
+    pub fn plist_put(
+        &mut self,
+        plist: LispValue,
+        property: LispValue,
+        value: LispValue,
+    ) -> LispValue {
+        let mut current = plist;
+        while let Some((found_property, _old_value, next)) = self.plist_pair(current) {
+            if found_property == property {
+                if let Some(value_cell) = self.plist_value_cell(current)
+                    && let Some(addr) = value_cell.heap_addr()
+                    && let Some(cell) = self.cons_by_addr_mut(addr)
+                {
+                    cell.car = value;
+                    return plist;
+                }
+                break;
+            }
+            current = next;
+        }
+        let value_tail = self.cons(value, plist);
+        self.cons(property, value_tail)
     }
 
     pub fn symbol_function(&self, symbol: LispValue) -> Result<Option<LispValue>, RuntimeError> {
@@ -625,6 +743,18 @@ impl Runtime {
             }
         }
         None
+    }
+
+    fn plist_pair(&self, pair_cell: LispValue) -> Option<(LispValue, LispValue, LispValue)> {
+        let pair = self.cons_by_addr(pair_cell.heap_addr()?)?;
+        let value_cell = self.cons_by_addr(pair.cdr.heap_addr()?)?;
+        Some((pair.car, value_cell.car, value_cell.cdr))
+    }
+
+    fn plist_value_cell(&self, pair_cell: LispValue) -> Option<LispValue> {
+        let pair = self.cons_by_addr(pair_cell.heap_addr()?)?;
+        self.cons_by_addr(pair.cdr.heap_addr()?)?;
+        Some(pair.cdr)
     }
 
     pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
@@ -929,6 +1059,7 @@ struct Symbol {
     name: String,
     value: Option<LispValue>,
     function: Option<LispValue>,
+    plist: LispValue,
 }
 
 #[repr(C, align(8))]
@@ -1168,6 +1299,39 @@ mod tests {
         assert_eq!(runtime.provide(feature), Ok(feature));
         assert_eq!(runtime.featurep(feature), Ok(true));
         assert_eq!(runtime.feature_count(), 1);
+    }
+
+    #[test]
+    fn symbol_plists_store_properties_by_eq() {
+        let mut runtime = Runtime::new();
+        let symbol = runtime.intern("object-symbol");
+        let property = runtime.intern("object-property");
+        let first = LispValue::expect_fixnum(1);
+        let second = LispValue::expect_fixnum(2);
+
+        assert_eq!(
+            runtime.symbol_property(symbol, property),
+            Ok(LispValue::NIL)
+        );
+        assert_eq!(
+            runtime.put_symbol_property(symbol, property, first),
+            Ok(first)
+        );
+        assert_eq!(runtime.symbol_property(symbol, property), Ok(first));
+        assert_eq!(
+            runtime.put_symbol_property(symbol, property, second),
+            Ok(second)
+        );
+        assert_eq!(runtime.symbol_property(symbol, property), Ok(second));
+        assert_eq!(
+            runtime.plist_get(runtime.symbol_plist(symbol).expect("plist"), property),
+            second
+        );
+        assert_eq!(
+            runtime.put_symbol_property(LispValue::NIL, property, first),
+            Ok(first)
+        );
+        assert_eq!(runtime.symbol_property(LispValue::NIL, property), Ok(first));
     }
 
     #[test]

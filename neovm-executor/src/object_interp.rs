@@ -680,6 +680,31 @@ impl Interpreter<'_, '_, '_> {
             "require" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
                 self.require_feature(args[0], args.get(2).copied().unwrap_or(LispValue::NIL))
             }),
+            "get" => self.exact_arity(name, args, 2).and_then(|_| {
+                let result = self.runtime.symbol_property(args[0], args[1]);
+                self.runtime_value(result)
+            }),
+            "put" => self.exact_arity(name, args, 3).and_then(|_| {
+                let result = self.runtime.put_symbol_property(args[0], args[1], args[2]);
+                self.runtime_value(result)
+            }),
+            "symbol-plist" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.symbol_plist(args[0]);
+                self.runtime_value(result)
+            }),
+            "setplist" => self.exact_arity(name, args, 2).and_then(|_| {
+                let result = self.runtime.set_symbol_plist(args[0], args[1]);
+                self.runtime_value(result)
+            }),
+            "plist-get" => self
+                .exact_arity(name, args, 2)
+                .map(|_| self.runtime.plist_get(args[0], args[1])),
+            "plist-put" => self
+                .exact_arity(name, args, 3)
+                .map(|_| self.runtime.plist_put(args[0], args[1], args[2])),
+            "autoload" => self
+                .min_max_arity(name, args, 2, 5)
+                .and_then(|_| self.autoload(args)),
             "symbol-function" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.symbol_function(args[0])),
@@ -842,6 +867,23 @@ impl Interpreter<'_, '_, '_> {
             data,
         });
         None
+    }
+
+    fn autoload(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let function = args[0];
+        let mut autoload_args = vec![args[1], LispValue::NIL, LispValue::NIL, LispValue::NIL];
+        for (slot, value) in autoload_args
+            .iter_mut()
+            .skip(1)
+            .zip(args.iter().copied().skip(2))
+        {
+            *slot = value;
+        }
+        let head = self.runtime.intern("autoload");
+        let tail = make_list(self.runtime, autoload_args);
+        let object = self.runtime.cons(head, tail);
+        let result = self.runtime.set_symbol_function(function, object);
+        self.runtime_value(result).map(|_| function)
     }
 
     fn is_callable_name(&self, name: &str) -> bool {
@@ -1505,6 +1547,13 @@ fn is_primitive_name(name: &str) -> bool {
             | "provide"
             | "featurep"
             | "require"
+            | "get"
+            | "put"
+            | "symbol-plist"
+            | "setplist"
+            | "plist-get"
+            | "plist-put"
+            | "autoload"
             | "symbol-function"
             | "fset"
             | "defalias"
@@ -1652,6 +1701,30 @@ mod tests {
     }
 
     #[test]
+    fn executes_property_list_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (put 'object-symbol 'object-property 4) (+ (get 'object-symbol 'object-property) (plist-get (plist-put nil 'object-other 3) 'object-other) (if (equal (symbol-plist 'object-symbol) '(object-property 4)) 5 0)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
+    fn executes_setplist_primitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (setplist 'object-symbol (list 'a 1)) (get 'object-symbol 'a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_autoload_primitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (autoload 'object-auto \"object-file\" \"doc\" t 'macro) (if (fboundp 'object-auto) (if (equal (symbol-function 'object-auto) '(autoload \"object-file\" \"doc\" t macro)) 7 0) 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
     fn executes_direct_lambda_function_object() {
         let (value, runtime) =
             execute(";;; -*- lexical-binding: t; -*-\n(funcall (lambda (x) (1+ x)) 4)");
@@ -1739,6 +1812,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(progn (defvar object-defvar (+ 1 2)) (defvar object-defvar (error \"skip\")) (defconst object-defconst 7) (+ (symbol-value 'object-defvar) (symbol-value 'object-defconst)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_basic_declaration_and_custom_forms() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn (declare-function object-missing \"file\") (defgroup object-group nil \"doc\" :group 'lisp) (defcustom object-custom (+ 1 2) \"doc\" :type 'integer) object-custom)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
