@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::ids::{FunctionId, RegId};
+use neovm_compiler::lower::{lambda_template_to_ssa, ssa_to_regir};
 use neovm_compiler::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
 use neovm_compiler::ssa::SsaConst;
 use neovm_compiler::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
@@ -245,11 +246,48 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.set(*dst, value);
             }
-            RegInstKind::Lambda { .. }
-            | RegInstKind::MakeLexicalCell { .. }
-            | RegInstKind::LexicalCellGet { .. }
-            | RegInstKind::LexicalCellSet { .. }
-            | RegInstKind::BindDynamic { .. }
+            RegInstKind::Lambda {
+                dst,
+                template,
+                captures,
+            } => {
+                let Some(captures) = self.get_many(captures) else {
+                    return false;
+                };
+                let function = self.runtime.function(template.clone(), captures);
+                self.set(*dst, function);
+            }
+            RegInstKind::MakeLexicalCell { dst, initial } => {
+                let Some(value) = self.get(*initial) else {
+                    return false;
+                };
+                let cell = self.runtime.lexical_cell(value);
+                self.set(*dst, cell);
+            }
+            RegInstKind::LexicalCellGet { dst, cell } => {
+                let Some(cell) = self.get(*cell) else {
+                    return false;
+                };
+                let result = self.runtime.lexical_cell_get(cell);
+                let Some(value) = self.runtime_value(result) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::LexicalCellSet { dst, cell, src } => {
+                let Some(cell) = self.get(*cell) else {
+                    return false;
+                };
+                let Some(value) = self.get(*src) else {
+                    return false;
+                };
+                let result = self.runtime.lexical_cell_set(cell, value);
+                let Some(value) = self.runtime_value(result) else {
+                    return false;
+                };
+                self.set(*dst, value);
+            }
+            RegInstKind::BindDynamic { .. }
             | RegInstKind::UnbindDynamic { .. }
             | RegInstKind::CatchBegin { .. }
             | RegInstKind::CatchEnd
@@ -292,6 +330,9 @@ impl Interpreter<'_, '_, '_> {
             self.error("function indirection exceeded object interpreter recursion limit");
             return None;
         }
+        if self.runtime.is_function(callee) {
+            return self.execute_function_object(callee, args);
+        }
         let name = match self.runtime.symbol_name(callee) {
             Ok(name) => name,
             Err(error) => {
@@ -310,6 +351,43 @@ impl Interpreter<'_, '_, '_> {
             }
         }
         self.execute_named_call(&name, args)
+    }
+
+    fn execute_function_object(
+        &mut self,
+        function: LispValue,
+        args: &[LispValue],
+    ) -> Option<LispValue> {
+        let (template, captures) = match self.runtime.function_parts(function) {
+            Ok(function) => function,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        let lowered = lambda_template_to_ssa(&template);
+        if !lowered.diagnostics.is_empty() {
+            self.diagnostics.extend(lowered.diagnostics);
+            return None;
+        }
+        let regir = ssa_to_regir(&lowered.value);
+        if !regir.diagnostics.is_empty() {
+            self.diagnostics.extend(regir.diagnostics);
+            return None;
+        }
+        let mut entry_args = Vec::with_capacity(captures.len() + args.len());
+        entry_args.extend(captures);
+        entry_args.extend_from_slice(args);
+        let result = execute_with_module(
+            &regir.value,
+            &entry_args,
+            self.module,
+            self.functions_by_name,
+            self.runtime,
+            &mut *self.fuel,
+        );
+        self.diagnostics.extend(result.diagnostics);
+        result.value
     }
 
     fn execute_apply(&mut self, callee: LispValue, args: &[LispValue]) -> Option<LispValue> {
@@ -1016,5 +1094,30 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(if (fboundp 'car) (funcall (symbol-function 'car) (cons 4 5)) 0)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn executes_direct_lambda_function_object() {
+        let (value, runtime) =
+            execute(";;; -*- lexical-binding: t; -*-\n(funcall (lambda (x) (1+ x)) 4)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+        assert_eq!(runtime.function_count(), 1);
+    }
+
+    #[test]
+    fn executes_lambda_with_value_capture() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 10)) (funcall (lambda (y) (+ x y)) 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn executes_lambda_with_mutable_cell_capture() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 0)) (let ((f (lambda () (setq x (+ x 1)) x))) (+ (funcall f) (funcall f))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+        assert_eq!(runtime.lexical_cell_count(), 1);
     }
 }

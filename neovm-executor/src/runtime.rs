@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt};
 
+use neovm_compiler::ssa::SsaLambdaTemplate;
+
 use crate::value::LispValue;
 
 #[derive(Default)]
@@ -7,6 +9,8 @@ pub struct Runtime {
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
+    functions: Vec<Box<FunctionObject>>,
+    lexical_cells: Vec<Box<LexicalCell>>,
     interned_symbols: HashMap<String, LispValue>,
     pending_error: Option<RuntimeError>,
 }
@@ -34,15 +38,53 @@ impl Runtime {
             .to_abi_i64()
     }
 
-    pub fn string(&mut self, value: impl Into<String>) -> LispValue {
+    pub fn string(&mut self, value: impl AsRef<str>) -> LispValue {
+        self.string_from_lisp_data(LispStringData::from_str(value.as_ref()))
+    }
+
+    pub fn string_from_bytes(
+        &mut self,
+        bytes: Vec<u8>,
+        chars: usize,
+        multibyte: bool,
+    ) -> LispValue {
+        self.string_from_lisp_data(LispStringData::new(bytes, chars, multibyte))
+    }
+
+    fn string_from_lisp_data(&mut self, data: LispStringData) -> LispValue {
         let mut string = Box::new(LispString {
             header: HeapHeader {
                 kind: HeapKind::String,
             },
-            value: value.into(),
+            data,
         });
         let addr = (&mut *string as *mut LispString) as usize;
         self.strings.push(string);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn function(&mut self, template: SsaLambdaTemplate, captures: Vec<LispValue>) -> LispValue {
+        let mut function = Box::new(FunctionObject {
+            header: HeapHeader {
+                kind: HeapKind::Function,
+            },
+            template,
+            captures,
+        });
+        let addr = (&mut *function as *mut FunctionObject) as usize;
+        self.functions.push(function);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn lexical_cell(&mut self, value: LispValue) -> LispValue {
+        let mut cell = Box::new(LexicalCell {
+            header: HeapHeader {
+                kind: HeapKind::LexicalCell,
+            },
+            value,
+        });
+        let addr = (&mut *cell as *mut LexicalCell) as usize;
+        self.lexical_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
 
@@ -123,6 +165,12 @@ impl Runtime {
             .is_some_and(|addr| self.string_by_addr(addr).is_some())
     }
 
+    pub fn is_function(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.function_by_addr(addr).is_some())
+    }
+
     pub fn cons_cell_count(&self) -> usize {
         self.cons_cells.len()
     }
@@ -133,6 +181,14 @@ impl Runtime {
 
     pub fn string_count(&self) -> usize {
         self.strings.len()
+    }
+
+    pub fn function_count(&self) -> usize {
+        self.functions.len()
+    }
+
+    pub fn lexical_cell_count(&self) -> usize {
+        self.lexical_cells.len()
     }
 
     pub fn symbol_name(&self, symbol: LispValue) -> Result<String, RuntimeError> {
@@ -239,7 +295,35 @@ impl Runtime {
     }
 
     pub fn string_contents(&self, string: LispValue) -> Result<&str, RuntimeError> {
-        Ok(&self.expect_string(string)?.value)
+        self.expect_string(string)?
+            .data
+            .as_str()
+            .ok_or_else(|| RuntimeError::InvalidStringData("string is not valid UTF-8".to_string()))
+    }
+
+    pub fn string_data(&self, string: LispValue) -> Result<&LispStringData, RuntimeError> {
+        Ok(&self.expect_string(string)?.data)
+    }
+
+    pub fn function_parts(
+        &self,
+        function: LispValue,
+    ) -> Result<(SsaLambdaTemplate, Vec<LispValue>), RuntimeError> {
+        let function = self.expect_function(function)?;
+        Ok((function.template.clone(), function.captures.clone()))
+    }
+
+    pub fn lexical_cell_get(&self, cell: LispValue) -> Result<LispValue, RuntimeError> {
+        Ok(self.expect_lexical_cell(cell)?.value)
+    }
+
+    pub fn lexical_cell_set(
+        &mut self,
+        cell: LispValue,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
+        self.expect_lexical_cell_mut(cell)?.value = value;
+        Ok(value)
     }
 
     pub fn pending_error(&self) -> Option<&RuntimeError> {
@@ -330,6 +414,51 @@ impl Runtime {
             })
     }
 
+    fn expect_function(&self, value: LispValue) -> Result<&FunctionObject, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "functionp",
+                value,
+            });
+        };
+        self.function_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "functionp",
+                value,
+            })
+    }
+
+    fn expect_lexical_cell(&self, value: LispValue) -> Result<&LexicalCell, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            });
+        };
+        self.lexical_cell_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            })
+    }
+
+    fn expect_lexical_cell_mut(
+        &mut self,
+        value: LispValue,
+    ) -> Result<&mut LexicalCell, RuntimeError> {
+        let Some(addr) = value.heap_addr() else {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            });
+        };
+        self.lexical_cell_by_addr_mut(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            })
+    }
+
     fn cons_by_addr(&self, addr: usize) -> Option<&Cons> {
         for cell in &self.cons_cells {
             let cell_addr = (&**cell as *const Cons) as usize;
@@ -380,6 +509,36 @@ impl Runtime {
         None
     }
 
+    fn function_by_addr(&self, addr: usize) -> Option<&FunctionObject> {
+        for function in &self.functions {
+            let function_addr = (&**function as *const FunctionObject) as usize;
+            if function_addr == addr && function.header.kind == HeapKind::Function {
+                return Some(function);
+            }
+        }
+        None
+    }
+
+    fn lexical_cell_by_addr(&self, addr: usize) -> Option<&LexicalCell> {
+        for cell in &self.lexical_cells {
+            let cell_addr = (&**cell as *const LexicalCell) as usize;
+            if cell_addr == addr && cell.header.kind == HeapKind::LexicalCell {
+                return Some(cell);
+            }
+        }
+        None
+    }
+
+    fn lexical_cell_by_addr_mut(&mut self, addr: usize) -> Option<&mut LexicalCell> {
+        for cell in &mut self.lexical_cells {
+            let cell_addr = (&**cell as *const LexicalCell) as usize;
+            if cell_addr == addr && cell.header.kind == HeapKind::LexicalCell {
+                return Some(cell);
+            }
+        }
+        None
+    }
+
     pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
         self.equal_with_depth(left, right, 256)
     }
@@ -404,7 +563,7 @@ impl Runtime {
             self.string_by_addr(left_addr),
             self.string_by_addr(right_addr),
         ) {
-            return left.value == right.value;
+            return left.data == right.data;
         }
         false
     }
@@ -456,9 +615,70 @@ impl Runtime {
         if let Some(addr) = value.heap_addr()
             && let Some(string) = self.string_by_addr(addr)
         {
-            return format!("{:?}", string.value);
+            return string.data.format_debug();
+        }
+        if self.is_function(value) {
+            return "#<function>".to_string();
+        }
+        if value
+            .heap_addr()
+            .is_some_and(|addr| self.lexical_cell_by_addr(addr).is_some())
+        {
+            return "#<lexical-cell>".to_string();
         }
         format!("{value:?}")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LispStringData {
+    bytes: Vec<u8>,
+    chars: usize,
+    multibyte: bool,
+}
+
+impl LispStringData {
+    pub fn new(bytes: Vec<u8>, chars: usize, multibyte: bool) -> Self {
+        Self {
+            bytes,
+            chars,
+            multibyte,
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        Self {
+            bytes: value.as_bytes().to_vec(),
+            chars: value.chars().count(),
+            multibyte: value.len() != value.chars().count(),
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn char_len(&self) -> usize {
+        self.chars
+    }
+
+    pub fn byte_len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub fn is_multibyte(&self) -> bool {
+        self.multibyte
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        std::str::from_utf8(&self.bytes).ok()
+    }
+
+    fn format_debug(&self) -> String {
+        match self.as_str() {
+            Some(value) => format!("{value:?}"),
+            None => format!("#<unibyte-string {:?}>", self.bytes),
+        }
     }
 }
 
@@ -477,6 +697,7 @@ pub enum RuntimeError {
     ConstantSymbol {
         name: String,
     },
+    InvalidStringData(String),
 }
 
 impl fmt::Display for RuntimeError {
@@ -488,6 +709,7 @@ impl fmt::Display for RuntimeError {
             Self::VoidVariable { name } => write!(f, "void variable: {name}"),
             Self::VoidFunction { name } => write!(f, "void function: {name}"),
             Self::ConstantSymbol { name } => write!(f, "attempt to set constant symbol: {name}"),
+            Self::InvalidStringData(message) => write!(f, "invalid string data: {message}"),
         }
     }
 }
@@ -500,6 +722,8 @@ enum HeapKind {
     Cons = 1,
     Symbol = 2,
     String = 3,
+    Function = 4,
+    LexicalCell = 5,
 }
 
 #[repr(C)]
@@ -525,7 +749,20 @@ struct Symbol {
 #[repr(C, align(8))]
 struct LispString {
     header: HeapHeader,
-    value: String,
+    data: LispStringData,
+}
+
+#[repr(C, align(8))]
+struct FunctionObject {
+    header: HeapHeader,
+    template: SsaLambdaTemplate,
+    captures: Vec<LispValue>,
+}
+
+#[repr(C, align(8))]
+struct LexicalCell {
+    header: HeapHeader,
+    value: LispValue,
 }
 
 #[cfg(test)]
@@ -627,9 +864,26 @@ mod tests {
 
         assert!(runtime.is_string(left));
         assert_eq!(runtime.string_contents(left), Ok("alpha"));
+        let data = runtime.string_data(left).expect("string data");
+        assert_eq!(data.char_len(), 5);
+        assert_eq!(data.byte_len(), 5);
+        assert_eq!(data.bytes(), b"alpha");
+        assert!(!data.is_multibyte());
         assert_ne!(left, right);
         assert!(runtime.equal(left, right));
         assert_eq!(runtime.format_value(left), "\"alpha\"");
+    }
+
+    #[test]
+    fn strings_track_bytes_and_chars_separately() {
+        let mut runtime = Runtime::new();
+        let string = runtime.string("λ");
+        let data = runtime.string_data(string).expect("string data");
+
+        assert_eq!(data.char_len(), 1);
+        assert_eq!(data.byte_len(), 2);
+        assert_eq!(data.bytes(), "λ".as_bytes());
+        assert!(data.is_multibyte());
     }
 
     #[test]
