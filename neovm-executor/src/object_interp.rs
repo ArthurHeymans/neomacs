@@ -28,6 +28,19 @@ struct SignaledValue {
 }
 
 #[derive(Clone, Debug)]
+struct ConditionFrame {
+    var: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct ActiveConditionHandler {
+    stop_index: usize,
+    condition_end_index: usize,
+    result_reg: Option<RegId>,
+    dynamic_bind_count: usize,
+}
+
+#[derive(Clone, Debug)]
 struct InternalInterpResult {
     value: Option<LispValue>,
     thrown: Option<ThrownValue>,
@@ -107,8 +120,11 @@ fn execute_with_module(
         registers: HashMap::new(),
         lexicals: HashMap::new(),
         catch_stack: Vec::new(),
+        condition_stack: Vec::new(),
+        active_condition_handler: None,
         pending_throw: None,
         pending_signal: None,
+        last_value: None,
         module,
         functions_by_name,
         runtime,
@@ -123,8 +139,11 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     registers: HashMap<RegId, LispValue>,
     lexicals: HashMap<String, LispValue>,
     catch_stack: Vec<LispValue>,
+    condition_stack: Vec<ConditionFrame>,
+    active_condition_handler: Option<ActiveConditionHandler>,
     pending_throw: Option<ThrownValue>,
     pending_signal: Option<SignaledValue>,
+    last_value: Option<LispValue>,
     module: &'a RegModule,
     functions_by_name: &'a HashMap<String, FunctionId>,
     runtime: &'runtime mut Runtime,
@@ -168,12 +187,34 @@ impl Interpreter<'_, '_, '_> {
             let mut inst_index = 0;
             while inst_index < body.instructions.len() {
                 let inst = &body.instructions[inst_index];
+                if self
+                    .active_condition_handler
+                    .as_ref()
+                    .is_some_and(|handler| handler.stop_index == inst_index)
+                {
+                    let active = self
+                        .active_condition_handler
+                        .take()
+                        .expect("active condition handler");
+                    let next_index = active.condition_end_index + 1;
+                    let result_reg = active.result_reg;
+                    let Some(value) = self.complete_condition_handler(active) else {
+                        return self.finish(None);
+                    };
+                    if let Some(result_reg) = result_reg {
+                        self.set(result_reg, value);
+                        inst_index = next_index;
+                        continue;
+                    }
+                    return self.finish(Some(value));
+                }
                 if matches!(inst.kind, RegInstKind::ConditionCaseHandler { .. }) {
                     let Some(end_index) = find_condition_case_end(&body.instructions, inst_index)
                     else {
                         self.error("object interpreter reached condition-case handler without end");
                         return self.finish(None);
                     };
+                    self.condition_stack.pop();
                     inst_index = end_index + 1;
                     continue;
                 }
@@ -182,6 +223,15 @@ impl Interpreter<'_, '_, '_> {
                         return self.finish_throw(thrown);
                     }
                     if let Some(signaled) = self.pending_signal.take() {
+                        if let Some(handler_start) = self.enter_condition_handler(
+                            &body.instructions,
+                            inst_index,
+                            signaled,
+                            instruction_result_reg(&inst.kind),
+                        ) {
+                            inst_index = handler_start;
+                            continue;
+                        }
                         return self.finish_signal(signaled);
                     }
                     return self.finish(None);
@@ -391,9 +441,14 @@ impl Interpreter<'_, '_, '_> {
                 self.pending_throw = Some(ThrownValue { tag, value });
                 return false;
             }
-            RegInstKind::ConditionCaseBegin { .. }
-            | RegInstKind::ConditionCaseHandler { .. }
-            | RegInstKind::ConditionCaseEnd => {}
+            RegInstKind::ConditionCaseBegin { var } => {
+                self.condition_stack
+                    .push(ConditionFrame { var: var.clone() });
+            }
+            RegInstKind::ConditionCaseHandler { .. } => {}
+            RegInstKind::ConditionCaseEnd => {
+                self.condition_stack.pop();
+            }
             RegInstKind::UnwindProtectBegin
             | RegInstKind::UnwindProtectCleanup
             | RegInstKind::UnwindProtectEnd => {
@@ -745,6 +800,51 @@ impl Interpreter<'_, '_, '_> {
         Ok(thrown.value)
     }
 
+    fn enter_condition_handler(
+        &mut self,
+        instructions: &[RegInst],
+        signal_index: usize,
+        signaled: SignaledValue,
+        result_reg: Option<RegId>,
+    ) -> Option<usize> {
+        let signal_name = match self.runtime.symbol_name(signaled.symbol) {
+            Ok(name) => name,
+            Err(error) => {
+                self.runtime_error(error);
+                return None;
+            }
+        };
+        let target = find_condition_handler(instructions, signal_index, &signal_name)?;
+        let frame = self.condition_stack.pop()?;
+        let mut dynamic_bind_count = 0;
+        if let Some(var) = frame.var {
+            let binding = self.runtime.cons(signaled.symbol, signaled.data);
+            if let Err(error) = self.runtime.bind_dynamic_by_name(&var, binding) {
+                self.runtime_error(error);
+                return None;
+            }
+            dynamic_bind_count = 1;
+        }
+        self.last_value = None;
+        self.active_condition_handler = Some(ActiveConditionHandler {
+            stop_index: target.stop_index,
+            condition_end_index: target.condition_end_index,
+            result_reg,
+            dynamic_bind_count,
+        });
+        Some(target.handler_index + 1)
+    }
+
+    fn complete_condition_handler(&mut self, active: ActiveConditionHandler) -> Option<LispValue> {
+        if active.dynamic_bind_count > 0
+            && let Err(error) = self.runtime.unbind_dynamic(active.dynamic_bind_count)
+        {
+            self.runtime_error(error);
+            return None;
+        }
+        Some(self.last_value.unwrap_or(LispValue::NIL))
+    }
+
     fn const_value(&mut self, value: &SsaConst) -> Option<LispValue> {
         match value {
             SsaConst::Nil => Some(LispValue::NIL),
@@ -1054,6 +1154,7 @@ impl Interpreter<'_, '_, '_> {
 
     fn set(&mut self, reg: RegId, value: LispValue) {
         self.registers.insert(reg, value);
+        self.last_value = Some(value);
     }
 
     fn unsupported(&mut self, reason: impl Into<String>) {
@@ -1106,6 +1207,13 @@ fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {
         .collect()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ConditionHandlerTarget {
+    handler_index: usize,
+    stop_index: usize,
+    condition_end_index: usize,
+}
+
 fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Option<usize> {
     let mut depth = 0usize;
     for (index, inst) in instructions.iter().enumerate().skip(handler_index + 1) {
@@ -1117,6 +1225,90 @@ fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Op
         }
     }
     None
+}
+
+fn find_condition_handler(
+    instructions: &[RegInst],
+    signal_index: usize,
+    signal_name: &str,
+) -> Option<ConditionHandlerTarget> {
+    let mut depth = 0usize;
+    let mut handler_index = None;
+    let mut stop_index = None;
+    for (index, inst) in instructions.iter().enumerate().skip(signal_index + 1) {
+        match &inst.kind {
+            RegInstKind::ConditionCaseBegin { .. } => depth += 1,
+            RegInstKind::ConditionCaseEnd if depth == 0 => {
+                return handler_index.map(|handler_index| ConditionHandlerTarget {
+                    handler_index,
+                    stop_index: stop_index.unwrap_or(index),
+                    condition_end_index: index,
+                });
+            }
+            RegInstKind::ConditionCaseEnd => depth -= 1,
+            RegInstKind::ConditionCaseHandler { pattern } if depth == 0 => {
+                if handler_index.is_some() && stop_index.is_none() {
+                    stop_index = Some(index);
+                } else if handler_index.is_none() && condition_pattern_matches(pattern, signal_name)
+                {
+                    handler_index = Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn condition_pattern_matches(pattern: &SurfaceForm, signal_name: &str) -> bool {
+    if let Some(name) = pattern.symbol_name() {
+        return condition_name_matches(name, signal_name);
+    }
+    let SurfaceKind::List(items) = &pattern.kind else {
+        return false;
+    };
+    items
+        .iter()
+        .filter_map(SurfaceForm::symbol_name)
+        .any(|name| condition_name_matches(name, signal_name))
+}
+
+fn condition_name_matches(pattern_name: &str, signal_name: &str) -> bool {
+    pattern_name == signal_name || pattern_name == "error"
+}
+
+fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
+    match kind {
+        RegInstKind::LoadConst { dst, .. }
+        | RegInstKind::Quote { dst, .. }
+        | RegInstKind::FunctionQuote { dst, .. }
+        | RegInstKind::Lambda { dst, .. }
+        | RegInstKind::Move { dst, .. }
+        | RegInstKind::LexicalGet { dst, .. }
+        | RegInstKind::LexicalSet { dst, .. }
+        | RegInstKind::MakeLexicalCell { dst, .. }
+        | RegInstKind::LexicalCellGet { dst, .. }
+        | RegInstKind::LexicalCellSet { dst, .. }
+        | RegInstKind::SymbolGet { dst, .. }
+        | RegInstKind::SymbolSet { dst, .. }
+        | RegInstKind::CallNamed { dst, .. }
+        | RegInstKind::Funcall { dst, .. }
+        | RegInstKind::Apply { dst, .. } => Some(*dst),
+        RegInstKind::BindLexical { .. }
+        | RegInstKind::BindDynamic { .. }
+        | RegInstKind::UnbindDynamic { .. }
+        | RegInstKind::DeclareSpecial { .. }
+        | RegInstKind::CatchBegin { .. }
+        | RegInstKind::CatchEnd
+        | RegInstKind::Throw { .. }
+        | RegInstKind::ConditionCaseBegin { .. }
+        | RegInstKind::ConditionCaseHandler { .. }
+        | RegInstKind::ConditionCaseEnd
+        | RegInstKind::UnwindProtectBegin
+        | RegInstKind::UnwindProtectCleanup
+        | RegInstKind::UnwindProtectEnd
+        | RegInstKind::Safepoint { .. } => None,
+    }
 }
 
 fn make_list(runtime: &mut Runtime, values: impl IntoIterator<Item = LispValue>) -> LispValue {
@@ -1385,5 +1577,21 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(let ((x 1)) (condition-case err (setq x 2) (error (setq x 99))) x)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn condition_case_handles_error_signal() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(condition-case err (error \"boom\") (error 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn condition_case_binds_signal_data() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(condition-case err (signal 'wrong-type-argument (list 'symbolp 1)) (wrong-type-argument (eq (car err) 'wrong-type-argument)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 }
