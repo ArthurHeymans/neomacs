@@ -1,8 +1,13 @@
 use std::path::Path;
 
+pub mod runtime;
+pub mod value;
+
 pub use neovm_compiler::CompileArtifact;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
 pub use neovm_compiler::interp::InterpResult;
+pub use runtime::{Runtime, RuntimeError};
+pub use value::LispValue;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Engine {
