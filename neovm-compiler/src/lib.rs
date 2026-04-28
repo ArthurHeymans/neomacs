@@ -201,4 +201,101 @@ mod tests {
                 .contains("unsupported Register IR interpreter operation")
         }));
     }
+
+    #[test]
+    fn e2e_recursive_fibonacci() {
+        let artifact = execute_source("fib.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun fib (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))\n(fib 10)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(55));
+    }
+
+    #[test]
+    fn e2e_list_length_and_append() {
+        let artifact = execute_source("list.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-length (xs) (if (null xs) 0 (+ 1 (my-length (cdr xs)))))
+(defun my-append (a b) (if (null a) b (cons (car a) (my-append (cdr a) b))))
+(my-length (my-append (list 1 2 3) (list 4 5)))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(5));
+    }
+
+    #[test]
+    fn e2e_string_concat() {
+        let artifact = execute_source("str.el",
+            ";;; -*- lexical-binding: t; -*-\n(concat \"hello\" \" \" \"world\")",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(matches!(artifact.result.value, Some(interp::RuntimeValue::Val(crate::expand_value::MacroValue::String(ref s))) if s == "hello world"));
+    }
+
+    #[test]
+    fn e2e_let_star_bindings() {
+        let artifact = execute_source("let.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun test (n)
+  (let* ((a (+ n 1))
+         (b (* a 2))
+         (c (+ a b)))
+    c))
+(test 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(18));
+    }
+
+    #[test]
+    fn e2e_multiple_defuns() {
+        let artifact = execute_source("multi.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun double (x) (* x 2))
+(defun add-one (x) (+ x 1))
+(defun compose (x) (double (add-one x)))
+(compose 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(12));
+    }
+
+    #[test]
+    fn e2e_funcall_with_symbol() {
+        let artifact = execute_source("funcall.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun add1 (x) (+ x 1))
+(funcall 'add1 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(6));
+    }
+
+    #[test]
+    fn e2e_nth_and_access() {
+        let artifact = execute_source("nth.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun fifth (xs) (nth 4 xs))
+(fifth (list 10 20 30 40 50))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(50));
+    }
+
+    #[test]
+    fn e2e_progn() {
+        let artifact = execute_source("progn.el", "\
+;;; -*- lexical-binding: t; -*-
+(progn (+ 1 2) (+ 3 4))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(7));
+    }
+
+    #[test]
+    fn e2e_cond_form() {
+        let artifact = execute_source("cond.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun classify (n)
+  (cond ((< n 0) -1) ((= n 0) 0) (t 1)))
+(list (classify (- 0 5)) (classify 0) (classify 42))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+    }
 }
