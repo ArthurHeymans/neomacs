@@ -12,7 +12,7 @@ use crate::runtime::HashTableTest;
 use crate::{LispValue, Runtime, RuntimeError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjectInterpResult {
+pub(crate) struct ObjectInterpResult {
     pub value: Option<LispValue>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -72,7 +72,7 @@ impl InternalInterpResult {
         }
     }
 
-    fn into_public(mut self, runtime: &Runtime) -> ObjectInterpResult {
+    fn into_result(mut self, runtime: &Runtime) -> ObjectInterpResult {
         if let Some(thrown) = self.thrown.take() {
             self.diagnostics.push(Diagnostic::error(format!(
                 "uncaught throw for tag {}",
@@ -93,14 +93,14 @@ impl InternalInterpResult {
     }
 }
 
-pub fn execute_module_with_args(
+pub(crate) fn execute_module_with_args(
     module: &RegModule,
     args: &[LispValue],
     runtime: &mut Runtime,
 ) -> ObjectInterpResult {
     let functions_by_name = functions_by_name(module);
     let mut fuel = 100_000usize;
-    execute_module_entry(module, &functions_by_name, args, runtime, &mut fuel).into_public(runtime)
+    execute_module_entry(module, &functions_by_name, args, runtime, &mut fuel).into_result(runtime)
 }
 
 fn execute_module_entry(

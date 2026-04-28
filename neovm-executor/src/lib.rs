@@ -1,18 +1,23 @@
 use std::path::Path;
 
-pub mod object_interp;
+mod object_interp;
 pub mod runtime;
 pub mod value;
 
 pub use neovm_compiler::CompileArtifact;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
-pub use object_interp::ObjectInterpResult;
 pub use runtime::{Runtime, RuntimeError};
 pub use value::LispValue;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExecuteResult {
+    pub value: Option<LispValue>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 pub struct ExecuteArtifact {
     pub compile: CompileArtifact,
-    pub result: ObjectInterpResult,
+    pub result: ExecuteResult,
     pub runtime: Runtime,
 }
 
@@ -102,7 +107,7 @@ fn execute_with_object_interpreter(
 
     ExecuteArtifact {
         compile,
-        result: ObjectInterpResult { value, diagnostics },
+        result: ExecuteResult { value, diagnostics },
         runtime,
     }
 }
