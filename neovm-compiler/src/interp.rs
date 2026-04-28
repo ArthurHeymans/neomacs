@@ -16,6 +16,7 @@ thread_local! {
     static CELL_MAP: RefCell<HashMap<u64, RuntimeValue>> = RefCell::new(HashMap::new());
     static NEXT_CELL_ID: RefCell<u64> = RefCell::new(1);
     static CLOSURE_ENVS: RefCell<HashMap<u64, HashMap<String, RuntimeValue>>> = RefCell::new(HashMap::new());
+    static CLOSURE_CELLS: RefCell<HashMap<u64, HashMap<String, i64>>> = RefCell::new(HashMap::new());
     static NEXT_CLOSURE_ID: RefCell<u64> = RefCell::new(1);
 }
 
@@ -75,6 +76,14 @@ fn get_closure_env(id: u64) -> HashMap<String, RuntimeValue> {
 
 fn put_closure_env(id: u64, env: HashMap<String, RuntimeValue>) {
     CLOSURE_ENVS.with(|envs| { envs.borrow_mut().insert(id, env); });
+}
+
+fn put_closure_cells(id: u64, cells: HashMap<String, i64>) {
+    CLOSURE_CELLS.with(|c| { c.borrow_mut().insert(id, cells); });
+}
+
+fn get_closure_cells(id: u64) -> HashMap<String, i64> {
+    CLOSURE_CELLS.with(|c| c.borrow().get(&id).cloned().unwrap_or_default())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -452,12 +461,25 @@ impl Interpreter<'_, '_> {
                     .filter_map(|reg| self.get(*reg))
                     .collect();
                 let mut env = HashMap::new();
+                let mut cells = HashMap::new();
                 for (i, cap) in template.captures.iter().enumerate() {
                     if let Some(val) = captured.get(i) {
-                        env.insert(cap.name.clone(), val.clone());
+                        match cap.mode {
+                            crate::ssa::SsaCaptureMode::Cell => {
+                                // val is a cell ID — store the mapping and dereference
+                                if let Some(cell_id) = val.as_i64() {
+                                    cells.insert(cap.name.clone(), cell_id);
+                                }
+                                env.insert(cap.name.clone(), cell_get(val.as_i64().unwrap_or(0)));
+                            }
+                            crate::ssa::SsaCaptureMode::Value => {
+                                env.insert(cap.name.clone(), val.clone());
+                            }
+                        }
                     }
                 }
                 let env_id = alloc_closure_env(env);
+                put_closure_cells(env_id, cells);
                 self.set(*dst, RuntimeValue::Closure {
                     template: template.clone(),
                     captured,
@@ -584,9 +606,10 @@ impl Interpreter<'_, '_> {
             ));
             return None;
         };
+        let adapted = adapt_args_to_lambda(&function.lambda_list, args, function.entry_params.len());
         let result = execute_with_module(
             function,
-            args,
+            &adapted,
             Some(module),
             Some(functions_by_name),
             &mut *self.fuel,
@@ -647,6 +670,14 @@ impl Interpreter<'_, '_> {
         args: &[RuntimeValue],
     ) -> Option<RuntimeValue> {
         let mut env = get_closure_env(env_id);
+        let cells = get_closure_cells(env_id);
+
+        // Sync cell values into env (in case other closures modified the cells)
+        for (name, cell_id) in &cells {
+            if let Some(val) = env.get_mut(name) {
+                *val = cell_get(*cell_id);
+            }
+        }
 
         // Bind captured values (first call only — env already has them on subsequent calls)
         for (i, capture) in template.captures.iter().enumerate() {
@@ -661,10 +692,55 @@ impl Interpreter<'_, '_> {
         // Interpret the HIR body
         let result = eval_hir_expr(&template.body, &mut env, self.module, self.functions_by_name, self.fuel, &mut self.diagnostics);
 
+        // Write back cell-mapped variables from env to cells
+        for (name, cell_id) in &cells {
+            if let Some(val) = env.get(name) {
+                cell_set(*cell_id, val.clone());
+            }
+        }
+
         // Persist updated env for next call
         put_closure_env(env_id, env);
         result
     }
+}
+
+/// Adapt calling args to match a function's lambda list.
+/// For functions with &rest, pack extra args into a list for the rest param.
+fn adapt_args_to_lambda(lambda_list: &LambdaList, args: &[RuntimeValue], entry_param_count: usize) -> Vec<RuntimeValue> {
+    let n_required = lambda_list.required.len();
+    let n_optional = lambda_list.optional.len();
+    let has_rest = lambda_list.rest.is_some();
+
+    if !has_rest {
+        if args.len() >= entry_param_count {
+            return args.to_vec();
+        }
+        let mut adapted = args.to_vec();
+        while adapted.len() < entry_param_count {
+            adapted.push(RuntimeValue::nil());
+        }
+        return adapted;
+    }
+
+    let fixed_count = n_required + n_optional;
+    let mut adapted = Vec::new();
+
+    for i in 0..fixed_count {
+        if let Some(arg) = args.get(i) {
+            adapted.push(arg.clone());
+        } else {
+            adapted.push(RuntimeValue::nil());
+        }
+    }
+
+    let rest_vals: Vec<MacroValue> = args[fixed_count.min(args.len())..]
+        .iter()
+        .map(|a| a.as_macro_value().clone())
+        .collect();
+    adapted.push(RuntimeValue::Val(MacroValue::list(rest_vals)));
+
+    adapted
 }
 
 /// Spread apply args: last argument is a list that gets flattened.

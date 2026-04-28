@@ -445,4 +445,33 @@ total", &[]);
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.as_i64(), Some(15));
     }
+
+    #[test]
+    fn e2e_mutable_closure_counter() {
+        let artifact = execute_source("counter.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun make-counter (start)
+  (let ((count start))
+    (lambda ()
+      (setq count (+ count 1))
+      count)))
+(defvar c (make-counter 0))
+(list (funcall c) (funcall c) (funcall c))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+        let val = artifact.result.value.unwrap();
+        assert!(matches!(val, interp::RuntimeValue::Val(
+            crate::expand_value::MacroValue::Cons(_)
+        )));
+    }
+
+    #[test]
+    fn e2e_rest_parameter() {
+        let artifact = execute_source("rest.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-list (&rest args) args)
+(my-list 1 2 3)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+    }
 }
