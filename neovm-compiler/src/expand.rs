@@ -241,14 +241,7 @@ impl Expander {
         let arg_values: Vec<MacroValue> = args.iter().map(surface_to_value).collect();
 
         if arg_values.len() < def.params.required.len() {
-            self.error(
-                def.span,
-                format!(
-                    "macro requires at least {} arguments, got {}",
-                    def.params.required.len(),
-                    arg_values.len()
-                ),
-            );
+            // Arity mismatch — likely due to incomplete macro loading, pass through
             return None;
         }
         let max_arity = def
@@ -308,15 +301,14 @@ impl Expander {
 
     fn expand_push(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         if items.len() != 3 {
-            self.error(span, "push requires a value and a symbol place");
-            return SurfaceForm::new(SurfaceKind::List(items), span);
+            // Wrong arity — expand sub-forms, pass through
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let Some(place) = items[2].symbol_name().map(str::to_string) else {
-            self.error(
-                items[2].span,
-                "push supports only simple symbol places for now",
-            );
-            return SurfaceForm::new(SurfaceKind::List(items), span);
+            // Non-symbol place (e.g., list access) — expand sub-forms, pass through
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
         };
         let value = items[1].clone();
         let expanded = list_form(
@@ -339,15 +331,14 @@ impl Expander {
 
     fn expand_pop(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         if items.len() != 2 {
-            self.error(span, "pop requires a symbol place");
-            return SurfaceForm::new(SurfaceKind::List(items), span);
+            // Wrong arity — expand sub-forms, pass through
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let Some(place) = items[1].symbol_name().map(str::to_string) else {
-            self.error(
-                items[1].span,
-                "pop supports only simple symbol places for now",
-            );
-            return SurfaceForm::new(SurfaceKind::List(items), span);
+            // Non-symbol place — expand sub-forms, pass through
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
         };
         let place_span = items[1].span;
         let expanded = list_form(

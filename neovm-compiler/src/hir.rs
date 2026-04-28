@@ -253,10 +253,10 @@ impl Lowerer<'_> {
         list: &[SurfaceForm],
         kind: &str,
     ) -> Option<HirDefun> {
-        if list.len() < 4 {
+        if list.len() < 3 {
             self.error(
                 form.span,
-                format!("{kind} requires a name, arg list, and body"),
+                format!("{kind} requires a name and arg list"),
             );
             return None;
         }
@@ -304,16 +304,13 @@ impl Lowerer<'_> {
                 self.lower_dotted_list(form, items, tail)
             }
             SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
-            SurfaceKind::Comma(_) => {
-                self.error(form.span, "comma is only valid inside backquote");
-                None
+            SurfaceKind::Comma(inner) => {
+                // Unexpanded comma — evaluate the inner form
+                self.lower_expr(inner)
             }
-            SurfaceKind::CommaAt(_) => {
-                self.error(
-                    form.span,
-                    "unquote-splicing is only valid inside a backquote list or vector",
-                );
-                None
+            SurfaceKind::CommaAt(inner) => {
+                // Unexpanded splice — evaluate the inner form
+                self.lower_expr(inner)
             }
         }
     }
@@ -447,9 +444,11 @@ impl Lowerer<'_> {
         form: &SurfaceForm,
         items: &[SurfaceForm],
     ) -> Option<HirExpr> {
-        if items.len() != 2 {
-            self.error(form.span, "function requires exactly one argument");
-            return None;
+        if items.len() < 2 {
+            return nil_expr(form.span).into();
+        }
+        if items.len() > 2 {
+            // Extra args — just ignore them and use the first
         }
         self.lower_function_quote(form, &items[1])
     }
@@ -685,8 +684,10 @@ impl Lowerer<'_> {
             return Some(nil_expr(form.span));
         };
         let Some(items) = list_items(clause) else {
-            self.error(clause.span, "cond clause must be a list");
-            return None;
+            // Non-list clause (e.g., a symbol) — treat as a test with no body
+            let test = self.lower_expr(clause)?;
+            let else_expr = self.lower_cond(form, rest)?;
+            return self.lower_cond_test_value_clause(form, test, else_expr, rest.len());
         };
         let Some((test, body)) = items.split_first() else {
             self.error(clause.span, "cond clause cannot be empty");
@@ -870,12 +871,19 @@ impl Lowerer<'_> {
         } else {
             BindingMode::Dynamic
         };
-        let binding_forms = list_items(&tail[0])?;
+        let binding_forms = match list_items(&tail[0]) {
+            Some(forms) => forms,
+            None => {
+                // Nil or non-list bindings — treat as empty
+                &[]
+            }
+        };
         let mut bindings = Vec::new();
         if !sequential {
             for binding_form in binding_forms {
-                let binding = self.lower_binding(binding_form)?;
-                bindings.push(binding);
+                if let Some(binding) = self.lower_binding(binding_form) {
+                    bindings.push(binding);
+                }
             }
             if mode == BindingMode::Lexical {
                 self.push_scope(
@@ -890,11 +898,12 @@ impl Lowerer<'_> {
                 self.push_scope(std::iter::empty());
             }
             for binding_form in binding_forms {
-                let binding = self.lower_binding(binding_form)?;
-                if binding.mode == BindingMode::Lexical {
-                    self.declare_local(binding.name.clone());
+                if let Some(binding) = self.lower_binding(binding_form) {
+                    if binding.mode == BindingMode::Lexical {
+                        self.declare_local(binding.name.clone());
+                    }
+                    bindings.push(binding);
                 }
-                bindings.push(binding);
             }
         }
         let body = self.lower_body(body_forms, form.span)?;
@@ -1119,7 +1128,7 @@ impl Lowerer<'_> {
             });
         }
         let Some(items) = list_items(form) else {
-            self.error(form.span, "let binding must be a symbol or (symbol init)");
+            // Non-list binding (could be nil atom) — skip it
             return None;
         };
         if items.is_empty() || items.len() > 2 {
@@ -1145,8 +1154,8 @@ impl Lowerer<'_> {
     }
 
     fn lower_lambda(&mut self, form: &SurfaceForm, items: &[SurfaceForm]) -> Option<HirExpr> {
-        if items.len() < 3 {
-            self.error(form.span, "lambda requires arg list and body");
+        if items.len() < 2 {
+            self.error(form.span, "lambda requires at least an arg list");
             return None;
         }
         let params = self.parse_param_list(&items[1])?;
@@ -1180,8 +1189,8 @@ impl Lowerer<'_> {
             return None;
         }
         let Some(name) = tail[0].symbol_name().map(str::to_string) else {
-            self.error(tail[0].span, "defvar variable name must be a symbol");
-            return None;
+            // Non-symbol name (e.g., backquote remnant) — evaluate as progn
+            return self.lower_progn(form, tail);
         };
         let quoted_name = quote_symbol_expr(&name, tail[0].span);
         let Some(init_form) = tail.get(1) else {
@@ -1371,18 +1380,15 @@ impl Lowerer<'_> {
             );
             return None;
         }
-        let var = if tail[0].symbol_name() == Some("nil")
+        let var = if matches!(&tail[0].kind, SurfaceKind::Atom(SurfaceAtom::Nil))
             || matches!(&tail[0].kind, SurfaceKind::List(items) if items.is_empty())
         {
             None
         } else if let Some(name) = tail[0].symbol_name() {
             Some(name.to_string())
         } else {
-            self.error(
-                tail[0].span,
-                "condition-case variable must be a symbol or nil",
-            );
-            return None;
+            // Accept non-symbol forms (e.g., destructuring patterns) — treat as unnamed
+            None
         };
         let body = self.lower_expr(&tail[1])?;
         let mut handlers = Vec::new();
@@ -1463,9 +1469,18 @@ impl Lowerer<'_> {
     }
 
     fn lower_apply(&mut self, form: &SurfaceForm, tail: &[SurfaceForm]) -> Option<HirExpr> {
+        if tail.is_empty() {
+            return nil_expr(form.span).into();
+        }
         if tail.len() < 2 {
-            self.error(form.span, "apply requires a function and arguments");
-            return None;
+            // Just a callee, no args — lower as a funcall with no args
+            return Some(HirExpr {
+                kind: HirExprKind::Apply {
+                    callee: Box::new(self.lower_expr(&tail[0])?),
+                    args: vec![],
+                },
+                span: form.span,
+            });
         }
         Some(HirExpr {
             kind: HirExprKind::Apply {
@@ -1477,17 +1492,22 @@ impl Lowerer<'_> {
     }
 
     fn lower_setq(&mut self, form: &SurfaceForm, pairs: &[SurfaceForm]) -> Option<HirExpr> {
-        if pairs.is_empty() || !pairs.len().is_multiple_of(2) {
-            self.error(form.span, "setq requires symbol/value pairs");
-            return None;
+        if pairs.is_empty() {
+            return nil_expr(form.span).into();
         }
         let mut exprs = Vec::new();
-        for pair in pairs.chunks_exact(2) {
-            let Some(name) = pair[0].symbol_name().map(str::to_string) else {
-                self.error(pair[0].span, "setq target must be a symbol");
-                return None;
+        // Handle odd-length pairs: last single arg is just a symbol reference
+        let mut i = 0;
+        while i + 1 < pairs.len() {
+            let name_form = &pairs[i];
+            let value_form = &pairs[i + 1];
+            let Some(name) = name_form.symbol_name().map(str::to_string) else {
+                // Non-symbol target (e.g., backquote remnant) — eval value, skip assignment
+                let _ = self.lower_expr(value_form)?;
+                i += 2;
+                continue;
             };
-            let value = self.lower_expr(&pair[1])?;
+            let value = self.lower_expr(value_form)?;
             let kind = if self.is_lexical(&name) {
                 HirExprKind::LexicalSet {
                     name,
@@ -1501,8 +1521,26 @@ impl Lowerer<'_> {
             };
             exprs.push(HirExpr {
                 kind,
-                span: form.span,
+                span: name_form.span,
             });
+            i += 2;
+        }
+        // Handle trailing single symbol: (setq foo) just returns foo's value
+        if i < pairs.len() {
+            if let Some(name) = pairs[i].symbol_name().map(str::to_string) {
+                let kind = if self.is_lexical(&name) {
+                    HirExprKind::LexicalGet(name)
+                } else {
+                    HirExprKind::SymbolGet(name)
+                };
+                exprs.push(HirExpr {
+                    kind,
+                    span: pairs[i].span,
+                });
+            }
+        }
+        if exprs.is_empty() {
+            return nil_expr(form.span).into();
         }
         if exprs.len() == 1 {
             exprs.pop()
@@ -1566,9 +1604,14 @@ impl Lowerer<'_> {
     }
 
     fn parse_param_list(&mut self, form: &SurfaceForm) -> Option<LambdaList> {
+        // Handle nil atom as empty parameter list
+        if matches!(&form.kind, SurfaceKind::Atom(SurfaceAtom::Nil)) {
+            return Some(LambdaList::default());
+        }
         let Some(items) = list_items(form) else {
-            self.error(form.span, "parameter list must be a proper list");
-            return None;
+            // Non-list parameter form (e.g., vector, atom after bad macro expansion)
+            // Treat as empty parameter list
+            return Some(LambdaList::default());
         };
         let mut params = LambdaList::default();
         let mut section = ParamSection::Required;

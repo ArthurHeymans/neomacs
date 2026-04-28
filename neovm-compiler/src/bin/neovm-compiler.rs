@@ -155,6 +155,13 @@ fn scan(args: Vec<String>) -> ExitCode {
                         .or_default()
                         .push(path.clone());
                 }
+            } else if !has_reader_errors && !has_hir_errors {
+                // Track other errors for non-reader/non-HIR failures
+                let key = diag.message.split_whitespace().take(8).collect::<Vec<_>>().join(" ");
+                macro_gaps
+                    .entry(key)
+                    .or_default()
+                    .push(path.clone());
             }
         }
     }
