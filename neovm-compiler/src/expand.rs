@@ -176,6 +176,8 @@ impl Expander {
             "pop" => self.expand_pop(span, items),
             "if-let*" => self.expand_if_let(span, items),
             "when-let*" => self.expand_when_let(span, items),
+            // declare-function is a compile-time declaration — discard
+            "declare-function" => nil_form(span),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
