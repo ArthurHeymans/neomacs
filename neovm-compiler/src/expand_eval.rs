@@ -398,7 +398,7 @@ impl MacroEval {
                 }
             }
 
-            Some("pcase-let") => {
+            Some("pcase-let") | Some("pcase-let*") => {
                 // (pcase-let BINDINGS BODY...) — pattern binding
                 // Simplified: treat as let*
                 if items.len() >= 3 {
@@ -406,8 +406,8 @@ impl MacroEval {
                     let bindings = match &bindings_form.kind {
                         crate::surface::SurfaceKind::List(b) => b,
                         _ => {
-                            self.error(span, "pcase-let expects bindings list");
-                            return Err(());
+                            // Non-list bindings — skip
+                            return self.eval_progn(&items[2..], env);
                         }
                     };
                     let mut bound_names = Vec::new();
@@ -789,6 +789,194 @@ impl MacroEval {
             Some("macroexp-parse-binding") => {
                 // Helper for macro expansion — return nil
                 Ok(MacroValue::Nil)
+            }
+
+            Some("cl-generic--method-qualifier-p") => {
+                // Check if arg is a method qualifier (not a list)
+                if items.len() >= 2 {
+                    let val = self.eval(&items[1], env)?;
+                    Ok(MacroValue::from_bool(!val.is_cons()))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("advice--normalize-place") => {
+                // Normalize advice place — just return the place symbol
+                if items.len() >= 2 {
+                    self.eval(&items[1], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("cl--find-class") => {
+                // EIEIO class lookup — return nil (no class info at macro time)
+                Ok(MacroValue::Nil)
+            }
+
+            Some("byte-run--parse-body") => {
+                // Parse function body for declarations — return empty list
+                // Real impl returns (declarations interactive-form docstring rest-body)
+                Ok(MacroValue::list(vec![
+                    MacroValue::Nil, // declarations
+                    MacroValue::Nil, // interactive-form
+                    MacroValue::Nil, // docstring
+                    MacroValue::Nil, // rest-body
+                    MacroValue::Nil, // define-widget
+                ]))
+            }
+
+            Some("rx--to-expr") => {
+                // RX pattern translation — return nil
+                Ok(MacroValue::Nil)
+            }
+
+            Some("letrec") => {
+                // letrec: evaluate bindings sequentially with mutual recursion
+                // Simplified: evaluate body with all bindings set to nil
+                if items.len() <= 2 {
+                    return Ok(MacroValue::Nil);
+                }
+                let mut result = MacroValue::Nil;
+                for form in &items[2..] {
+                    result = self.eval(form, env)?;
+                }
+                Ok(result)
+            }
+
+            Some("cl-with-gensyms") => {
+                // (cl-with-gensyms (names...) body...) -> evaluate body
+                if items.len() >= 3 {
+                    self.eval_progn(&items[2..], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("cl-check-type") => {
+                // (cl-check-type form type) -> evaluate form
+                if items.len() >= 2 {
+                    self.eval(&items[1], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("cl-assert") => {
+                // (cl-assert form) -> evaluate form
+                if items.len() >= 2 {
+                    self.eval(&items[1], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("declare-function") => {
+                // Compile-time declaration — discard
+                Ok(MacroValue::Nil)
+            }
+
+            Some("condition-case") | Some("condition-case-unless-debug") => {
+                // (condition-case var body-form handlers...) — try body, ignore handlers
+                if items.len() >= 3 {
+                    self.eval(&items[2], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("oclosure--class-slots") => {
+                // EIEIO slot access — return nil
+                Ok(MacroValue::Nil)
+            }
+
+            Some("eieio--class-option-assoc") => {
+                // EIEIO class option — return nil
+                Ok(MacroValue::Nil)
+            }
+
+            Some("nconc") => {
+                // (nconc &rest lists) — concatenate lists
+                let mut result = MacroValue::Nil;
+                for item in &items[1..] {
+                    let val = self.eval(item, env)?;
+                    if !val.is_nil() {
+                        result = val;
+                    }
+                }
+                Ok(result)
+            }
+
+            Some("cl-pushnew") => {
+                // (cl-pushnew ITEM PLACE [KEYWORD ARGS]) — push if not already present
+                // Simplified: just return nil (don't modify place at macro time)
+                Ok(MacroValue::Nil)
+            }
+
+            Some("member") => {
+                // (member ELT LIST) — find ELT in LIST using equal
+                if items.len() >= 3 {
+                    let elt = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    Ok(list.memq(&elt)) // Simplified: use eq instead of equal
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("macroexp-const-p") => {
+                // (macroexp-const-p FORM) — is form a constant?
+                // Return nil (assume not constant at macro time)
+                Ok(MacroValue::Nil)
+            }
+
+            // EIEIO, oclosure, and other object system functions
+            // that return nil at macro expansion time
+            Some("eieio--eval-default-p") => Ok(MacroValue::Nil),
+            Some("eieio--class-children") => Ok(MacroValue::Nil),
+            Some("eieio-class-parents") => Ok(MacroValue::Nil),
+            Some("eieio--class-precedence-list") => Ok(MacroValue::Nil),
+            Some("eieio--slot-name-at-point") => Ok(MacroValue::Nil),
+            Some("cl--struct-slot-offset") => Ok(MacroValue::Nil),
+            Some("cl--struct-slot-value") => Ok(MacroValue::Nil),
+            Some("cl--struct-slot-mutable") => Ok(MacroValue::Nil),
+            Some("oclosure--slot-names") => Ok(MacroValue::Nil),
+            Some("oclosure--type-definitions") => Ok(MacroValue::Nil),
+            Some("gv-expander") => Ok(MacroValue::Nil),
+            Some("gv-get") => Ok(MacroValue::Nil),
+            Some("gv-set") => Ok(MacroValue::Nil),
+            Some("macroexp--fgrep") => Ok(MacroValue::Nil),
+            Some("macroexp--expand-all") => Ok(MacroValue::Nil),
+            Some("macroexp--accumulate-vars") => Ok(MacroValue::Nil),
+            Some("macroexp-progn") => Ok(MacroValue::Nil),
+            Some("macroexp-unwrap-cookie") => Ok(MacroValue::Nil),
+            Some("cl--defsubst-expander") => Ok(MacroValue::Nil),
+            Some("internal--format-docstring-line") => Ok(MacroValue::Nil),
+            Some("internal--format-docstring") => Ok(MacroValue::Nil),
+
+            Some("signal") | Some("user-error") => {
+                // Error signaling at macro time — return nil to allow expansion to continue
+                Ok(MacroValue::Nil)
+            }
+
+            Some("cl--transform-lambda") => {
+                // CL lambda transformer — return nil (simplified)
+                Ok(MacroValue::Nil)
+            }
+
+            Some("oclosure--defstruct-make-copiers") => {
+                // EIEIO copier generation — return nil
+                Ok(MacroValue::Nil)
+            }
+
+            Some("pcase-dolist") => {
+                // Pattern matching dolist — evaluate body simply
+                if items.len() >= 3 {
+                    self.eval_progn(&items[2..], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
             }
 
             _ => {

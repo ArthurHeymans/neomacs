@@ -178,6 +178,51 @@ impl Expander {
             "when-let*" => self.expand_when_let(span, items),
             // declare-function is a compile-time declaration — discard
             "declare-function" => nil_form(span),
+            // pcase-let* -> let* (simplified: extracts symbol bindings, ignores destructuring patterns)
+            "pcase-let*" => {
+                if items.len() >= 3 {
+                    // items[1] = ((pattern expr) ...), items[2..] = body
+                    let bindings_form = &items[1];
+                    let body: Vec<SurfaceForm> = items[2..].iter().map(|f| self.expand_form(f.clone())).collect();
+                    // Convert pcase bindings to let* bindings: ((pat expr) ...) -> ((sym expr) ...)
+                    let simple_bindings = self.simplify_pcase_bindings(bindings_form);
+                    let mut result = vec![symbol_form("let*", span), simple_bindings];
+                    result.extend(body);
+                    list_form(result, span)
+                } else {
+                    let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+                    SurfaceForm::new(SurfaceKind::List(expanded), span)
+                }
+            }
+            // cl-with-gensyms -> let (simplified: uses symbol names as-is)
+            "cl-with-gensyms" => {
+                if items.len() >= 3 {
+                    let bindings = items[1].clone();
+                    let body: Vec<SurfaceForm> = items[2..].iter().map(|f| self.expand_form(f.clone())).collect();
+                    list_form(
+                        vec![symbol_form("let", span), bindings.clone()].into_iter().chain(body).collect(),
+                        span,
+                    )
+                } else {
+                    nil_form(span)
+                }
+            }
+            // cl-check-type -> progn (evaluate the form, ignore type check)
+            "cl-check-type" => {
+                if items.len() >= 2 {
+                    self.expand_form(items[1].clone())
+                } else {
+                    nil_form(span)
+                }
+            }
+            // cl-assert -> progn (evaluate the assertion form)
+            "cl-assert" => {
+                if items.len() >= 2 {
+                    self.expand_form(items[1].clone())
+                } else {
+                    nil_form(span)
+                }
+            }
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -366,6 +411,37 @@ impl Expander {
             span,
         );
         self.expand_form(expanded)
+    }
+
+    /// Simplify pcase-let* bindings: ((pattern expr) ...) -> ((sym expr) ...)
+    /// For non-symbol patterns, extract the expression but bind to a gensym-like name.
+    fn simplify_pcase_bindings(&mut self, form: &SurfaceForm) -> SurfaceForm {
+        let SurfaceKind::List(items) = &form.kind else {
+            return form.clone();
+        };
+        let span = form.span;
+        let bindings: Vec<SurfaceForm> = items
+            .iter()
+            .filter_map(|binding| {
+                let SurfaceKind::List(binding_items) = &binding.kind else {
+                    return None;
+                };
+                if binding_items.len() == 2 {
+                    let pat = &binding_items[0];
+                    let expr = &binding_items[1];
+                    if let Some(name) = pat.symbol_name() {
+                        Some(list_form(vec![symbol_form(name, pat.span), expr.clone()], span))
+                    } else {
+                        Some(list_form(vec![symbol_form("_", pat.span), expr.clone()], span))
+                    }
+                } else if binding_items.len() == 1 {
+                    Some(list_form(vec![symbol_form("_", binding_items[0].span), binding_items[0].clone()], span))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        list_form(bindings, span)
     }
 
     fn expand_if_let(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
