@@ -120,6 +120,140 @@ impl MacroValue {
             MacroValue::Nil
         }
     }
+
+    /// (assq key alist) — find first pair whose car is eq to key
+    /// alist is a list of cons cells: ((key1 . val1) (key2 . val2) ...)
+    pub fn assq(&self, key: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            let car_val = cell.car.clone();
+            if let MacroValue::Cons(pair) = &car_val {
+                // Element is a cons cell — check if its car matches key
+                if pair.car.eq_value(key) {
+                    return car_val;
+                }
+            } else if car_val.eq_value(key) {
+                // Element is an atom that matches key
+                return car_val;
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
+    /// (memq element list) — find tail starting with element
+    pub fn memq(&self, el: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            if cell.car.eq_value(el) {
+                return current.clone();
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
+    /// (butlast list n) — return list without last n elements
+    pub fn butlast(&self, n: usize) -> MacroValue {
+        let Some(vec) = self.to_vec() else {
+            return MacroValue::Nil;
+        };
+        if n >= vec.len() {
+            return MacroValue::Nil;
+        }
+        MacroValue::list(vec[..vec.len() - n].to_vec())
+    }
+
+    /// (delq element list) — remove elements eq to element
+    pub fn delq(&self, el: &MacroValue) -> MacroValue {
+        let Some(vec) = self.to_vec() else {
+            return self.clone();
+        };
+        let filtered: Vec<_> = vec.into_iter().filter(|v| !v.eq_value(el)).collect();
+        MacroValue::list(filtered)
+    }
+
+    fn eq_value(&self, other: &MacroValue) -> bool {
+        match (self, other) {
+            (MacroValue::Nil, MacroValue::Nil) => true,
+            (MacroValue::Int(a), MacroValue::Int(b)) => a == b,
+            (MacroValue::Symbol(a), MacroValue::Symbol(b)) => a == b,
+            (MacroValue::String(a), MacroValue::String(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    /// (plist-get plist prop) — get value from property list
+    /// plist is (prop1 val1 prop2 val2 ...)
+    pub fn plist_get(&self, prop: &MacroValue) -> MacroValue {
+        let Some(vec) = self.to_vec() else {
+            return MacroValue::Nil;
+        };
+        let mut i = 0;
+        while i + 1 < vec.len() {
+            if vec[i].eq_value(prop) {
+                return vec[i + 1].clone();
+            }
+            i += 2;
+        }
+        MacroValue::Nil
+    }
+
+    /// (last list n) — return last n cons cells
+    pub fn last(&self, n: usize) -> MacroValue {
+        let Some(vec) = self.to_vec() else {
+            return MacroValue::Nil;
+        };
+        if vec.is_empty() {
+            return MacroValue::Nil;
+        }
+        if n == 0 {
+            return self.clone();
+        }
+        let start = vec.len().saturating_sub(n);
+        // For n=1, return the last element (not a list)
+        if n == 1 {
+            return vec.last().cloned().unwrap_or(MacroValue::Nil);
+        }
+        MacroValue::list(vec[start..].to_vec())
+    }
+
+    /// (remove element list) — remove by equal
+    pub fn remove(&self, el: &MacroValue) -> MacroValue {
+        let Some(vec) = self.to_vec() else {
+            return self.clone();
+        };
+        let filtered: Vec<_> = vec.into_iter().filter(|v| v != el).collect();
+        MacroValue::list(filtered)
+    }
+
+    /// (plist-put plist prop val) — set property in plist, return new plist
+    pub fn plist_put(&self, prop: &MacroValue, val: MacroValue) -> MacroValue {
+        let Some(mut vec) = self.to_vec() else {
+            return MacroValue::list(vec![prop.clone(), val]);
+        };
+        let mut i = 0;
+        while i + 1 < vec.len() {
+            if vec[i].eq_value(prop) {
+                vec[i + 1] = val;
+                return MacroValue::list(vec);
+            }
+            i += 2;
+        }
+        // Not found — append
+        vec.push(prop.clone());
+        vec.push(val);
+        MacroValue::list(vec)
+    }
+
+    /// (reverse list) — reverse a list
+    pub fn reverse(&self) -> MacroValue {
+        let Some(mut vec) = self.to_vec() else {
+            return MacroValue::Nil;
+        };
+        vec.reverse();
+        MacroValue::list(vec)
+    }
 }
 
 /// Convert unevaluated SurfaceForm syntax to a MacroValue.

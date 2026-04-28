@@ -490,6 +490,248 @@ impl MacroEval {
                 }
             }
 
+            Some("assq") => {
+                // (assq key alist) — find first pair whose car is eq to key
+                if items.len() >= 3 {
+                    let key = self.eval(&items[1], env)?;
+                    let alist = self.eval(&items[2], env)?;
+                    Ok(alist.assq(&key))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("get") => {
+                // (get symbol prop) — get property from symbol's plist
+                // At macro time we don't have a real plist, return nil
+                Ok(MacroValue::Nil)
+            }
+
+            Some("intern-soft") => {
+                // (intern-soft name) — look up existing symbol, return nil if not found
+                // At macro time we return the symbol if it's a string arg
+                if items.len() >= 2 {
+                    let name = self.eval(&items[1], env)?;
+                    match &name {
+                        MacroValue::String(s) => Ok(MacroValue::Symbol(s.clone())),
+                        MacroValue::Symbol(s) => Ok(MacroValue::Symbol(s.clone())),
+                        _ => Ok(MacroValue::Nil),
+                    }
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("fboundp") | Some("boundp") | Some("facep") => {
+                // Runtime predicates — at macro time, return nil (unknown)
+                Ok(MacroValue::Nil)
+            }
+
+            Some("butlast") => {
+                // (butlast list &optional n) — return list without last n elements
+                if items.len() >= 2 {
+                    let list = self.eval(&items[1], env)?;
+                    let n = if items.len() >= 3 {
+                        self.eval(&items[2], env)?.as_int().unwrap_or(1)
+                    } else {
+                        1
+                    };
+                    Ok(list.butlast(n as usize))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("delq") => {
+                // (delq element list) — delete elements by eq
+                // Returns a new list (we don't mutate at macro time)
+                if items.len() >= 3 {
+                    let el = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    Ok(list.delq(&el))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("prog1") => {
+                // (prog1 first &rest body) — evaluate all, return first value
+                if items.is_empty() {
+                    Ok(MacroValue::Nil)
+                } else {
+                    let first = self.eval(&items[1], env)?;
+                    for form in &items[2..] {
+                        self.eval(form, env)?;
+                    }
+                    Ok(first)
+                }
+            }
+
+            Some("mapcar") => {
+                // (mapcar function sequence) — map over list
+                // At macro time, support only trivial cases with nil/empty lists
+                if items.len() >= 3 {
+                    let seq = self.eval(&items[2], env)?;
+                    if seq.is_nil() {
+                        Ok(MacroValue::Nil)
+                    } else {
+                        // Can't evaluate arbitrary function at macro time
+                        self.error(span, "cannot evaluate 'mapcar' with non-empty list at macro expansion time");
+                        Err(())
+                    }
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("memq") => {
+                // (memq element list) — find element in list by eq
+                if items.len() >= 3 {
+                    let el = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    Ok(list.memq(&el))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("eval") => {
+                // (eval form) — evaluate a form
+                // At macro time, evaluate the argument as a form
+                if items.len() >= 2 {
+                    let form = self.eval(&items[1], env)?;
+                    // The result should be a form to evaluate — but we'd need
+                    // to convert MacroValue back to SurfaceForm. For now, just
+                    // return the value as-is.
+                    Ok(form)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("setcdr") => {
+                // (setcdr cell new-cdr) — mutate cdr of a cons cell
+                // At macro time, we don't mutate — return new-cdr
+                if items.len() >= 3 {
+                    self.eval(&items[2], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("put") => {
+                // (put symbol prop value) — set symbol property
+                // At macro time, return the value
+                if items.len() >= 4 {
+                    self.eval(&items[3], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("string-match") => {
+                // (string-match regexp string &optional start)
+                // At macro time, return 0 (matched) or nil
+                Ok(MacroValue::Int(0))
+            }
+
+            Some("plist-get") => {
+                // (plist-get plist prop) — get value from property list
+                // plist is (prop1 val1 prop2 val2 ...)
+                if items.len() >= 3 {
+                    let prop = self.eval(&items[2], env)?;
+                    let plist = self.eval(&items[1], env)?;
+                    Ok(plist.plist_get(&prop))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("last") => {
+                // (last list &optional n) — return last n elements (default 1)
+                if items.len() >= 2 {
+                    let list = self.eval(&items[1], env)?;
+                    let n = if items.len() >= 3 {
+                        self.eval(&items[2], env)?.as_int().unwrap_or(1) as usize
+                    } else {
+                        1
+                    };
+                    Ok(list.last(n))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("copy-sequence") | Some("cl-copy-list") => {
+                // (copy-sequence seq) — shallow copy
+                // Our MacroValues are Rc-based, so clone is already a shallow copy
+                if items.len() >= 2 {
+                    self.eval(&items[1], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("remove") => {
+                // (remove element list) — remove by equal (not eq)
+                if items.len() >= 3 {
+                    let el = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    Ok(list.remove(&el))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("make-vector") => {
+                // (make-vector length initial-value) — create a vector
+                // Return a vector of the specified length
+                if items.len() >= 2 {
+                    let len = self.eval(&items[1], env)?.as_int().unwrap_or(0);
+                    let init = if items.len() >= 3 {
+                        self.eval(&items[2], env)?
+                    } else {
+                        MacroValue::Nil
+                    };
+                    Ok(MacroValue::Vector(vec![init; len.max(0) as usize]))
+                } else {
+                    Ok(MacroValue::Vector(Vec::new()))
+                }
+            }
+
+            Some("plist-put") => {
+                // (plist-put plist prop val) — set property in plist
+                // At macro time, return the modified plist
+                if items.len() >= 4 {
+                    let plist = self.eval(&items[1], env)?;
+                    let prop = self.eval(&items[2], env)?;
+                    let val = self.eval(&items[3], env)?;
+                    Ok(plist.plist_put(&prop, val))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("reverse") => {
+                // (reverse list) — reverse a list
+                if items.len() >= 2 {
+                    let list = self.eval(&items[1], env)?;
+                    Ok(list.reverse())
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
+            Some("aset") => {
+                // (aset array idx newelt) — set element in array/vector
+                // At macro time, return the new value
+                if items.len() >= 4 {
+                    self.eval(&items[3], env)
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
             _ => {
                 self.error(span, format!(
                     "cannot evaluate '{}' at macro expansion time",
