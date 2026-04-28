@@ -188,7 +188,7 @@ mod tests {
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(2));
+        assert_eq!(artifact.result.as_i64(), Some(2));
     }
 
     #[test]

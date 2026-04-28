@@ -9,10 +9,16 @@ use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
 use crate::ssa::SsaConst;
 use crate::surface::{SurfaceAtom, SurfaceKind};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct InterpResult {
-    pub value: Option<i64>,
+    pub value: Option<RuntimeValue>,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+impl InterpResult {
+    pub fn as_i64(&self) -> Option<i64> {
+        self.value.as_ref().and_then(|v| v.as_i64())
+    }
 }
 
 pub fn execute(function: &RegFunction) -> InterpResult {
@@ -24,15 +30,16 @@ pub fn execute_module(module: &RegModule) -> InterpResult {
 }
 
 pub fn execute_module_with_args(module: &RegModule, args: &[i64]) -> InterpResult {
+    let rv_args: Vec<RuntimeValue> = args.iter().map(|a| RuntimeValue::from_i64(*a)).collect();
     let functions_by_name = functions_by_name(module);
     let mut fuel = 100_000usize;
-    execute_module_entry(module, &functions_by_name, args, &mut fuel)
+    execute_module_entry(module, &functions_by_name, &rv_args, &mut fuel)
 }
 
 fn execute_module_entry(
     module: &RegModule,
     functions_by_name: &HashMap<String, FunctionId>,
-    args: &[i64],
+    args: &[RuntimeValue],
     fuel: &mut usize,
 ) -> InterpResult {
     let Some(entry) = module.entry else {
@@ -55,13 +62,14 @@ fn execute_module_entry(
 }
 
 pub fn execute_with_args(function: &RegFunction, args: &[i64]) -> InterpResult {
+    let rv_args: Vec<RuntimeValue> = args.iter().map(|a| RuntimeValue::from_i64(*a)).collect();
     let mut fuel = 100_000usize;
-    execute_with_module(function, args, None, None, &mut fuel)
+    execute_with_module(function, &rv_args, None, None, &mut fuel)
 }
 
 fn execute_with_module<'ir>(
     function: &'ir RegFunction,
-    args: &[i64],
+    args: &[RuntimeValue],
     module: Option<&'ir RegModule>,
     functions_by_name: Option<&'ir HashMap<String, FunctionId>>,
     fuel: &mut usize,
@@ -79,9 +87,15 @@ fn execute_with_module<'ir>(
 }
 
 /// Rich runtime value type for the RegIR interpreter.
-#[derive(Clone, Debug)]
-enum RuntimeValue {
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeValue {
     Val(MacroValue),
+}
+
+impl std::fmt::Display for RuntimeValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display_string())
+    }
 }
 
 impl RuntimeValue {
@@ -160,7 +174,7 @@ enum PrimResult {
 }
 
 impl Interpreter<'_, '_> {
-    fn execute(mut self, args: &[i64]) -> InterpResult {
+    fn execute(mut self, args: &[RuntimeValue]) -> InterpResult {
         if args.len() != self.function.entry_params.len() {
             self.error(format!(
                 "Register IR interpreter expected {} arguments, got {}",
@@ -170,8 +184,8 @@ impl Interpreter<'_, '_> {
             return self.finish(None);
         }
         let entry_params = self.function.entry_params.clone();
-        for (reg, value) in entry_params.into_iter().zip(args.iter().copied()) {
-            self.set(reg, RuntimeValue::from_i64(value));
+        for (reg, value) in entry_params.into_iter().zip(args.iter().cloned()) {
+            self.set(reg, value);
         }
 
         let Some(mut block) = self.function.entry else {
@@ -200,13 +214,7 @@ impl Interpreter<'_, '_> {
             match &body.terminator {
                 RegTerminator::Return(value) => {
                     let value = value.and_then(|reg| self.get(reg));
-                    let i64_val = value.map(|v| match v {
-                        RuntimeValue::Val(MacroValue::Nil) => 0,
-                        RuntimeValue::Val(MacroValue::Int(n)) => n,
-                        RuntimeValue::Val(MacroValue::Symbol(s)) if s == "t" => 1,
-                        _ => 0,
-                    });
-                    return self.finish(i64_val);
+                    return self.finish(value);
                 }
                 RegTerminator::Jump { target } => block = *target,
                 RegTerminator::BranchIfNil {
@@ -624,16 +632,15 @@ impl Interpreter<'_, '_> {
             ));
             return None;
         };
-        let i64_args: Vec<i64> = args.iter().map(|a| a.as_i64().unwrap_or(0)).collect();
         let result = execute_with_module(
             function,
-            &i64_args,
+            args,
             Some(module),
             Some(functions_by_name),
             &mut *self.fuel,
         );
         self.diagnostics.extend(result.diagnostics);
-        Some(result.value.map(RuntimeValue::from_i64).unwrap_or(RuntimeValue::nil()))
+        result.value.or_else(|| Some(RuntimeValue::nil()))
     }
 
     fn get_many(&mut self, regs: &[crate::ids::RegId]) -> Option<Vec<RuntimeValue>> {
@@ -673,7 +680,7 @@ impl Interpreter<'_, '_> {
         self.diagnostics.push(Diagnostic::error(message));
     }
 
-    fn finish(self, value: Option<i64>) -> InterpResult {
+    fn finish(self, value: Option<RuntimeValue>) -> InterpResult {
         InterpResult {
             value,
             diagnostics: self.diagnostics,
@@ -832,7 +839,7 @@ mod tests {
 
         let result = execute(&regir.value);
         assert_eq!(result.diagnostics, Vec::new());
-        assert_eq!(result.value, Some(42));
+        assert_eq!(result.as_i64(), Some(42));
     }
 
     #[test]
@@ -851,10 +858,10 @@ mod tests {
 
         let nil_result = execute_with_args(&regir.value, &[0, 7]);
         assert_eq!(nil_result.diagnostics, Vec::new());
-        assert_eq!(nil_result.value, Some(7));
+        assert_eq!(nil_result.as_i64(), Some(7));
         let true_result = execute_with_args(&regir.value, &[3, 7]);
         assert_eq!(true_result.diagnostics, Vec::new());
-        assert_eq!(true_result.value, Some(3));
+        assert_eq!(true_result.as_i64(), Some(3));
     }
 
     #[test]
@@ -866,7 +873,7 @@ mod tests {
         let regir = artifact.regir.expect("RegIR module");
         let result = execute_module_with_args(&regir, &[0, 9]);
         assert_eq!(result.diagnostics, Vec::new());
-        assert_eq!(result.value, Some(9));
+        assert_eq!(result.as_i64(), Some(9));
     }
 
     #[test]
@@ -877,7 +884,7 @@ mod tests {
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(16));
+        assert_eq!(artifact.result.as_i64(), Some(16));
     }
 
     #[test]
@@ -888,7 +895,7 @@ mod tests {
             &[8],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(7));
+        assert_eq!(artifact.result.as_i64(), Some(7));
     }
 
     #[test]
@@ -899,7 +906,7 @@ mod tests {
             &[4],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(5));
+        assert_eq!(artifact.result.as_i64(), Some(5));
     }
 
     #[test]
@@ -910,6 +917,6 @@ mod tests {
             &[5],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(120));
+        assert_eq!(artifact.result.as_i64(), Some(120));
     }
 }

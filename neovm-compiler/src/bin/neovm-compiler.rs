@@ -3,6 +3,16 @@ use std::process::ExitCode;
 use neovm_compiler::{compile_source, diagnostic::render_diagnostics, execute_file};
 
 fn main() -> ExitCode {
+    // Increase stack size for recursive interpreter
+    std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| real_main())
+        .expect("failed to spawn main thread")
+        .join()
+        .expect("main thread panicked")
+}
+
+fn real_main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let Some(command) = args.next() else {
         usage();
