@@ -4,9 +4,10 @@ use cranelift_entity::EntityRef;
 
 use crate::diagnostic::Diagnostic;
 use crate::expand_value::MacroValue;
+use crate::hir::{HirConst, HirExpr, HirExprKind, LambdaList};
 use crate::ids::FunctionId;
 use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
-use crate::ssa::SsaConst;
+use crate::ssa::{SsaConst, SsaLambdaTemplate};
 use crate::surface::{SurfaceAtom, SurfaceKind};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -90,6 +91,10 @@ fn execute_with_module<'ir>(
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
     Val(MacroValue),
+    Closure {
+        template: SsaLambdaTemplate,
+        captured: Vec<RuntimeValue>,
+    },
 }
 
 impl std::fmt::Display for RuntimeValue {
@@ -121,12 +126,21 @@ impl RuntimeValue {
     fn as_macro_value(&self) -> &MacroValue {
         match self {
             RuntimeValue::Val(v) => v,
+            RuntimeValue::Closure { .. } => &MacroValue::Nil,
         }
+    }
+
+    fn is_closure(&self) -> bool {
+        matches!(self, RuntimeValue::Closure { .. })
     }
 
     fn display_string(&self) -> String {
         match self {
             RuntimeValue::Val(v) => format_value(v),
+            RuntimeValue::Closure { template, .. } => {
+                let n_params = template.params.required.len();
+                format!("<closure with {} params>", n_params)
+            }
         }
     }
 }
@@ -337,6 +351,12 @@ impl Interpreter<'_, '_> {
                             PrimResult::Error => return false,
                         }
                     }
+                    RuntimeValue::Closure { template, captured } => {
+                        match self.execute_closure(template, captured, &args) {
+                            Some(v) => v,
+                            None => return false,
+                        }
+                    }
                     _ => {
                         self.set(*dst, RuntimeValue::nil());
                         return true;
@@ -344,17 +364,23 @@ impl Interpreter<'_, '_> {
                 };
                 self.set(*dst, result);
             }
-            RegInstKind::Lambda { dst, template: _, captures: _ } => {
-                // Lambda closures not yet supported — return nil
-                self.set(*dst, RuntimeValue::Val(MacroValue::Nil));
+            RegInstKind::Lambda { dst, template, captures } => {
+                let captured: Vec<RuntimeValue> = captures
+                    .iter()
+                    .filter_map(|reg| self.get(*reg))
+                    .collect();
+                self.set(*dst, RuntimeValue::Closure {
+                    template: template.clone(),
+                    captured,
+                });
             }
             RegInstKind::MakeLexicalCell { dst, initial } => {
                 let Some(value) = self.get(*initial) else {
                     return false;
                 };
-                // Wrap in a cell (cons with marker)
                 let cell_val = match &value {
                     RuntimeValue::Val(v) => v.clone(),
+                    RuntimeValue::Closure { .. } => MacroValue::Nil,
                 };
                 self.set(*dst, RuntimeValue::Val(MacroValue::cons(cell_val, MacroValue::Nil)));
             }
@@ -412,24 +438,31 @@ impl Interpreter<'_, '_> {
             RegInstKind::UnwindProtectCleanup => {}
             RegInstKind::UnwindProtectEnd => {}
             RegInstKind::Apply { dst, callee, args } => {
-                // (apply func args) — same as funcall for our purposes
                 let Some(callee_val) = self.get(*callee) else {
                     return false;
                 };
-                let Some(args) = self.get_many(args) else {
+                let Some(raw_args) = self.get_many(args) else {
                     return false;
                 };
+                // (apply func a1 a2 ... alist) — spread the last list arg
+                let spread_args = spread_apply_args(&raw_args);
                 let result = match &callee_val {
                     RuntimeValue::Val(MacroValue::Symbol(name)) => {
-                        match self.execute_primitive_call(name, &args) {
+                        match self.execute_primitive_call(name, &spread_args) {
                             PrimResult::Value(v) => v,
                             PrimResult::Unknown => {
-                                match self.execute_module_call(name, &args) {
+                                match self.execute_module_call(name, &spread_args) {
                                     Some(v) => v,
                                     None => RuntimeValue::nil(),
                                 }
                             }
                             PrimResult::Error => return false,
+                        }
+                    }
+                    RuntimeValue::Closure { template, captured } => {
+                        match self.execute_closure(template, captured, &spread_args) {
+                            Some(v) => v,
+                            None => return false,
                         }
                     }
                     _ => RuntimeValue::nil(),
@@ -441,385 +474,11 @@ impl Interpreter<'_, '_> {
     }
 
     fn execute_primitive_call(&mut self, name: &str, args: &[RuntimeValue]) -> PrimResult {
-        // Try i64 fast path first
-        let i64_args: Option<Vec<i64>> = args.iter().map(|a| a.as_i64()).collect();
-        if let Some(iargs) = i64_args {
-            if let Some(value) = self.execute_i64_primitive(name, &iargs) {
-                return match value {
-                    Ok(v) => PrimResult::Value(RuntimeValue::from_i64(v)),
-                    Err(()) => PrimResult::Error,
-                };
-            }
+        match eval_primitive(name, args) {
+            PrimResult::Unknown => PrimResult::Unknown,
+            PrimResult::Error => PrimResult::Error,
+            PrimResult::Value(v) => PrimResult::Value(v),
         }
-
-        // Rich value primitives
-        let value = match name {
-            "cons" => {
-                if args.len() >= 2 {
-                    RuntimeValue::Val(MacroValue::cons(
-                        args[0].as_macro_value().clone(),
-                        args[1].as_macro_value().clone(),
-                    ))
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "car" | "car-safe" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(first.as_macro_value().car())
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "cdr" | "cdr-safe" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(first.as_macro_value().cdr())
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "list" => {
-                let vals: Vec<MacroValue> = args.iter().map(|a| a.as_macro_value().clone()).collect();
-                RuntimeValue::Val(MacroValue::list(vals))
-            }
-            "eq" | "eql" => {
-                if args.len() >= 2 {
-                    let a = args[0].as_macro_value();
-                    let b = args[1].as_macro_value();
-                    RuntimeValue::Val(MacroValue::from_bool(a == b))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "equal" => {
-                if args.len() >= 2 {
-                    let a = args[0].as_macro_value();
-                    let b = args[1].as_macro_value();
-                    RuntimeValue::Val(MacroValue::from_bool(a == b))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "null" | "not" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(first.is_nil()))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "consp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first, RuntimeValue::Val(MacroValue::Cons(_)))))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "listp" => {
-                if let Some(first) = args.first() {
-                    let is_list = first.is_nil() || matches!(first, RuntimeValue::Val(MacroValue::Cons(_)));
-                    RuntimeValue::Val(MacroValue::from_bool(is_list))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "symbolp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first, RuntimeValue::Val(MacroValue::Symbol(_)))))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "stringp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first, RuntimeValue::Val(MacroValue::String(_)))))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "numberp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first, RuntimeValue::Val(MacroValue::Int(_)))))
-                } else {
-                    RuntimeValue::Val(MacroValue::Nil)
-                }
-            }
-            "length" => {
-                if let Some(first) = args.first() {
-                    let len = match first.as_macro_value() {
-                        MacroValue::Nil => 0i64,
-                        MacroValue::String(s) => s.len() as i64,
-                        MacroValue::Cons(_) => {
-                            first.as_macro_value().to_vec().map(|v| v.len() as i64).unwrap_or(0)
-                        }
-                        MacroValue::Vector(v) => v.len() as i64,
-                        _ => 0,
-                    };
-                    RuntimeValue::Val(MacroValue::Int(len))
-                } else {
-                    RuntimeValue::Val(MacroValue::Int(0))
-                }
-            }
-            "nth" => {
-                if args.len() >= 2 {
-                    let n = args[0].as_i64().unwrap_or(0);
-                    let list = args[1].as_macro_value();
-                    let result = nth_value(list, n);
-                    RuntimeValue::Val(result)
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            // String operations
-            "concat" => {
-                let parts: Vec<&str> = args.iter().filter_map(|a| a.as_macro_value().as_string()).collect();
-                RuntimeValue::Val(MacroValue::String(parts.join("")))
-            }
-            "substring" => {
-                if args.len() >= 2 {
-                    if let (Some(s), Some(start)) = (args[0].as_macro_value().as_string(), args[1].as_i64()) {
-                        let start = start.max(0) as usize;
-                        let end = args.get(2).and_then(|a| a.as_i64()).map(|e| e.max(0) as usize).unwrap_or(s.len());
-                        RuntimeValue::Val(MacroValue::String(s[start.min(end)..end.min(s.len())].to_string()))
-                    } else {
-                        RuntimeValue::nil()
-                    }
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "string=" | "string-equal" => {
-                if args.len() >= 2 {
-                    let a = args[0].as_macro_value().as_string().unwrap_or("");
-                    let b = args[1].as_macro_value().as_string().unwrap_or("");
-                    RuntimeValue::Val(MacroValue::from_bool(a == b))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "string<" | "string-lessp" => {
-                if args.len() >= 2 {
-                    let a = args[0].as_macro_value().as_string().unwrap_or("");
-                    let b = args[1].as_macro_value().as_string().unwrap_or("");
-                    RuntimeValue::Val(MacroValue::from_bool(a < b))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "length" => {
-                if let Some(first) = args.first() {
-                    let len = match first.as_macro_value() {
-                        MacroValue::Nil => 0i64,
-                        MacroValue::String(s) => s.len() as i64,
-                        MacroValue::Cons(_) => {
-                            first.as_macro_value().to_vec().map(|v| v.len() as i64).unwrap_or(0)
-                        }
-                        MacroValue::Vector(v) => v.len() as i64,
-                        _ => 0,
-                    };
-                    RuntimeValue::Val(MacroValue::Int(len))
-                } else {
-                    RuntimeValue::Val(MacroValue::Int(0))
-                }
-            }
-            // List operations
-            "append" => {
-                let mut result = Vec::new();
-                for (i, arg) in args.iter().enumerate() {
-                    if i + 1 == args.len() {
-                        // Last arg: can be any value (dotted list tail)
-                        if let Some(vec) = arg.as_macro_value().to_vec() {
-                            result.extend(vec);
-                        } else {
-                            // Non-list last arg: just extend with the previous lists
-                        }
-                    } else if let Some(vec) = arg.as_macro_value().to_vec() {
-                        result.extend(vec);
-                    }
-                }
-                RuntimeValue::Val(MacroValue::list(result))
-            }
-            "nreverse" | "reverse" => {
-                if let Some(first) = args.first() {
-                    if let Some(mut vec) = first.as_macro_value().to_vec() {
-                        vec.reverse();
-                        RuntimeValue::Val(MacroValue::list(vec))
-                    } else {
-                        RuntimeValue::nil()
-                    }
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "nthcdr" => {
-                if args.len() >= 2 {
-                    let mut n = args[0].as_i64().unwrap_or(0);
-                    let mut list = args[1].as_macro_value().clone();
-                    while n > 0 {
-                        list = list.cdr();
-                        n -= 1;
-                    }
-                    RuntimeValue::Val(list)
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "last" => {
-                if args.len() >= 1 {
-                    let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
-                    RuntimeValue::Val(args[0].as_macro_value().last(n))
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "butlast" => {
-                if args.len() >= 1 {
-                    let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
-                    RuntimeValue::Val(args[0].as_macro_value().butlast(n))
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            // Type predicates
-            "integerp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first.as_macro_value(), MacroValue::Int(_))))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "stringp" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(matches!(first.as_macro_value(), MacroValue::String(_))))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "atom" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(!first.as_macro_value().is_cons()))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(true))
-                }
-            }
-            "zerop" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::from_bool(first.as_i64() == Some(0)))
-                } else {
-                    RuntimeValue::Val(MacroValue::from_bool(false))
-                }
-            }
-            "max" => {
-                let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
-                RuntimeValue::Val(MacroValue::Int(vals.into_iter().max().unwrap_or(0)))
-            }
-            "min" => {
-                let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
-                RuntimeValue::Val(MacroValue::Int(vals.into_iter().min().unwrap_or(0)))
-            }
-            "abs" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::Int(first.as_i64().unwrap_or(0).abs()))
-                } else {
-                    RuntimeValue::Val(MacroValue::Int(0))
-                }
-            }
-            "mod" => {
-                if args.len() >= 2 {
-                    let a = args[0].as_i64().unwrap_or(0);
-                    let b = args[1].as_i64().unwrap_or(1);
-                    if b != 0 {
-                        RuntimeValue::Val(MacroValue::Int(a % b))
-                    } else {
-                        RuntimeValue::nil()
-                    }
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "number-to-string" | "int-to-string" => {
-                if let Some(first) = args.first() {
-                    RuntimeValue::Val(MacroValue::String(first.as_i64().unwrap_or(0).to_string()))
-                } else {
-                    RuntimeValue::Val(MacroValue::String("0".into()))
-                }
-            }
-            "string-to-number" => {
-                if let Some(first) = args.first() {
-                    let s = first.as_macro_value().as_string().unwrap_or("0");
-                    RuntimeValue::Val(MacroValue::Int(s.parse::<i64>().unwrap_or(0)))
-                } else {
-                    RuntimeValue::Val(MacroValue::Int(0))
-                }
-            }
-            "format" => {
-                // Simplified: just return the format string with %s/%d replaced
-                if !args.is_empty() {
-                    if let Some(fmt) = args[0].as_macro_value().as_string() {
-                        let mut formatted = fmt.to_string();
-                        for arg in &args[1..] {
-                            if let Some(pos) = formatted.find("%s").or(formatted.find("%d")) {
-                                let repl = arg.as_i64().map(|n| n.to_string())
-                                    .or_else(|| arg.as_macro_value().as_string().map(String::from))
-                                    .unwrap_or_else(|| arg.display_string());
-                                let before = formatted[..pos].to_string();
-                                let after = formatted[pos+2..].to_string();
-                                formatted = format!("{}{}{}", before, repl, after);
-                            }
-                        }
-                        RuntimeValue::Val(MacroValue::String(formatted))
-                    } else {
-                        RuntimeValue::nil()
-                    }
-                } else {
-                    RuntimeValue::nil()
-                }
-            }
-            "message" => {
-                // (message fmt &rest args) — return nil
-                RuntimeValue::Val(MacroValue::Nil)
-            }
-            "error" | "signal" => {
-                self.error(format!("runtime error: {}", args.first().map(|a| a.display_string()).unwrap_or_default()));
-                return PrimResult::Error;
-            }
-            // Built-in functions that return nil at runtime
-            // (ones not already handled above)
-            _ if is_known_nil_returning_builtin(name) => {
-                RuntimeValue::Val(MacroValue::Nil)
-            }
-            _ => return PrimResult::Unknown,
-        };
-        PrimResult::Value(value)
-    }
-
-    fn execute_i64_primitive(&mut self, name: &str, args: &[i64]) -> Option<Result<i64, ()>> {
-        let value = match name {
-            "+" => checked_fold(0, args, i64::checked_add),
-            "*" => checked_fold(1, args, i64::checked_mul),
-            "-" => match args {
-                [] => {
-                    self.error("primitive `-` requires at least one argument");
-                    return Some(Err(()));
-                }
-                [value] => value.checked_neg(),
-                [first, rest @ ..] => checked_fold(*first, rest, i64::checked_sub),
-            },
-            "1+" => args.first()?.checked_add(1),
-            "1-" => args.first()?.checked_sub(1),
-            "=" => Some(bool_value(args.windows(2).all(|pair| pair[0] == pair[1]))),
-            "<" => Some(bool_value(args.windows(2).all(|pair| pair[0] < pair[1]))),
-            "<=" => Some(bool_value(args.windows(2).all(|pair| pair[0] <= pair[1]))),
-            ">" => Some(bool_value(args.windows(2).all(|pair| pair[0] > pair[1]))),
-            ">=" => Some(bool_value(args.windows(2).all(|pair| pair[0] >= pair[1]))),
-            _ => return None,
-        };
-        Some(match value {
-            Some(v) => Ok(v),
-            None => {
-                self.error(format!("integer overflow in primitive `{name}`"));
-                Err(())
-            }
-        })
     }
 
     fn execute_module_call(&mut self, name: &str, args: &[RuntimeValue]) -> Option<RuntimeValue> {
@@ -891,6 +550,487 @@ impl Interpreter<'_, '_> {
             diagnostics: self.diagnostics,
         }
     }
+
+    fn execute_closure(
+        &mut self,
+        template: &SsaLambdaTemplate,
+        captured: &[RuntimeValue],
+        args: &[RuntimeValue],
+    ) -> Option<RuntimeValue> {
+        let mut env: HashMap<String, RuntimeValue> = HashMap::new();
+
+        // Bind captured values
+        for (i, capture) in template.captures.iter().enumerate() {
+            if let Some(val) = captured.get(i) {
+                env.insert(capture.name.clone(), val.clone());
+            }
+        }
+
+        // Bind parameters
+        bind_lambda_params(&template.params, args, &mut env);
+
+        // Interpret the HIR body
+        eval_hir_expr(&template.body, &env, self.module, self.functions_by_name, self.fuel, &mut self.diagnostics)
+    }
+}
+
+/// Spread apply args: last argument is a list that gets flattened.
+/// (apply f 1 2 '(3 4)) → [1, 2, 3, 4]
+fn spread_apply_args(args: &[RuntimeValue]) -> Vec<RuntimeValue> {
+    if args.is_empty() {
+        return Vec::new();
+    }
+    let mut result: Vec<RuntimeValue> = args[..args.len() - 1].to_vec();
+    if let Some(last) = args.last() {
+        match last.as_macro_value() {
+            MacroValue::Nil => {}
+            MacroValue::Cons(_) => {
+                if let Some(vec) = last.as_macro_value().to_vec() {
+                    for v in vec {
+                        result.push(RuntimeValue::Val(v));
+                    }
+                }
+            }
+            _ => result.push(last.clone()),
+        }
+    }
+    result
+}
+
+fn bind_lambda_params(params: &LambdaList, args: &[RuntimeValue], env: &mut HashMap<String, RuntimeValue>) {
+    let mut arg_idx = 0;
+    for name in &params.required {
+        if let Some(val) = args.get(arg_idx) {
+            env.insert(name.clone(), val.clone());
+        } else {
+            env.insert(name.clone(), RuntimeValue::nil());
+        }
+        arg_idx += 1;
+    }
+    for name in &params.optional {
+        if let Some(val) = args.get(arg_idx) {
+            env.insert(name.clone(), val.clone());
+        } else {
+            env.insert(name.clone(), RuntimeValue::nil());
+        }
+        arg_idx += 1;
+    }
+    if let Some(ref rest_name) = params.rest {
+        let rest: Vec<MacroValue> = args[arg_idx..].iter().map(|a| a.as_macro_value().clone()).collect();
+        env.insert(rest_name.clone(), RuntimeValue::Val(MacroValue::list(rest)));
+    }
+}
+
+/// Interpret an HIR expression tree directly.
+fn eval_hir_expr(
+    expr: &HirExpr,
+    env: &HashMap<String, RuntimeValue>,
+    module: Option<&RegModule>,
+    functions_by_name: Option<&HashMap<String, FunctionId>>,
+    fuel: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<RuntimeValue> {
+    match &expr.kind {
+        HirExprKind::Const(c) => Some(match c {
+            HirConst::Nil => RuntimeValue::nil(),
+            HirConst::True => RuntimeValue::Val(MacroValue::Symbol("t".into())),
+            HirConst::Int(n) => RuntimeValue::Val(MacroValue::Int(*n)),
+            HirConst::Float(f) => RuntimeValue::Val(MacroValue::Int(*f as i64)),
+            HirConst::String(s) => RuntimeValue::Val(MacroValue::String(s.clone())),
+            HirConst::Char(c) => RuntimeValue::Val(MacroValue::Int(*c)),
+        }),
+        HirExprKind::Quote(form) => Some(surface_to_runtime_value(form)),
+        HirExprKind::FunctionQuote(form) => Some(surface_to_runtime_value(form)),
+        HirExprKind::LexicalGet(name) => Some(env.get(name).cloned().unwrap_or_else(RuntimeValue::nil)),
+        HirExprKind::LexicalSet { name, value } => {
+            let val = eval_hir_expr(value, env, module, functions_by_name, fuel, diagnostics)?;
+            // Return the value (lexicals are immutable in HIR, but set returns the value)
+            Some(val)
+        }
+        HirExprKind::SymbolGet(name) => Some(RuntimeValue::nil()),
+        HirExprKind::SymbolSet { name, value } => {
+            eval_hir_expr(value, env, module, functions_by_name, fuel, diagnostics)
+        }
+        HirExprKind::If { test, then_expr, else_expr } => {
+            let test_val = eval_hir_expr(test, env, module, functions_by_name, fuel, diagnostics)?;
+            if test_val.is_nil() || matches!(&test_val, RuntimeValue::Val(MacroValue::Int(0))) {
+                eval_hir_expr(else_expr, env, module, functions_by_name, fuel, diagnostics)
+            } else {
+                eval_hir_expr(then_expr, env, module, functions_by_name, fuel, diagnostics)
+            }
+        }
+        HirExprKind::While { test, body } => {
+            let mut last = RuntimeValue::nil();
+            loop {
+                if *fuel == 0 {
+                    diagnostics.push(Diagnostic::error("closure interpreter exhausted fuel in while loop"));
+                    return None;
+                }
+                *fuel -= 1;
+                let test_val = eval_hir_expr(test, env, module, functions_by_name, fuel, diagnostics)?;
+                if test_val.is_nil() || matches!(&test_val, RuntimeValue::Val(MacroValue::Int(0))) {
+                    break;
+                }
+                last = eval_hir_expr(body, env, module, functions_by_name, fuel, diagnostics)?;
+            }
+            Some(last)
+        }
+        HirExprKind::Progn(exprs) => {
+            let mut last = RuntimeValue::nil();
+            for e in exprs {
+                last = eval_hir_expr(e, env, module, functions_by_name, fuel, diagnostics)?;
+            }
+            Some(last)
+        }
+        HirExprKind::Let { mode, sequential, bindings, body, .. } => {
+            let mut inner_env = env.clone();
+            for binding in bindings {
+                let val = eval_hir_expr(&binding.init, &inner_env, module, functions_by_name, fuel, diagnostics)?;
+                inner_env.insert(binding.name.clone(), val);
+            }
+            eval_hir_expr(body, &inner_env, module, functions_by_name, fuel, diagnostics)
+        }
+        HirExprKind::Lambda { params, body, .. } => {
+            // Create a closure template with no captures (captures from current env
+            // would need free variable analysis — for now, captures are empty)
+            let template = SsaLambdaTemplate {
+                params: params.clone(),
+                captures: Vec::new(),
+                declarations: Vec::new(),
+                body: body.clone(),
+            };
+            Some(RuntimeValue::Closure {
+                template,
+                captured: Vec::new(),
+            })
+        }
+        HirExprKind::Declare(_) => Some(RuntimeValue::nil()),
+        HirExprKind::Catch { .. } => {
+            // Catch/throw not supported in closure interpreter
+            Some(RuntimeValue::nil())
+        }
+        HirExprKind::Throw { .. } => {
+            diagnostics.push(Diagnostic::error("throw not supported in closure interpreter"));
+            None
+        }
+        HirExprKind::ConditionCase { body, .. } => {
+            // Just evaluate the body, ignore handlers
+            eval_hir_expr(body, env, module, functions_by_name, fuel, diagnostics)
+        }
+        HirExprKind::UnwindProtect { body, .. } => {
+            // Just evaluate the body, ignore cleanup
+            eval_hir_expr(body, env, module, functions_by_name, fuel, diagnostics)
+        }
+        HirExprKind::Funcall { callee, args } => {
+            let callee_val = eval_hir_expr(callee, env, module, functions_by_name, fuel, diagnostics)?;
+            let arg_vals: Vec<RuntimeValue> = args.iter().filter_map(|a| {
+                eval_hir_expr(a, env, module, functions_by_name, fuel, diagnostics)
+            }).collect();
+            eval_call(callee_val, &arg_vals, module, functions_by_name, fuel, diagnostics, env)
+        }
+        HirExprKind::Apply { callee, args } => {
+            let callee_val = eval_hir_expr(callee, env, module, functions_by_name, fuel, diagnostics)?;
+            let raw_arg_vals: Vec<RuntimeValue> = args.iter().filter_map(|a| {
+                eval_hir_expr(a, env, module, functions_by_name, fuel, diagnostics)
+            }).collect();
+            let spread_args = spread_apply_args(&raw_arg_vals);
+            eval_call(callee_val, &spread_args, module, functions_by_name, fuel, diagnostics, env)
+        }
+        HirExprKind::CallNamed { name, args } => {
+            let arg_vals: Vec<RuntimeValue> = args.iter().filter_map(|a| {
+                eval_hir_expr(a, env, module, functions_by_name, fuel, diagnostics)
+            }).collect();
+            let callee = RuntimeValue::Val(MacroValue::Symbol(name.clone()));
+            eval_call(callee, &arg_vals, module, functions_by_name, fuel, diagnostics, env)
+        }
+        HirExprKind::CallValue { callee, args } => {
+            let callee_val = eval_hir_expr(callee, env, module, functions_by_name, fuel, diagnostics)?;
+            let arg_vals: Vec<RuntimeValue> = args.iter().filter_map(|a| {
+                eval_hir_expr(a, env, module, functions_by_name, fuel, diagnostics)
+            }).collect();
+            eval_call(callee_val, &arg_vals, module, functions_by_name, fuel, diagnostics, env)
+        }
+    }
+}
+
+/// Execute a function call from the HIR interpreter.
+fn eval_call(
+    callee: RuntimeValue,
+    args: &[RuntimeValue],
+    module: Option<&RegModule>,
+    functions_by_name: Option<&HashMap<String, FunctionId>>,
+    fuel: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+    _env: &HashMap<String, RuntimeValue>,
+) -> Option<RuntimeValue> {
+    match &callee {
+        RuntimeValue::Val(MacroValue::Symbol(name)) => {
+            // Try the standalone primitive evaluator first
+            match eval_primitive(name, args) {
+                PrimResult::Value(v) => Some(v),
+                PrimResult::Error => {
+                    diagnostics.push(Diagnostic::error(format!("runtime error in closure call to `{name}`")));
+                    None
+                }
+                PrimResult::Unknown => {
+                    // Try module call
+                    if let (Some(mod_), Some(fns)) = (module, functions_by_name) {
+                        if let Some(fid) = fns.get(name).copied() {
+                            if let Some(func) = mod_.functions.get(fid) {
+                                let result = execute_with_module(
+                                    func, args, Some(mod_), Some(fns), fuel
+                                );
+                                diagnostics.extend(result.diagnostics);
+                                return result.value.or_else(|| Some(RuntimeValue::nil()));
+                            }
+                        }
+                    }
+                    Some(RuntimeValue::nil())
+                }
+            }
+        }
+        RuntimeValue::Closure { template, captured } => {
+            let mut closure_env: HashMap<String, RuntimeValue> = HashMap::new();
+            for (i, capture) in template.captures.iter().enumerate() {
+                if let Some(val) = captured.get(i) {
+                    closure_env.insert(capture.name.clone(), val.clone());
+                }
+            }
+            bind_lambda_params(&template.params, args, &mut closure_env);
+            eval_hir_expr(&template.body, &closure_env, module, functions_by_name, fuel, diagnostics)
+        }
+        _ => Some(RuntimeValue::nil()),
+    }
+}
+
+/// Standalone primitive evaluator — no interpreter context needed.
+/// Used by both the RegIR interpreter and the HIR closure interpreter.
+fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
+    // Try i64 fast path first
+    let i64_args: Option<Vec<i64>> = args.iter().map(|a| a.as_i64()).collect();
+    if let Some(ref iargs) = i64_args {
+        if let Some(result) = eval_i64_primitive(name, iargs) {
+            return match result {
+                Ok(v) => PrimResult::Value(RuntimeValue::from_i64(v)),
+                Err(()) => PrimResult::Error,
+            };
+        }
+    }
+
+    // Rich value primitives
+    let value = match name {
+        "cons" => {
+            if args.len() >= 2 {
+                RuntimeValue::Val(MacroValue::cons(
+                    args[0].as_macro_value().clone(),
+                    args[1].as_macro_value().clone(),
+                ))
+            } else {
+                RuntimeValue::nil()
+            }
+        }
+        "car" | "car-safe" => {
+            RuntimeValue::Val(args.first().map(|a| a.as_macro_value().car()).unwrap_or(MacroValue::Nil))
+        }
+        "cdr" | "cdr-safe" => {
+            RuntimeValue::Val(args.first().map(|a| a.as_macro_value().cdr()).unwrap_or(MacroValue::Nil))
+        }
+        "list" => {
+            let vals: Vec<MacroValue> = args.iter().map(|a| a.as_macro_value().clone()).collect();
+            RuntimeValue::Val(MacroValue::list(vals))
+        }
+        "eq" | "eql" => {
+            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].as_macro_value() == args[1].as_macro_value()))
+        }
+        "equal" => {
+            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].as_macro_value() == args[1].as_macro_value()))
+        }
+        "null" | "not" => {
+            RuntimeValue::Val(MacroValue::from_bool(args.first().map(|a| a.is_nil()).unwrap_or(true)))
+        }
+        "consp" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(false)
+            ))
+        }
+        "listp" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| a.is_nil() || matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(true)
+            ))
+        }
+        "symbolp" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| matches!(a, RuntimeValue::Val(MacroValue::Symbol(_)))).unwrap_or(false)
+            ))
+        }
+        "stringp" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| matches!(a, RuntimeValue::Val(MacroValue::String(_)))).unwrap_or(false)
+            ))
+        }
+        "numberp" | "integerp" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| matches!(a, RuntimeValue::Val(MacroValue::Int(_)))).unwrap_or(false)
+            ))
+        }
+        "atom" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.first().map(|a| !matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(true)
+            ))
+        }
+        "zerop" => {
+            RuntimeValue::Val(MacroValue::from_bool(args.first().map(|a| a.as_i64() == Some(0)).unwrap_or(false)))
+        }
+        "length" => {
+            let len = match args.first().map(|a| a.as_macro_value()) {
+                Some(MacroValue::Nil) => 0i64,
+                Some(MacroValue::String(s)) => s.len() as i64,
+                Some(MacroValue::Cons(_)) => args[0].as_macro_value().to_vec().map(|v| v.len() as i64).unwrap_or(0),
+                Some(MacroValue::Vector(v)) => v.len() as i64,
+                _ => 0,
+            };
+            RuntimeValue::Val(MacroValue::Int(len))
+        }
+        "nth" => {
+            if args.len() >= 2 {
+                RuntimeValue::Val(nth_value(args[1].as_macro_value(), args[0].as_i64().unwrap_or(0)))
+            } else {
+                RuntimeValue::nil()
+            }
+        }
+        "concat" => {
+            let parts: Vec<&str> = args.iter().filter_map(|a| a.as_macro_value().as_string()).collect();
+            RuntimeValue::Val(MacroValue::String(parts.join("")))
+        }
+        "substring" => {
+            if args.len() >= 2 {
+                if let (Some(s), Some(start)) = (args[0].as_macro_value().as_string(), args[1].as_i64()) {
+                    let start = start.max(0) as usize;
+                    let end = args.get(2).and_then(|a| a.as_i64()).map(|e| e.max(0) as usize).unwrap_or(s.len());
+                    RuntimeValue::Val(MacroValue::String(s[start.min(end)..end.min(s.len())].to_string()))
+                } else { RuntimeValue::nil() }
+            } else { RuntimeValue::nil() }
+        }
+        "string=" | "string-equal" => {
+            RuntimeValue::Val(MacroValue::from_bool(
+                args.len() >= 2 && args[0].as_macro_value().as_string() == args[1].as_macro_value().as_string()
+            ))
+        }
+        "string<" | "string-lessp" => {
+            let a = args.first().and_then(|v| v.as_macro_value().as_string()).unwrap_or("");
+            let b = args.get(1).and_then(|v| v.as_macro_value().as_string()).unwrap_or("");
+            RuntimeValue::Val(MacroValue::from_bool(a < b))
+        }
+        "format" => {
+            if let Some(fmt) = args.first().and_then(|a| a.as_macro_value().as_string()) {
+                let mut formatted = fmt.to_string();
+                for arg in &args[1..] {
+                    if let Some(pos) = formatted.find("%s").or(formatted.find("%d")) {
+                        let repl = arg.as_i64().map(|n| n.to_string())
+                            .or_else(|| arg.as_macro_value().as_string().map(String::from))
+                            .unwrap_or_else(|| arg.display_string());
+                        let before = formatted[..pos].to_string();
+                        let after = formatted[pos+2..].to_string();
+                        formatted = format!("{}{}{}", before, repl, after);
+                    }
+                }
+                RuntimeValue::Val(MacroValue::String(formatted))
+            } else { RuntimeValue::nil() }
+        }
+        "message" => RuntimeValue::nil(),
+        "append" => {
+            let mut result = Vec::new();
+            for (i, arg) in args.iter().enumerate() {
+                if i + 1 == args.len() {
+                    if let Some(vec) = arg.as_macro_value().to_vec() { result.extend(vec); }
+                } else if let Some(vec) = arg.as_macro_value().to_vec() { result.extend(vec); }
+            }
+            RuntimeValue::Val(MacroValue::list(result))
+        }
+        "nreverse" | "reverse" => {
+            if let Some(first) = args.first() {
+                if let Some(mut vec) = first.as_macro_value().to_vec() {
+                    vec.reverse();
+                    return PrimResult::Value(RuntimeValue::Val(MacroValue::list(vec)));
+                }
+            }
+            RuntimeValue::nil()
+        }
+        "nthcdr" => {
+            if args.len() >= 2 {
+                let mut n = args[0].as_i64().unwrap_or(0);
+                let mut list = args[1].as_macro_value().clone();
+                while n > 0 { list = list.cdr(); n -= 1; }
+                RuntimeValue::Val(list)
+            } else { RuntimeValue::nil() }
+        }
+        "last" => {
+            if let Some(first) = args.first() {
+                let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
+                RuntimeValue::Val(first.as_macro_value().last(n))
+            } else { RuntimeValue::nil() }
+        }
+        "butlast" => {
+            if let Some(first) = args.first() {
+                let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
+                RuntimeValue::Val(first.as_macro_value().butlast(n))
+            } else { RuntimeValue::nil() }
+        }
+        "max" => {
+            let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
+            RuntimeValue::Val(MacroValue::Int(vals.into_iter().max().unwrap_or(0)))
+        }
+        "min" => {
+            let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
+            RuntimeValue::Val(MacroValue::Int(vals.into_iter().min().unwrap_or(0)))
+        }
+        "abs" => {
+            RuntimeValue::Val(MacroValue::Int(args.first().and_then(|a| a.as_i64()).unwrap_or(0).abs()))
+        }
+        "mod" => {
+            if args.len() >= 2 {
+                let a = args[0].as_i64().unwrap_or(0);
+                let b = args[1].as_i64().unwrap_or(1);
+                if b != 0 {
+                    RuntimeValue::Val(MacroValue::Int(a % b))
+                } else { RuntimeValue::nil() }
+            } else { RuntimeValue::nil() }
+        }
+        "number-to-string" | "int-to-string" => {
+            RuntimeValue::Val(MacroValue::String(args.first().and_then(|a| a.as_i64()).unwrap_or(0).to_string()))
+        }
+        "string-to-number" => {
+            let s = args.first().and_then(|a| a.as_macro_value().as_string()).unwrap_or("0");
+            RuntimeValue::Val(MacroValue::Int(s.parse::<i64>().unwrap_or(0)))
+        }
+        _ if is_known_nil_returning_builtin(name) => RuntimeValue::nil(),
+        _ => return PrimResult::Unknown,
+    };
+    PrimResult::Value(value)
+}
+
+fn eval_i64_primitive(name: &str, args: &[i64]) -> Option<Result<i64, ()>> {
+    let value = match name {
+        "+" => checked_fold(0, args, i64::checked_add),
+        "*" => checked_fold(1, args, i64::checked_mul),
+        "-" => match args {
+            [] => return None,
+            [v] => v.checked_neg(),
+            [first, rest @ ..] => checked_fold(*first, rest, i64::checked_sub),
+        },
+        "1+" => args.first()?.checked_add(1),
+        "1-" => args.first()?.checked_sub(1),
+        "=" => Some(bool_value(args.windows(2).all(|pair| pair[0] == pair[1]))),
+        "<" => Some(bool_value(args.windows(2).all(|pair| pair[0] < pair[1]))),
+        "<=" => Some(bool_value(args.windows(2).all(|pair| pair[0] <= pair[1]))),
+        ">" => Some(bool_value(args.windows(2).all(|pair| pair[0] > pair[1]))),
+        ">=" => Some(bool_value(args.windows(2).all(|pair| pair[0] >= pair[1]))),
+        _ => return None,
+    };
+    Some(match value {
+        Some(v) => Ok(v),
+        None => Err(()),
+    })
 }
 
 fn nth_value(list: &MacroValue, n: i64) -> MacroValue {
@@ -961,8 +1101,7 @@ fn is_known_nil_returning_builtin(name: &str) -> bool {
         | "symbol-function" | "symbol-value" | "intern" | "intern-soft"
         | "mapcar" | "mapc" | "mapcan" | "dolist" | "dotimes"
         | "string-match" | "replace-match" | "match-string" | "match-beginning" | "match-end"
-        | "concat" | "substring" | "string=" | "string<" | "string>"
-        | "format" | "propertize" | "purecopy"
+        | "propertize" | "purecopy"
         | "point" | "point-min" | "point-max" | "buffer-size" | "buffer-name"
         | "buffer-file-name" | "current-buffer" | "window-buffer" | "selected-window"
         | "frame-parameter" | "frame-width" | "frame-height"
@@ -975,8 +1114,7 @@ fn is_known_nil_returning_builtin(name: &str) -> bool {
         | "macroexpand" | "macroexpand-all"
         | "condition-case" | "condition-case-unless-debug" | "ignore-errors"
         | "catch" | "throw" | "unwind-protect"
-        | "nreverse" | "reverse" | "sort" | "copy-sequence" | "copy-alist"
-        | "append" | "butlast" | "last" | "nthcdr"
+        | "sort" | "copy-sequence" | "copy-alist"
         | "set" | "default-value" | "set-default"
         | "make-sparse-keymap" | "make-keymap" | "define-key"
         | "use-global-map" | "use-local-map" | "current-global-map" | "current-local-map"
@@ -999,11 +1137,10 @@ fn is_known_nil_returning_builtin(name: &str) -> bool {
         | "looking-at" | "looking-at-p" | "string-match-p"
         | "replace-regexp-in-string" | "match-string-no-properties"
         | "upcase" | "downcase" | "capitalize" | "upcase-initials"
-        | "char-to-string" | "string-to-char" | "number-to-string" | "string-to-number"
+        | "char-to-string" | "string-to-char"
         | "identity" | "ignore" | "always" | "never"
-        | "eql" | "equal" | "equal-including-properties"
+        | "equal-including-properties"
         | "sxhash" | "sxhash-eq" | "sxhash-eql" | "sxhash-equal"
-        | "message"
     )
 }
 

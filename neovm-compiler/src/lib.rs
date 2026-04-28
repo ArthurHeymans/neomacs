@@ -298,4 +298,103 @@ mod tests {
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert!(artifact.result.value.is_some());
     }
+
+    #[test]
+    fn e2e_lambda_immediate_funcall() {
+        let artifact = execute_source("lambda.el", "\
+;;; -*- lexical-binding: t; -*-
+(funcall (lambda (x y) (+ x y)) 3 4)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(7));
+    }
+
+    #[test]
+    fn e2e_defun_returns_lambda() {
+        let artifact = execute_source("maker.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun make-adder (n) (lambda (x) (+ n x)))
+(funcall (make-adder 10) 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(15));
+    }
+
+    #[test]
+    fn e2e_apply_with_list() {
+        let artifact = execute_source("apply.el", "\
+;;; -*- lexical-binding: t; -*-
+(apply '+ (list 1 2 3))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(6));
+    }
+
+    #[test]
+    fn e2e_mapcar_with_lambda() {
+        let artifact = execute_source("mapcar.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-mapcar (f lst)
+  (if (null lst) nil
+    (cons (funcall f (car lst)) (my-mapcar f (cdr lst)))))
+(my-mapcar (lambda (x) (* x x)) (list 1 2 3 4 5))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+        let val = artifact.result.value.unwrap();
+        assert!(matches!(val, interp::RuntimeValue::Val(
+            crate::expand_value::MacroValue::Cons(_)
+        )));
+    }
+
+    #[test]
+    fn e2e_higher_order_composition() {
+        let artifact = execute_source("compose.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun compose (f g) (lambda (x) (funcall f (funcall g x))))
+(funcall (compose (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(12));
+    }
+
+    #[test]
+    fn e2e_mutual_recursion() {
+        let artifact = execute_source("mutual.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-even (n) (if (= n 0) t (my-odd (- n 1))))
+(defun my-odd (n) (if (= n 0) nil (my-even (- n 1))))
+(list (my-even 4) (my-odd 3))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+    }
+
+    #[test]
+    fn e2e_factorial_accumulator() {
+        let artifact = execute_source("fact.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun fact-acc (n acc)
+  (if (= n 0) acc (fact-acc (- n 1) (* n acc))))
+(fact-acc 10 1)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(3628800));
+    }
+
+    #[test]
+    fn e2e_string_operations() {
+        let artifact = execute_source("strings.el", "\
+;;; -*- lexical-binding: t; -*-
+(concat (substring \"hello world\" 0 5) \"!\")", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(matches!(artifact.result.value, Some(interp::RuntimeValue::Val(
+            crate::expand_value::MacroValue::String(ref s)
+        )) if s == "hello!"));
+    }
+
+    #[test]
+    fn e2e_list_reverse_and_length() {
+        let artifact = execute_source("reversal.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-reverse (lst)
+  (if (null lst) nil
+    (append (my-reverse (cdr lst)) (list (car lst)))))
+(length (my-reverse (list 1 2 3 4 5)))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(5));
+    }
 }
