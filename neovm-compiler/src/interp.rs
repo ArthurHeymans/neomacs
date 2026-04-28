@@ -569,6 +569,211 @@ impl Interpreter<'_, '_> {
                     RuntimeValue::nil()
                 }
             }
+            // String operations
+            "concat" => {
+                let parts: Vec<&str> = args.iter().filter_map(|a| a.as_macro_value().as_string()).collect();
+                RuntimeValue::Val(MacroValue::String(parts.join("")))
+            }
+            "substring" => {
+                if args.len() >= 2 {
+                    if let (Some(s), Some(start)) = (args[0].as_macro_value().as_string(), args[1].as_i64()) {
+                        let start = start.max(0) as usize;
+                        let end = args.get(2).and_then(|a| a.as_i64()).map(|e| e.max(0) as usize).unwrap_or(s.len());
+                        RuntimeValue::Val(MacroValue::String(s[start.min(end)..end.min(s.len())].to_string()))
+                    } else {
+                        RuntimeValue::nil()
+                    }
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            "string=" | "string-equal" => {
+                if args.len() >= 2 {
+                    let a = args[0].as_macro_value().as_string().unwrap_or("");
+                    let b = args[1].as_macro_value().as_string().unwrap_or("");
+                    RuntimeValue::Val(MacroValue::from_bool(a == b))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(false))
+                }
+            }
+            "string<" | "string-lessp" => {
+                if args.len() >= 2 {
+                    let a = args[0].as_macro_value().as_string().unwrap_or("");
+                    let b = args[1].as_macro_value().as_string().unwrap_or("");
+                    RuntimeValue::Val(MacroValue::from_bool(a < b))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(false))
+                }
+            }
+            "length" => {
+                if let Some(first) = args.first() {
+                    let len = match first.as_macro_value() {
+                        MacroValue::Nil => 0i64,
+                        MacroValue::String(s) => s.len() as i64,
+                        MacroValue::Cons(_) => {
+                            first.as_macro_value().to_vec().map(|v| v.len() as i64).unwrap_or(0)
+                        }
+                        MacroValue::Vector(v) => v.len() as i64,
+                        _ => 0,
+                    };
+                    RuntimeValue::Val(MacroValue::Int(len))
+                } else {
+                    RuntimeValue::Val(MacroValue::Int(0))
+                }
+            }
+            // List operations
+            "append" => {
+                let mut result = Vec::new();
+                for (i, arg) in args.iter().enumerate() {
+                    if i + 1 == args.len() {
+                        // Last arg: can be any value (dotted list tail)
+                        if let Some(vec) = arg.as_macro_value().to_vec() {
+                            result.extend(vec);
+                        } else {
+                            // Non-list last arg: just extend with the previous lists
+                        }
+                    } else if let Some(vec) = arg.as_macro_value().to_vec() {
+                        result.extend(vec);
+                    }
+                }
+                RuntimeValue::Val(MacroValue::list(result))
+            }
+            "nreverse" | "reverse" => {
+                if let Some(first) = args.first() {
+                    if let Some(mut vec) = first.as_macro_value().to_vec() {
+                        vec.reverse();
+                        RuntimeValue::Val(MacroValue::list(vec))
+                    } else {
+                        RuntimeValue::nil()
+                    }
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            "nthcdr" => {
+                if args.len() >= 2 {
+                    let mut n = args[0].as_i64().unwrap_or(0);
+                    let mut list = args[1].as_macro_value().clone();
+                    while n > 0 {
+                        list = list.cdr();
+                        n -= 1;
+                    }
+                    RuntimeValue::Val(list)
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            "last" => {
+                if args.len() >= 1 {
+                    let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
+                    RuntimeValue::Val(args[0].as_macro_value().last(n))
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            "butlast" => {
+                if args.len() >= 1 {
+                    let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
+                    RuntimeValue::Val(args[0].as_macro_value().butlast(n))
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            // Type predicates
+            "integerp" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::from_bool(matches!(first.as_macro_value(), MacroValue::Int(_))))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(false))
+                }
+            }
+            "stringp" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::from_bool(matches!(first.as_macro_value(), MacroValue::String(_))))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(false))
+                }
+            }
+            "atom" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::from_bool(!first.as_macro_value().is_cons()))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(true))
+                }
+            }
+            "zerop" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::from_bool(first.as_i64() == Some(0)))
+                } else {
+                    RuntimeValue::Val(MacroValue::from_bool(false))
+                }
+            }
+            "max" => {
+                let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
+                RuntimeValue::Val(MacroValue::Int(vals.into_iter().max().unwrap_or(0)))
+            }
+            "min" => {
+                let vals: Vec<i64> = args.iter().filter_map(|a| a.as_i64()).collect();
+                RuntimeValue::Val(MacroValue::Int(vals.into_iter().min().unwrap_or(0)))
+            }
+            "abs" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::Int(first.as_i64().unwrap_or(0).abs()))
+                } else {
+                    RuntimeValue::Val(MacroValue::Int(0))
+                }
+            }
+            "mod" => {
+                if args.len() >= 2 {
+                    let a = args[0].as_i64().unwrap_or(0);
+                    let b = args[1].as_i64().unwrap_or(1);
+                    if b != 0 {
+                        RuntimeValue::Val(MacroValue::Int(a % b))
+                    } else {
+                        RuntimeValue::nil()
+                    }
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
+            "number-to-string" | "int-to-string" => {
+                if let Some(first) = args.first() {
+                    RuntimeValue::Val(MacroValue::String(first.as_i64().unwrap_or(0).to_string()))
+                } else {
+                    RuntimeValue::Val(MacroValue::String("0".into()))
+                }
+            }
+            "string-to-number" => {
+                if let Some(first) = args.first() {
+                    let s = first.as_macro_value().as_string().unwrap_or("0");
+                    RuntimeValue::Val(MacroValue::Int(s.parse::<i64>().unwrap_or(0)))
+                } else {
+                    RuntimeValue::Val(MacroValue::Int(0))
+                }
+            }
+            "format" => {
+                // Simplified: just return the format string with %s/%d replaced
+                if !args.is_empty() {
+                    if let Some(fmt) = args[0].as_macro_value().as_string() {
+                        let mut formatted = fmt.to_string();
+                        for arg in &args[1..] {
+                            if let Some(pos) = formatted.find("%s").or(formatted.find("%d")) {
+                                let repl = arg.as_i64().map(|n| n.to_string())
+                                    .or_else(|| arg.as_macro_value().as_string().map(String::from))
+                                    .unwrap_or_else(|| arg.display_string());
+                                let before = formatted[..pos].to_string();
+                                let after = formatted[pos+2..].to_string();
+                                formatted = format!("{}{}{}", before, repl, after);
+                            }
+                        }
+                        RuntimeValue::Val(MacroValue::String(formatted))
+                    } else {
+                        RuntimeValue::nil()
+                    }
+                } else {
+                    RuntimeValue::nil()
+                }
+            }
             "message" => {
                 // (message fmt &rest args) — return nil
                 RuntimeValue::Val(MacroValue::Nil)
