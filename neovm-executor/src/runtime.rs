@@ -17,7 +17,6 @@ pub struct Runtime {
     features: Vec<LispValue>,
     nil_plist: LispValue,
     true_plist: LispValue,
-    pending_error: Option<RuntimeError>,
 }
 
 impl Default for Runtime {
@@ -35,7 +34,6 @@ impl Default for Runtime {
             features: Vec::new(),
             nil_plist: LispValue::NIL,
             true_plist: LispValue::NIL,
-            pending_error: None,
         }
     }
 }
@@ -56,11 +54,6 @@ impl Runtime {
         let addr = (&mut *cell as *mut Cons) as usize;
         self.cons_cells.push(cell);
         LispValue::from_heap_addr(addr)
-    }
-
-    pub fn cons_abi(&mut self, car: i64, cdr: i64) -> i64 {
-        self.cons(LispValue::from_abi_i64(car), LispValue::from_abi_i64(cdr))
-            .to_abi_i64()
     }
 
     pub fn string(&mut self, value: impl AsRef<str>) -> LispValue {
@@ -176,10 +169,6 @@ impl Runtime {
         Ok(self.expect_cons(pair)?.car)
     }
 
-    pub fn car_abi(&mut self, pair: i64) -> i64 {
-        self.return_or_record_error(self.car(LispValue::from_abi_i64(pair)))
-    }
-
     pub fn cdr(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -195,10 +184,6 @@ impl Runtime {
     pub fn set_cdr(&mut self, pair: LispValue, cdr: LispValue) -> Result<LispValue, RuntimeError> {
         self.expect_cons_mut(pair)?.cdr = cdr;
         Ok(cdr)
-    }
-
-    pub fn cdr_abi(&mut self, pair: i64) -> i64 {
-        self.return_or_record_error(self.cdr(LispValue::from_abi_i64(pair)))
     }
 
     pub fn is_cons(&self, value: LispValue) -> bool {
@@ -669,14 +654,6 @@ impl Runtime {
         Ok(value)
     }
 
-    pub fn pending_error(&self) -> Option<&RuntimeError> {
-        self.pending_error.as_ref()
-    }
-
-    pub fn take_pending_error(&mut self) -> Option<RuntimeError> {
-        self.pending_error.take()
-    }
-
     fn dynamic_symbol_value(&self, symbol: LispValue) -> Option<LispValue> {
         self.dynamic_binding_index(symbol)
             .map(|index| self.dynamic_bindings[index].value)
@@ -686,16 +663,6 @@ impl Runtime {
         self.dynamic_bindings
             .iter()
             .rposition(|binding| binding.symbol == symbol)
-    }
-
-    fn return_or_record_error(&mut self, result: Result<LispValue, RuntimeError>) -> i64 {
-        match result {
-            Ok(value) => value.to_abi_i64(),
-            Err(error) => {
-                self.pending_error = Some(error);
-                LispValue::NIL.to_abi_i64()
-            }
-        }
     }
 
     fn expect_cons(&self, value: LispValue) -> Result<&Cons, RuntimeError> {
@@ -1422,20 +1389,6 @@ mod tests {
     }
 
     #[test]
-    fn pair_abi_methods_use_lisp_value_bits() {
-        let mut runtime = Runtime::new();
-        let car = LispValue::expect_fixnum(11);
-        let cdr = LispValue::expect_fixnum(12);
-
-        let pair = LispValue::from_abi_i64(runtime.cons_abi(car.to_abi_i64(), cdr.to_abi_i64()));
-
-        assert!(pair.is_heap());
-        assert_eq!(runtime.car_abi(pair.to_abi_i64()), car.to_abi_i64());
-        assert_eq!(runtime.cdr_abi(pair.to_abi_i64()), cdr.to_abi_i64());
-        assert_eq!(runtime.pending_error(), None);
-    }
-
-    #[test]
     fn car_and_cdr_of_nil_are_nil() {
         let runtime = Runtime::new();
 
@@ -1724,24 +1677,5 @@ mod tests {
                 name: "dyn".to_string()
             })
         );
-    }
-
-    #[test]
-    fn abi_methods_record_pending_errors() {
-        let mut runtime = Runtime::new();
-        let value = LispValue::expect_fixnum(7);
-
-        assert_eq!(
-            runtime.car_abi(value.to_abi_i64()),
-            LispValue::NIL.to_abi_i64()
-        );
-        assert_eq!(
-            runtime.take_pending_error(),
-            Some(RuntimeError::WrongTypeArgument {
-                expected: "consp",
-                value
-            })
-        );
-        assert_eq!(runtime.pending_error(), None);
     }
 }

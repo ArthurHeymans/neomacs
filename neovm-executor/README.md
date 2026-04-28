@@ -8,7 +8,6 @@ Current scope:
 - Run Register IR through the runtime-backed object interpreter.
 - Define the executor-side `LispValue` tagged-word ABI carrier.
 - Own the runtime heap used by returned `LispValue` object references.
-- Expose temporary raw-bit ABI adapters for those pair operations.
 - Keep execution policy outside the compiler crate.
 - Provide a development CLI:
 
