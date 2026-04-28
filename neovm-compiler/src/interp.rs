@@ -336,15 +336,18 @@ impl Interpreter<'_, '_> {
                 let Some(args) = self.get_many(args) else {
                     return false;
                 };
-                let value = match self.execute_primitive_call(name, &args) {
-                    PrimResult::Value(value) => value,
-                    PrimResult::Unknown => {
-                        let Some(value) = self.execute_module_call(name, &args) else {
+                // Try module function first (user-defined functions override builtins)
+                let value = if let Some(value) = self.try_module_call(name, &args) {
+                    value
+                } else {
+                    match self.execute_primitive_call(name, &args) {
+                        PrimResult::Value(value) => value,
+                        PrimResult::Unknown => {
+                            self.unsupported(format!("named call `{name}` requires runtime support"));
                             return false;
-                        };
-                        value
+                        }
+                        PrimResult::Error => return false,
                     }
-                    PrimResult::Error => return false,
                 };
                 self.set(*dst, value);
             }
@@ -499,12 +502,17 @@ impl Interpreter<'_, '_> {
     }
 
     fn execute_module_call(&mut self, name: &str, args: &[RuntimeValue]) -> Option<RuntimeValue> {
-        let (Some(module), Some(functions_by_name)) = (self.module, self.functions_by_name) else {
+        self.try_module_call(name, args).or_else(|| {
             self.unsupported(format!("named call `{name}` requires runtime support"));
+            None
+        })
+    }
+
+    fn try_module_call(&mut self, name: &str, args: &[RuntimeValue]) -> Option<RuntimeValue> {
+        let (Some(module), Some(functions_by_name)) = (self.module, self.functions_by_name) else {
             return None;
         };
         let Some(function_id) = functions_by_name.get(name).copied() else {
-            self.unsupported(format!("named call `{name}` requires runtime support"));
             return None;
         };
         let Some(function) = module.functions.get(function_id) else {
