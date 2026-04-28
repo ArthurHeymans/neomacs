@@ -60,7 +60,7 @@ enum TokenKind {
     Float(f64),
     #[regex(r"[+-]?[0-9]+", parse_int, priority = 4)]
     Int(i64),
-    #[regex(r#"[^\s()\[\]'"`,;]+"#, |lexer| lexer.slice().to_string(), priority = 1)]
+    #[regex(r#"[^\s()\[\]'"`,;]+"#, lex_symbol, priority = 1)]
     Symbol(String),
 }
 
@@ -206,10 +206,139 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                 continue;
             }
         }
+        // Case 5: Escaped chars in symbol names. Elisp allows `\` followed
+        // by any delimiter character within a symbol name. The Symbol regex
+        // stops at delimiters, so `\`` becomes Symbol(`\`) + Backquote.
+        // Merge them into a single Symbol whose name has the backslash removed
+        // (the escaped char IS the symbol character).
+        // Also handles `\,@` where CommaAt(`,@`) is the next token — the
+        // escaped char is `,` and `@` continues the symbol name.
+        if matches!(&tok.kind, TokenKind::Symbol(s) if s.ends_with('\\'))
+            && i + 1 < raw_tokens.len()
+        {
+            let next = &raw_tokens[i + 1];
+            let escaped_text: Option<&str> = match &next.kind {
+                TokenKind::Backquote => Some("`"),
+                TokenKind::Comma => Some(","),
+                TokenKind::CommaAt => Some(",@"),
+                TokenKind::Quote => Some("'"),
+                TokenKind::LParen => Some("("),
+                TokenKind::RParen => Some(")"),
+                TokenKind::LBracket => Some("["),
+                TokenKind::RBracket => Some("]"),
+                TokenKind::Comment if next.text.starts_with(';') => Some(";"),
+                TokenKind::String(_) => Some("\""),
+                _ => None,
+            };
+            if let Some(escaped) = escaped_text {
+                // Remove trailing backslash from symbol name, append the escaped text
+                let base = &tok.text[..tok.text.len() - 1];
+                let decoded = format!("{base}{escaped}");
+                tokens.push(Token {
+                    kind: TokenKind::Symbol(decoded.clone()),
+                    span: tok.span,
+                    text: decoded,
+                });
+                i += 2;
+                continue;
+            }
+        }
         tokens.push(raw_tokens[i].clone());
         i += 1;
     }
     tokens
+}
+
+/// Delimiter bytes that terminate symbol names (without `\` escape).
+const DELIMITER_BYTES: &[u8] = b" \t\r\n\x0c\x0b()[]{}'\"`,;";
+
+fn is_symbol_byte(b: u8) -> bool {
+    !DELIMITER_BYTES.contains(&b)
+}
+
+/// Custom symbol lexer that handles `\` escape sequences within symbol names.
+/// In elisp, `\` followed by any character includes that character in the
+/// symbol name. So `\,` is a symbol named `,`, `\,.` is a symbol named `,.`,
+/// and `\,@` is a symbol named `,@`.
+fn lex_symbol(lexer: &mut logos::Lexer<'_, TokenKind>) -> String {
+    let initial = lexer.slice();
+    let remainder = lexer.remainder();
+    let bytes = remainder.as_bytes();
+    let mut i = 0;
+    let mut raw_end = 0; // extra bytes consumed from remainder
+
+    // If the initial match ended with `\`, or if we encounter `\` during
+    // extension, consume the next char (escaped delimiter) + more symbol chars.
+    let needs_escape_continuation = initial.as_bytes().last() == Some(&b'\\');
+
+    if !needs_escape_continuation && !bytes.contains(&b'\\') {
+        // Fast path: no backslash in initial or remainder, just return as-is
+        return initial.to_string();
+    }
+
+    // Slow path: need to handle `\` escapes
+    let mut decoded = String::new();
+    let mut chars = initial.chars();
+    let mut pending_backslash = false;
+
+    // Process initial match
+    while let Some(ch) = chars.next() {
+        if pending_backslash {
+            decoded.push(ch);
+            pending_backslash = false;
+        } else if ch == '\\' {
+            // Check if this is an escape (backslash at end of initial, or
+            // followed by a delimiter in the remainder)
+            if chars.as_str().is_empty() && i < bytes.len() && !is_symbol_byte(bytes[i]) {
+                // Backslash at end of initial, next byte is a delimiter — escape it
+                decoded.push(bytes[i] as char);
+                raw_end += 1;
+                i += 1;
+                // Continue consuming symbol chars after the escaped delimiter
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        decoded.push(bytes[i + 1] as char);
+                        i += 2;
+                        raw_end += 2;
+                    } else if is_symbol_byte(bytes[i]) {
+                        decoded.push(bytes[i] as char);
+                        i += 1;
+                        raw_end += 1;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                // Backslash followed by symbol char — it's literal `\` in name
+                decoded.push('\\');
+                pending_backslash = false;
+            }
+        } else {
+            decoded.push(ch);
+        }
+    }
+
+    // Process remainder
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            // Backslash escape: next byte is part of the symbol name
+            decoded.push(bytes[i + 1] as char);
+            i += 2;
+            raw_end += 2;
+        } else if is_symbol_byte(bytes[i]) {
+            decoded.push(bytes[i] as char);
+            i += 1;
+            raw_end += 1;
+        } else {
+            break;
+        }
+    }
+
+    if raw_end > 0 {
+        lexer.bump(raw_end);
+    }
+
+    decoded
 }
 
 fn lex_string(lexer: &mut logos::Lexer<'_, TokenKind>) -> String {
@@ -431,20 +560,21 @@ impl Parser<'_> {
     }
 
     fn parse_invalid_hash_list(&mut self, start_span: Span) -> bool {
-        self.builder.start_node(SyntaxKind::Error.into());
-        self.error(start_span, "invalid read syntax: #(");
-        self.bump();
+        // Parse #(...) as a list — Emacs uses this for string-with-text-properties
+        // and byte-code objects. We treat the contents as a normal list.
+        self.builder.start_node(SyntaxKind::List.into());
+        self.bump(); // consume #(
         loop {
             self.bump_trivia();
             let Some(token) = self.peek().cloned() else {
-                self.error(start_span, "unterminated invalid #(...) form");
+                self.error(start_span, "unterminated #(...) form");
                 self.builder.finish_node();
                 return false;
             };
             if matches!(token.kind, TokenKind::RParen) {
                 self.bump();
                 self.builder.finish_node();
-                return false;
+                return true;
             }
             if !self.parse_form() {
                 if self.is_eof() {
@@ -852,15 +982,10 @@ mod tests {
     }
 
     #[test]
-    fn reports_hash_paren_as_invalid_gnu_read_syntax() {
+    fn parses_hash_paren_as_list() {
         let output = read("#(1 2)");
-        assert!(
-            output
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.message.contains("invalid read syntax: #("))
-        );
-        assert!(output.forms.is_empty());
+        assert_eq!(output.diagnostics, Vec::new());
+        assert_eq!(output.forms.len(), 1);
     }
 
     #[test]
@@ -869,5 +994,14 @@ mod tests {
         assert!(output.diagnostics.iter().any(|diagnostic| {
             diagnostic.is_error() && diagnostic.message.contains("unterminated list")
         }));
+    }
+
+    #[test]
+    fn reads_escaped_symbols() {
+        // `\,` in elisp is the symbol named ","
+        // `'\,` is the quoted symbol ","
+        let output = read("'\\,");  // Rust raw string: ' \ ,
+        assert_eq!(output.diagnostics, Vec::new());
+        assert_eq!(output.forms.len(), 1);
     }
 }
