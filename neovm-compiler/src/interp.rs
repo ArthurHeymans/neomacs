@@ -1036,6 +1036,15 @@ fn eval_i64_primitive(name: &str, args: &[i64]) -> Option<Result<i64, ()>> {
             [v] => v.checked_neg(),
             [first, rest @ ..] => checked_fold(*first, rest, i64::checked_sub),
         },
+        "/" => {
+            if args.is_empty() { return None; }
+            let first = *args.first()?;
+            if args.len() == 1 { return Some(Ok(first)); }
+            let rest = &args[1..];
+            rest.iter().try_fold(first, |acc, &v| {
+                if v == 0 { None } else { Some(acc / v) }
+            })
+        }
         "1+" => args.first()?.checked_add(1),
         "1-" => args.first()?.checked_sub(1),
         "=" => Some(bool_value(args.windows(2).all(|pair| pair[0] == pair[1]))),
