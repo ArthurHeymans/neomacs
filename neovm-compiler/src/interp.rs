@@ -13,6 +13,10 @@ use crate::surface::{SurfaceAtom, SurfaceKind};
 
 thread_local! {
     static DYNAMIC_VARS: RefCell<HashMap<String, RuntimeValue>> = RefCell::new(HashMap::new());
+    static CELL_MAP: RefCell<HashMap<u64, RuntimeValue>> = RefCell::new(HashMap::new());
+    static NEXT_CELL_ID: RefCell<u64> = RefCell::new(1);
+    static CLOSURE_ENVS: RefCell<HashMap<u64, HashMap<String, RuntimeValue>>> = RefCell::new(HashMap::new());
+    static NEXT_CLOSURE_ID: RefCell<u64> = RefCell::new(1);
 }
 
 fn dynamic_get(name: &str) -> RuntimeValue {
@@ -26,6 +30,51 @@ fn dynamic_set(name: &str, value: RuntimeValue) -> RuntimeValue {
         vars.borrow_mut().insert(name.to_string(), value.clone());
     });
     value
+}
+
+fn alloc_cell_id() -> u64 {
+    NEXT_CELL_ID.with(|next| {
+        let mut n = next.borrow_mut();
+        let id = *n;
+        *n += 1;
+        id
+    })
+}
+
+fn cell_alloc(initial: RuntimeValue) -> RuntimeValue {
+    let id = alloc_cell_id();
+    CELL_MAP.with(|cells| { cells.borrow_mut().insert(id, initial); });
+    RuntimeValue::Val(MacroValue::Int(id as i64))
+}
+
+fn cell_get(cell_id: i64) -> RuntimeValue {
+    CELL_MAP.with(|cells| {
+        cells.borrow().get(&(cell_id as u64)).cloned().unwrap_or_else(RuntimeValue::nil)
+    })
+}
+
+fn cell_set(cell_id: i64, value: RuntimeValue) -> RuntimeValue {
+    CELL_MAP.with(|cells| { cells.borrow_mut().insert(cell_id as u64, value.clone()); });
+    value
+}
+
+fn alloc_closure_env(env: HashMap<String, RuntimeValue>) -> u64 {
+    let id = NEXT_CLOSURE_ID.with(|next| {
+        let mut n = next.borrow_mut();
+        let id = *n;
+        *n += 1;
+        id
+    });
+    CLOSURE_ENVS.with(|envs| { envs.borrow_mut().insert(id, env); });
+    id
+}
+
+fn get_closure_env(id: u64) -> HashMap<String, RuntimeValue> {
+    CLOSURE_ENVS.with(|envs| envs.borrow().get(&id).cloned().unwrap_or_default())
+}
+
+fn put_closure_env(id: u64, env: HashMap<String, RuntimeValue>) {
+    CLOSURE_ENVS.with(|envs| { envs.borrow_mut().insert(id, env); });
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -112,6 +161,7 @@ pub enum RuntimeValue {
     Closure {
         template: SsaLambdaTemplate,
         captured: Vec<RuntimeValue>,
+        env_id: u64,
     },
 }
 
@@ -144,7 +194,19 @@ impl RuntimeValue {
     fn as_macro_value(&self) -> &MacroValue {
         match self {
             RuntimeValue::Val(v) => v,
-            RuntimeValue::Closure { .. } => &MacroValue::Nil,
+            RuntimeValue::Closure { .. } => {
+                // Closures coerce to Nil for MacroValue operations
+                // We can't use a static due to Rc<MacroCons> not being Send+Sync,
+                // so we use a transmute of a local Nil lifetime.
+                // SAFETY: MacroValue::Nil contains no Rc, so the reference is valid
+                // for as long as the caller needs it within this expression.
+                #[inline(always)]
+                fn nil_ref() -> &'static MacroValue {
+                    const NIL: MacroValue = MacroValue::Nil;
+                    &NIL
+                }
+                nil_ref()
+            }
         }
     }
 
@@ -155,9 +217,9 @@ impl RuntimeValue {
     fn display_string(&self) -> String {
         match self {
             RuntimeValue::Val(v) => format_value(v),
-            RuntimeValue::Closure { template, .. } => {
+            RuntimeValue::Closure { template, env_id, .. } => {
                 let n_params = template.params.required.len();
-                format!("<closure with {} params>", n_params)
+                format!("<closure:{} with {} params>", env_id, n_params)
             }
         }
     }
@@ -371,8 +433,8 @@ impl Interpreter<'_, '_> {
                             PrimResult::Error => return false,
                         }
                     }
-                    RuntimeValue::Closure { template, captured } => {
-                        match self.execute_closure(template, captured, &args) {
+                    RuntimeValue::Closure { template, captured, env_id } => {
+                        match self.execute_closure(template, captured, *env_id, &args) {
                             Some(v) => v,
                             None => return false,
                         }
@@ -389,40 +451,41 @@ impl Interpreter<'_, '_> {
                     .iter()
                     .filter_map(|reg| self.get(*reg))
                     .collect();
+                let mut env = HashMap::new();
+                for (i, cap) in template.captures.iter().enumerate() {
+                    if let Some(val) = captured.get(i) {
+                        env.insert(cap.name.clone(), val.clone());
+                    }
+                }
+                let env_id = alloc_closure_env(env);
                 self.set(*dst, RuntimeValue::Closure {
                     template: template.clone(),
                     captured,
+                    env_id,
                 });
             }
             RegInstKind::MakeLexicalCell { dst, initial } => {
                 let Some(value) = self.get(*initial) else {
                     return false;
                 };
-                let cell_val = match &value {
-                    RuntimeValue::Val(v) => v.clone(),
-                    RuntimeValue::Closure { .. } => MacroValue::Nil,
-                };
-                self.set(*dst, RuntimeValue::Val(MacroValue::cons(cell_val, MacroValue::Nil)));
+                self.set(*dst, cell_alloc(value));
             }
             RegInstKind::LexicalCellGet { dst, cell } => {
                 let Some(cell_val) = self.get(*cell) else {
                     return false;
                 };
-                if let RuntimeValue::Val(MacroValue::Cons(c)) = &cell_val {
-                    self.set(*dst, RuntimeValue::Val(c.car.clone()));
-                } else {
-                    self.set(*dst, RuntimeValue::nil());
-                }
+                let id = cell_val.as_i64().unwrap_or(0);
+                self.set(*dst, cell_get(id));
             }
             RegInstKind::LexicalCellSet { dst, cell, src } => {
-                let Some(_cell_val) = self.get(*cell) else {
+                let Some(cell_val) = self.get(*cell) else {
                     return false;
                 };
                 let Some(value) = self.get(*src) else {
                     return false;
                 };
-                // Cells are immutable in our representation — just set dst to value
-                self.set(*dst, value);
+                let id = cell_val.as_i64().unwrap_or(0);
+                self.set(*dst, cell_set(id, value));
             }
             RegInstKind::BindDynamic { name, src } => {
                 let Some(value) = self.get(*src) else {
@@ -479,8 +542,8 @@ impl Interpreter<'_, '_> {
                             PrimResult::Error => return false,
                         }
                     }
-                    RuntimeValue::Closure { template, captured } => {
-                        match self.execute_closure(template, captured, &spread_args) {
+                    RuntimeValue::Closure { template, captured, env_id } => {
+                        match self.execute_closure(template, captured, *env_id, &spread_args) {
                             Some(v) => v,
                             None => return false,
                         }
@@ -580,14 +643,15 @@ impl Interpreter<'_, '_> {
         &mut self,
         template: &SsaLambdaTemplate,
         captured: &[RuntimeValue],
+        env_id: u64,
         args: &[RuntimeValue],
     ) -> Option<RuntimeValue> {
-        let mut env: HashMap<String, RuntimeValue> = HashMap::new();
+        let mut env = get_closure_env(env_id);
 
-        // Bind captured values
+        // Bind captured values (first call only — env already has them on subsequent calls)
         for (i, capture) in template.captures.iter().enumerate() {
             if let Some(val) = captured.get(i) {
-                env.insert(capture.name.clone(), val.clone());
+                env.entry(capture.name.clone()).or_insert_with(|| val.clone());
             }
         }
 
@@ -595,7 +659,11 @@ impl Interpreter<'_, '_> {
         bind_lambda_params(&template.params, args, &mut env);
 
         // Interpret the HIR body
-        eval_hir_expr(&template.body, &env, self.module, self.functions_by_name, self.fuel, &mut self.diagnostics)
+        let result = eval_hir_expr(&template.body, &mut env, self.module, self.functions_by_name, self.fuel, &mut self.diagnostics);
+
+        // Persist updated env for next call
+        put_closure_env(env_id, env);
+        result
     }
 }
 
@@ -649,7 +717,7 @@ fn bind_lambda_params(params: &LambdaList, args: &[RuntimeValue], env: &mut Hash
 /// Interpret an HIR expression tree directly.
 fn eval_hir_expr(
     expr: &HirExpr,
-    env: &HashMap<String, RuntimeValue>,
+    env: &mut HashMap<String, RuntimeValue>,
     module: Option<&RegModule>,
     functions_by_name: Option<&HashMap<String, FunctionId>>,
     fuel: &mut usize,
@@ -669,7 +737,7 @@ fn eval_hir_expr(
         HirExprKind::LexicalGet(name) => Some(env.get(name).cloned().unwrap_or_else(RuntimeValue::nil)),
         HirExprKind::LexicalSet { name, value } => {
             let val = eval_hir_expr(value, env, module, functions_by_name, fuel, diagnostics)?;
-            // Return the value (lexicals are immutable in HIR, but set returns the value)
+            env.insert(name.clone(), val.clone());
             Some(val)
         }
         HirExprKind::SymbolGet(name) => Some(dynamic_get(name)),
@@ -708,26 +776,27 @@ fn eval_hir_expr(
             }
             Some(last)
         }
-        HirExprKind::Let { mode, sequential, bindings, body, .. } => {
+        HirExprKind::Let { mode: _, sequential: _, bindings, body, .. } => {
             let mut inner_env = env.clone();
             for binding in bindings {
-                let val = eval_hir_expr(&binding.init, &inner_env, module, functions_by_name, fuel, diagnostics)?;
+                let val = eval_hir_expr(&binding.init, &mut inner_env, module, functions_by_name, fuel, diagnostics)?;
                 inner_env.insert(binding.name.clone(), val);
             }
-            eval_hir_expr(body, &inner_env, module, functions_by_name, fuel, diagnostics)
+            eval_hir_expr(body, &mut inner_env, module, functions_by_name, fuel, diagnostics)
         }
         HirExprKind::Lambda { params, body, .. } => {
-            // Create a closure template with no captures (captures from current env
-            // would need free variable analysis — for now, captures are empty)
             let template = SsaLambdaTemplate {
                 params: params.clone(),
                 captures: Vec::new(),
                 declarations: Vec::new(),
                 body: body.clone(),
             };
+            // Capture the current lexical environment into a shared closure env
+            let env_id = alloc_closure_env(env.clone());
             Some(RuntimeValue::Closure {
                 template,
                 captured: Vec::new(),
+                env_id,
             })
         }
         HirExprKind::Declare(_) => Some(RuntimeValue::nil()),
@@ -815,15 +884,17 @@ fn eval_call(
                 }
             }
         }
-        RuntimeValue::Closure { template, captured } => {
-            let mut closure_env: HashMap<String, RuntimeValue> = HashMap::new();
+        RuntimeValue::Closure { template, captured, env_id } => {
+            let mut closure_env = get_closure_env(*env_id);
             for (i, capture) in template.captures.iter().enumerate() {
                 if let Some(val) = captured.get(i) {
-                    closure_env.insert(capture.name.clone(), val.clone());
+                    closure_env.entry(capture.name.clone()).or_insert_with(|| val.clone());
                 }
             }
             bind_lambda_params(&template.params, args, &mut closure_env);
-            eval_hir_expr(&template.body, &closure_env, module, functions_by_name, fuel, diagnostics)
+            let result = eval_hir_expr(&template.body, &mut closure_env, module, functions_by_name, fuel, diagnostics);
+            put_closure_env(*env_id, closure_env);
+            result
         }
         _ => Some(RuntimeValue::nil()),
     }
