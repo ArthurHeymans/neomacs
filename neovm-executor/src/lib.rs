@@ -10,44 +10,24 @@ pub use object_interp::ObjectInterpResult;
 pub use runtime::{Runtime, RuntimeError};
 pub use value::LispValue;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Engine {
-    ObjectInterpreter,
-}
-
-impl Engine {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::ObjectInterpreter => "object-interp",
-        }
-    }
-}
-
 pub struct ExecuteArtifact {
     pub compile: CompileArtifact,
     pub result: ObjectInterpResult,
     pub runtime: Runtime,
-    pub engine: Engine,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Executor {
-    engine: Engine,
-}
+pub struct Executor;
 
 impl Default for Executor {
     fn default() -> Self {
-        Self::new(Engine::ObjectInterpreter)
+        Self
     }
 }
 
 impl Executor {
-    pub fn new(engine: Engine) -> Self {
-        Self { engine }
-    }
-
-    pub fn engine(&self) -> Engine {
-        self.engine
+    pub fn new() -> Self {
+        Self
     }
 
     pub fn execute_source(
@@ -56,9 +36,7 @@ impl Executor {
         text: impl Into<String>,
         args: &[i64],
     ) -> ExecuteArtifact {
-        match self.engine {
-            Engine::ObjectInterpreter => execute_with_object_interpreter(name, text, args),
-        }
+        execute_with_object_interpreter(name, text, args)
     }
 
     pub fn execute_file(
@@ -126,13 +104,12 @@ fn execute_with_object_interpreter(
         compile,
         result: ObjectInterpResult { value, diagnostics },
         runtime,
-        engine: Engine::ObjectInterpreter,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Engine, Executor, LispValue, execute_source};
+    use super::{Executor, LispValue, execute_source};
 
     #[test]
     fn executes_runtime_free_source_with_default_object_interpreter() {
@@ -142,7 +119,6 @@ mod tests {
             &[],
         );
 
-        assert_eq!(artifact.engine, Engine::ObjectInterpreter);
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(16)));
     }
@@ -191,7 +167,7 @@ mod tests {
 
     #[test]
     fn object_interpreter_executes_pair_primitives() {
-        let executor = Executor::new(Engine::ObjectInterpreter);
+        let executor = Executor::new();
         let artifact = executor.execute_source(
             "pair.el",
             ";;; -*- lexical-binding: t; -*-\n(car (cons 1 2))",
@@ -204,7 +180,7 @@ mod tests {
 
     #[test]
     fn object_interpreter_executes_list_primitives() {
-        let executor = Executor::new(Engine::ObjectInterpreter);
+        let executor = Executor::new();
         let artifact = executor.execute_source(
             "list.el",
             ";;; -*- lexical-binding: t; -*-\n(length (reverse (list 1 2 3)))",

@@ -367,7 +367,7 @@ machine-code emission.
 The execution development CLI entrypoint is:
 
 ```text
-neovm-executor run [--engine=object-interp] <file.el> [i64-arg ...]
+neovm-executor run <file.el> [i64-arg ...]
 ```
 
 ## Cranelift Backend

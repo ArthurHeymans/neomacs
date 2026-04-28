@@ -13,7 +13,7 @@ Current scope:
 - Provide a development CLI:
 
 ```text
-neovm-executor run [--engine=object-interp] <file.el> [i64-arg ...]
+neovm-executor run <file.el> [i64-arg ...]
 ```
 
 Planned scope:
