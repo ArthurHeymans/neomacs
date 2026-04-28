@@ -1205,7 +1205,7 @@ impl MacroEval {
                 self.eval(body_form, env)?;
             }
             iterations += 1;
-            if iterations > 50000 {
+            if iterations > 1000 {
                 self.error(span, "while loop exceeded iteration limit");
                 return Err(());
             }
