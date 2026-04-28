@@ -1450,7 +1450,7 @@ impl MacroEval {
 
     fn eval_concat(
         &mut self,
-        span: Span,
+        _span: Span,
         args: &[SurfaceForm],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {

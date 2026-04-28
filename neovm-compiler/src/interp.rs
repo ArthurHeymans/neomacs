@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
@@ -167,11 +168,19 @@ fn execute_with_module<'ir>(
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
     Val(MacroValue),
+    Cons(Rc<RuntimeCons>),
+    Vector(Vec<RuntimeValue>),
     Closure {
         template: SsaLambdaTemplate,
         captured: Vec<RuntimeValue>,
         env_id: u64,
     },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuntimeCons {
+    pub car: RuntimeValue,
+    pub cdr: RuntimeValue,
 }
 
 impl std::fmt::Display for RuntimeValue {
@@ -189,8 +198,41 @@ impl RuntimeValue {
         RuntimeValue::Val(MacroValue::Nil)
     }
 
+    fn cons(car: RuntimeValue, cdr: RuntimeValue) -> Self {
+        RuntimeValue::Cons(Rc::new(RuntimeCons { car, cdr }))
+    }
+
+    fn list(items: Vec<RuntimeValue>) -> Self {
+        let mut tail = RuntimeValue::nil();
+        for item in items.into_iter().rev() {
+            tail = RuntimeValue::cons(item, tail);
+        }
+        tail
+    }
+
+    fn from_macro_value(value: MacroValue) -> Self {
+        match value {
+            MacroValue::Cons(cell) => RuntimeValue::cons(
+                RuntimeValue::from_macro_value(cell.car.clone()),
+                RuntimeValue::from_macro_value(cell.cdr.clone()),
+            ),
+            MacroValue::Vector(items) => RuntimeValue::Vector(
+                items.into_iter().map(RuntimeValue::from_macro_value).collect(),
+            ),
+            atom => RuntimeValue::Val(atom),
+        }
+    }
+
     fn is_nil(&self) -> bool {
         matches!(self, RuntimeValue::Val(MacroValue::Nil))
+    }
+
+    fn is_cons(&self) -> bool {
+        matches!(self, RuntimeValue::Cons(_) | RuntimeValue::Val(MacroValue::Cons(_)))
+    }
+
+    fn is_list(&self) -> bool {
+        self.is_nil() || self.is_cons()
     }
 
     fn as_i64(&self) -> Option<i64> {
@@ -200,32 +242,85 @@ impl RuntimeValue {
         }
     }
 
-    fn as_macro_value(&self) -> &MacroValue {
+    fn as_string(&self) -> Option<&str> {
         match self {
-            RuntimeValue::Val(v) => v,
-            RuntimeValue::Closure { .. } => {
-                // Closures coerce to Nil for MacroValue operations
-                // We can't use a static due to Rc<MacroCons> not being Send+Sync,
-                // so we use a transmute of a local Nil lifetime.
-                // SAFETY: MacroValue::Nil contains no Rc, so the reference is valid
-                // for as long as the caller needs it within this expression.
-                #[inline(always)]
-                fn nil_ref() -> &'static MacroValue {
-                    const NIL: MacroValue = MacroValue::Nil;
-                    &NIL
+            RuntimeValue::Val(MacroValue::String(s)) => Some(s),
+            _ => None,
+        }
+    }
+
+    fn car(&self) -> RuntimeValue {
+        match self {
+            RuntimeValue::Cons(cell) => cell.car.clone(),
+            RuntimeValue::Val(MacroValue::Cons(cell)) => RuntimeValue::from_macro_value(cell.car.clone()),
+            _ => RuntimeValue::nil(),
+        }
+    }
+
+    fn cdr(&self) -> RuntimeValue {
+        match self {
+            RuntimeValue::Cons(cell) => cell.cdr.clone(),
+            RuntimeValue::Val(MacroValue::Cons(cell)) => RuntimeValue::from_macro_value(cell.cdr.clone()),
+            _ => RuntimeValue::nil(),
+        }
+    }
+
+    fn to_vec(&self) -> Option<Vec<RuntimeValue>> {
+        let mut items = Vec::new();
+        let mut current = self.clone();
+        loop {
+            match current {
+                RuntimeValue::Val(MacroValue::Nil) => return Some(items),
+                RuntimeValue::Cons(cell) => {
+                    items.push(cell.car.clone());
+                    current = cell.cdr.clone();
                 }
-                nil_ref()
+                RuntimeValue::Val(MacroValue::Cons(cell)) => {
+                    items.push(RuntimeValue::from_macro_value(cell.car.clone()));
+                    current = RuntimeValue::from_macro_value(cell.cdr.clone());
+                }
+                _ => return None,
             }
         }
     }
 
-    fn is_closure(&self) -> bool {
-        matches!(self, RuntimeValue::Closure { .. })
+    fn equal_value(&self, other: &RuntimeValue) -> bool {
+        match (self, other) {
+            (RuntimeValue::Val(a), RuntimeValue::Val(b)) => a == b,
+            (RuntimeValue::Cons(a), RuntimeValue::Cons(b)) => {
+                a.car.equal_value(&b.car) && a.cdr.equal_value(&b.cdr)
+            }
+            (RuntimeValue::Vector(a), RuntimeValue::Vector(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.equal_value(b))
+            }
+            (RuntimeValue::Closure { env_id: a, .. }, RuntimeValue::Closure { env_id: b, .. }) => a == b,
+            (RuntimeValue::Val(MacroValue::Cons(_)), RuntimeValue::Cons(_))
+            | (RuntimeValue::Cons(_), RuntimeValue::Val(MacroValue::Cons(_))) => {
+                let Some(left) = self.to_vec() else { return false; };
+                let Some(right) = other.to_vec() else { return false; };
+                left.len() == right.len() && left.iter().zip(&right).all(|(a, b)| a.equal_value(b))
+            }
+            (RuntimeValue::Val(MacroValue::Vector(a)), RuntimeValue::Vector(b))
+            | (RuntimeValue::Vector(b), RuntimeValue::Val(MacroValue::Vector(a))) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .cloned()
+                        .map(RuntimeValue::from_macro_value)
+                        .zip(b)
+                        .all(|(a, b)| a.equal_value(b))
+            }
+            _ => false,
+        }
     }
 
     fn display_string(&self) -> String {
         match self {
-            RuntimeValue::Val(v) => format_value(v),
+            RuntimeValue::Val(v) => format_runtime_value(&RuntimeValue::from_macro_value(v.clone())),
+            RuntimeValue::Cons(_) => format_runtime_value(self),
+            RuntimeValue::Vector(items) => {
+                let parts: Vec<_> = items.iter().map(RuntimeValue::display_string).collect();
+                format!("[{}]", parts.join(" "))
+            }
             RuntimeValue::Closure { template, env_id, .. } => {
                 let n_params = template.params.required.len();
                 format!("<closure:{} with {} params>", env_id, n_params)
@@ -235,27 +330,39 @@ impl RuntimeValue {
 }
 
 fn format_value(v: &MacroValue) -> String {
-    match v {
-        MacroValue::Nil => "nil".to_string(),
-        MacroValue::Int(n) => n.to_string(),
-        MacroValue::Symbol(s) => s.clone(),
-        MacroValue::String(s) => format!("\"{s}\""),
-        MacroValue::Cons(cell) => {
+    format_runtime_value(&RuntimeValue::from_macro_value(v.clone()))
+}
+
+fn format_runtime_value(value: &RuntimeValue) -> String {
+    match value {
+        RuntimeValue::Val(MacroValue::Nil) => "nil".to_string(),
+        RuntimeValue::Val(MacroValue::Int(n)) => n.to_string(),
+        RuntimeValue::Val(MacroValue::Symbol(s)) => s.clone(),
+        RuntimeValue::Val(MacroValue::String(s)) => format!("\"{s}\""),
+        RuntimeValue::Val(MacroValue::Cons(_)) | RuntimeValue::Cons(_) => {
             let mut parts = Vec::new();
-            let mut current = v.clone();
-            while let MacroValue::Cons(c) = &current {
-                parts.push(format_value(&c.car));
-                current = c.cdr.clone();
+            let mut current = value.clone();
+            while current.is_cons() {
+                parts.push(current.car().display_string());
+                current = current.cdr();
             }
             if current.is_nil() {
                 format!("({})", parts.join(" "))
             } else {
-                format!("({} . {})", parts.join(" "), format_value(&current))
+                format!("({} . {})", parts.join(" "), current.display_string())
             }
         }
-        MacroValue::Vector(vec) => {
+        RuntimeValue::Val(MacroValue::Vector(vec)) => {
             let parts: Vec<_> = vec.iter().map(format_value).collect();
             format!("[{}]", parts.join(" "))
+        }
+        RuntimeValue::Vector(items) => {
+            let parts: Vec<_> = items.iter().map(RuntimeValue::display_string).collect();
+            format!("[{}]", parts.join(" "))
+        }
+        RuntimeValue::Closure { template, env_id, .. } => {
+            let n_params = template.params.required.len();
+            format!("<closure:{} with {} params>", env_id, n_params)
         }
     }
 }
@@ -734,11 +841,7 @@ fn adapt_args_to_lambda(lambda_list: &LambdaList, args: &[RuntimeValue], entry_p
         }
     }
 
-    let rest_vals: Vec<MacroValue> = args[fixed_count.min(args.len())..]
-        .iter()
-        .map(|a| a.as_macro_value().clone())
-        .collect();
-    adapted.push(RuntimeValue::Val(MacroValue::list(rest_vals)));
+    adapted.push(RuntimeValue::list(args[fixed_count.min(args.len())..].to_vec()));
 
     adapted
 }
@@ -751,16 +854,15 @@ fn spread_apply_args(args: &[RuntimeValue]) -> Vec<RuntimeValue> {
     }
     let mut result: Vec<RuntimeValue> = args[..args.len() - 1].to_vec();
     if let Some(last) = args.last() {
-        match last.as_macro_value() {
-            MacroValue::Nil => {}
-            MacroValue::Cons(_) => {
-                if let Some(vec) = last.as_macro_value().to_vec() {
-                    for v in vec {
-                        result.push(RuntimeValue::Val(v));
-                    }
-                }
+        if last.is_nil() {
+            return result;
+        }
+        if last.is_list() {
+            if let Some(vec) = last.to_vec() {
+                result.extend(vec);
             }
-            _ => result.push(last.clone()),
+        } else {
+            result.push(last.clone());
         }
     }
     result
@@ -785,8 +887,7 @@ fn bind_lambda_params(params: &LambdaList, args: &[RuntimeValue], env: &mut Hash
         arg_idx += 1;
     }
     if let Some(ref rest_name) = params.rest {
-        let rest: Vec<MacroValue> = args[arg_idx..].iter().map(|a| a.as_macro_value().clone()).collect();
-        env.insert(rest_name.clone(), RuntimeValue::Val(MacroValue::list(rest)));
+        env.insert(rest_name.clone(), RuntimeValue::list(args[arg_idx..].to_vec()));
     }
 }
 
@@ -994,41 +1095,37 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
     let value = match name {
         "cons" => {
             if args.len() >= 2 {
-                RuntimeValue::Val(MacroValue::cons(
-                    args[0].as_macro_value().clone(),
-                    args[1].as_macro_value().clone(),
-                ))
+                RuntimeValue::cons(args[0].clone(), args[1].clone())
             } else {
                 RuntimeValue::nil()
             }
         }
         "car" | "car-safe" => {
-            RuntimeValue::Val(args.first().map(|a| a.as_macro_value().car()).unwrap_or(MacroValue::Nil))
+            args.first().map(RuntimeValue::car).unwrap_or_else(RuntimeValue::nil)
         }
         "cdr" | "cdr-safe" => {
-            RuntimeValue::Val(args.first().map(|a| a.as_macro_value().cdr()).unwrap_or(MacroValue::Nil))
+            args.first().map(RuntimeValue::cdr).unwrap_or_else(RuntimeValue::nil)
         }
         "list" => {
-            let vals: Vec<MacroValue> = args.iter().map(|a| a.as_macro_value().clone()).collect();
-            RuntimeValue::Val(MacroValue::list(vals))
+            RuntimeValue::list(args.to_vec())
         }
         "eq" | "eql" => {
-            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].as_macro_value() == args[1].as_macro_value()))
+            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].equal_value(&args[1])))
         }
         "equal" => {
-            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].as_macro_value() == args[1].as_macro_value()))
+            RuntimeValue::Val(MacroValue::from_bool(args.len() >= 2 && args[0].equal_value(&args[1])))
         }
         "null" | "not" => {
             RuntimeValue::Val(MacroValue::from_bool(args.first().map(|a| a.is_nil()).unwrap_or(true)))
         }
         "consp" => {
             RuntimeValue::Val(MacroValue::from_bool(
-                args.first().map(|a| matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(false)
+                args.first().map(RuntimeValue::is_cons).unwrap_or(false)
             ))
         }
         "listp" => {
             RuntimeValue::Val(MacroValue::from_bool(
-                args.first().map(|a| a.is_nil() || matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(true)
+                args.first().map(RuntimeValue::is_list).unwrap_or(true)
             ))
         }
         "symbolp" => {
@@ -1048,36 +1145,37 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
         }
         "atom" => {
             RuntimeValue::Val(MacroValue::from_bool(
-                args.first().map(|a| !matches!(a, RuntimeValue::Val(MacroValue::Cons(_)))).unwrap_or(true)
+                args.first().map(|a| !a.is_cons()).unwrap_or(true)
             ))
         }
         "zerop" => {
             RuntimeValue::Val(MacroValue::from_bool(args.first().map(|a| a.as_i64() == Some(0)).unwrap_or(false)))
         }
         "length" => {
-            let len = match args.first().map(|a| a.as_macro_value()) {
-                Some(MacroValue::Nil) => 0i64,
-                Some(MacroValue::String(s)) => s.len() as i64,
-                Some(MacroValue::Cons(_)) => args[0].as_macro_value().to_vec().map(|v| v.len() as i64).unwrap_or(0),
-                Some(MacroValue::Vector(v)) => v.len() as i64,
+            let len = match args.first() {
+                Some(value) if value.is_nil() => 0i64,
+                Some(RuntimeValue::Val(MacroValue::String(s))) => s.len() as i64,
+                Some(value) if value.is_list() => value.to_vec().map(|v| v.len() as i64).unwrap_or(0),
+                Some(RuntimeValue::Vector(v)) => v.len() as i64,
+                Some(RuntimeValue::Val(MacroValue::Vector(v))) => v.len() as i64,
                 _ => 0,
             };
             RuntimeValue::Val(MacroValue::Int(len))
         }
         "nth" => {
             if args.len() >= 2 {
-                RuntimeValue::Val(nth_value(args[1].as_macro_value(), args[0].as_i64().unwrap_or(0)))
+                nth_value(&args[1], args[0].as_i64().unwrap_or(0))
             } else {
                 RuntimeValue::nil()
             }
         }
         "concat" => {
-            let parts: Vec<&str> = args.iter().filter_map(|a| a.as_macro_value().as_string()).collect();
+            let parts: Vec<&str> = args.iter().filter_map(RuntimeValue::as_string).collect();
             RuntimeValue::Val(MacroValue::String(parts.join("")))
         }
         "substring" => {
             if args.len() >= 2 {
-                if let (Some(s), Some(start)) = (args[0].as_macro_value().as_string(), args[1].as_i64()) {
+                if let (Some(s), Some(start)) = (args[0].as_string(), args[1].as_i64()) {
                     let start = start.max(0) as usize;
                     let end = args.get(2).and_then(|a| a.as_i64()).map(|e| e.max(0) as usize).unwrap_or(s.len());
                     RuntimeValue::Val(MacroValue::String(s[start.min(end)..end.min(s.len())].to_string()))
@@ -1086,21 +1184,21 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
         }
         "string=" | "string-equal" => {
             RuntimeValue::Val(MacroValue::from_bool(
-                args.len() >= 2 && args[0].as_macro_value().as_string() == args[1].as_macro_value().as_string()
+                args.len() >= 2 && args[0].as_string() == args[1].as_string()
             ))
         }
         "string<" | "string-lessp" => {
-            let a = args.first().and_then(|v| v.as_macro_value().as_string()).unwrap_or("");
-            let b = args.get(1).and_then(|v| v.as_macro_value().as_string()).unwrap_or("");
+            let a = args.first().and_then(RuntimeValue::as_string).unwrap_or("");
+            let b = args.get(1).and_then(RuntimeValue::as_string).unwrap_or("");
             RuntimeValue::Val(MacroValue::from_bool(a < b))
         }
         "format" => {
-            if let Some(fmt) = args.first().and_then(|a| a.as_macro_value().as_string()) {
+            if let Some(fmt) = args.first().and_then(RuntimeValue::as_string) {
                 let mut formatted = fmt.to_string();
                 for arg in &args[1..] {
                     if let Some(pos) = formatted.find("%s").or(formatted.find("%d")) {
                         let repl = arg.as_i64().map(|n| n.to_string())
-                            .or_else(|| arg.as_macro_value().as_string().map(String::from))
+                            .or_else(|| arg.as_string().map(String::from))
                             .unwrap_or_else(|| arg.display_string());
                         let before = formatted[..pos].to_string();
                         let after = formatted[pos+2..].to_string();
@@ -1115,16 +1213,16 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
             let mut result = Vec::new();
             for (i, arg) in args.iter().enumerate() {
                 if i + 1 == args.len() {
-                    if let Some(vec) = arg.as_macro_value().to_vec() { result.extend(vec); }
-                } else if let Some(vec) = arg.as_macro_value().to_vec() { result.extend(vec); }
+                    if let Some(vec) = arg.to_vec() { result.extend(vec); }
+                } else if let Some(vec) = arg.to_vec() { result.extend(vec); }
             }
-            RuntimeValue::Val(MacroValue::list(result))
+            RuntimeValue::list(result)
         }
         "nreverse" | "reverse" => {
             if let Some(first) = args.first() {
-                if let Some(mut vec) = first.as_macro_value().to_vec() {
+                if let Some(mut vec) = first.to_vec() {
                     vec.reverse();
-                    return PrimResult::Value(RuntimeValue::Val(MacroValue::list(vec)));
+                    return PrimResult::Value(RuntimeValue::list(vec));
                 }
             }
             RuntimeValue::nil()
@@ -1132,21 +1230,21 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
         "nthcdr" => {
             if args.len() >= 2 {
                 let mut n = args[0].as_i64().unwrap_or(0);
-                let mut list = args[1].as_macro_value().clone();
+                let mut list = args[1].clone();
                 while n > 0 { list = list.cdr(); n -= 1; }
-                RuntimeValue::Val(list)
+                list
             } else { RuntimeValue::nil() }
         }
         "last" => {
             if let Some(first) = args.first() {
                 let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
-                RuntimeValue::Val(first.as_macro_value().last(n))
+                last_value(first, n)
             } else { RuntimeValue::nil() }
         }
         "butlast" => {
             if let Some(first) = args.first() {
                 let n = args.get(1).and_then(|a| a.as_i64()).unwrap_or(1) as usize;
-                RuntimeValue::Val(first.as_macro_value().butlast(n))
+                butlast_value(first, n)
             } else { RuntimeValue::nil() }
         }
         "max" => {
@@ -1173,7 +1271,7 @@ fn eval_primitive(name: &str, args: &[RuntimeValue]) -> PrimResult {
             RuntimeValue::Val(MacroValue::String(args.first().and_then(|a| a.as_i64()).unwrap_or(0).to_string()))
         }
         "string-to-number" => {
-            let s = args.first().and_then(|a| a.as_macro_value().as_string()).unwrap_or("0");
+            let s = args.first().and_then(RuntimeValue::as_string).unwrap_or("0");
             RuntimeValue::Val(MacroValue::Int(s.parse::<i64>().unwrap_or(0)))
         }
         _ if is_known_nil_returning_builtin(name) => RuntimeValue::nil(),
@@ -1215,9 +1313,9 @@ fn eval_i64_primitive(name: &str, args: &[i64]) -> Option<Result<i64, ()>> {
     })
 }
 
-fn nth_value(list: &MacroValue, n: i64) -> MacroValue {
+fn nth_value(list: &RuntimeValue, n: i64) -> RuntimeValue {
     if n < 0 {
-        return MacroValue::Nil;
+        return RuntimeValue::nil();
     }
     let mut current = list.clone();
     for _ in 0..n {
@@ -1226,36 +1324,82 @@ fn nth_value(list: &MacroValue, n: i64) -> MacroValue {
     current.car()
 }
 
+fn last_value(list: &RuntimeValue, n: usize) -> RuntimeValue {
+    let Some(vec) = list.to_vec() else {
+        return RuntimeValue::nil();
+    };
+    if vec.is_empty() {
+        return RuntimeValue::nil();
+    }
+    if n == 0 {
+        return list.clone();
+    }
+    let start = vec.len().saturating_sub(n);
+    if n == 1 {
+        return vec.last().cloned().unwrap_or_else(RuntimeValue::nil);
+    }
+    RuntimeValue::list(vec[start..].to_vec())
+}
+
+fn butlast_value(list: &RuntimeValue, n: usize) -> RuntimeValue {
+    let Some(vec) = list.to_vec() else {
+        return list.clone();
+    };
+    if n >= vec.len() {
+        return RuntimeValue::nil();
+    }
+    RuntimeValue::list(vec[..vec.len() - n].to_vec())
+}
+
 fn surface_to_runtime_value(form: &crate::surface::SurfaceForm) -> RuntimeValue {
     match &form.kind {
-        SurfaceKind::Atom(atom) => RuntimeValue::Val(match atom {
-            SurfaceAtom::Nil => MacroValue::Nil,
-            SurfaceAtom::True => MacroValue::Symbol("t".into()),
-            SurfaceAtom::Int(n) => MacroValue::Int(*n),
-            SurfaceAtom::Float(f) => MacroValue::Int(*f as i64),
-            SurfaceAtom::Char(c) => MacroValue::Int(*c),
-            SurfaceAtom::String(s) => MacroValue::String(s.clone()),
-            SurfaceAtom::Symbol(s) => MacroValue::Symbol(s.clone()),
-        }),
+        SurfaceKind::Atom(atom) => surface_atom_to_runtime_value(atom),
         SurfaceKind::List(items) => {
-            let vals: Vec<MacroValue> = items.iter().map(|f| {
-                match &f.kind {
-                    SurfaceKind::Atom(atom) => match atom {
-                        SurfaceAtom::Nil => MacroValue::Nil,
-                        SurfaceAtom::True => MacroValue::Symbol("t".into()),
-                        SurfaceAtom::Int(n) => MacroValue::Int(*n),
-                        SurfaceAtom::Float(f) => MacroValue::Int(*f as i64),
-                        SurfaceAtom::Char(c) => MacroValue::Int(*c),
-                        SurfaceAtom::String(s) => MacroValue::String(s.clone()),
-                        SurfaceAtom::Symbol(s) => MacroValue::Symbol(s.clone()),
-                    },
-                    _ => MacroValue::Nil,
-                }
-            }).collect();
-            RuntimeValue::Val(MacroValue::list(vals))
+            RuntimeValue::list(items.iter().map(surface_to_runtime_value).collect())
         }
-        _ => RuntimeValue::Val(MacroValue::Nil),
+        SurfaceKind::DottedList(items, tail) => {
+            let mut result = surface_to_runtime_value(tail);
+            for item in items.iter().rev() {
+                result = RuntimeValue::cons(surface_to_runtime_value(item), result);
+            }
+            result
+        }
+        SurfaceKind::Vector(items) => {
+            RuntimeValue::Vector(items.iter().map(surface_to_runtime_value).collect())
+        }
+        SurfaceKind::Quote(inner) => RuntimeValue::list(vec![
+            RuntimeValue::Val(MacroValue::Symbol("quote".into())),
+            surface_to_runtime_value(inner),
+        ]),
+        SurfaceKind::FunctionQuote(inner) => RuntimeValue::list(vec![
+            RuntimeValue::Val(MacroValue::Symbol("function".into())),
+            surface_to_runtime_value(inner),
+        ]),
+        SurfaceKind::Backquote(inner) => RuntimeValue::list(vec![
+            RuntimeValue::Val(MacroValue::Symbol("backquote".into())),
+            surface_to_runtime_value(inner),
+        ]),
+        SurfaceKind::Comma(inner) => RuntimeValue::list(vec![
+            RuntimeValue::Val(MacroValue::Symbol("unquote".into())),
+            surface_to_runtime_value(inner),
+        ]),
+        SurfaceKind::CommaAt(inner) => RuntimeValue::list(vec![
+            RuntimeValue::Val(MacroValue::Symbol("splice-unquote".into())),
+            surface_to_runtime_value(inner),
+        ]),
     }
+}
+
+fn surface_atom_to_runtime_value(atom: &SurfaceAtom) -> RuntimeValue {
+    RuntimeValue::Val(match atom {
+        SurfaceAtom::Nil => MacroValue::Nil,
+        SurfaceAtom::True => MacroValue::Symbol("t".into()),
+        SurfaceAtom::Int(n) => MacroValue::Int(*n),
+        SurfaceAtom::Float(f) => MacroValue::Int(*f as i64),
+        SurfaceAtom::Char(c) => MacroValue::Int(*c),
+        SurfaceAtom::String(s) => MacroValue::String(s.clone()),
+        SurfaceAtom::Symbol(s) => MacroValue::Symbol(s.clone()),
+    })
 }
 
 fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {

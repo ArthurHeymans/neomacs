@@ -338,9 +338,7 @@ mod tests {
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert!(artifact.result.value.is_some());
         let val = artifact.result.value.unwrap();
-        assert!(matches!(val, interp::RuntimeValue::Val(
-            crate::expand_value::MacroValue::Cons(_)
-        )));
+        assert!(matches!(val, interp::RuntimeValue::Cons(_)));
     }
 
     #[test]
@@ -351,6 +349,20 @@ mod tests {
 (funcall (compose (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)", &[]);
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.as_i64(), Some(12));
+    }
+
+    #[test]
+    fn e2e_closures_survive_list_primitives_without_integer_collision() {
+        let artifact = execute_source("closure-list.el", "\
+;;; -*- lexical-binding: t; -*-
+(let ((f (lambda (x) (+ x 1)))
+      (n (- 0 3819615433963601919)))
+  (+ (funcall (car (list f)) 1)
+     (funcall (nth 0 (list f)) 2)
+     (funcall (cdr (cons 0 f)) 3)
+     (nth 1 (list f n))))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(-3819615433963601910));
     }
 
     #[test]
@@ -460,9 +472,7 @@ total", &[]);
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert!(artifact.result.value.is_some());
         let val = artifact.result.value.unwrap();
-        assert!(matches!(val, interp::RuntimeValue::Val(
-            crate::expand_value::MacroValue::Cons(_)
-        )));
+        assert!(matches!(val, interp::RuntimeValue::Cons(_)));
     }
 
     #[test]
