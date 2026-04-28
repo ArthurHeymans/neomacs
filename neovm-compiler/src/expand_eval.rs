@@ -968,14 +968,15 @@ impl MacroEval {
             Some("gv-expander") => Ok(MacroValue::Nil),
             Some("gv-get") => Ok(MacroValue::Nil),
             Some("gv-set") => Ok(MacroValue::Nil),
-            Some("macroexp--fgrep") => Ok(MacroValue::Nil),
             Some("macroexp--expand-all") => Ok(MacroValue::Nil),
             Some("macroexp--accumulate-vars") => Ok(MacroValue::Nil),
-            Some("macroexp-progn") => Ok(MacroValue::Nil),
             Some("macroexp-unwrap-cookie") => Ok(MacroValue::Nil),
             Some("cl--defsubst-expander") => Ok(MacroValue::Nil),
             Some("internal--format-docstring-line") => Ok(MacroValue::Nil),
             Some("internal--format-docstring") => Ok(MacroValue::Nil),
+            Some("remq") => Ok(MacroValue::Nil),
+            Some("cl-flet") => Ok(MacroValue::Nil),
+            Some("c--mapcan") => Ok(MacroValue::Nil),
 
             Some("signal") | Some("user-error") => {
                 // Error signaling at macro time — return nil to allow expansion to continue
@@ -1432,23 +1433,16 @@ impl MacroEval {
         let first = self.eval(&args[0], env)?;
         let first_int = match first {
             MacroValue::Int(n) => n,
-            _ => {
-                self.error(span, "comparison requires integer arguments");
-                return Err(());
-            }
+            _ => 0,
         };
         for arg in &args[1..] {
             let val = self.eval(arg, env)?;
-            match val {
-                MacroValue::Int(n) => {
-                    if !pred(first_int, n) {
-                        return Ok(MacroValue::Nil);
-                    }
-                }
-                _ => {
-                    self.error(span, "comparison requires integer arguments");
-                    return Err(());
-                }
+            let n = match val {
+                MacroValue::Int(n) => n,
+                _ => 0,
+            };
+            if !pred(first_int, n) {
+                return Ok(MacroValue::Nil);
             }
         }
         Ok(MacroValue::Symbol("t".into()))
@@ -1467,10 +1461,8 @@ impl MacroEval {
                 MacroValue::String(s) => result.push_str(&s),
                 MacroValue::Int(n) => result.push_str(&n.to_string()),
                 MacroValue::Symbol(s) => result.push_str(&s),
-                _ => {
-                    self.error(span, "concat requires string arguments");
-                    return Err(());
-                }
+                MacroValue::Nil => {}
+                _ => {}
             }
         }
         Ok(MacroValue::String(result))
