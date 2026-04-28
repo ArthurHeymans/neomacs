@@ -5,18 +5,15 @@
 
 Current scope:
 
-- Run the runtime-free Register IR subset with the validation interpreter.
-- Run a runtime-backed Register IR object interpreter for the first
-  `LispValue` primitive subset.
+- Run Register IR through the runtime-backed object interpreter.
 - Define the executor-side `LispValue` tagged-word ABI carrier.
-- Own a small runtime heap for initial pair operations: `cons`, `car`, and
-  `cdr`.
+- Own the runtime heap used by returned `LispValue` object references.
 - Expose temporary raw-bit ABI adapters for those pair operations.
 - Keep execution policy outside the compiler crate.
 - Provide a development CLI:
 
 ```text
-neovm-executor run [--engine=interp|object-interp] <file.el> [i64-arg ...]
+neovm-executor run [--engine=object-interp] <file.el> [i64-arg ...]
 ```
 
 Planned scope:

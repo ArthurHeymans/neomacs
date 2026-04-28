@@ -338,7 +338,7 @@ This matters for both correctness and precise root maps.
 
 ## Register IR
 
-Register IR is the execution contract for the interpreter and backend lowering.
+Register IR is the execution contract for the executor and backend lowering.
 It is lower-level than SSA and should make VM state explicit.
 
 Register IR should contain:
@@ -355,26 +355,19 @@ Register IR should contain:
 - Deopt or reconstruction metadata later.
 
 Register IR has a module container parallel to SSA so every top-level function
-can keep a stable function ID through interpreter and backend-oriented lowering.
+can keep a stable function ID through executor and backend-oriented lowering.
 
-The register interpreter remains useful for portability, debugging, and
-semantic validation. Native execution should lower to Cranelift IR, letting
-Cranelift own instruction selection, physical register allocation, verification,
-and machine-code emission.
+The compiler crate stops at compile/lower/verify. Semantic execution lives in
+`neovm-executor`, whose object interpreter runs Register IR against the real
+`LispValue` and runtime heap representation. Native execution should lower to
+Cranelift IR while preserving that same runtime value ABI, letting Cranelift own
+instruction selection, physical register allocation, verification, and
+machine-code emission.
 
-The current execution API can compile a source/file to a Register IR module and
-run the module entry function for the runtime-free subset: immediate constants,
-lexical binds/reads/writes, branches, jumps, returns, module-local named
-function calls including recursion, and selected pure integer primitives such as
-`+`, `*`, `-`, `1+`, `1-`, numeric comparisons, `not`, and `null`.
-Runtime-dependent operations such as unknown calls, symbol access, heap
-constants, lambda materialization, dynamic binding, and nonlocal control return
-explicit diagnostics instead of falling back silently.
-
-The development CLI entrypoint is:
+The execution development CLI entrypoint is:
 
 ```text
-neovm-compiler run <file.el> [i64-arg ...]
+neovm-executor run [--engine=object-interp] <file.el> [i64-arg ...]
 ```
 
 ## Cranelift Backend

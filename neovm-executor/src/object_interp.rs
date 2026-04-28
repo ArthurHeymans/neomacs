@@ -1137,7 +1137,7 @@ impl Interpreter<'_, '_, '_> {
         match value {
             SsaConst::Nil => Some(LispValue::NIL),
             SsaConst::True => Some(LispValue::TRUE),
-            SsaConst::Int(value) => LispValue::from_fixnum(*value),
+            SsaConst::Int(value) => self.fixnum_value(*value, "integer constant"),
             SsaConst::Char(value) => {
                 let code: u32 = (*value).try_into().ok()?;
                 char::from_u32(code).map(LispValue::from_char)
@@ -1195,7 +1195,7 @@ impl Interpreter<'_, '_, '_> {
             SurfaceAtom::Nil => Some(LispValue::NIL),
             SurfaceAtom::True => Some(LispValue::TRUE),
             SurfaceAtom::Symbol(name) => Some(self.runtime.intern(name)),
-            SurfaceAtom::Int(value) => LispValue::from_fixnum(*value),
+            SurfaceAtom::Int(value) => self.fixnum_value(*value, "quoted integer"),
             SurfaceAtom::Char(value) => {
                 let code: u32 = (*value).try_into().ok()?;
                 char::from_u32(code).map(LispValue::from_char)
@@ -1203,6 +1203,16 @@ impl Interpreter<'_, '_, '_> {
             SurfaceAtom::String(value) => Some(self.runtime.string(value.clone())),
             SurfaceAtom::Float(_) => {
                 self.unsupported("quoted floats require float object support");
+                None
+            }
+        }
+    }
+
+    fn fixnum_value(&mut self, value: i64, context: &str) -> Option<LispValue> {
+        match LispValue::from_fixnum(value) {
+            Some(value) => Some(value),
+            None => {
+                self.unsupported(format!("{context} {value} requires bignum support"));
                 None
             }
         }

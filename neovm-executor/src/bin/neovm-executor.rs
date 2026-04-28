@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use neovm_executor::{Engine, Executor, LispValue, render_diagnostics};
+use neovm_executor::{Executor, render_diagnostics};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -19,7 +19,7 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Vec<String>) -> ExitCode {
-    let Some((engine, args)) = parse_engine(args) else {
+    let Some(args) = parse_engine(args) else {
         usage();
         return ExitCode::from(2);
     };
@@ -35,7 +35,7 @@ fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let executor = Executor::new(engine);
+    let executor = Executor::default();
     let artifact = match executor.execute_file(path, &values) {
         Ok(artifact) => artifact,
         Err(error) => {
@@ -66,11 +66,7 @@ fn run(args: Vec<String>) -> ExitCode {
 
     match artifact.result.value {
         Some(value) => {
-            if artifact.engine == Engine::ObjectInterpreter {
-                println!("{:?}", LispValue::from_abi_i64(value));
-            } else {
-                println!("{value}");
-            }
+            println!("{}", artifact.runtime.format_value(value));
             ExitCode::SUCCESS
         }
         None => {
@@ -80,25 +76,27 @@ fn run(args: Vec<String>) -> ExitCode {
     }
 }
 
-fn parse_engine(args: Vec<String>) -> Option<(Engine, Vec<String>)> {
-    let mut engine = Engine::Interpreter;
+fn parse_engine(args: Vec<String>) -> Option<Vec<String>> {
     let mut rest = Vec::new();
     for arg in args {
         if let Some(value) = arg.strip_prefix("--engine=") {
-            engine = parse_engine_value(value)?;
+            parse_engine_value(value)?;
         } else {
             rest.push(arg);
         }
     }
-    Some((engine, rest))
+    Some(rest)
 }
 
-fn parse_engine_value(value: &str) -> Option<Engine> {
+fn parse_engine_value(value: &str) -> Option<()> {
     match value {
-        "interp" | "interpreter" => Some(Engine::Interpreter),
-        "object-interp" | "object-interpreter" => Some(Engine::ObjectInterpreter),
+        "object-interp" | "object-interpreter" => Some(()),
+        "interp" | "interpreter" => {
+            eprintln!("engine `{value}` was removed; supported engine: object-interp");
+            None
+        }
         _ => {
-            eprintln!("unknown engine `{value}`; supported engines: interp, object-interp");
+            eprintln!("unknown engine `{value}`; supported engine: object-interp");
             None
         }
     }
@@ -114,5 +112,5 @@ fn parse_i64_args(args: &[String]) -> Result<Vec<i64>, String> {
 }
 
 fn usage() {
-    eprintln!("usage: neovm-executor run [--engine=interp|object-interp] <file.el> [i64-arg ...]");
+    eprintln!("usage: neovm-executor run [--engine=object-interp] <file.el> [i64-arg ...]");
 }
