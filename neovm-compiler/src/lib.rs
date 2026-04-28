@@ -397,4 +397,52 @@ mod tests {
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.as_i64(), Some(5));
     }
+
+    #[test]
+    fn e2e_dynamic_variables() {
+        let artifact = execute_source("dyn.el", "\
+;;; -*- lexical-binding: t; -*-
+(defvar total 0)
+(defun add-total (n) (setq total (+ total n)))
+(add-total 5)
+(add-total 10)
+total", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(15));
+    }
+
+    #[test]
+    fn e2e_closure_captures_dynamic() {
+        let artifact = execute_source("cap.el", "\
+;;; -*- lexical-binding: t; -*-
+(defvar state 0)
+(defun make-stateful-adder (n)
+  (lambda (x) (+ x n)))
+(funcall (make-stateful-adder 10) 5)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(15));
+    }
+
+    #[test]
+    fn e2e_apply_spread() {
+        let artifact = execute_source("spread.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun my-max (a b) (if (> a b) a b))
+(apply 'my-max (list 42 17))", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(42));
+    }
+
+    #[test]
+    fn e2e_nested_let_and_lambda() {
+        let artifact = execute_source("nested.el", "\
+;;; -*- lexical-binding: t; -*-
+(defun test ()
+  (let ((x 10))
+    (let ((f (lambda (y) (+ x y))))
+      (funcall f 5))))
+(test)", &[]);
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.as_i64(), Some(15));
+    }
 }

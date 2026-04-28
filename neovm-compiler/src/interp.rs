@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 use cranelift_entity::EntityRef;
 
@@ -9,6 +10,23 @@ use crate::ids::FunctionId;
 use crate::regir::{RegFunction, RegInstKind, RegModule, RegTerminator};
 use crate::ssa::{SsaConst, SsaLambdaTemplate};
 use crate::surface::{SurfaceAtom, SurfaceKind};
+
+thread_local! {
+    static DYNAMIC_VARS: RefCell<HashMap<String, RuntimeValue>> = RefCell::new(HashMap::new());
+}
+
+fn dynamic_get(name: &str) -> RuntimeValue {
+    DYNAMIC_VARS.with(|vars| {
+        vars.borrow().get(name).cloned().unwrap_or_else(RuntimeValue::nil)
+    })
+}
+
+fn dynamic_set(name: &str, value: RuntimeValue) -> RuntimeValue {
+    DYNAMIC_VARS.with(|vars| {
+        vars.borrow_mut().insert(name.to_string(), value.clone());
+    });
+    value
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpResult {
@@ -304,15 +322,14 @@ impl Interpreter<'_, '_> {
                 self.set(*dst, value);
             }
             RegInstKind::SymbolGet { dst, name } => {
-                // Dynamic variable lookup — return nil for unknown symbols
-                self.set(*dst, RuntimeValue::Val(MacroValue::Nil));
+                self.set(*dst, dynamic_get(name));
             }
             RegInstKind::SymbolSet { dst, name, src } => {
                 let Some(value) = self.get(*src) else {
                     return false;
                 };
-                // Dynamic variable set — just return the value
-                self.set(*dst, value);
+                let result = dynamic_set(name, value);
+                self.set(*dst, result);
             }
             RegInstKind::DeclareSpecial { .. } | RegInstKind::Safepoint { .. } => {}
             RegInstKind::CallNamed { dst, name, args } => {
@@ -408,10 +425,10 @@ impl Interpreter<'_, '_> {
                 let Some(value) = self.get(*src) else {
                     return false;
                 };
-                self.lexicals.insert(name.clone(), value);
+                dynamic_set(name, value);
             }
             RegInstKind::UnbindDynamic { count } => {
-                // We don't track dynamic binding scopes — no-op
+                // Dynamic scope unbinding not tracked — values persist
                 let _ = count;
             }
             RegInstKind::CatchBegin { tag } => {
@@ -647,9 +664,10 @@ fn eval_hir_expr(
             // Return the value (lexicals are immutable in HIR, but set returns the value)
             Some(val)
         }
-        HirExprKind::SymbolGet(name) => Some(RuntimeValue::nil()),
+        HirExprKind::SymbolGet(name) => Some(dynamic_get(name)),
         HirExprKind::SymbolSet { name, value } => {
-            eval_hir_expr(value, env, module, functions_by_name, fuel, diagnostics)
+            let val = eval_hir_expr(value, env, module, functions_by_name, fuel, diagnostics)?;
+            Some(dynamic_set(name, val))
         }
         HirExprKind::If { test, then_expr, else_expr } => {
             let test_val = eval_hir_expr(test, env, module, functions_by_name, fuel, diagnostics)?;
