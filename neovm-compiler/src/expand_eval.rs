@@ -476,15 +476,37 @@ impl MacroEval {
             }
 
             Some("push") => {
-                // (push VAL PLACE) — macro expansion time, just return nil
-                Ok(MacroValue::Nil)
+                // (push VAL PLACE) — prepend VAL to PLACE list
+                if items.len() >= 3 {
+                    let val = self.eval(&items[1], env)?;
+                    if let Some(place_name) = items[2].symbol_name() {
+                        let current = env.lookup(place_name).cloned().unwrap_or(MacroValue::Nil);
+                        let new_list = MacroValue::cons(val, current);
+                        env.bind(place_name.to_string(), new_list.clone());
+                        Ok(new_list)
+                    } else {
+                        // Non-symbol place — just return val
+                        Ok(val)
+                    }
+                } else {
+                    Ok(MacroValue::Nil)
+                }
             }
 
             Some("pop") => {
-                // (pop PLACE) — macro expansion time, return car of place value
+                // (pop PLACE) — remove first element, return it, update PLACE
                 if items.len() >= 2 {
-                    let val = self.eval(&items[1], env)?;
-                    Ok(val.car())
+                    if let Some(place_name) = items[1].symbol_name() {
+                        let current = env.lookup(place_name).cloned().unwrap_or(MacroValue::Nil);
+                        let first = current.car();
+                        let rest = current.cdr();
+                        env.bind(place_name.to_string(), rest);
+                        Ok(first)
+                    } else {
+                        // Non-symbol place — just evaluate and return car
+                        let val = self.eval(&items[1], env)?;
+                        Ok(val.car())
+                    }
                 } else {
                     Ok(MacroValue::Nil)
                 }

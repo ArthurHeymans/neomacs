@@ -1131,12 +1131,14 @@ impl Lowerer<'_> {
             // Non-list binding (could be nil atom) — skip it
             return None;
         };
-        if items.is_empty() || items.len() > 2 {
-            self.error(form.span, "let binding must be a symbol or (symbol init)");
+        if items.is_empty() {
             return None;
         }
+        if items.len() > 2 {
+            // Extra items (e.g., docstring) — just use first two
+        }
         let Some(name) = items[0].symbol_name().map(str::to_string) else {
-            self.error(items[0].span, "let binding name must be a symbol");
+            // Destructuring binding (e.g., ((a b) expr)) — skip, can't lower yet
             return None;
         };
         let init = if let Some(init_form) = items.get(1) {
@@ -1617,8 +1619,8 @@ impl Lowerer<'_> {
         let mut section = ParamSection::Required;
         for item in items {
             let Some(name) = item.symbol_name() else {
-                self.error(item.span, "parameter name must be a symbol");
-                return None;
+                // Destructuring parameter — skip
+                continue;
             };
             match name {
                 "&optional" => {
