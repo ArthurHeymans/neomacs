@@ -300,9 +300,8 @@ impl Lowerer<'_> {
                 kind: HirExprKind::Quote(Box::new(form.clone())),
                 span: form.span,
             }),
-            SurfaceKind::DottedList(_, _) => {
-                self.error(form.span, "dotted-list expressions are not supported here");
-                None
+            SurfaceKind::DottedList(items, tail) => {
+                self.lower_dotted_list(form, items, tail)
             }
             SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
             SurfaceKind::Comma(_) => {
@@ -407,6 +406,29 @@ impl Lowerer<'_> {
             Some(name) => self.lower_call_named(form, name, &items[1..]),
             None => self.lower_call_value(form, head, &items[1..]),
         }
+    }
+
+    /// Lower a dotted list (a b . c) as a chain of cons: (cons a (cons b c))
+    fn lower_dotted_list(
+        &mut self,
+        form: &SurfaceForm,
+        items: &[SurfaceForm],
+        tail: &SurfaceForm,
+    ) -> Option<HirExpr> {
+        let tail_expr = self.lower_expr(tail)?;
+        let span = form.span;
+        let mut result = tail_expr;
+        for item in items.iter().rev() {
+            let car_expr = self.lower_expr(item)?;
+            result = HirExpr {
+                kind: HirExprKind::CallNamed {
+                    name: "cons".to_string(),
+                    args: vec![car_expr, result],
+                },
+                span,
+            };
+        }
+        Some(result)
     }
 
     fn lower_quote_form(&mut self, form: &SurfaceForm, items: &[SurfaceForm]) -> Option<HirExpr> {
@@ -1349,7 +1371,9 @@ impl Lowerer<'_> {
             );
             return None;
         }
-        let var = if tail[0].symbol_name() == Some("nil") {
+        let var = if tail[0].symbol_name() == Some("nil")
+            || matches!(&tail[0].kind, SurfaceKind::List(items) if items.is_empty())
+        {
             None
         } else if let Some(name) = tail[0].symbol_name() {
             Some(name.to_string())
