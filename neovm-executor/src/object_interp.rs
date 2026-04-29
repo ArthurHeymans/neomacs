@@ -52,6 +52,7 @@ enum NonlocalExit {
 struct ActiveUnwindCleanup {
     stop_index: usize,
     pending: NonlocalExit,
+    result_reg: Option<RegId>,
 }
 
 #[derive(Clone, Debug)]
@@ -212,7 +213,23 @@ impl Interpreter<'_, '_, '_> {
                         .active_unwind_cleanup
                         .take()
                         .expect("active unwind cleanup");
-                    return self.finish_nonlocal(cleanup.pending);
+                    match cleanup.pending {
+                        NonlocalExit::Throw(thrown) => {
+                            return self.finish_throw(thrown);
+                        }
+                        NonlocalExit::Signal(signaled) => {
+                            if let Some(handler_start) = self.enter_condition_handler(
+                                &body.instructions,
+                                inst_index,
+                                signaled,
+                                cleanup.result_reg,
+                            ) {
+                                inst_index = handler_start;
+                                continue;
+                            }
+                            return self.finish_signal(signaled);
+                        }
+                    }
                 }
                 if self
                     .active_condition_handler
@@ -246,6 +263,7 @@ impl Interpreter<'_, '_, '_> {
                     continue;
                 }
                 if !self.execute_inst(&inst.kind) {
+                    let result_reg = instruction_result_reg(&inst.kind);
                     if let Some(thrown) = self.pending_throw.take() {
                         let already_in_cleanup = self.active_unwind_cleanup.take().is_some();
                         if !already_in_cleanup {
@@ -253,6 +271,7 @@ impl Interpreter<'_, '_, '_> {
                                 &body.instructions,
                                 inst_index,
                                 NonlocalExit::Throw(thrown),
+                                result_reg,
                             ) {
                                 inst_index = cleanup_start;
                                 continue;
@@ -267,6 +286,7 @@ impl Interpreter<'_, '_, '_> {
                                 &body.instructions,
                                 inst_index,
                                 NonlocalExit::Signal(signaled),
+                                result_reg,
                             ) {
                                 inst_index = cleanup_start;
                                 continue;
@@ -276,7 +296,7 @@ impl Interpreter<'_, '_, '_> {
                             &body.instructions,
                             inst_index,
                             signaled,
-                            instruction_result_reg(&inst.kind),
+                            result_reg,
                         ) {
                             inst_index = handler_start;
                             continue;
@@ -942,6 +962,158 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.execute_apply(*callee, args)
             }
+            "functionp" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(
+                    self.runtime.is_function(args[0])
+                        || (self.runtime.is_symbol(args[0])
+                            && self
+                                .runtime
+                                .symbol_name(args[0])
+                                .ok()
+                                .is_some_and(|name| self.is_callable_name(&name))),
+                )
+            }),
+            "mod" => self.exact_arity(name, args, 2).and_then(|_| {
+                let dividend = self.fixnum_arg(name, args[0])?;
+                let divisor = self.fixnum_arg(name, args[1])?;
+                if divisor == 0 {
+                    let symbol = self.runtime.intern("arith-error");
+                    self.pending_signal = Some(SignaledValue {
+                        symbol,
+                        data: LispValue::NIL,
+                    });
+                    return None;
+                }
+                let result = dividend % divisor;
+                let result = if result != 0 && (dividend < 0) != (divisor < 0) {
+                    result + divisor
+                } else {
+                    result
+                };
+                self.fixnum(result, name)
+            }),
+            "rem" => self.exact_arity(name, args, 2).and_then(|_| {
+                let dividend = self.fixnum_arg(name, args[0])?;
+                let divisor = self.fixnum_arg(name, args[1])?;
+                if divisor == 0 {
+                    let symbol = self.runtime.intern("arith-error");
+                    self.pending_signal = Some(SignaledValue {
+                        symbol,
+                        data: LispValue::NIL,
+                    });
+                    return None;
+                }
+                self.fixnum(dividend % divisor, name)
+            }),
+            "abs" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.fixnum_arg(name, args[0]))
+                .and_then(|value| value.checked_abs())
+                .and_then(|value| self.fixnum(value, name)),
+            "max" => {
+                if args.is_empty() {
+                    self.error("primitive `max` requires at least one argument");
+                    return None;
+                }
+                let mut result = self.fixnum_arg(name, args[0])?;
+                for arg in &args[1..] {
+                    let value = self.fixnum_arg(name, *arg)?;
+                    result = result.max(value);
+                }
+                self.fixnum(result, name)
+            }
+            "min" => {
+                if args.is_empty() {
+                    self.error("primitive `min` requires at least one argument");
+                    return None;
+                }
+                let mut result = self.fixnum_arg(name, args[0])?;
+                for arg in &args[1..] {
+                    let value = self.fixnum_arg(name, *arg)?;
+                    result = result.min(value);
+                }
+                self.fixnum(result, name)
+            }
+            "type-of" => self.exact_arity(name, args, 1).map(|_| {
+                if args[0].is_nil() || args[0].is_true() {
+                    self.runtime.intern("symbol")
+                } else if args[0].is_fixnum() {
+                    self.runtime.intern("integer")
+                } else if args[0].as_char().is_some() {
+                    self.runtime.intern("symbol")
+                } else if args[0].is_heap() {
+                    if self.runtime.is_cons(args[0]) {
+                        self.runtime.intern("cons")
+                    } else if self.runtime.is_string(args[0]) {
+                        self.runtime.intern("string")
+                    } else if self.runtime.is_vector(args[0]) {
+                        self.runtime.intern("vector")
+                    } else if self.runtime.is_hash_table(args[0]) {
+                        self.runtime.intern("hash-table")
+                    } else if self.runtime.is_function(args[0]) {
+                        self.runtime.intern("compiled-function")
+                    } else {
+                        self.runtime.intern("misc")
+                    }
+                } else {
+                    self.runtime.intern("misc")
+                }
+            }),
+            "cadr" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.cdr(args[0]);
+                let cdr = self.runtime_value(result)?;
+                let result = self.runtime.car(cdr);
+                self.runtime_value(result)
+            }),
+            "caar" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.car(args[0]);
+                let car = self.runtime_value(result)?;
+                let result = self.runtime.car(car);
+                self.runtime_value(result)
+            }),
+            "cdar" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.car(args[0]);
+                let car = self.runtime_value(result)?;
+                let result = self.runtime.cdr(car);
+                self.runtime_value(result)
+            }),
+            "cddr" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.cdr(args[0]);
+                let cdr = self.runtime_value(result)?;
+                let result = self.runtime.cdr(cdr);
+                self.runtime_value(result)
+            }),
+            "caaar" | "caadr" | "cadar" | "caddr"
+            | "cdaar" | "cdadr" | "cddar" | "cdddr"
+            | "caaaar" | "caaadr" | "caadar" | "caaddr"
+            | "cadaar" | "cadadr" | "caddar" | "cadddr"
+            | "cdaaar" | "cdaadr" | "cdadar" | "cdaddr"
+            | "cddaar" | "cddadr" | "cdddar" | "cddddr" => {
+                self.exact_arity(name, args, 1).and_then(|_| {
+                    let mut value = args[0];
+                    for ch in name[1..name.len() - 1].bytes().rev() {
+                        let result = if ch == b'a' {
+                            self.runtime.car(value)
+                        } else {
+                            self.runtime.cdr(value)
+                        };
+                        value = self.runtime_value(result)?;
+                    }
+                    Some(value)
+                })
+            }
+            "number-or-marker-p" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(args[0].is_fixnum())),
+            "floatp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(false)),
+            "string-or-null-p" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))
+            }),
+            "booleanp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
             _ => return None,
         };
         Some(value)
@@ -1124,11 +1296,13 @@ impl Interpreter<'_, '_, '_> {
         instructions: &[RegInst],
         signal_index: usize,
         pending: NonlocalExit,
+        result_reg: Option<RegId>,
     ) -> Option<usize> {
         let target = find_unwind_cleanup(instructions, signal_index)?;
         self.active_unwind_cleanup = Some(ActiveUnwindCleanup {
             stop_index: target.end_index,
             pending,
+            result_reg,
         });
         Some(target.cleanup_index + 1)
     }
@@ -1801,7 +1975,11 @@ impl Interpreter<'_, '_, '_> {
         let value = rest.iter().try_fold(first, |acc, value| {
             let value = self.fixnum_arg("/", *value)?;
             if value == 0 {
-                self.error("division by zero in primitive `/`");
+                let symbol = self.runtime.intern("arith-error");
+                self.pending_signal = Some(SignaledValue {
+                    symbol,
+                    data: LispValue::NIL,
+                });
                 return None;
             }
             acc.checked_div(value)
@@ -1982,12 +2160,6 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
-    fn finish_nonlocal(self, pending: NonlocalExit) -> InternalInterpResult {
-        match pending {
-            NonlocalExit::Throw(thrown) => self.finish_throw(thrown),
-            NonlocalExit::Signal(signaled) => self.finish_signal(signaled),
-        }
-    }
 }
 
 fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {
@@ -2245,6 +2417,24 @@ fn is_primitive_name(name: &str) -> bool {
             | "error"
             | "funcall"
             | "apply"
+            | "functionp"
+            | "mod"
+            | "rem"
+            | "abs"
+            | "max"
+            | "min"
+            | "type-of"
+            | "cadr" | "caar" | "cdar" | "cddr"
+            | "caaar" | "caadr" | "cadar" | "caddr"
+            | "cdaar" | "cdadr" | "cddar" | "cdddr"
+            | "caaaar" | "caaadr" | "caadar" | "caaddr"
+            | "cadaar" | "cadadr" | "caddar" | "cadddr"
+            | "cdaaar" | "cdaadr" | "cdadar" | "cdaddr"
+            | "cddaar" | "cddadr" | "cdddar" | "cddddr"
+            | "number-or-marker-p"
+            | "floatp"
+            | "string-or-null-p"
+            | "booleanp"
     )
 }
 

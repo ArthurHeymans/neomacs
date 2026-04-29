@@ -246,4 +246,408 @@ mod tests {
                 .contains("integer constant 3819615433963601919 requires bignum support")
         }));
     }
+
+    #[test]
+    fn e2e_recursive_fibonacci() {
+        let artifact = execute_source(
+            "fib.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun fib (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))\n(fib 10)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(55)));
+    }
+
+    #[test]
+    fn e2e_higher_order_composition() {
+        let artifact = execute_source(
+            "compose.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun compose (f g) (lambda (x) (funcall f (funcall g x))))
+(funcall (compose (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
+    fn e2e_mutable_closure_counter() {
+        let artifact = execute_source(
+            "counter.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun make-counter (start)
+  (let ((count start))
+    (lambda ()
+      (setq count (+ count 1))
+      count)))
+(defvar c (make-counter 0))
+(list (funcall c) (funcall c) (funcall c))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(artifact.result.value.is_some());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
+    }
+
+    #[test]
+    fn e2e_mutable_closure_across_multiple_closures() {
+        let artifact = execute_source(
+            "shared-counter.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun make-shared-counter (start)
+  (let ((count start))
+    (list (lambda () (setq count (+ count 1)) count)
+          (lambda () count))))
+(let ((pair (make-shared-counter 0)))
+  (funcall (nth 0 pair))
+  (funcall (nth 0 pair))
+  (funcall (nth 1 pair)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn e2e_insertion_sort() {
+        let artifact = execute_source(
+            "isort.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun insert-sorted (x sorted)
+  (cond ((null sorted) (list x))
+        ((<= x (car sorted)) (cons x sorted))
+        (t (cons (car sorted) (insert-sorted x (cdr sorted))))))
+(defun insertion-sort (lst)
+  (if (null lst) nil
+    (insert-sorted (car lst) (insertion-sort (cdr lst)))))
+(insertion-sort (list 5 3 1 4 2))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 4 5)");
+    }
+
+    #[test]
+    fn e2e_filter_map_reduce() {
+        let artifact = execute_source(
+            "fmr.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun my-filter (pred lst)
+  (if (null lst) nil
+    (if (funcall pred (car lst))
+        (cons (car lst) (my-filter pred (cdr lst)))
+      (my-filter pred (cdr lst)))))
+(defun my-reduce (fn init lst)
+  (if (null lst) init
+    (my-reduce fn (funcall fn init (car lst)) (cdr lst))))
+(my-reduce '+ 0
+  (mapcar (lambda (x) (* x x))
+    (my-filter (lambda (x) (> x 2)) (list 1 2 3 4 5))))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(50)));
+    }
+
+    #[test]
+    fn e2e_dynamic_variables() {
+        let artifact = execute_source(
+            "dyn.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defvar total 0)
+(defun add-total (n) (setq total (+ total n)))
+(add-total 5)
+(add-total 10)
+total",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn e2e_condition_case_catches_arith_error() {
+        let artifact = execute_source(
+            "safe-div.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun safe-div (a b)
+  (condition-case err
+      (/ a b)
+    (arith-error 0)))
+(list (safe-div 10 3) (safe-div 10 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(3 0)");
+    }
+
+    #[test]
+    fn e2e_condition_case_catches_error_signal() {
+        let artifact = execute_source(
+            "catch-error.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (error \"something went wrong\")
+  (error (cadr err)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "\"something went wrong\"");
+    }
+
+    #[test]
+    fn e2e_unwind_protect_cleanup_runs_on_signal() {
+        let artifact = execute_source(
+            "unwind.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((x 0))
+  (condition-case nil
+      (unwind-protect
+          (progn (setq x 1) (signal 'test-signal nil))
+        (setq x 2))
+    (test-signal (setq x (+ x 10))))
+  x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
+    fn e2e_throw_catch() {
+        let artifact = execute_source(
+            "throw.el",
+            ";;; -*- lexical-binding: t; -*-\n(catch 'done (throw 'done 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn e2e_string_operations() {
+        let artifact = execute_source(
+            "strings.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(concat (substring \"hello world\" 0 5) \"!\")",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "\"hello!\"");
+    }
+
+    #[test]
+    fn e2e_vector_binary_search() {
+        let artifact = execute_source(
+            "bsearch.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun binary-search (vec target lo hi)
+  (if (> lo hi) -1
+    (let ((mid (/ (+ lo hi) 2)))
+      (cond ((= (aref vec mid) target) mid)
+            ((< (aref vec mid) target) (binary-search vec target (+ mid 1) hi))
+            (t (binary-search vec target lo (- mid 1)))))))
+(let ((v (vector 1 3 5 7 9 11 13 15 17 19)))
+  (list (binary-search v 7 0 9)
+        (binary-search v 1 0 9)
+        (binary-search v 19 0 9)
+        (binary-search v 4 0 9)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(3 0 9 -1)");
+    }
+
+    #[test]
+    fn e2e_mutual_recursion() {
+        let artifact = execute_source(
+            "mutual.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun my-even (n) (if (= n 0) t (my-odd (- n 1))))
+(defun my-odd (n) (if (= n 0) nil (my-even (- n 1))))
+(list (my-even 4) (my-odd 3))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t t)");
+    }
+
+    #[test]
+    fn e2e_rest_and_optional_params() {
+        let artifact = execute_source(
+            "params.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun my-list (&rest args) args)
+(defun greet (greeting &optional name)
+  (concat greeting \" \" (if name name \"world\")))
+(list (my-list 1 2 3) (greet \"hi\") (greet \"hello\" \"emacs\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "((1 2 3) \"hi world\" \"hello emacs\")");
+    }
+
+    #[test]
+    fn e2e_hash_table_operations() {
+        let artifact = execute_source(
+            "hash.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defvar h (make-hash-table :test 'equal))
+(puthash \"a\" 1 h)
+(puthash \"b\" 2 h)
+(list (gethash \"a\" h) (gethash \"b\" h) (gethash \"c\" h 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 0)");
+    }
+
+    #[test]
+    fn e2e_new_math_primitives() {
+        let artifact = execute_source(
+            "math.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(list (abs -5) (mod 10 3) (mod -10 3) (max 1 3 2) (min 1 3 2))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(5 1 2 3 1)");
+    }
+
+    #[test]
+    fn e2e_type_predicates() {
+        let artifact = execute_source(
+            "types.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun my-fn (x) x)
+(list (type-of 42) (type-of \"hello\") (type-of nil) (type-of (list 1 2))
+      (functionp 'my-fn) (functionp 42) (booleanp t) (booleanp nil))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(integer string symbol cons t nil t t)"
+        );
+    }
+
+    #[test]
+    fn e2e_cadr_and_friends() {
+        let artifact = execute_source(
+            "cadr.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((xs (list (list 1 2) (list 3 4) (list 5 6))))
+  (list (caar xs) (cadr xs) (caddr xs) (cdar xs) (cddr xs)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(1 (3 4) (5 6) (2) ((5 6)))"
+        );
+    }
+
+    #[test]
+    fn e2e_factorial_accumulator() {
+        let artifact = execute_source(
+            "fact.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun fact-acc (n acc)
+  (if (= n 0) acc (fact-acc (- n 1) (* n acc))))
+(fact-acc 10 1)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3628800)));
+    }
+
+    #[test]
+    fn e2e_while_loop() {
+        let artifact = execute_source(
+            "while.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun countdown (n)
+  (let ((result nil))
+    (while (> n 0)
+      (setq result (cons n result))
+      (setq n (- n 1)))
+    result))
+(countdown 5)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 4 5)");
+    }
+
+    #[test]
+    fn e2e_dolist_and_dotimes() {
+        let artifact = execute_source(
+            "loops.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun sum-list (xs)
+  (let ((s 0))
+    (dolist (x xs s)
+      (setq s (+ s x)))))
+(defun make-range (n)
+  (let ((result nil))
+    (dotimes (i n)
+      (setq result (cons i result)))
+    (reverse result)))
+(list (sum-list (list 1 2 3 4 5)) (make-range 5))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(15 (0 1 2 3 4))");
+    }
+
+    #[test]
+    fn e2e_cond_form() {
+        let artifact = execute_source(
+            "cond.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun classify (n)
+  (cond ((< n 0) -1) ((= n 0) 0) (t 1)))
+(list (classify (- 0 5)) (classify 0) (classify 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(-1 0 1)");
+    }
 }
