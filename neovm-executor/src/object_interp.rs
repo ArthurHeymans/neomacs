@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::hir::LambdaList;
-use neovm_compiler::ids::{FunctionId, RegId};
+use neovm_compiler::ids::{FunctionId, PrimaryMap, RegId};
 use neovm_compiler::lower::{lambda_template_to_ssa, ssa_to_regir};
 use neovm_compiler::regir::{RegFunction, RegInst, RegInstKind, RegModule, RegTerminator};
 use neovm_compiler::ssa::SsaConst;
@@ -102,6 +102,150 @@ pub(crate) fn execute_module_with_args(
     let functions_by_name = functions_by_name(module);
     let mut fuel = 100_000usize;
     execute_module_entry(module, &functions_by_name, args, runtime, &mut fuel).into_result(runtime)
+}
+
+pub(crate) fn execute_module_function(
+    module: &RegModule,
+    functions_by_name: &HashMap<String, FunctionId>,
+    function_id: FunctionId,
+    args: &[LispValue],
+    runtime: &mut Runtime,
+) -> Option<LispValue> {
+    let Some(function) = module.functions.get(function_id) else {
+        eprintln!("JIT: unknown function {function_id:?}");
+        return None;
+    };
+    let mut fuel = 100_000usize;
+    let adapted = adapt_lambda_args_standalone(&function.lambda_list, args, runtime)?;
+    let result = execute_with_module(function, &adapted, module, functions_by_name, runtime, &mut fuel);
+    if let Some(thrown) = result.thrown {
+        eprintln!("JIT: uncaught throw: {}", runtime.format_value(thrown.tag));
+        return None;
+    }
+    if let Some(signaled) = result.signaled {
+        eprintln!("JIT: unhandled signal: {}", runtime.format_value(signaled.symbol));
+        return None;
+    }
+    result.value
+}
+
+pub(crate) fn execute_function_object_direct(
+    module: &RegModule,
+    functions_by_name: &HashMap<String, FunctionId>,
+    function: LispValue,
+    args: &[LispValue],
+    runtime: &mut Runtime,
+) -> Option<LispValue> {
+    let (template, captures) = match runtime.function_parts(function) {
+        Ok(parts) => parts,
+        Err(error) => {
+            eprintln!("JIT runtime error: {error}");
+            return None;
+        }
+    };
+    let lowered = lambda_template_to_ssa(&template);
+    if !lowered.diagnostics.is_empty() {
+        eprintln!("JIT: lambda lowering errors");
+        return None;
+    }
+    let regir = ssa_to_regir(&lowered.value);
+    if !regir.diagnostics.is_empty() {
+        eprintln!("JIT: lambda RegIR errors");
+        return None;
+    }
+    let adapted = adapt_lambda_args_standalone(&template.params, args, runtime)?;
+    let mut entry_args = Vec::with_capacity(captures.len() + adapted.len());
+    entry_args.extend(captures);
+    entry_args.extend(adapted);
+    let mut fuel = 100_000usize;
+    let result = execute_with_module(
+        &regir.value,
+        &entry_args,
+        module,
+        functions_by_name,
+        runtime,
+        &mut fuel,
+    );
+    if let Some(thrown) = result.thrown {
+        eprintln!("JIT: uncaught throw: {}", runtime.format_value(thrown.tag));
+        return None;
+    }
+    if let Some(signaled) = result.signaled {
+        eprintln!("JIT: unhandled signal: {}", runtime.format_value(signaled.symbol));
+        return None;
+    }
+    result.value
+}
+
+/// Execute a primitive call using the interpreter's full evaluator context.
+/// Used by the JIT as a fallback for higher-order operations (mapcar, mapc, etc.)
+/// that need to call back into compiled code.
+pub(crate) fn execute_interpreter_primitive(
+    name: &str,
+    args: &[LispValue],
+    module: &RegModule,
+    functions_by_name: &HashMap<String, FunctionId>,
+    runtime: &mut Runtime,
+) -> Option<LispValue> {
+    // Create a dummy function context for the interpreter
+    let dummy_func = RegFunction {
+        name: None,
+        lambda_list: LambdaList::default(),
+        entry_params: Vec::new(),
+        registers: PrimaryMap::new(),
+        blocks: PrimaryMap::new(),
+        entry: None,
+        safepoints: Default::default(),
+    };
+    let mut fuel = 100_000usize;
+    let mut interp = Interpreter {
+        function: &dummy_func,
+        registers: HashMap::new(),
+        lexicals: HashMap::new(),
+        catch_stack: Vec::new(),
+        condition_stack: Vec::new(),
+        active_condition_handler: None,
+        active_unwind_cleanup: None,
+        pending_throw: None,
+        pending_signal: None,
+        last_value: None,
+        module,
+        functions_by_name,
+        runtime,
+        fuel: &mut fuel,
+        diagnostics: Vec::new(),
+    };
+    interp.execute_primitive_call(name, args).flatten()
+}
+
+fn adapt_lambda_args_standalone(
+    lambda_list: &LambdaList,
+    args: &[LispValue],
+    runtime: &mut Runtime,
+) -> Option<Vec<LispValue>> {
+    if args.len() < lambda_list.min_arity() {
+        eprintln!("JIT: function requires at least {} args, got {}", lambda_list.min_arity(), args.len());
+        return None;
+    }
+    if let Some(max) = lambda_list.max_arity() && args.len() > max {
+        eprintln!("JIT: function requires at most {max} args, got {}", args.len());
+        return None;
+    }
+    let mut adapted = Vec::with_capacity(lambda_list.entry_arity());
+    adapted.extend_from_slice(&args[..lambda_list.required.len()]);
+    let optional_start = lambda_list.required.len();
+    for index in 0..lambda_list.optional.len() {
+        adapted.push(
+            args.get(optional_start + index)
+                .copied()
+                .unwrap_or(LispValue::NIL),
+        );
+    }
+    if lambda_list.rest.is_some() {
+        let rest_start = args.len().min(optional_start + lambda_list.optional.len());
+        adapted.push(make_list(runtime, args[rest_start..].iter().copied()));
+    }
+    Some(adapted)
 }
 
 fn execute_module_entry(

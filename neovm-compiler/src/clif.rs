@@ -17,20 +17,44 @@ use crate::liveness::SsaSafepointLiveness;
 use crate::ssa::{SsaConst, SsaFunction, SsaInstKind, SsaLambdaTemplate, SsaModule, SsaTerminator};
 use crate::surface::SurfaceForm;
 
+const TAG_BITS: u32 = 3;
+const FIXNUM_TAG: i64 = 0b000;
+const CHAR_TAG: i64 = 0b010;
+const SPECIAL_TAG: i64 = 0b110;
+const NIL_BITS: i64 = SPECIAL_TAG; // 6
+const TRUE_BITS: i64 = (1 << TAG_BITS) | SPECIAL_TAG; // 14
+const FIXNUM_MIN: i64 = i64::MIN >> TAG_BITS;
+const FIXNUM_MAX: i64 = i64::MAX >> TAG_BITS;
+
+#[derive(Clone, Debug)]
+pub struct ClifRuntimeTables {
+    pub symbol_rodeo: Rodeo,
+    pub string_rodeo: Rodeo,
+    pub quoted_forms: Vec<SurfaceForm>,
+    pub lambda_templates: Vec<SsaLambdaTemplate>,
+}
+
 pub struct ClifModuleLowerOutput {
     pub functions: PrimaryMap<FunctionId, ClifLowerOutput>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
-pub struct ClifLowerOutput {
+pub struct ClifLowerOutput<M: ClifModuleBackend = ModuleDeclarations> {
     pub function: Option<Function>,
-    pub runtime: ClifRuntimeAbi,
+    pub runtime: ClifRuntimeAbi<M>,
     pub safepoints: ClifSafepointTable,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 pub fn ssa_to_clif(function: &SsaFunction) -> ClifLowerOutput {
-    ClifLowerer::new(function).lower()
+    ClifLowerer::<ModuleDeclarations>::new(function).lower()
+}
+
+pub fn ssa_to_clif_with_backend<M: ClifModuleBackend>(
+    function: &SsaFunction,
+    runtime: ClifRuntimeAbi<M>,
+) -> ClifLowerOutput<M> {
+    ClifLowerer::with_runtime(function, runtime).lower()
 }
 
 pub fn ssa_module_to_clif(module: &SsaModule) -> ClifModuleLowerOutput {
@@ -99,8 +123,29 @@ pub enum ClifRuntimeCallKind {
     Cdr,
 }
 
-pub struct ClifRuntimeAbi {
-    declarations: ModuleDeclarations,
+/// Abstraction over Cranelift module backends for declaring imported functions.
+///
+/// Implemented for `ModuleDeclarations` (IR dumping/tests) and `cranelift_jit::JITModule`
+/// (native JIT compilation).
+pub trait ClifModuleBackend {
+    fn declare_import(&mut self, name: &str, signature: &Signature) -> FuncId;
+    fn call_conv(&self) -> CallConv;
+}
+
+impl ClifModuleBackend for ModuleDeclarations {
+    fn declare_import(&mut self, name: &str, signature: &Signature) -> FuncId {
+        self.declare_function(name, Linkage::Import, signature)
+            .expect("ModuleDeclarations::declare_function should not fail")
+            .0
+    }
+
+    fn call_conv(&self) -> CallConv {
+        CallConv::SystemV
+    }
+}
+
+pub struct ClifRuntimeAbi<M: ClifModuleBackend = ModuleDeclarations> {
+    module: M,
     symbols: Rodeo,
     strings: Rodeo,
     quoted_forms: Vec<SurfaceForm>,
@@ -123,12 +168,14 @@ pub struct ClifRuntimeAbi {
     cons: Option<FuncId>,
     car: Option<FuncId>,
     cdr: Option<FuncId>,
+    local_functions: HashMap<String, FuncId>,
+    imported_names: Vec<String>,
 }
 
-impl Default for ClifRuntimeAbi {
+impl<M: ClifModuleBackend + Default> Default for ClifRuntimeAbi<M> {
     fn default() -> Self {
         Self {
-            declarations: ModuleDeclarations::default(),
+            module: M::default(),
             symbols: Rodeo::default(),
             strings: Rodeo::default(),
             quoted_forms: Vec::new(),
@@ -151,13 +198,76 @@ impl Default for ClifRuntimeAbi {
             cons: None,
             car: None,
             cdr: None,
+            local_functions: HashMap::new(),
+            imported_names: Vec::new(),
         }
     }
 }
 
-impl ClifRuntimeAbi {
-    pub fn declarations(&self) -> &ModuleDeclarations {
-        &self.declarations
+impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
+    pub fn from_module(module: M) -> Self {
+        Self {
+            module,
+            symbols: Rodeo::default(),
+            strings: Rodeo::default(),
+            quoted_forms: Vec::new(),
+            lambda_templates: Vec::new(),
+            call_named_by_arity: HashMap::new(),
+            funcall_by_arity: HashMap::new(),
+            apply_by_arity: HashMap::new(),
+            symbol_get: None,
+            symbol_set: None,
+            bind_dynamic: None,
+            unbind_dynamic: None,
+            string_const: None,
+            float_const: None,
+            quote: None,
+            function_quote: None,
+            lambda_by_capture_count: HashMap::new(),
+            make_lexical_cell: None,
+            lexical_cell_get: None,
+            lexical_cell_set: None,
+            cons: None,
+            car: None,
+            cdr: None,
+            local_functions: HashMap::new(),
+            imported_names: Vec::new(),
+        }
+    }
+
+    pub fn into_module(self) -> M {
+        self.module
+    }
+
+    pub fn extract_tables(&self) -> ClifRuntimeTables {
+        ClifRuntimeTables {
+            symbol_rodeo: self.symbols.clone(),
+            string_rodeo: self.strings.clone(),
+            quoted_forms: self.quoted_forms.clone(),
+            lambda_templates: self.lambda_templates.clone(),
+        }
+    }
+
+    /// Register a module-local function for direct JIT-to-JIT calls.
+    /// The `declared_name` is the name used when declaring/defining the function in the backend module.
+    pub fn register_local_function(&mut self, declared_name: &str, arity: usize, call_conv: CallConv) {
+        let mut sig = Signature::new(call_conv);
+        sig.params.push(AbiParam::new(types::I64)); // vmctx
+        for _ in 0..arity {
+            sig.params.push(AbiParam::new(types::I64));
+        }
+        sig.returns.push(AbiParam::new(types::I64));
+        let id = self.module.declare_import(declared_name, &sig);
+        self.local_functions.insert(declared_name.to_string(), id);
+    }
+
+    /// Get the FuncId for a registered local function, if any.
+    pub fn local_function(&self, name: &str) -> Option<FuncId> {
+        self.local_functions.get(name).copied()
+    }
+
+    pub fn module(&self) -> &M {
+        &self.module
     }
 
     pub fn intern_symbol(&mut self, name: &str) -> Spur {
@@ -219,10 +329,7 @@ impl ClifRuntimeAbi {
     }
 
     pub fn imported_function_names(&self) -> Vec<&str> {
-        self.declarations
-            .get_functions()
-            .filter_map(|(_, declaration)| declaration.name.as_deref())
-            .collect()
+        self.imported_names.iter().map(|s| s.as_str()).collect()
     }
 
     fn call_named(
@@ -239,10 +346,8 @@ impl ClifRuntimeAbi {
 
         let name = format!("__neomacs_rt_call_named_{arity}");
         let signature = call_named_signature(arity, call_conv);
-        let (id, _) = self
-            .declarations
-            .declare_function(&name, Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import(&name, &signature);
+        self.imported_names.push(name.clone());
         self.call_named_by_arity.insert(arity, id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -257,10 +362,8 @@ impl ClifRuntimeAbi {
 
         let name = format!("__neomacs_rt_funcall_{arity}");
         let signature = indirect_call_signature(arity, call_conv);
-        let (id, _) = self
-            .declarations
-            .declare_function(&name, Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import(&name, &signature);
+        self.imported_names.push(name.clone());
         self.funcall_by_arity.insert(arity, id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -275,10 +378,8 @@ impl ClifRuntimeAbi {
 
         let name = format!("__neomacs_rt_apply_{arity}");
         let signature = indirect_call_signature(arity, call_conv);
-        let (id, _) = self
-            .declarations
-            .declare_function(&name, Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import(&name, &signature);
+        self.imported_names.push(name.clone());
         self.apply_by_arity.insert(arity, id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -289,10 +390,10 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_symbol_get", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_symbol_get", &signature);
+        self.imported_names.push("__neomacs_rt_symbol_get".to_string());
         self.symbol_get = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -303,10 +404,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_symbol_set", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_symbol_set", &signature);
+        self.imported_names.push("__neomacs_rt_symbol_set".to_string());
         self.symbol_set = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -317,10 +416,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_bind_dynamic", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_bind_dynamic", &signature);
+        self.imported_names.push("__neomacs_rt_bind_dynamic".to_string());
         self.bind_dynamic = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -331,10 +428,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_unbind_dynamic", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_unbind_dynamic", &signature);
+        self.imported_names.push("__neomacs_rt_unbind_dynamic".to_string());
         self.unbind_dynamic = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -345,10 +440,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_string_const", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_string_const", &signature);
+        self.imported_names.push("__neomacs_rt_string_const".to_string());
         self.string_const = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -359,10 +452,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_float_const", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_float_const", &signature);
+        self.imported_names.push("__neomacs_rt_float_const".to_string());
         self.float_const = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -373,10 +464,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_quote", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_quote", &signature);
+        self.imported_names.push("__neomacs_rt_quote".to_string());
         self.quote = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -387,10 +476,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_function_quote", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_function_quote", &signature);
+        self.imported_names.push("__neomacs_rt_function_quote".to_string());
         self.function_quote = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -406,10 +493,8 @@ impl ClifRuntimeAbi {
         }
 
         let name = format!("__neomacs_rt_lambda_{capture_count}");
-        let (id, _) = self
-            .declarations
-            .declare_function(&name, Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import(&name, &signature);
+        self.imported_names.push(name.clone());
         self.lambda_by_capture_count.insert(capture_count, id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -420,14 +505,10 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function(
-                "__neomacs_rt_make_lexical_cell",
-                Linkage::Import,
-                &signature,
-            )
-            .map_err(|error| error.to_string())?;
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_make_lexical_cell", &signature);
+        self.imported_names.push("__neomacs_rt_make_lexical_cell".to_string());
         self.make_lexical_cell = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -438,10 +519,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_lexical_cell_get", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_lexical_cell_get", &signature);
+        self.imported_names.push("__neomacs_rt_lexical_cell_get".to_string());
         self.lexical_cell_get = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -452,10 +531,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_lexical_cell_set", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_lexical_cell_set", &signature);
+        self.imported_names.push("__neomacs_rt_lexical_cell_set".to_string());
         self.lexical_cell_set = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -466,10 +543,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_cons", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_cons", &signature);
+        self.imported_names.push("__neomacs_rt_cons".to_string());
         self.cons = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -480,10 +555,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_car", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_car", &signature);
+        self.imported_names.push("__neomacs_rt_car".to_string());
         self.car = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -494,10 +567,8 @@ impl ClifRuntimeAbi {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let (id, _) = self
-            .declarations
-            .declare_function("__neomacs_rt_cdr", Linkage::Import, &signature)
-            .map_err(|error| error.to_string())?;
+        let id = self.module.declare_import("__neomacs_rt_cdr", &signature);
+        self.imported_names.push("__neomacs_rt_cdr".to_string());
         self.cdr = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -595,15 +666,15 @@ fn lambda_signature(capture_count: usize, call_conv: CallConv) -> Signature {
     signature
 }
 
-struct ClifLowerer<'a> {
+struct ClifLowerer<'a, M: ClifModuleBackend = ModuleDeclarations> {
     ssa: &'a SsaFunction,
-    runtime: ClifRuntimeAbi,
+    runtime: ClifRuntimeAbi<M>,
     safepoints: ClifSafepointTable,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl<'a> ClifLowerer<'a> {
-    fn new(ssa: &'a SsaFunction) -> Self {
+impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
+    fn new(ssa: &'a SsaFunction) -> Self where M: Default {
         Self {
             ssa,
             runtime: ClifRuntimeAbi::default(),
@@ -612,8 +683,17 @@ impl<'a> ClifLowerer<'a> {
         }
     }
 
-    fn lower(mut self) -> ClifLowerOutput {
-        let call_conv = CallConv::SystemV;
+    fn with_runtime(ssa: &'a SsaFunction, runtime: ClifRuntimeAbi<M>) -> Self {
+        Self {
+            ssa,
+            runtime,
+            safepoints: ClifSafepointTable::default(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn lower(mut self) -> ClifLowerOutput<M> {
+        let call_conv = self.runtime.module.call_conv();
         self.check_supported_subset();
         if !self.diagnostics.is_empty() {
             return self.finish(None);
@@ -763,7 +843,7 @@ impl<'a> ClifLowerer<'a> {
         )));
     }
 
-    fn finish(self, function: Option<Function>) -> ClifLowerOutput {
+    fn finish(self, function: Option<Function>) -> ClifLowerOutput<M> {
         ClifLowerOutput {
             function,
             runtime: self.runtime,
@@ -773,14 +853,14 @@ impl<'a> ClifLowerer<'a> {
     }
 }
 
-struct ClifBlockLowerer<'a> {
+struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     builder: FunctionBuilder<'a>,
     block_map: HashMap<BlockId, ir::Block>,
     value_map: HashMap<ValueId, ir::Value>,
     lexical_vars: HashMap<String, Variable>,
     runtime_func_refs: HashMap<FuncId, FuncRef>,
     vmctx: Option<ir::Value>,
-    runtime: &'a mut ClifRuntimeAbi,
+    runtime: &'a mut ClifRuntimeAbi<M>,
     safepoints: ClifSafepointTable,
     safepoint_liveness: SsaSafepointLiveness,
     current_inst: Option<(BlockId, usize)>,
@@ -788,7 +868,7 @@ struct ClifBlockLowerer<'a> {
     diagnostics: Vec<Diagnostic>,
 }
 
-impl ClifBlockLowerer<'_> {
+impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
     fn lower_inst(&mut self, inst: &crate::ssa::SsaInst) {
         match &inst.kind {
             SsaInstKind::Const(value) => {
@@ -797,10 +877,16 @@ impl ClifBlockLowerer<'_> {
                     return;
                 };
                 let immediate = match value {
-                    SsaConst::Nil => 0,
-                    SsaConst::True => 1,
-                    SsaConst::Int(value) => *value,
-                    SsaConst::Char(value) => *value,
+                    SsaConst::Nil => NIL_BITS,
+                    SsaConst::True => TRUE_BITS,
+                    SsaConst::Int(value) => {
+                        if !(FIXNUM_MIN..=FIXNUM_MAX).contains(value) {
+                            self.error(format!("integer constant {value} requires bignum support"));
+                            return;
+                        }
+                        (*value << TAG_BITS as i64) | FIXNUM_TAG
+                    }
+                    SsaConst::Char(value) => ((*value as i64) << TAG_BITS) | CHAR_TAG,
                     SsaConst::Float(value) => {
                         let bits = value.to_bits();
                         let Some(func_ref) = self.float_const_ref() else {
@@ -1081,6 +1167,29 @@ impl ClifBlockLowerer<'_> {
                     PrimitiveCallLowering::Unknown => {}
                     PrimitiveCallLowering::Error => return,
                 }
+                // Try direct JIT-to-JIT call for module-local functions
+                if let Some(local_fid) = self.runtime.local_function(name) {
+                    let Some(vmctx) = self.vmctx else {
+                        self.error("local function call requires vmctx");
+                        return;
+                    };
+                    let arity = args.len();
+                    let mut sig = Signature::new(self.call_conv);
+                    sig.params.push(AbiParam::new(types::I64)); // vmctx
+                    for _ in 0..arity {
+                        sig.params.push(AbiParam::new(types::I64));
+                    }
+                    sig.returns.push(AbiParam::new(types::I64));
+                    let Some(func_ref) = self.func_ref_for_id(local_fid, sig) else {
+                        return;
+                    };
+                    let mut call_args = vec![vmctx];
+                    call_args.extend(args.iter().copied());
+                    let inst = self.builder.ins().call(func_ref, &call_args);
+                    let result_value = self.builder.inst_results(inst)[0];
+                    self.value_map.insert(result, result_value);
+                    return;
+                }
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
                     return;
                 };
@@ -1169,7 +1278,7 @@ impl ClifBlockLowerer<'_> {
                 let Some(test) = self.value(*test) else {
                     return;
                 };
-                let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, test, 0);
+                let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, test, NIL_BITS);
                 let then_args = self.values(then_args);
                 let else_args = self.values(else_args);
                 let Some(then_target) = self.block(*then_target) else {
@@ -1203,156 +1312,27 @@ impl ClifBlockLowerer<'_> {
     }
 
     fn lower_pure_integer_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        // Arithmetic and comparison operators must go through runtime dispatch
+        // to handle dynamic float promotion (GNU Emacs semantics).
+        // Only null/not can be safely inlined (tagged value check).
         match name {
-            "+" => PrimitiveCallLowering::Value(self.lower_integer_fold(
-                args,
-                0,
-                Self::emit_checked_iadd,
-            )),
-            "*" => PrimitiveCallLowering::Value(self.lower_integer_fold(
-                args,
-                1,
-                Self::emit_checked_imul,
-            )),
-            "-" => {
-                match args {
-                    [] => {
-                        self.error("primitive `-` requires at least one argument");
-                        PrimitiveCallLowering::Error
-                    }
-                    [value] => {
-                        let zero = self.builder.ins().iconst(types::I64, 0);
-                        PrimitiveCallLowering::Value(self.emit_checked_isub(zero, *value))
-                    }
-                    [first, rest @ ..] => PrimitiveCallLowering::Value(
-                        self.lower_integer_fold_from(*first, rest, Self::emit_checked_isub),
-                    ),
-                }
-            }
-            "1+" => {
-                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
+            "null" | "not" => {
+                let Some(value) = args.first() else {
                     return PrimitiveCallLowering::Error;
                 };
-                let one = self.builder.ins().iconst(types::I64, 1);
-                PrimitiveCallLowering::Value(self.emit_checked_iadd(value, one))
-            }
-            "1-" => {
-                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
-                    return PrimitiveCallLowering::Error;
-                };
-                let one = self.builder.ins().iconst(types::I64, 1);
-                PrimitiveCallLowering::Value(self.emit_checked_isub(value, one))
-            }
-            "=" => {
-                PrimitiveCallLowering::Value(self.lower_integer_chain_compare(args, IntCC::Equal))
-            }
-            "<" => PrimitiveCallLowering::Value(
-                self.lower_integer_chain_compare(args, IntCC::SignedLessThan),
-            ),
-            "<=" => PrimitiveCallLowering::Value(
-                self.lower_integer_chain_compare(args, IntCC::SignedLessThanOrEqual),
-            ),
-            ">" => PrimitiveCallLowering::Value(
-                self.lower_integer_chain_compare(args, IntCC::SignedGreaterThan),
-            ),
-            ">=" => PrimitiveCallLowering::Value(
-                self.lower_integer_chain_compare(args, IntCC::SignedGreaterThanOrEqual),
-            ),
-            "not" | "null" => {
-                let Some(value) = self.exactly_one_primitive_arg(name, args) else {
-                    return PrimitiveCallLowering::Error;
-                };
-                let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, value, 0);
+                let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, *value, NIL_BITS);
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_nil))
             }
             _ => PrimitiveCallLowering::Unknown,
         }
     }
 
-    fn lower_integer_fold(
-        &mut self,
-        args: &[ir::Value],
-        initial: i64,
-        op: fn(&mut Self, ir::Value, ir::Value) -> ir::Value,
-    ) -> ir::Value {
-        let initial = self.builder.ins().iconst(types::I64, initial);
-        self.lower_integer_fold_from(initial, args, op)
-    }
-
-    fn lower_integer_fold_from(
-        &mut self,
-        initial: ir::Value,
-        rest: &[ir::Value],
-        op: fn(&mut Self, ir::Value, ir::Value) -> ir::Value,
-    ) -> ir::Value {
-        rest.iter()
-            .copied()
-            .fold(initial, |acc, value| op(self, acc, value))
-    }
-
-    fn emit_checked_iadd(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
-        let (value, overflow) = self.builder.ins().sadd_overflow(left, right);
-        self.trap_on_integer_overflow(overflow);
-        value
-    }
-
-    fn emit_checked_isub(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
-        let (value, overflow) = self.builder.ins().ssub_overflow(left, right);
-        self.trap_on_integer_overflow(overflow);
-        value
-    }
-
-    fn emit_checked_imul(&mut self, left: ir::Value, right: ir::Value) -> ir::Value {
-        let (value, overflow) = self.builder.ins().smul_overflow(left, right);
-        self.trap_on_integer_overflow(overflow);
-        value
-    }
-
-    fn trap_on_integer_overflow(&mut self, overflow: ir::Value) {
-        self.builder
-            .ins()
-            .trapnz(overflow, ir::TrapCode::unwrap_user(2));
-    }
-
-    fn lower_integer_chain_compare(&mut self, args: &[ir::Value], condition: IntCC) -> ir::Value {
-        let Some((first, rest)) = args.split_first() else {
-            return self.builder.ins().iconst(types::I64, 1);
-        };
-        let mut previous = *first;
-        let mut combined = None;
-        for current in rest.iter().copied() {
-            let comparison = self.builder.ins().icmp(condition, previous, current);
-            combined = Some(match combined {
-                Some(acc) => self.builder.ins().band(acc, comparison),
-                None => comparison,
-            });
-            previous = current;
-        }
-        match combined {
-            Some(condition) => self.bool_to_lisp_value(condition),
-            None => self.builder.ins().iconst(types::I64, 1),
-        }
-    }
-
     fn bool_to_lisp_value(&mut self, condition: ir::Value) -> ir::Value {
-        let true_value = self.builder.ins().iconst(types::I64, 1);
-        let false_value = self.builder.ins().iconst(types::I64, 0);
+        let true_value = self.builder.ins().iconst(types::I64, TRUE_BITS);
+        let false_value = self.builder.ins().iconst(types::I64, NIL_BITS);
         self.builder
             .ins()
             .select(condition, true_value, false_value)
-    }
-
-    fn exactly_one_primitive_arg(&mut self, name: &str, args: &[ir::Value]) -> Option<ir::Value> {
-        match args {
-            [value] => Some(*value),
-            _ => {
-                self.error(format!(
-                    "primitive `{name}` requires exactly one argument, got {}",
-                    args.len()
-                ));
-                None
-            }
-        }
     }
 
     fn lower_pair_runtime_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
@@ -1664,17 +1644,21 @@ impl ClifBlockLowerer<'_> {
     }
 
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {
-        if let Some(func_ref) = self.runtime_func_refs.get(&import.id).copied() {
+        self.func_ref_for_id(import.id, import.signature)
+    }
+
+    fn func_ref_for_id(&mut self, id: FuncId, signature: Signature) -> Option<FuncRef> {
+        if let Some(func_ref) = self.runtime_func_refs.get(&id).copied() {
             return Some(func_ref);
         }
 
-        let signature = self.builder.import_signature(import.signature);
+        let signature = self.builder.import_signature(signature);
         let user_name = self
             .builder
             .func
             .declare_imported_user_function(ir::UserExternalName {
                 namespace: 0,
-                index: import.id.as_u32(),
+                index: id.as_u32(),
             });
         let func_ref = self.builder.import_function(ir::ExtFuncData {
             name: ir::ExternalName::user(user_name),
@@ -1682,7 +1666,7 @@ impl ClifBlockLowerer<'_> {
             colocated: false,
             patchable: false,
         });
-        self.runtime_func_refs.insert(import.id, func_ref);
+        self.runtime_func_refs.insert(id, func_ref);
         Some(func_ref)
     }
 
@@ -1970,7 +1954,7 @@ mod tests {
         assert_eq!(clif.diagnostics, Vec::new());
         assert_eq!(clif.safepoints.entries.len(), 0);
         let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("iconst.i64 42"));
+        assert!(dump.contains("iconst.i64 336")); // 42 << 3 (tagged fixnum)
         assert!(dump.contains("return"));
     }
 
@@ -2324,14 +2308,13 @@ mod tests {
 
         let lambda_clif = ssa_to_clif(&lambda_ssa.value);
         assert_eq!(lambda_clif.diagnostics, Vec::new());
+        // + goes through runtime dispatch for float promotion support
         assert!(
-            !lambda_clif
+            lambda_clif
                 .runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
-        let dump = dump_clif(&lambda_clif.function.expect("CLIF function"));
-        assert!(dump.contains("sadd_overflow"));
     }
 
     #[test]
@@ -2393,7 +2376,7 @@ mod tests {
         assert_eq!(clif.diagnostics, Vec::new());
         assert_eq!(clif.safepoints.entries.len(), 0);
         let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("iconst.i64 2"));
+        assert!(dump.contains("iconst.i64 16")); // 2 << 3 (tagged fixnum)
         assert!(dump.contains("return"));
     }
 
@@ -2412,13 +2395,13 @@ mod tests {
         assert_eq!(clif.diagnostics, Vec::new());
         assert_eq!(clif.safepoints.entries.len(), 0);
         let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("iconst.i64 2"));
-        assert!(dump.contains("iconst.i64 3"));
+        assert!(dump.contains("iconst.i64 16")); // 2 << 3 (tagged fixnum)
+        assert!(dump.contains("iconst.i64 24")); // 3 << 3 (tagged fixnum)
         assert!(dump.contains("return"));
     }
 
     #[test]
-    fn inlines_pure_integer_named_call() {
+    fn dispatches_arithmetic_to_runtime() {
         let artifact = compile_source(
             "call.el",
             ";;; -*- lexical-binding: t; -*-\n(defun add1-native (x) (+ x 1))",
@@ -2430,26 +2413,17 @@ mod tests {
 
         let clif = ssa_to_clif(&ssa.value);
         assert_eq!(clif.diagnostics, Vec::new());
-        assert_eq!(
-            clif.runtime
-                .symbol_key("+")
-                .map(|symbol| clif.runtime.resolve_symbol(symbol)),
-            None
-        );
+        // Arithmetic goes through runtime dispatch for float promotion support
         assert!(
-            !clif
+            clif
                 .runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
-        assert_eq!(clif.safepoints.entries.len(), 0);
-        let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("sadd_overflow"));
-        assert!(dump.contains("trapnz"));
     }
 
     #[test]
-    fn inlines_integer_comparison_chain() {
+    fn dispatches_comparison_to_runtime() {
         let artifact = compile_source(
             "compare.el",
             ";;; -*- lexical-binding: t; -*-\n(defun ordered (x y z) (if (< x y z) 1 0))",
@@ -2461,17 +2435,13 @@ mod tests {
 
         let clif = ssa_to_clif(&ssa.value);
         assert_eq!(clif.diagnostics, Vec::new());
-        assert_eq!(clif.safepoints.entries.len(), 0);
+        // Comparisons go through runtime dispatch for float promotion support
         assert!(
-            !clif
+            clif
                 .runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_3")
         );
-        let dump = dump_clif(&clif.function.expect("CLIF function"));
-        assert!(dump.contains("icmp slt"));
-        assert!(dump.contains("band"));
-        assert!(dump.contains("select"));
     }
 
     #[test]

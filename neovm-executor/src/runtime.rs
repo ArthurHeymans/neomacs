@@ -12,6 +12,7 @@ pub struct Runtime {
     hash_tables: Vec<Box<HashTableObject>>,
     functions: Vec<Box<FunctionObject>>,
     lexical_cells: Vec<Box<LexicalCell>>,
+    floats: Vec<Box<FloatObj>>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
@@ -29,6 +30,7 @@ impl Default for Runtime {
             hash_tables: Vec::new(),
             functions: Vec::new(),
             lexical_cells: Vec::new(),
+            floats: Vec::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: Vec::new(),
@@ -222,6 +224,46 @@ impl Runtime {
         value
             .heap_addr()
             .is_some_and(|addr| self.function_by_addr(addr).is_some())
+    }
+
+    pub fn float(&mut self, value: f64) -> LispValue {
+        let mut obj = Box::new(FloatObj {
+            header: HeapHeader {
+                kind: HeapKind::Float,
+            },
+            value,
+        });
+        let addr = (&mut *obj as *mut FloatObj) as usize;
+        self.floats.push(obj);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn is_float(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.float_by_addr(addr).is_some())
+    }
+
+    pub fn float_data(&self, value: LispValue) -> Result<f64, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "float", value })?;
+        let obj = self.float_by_addr(addr).ok_or(RuntimeError::WrongTypeArgument { expected: "float", value })?;
+        Ok(obj.value)
+    }
+
+    pub fn as_number(&self, value: LispValue) -> Option<f64> {
+        if let Some(fixnum) = value.as_fixnum() {
+            return Some(fixnum as f64);
+        }
+        if let Some(addr) = value.heap_addr() {
+            if let Some(obj) = self.float_by_addr(addr) {
+                return Some(obj.value);
+            }
+        }
+        None
+    }
+
+    pub fn is_number(&self, value: LispValue) -> bool {
+        value.is_fixnum() || self.is_float(value)
     }
 
     pub fn cons_cell_count(&self) -> usize {
@@ -959,6 +1001,16 @@ impl Runtime {
         None
     }
 
+    fn float_by_addr(&self, addr: usize) -> Option<&FloatObj> {
+        for obj in &self.floats {
+            let obj_addr = (&**obj as *const FloatObj) as usize;
+            if obj_addr == addr && obj.header.kind == HeapKind::Float {
+                return Some(obj);
+            }
+        }
+        None
+    }
+
     fn plist_pair(&self, pair_cell: LispValue) -> Option<(LispValue, LispValue, LispValue)> {
         let pair = self.cons_by_addr(pair_cell.heap_addr()?)?;
         let value_cell = self.cons_by_addr(pair.cdr.heap_addr()?)?;
@@ -1092,6 +1144,11 @@ impl Runtime {
             .is_some_and(|addr| self.lexical_cell_by_addr(addr).is_some())
         {
             return "#<lexical-cell>".to_string();
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(obj) = self.float_by_addr(addr)
+        {
+            return format!("{}", obj.value);
         }
         format!("{value:?}")
     }
@@ -1302,6 +1359,7 @@ enum HeapKind {
     HashTable = 5,
     Function = 6,
     LexicalCell = 7,
+    Float = 8,
 }
 
 #[repr(C)]
@@ -1361,6 +1419,12 @@ struct FunctionObject {
 struct LexicalCell {
     header: HeapHeader,
     value: LispValue,
+}
+
+#[repr(C, align(8))]
+struct FloatObj {
+    header: HeapHeader,
+    value: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,0 +1,1017 @@
+use std::collections::HashMap;
+
+use lasso::{Key, Rodeo, Spur};
+use neovm_compiler::ids::FunctionId;
+use neovm_compiler::regir::RegModule;
+use neovm_compiler::ssa::SsaLambdaTemplate;
+use neovm_compiler::surface::SurfaceForm;
+
+use crate::{LispValue, Runtime};
+
+#[repr(C)]
+pub struct JitContext {
+    pub runtime: *mut Runtime,
+    pub symbols: *mut Rodeo,
+    pub strings: *mut Rodeo,
+    pub quoted_forms: *mut Vec<SurfaceForm>,
+    pub lambda_templates: *mut Vec<SsaLambdaTemplate>,
+    pub regir: *mut RegModule,
+    pub functions_by_name: *mut HashMap<String, FunctionId>,
+}
+
+macro_rules! jit_shim {
+    ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? { $($body:tt)* }) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name($($arg: $ty),*) $(-> $ret)? {
+            unsafe { $($body)* }
+        }
+    };
+}
+
+macro_rules! ctx_and_rt {
+    ($vmctx:ident, $ctx:ident, $rt:ident) => {
+        let $ctx = &mut *($vmctx as *mut JitContext);
+        let $rt = &mut *$ctx.runtime;
+    };
+}
+
+macro_rules! resolve_sym {
+    ($ctx:expr, $idx:expr) => {
+        {
+            let rodeo = &*$ctx.symbols;
+            let spur = Spur::try_from_usize($idx as usize).expect("invalid symbol index");
+            rodeo.resolve(&spur)
+        }
+    };
+}
+
+macro_rules! resolve_str {
+    ($ctx:expr, $idx:expr) => {
+        {
+            let rodeo = &*$ctx.strings;
+            let spur = Spur::try_from_usize($idx as usize).expect("invalid string index");
+            rodeo.resolve(&spur)
+        }
+    };
+}
+
+// --- Core heap operations ---
+
+jit_shim!(__neomacs_rt_cons(vmctx: i64, car: i64, cdr: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    rt.cons(LispValue::from_abi_i64(car), LispValue::from_abi_i64(cdr)).to_abi_i64()
+});
+
+jit_shim!(__neomacs_rt_car(vmctx: i64, pair: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    let result = rt.car(LispValue::from_abi_i64(pair));
+    match result { Ok(v) => v.to_abi_i64(), Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() } }
+});
+
+jit_shim!(__neomacs_rt_cdr(vmctx: i64, pair: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    let result = rt.cdr(LispValue::from_abi_i64(pair));
+    match result { Ok(v) => v.to_abi_i64(), Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() } }
+});
+
+jit_shim!(__neomacs_rt_make_lexical_cell(vmctx: i64, value: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    rt.lexical_cell(LispValue::from_abi_i64(value)).to_abi_i64()
+});
+
+jit_shim!(__neomacs_rt_lexical_cell_get(vmctx: i64, cell: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    match rt.lexical_cell_get(LispValue::from_abi_i64(cell)) {
+        Ok(v) => v.to_abi_i64(),
+        Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() }
+    }
+});
+
+jit_shim!(__neomacs_rt_lexical_cell_set(vmctx: i64, cell: i64, value: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    match rt.lexical_cell_set(LispValue::from_abi_i64(cell), LispValue::from_abi_i64(value)) {
+        Ok(v) => v.to_abi_i64(),
+        Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() }
+    }
+});
+
+// --- Symbol operations ---
+
+jit_shim!(__neomacs_rt_symbol_get(vmctx: i64, symbol_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index);
+    let rt = &mut *ctx.runtime;
+    let symbol = rt.intern(name);
+    match rt.symbol_value(symbol) { Ok(v) => v.to_abi_i64(), Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() } }
+});
+
+jit_shim!(__neomacs_rt_symbol_set(vmctx: i64, symbol_index: i64, value: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index);
+    let rt = &mut *ctx.runtime;
+    let symbol = rt.intern(name);
+    match rt.set_symbol_value(symbol, LispValue::from_abi_i64(value)) { Ok(v) => v.to_abi_i64(), Err(e) => { eprintln!("JIT rt error: {e}"); LispValue::NIL.to_abi_i64() } }
+});
+
+jit_shim!(__neomacs_rt_bind_dynamic(vmctx: i64, symbol_index: i64, value: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index);
+    let rt = &mut *ctx.runtime;
+    if let Err(e) = rt.bind_dynamic_by_name(name, LispValue::from_abi_i64(value)) { eprintln!("JIT rt error: {e}"); }
+    0
+});
+
+jit_shim!(__neomacs_rt_unbind_dynamic(vmctx: i64, count: i64) -> i64 {
+    ctx_and_rt!(vmctx, ctx, rt);
+    if let Err(e) = rt.unbind_dynamic(count as usize) { eprintln!("JIT rt error: {e}"); }
+    0
+});
+
+// --- String/Float ---
+
+jit_shim!(__neomacs_rt_string_const(vmctx: i64, string_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let value = resolve_str!(ctx, string_index);
+    let rt = &mut *ctx.runtime;
+    rt.string(value).to_abi_i64()
+});
+
+jit_shim!(__neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    let value = f64::from_bits(bits as u64);
+    rt.float(value).to_abi_i64()
+});
+
+// --- Quote / Lambda ---
+
+jit_shim!(__neomacs_rt_quote(vmctx: i64, form_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let forms = &*ctx.quoted_forms;
+    let rt = &mut *ctx.runtime;
+    match forms.get(form_index as usize) {
+        Some(form) => surface_form_to_lisp(rt, form).to_abi_i64(),
+        None => { eprintln!("JIT: quote index {form_index} OOB"); LispValue::NIL.to_abi_i64() }
+    }
+});
+
+jit_shim!(__neomacs_rt_function_quote(vmctx: i64, fn_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let forms = &*ctx.quoted_forms;
+    let rt = &mut *ctx.runtime;
+    match forms.get(fn_index as usize) {
+        Some(form) => surface_form_to_lisp(rt, form).to_abi_i64(),
+        None => { eprintln!("JIT: fn-quote index {fn_index} OOB"); LispValue::NIL.to_abi_i64() }
+    }
+});
+
+jit_shim!(__neomacs_rt_lambda_0(vmctx: i64, template_index: i64) -> i64 {
+    make_lambda(vmctx, template_index, &[])
+});
+
+jit_shim!(__neomacs_rt_lambda_1(vmctx: i64, template_index: i64, capture0: i64) -> i64 {
+    make_lambda(vmctx, template_index, &[capture0])
+});
+
+jit_shim!(__neomacs_rt_lambda_2(vmctx: i64, template_index: i64, capture0: i64, capture1: i64) -> i64 {
+    make_lambda(vmctx, template_index, &[capture0, capture1])
+});
+
+jit_shim!(__neomacs_rt_lambda_3(vmctx: i64, template_index: i64, capture0: i64, capture1: i64, capture2: i64) -> i64 {
+    make_lambda(vmctx, template_index, &[capture0, capture1, capture2])
+});
+
+unsafe fn make_lambda(vmctx: i64, template_index: i64, captures: &[i64]) -> i64 {
+    unsafe {
+        let ctx = &mut *(vmctx as *mut JitContext);
+        let templates = &*ctx.lambda_templates;
+        let rt = &mut *ctx.runtime;
+        match templates.get(template_index as usize) {
+            Some(template) => {
+                let capture_values: Vec<LispValue> = captures.iter().map(|c| LispValue::from_abi_i64(*c)).collect();
+                rt.function(template.clone(), capture_values).to_abi_i64()
+            }
+            None => { eprintln!("JIT: lambda template index {template_index} OOB"); LispValue::NIL.to_abi_i64() }
+        }
+    }
+}
+
+// --- Call dispatch ---
+
+jit_shim!(__neomacs_rt_call_named_0(vmctx: i64, symbol_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index).to_string();
+    let rt = &mut *ctx.runtime;
+    dispatch_named_call(ctx, &name, &[], rt)
+});
+
+jit_shim!(__neomacs_rt_call_named_1(vmctx: i64, symbol_index: i64, arg0: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index).to_string();
+    let rt = &mut *ctx.runtime;
+    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0)], rt)
+});
+
+jit_shim!(__neomacs_rt_call_named_2(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index).to_string();
+    let rt = &mut *ctx.runtime;
+    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1)], rt)
+});
+
+jit_shim!(__neomacs_rt_call_named_3(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index).to_string();
+    let rt = &mut *ctx.runtime;
+    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2)], rt)
+});
+
+jit_shim!(__neomacs_rt_call_named_4(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64, arg2: i64, arg3: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_sym!(ctx, symbol_index).to_string();
+    let rt = &mut *ctx.runtime;
+    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2), LispValue::from_abi_i64(arg3)], rt)
+});
+
+// Higher-arity call_named shims (5-16)
+macro_rules! call_named_shim {
+    ($fname:ident $($arg:ident)*) => {
+        jit_shim!($fname(vmctx: i64, symbol_index: i64 $(, $arg: i64)*) -> i64 {
+            let ctx = &mut *(vmctx as *mut JitContext);
+            let name = resolve_sym!(ctx, symbol_index).to_string();
+            let rt = &mut *ctx.runtime;
+            dispatch_named_call(ctx, &name, &[$(LispValue::from_abi_i64($arg)),*], rt)
+        });
+    };
+}
+
+call_named_shim!(__neomacs_rt_call_named_5 a0 a1 a2 a3 a4);
+call_named_shim!(__neomacs_rt_call_named_6 a0 a1 a2 a3 a4 a5);
+call_named_shim!(__neomacs_rt_call_named_7 a0 a1 a2 a3 a4 a5 a6);
+call_named_shim!(__neomacs_rt_call_named_8 a0 a1 a2 a3 a4 a5 a6 a7);
+call_named_shim!(__neomacs_rt_call_named_9 a0 a1 a2 a3 a4 a5 a6 a7 a8);
+call_named_shim!(__neomacs_rt_call_named_10 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9);
+call_named_shim!(__neomacs_rt_call_named_11 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10);
+call_named_shim!(__neomacs_rt_call_named_12 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11);
+call_named_shim!(__neomacs_rt_call_named_13 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12);
+call_named_shim!(__neomacs_rt_call_named_14 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13);
+call_named_shim!(__neomacs_rt_call_named_15 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14);
+call_named_shim!(__neomacs_rt_call_named_16 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15);
+
+jit_shim!(__neomacs_rt_funcall_0(vmctx: i64, callee: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_funcall(ctx, LispValue::from_abi_i64(callee), &[], rt)
+});
+
+jit_shim!(__neomacs_rt_funcall_1(vmctx: i64, callee: i64, arg0: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_funcall(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0)], rt)
+});
+
+jit_shim!(__neomacs_rt_funcall_2(vmctx: i64, callee: i64, arg0: i64, arg1: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_funcall(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1)], rt)
+});
+
+jit_shim!(__neomacs_rt_funcall_3(vmctx: i64, callee: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_funcall(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2)], rt)
+});
+
+// Higher-arity funcall shims (4-8)
+macro_rules! funcall_shim {
+    ($fname:ident $($arg:ident)*) => {
+        jit_shim!($fname(vmctx: i64, callee: i64 $(, $arg: i64)*) -> i64 {
+            let ctx = &mut *(vmctx as *mut JitContext);
+            let rt = &mut *ctx.runtime;
+            dispatch_funcall(ctx, LispValue::from_abi_i64(callee), &[$(LispValue::from_abi_i64($arg)),*], rt)
+        });
+    };
+}
+
+funcall_shim!(__neomacs_rt_funcall_4 a0 a1 a2 a3);
+funcall_shim!(__neomacs_rt_funcall_5 a0 a1 a2 a3 a4);
+funcall_shim!(__neomacs_rt_funcall_6 a0 a1 a2 a3 a4 a5);
+funcall_shim!(__neomacs_rt_funcall_7 a0 a1 a2 a3 a4 a5 a6);
+funcall_shim!(__neomacs_rt_funcall_8 a0 a1 a2 a3 a4 a5 a6 a7);
+
+jit_shim!(__neomacs_rt_apply_2(vmctx: i64, callee: i64, arg0: i64, arg1: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_apply(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1)], rt)
+});
+
+jit_shim!(__neomacs_rt_apply_3(vmctx: i64, callee: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_apply(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2)], rt)
+});
+
+// --- Dispatch helpers ---
+
+unsafe fn dispatch_named_call(
+    ctx: &mut JitContext,
+    name: &str,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    let fns = unsafe { &*ctx.functions_by_name };
+    match dispatch_primitive(name, args, rt, fns) {
+        Some(value) => value.to_abi_i64(),
+        None => {
+            let regir = unsafe { &*ctx.regir };
+            let fns = unsafe { &*ctx.functions_by_name };
+            if let Some(&fid) = fns.get(name) {
+                return crate::object_interp::execute_module_function(regir, fns, fid, args, rt)
+                    .unwrap_or(LispValue::NIL)
+                    .to_abi_i64();
+            }
+            // Fall back to interpreter's primitive dispatch for higher-order ops
+            // (mapcar, mapc, maphash, require, etc.) that need evaluator context
+            if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {
+                return value.to_abi_i64();
+            }
+            eprintln!("JIT: unhandled call `{name}`");
+            LispValue::NIL.to_abi_i64()
+        }
+    }
+}
+
+unsafe fn dispatch_funcall(
+    ctx: &mut JitContext,
+    callee: LispValue,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    unsafe {
+        if rt.is_function(callee) {
+            let regir = &*ctx.regir;
+            let fns = &*ctx.functions_by_name;
+            return crate::object_interp::execute_function_object_direct(regir, fns, callee, args, rt)
+                .unwrap_or(LispValue::NIL)
+                .to_abi_i64();
+        }
+        if rt.is_symbol(callee) {
+            let name = match rt.symbol_name(callee) { Ok(n) => n, Err(e) => { eprintln!("JIT rt error: {e}"); return LispValue::NIL.to_abi_i64(); } };
+            return dispatch_named_call(ctx, &name, args, rt);
+        }
+        eprintln!("JIT: funcall on non-callable");
+        LispValue::NIL.to_abi_i64()
+    }
+}
+
+unsafe fn dispatch_apply(
+    ctx: &mut JitContext,
+    callee: LispValue,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    unsafe {
+        let Some((last, prefixes)) = args.split_last() else {
+            eprintln!("JIT: apply needs args");
+            return LispValue::NIL.to_abi_i64();
+        };
+        let tail = match list_values(rt, *last) { Some(t) => t, None => return LispValue::NIL.to_abi_i64() };
+        let mut flat = Vec::with_capacity(prefixes.len() + tail.len());
+        flat.extend(prefixes.iter().copied());
+        flat.extend(tail);
+        dispatch_funcall(ctx, callee, &flat, rt)
+    }
+}
+
+fn list_values(rt: &Runtime, list: LispValue) -> Option<Vec<LispValue>> {
+    let mut values = Vec::new();
+    let mut current = list;
+    while !current.is_nil() {
+        let car = rt.car(current).ok()?;
+        let cdr = rt.cdr(current).ok()?;
+        values.push(car);
+        current = cdr;
+    }
+    Some(values)
+}
+
+// --- Primitives ---
+
+fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_functions: &std::collections::HashMap<String, FunctionId>) -> Option<LispValue> {
+    match name {
+        // --- Arithmetic ---
+        "+" => numeric_fold_add(rt, args),
+        "-" => numeric_fold_sub(rt, args),
+        "*" => numeric_fold_mul(rt, args),
+        "/" => numeric_div(rt, args),
+        "1+" => numeric_add1(rt, args[0]),
+        "1-" => numeric_sub1(rt, args[0]),
+        "mod" => numeric_mod(rt, args),
+        "rem" => numeric_rem(rt, args),
+        "abs" => numeric_abs(rt, args[0]),
+        "max" => numeric_max(rt, args),
+        "min" => numeric_min(rt, args),
+        "=" => numeric_eq(rt, args),
+        "<" => numeric_cmp(rt, args, |a, b| a < b),
+        "<=" => numeric_cmp(rt, args, |a, b| a <= b),
+        ">" => numeric_cmp(rt, args, |a, b| a > b),
+        ">=" => numeric_cmp(rt, args, |a, b| a >= b),
+
+        // --- Equality and comparison ---
+        "eq" | "eql" => Some(bool_value(args[0] == args[1])),
+        "equal" => Some(bool_value(rt.equal(args[0], args[1]))),
+
+        // --- Type predicates ---
+        "null" | "not" => Some(bool_value(args[0].is_nil())),
+        "consp" => Some(bool_value(rt.is_cons(args[0]))),
+        "listp" => Some(bool_value(args[0].is_nil() || rt.is_cons(args[0]))),
+        "numberp" => Some(bool_value(rt.is_number(args[0]))),
+        "integerp" => Some(bool_value(args[0].is_fixnum())),
+        "floatp" => Some(bool_value(rt.is_float(args[0]))),
+        "symbolp" => Some(bool_value(rt.is_symbol(args[0]))),
+        "stringp" => Some(bool_value(rt.is_string(args[0]))),
+        "vectorp" => Some(bool_value(rt.is_vector(args[0]))),
+        "hash-table-p" => Some(bool_value(rt.is_hash_table(args[0]))),
+        "functionp" => {
+            let is_fn = rt.is_function(args[0]);
+            let has_symbol_fn = rt.is_symbol(args[0]) && (
+                rt.symbol_function(args[0]).ok().flatten().is_some()
+                || (rt.symbol_name(args[0]).ok().is_some_and(|name| jit_functions.contains_key(&name)))
+            );
+            Some(bool_value(is_fn || has_symbol_fn))
+        }
+        "booleanp" => Some(bool_value(args[0].is_nil() || args[0].is_true())),
+        "natnump" | "wholenump" => Some(bool_value(args[0].as_fixnum().is_some_and(|v| v >= 0))),
+        "zerop" => Some(bool_value(args[0].as_fixnum() == Some(0))),
+        "number-or-marker-p" => Some(bool_value(rt.is_number(args[0]))),
+        "string-or-null-p" => Some(bool_value(rt.is_string(args[0]) || args[0].is_nil())),
+        "type-of" => Some(type_of(rt, args[0])),
+
+        // --- Cons / pair ---
+        "cons" => Some(rt.cons(args[0], args[1])),
+        "car" => rt.car(args[0]).ok(),
+        "cdr" => rt.cdr(args[0]).ok(),
+        "car-safe" => Some(if rt.is_cons(args[0]) { rt.car(args[0]).unwrap_or(LispValue::NIL) } else { LispValue::NIL }),
+        "cdr-safe" => Some(if rt.is_cons(args[0]) { rt.cdr(args[0]).unwrap_or(LispValue::NIL) } else { LispValue::NIL }),
+        "setcar" => rt.set_car(args[0], args[1]).ok(),
+        "setcdr" => rt.set_cdr(args[0], args[1]).ok(),
+
+        // --- List operations ---
+        "list" => Some(make_list(rt, args.iter().copied())),
+        "length" => list_length(rt, args[0]),
+        "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
+        "reverse" => reverse_list(rt, args[0]),
+        "append" => append_lists(rt, args),
+        "memq" => memq_op(rt, args[0], args[1]),
+        "member" => member_op(rt, args[0], args[1]),
+        "assq" => assoc_op(rt, args[0], args[1], false),
+        "assoc" => assoc_op(rt, args[0], args[1], true),
+        "copy-sequence" => copy_sequence(rt, args[0]),
+
+        // --- String operations ---
+        "concat" => concat_strings(rt, args),
+        "substring" => substring_op(rt, args),
+        "string=" | "string-equal" => string_equal(rt, args[0], args[1]),
+        "string<" | "string-lessp" => string_lessp(rt, args[0], args[1]),
+        "char-to-string" => char_to_string(rt, args[0]),
+        "string-to-char" => string_to_char(rt, args[0]),
+        "format" | "format-message" => format_string(rt, args[0], &args[1..]),
+
+        // --- Vector operations ---
+        "vector" => Some(rt.vector(args.to_vec())),
+        "aref" => aref_op(rt, args[0], args[1]),
+        "aset" => aset_op(rt, args[0], args[1], args[2]),
+
+        // --- Hash table operations ---
+        "make-hash-table" => make_hash_table(rt, args),
+        "hash-table-count" => hash_table_count_op(rt, args[0]),
+        "gethash" => gethash_op(rt, args[0], args[1], args.get(2).copied()),
+        "puthash" => rt.puthash(args[0], args[1], args[2]).ok(),
+        "remhash" => rt.remhash(args[0], args[1]).ok(),
+        "clrhash" => rt.clrhash(args[0]).ok(),
+
+        // --- Symbol operations ---
+        "symbol-value" => rt.symbol_value(args[0]).ok(),
+        "symbol-name" => rt.symbol_name_value(args[0]).ok(),
+        "symbol-function" => rt.symbol_function(args[0]).ok().flatten().or(Some(LispValue::NIL)),
+        "symbol-plist" => rt.symbol_plist(args[0]).ok(),
+        "set" => rt.set_symbol_value(args[0], args[1]).ok(),
+        "setplist" => rt.set_symbol_plist(args[0], args[1]).ok(),
+        "boundp" => Some(bool_value(rt.is_bound_symbol(args[0]).unwrap_or(false))),
+        "fboundp" => {
+            let has_fn = rt.symbol_function(args[0]).ok().flatten().is_some();
+            let has_jit_fn = rt.symbol_name(args[0]).ok().is_some_and(|name| jit_functions.contains_key(&name));
+            Some(bool_value(has_fn || has_jit_fn))
+        }
+        "fset" => rt.set_symbol_function(args[0], args[1]).ok(),
+        "defalias" => { let _ = rt.set_symbol_function(args[0], args[1]); Some(args[0]) },
+        "intern" => {
+            let name = rt.string_contents(args[0]).ok()?.to_string();
+            Some(rt.intern(&name))
+        }
+        "get" => rt.symbol_property(args[0], args[1]).ok(),
+        "put" => rt.put_symbol_property(args[0], args[1], args[2]).ok(),
+        "plist-get" => Some(rt.plist_get(args[0], args[1])),
+        "plist-put" => Some(rt.plist_put(args[0], args[1], args[2])),
+        "provide" => rt.provide(args[0]).ok(),
+        "featurep" => Some(bool_value(rt.featurep(args[0]).unwrap_or(false))),
+
+        // --- c*r accessors ---
+        // ops are outermost-to-innermost; reversed iteration applies innermost first
+        // true = car ('a'), false = cdr ('d')
+        "caar" => car_cdr_chain(rt, args[0], &[true, true]),
+        "cadr" => car_cdr_chain(rt, args[0], &[true, false]),
+        "cdar" => car_cdr_chain(rt, args[0], &[false, true]),
+        "cddr" => car_cdr_chain(rt, args[0], &[false, false]),
+        "caaar" => car_cdr_chain(rt, args[0], &[true, true, true]),
+        "caadr" => car_cdr_chain(rt, args[0], &[true, true, false]),
+        "cadar" => car_cdr_chain(rt, args[0], &[true, false, true]),
+        "caddr" => car_cdr_chain(rt, args[0], &[true, false, false]),
+        "cdaar" => car_cdr_chain(rt, args[0], &[false, true, true]),
+        "cdadr" => car_cdr_chain(rt, args[0], &[false, true, false]),
+        "cddar" => car_cdr_chain(rt, args[0], &[false, false, true]),
+        "cdddr" => car_cdr_chain(rt, args[0], &[false, false, false]),
+        "caaaar" => car_cdr_chain(rt, args[0], &[true, true, true, true]),
+        "caaadr" => car_cdr_chain(rt, args[0], &[true, true, true, false]),
+        "caadar" => car_cdr_chain(rt, args[0], &[true, true, false, true]),
+        "caaddr" => car_cdr_chain(rt, args[0], &[true, true, false, false]),
+        "cadaar" => car_cdr_chain(rt, args[0], &[true, false, true, true]),
+        "cadadr" => car_cdr_chain(rt, args[0], &[true, false, true, false]),
+        "caddar" => car_cdr_chain(rt, args[0], &[true, false, false, true]),
+        "cadddr" => car_cdr_chain(rt, args[0], &[true, false, false, false]),
+        "cdaaar" => car_cdr_chain(rt, args[0], &[false, true, true, true]),
+        "cdaadr" => car_cdr_chain(rt, args[0], &[false, true, true, false]),
+        "cdadar" => car_cdr_chain(rt, args[0], &[false, true, false, true]),
+        "cdaddr" => car_cdr_chain(rt, args[0], &[false, true, false, false]),
+        "cddaar" => car_cdr_chain(rt, args[0], &[false, false, true, true]),
+        "cddadr" => car_cdr_chain(rt, args[0], &[false, false, true, false]),
+        "cdddar" => car_cdr_chain(rt, args[0], &[false, false, false, true]),
+        "cddddr" => car_cdr_chain(rt, args[0], &[false, false, false, false]),
+
+        // --- Misc ---
+        "identity" => Some(args[0]),
+        "ignore" => Some(LispValue::NIL),
+        "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
+        "print" | "prin1" => Some(args[0]),
+        "autoload" => Some(LispValue::NIL),
+
+        _ => None,
+    }
+}
+
+// Fallback: use the interpreter's primitive dispatch for higher-order operations
+// (mapcar, mapc, maphash, require) that need full evaluator context
+unsafe fn dispatch_interpreter_fallback(
+    ctx: &mut JitContext,
+    name: &str,
+    args: &[LispValue],
+) -> Option<LispValue> {
+    unsafe {
+        let regir = &*ctx.regir;
+        let fns = &*ctx.functions_by_name;
+        let rt = &mut *ctx.runtime;
+        crate::object_interp::execute_interpreter_primitive(name, args, regir, fns, rt)
+    }
+}
+
+// --- Numeric helpers ---
+
+fn any_float(rt: &Runtime, args: &[LispValue]) -> bool {
+    args.iter().any(|v| rt.is_float(*v))
+}
+
+fn to_f64(rt: &Runtime, v: LispValue) -> f64 {
+    rt.as_number(v).unwrap_or(0.0)
+}
+
+fn numeric_result(rt: &mut Runtime, value: f64, has_float: bool) -> Option<LispValue> {
+    if has_float {
+        Some(rt.float(value))
+    } else {
+        LispValue::from_fixnum(value as i64)
+    }
+}
+
+fn numeric_fold_add(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let sum: f64 = args.iter().map(|v| to_f64(rt, *v)).sum();
+    numeric_result(rt, sum, has_float)
+}
+
+fn numeric_fold_sub(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    if args.is_empty() { return LispValue::from_fixnum(0); }
+    let has_float = any_float(rt, args);
+    if args.len() == 1 {
+        return numeric_result(rt, -to_f64(rt, args[0]), has_float);
+    }
+    let first = to_f64(rt, args[0]);
+    let rest: f64 = args[1..].iter().map(|v| to_f64(rt, *v)).sum();
+    numeric_result(rt, first - rest, has_float)
+}
+
+fn numeric_fold_mul(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let product: f64 = args.iter().map(|v| to_f64(rt, *v)).product();
+    numeric_result(rt, product, has_float)
+}
+
+fn numeric_div(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    if b == 0.0 { return None; }
+    if has_float {
+        Some(rt.float(a / b))
+    } else {
+        LispValue::from_fixnum(a as i64 / b as i64)
+    }
+}
+
+fn numeric_add1(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
+    let has_float = rt.is_float(v);
+    numeric_result(rt, to_f64(rt, v) + 1.0, has_float)
+}
+
+fn numeric_sub1(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
+    let has_float = rt.is_float(v);
+    numeric_result(rt, to_f64(rt, v) - 1.0, has_float)
+}
+
+fn numeric_mod(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    if b == 0.0 { return None; }
+    let result = a % b;
+    // GNU Emacs mod returns non-negative result
+    let result = if result != 0.0 && (a < 0.0) != (b < 0.0) { result + b } else { result };
+    numeric_result(rt, result, has_float)
+}
+
+fn numeric_rem(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    if b == 0.0 { return None; }
+    numeric_result(rt, a % b, has_float)
+}
+
+fn numeric_abs(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
+    let has_float = rt.is_float(v);
+    numeric_result(rt, to_f64(rt, v).abs(), has_float)
+}
+
+fn numeric_max(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let max = args.iter().map(|v| to_f64(rt, *v)).reduce(f64::max)?;
+    numeric_result(rt, max, has_float)
+}
+
+fn numeric_min(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    let min = args.iter().map(|v| to_f64(rt, *v)).reduce(f64::min)?;
+    numeric_result(rt, min, has_float)
+}
+
+fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    Some(bool_value(a == b))
+}
+
+fn numeric_cmp(rt: &Runtime, args: &[LispValue], cmp: impl Fn(f64, f64) -> bool) -> Option<LispValue> {
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    Some(bool_value(cmp(a, b)))
+}
+
+// --- Type-of ---
+
+fn type_of(rt: &mut Runtime, value: LispValue) -> LispValue {
+    if value.is_nil() || value.is_true() {
+        rt.intern("symbol")
+    } else if value.is_fixnum() {
+        rt.intern("integer")
+    } else if value.as_char().is_some() {
+        rt.intern("symbol")
+    } else if value.is_heap() {
+        if rt.is_cons(value) {
+            rt.intern("cons")
+        } else if rt.is_string(value) {
+            rt.intern("string")
+        } else if rt.is_vector(value) {
+            rt.intern("vector")
+        } else if rt.is_hash_table(value) {
+            rt.intern("hash-table")
+        } else if rt.is_function(value) {
+            rt.intern("compiled-function")
+        } else if rt.is_float(value) {
+            rt.intern("float")
+        } else {
+            rt.intern("misc")
+        }
+    } else {
+        rt.intern("misc")
+    }
+}
+
+// --- c*r accessors ---
+
+fn car_cdr_chain(rt: &Runtime, mut value: LispValue, ops: &[bool]) -> Option<LispValue> {
+    // ops are in name order: ops[0] = outermost (leftmost in name), ops[last] = innermost
+    // We apply innermost first, so iterate in reverse.
+    // true = car ('a' in name), false = cdr ('d' in name)
+    for &is_car in ops.iter().rev() {
+        value = if is_car { rt.car(value).ok()? } else { rt.cdr(value).ok()? };
+    }
+    Some(value)
+}
+
+// --- List operations ---
+
+fn bool_value(value: bool) -> LispValue {
+    if value { LispValue::TRUE } else { LispValue::NIL }
+}
+
+fn make_list(rt: &mut Runtime, values: impl IntoIterator<Item = LispValue>) -> LispValue {
+    let values: Vec<LispValue> = values.into_iter().collect();
+    let mut result = LispValue::NIL;
+    for value in values.into_iter().rev() {
+        result = rt.cons(value, result);
+    }
+    result
+}
+
+fn list_length(rt: &mut Runtime, list: LispValue) -> Option<LispValue> {
+    let mut count = 0i64;
+    let mut current = list;
+    while !current.is_nil() {
+        current = rt.cdr(current).ok()?;
+        count += 1;
+    }
+    Some(LispValue::from_fixnum(count)?)
+}
+
+fn nth_element(rt: &mut Runtime, list: LispValue, n: usize) -> Option<LispValue> {
+    let mut current = list;
+    for _ in 0..n { current = rt.cdr(current).ok()?; }
+    rt.car(current).ok()
+}
+
+fn reverse_list(rt: &mut Runtime, list: LispValue) -> Option<LispValue> {
+    let mut result = LispValue::NIL;
+    let mut current = list;
+    while !current.is_nil() {
+        let car = rt.car(current).ok()?;
+        let cdr = rt.cdr(current).ok()?;
+        result = rt.cons(car, result);
+        current = cdr;
+    }
+    Some(result)
+}
+
+fn append_lists(rt: &mut Runtime, lists: &[LispValue]) -> Option<LispValue> {
+    let mut all = Vec::new();
+    for list in lists.iter().take(lists.len().saturating_sub(1)) {
+        let mut current = *list;
+        while !current.is_nil() {
+            let car = rt.car(current).ok()?;
+            let cdr = rt.cdr(current).ok()?;
+            all.push(car);
+            current = cdr;
+        }
+    }
+    if let Some(last) = lists.last() {
+        let mut current = *last;
+        while !current.is_nil() {
+            let car = rt.car(current).ok()?;
+            let cdr = rt.cdr(current).ok()?;
+            all.push(car);
+            current = cdr;
+        }
+    }
+    Some(make_list(rt, all))
+}
+
+fn memq_op(rt: &Runtime, element: LispValue, list: LispValue) -> Option<LispValue> {
+    let mut current = list;
+    while !current.is_nil() {
+        let car = rt.car(current).ok()?;
+        if car == element {
+            return Some(current);
+        }
+        current = rt.cdr(current).ok()?;
+    }
+    Some(LispValue::NIL)
+}
+
+fn member_op(rt: &Runtime, element: LispValue, list: LispValue) -> Option<LispValue> {
+    let mut current = list;
+    while !current.is_nil() {
+        let car = rt.car(current).ok()?;
+        if rt.equal(car, element) {
+            return Some(current);
+        }
+        current = rt.cdr(current).ok()?;
+    }
+    Some(LispValue::NIL)
+}
+
+fn assoc_op(rt: &Runtime, key: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
+    let mut current = alist;
+    while !current.is_nil() {
+        let pair = rt.car(current).ok()?;
+        if rt.is_cons(pair) {
+            let car = rt.car(pair).ok()?;
+            let matches = if use_equal { rt.equal(car, key) } else { car == key };
+            if matches {
+                return Some(pair);
+            }
+        }
+        current = rt.cdr(current).ok()?;
+    }
+    Some(LispValue::NIL)
+}
+
+fn copy_sequence(rt: &mut Runtime, seq: LispValue) -> Option<LispValue> {
+    if rt.is_cons(seq) {
+        let mut values = Vec::new();
+        let mut current = seq;
+        while !current.is_nil() {
+            let car = rt.car(current).ok()?;
+            let cdr = rt.cdr(current).ok()?;
+            values.push(car);
+            current = cdr;
+        }
+        Some(make_list(rt, values))
+    } else if rt.is_vector(seq) {
+        let elements = rt.vector_elements(seq).ok()?;
+        Some(rt.vector(elements))
+    } else if rt.is_string(seq) {
+        let s = rt.string_contents(seq).ok()?.to_string();
+        Some(rt.string(&s))
+    } else {
+        Some(seq)
+    }
+}
+
+// --- String operations ---
+
+fn concat_strings(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let mut result = String::new();
+    for arg in args {
+        result.push_str(rt.string_contents(*arg).ok()?);
+    }
+    Some(rt.string(&result))
+}
+
+fn substring_op(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let s = rt.string_contents(args[0]).ok()?.to_string();
+    let start = args[1].as_fixnum()? as usize;
+    let end = if args.len() > 2 { args[2].as_fixnum()? as usize } else { s.len() };
+    Some(rt.string(s.get(start..end)?))
+}
+
+fn string_equal(rt: &Runtime, a: LispValue, b: LispValue) -> Option<LispValue> {
+    let sa = rt.string_contents(a).ok()?;
+    let sb = rt.string_contents(b).ok()?;
+    Some(bool_value(sa == sb))
+}
+
+fn string_lessp(rt: &Runtime, a: LispValue, b: LispValue) -> Option<LispValue> {
+    let sa = rt.string_contents(a).ok()?;
+    let sb = rt.string_contents(b).ok()?;
+    Some(bool_value(sa < sb))
+}
+
+fn char_to_string(rt: &mut Runtime, value: LispValue) -> Option<LispValue> {
+    let ch = value.as_char()?;
+    Some(rt.string(ch.to_string()))
+}
+
+fn string_to_char(rt: &Runtime, value: LispValue) -> Option<LispValue> {
+    let s = rt.string_contents(value).ok()?;
+    let ch = s.chars().next()?;
+    Some(LispValue::from_char(ch))
+}
+
+fn format_string(rt: &mut Runtime, template: LispValue, args: &[LispValue]) -> Option<LispValue> {
+    let tmpl = rt.string_contents(template).ok()?;
+    let mut result = String::new();
+    let mut chars = tmpl.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '%' {
+            let spec = chars.peek().copied();
+            match spec {
+                Some('s') => {
+                    chars.next();
+                    if let Some(&arg) = args.first() {
+                        result.push_str(&rt.format_value(arg));
+                    }
+                }
+                Some('d') => {
+                    chars.next();
+                    if let Some(&arg) = args.first() {
+                        result.push_str(&arg.as_fixnum().unwrap_or(0).to_string());
+                    }
+                }
+                Some('f') => {
+                    chars.next();
+                    if let Some(&arg) = args.first() {
+                        let num = rt.as_number(arg).unwrap_or(0.0);
+                        result.push_str(&num.to_string());
+                    }
+                }
+                Some('c') => {
+                    chars.next();
+                    if let Some(&arg) = args.first() {
+                        if let Some(ch) = arg.as_char() {
+                            result.push(ch);
+                        } else if let Some(n) = arg.as_fixnum() {
+                            if let Some(ch) = char::from_u32(n as u32) {
+                                result.push(ch);
+                            }
+                        }
+                    }
+                }
+                Some('%') => {
+                    chars.next();
+                    result.push('%');
+                }
+                _ => result.push(ch),
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    Some(rt.string(&result))
+}
+
+// --- Vector operations ---
+
+fn aref_op(rt: &Runtime, vector: LispValue, index: LispValue) -> Option<LispValue> {
+    let idx = index.as_fixnum()? as usize;
+    rt.vector_aref(vector, idx).ok()
+}
+
+fn aset_op(rt: &mut Runtime, vector: LispValue, index: LispValue, value: LispValue) -> Option<LispValue> {
+    let idx = index.as_fixnum()? as usize;
+    rt.vector_aset(vector, idx, value).ok()
+}
+
+// --- Hash table operations ---
+
+fn make_hash_table(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    use crate::runtime::HashTableTest;
+    let mut test = HashTableTest::Eql;
+    let mut i = 0;
+    while i + 1 < args.len() {
+        if let Some(keyword) = rt.symbol_name(args[i]).ok() {
+            if keyword == ":test" && i + 1 < args.len() {
+                if let Some(test_name) = rt.symbol_name(args[i + 1]).ok() {
+                    test = match test_name.as_str() {
+                        "eq" => HashTableTest::Eq,
+                        "eql" => HashTableTest::Eql,
+                        "equal" => HashTableTest::Equal,
+                        _ => HashTableTest::Eql,
+                    };
+                }
+            }
+        }
+        i += 2;
+    }
+    Some(rt.hash_table(test))
+}
+
+fn hash_table_count_op(rt: &Runtime, table: LispValue) -> Option<LispValue> {
+    let count = rt.hash_table_count(table).ok()?;
+    LispValue::from_fixnum(count as i64)
+}
+
+fn gethash_op(rt: &Runtime, key: LispValue, table: LispValue, default: Option<LispValue>) -> Option<LispValue> {
+    match rt.gethash(key, table) {
+        Ok(Some(value)) => Some(value),
+        Ok(None) => Some(default.unwrap_or(LispValue::NIL)),
+        Err(_) => Some(default.unwrap_or(LispValue::NIL)),
+    }
+}
+
+fn surface_form_to_lisp(rt: &mut Runtime, form: &SurfaceForm) -> LispValue {
+    use neovm_compiler::surface::{SurfaceAtom, SurfaceKind};
+    match &form.kind {
+        SurfaceKind::Atom(atom) => match atom {
+            SurfaceAtom::Nil => LispValue::NIL,
+            SurfaceAtom::True => LispValue::TRUE,
+            SurfaceAtom::Symbol(n) => rt.intern(n),
+            SurfaceAtom::Int(v) => LispValue::from_fixnum(*v).unwrap_or(LispValue::NIL),
+            SurfaceAtom::Float(v) => rt.float(*v),
+            SurfaceAtom::String(v) => rt.string(v),
+            SurfaceAtom::Char(v) => char::from_u32(*v as u32).map_or(LispValue::NIL, LispValue::from_char),
+        },
+        SurfaceKind::List(forms) => {
+            let elements: Vec<LispValue> = forms.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
+            make_list(rt, elements)
+        }
+        _ => LispValue::NIL, // DottedList, Vector, Quote, FunctionQuote, Backquote, Comma, CommaAt
+    }
+}

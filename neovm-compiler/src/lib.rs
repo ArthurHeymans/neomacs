@@ -18,6 +18,7 @@ pub mod expand_eval;
 pub mod expand_value;
 pub mod hir;
 pub mod ids;
+pub mod jit;
 pub mod liveness;
 pub mod lower;
 pub mod pretty;

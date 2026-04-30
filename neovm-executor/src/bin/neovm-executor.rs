@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use neovm_executor::{Executor, render_diagnostics};
+use neovm_executor::{Engine, Executor, render_diagnostics};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -19,15 +19,27 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Vec<String>) -> ExitCode {
-    if args.iter().any(|arg| arg.starts_with("--engine=")) {
-        eprintln!("--engine was removed; neovm-executor uses the LispValue object interpreter");
-        return ExitCode::from(2);
+    let mut engine = Engine::default();
+    let mut positional = Vec::new();
+    for arg in &args {
+        if let Some(value) = arg.strip_prefix("--engine=") {
+            engine = match value {
+                "interpreter" => Engine::Interpreter,
+                "jit" => Engine::Jit,
+                _ => {
+                    eprintln!("unknown engine `{value}` (options: interpreter, jit)");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            positional.push(arg.clone());
+        }
     }
-    let Some(path) = args.first() else {
+    let Some(path) = positional.first() else {
         usage();
         return ExitCode::from(2);
     };
-    let values = match parse_i64_args(&args[1..]) {
+    let values = match parse_i64_args(&positional[1..]) {
         Ok(values) => values,
         Err(error) => {
             eprintln!("{error}");
@@ -35,7 +47,7 @@ fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let executor = Executor::default();
+    let executor = Executor::with_engine(engine);
     let artifact = match executor.execute_file(path, &values) {
         Ok(artifact) => artifact,
         Err(error) => {
@@ -86,5 +98,5 @@ fn parse_i64_args(args: &[String]) -> Result<Vec<i64>, String> {
 }
 
 fn usage() {
-    eprintln!("usage: neovm-executor run <file.el> [i64-arg ...]");
+    eprintln!("usage: neovm-executor run [--engine=interpreter|jit] <file.el> [i64-arg ...]");
 }

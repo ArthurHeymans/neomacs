@@ -7,4 +7,7 @@ license.workspace = true
 description = "Execution engines for NeoVM compiler artifacts"
 
 [dependencies]
+cranelift-jit = "0.131.0"
+cranelift-module = "0.131.0"
+lasso = "0.7.3"
 neovm-compiler = { path = "../neovm-compiler", version = "0.0.1" }
