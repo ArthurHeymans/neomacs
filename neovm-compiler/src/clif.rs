@@ -1286,9 +1286,6 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
     }
 
     fn lower_pure_integer_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
-        // Arithmetic and comparison operators must go through runtime dispatch
-        // to handle dynamic float promotion (GNU Emacs semantics).
-        // Only null/not can be safely inlined (tagged value check).
         match name {
             "null" | "not" => {
                 let Some(value) = args.first() else {
@@ -1297,6 +1294,23 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, *value, NIL_BITS);
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_nil))
             }
+            "eq" | "eql" => {
+                if args.len() != 2 {
+                    return PrimitiveCallLowering::Unknown;
+                }
+                let is_eq = self.builder.ins().icmp(IntCC::Equal, args[0], args[1]);
+                PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_eq))
+            }
+            "integerp" => {
+                let Some(value) = args.first() else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let tag = self.builder.ins().band_imm(*value, 7);
+                let is_fix = self.builder.ins().icmp_imm(IntCC::Equal, tag, FIXNUM_TAG);
+                PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_fix))
+            }
+            "+" | "-" | "*" => self.lower_fixnum_arithmetic(name, args),
+            "=" | "<" | ">" | "<=" | ">=" => self.lower_fixnum_comparison(name, args),
             _ => PrimitiveCallLowering::Unknown,
         }
     }
@@ -1307,6 +1321,126 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         self.builder
             .ins()
             .select(condition, true_value, false_value)
+    }
+
+    fn is_fixnum(&mut self, value: ir::Value) -> ir::Value {
+        let tag = self.builder.ins().band_imm(value, 7);
+        self.builder.ins().icmp_imm(IntCC::Equal, tag, FIXNUM_TAG)
+    }
+
+    fn untag_fixnum(&mut self, value: ir::Value) -> ir::Value {
+        self.builder.ins().ushr_imm(value, TAG_BITS as i64)
+    }
+
+    fn tag_fixnum(&mut self, value: ir::Value) -> ir::Value {
+        self.builder.ins().ishl_imm(value, TAG_BITS as i64)
+    }
+
+    /// Inline fixnum arithmetic with runtime fallback for non-fixnum args.
+    /// For + and -, tagged arithmetic works directly since both tags are 0.
+    /// For *, one operand must be untagged first.
+    fn lower_fixnum_arithmetic(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        if args.len() < 2 {
+            return PrimitiveCallLowering::Unknown;
+        }
+
+        let a = args[0];
+        let b = args[1];
+
+        let a_fix = self.is_fixnum(a);
+        let b_fix = self.is_fixnum(b);
+        let both_fix = self.builder.ins().band(a_fix, b_fix);
+
+        let inline_block = self.builder.create_block();
+        let fallback_block = self.builder.create_block();
+        let merge_block = self.builder.create_block();
+        let merge_result = self.builder.append_block_param(merge_block, types::I64);
+
+        self.builder
+            .ins()
+            .brif(both_fix, inline_block, &[], fallback_block, &[]);
+
+        self.builder.switch_to_block(inline_block);
+        let inline_result = match name {
+            "+" => self.builder.ins().iadd(a, b),
+            "-" => self.builder.ins().isub(a, b),
+            "*" => {
+                let au = self.untag_fixnum(a);
+                let product = self.builder.ins().imul(au, b);
+                self.tag_fixnum(product)
+            }
+            _ => unreachable!(),
+        };
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(inline_result)]);
+
+        self.builder.switch_to_block(fallback_block);
+        let Some(func_ref) = self.call_named_ref(args.len()) else {
+            return PrimitiveCallLowering::Error;
+        };
+        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
+            return PrimitiveCallLowering::Error;
+        };
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+
+        self.builder.switch_to_block(merge_block);
+        self.builder.seal_block(inline_block);
+        self.builder.seal_block(fallback_block);
+        self.builder.seal_block(merge_block);
+
+        PrimitiveCallLowering::Value(merge_result)
+    }
+
+    /// Inline fixnum comparison with runtime fallback for float promotion.
+    /// Tagged fixnum comparison order is preserved since tag bits are 0.
+    fn lower_fixnum_comparison(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        if args.len() != 2 {
+            return PrimitiveCallLowering::Unknown;
+        }
+
+        let a = args[0];
+        let b = args[1];
+
+        let a_fix = self.is_fixnum(a);
+        let b_fix = self.is_fixnum(b);
+        let both_fix = self.builder.ins().band(a_fix, b_fix);
+
+        let inline_block = self.builder.create_block();
+        let fallback_block = self.builder.create_block();
+        let merge_block = self.builder.create_block();
+        let merge_result = self.builder.append_block_param(merge_block, types::I64);
+
+        self.builder
+            .ins()
+            .brif(both_fix, inline_block, &[], fallback_block, &[]);
+
+        self.builder.switch_to_block(inline_block);
+        let cc = match name {
+            "=" => IntCC::Equal,
+            "<" => IntCC::SignedLessThan,
+            ">" => IntCC::SignedGreaterThan,
+            "<=" => IntCC::SignedLessThanOrEqual,
+            ">=" => IntCC::SignedGreaterThanOrEqual,
+            _ => unreachable!(),
+        };
+        let cmp = self.builder.ins().icmp(cc, a, b);
+        let inline_val = self.bool_to_lisp_value(cmp);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(inline_val)]);
+
+        self.builder.switch_to_block(fallback_block);
+        let Some(func_ref) = self.call_named_ref(2) else {
+            return PrimitiveCallLowering::Error;
+        };
+        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
+            return PrimitiveCallLowering::Error;
+        };
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+
+        self.builder.switch_to_block(merge_block);
+        self.builder.seal_block(inline_block);
+        self.builder.seal_block(fallback_block);
+        self.builder.seal_block(merge_block);
+
+        PrimitiveCallLowering::Value(merge_result)
     }
 
     fn lower_pair_runtime_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
