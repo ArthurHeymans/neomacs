@@ -512,6 +512,15 @@ jit_shim!(__neomacs_rt_get_throw_value(vmctx: i64) -> i64 {
     }
 });
 
+jit_shim!(__neomacs_rt_peek_throw_tag(vmctx: i64) -> i64 {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow().pending_throw
+            .as_ref()
+            .map(|(tag, _)| tag.to_abi_i64())
+            .unwrap_or(LispValue::NIL.to_abi_i64())
+    })
+});
+
 jit_shim!(__neomacs_rt_check_exception(vmctx: i64) -> i64 {
     if has_pending_exception() {
         EXCEPTION_SENTINEL
