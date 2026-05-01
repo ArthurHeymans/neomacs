@@ -933,6 +933,30 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         self.value_map.insert(result, value);
                         return;
                     }
+                    SsaConst::Symbol(name) => {
+                        let symbol = self.runtime.intern_symbol(name);
+                        let Some(func_ref) = self.symbol_get_ref() else {
+                            return;
+                        };
+                        let symbol_idx =
+                            self.builder.ins().iconst(types::I64, symbol.into_usize() as i64);
+                        let Some(value) = self.emit_runtime_call(
+                            func_ref,
+                            &[symbol_idx],
+                            ClifRuntimeCallKind::SymbolGet {
+                                name: name.clone(),
+                            },
+                        ) else {
+                            return;
+                        };
+                        self.value_map.insert(result, value);
+                        return;
+                    }
+                    SsaConst::Value(cv) => {
+                        let value = self.materialize_compile_value(cv);
+                        self.value_map.insert(result, value);
+                        return;
+                    }
                 };
                 let clif_value = self.builder.ins().iconst(types::I64, immediate);
                 self.value_map.insert(result, clif_value);
@@ -2148,6 +2172,104 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             }
         };
         self.runtime_func_ref(import)
+    }
+
+    fn materialize_compile_value(&mut self, cv: &crate::compile_value::CompileValue) -> ir::Value {
+        use crate::compile_value::CompileValue;
+        match cv {
+            CompileValue::Nil => self.builder.ins().iconst(types::I64, NIL_BITS),
+            CompileValue::Bool(true) => self.builder.ins().iconst(types::I64, TRUE_BITS),
+            CompileValue::Bool(false) => self.builder.ins().iconst(types::I64, NIL_BITS),
+            CompileValue::Int(n) => {
+                if !(FIXNUM_MIN..=FIXNUM_MAX).contains(n) {
+                    self.error(format!("compile value integer {n} requires bignum support"));
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                }
+                self.builder.ins().iconst(types::I64, (*n << TAG_BITS as i64) | FIXNUM_TAG)
+            }
+            CompileValue::Char(c) => {
+                self.builder.ins().iconst(types::I64, ((*c as i64) << TAG_BITS) | CHAR_TAG)
+            }
+            CompileValue::Float(f) => {
+                let bits = f.to_bits();
+                let Some(func_ref) = self.float_const_ref() else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                let Some(value) = self.emit_indexed_runtime_call(
+                    func_ref,
+                    bits as i64,
+                    ClifRuntimeCallKind::FloatConst { bits },
+                ) else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                value
+            }
+            CompileValue::String(s) => {
+                let string = self.runtime.intern_string(s).into_usize() as i64;
+                let Some(func_ref) = self.string_const_ref() else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                let Some(value) = self.emit_indexed_runtime_call(
+                    func_ref,
+                    string,
+                    ClifRuntimeCallKind::StringConst { value: s.clone() },
+                ) else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                value
+            }
+            CompileValue::Symbol(name) => {
+                let symbol = self.runtime.intern_symbol(name);
+                let Some(func_ref) = self.symbol_get_ref() else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                let symbol_idx =
+                    self.builder.ins().iconst(types::I64, symbol.into_usize() as i64);
+                let Some(value) = self.emit_runtime_call(
+                    func_ref,
+                    &[symbol_idx],
+                    ClifRuntimeCallKind::SymbolGet { name: name.clone() },
+                ) else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                value
+            }
+            CompileValue::Cons { car, cdr } => {
+                let car_val = self.materialize_compile_value(car);
+                let cdr_val = self.materialize_compile_value(cdr);
+                let Some(func_ref) = self.cons_ref() else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                let Some(value) = self.emit_runtime_call(
+                    func_ref,
+                    &[car_val, cdr_val],
+                    ClifRuntimeCallKind::Cons,
+                ) else {
+                    return self.builder.ins().iconst(types::I64, NIL_BITS);
+                };
+                value
+            }
+            CompileValue::Vector(items) => {
+                // Build vector as a list of cons cells for now
+                // A proper vector runtime function would be better
+                let mut result = self.builder.ins().iconst(types::I64, NIL_BITS);
+                for item in items.iter().rev() {
+                    let item_val = self.materialize_compile_value(item);
+                    let Some(func_ref) = self.cons_ref() else {
+                        return self.builder.ins().iconst(types::I64, NIL_BITS);
+                    };
+                    let Some(value) = self.emit_runtime_call(
+                        func_ref,
+                        &[item_val, result],
+                        ClifRuntimeCallKind::Cons,
+                    ) else {
+                        return self.builder.ins().iconst(types::I64, NIL_BITS);
+                    };
+                    result = value;
+                }
+                result
+            }
+        }
     }
 
     fn runtime_func_ref(&mut self, import: RuntimeFuncImport) -> Option<FuncRef> {

@@ -151,6 +151,8 @@ pub enum SsaConst {
     Float(f64),
     String(String),
     Char(i64),
+    Symbol(String),
+    Value(crate::compile_value::CompileValue),
 }
 
 #[derive(Clone, Debug, PartialEq)]

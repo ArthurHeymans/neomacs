@@ -13,6 +13,7 @@ pub mod ast;
 pub mod clif;
 pub mod diagnostic;
 pub mod effects;
+pub mod compile_value;
 pub mod expand;
 pub mod expand_eval;
 pub mod expand_value;

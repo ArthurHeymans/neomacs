@@ -591,6 +591,8 @@ fn ssa_const_name(value: &SsaConst) -> String {
         SsaConst::Float(value) => format!("float {value}"),
         SsaConst::String(value) => format!("string {value:?}"),
         SsaConst::Char(value) => format!("char {value}"),
+        SsaConst::Symbol(name) => format!("symbol {name}"),
+        SsaConst::Value(cv) => format!("value {cv:?}"),
     }
 }
 

@@ -464,7 +464,7 @@ impl<'a> RegLowerer<'a> {
     fn needs_safepoint(&self, kind: &SsaInstKind) -> bool {
         matches!(
             kind,
-            SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_))
+            SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_) | SsaConst::Symbol(_) | SsaConst::Value(_))
                 | SsaInstKind::Quote(_)
                 | SsaInstKind::FunctionQuote(_)
                 | SsaInstKind::Lambda { .. }
