@@ -694,8 +694,9 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
 
     fn lower(mut self) -> ClifLowerOutput<M> {
         let call_conv = self.runtime.module.call_conv();
-        self.check_supported_subset();
-        if !self.diagnostics.is_empty() {
+        if self.has_nonlocal_control_flow() {
+            // Functions with catch/throw, condition-case, or unwind-protect
+            // can't be JIT-compiled. Return None to signal interpreter fallback.
             return self.finish(None);
         }
 
@@ -796,28 +797,10 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
         self.finish(Some(function))
     }
 
-    fn check_supported_subset(&mut self) {
+    fn has_nonlocal_control_flow(&self) -> bool {
         for (_, block) in self.ssa.blocks.iter() {
             for inst in &block.instructions {
                 match &inst.kind {
-                    SsaInstKind::Const(_)
-                    | SsaInstKind::Quote(_)
-                    | SsaInstKind::FunctionQuote(_)
-                    | SsaInstKind::Lambda { .. }
-                    | SsaInstKind::LexicalGet(_)
-                    | SsaInstKind::BindLexical { .. }
-                    | SsaInstKind::LexicalSet { .. }
-                    | SsaInstKind::MakeLexicalCell { .. }
-                    | SsaInstKind::LexicalCellGet { .. }
-                    | SsaInstKind::LexicalCellSet { .. }
-                    | SsaInstKind::DeclareSpecial(_)
-                    | SsaInstKind::SymbolGet(_)
-                    | SsaInstKind::SymbolSet { .. }
-                    | SsaInstKind::BindDynamic { .. }
-                    | SsaInstKind::UnbindDynamic { .. }
-                    | SsaInstKind::CallNamed { .. }
-                    | SsaInstKind::Funcall { .. }
-                    | SsaInstKind::Apply { .. } => {}
                     SsaInstKind::CatchBegin { .. }
                     | SsaInstKind::CatchEnd
                     | SsaInstKind::Throw { .. }
@@ -826,21 +809,12 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                     | SsaInstKind::ConditionCaseEnd
                     | SsaInstKind::UnwindProtectBegin
                     | SsaInstKind::UnwindProtectCleanup
-                    | SsaInstKind::UnwindProtectEnd => {
-                        self.unsupported(
-                            "nonlocal control flow needs explicit runtime ABI support",
-                        );
-                    }
+                    | SsaInstKind::UnwindProtectEnd => return true,
+                    _ => {}
                 }
             }
         }
-    }
-
-    fn unsupported(&mut self, reason: impl Into<String>) {
-        self.diagnostics.push(Diagnostic::error(format!(
-            "unsupported Cranelift lowering: {}",
-            reason.into()
-        )));
+        false
     }
 
     fn finish(self, function: Option<Function>) -> ClifLowerOutput<M> {

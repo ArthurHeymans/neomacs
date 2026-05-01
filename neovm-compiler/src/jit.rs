@@ -6,7 +6,7 @@ use cranelift_module::{FuncId, Linkage, Module, default_libcall_names};
 use crate::clif::{ClifModuleBackend, ClifRuntimeAbi, ssa_to_clif_with_backend};
 use crate::diagnostic::Diagnostic;
 use crate::ids::FunctionId;
-use crate::ssa::{SsaLambdaTemplate, SsaModule};
+use crate::ssa::{SsaInstKind, SsaLambdaTemplate, SsaModule};
 use crate::surface::SurfaceForm;
 
 use lasso::Rodeo;
@@ -67,12 +67,15 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let mut runtime: ClifRuntimeAbi<JITModule> = ClifRuntimeAbi::from_module(jit);
     let call_conv = runtime.module().call_conv();
 
-    // Phase 0: Register all named SSA functions as local functions for direct JIT-to-JIT calls.
-    // Only register functions with fixed arity (no &rest, no &optional) since the JIT calling
-    // convention requires exact parameter counts.
+    // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
+    // Only register functions with fixed arity (no &rest, no &optional) that don't use
+    // nonlocal control flow (catch/throw, condition-case, unwind-protect), since those
+    // can't be lowered to Cranelift IR and will be skipped during JIT compilation.
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
-            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty() {
+            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty()
+                && !has_nonlocal_control_flow(func)
+            {
                 let arity = func.lambda_list.required.len();
                 runtime.register_local_function(name, arity, call_conv);
             }
@@ -105,9 +108,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let mut jit_func_ids: Vec<(FunctionId, FuncId)> = Vec::new();
     for (ssa_fid, function) in &lowered {
         let Some(mut function) = function.clone() else {
-            diagnostics.push(Diagnostic::error(
-                "JIT compilation requires all functions to lower to Cranelift IR",
-            ));
+            // Function has nonlocal control flow (catch/throw, condition-case, etc.)
+            // and can't be JIT-compiled. It will be called through the interpreter.
             continue;
         };
 
@@ -178,4 +180,24 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         }),
         diagnostics,
     }
+}
+
+fn has_nonlocal_control_flow(func: &crate::ssa::SsaFunction) -> bool {
+    for (_, block) in func.blocks.iter() {
+        for inst in &block.instructions {
+            match &inst.kind {
+                SsaInstKind::CatchBegin { .. }
+                | SsaInstKind::CatchEnd
+                | SsaInstKind::Throw { .. }
+                | SsaInstKind::ConditionCaseBegin { .. }
+                | SsaInstKind::ConditionCaseHandler { .. }
+                | SsaInstKind::ConditionCaseEnd
+                | SsaInstKind::UnwindProtectBegin
+                | SsaInstKind::UnwindProtectCleanup
+                | SsaInstKind::UnwindProtectEnd => return true,
+                _ => {}
+            }
+        }
+    }
+    false
 }

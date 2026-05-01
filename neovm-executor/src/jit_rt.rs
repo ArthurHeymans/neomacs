@@ -395,6 +395,217 @@ fn list_values(rt: &Runtime, list: LispValue) -> Option<Vec<LispValue>> {
     Some(values)
 }
 
+// --- Nonlocal control flow ---
+//
+// The JIT implements catch/throw, condition-case, and unwind-protect using a
+// thread-local exception state. Each potentially-throwing runtime call checks
+// for pending exceptions and returns a sentinel value. The compiled code checks
+// for the sentinel after each such call and branches to the appropriate handler.
+
+use std::cell::RefCell;
+
+thread_local! {
+    static JIT_EXCEPTION_STATE: RefCell<JitExceptionState> = RefCell::new(JitExceptionState::new());
+}
+
+struct JitExceptionState {
+    pending_throw: Option<(LispValue, LispValue)>, // (tag, value)
+    pending_signal: Option<(LispValue, LispValue)>, // (symbol, data)
+    catch_depth: usize,
+}
+
+impl JitExceptionState {
+    const fn new() -> Self {
+        Self {
+            pending_throw: None,
+            pending_signal: None,
+            catch_depth: 0,
+        }
+    }
+}
+
+/// Sentinel value returned by runtime calls when an exception is pending.
+/// Checked by compiled code after each potentially-throwing call.
+const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
+
+fn check_exception(rt: &Runtime, result: LispValue) -> Option<LispValue> {
+    JIT_EXCEPTION_STATE.with(|state| {
+        let state = state.borrow();
+        if state.pending_throw.is_some() || state.pending_signal.is_some() {
+            None
+        } else {
+            Some(result)
+        }
+    })
+}
+
+fn has_pending_exception() -> bool {
+    JIT_EXCEPTION_STATE.with(|state| {
+        let state = state.borrow();
+        state.pending_throw.is_some() || state.pending_signal.is_some()
+    })
+}
+
+fn set_pending_throw(tag: LispValue, value: LispValue) {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().pending_throw = Some((tag, value));
+    });
+}
+
+fn take_pending_throw() -> Option<(LispValue, LispValue)> {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().pending_throw.take()
+    })
+}
+
+fn set_pending_signal(symbol: LispValue, data: LispValue) {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().pending_signal = Some((symbol, data));
+    });
+}
+
+fn take_pending_signal() -> Option<(LispValue, LispValue)> {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().pending_signal.take()
+    })
+}
+
+fn push_catch() {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().catch_depth += 1;
+    });
+}
+
+fn pop_catch() {
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().catch_depth -= 1;
+    });
+}
+
+// JIT runtime shims for nonlocal control flow
+
+jit_shim!(__neomacs_rt_catch_begin(vmctx: i64, tag: i64) -> i64 {
+    push_catch();
+    // Return the tag — compiled code stores it in a local var for later matching
+    tag
+});
+
+jit_shim!(__neomacs_rt_catch_end(vmctx: i64) -> i64 {
+    pop_catch();
+    0 // void
+});
+
+jit_shim!(__neomacs_rt_throw(vmctx: i64, tag: i64, value: i64) -> i64 {
+    set_pending_throw(LispValue::from_abi_i64(tag), LispValue::from_abi_i64(value));
+    EXCEPTION_SENTINEL
+});
+
+jit_shim!(__neomacs_rt_catch_match(vmctx: i64, catch_tag: i64, throw_tag: i64) -> i64 {
+    let result = catch_tag == throw_tag;
+    bool_value(result).to_abi_i64()
+});
+
+jit_shim!(__neomacs_rt_get_throw_value(vmctx: i64) -> i64 {
+    match take_pending_throw() {
+        Some((_tag, value)) => value.to_abi_i64(),
+        None => LispValue::NIL.to_abi_i64(),
+    }
+});
+
+jit_shim!(__neomacs_rt_check_exception(vmctx: i64) -> i64 {
+    if has_pending_exception() {
+        EXCEPTION_SENTINEL
+    } else {
+        0
+    }
+});
+
+jit_shim!(__neomacs_rt_signal(vmctx: i64, symbol: i64, data: i64) -> i64 {
+    set_pending_signal(LispValue::from_abi_i64(symbol), LispValue::from_abi_i64(data));
+    EXCEPTION_SENTINEL
+});
+
+jit_shim!(__neomacs_rt_error_0(vmctx: i64, message_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_str!(ctx, message_index).to_string();
+    let rt = &mut *ctx.runtime;
+    let symbol = rt.intern("error");
+    let data = rt.cons(LispValue::from_abi_i64(message_index), LispValue::NIL);
+    set_pending_signal(symbol, data);
+    EXCEPTION_SENTINEL
+});
+
+jit_shim!(__neomacs_rt_error_1(vmctx: i64, message_index: i64, arg0: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let name = resolve_str!(ctx, message_index).to_string();
+    let rt = &mut *ctx.runtime;
+    let symbol = rt.intern("error");
+    let msg = rt.string(&name);
+    let data = make_list(rt, [msg, LispValue::from_abi_i64(arg0)]);
+    set_pending_signal(symbol, data);
+    EXCEPTION_SENTINEL
+});
+
+jit_shim!(__neomacs_rt_condition_case_begin(vmctx: i64) -> i64 {
+    push_catch();
+    0
+});
+
+jit_shim!(__neomacs_rt_condition_case_end(vmctx: i64) -> i64 {
+    pop_catch();
+    // Clear any pending signal if we reached here normally
+    take_pending_signal();
+    0
+});
+
+jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pattern_index: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    let thrown = has_pending_exception();
+    if !thrown {
+        return LispValue::NIL.to_abi_i64();
+    }
+    // Check if the signaled symbol matches the pattern
+    // pattern_index is an index into quoted_forms — resolve the pattern
+    let forms = &*ctx.quoted_forms;
+    let pattern = match forms.get(pattern_index as usize) {
+        Some(f) => surface_form_to_lisp(rt, f),
+        None => return LispValue::NIL.to_abi_i64(),
+    };
+    // The error symbol is in the pending signal
+    let matches = JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow().pending_signal.as_ref()
+            .map(|(sym, _data)| *sym == pattern || {
+                // Check if pattern is 'error' which catches all errors
+                rt.is_symbol(pattern) && rt.symbol_name(pattern).map_or(false, |n| n == "error")
+            })
+            .unwrap_or(false)
+    });
+    bool_value(matches).to_abi_i64()
+});
+
+jit_shim!(__neomacs_rt_get_signal_data(vmctx: i64) -> i64 {
+    match take_pending_signal() {
+        Some((_symbol, data)) => data.to_abi_i64(),
+        None => LispValue::NIL.to_abi_i64(),
+    }
+});
+
+jit_shim!(__neomacs_rt_unwind_protect_begin(vmctx: i64) -> i64 {
+    push_catch();
+    0
+});
+
+jit_shim!(__neomacs_rt_unwind_protect_cleanup_enter(vmctx: i64) -> i64 {
+    // Called at the start of cleanup code — exception remains pending
+    0
+});
+
+jit_shim!(__neomacs_rt_unwind_protect_end(vmctx: i64) -> i64 {
+    pop_catch();
+    0
+});
+
 // --- Primitives ---
 
 fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_functions: &std::collections::HashMap<String, FunctionId>) -> Option<LispValue> {
@@ -594,92 +805,172 @@ fn numeric_result(rt: &mut Runtime, value: f64, has_float: bool) -> Option<LispV
 
 fn numeric_fold_add(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let sum: i64 = args.iter().filter_map(|v| v.as_fixnum()).sum();
+        return LispValue::from_fixnum(sum);
+    }
     let sum: f64 = args.iter().map(|v| to_f64(rt, *v)).sum();
-    numeric_result(rt, sum, has_float)
+    numeric_result(rt, sum, true)
 }
 
 fn numeric_fold_sub(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     if args.is_empty() { return LispValue::from_fixnum(0); }
     let has_float = any_float(rt, args);
+    if !has_float {
+        if args.len() == 1 {
+            let v = args[0].as_fixnum()?;
+            return LispValue::from_fixnum(-v);
+        }
+        let first = args[0].as_fixnum()?;
+        let rest: i64 = args[1..].iter().filter_map(|v| v.as_fixnum()).sum();
+        return LispValue::from_fixnum(first - rest);
+    }
     if args.len() == 1 {
-        return numeric_result(rt, -to_f64(rt, args[0]), has_float);
+        return numeric_result(rt, -to_f64(rt, args[0]), true);
     }
     let first = to_f64(rt, args[0]);
     let rest: f64 = args[1..].iter().map(|v| to_f64(rt, *v)).sum();
-    numeric_result(rt, first - rest, has_float)
+    numeric_result(rt, first - rest, true)
 }
 
 fn numeric_fold_mul(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let product: i64 = args.iter().filter_map(|v| v.as_fixnum()).product();
+        return LispValue::from_fixnum(product);
+    }
     let product: f64 = args.iter().map(|v| to_f64(rt, *v)).product();
-    numeric_result(rt, product, has_float)
+    numeric_result(rt, product, true)
 }
 
 fn numeric_div(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        if b == 0 { return None; }
+        return LispValue::from_fixnum(a / b);
+    }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     if b == 0.0 { return None; }
-    if has_float {
-        Some(rt.float(a / b))
-    } else {
-        LispValue::from_fixnum(a as i64 / b as i64)
-    }
+    Some(rt.float(a / b))
 }
 
 fn numeric_add1(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
-    let has_float = rt.is_float(v);
-    numeric_result(rt, to_f64(rt, v) + 1.0, has_float)
+    if rt.is_float(v) {
+        numeric_result(rt, to_f64(rt, v) + 1.0, true)
+    } else {
+        let n = v.as_fixnum()?;
+        LispValue::from_fixnum(n + 1)
+    }
 }
 
 fn numeric_sub1(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
-    let has_float = rt.is_float(v);
-    numeric_result(rt, to_f64(rt, v) - 1.0, has_float)
+    if rt.is_float(v) {
+        numeric_result(rt, to_f64(rt, v) - 1.0, true)
+    } else {
+        let n = v.as_fixnum()?;
+        LispValue::from_fixnum(n - 1)
+    }
 }
 
 fn numeric_mod(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        if b == 0 { return None; }
+        let result = a % b;
+        let result = if result != 0 && (a < 0) != (b < 0) { result + b } else { result };
+        return LispValue::from_fixnum(result);
+    }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     if b == 0.0 { return None; }
     let result = a % b;
-    // GNU Emacs mod returns non-negative result
     let result = if result != 0.0 && (a < 0.0) != (b < 0.0) { result + b } else { result };
-    numeric_result(rt, result, has_float)
+    numeric_result(rt, result, true)
 }
 
 fn numeric_rem(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        if b == 0 { return None; }
+        return LispValue::from_fixnum(a % b);
+    }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     if b == 0.0 { return None; }
-    numeric_result(rt, a % b, has_float)
+    numeric_result(rt, a % b, true)
 }
 
 fn numeric_abs(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
-    let has_float = rt.is_float(v);
-    numeric_result(rt, to_f64(rt, v).abs(), has_float)
+    if rt.is_float(v) {
+        numeric_result(rt, to_f64(rt, v).abs(), true)
+    } else {
+        let n = v.as_fixnum()?;
+        LispValue::from_fixnum(n.checked_abs()?)
+    }
 }
 
 fn numeric_max(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let max = args.iter().filter_map(|v| v.as_fixnum()).reduce(i64::max)?;
+        return LispValue::from_fixnum(max);
+    }
     let max = args.iter().map(|v| to_f64(rt, *v)).reduce(f64::max)?;
-    numeric_result(rt, max, has_float)
+    numeric_result(rt, max, true)
 }
 
 fn numeric_min(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
+    if !has_float {
+        let min = args.iter().filter_map(|v| v.as_fixnum()).reduce(i64::min)?;
+        return LispValue::from_fixnum(min);
+    }
     let min = args.iter().map(|v| to_f64(rt, *v)).reduce(f64::min)?;
-    numeric_result(rt, min, has_float)
+    numeric_result(rt, min, true)
 }
 
 fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    if !has_float {
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        return Some(bool_value(a == b));
+    }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     Some(bool_value(a == b))
 }
 
 fn numeric_cmp(rt: &Runtime, args: &[LispValue], cmp: impl Fn(f64, f64) -> bool) -> Option<LispValue> {
+    let has_float = args.iter().any(|v| rt.is_float(*v));
+    if !has_float {
+        // For pure fixnum comparisons, use i64 comparison directly
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        // Determine which comparison from the closure behavior
+        let result = if cmp(0.0, 1.0) && !cmp(1.0, 0.0) && !cmp(0.0, 0.0) {
+            a < b // <
+        } else if cmp(0.0, 1.0) && cmp(1.0, 0.0) && !cmp(1.0, 1.0) {
+            a != b // never happens for < <= > >=
+        } else if cmp(0.0, 0.0) && cmp(0.0, 1.0) && !cmp(1.0, 0.0) {
+            a <= b // <=
+        } else if !cmp(0.0, 1.0) && cmp(1.0, 0.0) && !cmp(0.0, 0.0) {
+            a > b // >
+        } else if cmp(0.0, 0.0) && !cmp(0.0, 1.0) && cmp(1.0, 0.0) {
+            a >= b // >=
+        } else {
+            // Fallback: use f64
+            return Some(bool_value(cmp(a as f64, b as f64)));
+        };
+        return Some(bool_value(result));
+    }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     Some(bool_value(cmp(a, b)))

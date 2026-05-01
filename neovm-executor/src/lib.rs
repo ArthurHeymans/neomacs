@@ -1133,4 +1133,152 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "((3 4) (3 4) (b . 2))");
     }
+
+    // --- Tests for compiler-level constructs (while, cond, dolist, dotimes) ---
+
+    #[test]
+    fn jit_while_loop() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "while.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun countdown (n)
+  (let ((result nil))
+    (while (> n 0)
+      (setq result (cons n result))
+      (setq n (- n 1)))
+    result))
+(countdown 5)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 4 5)");
+    }
+
+    #[test]
+    fn jit_dolist_and_dotimes() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loops.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun sum-list (xs)
+  (let ((s 0))
+    (dolist (x xs s)
+      (setq s (+ s x)))))
+(defun make-range (n)
+  (let ((result nil))
+    (dotimes (i n)
+      (setq result (cons i result)))
+    (reverse result)))
+(list (sum-list (list 1 2 3 4 5)) (make-range 5))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(15 (0 1 2 3 4))");
+    }
+
+    #[test]
+    fn jit_cond_form() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun classify (n)
+  (cond ((< n 0) -1) ((= n 0) 0) (t 1)))
+(list (classify (- 0 5)) (classify 0) (classify 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(-1 0 1)");
+    }
+
+    #[test]
+    fn jit_closures_with_large_fixnums() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "closure-list.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((f (lambda (x) (+ x 1)))
+      (n (- 0 1152921504606840000)))
+  (+ (funcall (car (list f)) 1)
+     (funcall (nth 0 (list f)) 2)
+     (funcall (cdr (cons 0 f)) 3)
+     (nth 1 (list f n))))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(
+            artifact.result.value,
+            Some(LispValue::expect_fixnum(-1152921504606839991))
+        );
+    }
+
+    // --- Nonlocal control flow tests (require catch/throw/condition-case support) ---
+
+    #[test]
+    fn jit_throw_catch() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "throw.el",
+            ";;; -*- lexical-binding: t; -*-\n(catch 'done (throw 'done 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_condition_case_catches_error() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-error.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (error \"something went wrong\")
+  (error (cadr err)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "\"something went wrong\"");
+    }
+
+    #[test]
+    fn jit_condition_case_catches_arith_error() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "safe-div.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun safe-div (a b)
+  (condition-case err
+      (/ a b)
+    (arith-error 0)))
+(list (safe-div 10 3) (safe-div 10 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(3 0)");
+    }
+
+    #[test]
+    fn jit_unwind_protect_cleanup() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "unwind.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((x 0))
+  (condition-case nil
+      (unwind-protect
+          (progn (setq x 1) (signal 'test-signal nil))
+        (setq x 2))
+    (test-signal (setq x (+ x 10))))
+  x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(12)));
+    }
 }

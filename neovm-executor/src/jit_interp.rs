@@ -148,12 +148,21 @@ pub fn execute_with_jit(
                 }
             };
 
-            // Call the JIT-compiled entry function
-            let result = call_jit_entry(&jit_module, ctx_ptr as i64, &lisp_args);
-            value = Some(result);
-
-            // Clean up context
-            unsafe { drop(Box::from_raw(ctx_ptr)); }
+            if let Some(code_ptr) = jit_module.entry_code_ptr {
+                // JIT-compiled entry: call directly via function pointer
+                let result = call_jit_entry_with_ptr(code_ptr, jit_module.entry_arity, ctx_ptr as i64, &lisp_args);
+                value = Some(result);
+                unsafe { drop(Box::from_raw(ctx_ptr)); }
+            } else {
+                // Entry function has nonlocal control flow and can't be JIT-compiled.
+                // Fall back to the RegIR interpreter.
+                unsafe { drop(Box::from_raw(ctx_ptr)); }
+                let interp_result = crate::object_interp::execute_module_with_args(
+                    &regir, &lisp_args, &mut runtime,
+                );
+                diagnostics.extend(interp_result.diagnostics);
+                value = interp_result.value;
+            }
         }
     }
 
@@ -164,12 +173,7 @@ pub fn execute_with_jit(
     }
 }
 
-fn call_jit_entry(module: &JitCompiledModule, vmctx: i64, args: &[LispValue]) -> LispValue {
-    let Some(code_ptr) = module.entry_code_ptr else {
-        return LispValue::NIL;
-    };
-
-    let arity = module.entry_arity;
+fn call_jit_entry_with_ptr(code_ptr: *const u8, arity: usize, vmctx: i64, args: &[LispValue]) -> LispValue {
     let arg_abi: Vec<i64> = args.iter().map(|a| a.to_abi_i64()).collect();
 
     let result = unsafe {
