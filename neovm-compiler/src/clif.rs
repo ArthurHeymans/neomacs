@@ -121,6 +121,17 @@ pub enum ClifRuntimeCallKind {
     Cons,
     Car,
     Cdr,
+    CatchBegin,
+    CatchEnd,
+    Throw,
+    PeekThrowTag,
+    GetThrowValue,
+    CheckException,
+    ConditionCaseBegin,
+    ConditionCaseEnd,
+    UnwindProtectBegin,
+    UnwindProtectCleanupEnter,
+    UnwindProtectEnd,
 }
 
 /// Abstraction over Cranelift module backends for declaring imported functions.
@@ -170,6 +181,7 @@ pub struct ClifRuntimeAbi<M: ClifModuleBackend = ModuleDeclarations> {
     cdr: Option<FuncId>,
     local_functions: HashMap<String, FuncId>,
     imported_names: Vec<String>,
+    exception_funcs: HashMap<String, FuncId>,
 }
 
 impl<M: ClifModuleBackend + Default> Default for ClifRuntimeAbi<M> {
@@ -200,6 +212,7 @@ impl<M: ClifModuleBackend + Default> Default for ClifRuntimeAbi<M> {
             cdr: None,
             local_functions: HashMap::new(),
             imported_names: Vec::new(),
+            exception_funcs: HashMap::new(),
         }
     }
 }
@@ -232,6 +245,7 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             cdr: None,
             local_functions: HashMap::new(),
             imported_names: Vec::new(),
+            exception_funcs: HashMap::new(),
         }
     }
 
@@ -330,6 +344,34 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
 
     pub fn imported_function_names(&self) -> Vec<&str> {
         self.imported_names.iter().map(|s| s.as_str()).collect()
+    }
+
+    fn exception_func(
+        &mut self,
+        name: &str,
+        num_extra_args: usize,
+        call_conv: CallConv,
+    ) -> Result<RuntimeFuncImport, String> {
+        if let Some(id) = self.exception_funcs.get(name).copied() {
+            let mut sig = Signature::new(call_conv);
+            sig.params.push(AbiParam::new(types::I64));
+            for _ in 0..num_extra_args {
+                sig.params.push(AbiParam::new(types::I64));
+            }
+            sig.returns.push(AbiParam::new(types::I64));
+            return Ok(RuntimeFuncImport { id, signature: sig });
+        }
+        let mut sig = Signature::new(call_conv);
+        sig.params.push(AbiParam::new(types::I64)); // vmctx
+        for _ in 0..num_extra_args {
+            sig.params.push(AbiParam::new(types::I64));
+        }
+        sig.returns.push(AbiParam::new(types::I64));
+        let full_name = format!("__neomacs_rt_{name}");
+        let id = self.module.declare_import(&full_name, &sig);
+        self.imported_names.push(full_name);
+        self.exception_funcs.insert(name.to_string(), id);
+        Ok(RuntimeFuncImport { id, signature: sig })
     }
 
     fn call_named(
@@ -694,11 +736,6 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
 
     fn lower(mut self) -> ClifLowerOutput<M> {
         let call_conv = self.runtime.module.call_conv();
-        if self.has_nonlocal_control_flow() {
-            // Functions with catch/throw, condition-case, or unwind-protect
-            // can't be JIT-compiled. Return None to signal interpreter fallback.
-            return self.finish(None);
-        }
 
         let Some(entry) = self.ssa.entry else {
             self.diagnostics.push(Diagnostic::error(
@@ -764,6 +801,7 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                 current_inst: None,
                 call_conv,
                 diagnostics: Vec::new(),
+                exception_handlers: Vec::new(),
             };
             state.vmctx = entry_vmctx;
 
@@ -797,26 +835,6 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
         self.finish(Some(function))
     }
 
-    fn has_nonlocal_control_flow(&self) -> bool {
-        for (_, block) in self.ssa.blocks.iter() {
-            for inst in &block.instructions {
-                match &inst.kind {
-                    SsaInstKind::CatchBegin { .. }
-                    | SsaInstKind::CatchEnd
-                    | SsaInstKind::Throw { .. }
-                    | SsaInstKind::ConditionCaseBegin { .. }
-                    | SsaInstKind::ConditionCaseHandler { .. }
-                    | SsaInstKind::ConditionCaseEnd
-                    | SsaInstKind::UnwindProtectBegin
-                    | SsaInstKind::UnwindProtectCleanup
-                    | SsaInstKind::UnwindProtectEnd => return true,
-                    _ => {}
-                }
-            }
-        }
-        false
-    }
-
     fn finish(self, function: Option<Function>) -> ClifLowerOutput<M> {
         ClifLowerOutput {
             function,
@@ -840,6 +858,28 @@ struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     current_inst: Option<(BlockId, usize)>,
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
+    exception_handlers: Vec<ExceptionHandler>,
+}
+
+const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
+
+struct ExceptionHandler {
+    handler_block: ir::Block,
+    kind: ExceptionHandlerKind,
+}
+
+enum ExceptionHandlerKind {
+    Catch {
+        catch_tag: ir::Value,
+        continuation_block: ir::Block,
+    },
+    ConditionCase {
+        continuation_block: ir::Block,
+    },
+    UnwindProtect {
+        continuation_block: ir::Block,
+        normal_block: ir::Block,
+    },
 }
 
 impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
@@ -1171,7 +1211,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 else {
                     return;
                 };
-                self.value_map.insert(result, result_value);
+                let Some(checked) = self.emit_exception_check(result_value) else {
+                    return;
+                };
+                self.value_map.insert(result, checked);
             }
             SsaInstKind::Funcall { callee, args } => {
                 let Some(result) = inst.result else {
@@ -1189,7 +1232,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 else {
                     return;
                 };
-                self.value_map.insert(result, result_value);
+                let Some(checked) = self.emit_exception_check(result_value) else {
+                    return;
+                };
+                self.value_map.insert(result, checked);
             }
             SsaInstKind::Apply { callee, args } => {
                 let Some(result) = inst.result else {
@@ -1211,18 +1257,335 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 ) else {
                     return;
                 };
-                self.value_map.insert(result, result_value);
+                let Some(checked) = self.emit_exception_check(result_value) else {
+                    return;
+                };
+                self.value_map.insert(result, checked);
             }
-            SsaInstKind::CatchBegin { .. }
-            | SsaInstKind::CatchEnd
-            | SsaInstKind::Throw { .. }
-            | SsaInstKind::ConditionCaseBegin { .. }
-            | SsaInstKind::ConditionCaseHandler { .. }
-            | SsaInstKind::ConditionCaseEnd
-            | SsaInstKind::UnwindProtectBegin
-            | SsaInstKind::UnwindProtectCleanup
-            | SsaInstKind::UnwindProtectEnd => {
-                unreachable!("unsupported subset checked before lowering")
+            SsaInstKind::CatchBegin { tag } => {
+                let Some(tag_value) = self.value(*tag) else { return };
+                let Some(func_ref) = self.exception_func_ref("catch_begin", 1) else {
+                    return;
+                };
+                let Some(_) = self.emit_runtime_call(
+                    func_ref,
+                    &[tag_value],
+                    ClifRuntimeCallKind::CatchBegin,
+                ) else {
+                    return;
+                };
+                let handler_block = self.builder.create_block();
+                let continuation_block = self.builder.create_block();
+                self.exception_handlers.push(ExceptionHandler {
+                    handler_block,
+                    kind: ExceptionHandlerKind::Catch {
+                        catch_tag: tag_value,
+                        continuation_block,
+                    },
+                });
+            }
+            SsaInstKind::CatchEnd => {
+                let handler = self
+                    .exception_handlers
+                    .pop()
+                    .expect("CatchEnd without CatchBegin");
+                let Some(func_ref) = self.exception_func_ref("catch_end", 0) else {
+                    return;
+                };
+                let Some(_) = self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::CatchEnd,
+                ) else {
+                    return;
+                };
+                match handler.kind {
+                    ExceptionHandlerKind::Catch {
+                        catch_tag,
+                        continuation_block,
+                    } => {
+                        self.builder
+                            .ins()
+                            .jump(continuation_block, &[]);
+                        self.builder.switch_to_block(handler.handler_block);
+                        let Some(peek_ref) =
+                            self.exception_func_ref("peek_throw_tag", 0)
+                        else {
+                            return;
+                        };
+                        let Some(throw_tag) = self.emit_runtime_call(
+                            peek_ref,
+                            &[],
+                            ClifRuntimeCallKind::PeekThrowTag,
+                        ) else {
+                            return;
+                        };
+                        let tags_match = self
+                            .builder
+                            .ins()
+                            .icmp(IntCC::Equal, catch_tag, throw_tag);
+                        let match_block = self.builder.create_block();
+                        let rethrow_block = self.builder.create_block();
+                        self.builder.ins().brif(
+                            tags_match,
+                            match_block,
+                            &[],
+                            rethrow_block,
+                            &[],
+                        );
+                        self.builder.switch_to_block(match_block);
+                        let Some(get_val_ref) =
+                            self.exception_func_ref("get_throw_value", 0)
+                        else {
+                            return;
+                        };
+                        let Some(_) = self.emit_runtime_call(
+                            get_val_ref,
+                            &[],
+                            ClifRuntimeCallKind::GetThrowValue,
+                        ) else {
+                            return;
+                        };
+                        let Some(catch_end_ref) =
+                            self.exception_func_ref("catch_end", 0)
+                        else {
+                            return;
+                        };
+                        self.emit_runtime_call(
+                            catch_end_ref,
+                            &[],
+                            ClifRuntimeCallKind::CatchEnd,
+                        );
+                        self.builder.ins().jump(continuation_block, &[]);
+                        self.builder.switch_to_block(rethrow_block);
+                        let Some(catch_end_ref2) =
+                            self.exception_func_ref("catch_end", 0)
+                        else {
+                            return;
+                        };
+                        self.emit_runtime_call(
+                            catch_end_ref2,
+                            &[],
+                            ClifRuntimeCallKind::CatchEnd,
+                        );
+                        if let Some(outer) = self.exception_handlers.last() {
+                            self.builder
+                                .ins()
+                                .jump(outer.handler_block, &[]);
+                        } else {
+                            let sentinel =
+                                self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                            self.builder.ins().return_(&[sentinel]);
+                        }
+                        self.builder.seal_block(handler.handler_block);
+                        self.builder.seal_block(match_block);
+                        self.builder.seal_block(rethrow_block);
+                        self.builder.switch_to_block(continuation_block);
+                        self.builder.seal_block(continuation_block);
+                    }
+                    _ => {
+                        self.error("CatchEnd matched non-Catch handler");
+                    }
+                }
+            }
+            SsaInstKind::Throw { tag, value } => {
+                let Some(tag_value) = self.value(*tag) else { return };
+                let Some(value_value) = self.value(*value) else { return };
+                let Some(func_ref) = self.exception_func_ref("throw", 2) else {
+                    return;
+                };
+                let Some(result) = self.emit_runtime_call(
+                    func_ref,
+                    &[tag_value, value_value],
+                    ClifRuntimeCallKind::Throw,
+                ) else {
+                    return;
+                };
+                if let Some(outer) = self.exception_handlers.last() {
+                    self.builder
+                        .ins()
+                        .jump(outer.handler_block, &[]);
+                } else {
+                    self.builder.ins().return_(&[result]);
+                }
+            }
+            SsaInstKind::ConditionCaseBegin { .. } => {
+                let Some(func_ref) =
+                    self.exception_func_ref("condition_case_begin", 0)
+                else {
+                    return;
+                };
+                let Some(_) = self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::ConditionCaseBegin,
+                ) else {
+                    return;
+                };
+                let handler_block = self.builder.create_block();
+                let continuation_block = self.builder.create_block();
+                self.exception_handlers.push(ExceptionHandler {
+                    handler_block,
+                    kind: ExceptionHandlerKind::ConditionCase { continuation_block },
+                });
+            }
+            SsaInstKind::ConditionCaseHandler { pattern } => {
+                let _ = pattern;
+            }
+            SsaInstKind::ConditionCaseEnd => {
+                let handler = self
+                    .exception_handlers
+                    .pop()
+                    .expect("ConditionCaseEnd without ConditionCaseBegin");
+                let Some(func_ref) =
+                    self.exception_func_ref("condition_case_end", 0)
+                else {
+                    return;
+                };
+                let Some(_) = self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::ConditionCaseEnd,
+                ) else {
+                    return;
+                };
+                match handler.kind {
+                    ExceptionHandlerKind::ConditionCase { continuation_block } => {
+                        self.builder.ins().jump(continuation_block, &[]);
+                        self.builder.switch_to_block(handler.handler_block);
+                        if let Some(outer) = self.exception_handlers.last() {
+                            self.builder
+                                .ins()
+                                .jump(outer.handler_block, &[]);
+                        } else {
+                            let sentinel =
+                                self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                            self.builder.ins().return_(&[sentinel]);
+                        }
+                        self.builder.seal_block(handler.handler_block);
+                        self.builder.switch_to_block(continuation_block);
+                        self.builder.seal_block(continuation_block);
+                    }
+                    _ => {
+                        self.error("ConditionCaseEnd matched non-ConditionCase handler");
+                    }
+                }
+            }
+            SsaInstKind::UnwindProtectBegin => {
+                let Some(func_ref) =
+                    self.exception_func_ref("unwind_protect_begin", 0)
+                else {
+                    return;
+                };
+                let Some(_) = self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::UnwindProtectBegin,
+                ) else {
+                    return;
+                };
+                let handler_block = self.builder.create_block();
+                let continuation_block = self.builder.create_block();
+                let normal_block = self.builder.create_block();
+                self.exception_handlers.push(ExceptionHandler {
+                    handler_block,
+                    kind: ExceptionHandlerKind::UnwindProtect {
+                        continuation_block,
+                        normal_block,
+                    },
+                });
+            }
+            SsaInstKind::UnwindProtectCleanup => {
+                let handler = self
+                    .exception_handlers
+                    .last()
+                    .expect("UnwindProtectCleanup without UnwindProtectBegin");
+                if let ExceptionHandlerKind::UnwindProtect { normal_block, .. } =
+                    &handler.kind
+                {
+                    let nb = *normal_block;
+                    self.builder.ins().jump(nb, &[]);
+                    self.builder.switch_to_block(nb);
+                }
+                let Some(func_ref) =
+                    self.exception_func_ref("unwind_protect_cleanup_enter", 0)
+                else {
+                    return;
+                };
+                self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::UnwindProtectCleanupEnter,
+                );
+            }
+            SsaInstKind::UnwindProtectEnd => {
+                let handler = self
+                    .exception_handlers
+                    .pop()
+                    .expect("UnwindProtectEnd without UnwindProtectBegin");
+                let Some(func_ref) =
+                    self.exception_func_ref("unwind_protect_end", 0)
+                else {
+                    return;
+                };
+                self.emit_runtime_call(
+                    func_ref,
+                    &[],
+                    ClifRuntimeCallKind::UnwindProtectEnd,
+                );
+                match handler.kind {
+                    ExceptionHandlerKind::UnwindProtect {
+                        continuation_block,
+                        normal_block,
+                    } => {
+                        let Some(check_ref) =
+                            self.exception_func_ref("check_exception", 0)
+                        else {
+                            return;
+                        };
+                        let Some(check_result) = self.emit_runtime_call(
+                            check_ref,
+                            &[],
+                            ClifRuntimeCallKind::CheckException,
+                        ) else {
+                            return;
+                        };
+                        let sentinel =
+                            self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                        let is_exception = self
+                            .builder
+                            .ins()
+                            .icmp(IntCC::Equal, check_result, sentinel);
+                        let no_exception_block = self.builder.create_block();
+                        if let Some(outer) = self.exception_handlers.last() {
+                            self.builder.ins().brif(
+                                is_exception,
+                                outer.handler_block,
+                                &[],
+                                no_exception_block,
+                                &[],
+                            );
+                        } else {
+                            self.builder.ins().brif(
+                                is_exception,
+                                continuation_block,
+                                &[],
+                                no_exception_block,
+                                &[],
+                            );
+                        }
+                        self.builder.switch_to_block(no_exception_block);
+                        self.builder.ins().jump(continuation_block, &[]);
+                        self.builder.seal_block(handler.handler_block);
+                        self.builder.seal_block(normal_block);
+                        self.builder.seal_block(no_exception_block);
+                        self.builder.switch_to_block(continuation_block);
+                        self.builder.seal_block(continuation_block);
+                    }
+                    _ => {
+                        self.error("UnwindProtectEnd matched non-UnwindProtect handler");
+                    }
+                }
             }
         }
     }
@@ -1283,6 +1646,31 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             .iter()
             .filter_map(|value| self.value(*value))
             .collect()
+    }
+
+    /// After a potentially-throwing call, check for exception sentinel.
+    /// If sentinel detected, branch to current exception handler.
+    fn emit_exception_check(&mut self, call_result: ir::Value) -> Option<ir::Value> {
+        if self.exception_handlers.is_empty() {
+            return Some(call_result);
+        }
+        let handler_block = self.exception_handlers.last().unwrap().handler_block;
+        let normal_block = self.builder.create_block();
+        let normal_result = self.builder.append_block_param(normal_block, types::I64);
+        let sentinel = self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+        let is_sentinel = self
+            .builder
+            .ins()
+            .icmp(IntCC::Equal, call_result, sentinel);
+        self.builder.ins().brif(
+            is_sentinel,
+            handler_block,
+            &[],
+            normal_block,
+            &[],
+        );
+        self.builder.switch_to_block(normal_block);
+        Some(normal_result)
     }
 
     fn lower_pure_integer_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
@@ -1745,6 +2133,17 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 self.error(format!(
                     "failed to declare Cranelift cdr runtime call: {error}"
                 ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn exception_func_ref(&mut self, name: &str, num_extra_args: usize) -> Option<FuncRef> {
+        let import = match self.runtime.exception_func(name, num_extra_args, self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!("failed to declare exception runtime call: {error}"));
                 return None;
             }
         };

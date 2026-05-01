@@ -6,7 +6,7 @@ use cranelift_module::{FuncId, Linkage, Module, default_libcall_names};
 use crate::clif::{ClifModuleBackend, ClifRuntimeAbi, ssa_to_clif_with_backend};
 use crate::diagnostic::Diagnostic;
 use crate::ids::FunctionId;
-use crate::ssa::{SsaInstKind, SsaLambdaTemplate, SsaModule};
+use crate::ssa::{SsaLambdaTemplate, SsaModule};
 use crate::surface::SurfaceForm;
 
 use lasso::Rodeo;
@@ -68,14 +68,10 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let call_conv = runtime.module().call_conv();
 
     // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
-    // Only register functions with fixed arity (no &rest, no &optional) that don't use
-    // nonlocal control flow (catch/throw, condition-case, unwind-protect), since those
-    // can't be lowered to Cranelift IR and will be skipped during JIT compilation.
+    // Only register functions with fixed arity (no &rest, no &optional).
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
-            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty()
-                && !has_nonlocal_control_flow(func)
-            {
+            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty() {
                 let arity = func.lambda_list.required.len();
                 runtime.register_local_function(name, arity, call_conv);
             }
@@ -180,24 +176,4 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         }),
         diagnostics,
     }
-}
-
-fn has_nonlocal_control_flow(func: &crate::ssa::SsaFunction) -> bool {
-    for (_, block) in func.blocks.iter() {
-        for inst in &block.instructions {
-            match &inst.kind {
-                SsaInstKind::CatchBegin { .. }
-                | SsaInstKind::CatchEnd
-                | SsaInstKind::Throw { .. }
-                | SsaInstKind::ConditionCaseBegin { .. }
-                | SsaInstKind::ConditionCaseHandler { .. }
-                | SsaInstKind::ConditionCaseEnd
-                | SsaInstKind::UnwindProtectBegin
-                | SsaInstKind::UnwindProtectCleanup
-                | SsaInstKind::UnwindProtectEnd => return true,
-                _ => {}
-            }
-        }
-    }
-    false
 }
