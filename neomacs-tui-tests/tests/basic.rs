@@ -557,3 +557,30 @@ fn disabled_command_shows_prompt_and_accepts_with_space() {
         2,
     );
 }
+
+#[test]
+fn m_x_help_shows_help_menu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    invoke_mx_command(&mut gnu, &mut neo, "help");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Both should show a help buffer/menu
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| {
+                row.contains("Help") || row.contains("help")
+            }),
+            "{label}: M-x help should show help information\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "m_x_help_shows_help_menu",
+        &gnu,
+        &neo,
+        3,
+    );
+}

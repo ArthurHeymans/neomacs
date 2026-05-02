@@ -617,3 +617,43 @@ fn other_window_after_split() {
         diffs.len()
     );
 }
+
+// ── Frame management tests ──────────────────────────────────
+
+#[test]
+fn make_frame_and_delete_frame_via_cx5() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // C-x 5 2 creates a new frame
+    send_both(&mut gnu, &mut neo, "C-x 5 2");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Both should show a frame — on TTY this creates a new "screen"
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            !grid.iter().all(|row| row.trim().is_empty()),
+            "{label}: screen should not be blank after C-x 5 2"
+        );
+    }
+
+    // Delete the new frame with C-x 5 0
+    send_both(&mut gnu, &mut neo, "C-x 5 0");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Should return to a valid screen (not crash or hang)
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            !grid.iter().all(|row| row.trim().is_empty()),
+            "{label}: screen should not be blank after C-x 5 0"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "make_frame_and_delete_frame_via_cx5",
+        &gnu,
+        &neo,
+        2,
+    );
+}
