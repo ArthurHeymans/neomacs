@@ -640,3 +640,66 @@ fn face_attribute_inherit_returns_correct_chain_for_mode_line() {
         );
     }
 }
+
+// ── Buffer position correctness tests ───────────────────────
+
+#[test]
+fn buffer_positions_are_correct_1_based_after_file_visit() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "pos-check.txt",
+        "abc\n",
+        "C-x C-f",
+    );
+
+    // Check (point-min) is 1
+    support::eval_expression(&mut gnu, &mut neo, "(point-min)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('1'),
+            "{label}: (point-min) should be 1 after visiting file. Echo: {echo}"
+        );
+    }
+
+    // Check (point-max) matches between GNU and NeoMacs
+    support::eval_expression(&mut gnu, &mut neo, "(point-max)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    let gnu_pm = gnu.text_grid().last().cloned().unwrap_or_default();
+    let neo_pm = neo.text_grid().last().cloned().unwrap_or_default();
+    let gnu_num: String = gnu_pm.chars().filter(|c| c.is_ascii_digit()).collect();
+    let neo_num: String = neo_pm.chars().filter(|c| c.is_ascii_digit()).collect();
+    assert!(!gnu_num.is_empty(), "GNU point-max not found: {gnu_pm}");
+    assert!(!neo_num.is_empty(), "NEO point-max not found: {neo_pm}");
+    assert_eq!(gnu_num, neo_num, "point-max mismatch: GNU={gnu_num} NEO={neo_num}");
+
+    // (buffer-size) should also match
+    support::eval_expression(&mut gnu, &mut neo, "(buffer-size)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    let gnu_bs = gnu.text_grid().last().cloned().unwrap_or_default();
+    let neo_bs = neo.text_grid().last().cloned().unwrap_or_default();
+    let gnu_bs_num: String = gnu_bs.chars().filter(|c| c.is_ascii_digit()).collect();
+    let neo_bs_num: String = neo_bs.chars().filter(|c| c.is_ascii_digit()).collect();
+    assert_eq!(gnu_bs_num, neo_bs_num, "buffer-size mismatch: GNU={gnu_bs_num} NEO={neo_bs_num}");
+
+    // (point) at start of buffer should be 1
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    support::eval_expression(&mut gnu, &mut neo, "(point)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('1'),
+            "{label}: (point) at buffer start should be 1. Echo: {echo}"
+        );
+    }
+}
