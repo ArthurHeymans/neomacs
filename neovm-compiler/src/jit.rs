@@ -207,7 +207,10 @@ fn has_unsupported_nonlocal_flow(func: &SsaFunction) -> bool {
                 | SsaInstKind::ConditionCaseEnd
                 | SsaInstKind::UnwindProtectBegin
                 | SsaInstKind::UnwindProtectCleanup
-                | SsaInstKind::UnwindProtectEnd => return true,
+                | SsaInstKind::UnwindProtectEnd
+                | SsaInstKind::CatchBegin { .. }
+                | SsaInstKind::CatchEnd
+                | SsaInstKind::Throw { .. } => return true,
                 _ => {}
             }
         }

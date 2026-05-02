@@ -1024,6 +1024,10 @@ impl Expander {
         let mut finally_body: Vec<SurfaceForm> = Vec::new();
         let mut with_bindings: Vec<(String, SurfaceForm)> = Vec::new();
         let mut accums: Vec<(AccumKind, String, SurfaceForm)> = Vec::new(); // (kind, var, init)
+        let mut has_repeat = false;
+        let mut repeat_count: Option<SurfaceForm> = None;
+        let mut has_always_never = false;
+        let mut has_thereis = false;
 
         for clause in clauses {
             match clause {
@@ -1036,10 +1040,29 @@ impl Expander {
                     list_form(vec![symbol_form("null", span), cond.clone()], span)
                 ),
                 LoopClause::With { var, expr } => with_bindings.push((var.clone(), expr.clone())),
+                LoopClause::Repeat { count } => {
+                    // repeat N → counter var, checked in while test, decremented in body
+                    let counter_var = "--cl-repeat--";
+                    while_conds.push(list_form(vec![
+                        symbol_form(">", span),
+                        symbol_form(counter_var, span),
+                        SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+                    ], span));
+                    has_repeat = true;
+                    repeat_count = Some(count.clone());
+                }
                 LoopClause::Initially { body } => initially_body.extend(body.iter().cloned()),
                 LoopClause::Finally { body } => finally_body.extend(body.iter().cloned()),
                 LoopClause::Return { .. } => {
                     has_return = true;
+                    body_clauses.push(clause);
+                }
+                LoopClause::Always { .. } | LoopClause::Never { .. } => {
+                    has_always_never = true;
+                    body_clauses.push(clause);
+                }
+                LoopClause::Thereis { .. } => {
+                    has_thereis = true;
                     body_clauses.push(clause);
                 }
                 LoopClause::If { then_clauses, else_clauses, .. } => {
@@ -1047,6 +1070,12 @@ impl Expander {
                         || else_clauses.as_ref().map_or(false, |ec| clauses_contain_return(ec))
                     {
                         has_return = true;
+                    }
+                    if !has_always_never {
+                        has_always_never = clauses.iter().any(|c| matches!(c, LoopClause::Always { .. } | LoopClause::Never { .. }));
+                    }
+                    if !has_thereis {
+                        has_thereis = clauses.iter().any(|c| matches!(c, LoopClause::Thereis { .. }));
                     }
                     body_clauses.push(clause);
                 }
@@ -1063,6 +1092,8 @@ impl Expander {
                 LoopClause::Nconc { .. } => AccumKind::Nconc,
                 LoopClause::Sum { .. } => AccumKind::Sum,
                 LoopClause::Count { .. } => AccumKind::Count,
+                LoopClause::Minimize { .. } => AccumKind::Minimize,
+                LoopClause::Maximize { .. } => AccumKind::Maximize,
                 _ => continue,
             };
             // Reuse existing accumulator of same kind
@@ -1075,6 +1106,7 @@ impl Expander {
                 AccumKind::Sum | AccumKind::Count => SurfaceForm::new(
                     SurfaceKind::Atom(SurfaceAtom::Int(0)), span
                 ),
+                AccumKind::Minimize | AccumKind::Maximize => nil_form(span),
             };
             accums.push((kind, name.clone(), init));
             accum_map.push((kind, name, acc_counter));
@@ -1125,6 +1157,23 @@ impl Expander {
         // With bindings
         for (var, expr) in &with_bindings {
             let_bindings.push(list_form(vec![symbol_form(var, span), expr.clone()], span));
+        }
+
+        // Repeat binding
+        if has_repeat {
+            if let Some(count) = &repeat_count {
+                let_bindings.push(list_form(vec![symbol_form("--cl-repeat--", span), count.clone()], span));
+            }
+        }
+
+        // Always/never flag variable
+        if has_always_never {
+            let_bindings.push(list_form(vec![symbol_form("--cl-always--", span), symbol_form("t", span)], span));
+        }
+
+        // Thereis result variable
+        if has_thereis {
+            let_bindings.push(list_form(vec![symbol_form("--cl-thereis--", span), nil_form(span)], span));
         }
 
         // Build while test
@@ -1291,6 +1340,80 @@ impl Expander {
                     };
                     while_body.push(if_form);
                 }
+                LoopClause::Always { expr } => {
+                    // (if (null expr) (setq --cl-always-- nil))
+                    while_body.push(list_form(vec![
+                        symbol_form("if", span),
+                        list_form(vec![symbol_form("null", span), expr.clone()], span),
+                        list_form(vec![
+                            symbol_form("setq", span),
+                            symbol_form("--cl-always--", span),
+                            nil_form(span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Never { expr } => {
+                    // (if expr (setq --cl-always-- nil))
+                    while_body.push(list_form(vec![
+                        symbol_form("if", span),
+                        expr.clone(),
+                        list_form(vec![
+                            symbol_form("setq", span),
+                            symbol_form("--cl-always--", span),
+                            nil_form(span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Thereis { expr } => {
+                    // (if (and (null --cl-thereis--) expr)
+                    //     (setq --cl-thereis-- expr))
+                    while_body.push(list_form(vec![
+                        symbol_form("if", span),
+                        list_form(vec![
+                            symbol_form("and", span),
+                            list_form(vec![symbol_form("null", span), symbol_form("--cl-thereis--", span)], span),
+                            expr.clone(),
+                        ], span),
+                        list_form(vec![
+                            symbol_form("setq", span),
+                            symbol_form("--cl-thereis--", span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Minimize { expr } => {
+                    // (if (or (null acc) (< expr acc)) (setq acc expr))
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Minimize);
+                    while_body.push(list_form(vec![
+                        symbol_form("if", span),
+                        list_form(vec![
+                            symbol_form("or", span),
+                            list_form(vec![symbol_form("null", span), symbol_form(&acc_var, span)], span),
+                            list_form(vec![symbol_form("<", span), expr.clone(), symbol_form(&acc_var, span)], span),
+                        ], span),
+                        list_form(vec![
+                            symbol_form("setq", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Maximize { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Maximize);
+                    while_body.push(list_form(vec![
+                        symbol_form("if", span),
+                        list_form(vec![
+                            symbol_form("or", span),
+                            list_form(vec![symbol_form("null", span), symbol_form(&acc_var, span)], span),
+                            list_form(vec![symbol_form(">", span), expr.clone(), symbol_form(&acc_var, span)], span),
+                        ], span),
+                        list_form(vec![
+                            symbol_form("setq", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
                 _ => {}
             }
         }
@@ -1329,6 +1452,20 @@ impl Expander {
             ], span));
         }
 
+        // Repeat counter decrement
+        if has_repeat {
+            let counter_var = "--cl-repeat--";
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(counter_var, span),
+                list_form(vec![
+                    symbol_form("-", span),
+                    symbol_form(counter_var, span),
+                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
+                ], span),
+            ], span));
+        }
+
         // Build result expression (after while loop)
         let mut after_while: Vec<SurfaceForm> = Vec::new();
 
@@ -1348,12 +1485,12 @@ impl Expander {
 
         // Result expression
         if !accums.is_empty() {
-            let (kind, name, _) = &accums[0];
-            if *kind == AccumKind::Collect {
-                after_while.push(symbol_form(name, span));
-            } else {
-                after_while.push(symbol_form(name, span));
-            }
+            let (_, name, _) = &accums[0];
+            after_while.push(symbol_form(name, span));
+        } else if has_always_never {
+            after_while.push(symbol_form("--cl-always--", span));
+        } else if has_thereis {
+            after_while.push(symbol_form("--cl-thereis--", span));
         } else if finally_body.is_empty() {
             after_while.push(nil_form(span));
         }
@@ -1605,6 +1742,42 @@ impl Expander {
                     let body = self.collect_until_keyword(items, &mut pos);
                     clauses.push(LoopClause::Finally { body });
                 }
+                "always" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Always { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "never" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Never { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "thereis" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Thereis { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "minimize" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Minimize { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "maximize" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Maximize { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "repeat" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Repeat { count: items[pos].clone() });
+                    pos += 1;
+                }
                 _ => {
                     // Unknown keyword — skip it
                     pos += 1;
@@ -1828,6 +2001,24 @@ enum LoopClause {
     Initially {
         body: Vec<SurfaceForm>,
     },
+    Always {
+        expr: SurfaceForm,
+    },
+    Never {
+        expr: SurfaceForm,
+    },
+    Thereis {
+        expr: SurfaceForm,
+    },
+    Minimize {
+        expr: SurfaceForm,
+    },
+    Maximize {
+        expr: SurfaceForm,
+    },
+    Repeat {
+        count: SurfaceForm,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1837,6 +2028,8 @@ enum AccumKind {
     Nconc,
     Sum,
     Count,
+    Minimize,
+    Maximize,
 }
 
 fn is_loop_keyword(kw: &str) -> bool {

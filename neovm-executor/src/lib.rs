@@ -1589,4 +1589,101 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn jit_cl_loop_repeat() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-repeat.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((acc 0))
+  (cl-loop repeat 5 do (setq acc (+ acc 10)))
+  acc)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(50)));
+    }
+
+    #[test]
+    fn jit_cl_loop_always() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-always.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x from 1 to 5 always (> x 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        // All x > 0, so always returns t
+        assert_eq!(artifact.result.value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn jit_cl_loop_always_fails() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-always-fail.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x from 1 to 5 always (< x 3))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        // x=3 fails (< 3), so always returns nil
+        assert_eq!(artifact.result.value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn jit_cl_loop_never() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-never.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x from 1 to 5 never (> x 10))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        // No x > 10, so never returns t
+        assert_eq!(artifact.result.value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn jit_cl_loop_thereis() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-thereis.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x from 1 to 10 thereis (> x 5))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        // First x > 5 is x=6, returns t (truthy)
+        assert!(!artifact.result.value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn jit_cl_loop_minimize() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-min.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x in (list 5 3 8 1 9) minimize x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn jit_cl_loop_maximize() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-max.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x in (list 5 3 8 1 9) maximize x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(9)));
+    }
 }
