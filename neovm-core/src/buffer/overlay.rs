@@ -18,11 +18,178 @@ use crate::heap_types::OverlayData;
 
 pub type Overlay = OverlayData;
 
+/// Augmented interval tree node for O(log n + k) overlay queries.
+#[derive(Clone, Debug)]
+struct ItreeNode {
+    start: usize,
+    end: usize,
+    /// Maximum `end` value in this subtree (augmented).
+    max_end: usize,
+    /// The overlay object.
+    overlay: Value,
+    left: Option<Box<ItreeNode>>,
+    right: Option<Box<ItreeNode>>,
+}
+
+impl ItreeNode {
+    fn new(start: usize, end: usize, overlay: Value) -> Self {
+        Self {
+            start,
+            end,
+            max_end: end,
+            overlay,
+            left: None,
+            right: None,
+        }
+    }
+
+    fn update_max_end(&mut self) {
+        self.max_end = self.end;
+        if let Some(ref left) = self.left {
+            self.max_end = self.max_end.max(left.max_end);
+        }
+        if let Some(ref right) = self.right {
+            self.max_end = self.max_end.max(right.max_end);
+        }
+    }
+}
+
+/// BST-based augmented interval tree.  Not self-balancing, but overlay
+/// counts are typically small (< 1000), so depth is acceptable.
+#[derive(Clone, Debug)]
+struct Itree {
+    root: Option<Box<ItreeNode>>,
+}
+
+impl Itree {
+    fn new() -> Self {
+        Self { root: None }
+    }
+
+    /// Collect all overlays that cover `pos` into `out`.
+    fn overlays_at(&self, pos: usize, out: &mut Vec<Value>) {
+        Self::overlays_at_node(&self.root, pos, out);
+    }
+
+    fn overlays_at_node(node: &Option<Box<ItreeNode>>, pos: usize, out: &mut Vec<Value>) {
+        let Some(n) = node.as_ref() else { return };
+        // If left child's max_end > pos, it might contain covering intervals
+        if let Some(left) = n.left.as_ref() {
+            if left.max_end > pos {
+                Self::overlays_at_node(&n.left, pos, out);
+            }
+        }
+        // Check current node
+        if n.start <= pos && pos < n.end {
+            out.push(n.overlay);
+        }
+        // Always visit right child
+        if let Some(right) = n.right.as_ref() {
+            if right.max_end > pos || pos < n.start {
+                Self::overlays_at_node(&n.right, pos, out);
+            } else {
+                Self::overlays_at_node(&n.right, pos, out);
+            }
+        }
+    }
+
+    /// Insert an interval.  Returns false if already present.
+    fn insert(&mut self, start: usize, end: usize, overlay: Value) -> bool {
+        let inserted = Self::insert_node(&mut self.root, start, end, overlay);
+        inserted
+    }
+
+    fn insert_node(
+        node: &mut Option<Box<ItreeNode>>,
+        start: usize,
+        end: usize,
+        overlay: Value,
+    ) -> bool {
+        match node {
+            None => {
+                *node = Some(Box::new(ItreeNode::new(start, end, overlay)));
+                true
+            }
+            Some(n) => {
+                if n.overlay == overlay {
+                    // Already present — update endpoints
+                    n.start = start;
+                    n.end = end;
+                    n.update_max_end();
+                    false
+                } else if start < n.start {
+                    let inserted = Self::insert_node(&mut n.left, start, end, overlay);
+                    if inserted {
+                        n.update_max_end();
+                    }
+                    inserted
+                } else {
+                    let inserted = Self::insert_node(&mut n.right, start, end, overlay);
+                    if inserted {
+                        n.update_max_end();
+                    }
+                    inserted
+                }
+            }
+        }
+    }
+
+    /// Remove an overlay from the tree.
+    fn remove(&mut self, overlay: Value) -> bool {
+        Self::remove_node(&mut self.root, overlay)
+    }
+
+    fn remove_node(node: &mut Option<Box<ItreeNode>>, overlay: Value) -> bool {
+        // Take ownership of the node, operate on it, put back
+        let Some(mut boxed) = node.take() else {
+            return false;
+        };
+        if boxed.overlay == overlay {
+            // Remove this node, replace with merged children
+            let left = boxed.left.take();
+            let right = boxed.right.take();
+            *node = match (left, right) {
+                (None, None) => None,
+                (Some(child), None) | (None, Some(child)) => Some(child),
+                (Some(left), Some(right)) => {
+                    let mut merged = left;
+                    Self::attach_rightmost(&mut merged, right);
+                    Some(merged)
+                }
+            };
+            return true;
+        }
+        // Recurse into child
+        let go_left = overlay < boxed.overlay;
+        let found = if go_left {
+            Self::remove_node(&mut boxed.left, overlay)
+        } else {
+            Self::remove_node(&mut boxed.right, overlay)
+        };
+        if found {
+            boxed.update_max_end();
+        }
+        *node = Some(boxed);
+        found
+    }
+
+    fn attach_rightmost(node: &mut Box<ItreeNode>, child: Box<ItreeNode>) {
+        if node.right.is_none() {
+            node.right = Some(child);
+        } else {
+            Self::attach_rightmost(node.right.as_mut().unwrap(), child);
+        }
+        node.update_max_end();
+    }
+}
+
 #[derive(Clone)]
 pub struct OverlayList {
     overlays: BTreeSet<Value>,
     by_start: BTreeMap<usize, BTreeSet<Value>>,
     by_end: BTreeMap<usize, BTreeSet<Value>>,
+    /// Augmented interval tree for O(log n + k) overlays_at queries.
+    itree: Itree,
 }
 
 impl OverlayList {
@@ -31,6 +198,7 @@ impl OverlayList {
             overlays: BTreeSet::new(),
             by_start: BTreeMap::new(),
             by_end: BTreeMap::new(),
+            itree: Itree::new(),
         }
     }
 
@@ -41,6 +209,7 @@ impl OverlayList {
         self.overlays.insert(overlay);
         Self::insert_index_entry(&mut self.by_start, start, overlay);
         Self::insert_index_entry(&mut self.by_end, end, overlay);
+        self.itree.insert(start, end, overlay);
     }
 
     pub fn detach_overlay(&mut self, overlay: Value) -> bool {
@@ -51,6 +220,7 @@ impl OverlayList {
             Self::remove_index_entry(&mut self.by_start, start, overlay);
             Self::remove_index_entry(&mut self.by_end, end, overlay);
         }
+        self.itree.remove(overlay);
         true
     }
 
@@ -115,6 +285,8 @@ impl OverlayList {
         Self::remove_index_entry(&mut self.by_end, old_end, overlay);
         Self::insert_index_entry(&mut self.by_start, start, overlay);
         Self::insert_index_entry(&mut self.by_end, end, overlay);
+        self.itree.remove(overlay);
+        self.itree.insert(start, end, overlay);
         // GNU Emacs drops empty overlays created by move-overlay when
         // `evaporate' is non-nil. Minibuffer shadow overlays depend on this
         // to avoid leaking stale before/after-strings into later prompts.
@@ -127,15 +299,10 @@ impl OverlayList {
         }
     }
 
+    /// Return all overlays covering `pos`, O(log n + k) via interval tree.
     pub fn overlays_at(&self, pos: usize) -> Vec<Value> {
         let mut overlays = Vec::new();
-        for (_, ids) in self.by_start.range(..=pos) {
-            for overlay in ids {
-                if overlay_covers_pos(*overlay, pos) {
-                    overlays.push(*overlay);
-                }
-            }
-        }
+        self.itree.overlays_at(pos, &mut overlays);
         overlays
     }
 
@@ -396,6 +563,7 @@ impl OverlayList {
     fn rebuild_indexes(&mut self) {
         self.by_start.clear();
         self.by_end.clear();
+        self.itree = Itree::new();
         let live: Vec<Value> = self.overlays.iter().copied().collect();
         for overlay in live {
             if overlay_live_buffer(overlay).is_none() {
@@ -405,6 +573,7 @@ impl OverlayList {
             if let Some((start, end)) = overlay_range(overlay) {
                 Self::insert_index_entry(&mut self.by_start, start, overlay);
                 Self::insert_index_entry(&mut self.by_end, end, overlay);
+                self.itree.insert(start, end, overlay);
             }
         }
     }
