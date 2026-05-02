@@ -5762,12 +5762,17 @@ impl LayoutEngine {
             }
             // Mode-line
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
-            let ml: Vec<Glyph> = window
+            let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let mut ml: Vec<Glyph> = window
                 .mode_line
                 .glyphs
                 .iter()
                 .map(|g| Glyph::char(g.ch, g.face_id, 0))
                 .collect();
+            while ml.len() < ml_ncols {
+                ml.push(Glyph::char(' ', 1, 0));
+            }
+            ml.truncate(ml_ncols);
             builder.install_current_row_glyphs(ml);
             builder.end_row();
             builder.end_window();
@@ -5780,12 +5785,17 @@ impl LayoutEngine {
                 mini.pixel_bounds, mini.selected,
             );
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
-            let ml: Vec<Glyph> = mini
+            let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let mut ml: Vec<Glyph> = mini
                 .mode_line
                 .glyphs
                 .iter()
                 .map(|g| Glyph::char(g.ch, g.face_id, 0))
                 .collect();
+            while ml.len() < mini_ncols {
+                ml.push(Glyph::char(' ', 1, 0));
+            }
+            ml.truncate(mini_ncols);
             builder.install_current_row_glyphs(ml);
             builder.end_row();
             builder.end_window();

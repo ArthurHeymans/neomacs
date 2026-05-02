@@ -757,6 +757,7 @@ impl GlyphMatrixBuilder {
         let mut row = GlyphRow::new(role);
         row.enabled = true;
         row.mode_line = true;
+        self.current_row = entry.matrix.rows.len();
         entry.matrix.rows.push(row);
         entry.matrix.nrows += 1;
         true
