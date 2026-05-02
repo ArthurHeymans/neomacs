@@ -126,17 +126,17 @@ fn run_gui(demo: &str) {
     let rows = 50u16;
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
-    // font_size in points, converted to physical pixels via fontconfig DPI
-    let font_size_px =
-        neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
+    // Use logical font size (12 pt).  fontconfig/cosmic-text measure in
+    // logical pixels; the X11 pre-scaling and GPU handle physical DPI.
+    let logical_size = 12.0f32;
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.char_width('m', family, 400, false, font_size_px).max(1.0)
+        fm.char_width('m', family, 400, false, logical_size).max(1.0)
     };
     let char_h = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.font_metrics(family, 400, false, font_size_px)
+        fm.font_metrics(family, 400, false, logical_size)
             .line_height
             .max(1.0)
     };
@@ -768,7 +768,6 @@ fn build_faces() -> HashMap<u32, Face> {
     // Face 8: Rounded box border
     {
         let mut box_face = Face::new(8);
-        box_face.font_size = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
         box_face.foreground = Color::new(0.87, 0.87, 0.87, 1.0);
         box_face.background = Color::new(0.05, 0.05, 0.08, 1.0);
         box_face.font_weight = 400;
@@ -814,7 +813,6 @@ fn mk(
     face.foreground = Color::new(fr, fg, fb, 1.0);
     face.background = Color::new(br, _bg, bb, 1.0);
     // DPI-aware font size: convert from logical points to physical pixels
-    face.font_size = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
     face.font_weight = weight;
     face.attributes = attrs;
     face.background_gradient = gradient;
