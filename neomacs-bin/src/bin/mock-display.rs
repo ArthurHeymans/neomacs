@@ -124,7 +124,7 @@ fn run_gui(demo: &str) {
     // actual font metrics (DPI-aware via fontconfig) and we use the same
     // engine instance for measurement and layout — no duplicate FontSystem.
     let cols = 300u16;
-    let rows = 310u16;
+    let rows = 302u16;
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
