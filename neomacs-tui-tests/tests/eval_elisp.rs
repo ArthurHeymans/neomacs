@@ -703,3 +703,66 @@ fn buffer_positions_are_correct_1_based_after_file_visit() {
         );
     }
 }
+
+// ── Fundamental Elisp operation tests ───────────────────────
+
+#[test]
+fn fundamental_elisp_operations_return_correct_values() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Test (car (cons 1 2)) should be 1
+    support::eval_expression(&mut gnu, &mut neo, "(car (cons 1 2))");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('1'),
+            "{label}: (car (cons 1 2)) should be 1. Echo: {echo}"
+        );
+    }
+
+    // Test (cdr (cons 1 2)) should be 2
+    support::eval_expression(&mut gnu, &mut neo, "(cdr (cons 1 2))");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('2'),
+            "{label}: (cdr (cons 1 2)) should be 2. Echo: {echo}"
+        );
+    }
+
+    // Test (equal (cons 1 2) (cons 1 2)) should be t
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(equal (cons 1 2) (cons 1 2))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: (equal (cons 1 2) (cons 1 2)) should be t. Echo: {echo}"
+        );
+    }
+
+    // Test (listp (cons 1 2)) should be t
+    support::eval_expression(&mut gnu, &mut neo, "(listp (cons 1 2))");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: (listp (cons 1 2)) should be t. Echo: {echo}"
+        );
+    }
+}
