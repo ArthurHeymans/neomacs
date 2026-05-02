@@ -44,6 +44,14 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
             changed = true;
             any_changed = true;
         }
+        if block_merging(function).changed {
+            changed = true;
+            any_changed = true;
+        }
+        if common_subexpression_elimination(function).changed {
+            changed = true;
+            any_changed = true;
+        }
     }
     #[cfg(debug_assertions)]
     {
