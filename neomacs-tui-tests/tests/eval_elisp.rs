@@ -1076,3 +1076,44 @@ fn lambda_apply_funcall_match_gnu_semantics() {
         );
     }
 }
+
+// ── Macro and control flow tests ────────────────────────────
+
+#[test]
+fn macroexpand_and_condition_case_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (condition-case nil (/ 1 0) (arith-error "caught")) should return "caught"
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(condition-case nil (/ 1 0) (arith-error \"caught\"))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("caught"),
+            "{label}: (condition-case ... (/ 1 0) ...) should catch arith-error"
+        );
+    }
+
+    // (eval '(+ 1 2)) should be 3
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(eval '(+ 1 2))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('3'),
+            "{label}: (eval '(+ 1 2)) should be 3. Echo: {echo}"
+        );
+    }
+}
