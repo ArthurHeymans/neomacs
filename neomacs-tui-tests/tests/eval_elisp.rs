@@ -977,3 +977,44 @@ fn sequence_operations_match_gnu_semantics() {
         );
     }
 }
+
+// ── Regexp and assoc tests ──────────────────────────────────
+
+#[test]
+fn regexp_and_assoc_operations_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (string-match "foo" "foobar") should be 0 (match at position 0)
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(string-match \"foo\" \"foobar\")",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('0'),
+            "{label}: (string-match ...) should be 0. Echo: {echo}"
+        );
+    }
+
+    // (assoc 'b '((a . 1) (b . 2))) should be (b . 2)
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(assoc 'b '((a . 1) (b . 2)))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('b') && echo.contains('2'),
+            "{label}: (assoc 'b ...) should find (b . 2). Echo: {echo}"
+        );
+    }
+}
