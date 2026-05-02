@@ -49,14 +49,17 @@ impl WgpuRenderer {
         let frame_h = child.height;
         let bg_alpha = child.background_alpha;
 
-        tracing::debug!(
-            "render_child_frame: size={:.0}x{:.0} offset=({:.1},{:.1}) border={:.1} glyphs={}",
-            frame_w,
-            frame_h,
+        tracing::info!(
+            size_x = frame_w,
+            size_y = frame_h,
             offset_x,
             offset_y,
-            bw,
-            child.glyphs.len(),
+            logical_w,
+            logical_h,
+            sf = self.scale_factor,
+            border = bw,
+            glyphs = child.glyphs.len(),
+            "render_child_frame"
         );
 
         // Child-frame-specific rendering: shadow + background + border.

@@ -1785,6 +1785,7 @@ impl WgpuRenderer {
                     );
                 }
 
+                let mut glyph_samples: u32 = 0;
                 for glyph in &frame_glyphs.glyphs {
                     if let FrameGlyph::Char {
                         char,
@@ -1883,7 +1884,30 @@ impl WgpuRenderer {
                             let glyph_w = cached.width as f32 / sf;
                             let glyph_h = cached.height as f32 / sf;
 
-                            // Authoritative per-glyph vertical clipping from layout.
+                            // Log first few non-space chars for font-size debugging
+                            if !want_overlay
+                                && *char != ' '
+                                && glyph_samples < 3
+                                && *face_id <= 12
+                            {
+                                tracing::info!(
+                                    glyph_sample = glyph_samples,
+                                    char = %char,
+                                    face_id = *face_id,
+                                    font_size,
+                                    logical_x = glyph_x,
+                                    logical_y = glyph_y,
+                                    logical_w = glyph_w,
+                                    logical_h = glyph_h,
+                                    physical_x = phys_x,
+                                    physical_y = phys_y,
+                                    atlas_w = cached.width,
+                                    atlas_h = cached.height,
+                                    sf,
+                                    "glyph pixel dimensions"
+                                );
+                                glyph_samples += 1;
+                            }
                             let (glyph_y, glyph_h, tex_v_min, tex_v_max) =
                                 if let Some(clip) = clip_rect {
                                     let mut y0 = glyph_y;
