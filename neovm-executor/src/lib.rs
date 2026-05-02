@@ -1834,4 +1834,130 @@ total",
         let s = artifact.runtime.string_contents(val).unwrap();
         assert_eq!(s, "hello 42 world");
     }
+
+    // --- Complex end-to-end pipeline tests ---
+
+    #[test]
+    fn jit_closure_counter_with_funcall() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "closure-funcall.el",
+            ";;; -*- lexical-binding: t; -*-
+             (let ((counter (let ((n 0))
+               (lambda () (setq n (+ n 1)) n))))
+               (funcall counter)
+               (funcall counter)
+               (funcall counter))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_mapcar_with_lambda() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "mapcar-lambda.el",
+            ";;; -*- lexical-binding: t; -*-
+             (let ((result (mapcar (lambda (x) (* x x)) '(1 2 3 4 5))))
+               (car (cdr (cdr (cdr (cdr result))))))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(25)));
+    }
+
+    #[test]
+    fn jit_recursive_fibonacci_with_catch() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "fib-catch.el",
+            ";;; -*- lexical-binding: t; -*-
+             (defun fib (n)
+               (if (< n 2) n
+                 (+ (fib (- n 1)) (fib (- n 2)))))
+             (+ 100 (catch 'done (throw 'done (fib 10))))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(155)));
+    }
+
+    #[test]
+    fn jit_nested_let_with_vector_mutation() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "vector-mut.el",
+            ";;; -*- lexical-binding: t; -*-
+             (let ((v (vector 10 20 30 40 50)))
+               (aset v 2 99)
+               (+ (aref v 0) (aref v 1) (aref v 2) (aref v 3) (aref v 4)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(219)));
+    }
+
+    #[test]
+    fn jit_multiple_closures_sharing_mutable_cell() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "shared-cell.el",
+            ";;; -*- lexical-binding: t; -*-
+             (let ((cell (list 0)))
+               (let ((inc (lambda () (setcar cell (+ 1 (car cell))))))
+                 (funcall inc)
+                 (funcall inc)
+                 (funcall inc)
+                 (car cell)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_cond_multi_clause() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond-multi.el",
+            ";;; -*- lexical-binding: t; -*-
+             (let ((x 42))
+               (cond ((< x 10) 1)
+                     ((< x 20) 2)
+                     ((< x 30) 3)
+                     ((< x 50) 4)
+                     (t 5)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn jit_condition_case_div_zero() {
+        // Division by zero caught by condition-case with two handlers
+        let artifact = crate::jit_interp::execute_with_jit(
+            "arith-err-div.el",
+            ";;; -*- lexical-binding: t; -*-
+             (condition-case err
+               (/ 10 0)
+             (arith-error -1)
+             (error -2))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(-1)));
+    }
+
+    #[test]
+    fn jit_nested_condition_case_inner_signals_to_outer() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-resignal.el",
+            ";;; -*- lexical-binding: t; -*-
+             (condition-case err
+               (condition-case inner
+                 (/ 1 0)
+               (arith-error (signal 'error (list 99))))
+             (error 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
 }

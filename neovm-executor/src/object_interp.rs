@@ -1466,8 +1466,11 @@ impl Interpreter<'_, '_, '_> {
             }
         };
         let target = find_condition_handler(instructions, signal_index, &signal_name)?;
-        // Pop skipped inner condition-case frames that didn't have a matching handler.
-        for _ in 0..target.frames_to_skip {
+        // Pop skipped inner condition-case frames. Clamp to avoid over-popping
+        // when inner handlers have already been activated (and thus already
+        // popped their frames from condition_stack).
+        let actual_skip = target.frames_to_skip.min(self.condition_stack.len().saturating_sub(1));
+        for _ in 0..actual_skip {
             self.condition_stack.pop();
         }
         let frame = self.condition_stack.pop()?;
@@ -1481,6 +1484,15 @@ impl Interpreter<'_, '_, '_> {
             dynamic_bind_count = 1;
         }
         self.last_value = None;
+        // When a signal propagates through an inner handler to an outer handler,
+        // inherit the inner handler's result_reg so the outer handler writes to
+        // the correct register (the original body's result register, not the
+        // inner handler's signal instruction result register).
+        let result_reg = self
+            .active_condition_handlers
+            .last()
+            .and_then(|h| h.result_reg)
+            .or(result_reg);
         self.active_condition_handlers.push(ActiveConditionHandler {
             stop_index: target.stop_index,
             condition_end_index: target.condition_end_index,
