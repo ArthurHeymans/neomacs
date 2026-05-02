@@ -161,6 +161,9 @@ fn remap_inst(inst: &mut crate::ssa::SsaInst, remap: impl Fn(ValueId) -> ValueId
             *tag = remap(*tag);
             *value = remap(*value);
         }
+        ConditionCaseHandlerResult { value } => {
+            *value = remap(*value);
+        }
         _ => {}
     }
 }

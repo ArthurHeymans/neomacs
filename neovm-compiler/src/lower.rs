@@ -394,6 +394,12 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::ConditionCaseHandler { pattern } => RegInstKind::ConditionCaseHandler {
                 pattern: pattern.clone(),
             },
+            SsaInstKind::ConditionCaseHandlerResult { value } => {
+                // No-op in RegIR: the handler body's value is already in its register,
+                // and the runtime captures it via last_value. This instruction exists
+                // solely to prevent DCE from removing the handler body.
+                RegInstKind::Move { dst: self.value_reg(*value), src: self.value_reg(*value) }
+            }
             SsaInstKind::ConditionCaseEnd => RegInstKind::ConditionCaseEnd,
             SsaInstKind::UnwindProtectBegin => RegInstKind::UnwindProtectBegin,
             SsaInstKind::UnwindProtectCleanup => RegInstKind::UnwindProtectCleanup,
@@ -482,6 +488,7 @@ impl<'a> RegLowerer<'a> {
                 | SsaInstKind::Throw { .. }
                 | SsaInstKind::ConditionCaseBegin { .. }
                 | SsaInstKind::ConditionCaseHandler { .. }
+                | SsaInstKind::ConditionCaseHandlerResult { .. }
                 | SsaInstKind::UnwindProtectBegin
                 | SsaInstKind::UnwindProtectCleanup
         )
@@ -1009,7 +1016,16 @@ impl SsaBuilder {
                     self.emit_no_result(SsaInstKind::ConditionCaseHandler {
                         pattern: handler.pattern.clone(),
                     });
-                    let _ = self.lower_expr(&handler.body);
+                    let handler_value = self.lower_expr(&handler.body);
+                    // Emit a barrier that prevents DCE from removing the handler body.
+                    // The runtime uses last_value to get the handler result, so the
+                    // handler body instructions must survive optimization.
+                    if let Some(hv) = handler_value {
+                        self.emit_value(
+                            SsaInstKind::ConditionCaseHandlerResult { value: hv },
+                            Effects::new([Effect::MaySignal]),
+                        );
+                    }
                 }
                 self.emit_no_result(SsaInstKind::ConditionCaseEnd);
                 body_value
@@ -1250,6 +1266,7 @@ impl SsaBuilder {
             | SsaInstKind::CatchEnd
             | SsaInstKind::ConditionCaseBegin { .. }
             | SsaInstKind::ConditionCaseHandler { .. }
+            | SsaInstKind::ConditionCaseHandlerResult { .. }
             | SsaInstKind::ConditionCaseEnd
             | SsaInstKind::UnwindProtectBegin
             | SsaInstKind::UnwindProtectCleanup

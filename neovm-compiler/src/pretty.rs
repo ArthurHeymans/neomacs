@@ -286,6 +286,9 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::ConditionCaseHandler { .. } => {
             let _ = write!(out, "condition-case-handler <pattern>");
         }
+        SsaInstKind::ConditionCaseHandlerResult { value } => {
+            let _ = write!(out, "condition-case-handler-result {}", value);
+        }
         SsaInstKind::ConditionCaseEnd => {
             let _ = write!(out, "condition-case-end");
         }

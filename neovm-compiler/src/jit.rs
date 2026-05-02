@@ -204,6 +204,7 @@ fn has_unsupported_nonlocal_flow(func: &SsaFunction) -> bool {
             match inst.kind {
                 SsaInstKind::ConditionCaseBegin { .. }
                 | SsaInstKind::ConditionCaseHandler { .. }
+                | SsaInstKind::ConditionCaseHandlerResult { .. }
                 | SsaInstKind::ConditionCaseEnd
                 | SsaInstKind::UnwindProtectBegin
                 | SsaInstKind::UnwindProtectCleanup

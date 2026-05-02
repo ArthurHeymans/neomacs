@@ -117,6 +117,9 @@ pub enum SsaInstKind {
     ConditionCaseHandler {
         pattern: SurfaceForm,
     },
+    ConditionCaseHandlerResult {
+        value: ValueId,
+    },
     ConditionCaseEnd,
     UnwindProtectBegin,
     UnwindProtectCleanup,

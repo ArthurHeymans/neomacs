@@ -1467,6 +1467,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             SsaInstKind::ConditionCaseHandler { pattern } => {
                 let _ = pattern;
             }
+            SsaInstKind::ConditionCaseHandlerResult { value } => {
+                let _ = value;
+            }
             SsaInstKind::ConditionCaseEnd => {
                 let handler = self
                     .exception_handlers
