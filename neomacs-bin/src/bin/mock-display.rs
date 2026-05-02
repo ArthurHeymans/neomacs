@@ -595,7 +595,7 @@ fn build_default(
 
     let scratch: Vec<StyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, _)| StyledLine::from_str(t, 8))
+        .map(|(t, f)| StyledLine::from_str(t, f))
         .collect();
     let messages: Vec<StyledLine> = messages_buffer_lines()
         .into_iter()
