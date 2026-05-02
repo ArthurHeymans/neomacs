@@ -766,3 +766,66 @@ fn fundamental_elisp_operations_return_correct_values() {
         );
     }
 }
+
+// ── String and numeric operation tests ──────────────────────
+
+#[test]
+fn string_and_numeric_operations_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (concat "a" "b") should be "ab"
+    support::eval_expression(&mut gnu, &mut neo, "(concat \"a\" \"b\")");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("ab"),
+            "{label}: (concat \"a\" \"b\") should be \"ab\". Echo: {echo}"
+        );
+    }
+
+    // (substring "hello" 1 3) should be "el" (0-indexed in GNU!)
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(substring \"hello\" 1 3)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("el"),
+            "{label}: (substring \"hello\" 1 3) should be \"el\". Echo: {echo}"
+        );
+    }
+
+    // (length "hello") should be 5
+    support::eval_expression(&mut gnu, &mut neo, "(length \"hello\")");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('5'),
+            "{label}: (length \"hello\") should be 5. Echo: {echo}"
+        );
+    }
+
+    // (+ 1 2 3) should be 6
+    support::eval_expression(&mut gnu, &mut neo, "(+ 1 2 3)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('6'),
+            "{label}: (+ 1 2 3) should be 6. Echo: {echo}"
+        );
+    }
+}
