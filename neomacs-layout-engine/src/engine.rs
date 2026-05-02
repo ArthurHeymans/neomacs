@@ -5797,28 +5797,49 @@ impl LayoutEngine {
             builder.end_window();
         }
 
-        // Minibuffer at frame bottom
+        // Minibuffer at frame bottom — a real window with text rows
+        // and optionally a thin mode-line, matching GNU's design where
+        // the echo-area text is buffer content, not a mode-line.
         if let Some(ref mini) = content.minibuffer {
-            builder.begin_window(mini.window_id, 0, 0, mini.pixel_bounds, mini.selected);
+            let nrows = mini.lines.len();
+            let ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+            builder.begin_window(mini.window_id, nrows, ncols, mini.pixel_bounds, mini.selected);
 
-            builder.begin_status_line_row(GlyphRowRole::Minibuffer);
-            builder.set_current_row_metrics(
-                mini.pixel_bounds.y + mini.pixel_bounds.height - char_h,
-                char_h,
-                ascent,
-            );
-            let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
-            let mut ml: Vec<Glyph> = mini
-                .mode_line
-                .glyphs
-                .iter()
-                .map(|g| Glyph::char(g.ch, g.face_id, 0))
-                .collect();
-            while ml.len() < mini_ncols {
-                ml.push(Glyph::char(' ', 1, 0));
+            for (row_idx, line) in mini.lines.iter().enumerate() {
+                builder.begin_row(row_idx, GlyphRowRole::Minibuffer);
+                builder.set_current_row_metrics(
+                    mini.pixel_bounds.y + row_idx as f32 * char_h,
+                    char_h,
+                    ascent,
+                );
+                let mut cp = 0usize;
+                for glyph in &line.glyphs {
+                    builder.push_char(glyph.ch, glyph.face_id, cp);
+                    cp += 1;
+                }
+                builder.end_row();
             }
-            ml.truncate(mini_ncols);
-            builder.install_status_line_row_glyphs(ml);
+
+            if !mini.mode_line.glyphs.is_empty() {
+                builder.begin_status_line_row(GlyphRowRole::ModeLine);
+                builder.set_current_row_metrics(
+                    mini.pixel_bounds.y + mini.pixel_bounds.height - char_h,
+                    char_h,
+                    ascent,
+                );
+                let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+                let mut ml: Vec<Glyph> = mini
+                    .mode_line
+                    .glyphs
+                    .iter()
+                    .map(|g| Glyph::char(g.ch, g.face_id, 0))
+                    .collect();
+                while ml.len() < mini_ncols {
+                    ml.push(Glyph::char(' ', 1, 0));
+                }
+                ml.truncate(mini_ncols);
+                builder.install_status_line_row_glyphs(ml);
+            }
 
             builder.end_window();
         }
