@@ -866,12 +866,6 @@ impl MacroEval {
                 self.call_function(span, &func_val, &args, env)
             }
 
-            Some("cl-loop") => {
-                // (cl-loop &rest clauses) — complex loop macro
-                // At macro time, return nil
-                Ok(MacroValue::Nil)
-            }
-
             Some("aref") => {
                 // (aref array idx) — get element from array/vector
                 if items.len() >= 3 {
