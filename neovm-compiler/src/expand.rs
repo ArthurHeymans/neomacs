@@ -229,6 +229,7 @@ impl Expander {
             "cl-defun" => self.expand_cl_defun(span, items),
             "cl-macrolet" => self.expand_cl_macrolet(span, items),
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
+            "cl-loop" => self.expand_cl_loop(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -887,7 +888,7 @@ impl Expander {
         ];
         dbind_body.extend(body.into_iter().map(|f| self.expand_form(f)));
 
-        let mut defun_body = vec![
+        let defun_body = vec![
             symbol_form("defun", span),
             symbol_form(&name, span),
             rest_params,
@@ -992,6 +993,871 @@ impl Expander {
             ),
         }
     }
+
+    // ── cl-loop expansion ──────────────────────────────────────────────
+
+    fn expand_cl_loop(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        if items.len() < 2 {
+            return nil_form(span);
+        }
+        let clauses = match self.parse_loop_clauses(span, &items[1..]) {
+            Some(c) => c,
+            None => return nil_form(span),
+        };
+        if clauses.is_empty() {
+            return nil_form(span);
+        }
+        let result = self.build_loop_expansion(span, &clauses);
+        self.expand_form(result)
+    }
+
+    fn build_loop_expansion(&self, span: Span, clauses: &[LoopClause]) -> SurfaceForm {
+        let mut acc_counter = 0usize;
+        let mut list_counter = 0usize;
+        let mut has_return = false;
+
+        // Classify clauses
+        let mut for_clauses: Vec<&LoopClause> = Vec::new();
+        let mut body_clauses: Vec<&LoopClause> = Vec::new();
+        let mut while_conds: Vec<SurfaceForm> = Vec::new();
+        let mut initially_body: Vec<SurfaceForm> = Vec::new();
+        let mut finally_body: Vec<SurfaceForm> = Vec::new();
+        let mut with_bindings: Vec<(String, SurfaceForm)> = Vec::new();
+        let mut accums: Vec<(AccumKind, String, SurfaceForm)> = Vec::new(); // (kind, var, init)
+
+        for clause in clauses {
+            match clause {
+                LoopClause::ForFrom { .. }
+                | LoopClause::ForIn { .. }
+                | LoopClause::ForOn { .. }
+                | LoopClause::ForEquals { .. } => for_clauses.push(clause),
+                LoopClause::While { cond } => while_conds.push(cond.clone()),
+                LoopClause::Until { cond } => while_conds.push(
+                    list_form(vec![symbol_form("null", span), cond.clone()], span)
+                ),
+                LoopClause::With { var, expr } => with_bindings.push((var.clone(), expr.clone())),
+                LoopClause::Initially { body } => initially_body.extend(body.iter().cloned()),
+                LoopClause::Finally { body } => finally_body.extend(body.iter().cloned()),
+                LoopClause::Return { .. } => {
+                    has_return = true;
+                    body_clauses.push(clause);
+                }
+                LoopClause::If { then_clauses, else_clauses, .. } => {
+                    if clauses_contain_return(then_clauses)
+                        || else_clauses.as_ref().map_or(false, |ec| clauses_contain_return(ec))
+                    {
+                        has_return = true;
+                    }
+                    body_clauses.push(clause);
+                }
+                _ => body_clauses.push(clause),
+            }
+        }
+
+        // Allocate accumulators for collection/aggregation clauses
+        let mut accum_map: Vec<(AccumKind, String, usize)> = Vec::new(); // (kind, var, index-into-accums)
+        for clause in &body_clauses {
+            let kind = match clause {
+                LoopClause::Collect { .. } => AccumKind::Collect,
+                LoopClause::Append { .. } => AccumKind::Append,
+                LoopClause::Nconc { .. } => AccumKind::Nconc,
+                LoopClause::Sum { .. } => AccumKind::Sum,
+                LoopClause::Count { .. } => AccumKind::Count,
+                _ => continue,
+            };
+            // Reuse existing accumulator of same kind
+            if let Some(_existing) = accum_map.iter().find(|(k, _, _)| *k == kind) {
+                continue;
+            }
+            let name = format!("--cl-acc-{}--", acc_counter);
+            let init = match kind {
+                AccumKind::Collect | AccumKind::Append | AccumKind::Nconc => nil_form(span),
+                AccumKind::Sum | AccumKind::Count => SurfaceForm::new(
+                    SurfaceKind::Atom(SurfaceAtom::Int(0)), span
+                ),
+            };
+            accums.push((kind, name.clone(), init));
+            accum_map.push((kind, name, acc_counter));
+            acc_counter += 1;
+        }
+
+        // Build let-bindings
+        let mut let_bindings: Vec<SurfaceForm> = Vec::new();
+
+        // Accumulator bindings
+        for (_, name, init) in &accums {
+            let_bindings.push(list_form(vec![symbol_form(name, span), init.clone()], span));
+        }
+
+        // For-from bindings and list temp bindings
+        let mut for_from_info: Vec<(String, SurfaceForm, SurfaceForm, Option<SurfaceForm>)> = Vec::new(); // var, start, end, step
+        let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
+        let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
+        let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr
+
+        for clause in &for_clauses {
+            match clause {
+                LoopClause::ForFrom { var, start, end, step } => {
+                    let_bindings.push(list_form(vec![symbol_form(var, span), start.clone()], span));
+                    for_from_info.push((var.clone(), start.clone(), end.clone(), step.clone()));
+                }
+                LoopClause::ForIn { var, list_expr } => {
+                    let list_temp = format!("--cl-list-{}--", list_counter);
+                    list_counter += 1;
+                    let_bindings.push(list_form(vec![symbol_form(&list_temp, span), list_expr.clone()], span));
+                    let_bindings.push(list_form(vec![symbol_form(var, span), nil_form(span)], span));
+                    for_in_info.push((var.clone(), list_temp, list_expr.clone()));
+                }
+                LoopClause::ForOn { var, list_expr } => {
+                    let list_temp = format!("--cl-list-{}--", list_counter);
+                    list_counter += 1;
+                    let_bindings.push(list_form(vec![symbol_form(&list_temp, span), list_expr.clone()], span));
+                    for_on_info.push((var.clone(), list_temp, list_expr.clone()));
+                }
+                LoopClause::ForEquals { var, expr } => {
+                    let_bindings.push(list_form(vec![symbol_form(var, span), nil_form(span)], span));
+                    for_eq_info.push((var.clone(), expr.clone()));
+                }
+                _ => {}
+            }
+        }
+
+        // With bindings
+        for (var, expr) in &with_bindings {
+            let_bindings.push(list_form(vec![symbol_form(var, span), expr.clone()], span));
+        }
+
+        // Build while test
+        let mut while_tests: Vec<SurfaceForm> = Vec::new();
+
+        // For-from: (<= var end)
+        for (var, start, end, _) in &for_from_info {
+            let _ = start;
+            while_tests.push(list_form(vec![
+                symbol_form("<=", span),
+                symbol_form(var, span),
+                end.clone(),
+            ], span));
+        }
+
+        // For-in/for-on: list-temp truthiness
+        for (_, list_temp, _) in &for_in_info {
+            while_tests.push(symbol_form(list_temp, span));
+        }
+        for (_, list_temp, _) in &for_on_info {
+            while_tests.push(symbol_form(list_temp, span));
+        }
+
+        // Explicit while/until conditions
+        while_tests.extend(while_conds);
+
+        let while_test = if while_tests.is_empty() {
+            symbol_form("t", span)
+        } else if while_tests.len() == 1 {
+            while_tests.into_iter().next().unwrap()
+        } else {
+            list_form(
+                std::iter::once(symbol_form("and", span))
+                    .chain(while_tests.into_iter())
+                    .collect(),
+                span,
+            )
+        };
+
+        // Build while body
+        let mut while_body: Vec<SurfaceForm> = Vec::new();
+
+        // For-equals: setq at body start
+        for (var, expr) in &for_eq_info {
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(var, span),
+                expr.clone(),
+            ], span));
+        }
+
+        // For-in: setq var (car --list--)
+        for (var, list_temp, _) in &for_in_info {
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(var, span),
+                list_form(vec![symbol_form("car", span), symbol_form(list_temp, span)], span),
+            ], span));
+        }
+
+        // For-on: setq var --list--
+        for (var, list_temp, _) in &for_on_info {
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(var, span),
+                symbol_form(list_temp, span),
+            ], span));
+        }
+
+        // Body clauses (collect, sum, do, return, if, etc.)
+        for clause in &body_clauses {
+            match clause {
+                LoopClause::Collect { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Collect);
+                    while_body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("cons", span),
+                            expr.clone(),
+                            symbol_form(&acc_var, span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Append { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Append);
+                    while_body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("append", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Nconc { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Nconc);
+                    while_body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("nconc", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Sum { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Sum);
+                    while_body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("+", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Count { expr } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Count);
+                    while_body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("+", span),
+                            symbol_form(&acc_var, span),
+                            list_form(vec![
+                                symbol_form("if", span),
+                                expr.clone(),
+                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
+                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+                            ], span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Do { body } => {
+                    while_body.extend(body.iter().cloned());
+                }
+                LoopClause::Return { expr } => {
+                    while_body.push(list_form(vec![
+                        symbol_form("throw", span),
+                        list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
+                        expr.clone(),
+                    ], span));
+                }
+                LoopClause::If { cond, then_clauses, else_clauses } => {
+                    let then_body = self.build_if_body(span, then_clauses, &accum_map);
+                    let if_form = if let Some(else_cls) = else_clauses {
+                        let else_body = self.build_if_body(span, else_cls, &accum_map);
+                        list_form(vec![
+                            symbol_form("if", span),
+                            cond.clone(),
+                            self.wrap_progn(then_body, span),
+                            self.wrap_progn(else_body, span),
+                        ], span)
+                    } else {
+                        list_form(vec![
+                            symbol_form("if", span),
+                            cond.clone(),
+                            self.wrap_progn(then_body, span),
+                        ], span)
+                    };
+                    while_body.push(if_form);
+                }
+                _ => {}
+            }
+        }
+
+        // For-in advance: setq --list-- (cdr --list--)
+        for (_, list_temp, _) in &for_in_info {
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(list_temp, span),
+                list_form(vec![symbol_form("cdr", span), symbol_form(list_temp, span)], span),
+            ], span));
+        }
+
+        // For-on advance: setq --list-- (cdr --list--)
+        for (_, list_temp, _) in &for_on_info {
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(list_temp, span),
+                list_form(vec![symbol_form("cdr", span), symbol_form(list_temp, span)], span),
+            ], span));
+        }
+
+        // For-from advance: setq var (+ var step)
+        for (var, _, _, step) in &for_from_info {
+            let step_val = step.clone().unwrap_or_else(|| {
+                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span)
+            });
+            while_body.push(list_form(vec![
+                symbol_form("setq", span),
+                symbol_form(var, span),
+                list_form(vec![
+                    symbol_form("+", span),
+                    symbol_form(var, span),
+                    step_val,
+                ], span),
+            ], span));
+        }
+
+        // Build result expression (after while loop)
+        let mut after_while: Vec<SurfaceForm> = Vec::new();
+
+        // nreverse for collect accumulators
+        for (kind, name, _) in &accums {
+            if *kind == AccumKind::Collect {
+                after_while.push(list_form(vec![
+                    symbol_form("setq", span),
+                    symbol_form(name, span),
+                    list_form(vec![symbol_form("nreverse", span), symbol_form(name, span)], span),
+                ], span));
+            }
+        }
+
+        // Finally body
+        after_while.extend(finally_body.iter().cloned());
+
+        // Result expression
+        if !accums.is_empty() {
+            let (kind, name, _) = &accums[0];
+            if *kind == AccumKind::Collect {
+                after_while.push(symbol_form(name, span));
+            } else {
+                after_while.push(symbol_form(name, span));
+            }
+        } else if finally_body.is_empty() {
+            after_while.push(nil_form(span));
+        }
+
+        // Build the let body
+        let mut let_body: Vec<SurfaceForm> = Vec::new();
+        let_body.extend(initially_body.iter().cloned());
+        let_body.push(list_form(
+            std::iter::once(symbol_form("while", span))
+                .chain(std::iter::once(while_test))
+                .chain(while_body.into_iter())
+                .collect(),
+            span,
+        ));
+        let_body.extend(after_while);
+
+        let let_form = list_form(
+            std::iter::once(symbol_form("let", span))
+                .chain(std::iter::once(list_form(let_bindings, span)))
+                .chain(let_body.into_iter())
+                .collect(),
+            span,
+        );
+
+        // Wrap in catch/throw if return clause present
+        if has_return {
+            list_form(vec![
+                symbol_form("catch", span),
+                list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
+                let_form,
+            ], span)
+        } else {
+            let_form
+        }
+    }
+
+    fn find_accum_var(&self, accum_map: &[(AccumKind, String, usize)], kind: AccumKind) -> String {
+        accum_map.iter()
+            .find(|(k, _, _)| *k == kind)
+            .map(|(_, name, _)| name.clone())
+            .unwrap_or_else(|| "--cl-acc-unknown--".into())
+    }
+
+    fn build_if_body(&self, span: Span, clauses: &[LoopClause], accum_map: &[(AccumKind, String, usize)]) -> Vec<SurfaceForm> {
+        let mut body: Vec<SurfaceForm> = Vec::new();
+        for clause in clauses {
+            match clause {
+                LoopClause::Collect { expr } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Collect);
+                    body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("cons", span),
+                            expr.clone(),
+                            symbol_form(&acc_var, span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Append { expr } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Append);
+                    body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("append", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Nconc { expr } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Nconc);
+                    body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("nconc", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Sum { expr } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Sum);
+                    body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("+", span),
+                            symbol_form(&acc_var, span),
+                            expr.clone(),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Count { expr } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Count);
+                    body.push(list_form(vec![
+                        symbol_form("setq", span),
+                        symbol_form(&acc_var, span),
+                        list_form(vec![
+                            symbol_form("+", span),
+                            symbol_form(&acc_var, span),
+                            list_form(vec![
+                                symbol_form("if", span),
+                                expr.clone(),
+                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
+                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+                            ], span),
+                        ], span),
+                    ], span));
+                }
+                LoopClause::Do { body: b } => body.extend(b.iter().cloned()),
+                LoopClause::Return { expr } => {
+                    body.push(list_form(vec![
+                        symbol_form("throw", span),
+                        list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
+                        expr.clone(),
+                    ], span));
+                }
+                _ => {}
+            }
+        }
+        body
+    }
+
+    fn wrap_progn(&self, forms: Vec<SurfaceForm>, span: Span) -> SurfaceForm {
+        match forms.len() {
+            0 => nil_form(span),
+            1 => forms.into_iter().next().unwrap(),
+            _ => list_form(
+                std::iter::once(symbol_form("progn", span)).chain(forms).collect(),
+                span,
+            ),
+        }
+    }
+
+    // ── cl-loop clause parser ──────────────────────────────────────────
+
+    fn parse_loop_clauses(&self, span: Span, items: &[SurfaceForm]) -> Option<Vec<LoopClause>> {
+        let mut clauses = Vec::new();
+        let mut pos = 0;
+        while pos < items.len() {
+            let keyword = items[pos].symbol_name()?;
+            match keyword {
+                "for" => {
+                    pos += 1;
+                    let clause = self.parse_for_clause(span, items, &mut pos)?;
+                    clauses.push(clause);
+                }
+                "collect" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Collect { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "append" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Append { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "nconc" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Nconc { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "sum" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Sum { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "count" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Count { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "do" => {
+                    pos += 1;
+                    let body = self.collect_until_keyword(items, &mut pos);
+                    clauses.push(LoopClause::Do { body });
+                }
+                "while" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::While { cond: items[pos].clone() });
+                    pos += 1;
+                }
+                "until" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Until { cond: items[pos].clone() });
+                    pos += 1;
+                }
+                "return" => {
+                    pos += 1;
+                    let expr = if pos < items.len() {
+                        let e = items[pos].clone();
+                        pos += 1;
+                        e
+                    } else {
+                        nil_form(span)
+                    };
+                    clauses.push(LoopClause::Return { expr });
+                }
+                "if" | "when" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    let cond = items[pos].clone();
+                    pos += 1;
+                    let then_clauses = self.parse_sub_clauses(span, items, &mut pos)?;
+                    let else_clauses = if pos < items.len() && items[pos].symbol_name() == Some("else") {
+                        pos += 1;
+                        Some(self.parse_sub_clauses(span, items, &mut pos)?)
+                    } else {
+                        None
+                    };
+                    if pos < items.len() && items[pos].symbol_name() == Some("end") {
+                        pos += 1;
+                    }
+                    clauses.push(LoopClause::If { cond, then_clauses, else_clauses });
+                }
+                "with" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    let var = items[pos].symbol_name()?.to_string();
+                    pos += 1;
+                    let expr = if pos < items.len() && items[pos].symbol_name() == Some("=") {
+                        pos += 1;
+                        if pos >= items.len() { return None; }
+                        let e = items[pos].clone();
+                        pos += 1;
+                        e
+                    } else {
+                        nil_form(span)
+                    };
+                    clauses.push(LoopClause::With { var, expr });
+                }
+                "initially" => {
+                    pos += 1;
+                    let body = self.collect_until_keyword(items, &mut pos);
+                    clauses.push(LoopClause::Initially { body });
+                }
+                "finally" => {
+                    pos += 1;
+                    let body = self.collect_until_keyword(items, &mut pos);
+                    clauses.push(LoopClause::Finally { body });
+                }
+                _ => {
+                    // Unknown keyword — skip it
+                    pos += 1;
+                }
+            }
+        }
+        Some(clauses)
+    }
+
+    fn parse_for_clause(&self, span: Span, items: &[SurfaceForm], pos: &mut usize) -> Option<LoopClause> {
+        if *pos >= items.len() { return None; }
+        let var = items[*pos].symbol_name()?.to_string();
+        *pos += 1;
+
+        // Peek at next keyword to determine sub-type
+        if *pos >= items.len() {
+            // bare: (for var) — treat as for-equals nil
+            return Some(LoopClause::ForEquals {
+                var,
+                expr: nil_form(span),
+            });
+        }
+
+        let next_kw = items[*pos].symbol_name().unwrap_or("");
+        match next_kw {
+            "from" => {
+                *pos += 1;
+                let start = items.get(*pos)?.clone();
+                *pos += 1;
+                // Optional "to" and "by"
+                let mut end = None;
+                let mut step = None;
+                while *pos < items.len() {
+                    let kw = items[*pos].symbol_name().unwrap_or("");
+                    match kw {
+                        "to" => {
+                            *pos += 1;
+                            end = Some(items.get(*pos)?.clone());
+                            *pos += 1;
+                        }
+                        "by" => {
+                            *pos += 1;
+                            step = Some(items.get(*pos)?.clone());
+                            *pos += 1;
+                        }
+                        _ => break,
+                    }
+                }
+                Some(LoopClause::ForFrom {
+                    var,
+                    start,
+                    end: end?,
+                    step,
+                })
+            }
+            "in" => {
+                *pos += 1;
+                let list_expr = items.get(*pos)?.clone();
+                *pos += 1;
+                Some(LoopClause::ForIn { var, list_expr })
+            }
+            "on" => {
+                *pos += 1;
+                let list_expr = items.get(*pos)?.clone();
+                *pos += 1;
+                Some(LoopClause::ForOn { var, list_expr })
+            }
+            "=" => {
+                *pos += 1;
+                let expr = items.get(*pos)?.clone();
+                *pos += 1;
+                // Optional "then"
+                // For simplicity, ignore "then" in phase 1
+                if *pos < items.len() && items[*pos].symbol_name() == Some("then") {
+                    *pos += 1;
+                    if *pos < items.len() { *pos += 1; } // skip the then-expr
+                }
+                Some(LoopClause::ForEquals { var, expr })
+            }
+            _ => {
+                // No recognized sub-keyword: treat as for-equals with the next form
+                Some(LoopClause::ForEquals {
+                    var,
+                    expr: nil_form(span),
+                })
+            }
+        }
+    }
+
+    fn parse_sub_clauses(&self, span: Span, items: &[SurfaceForm], pos: &mut usize) -> Option<Vec<LoopClause>> {
+        let mut clauses = Vec::new();
+        while *pos < items.len() {
+            let kw = items[*pos].symbol_name().unwrap_or("");
+            match kw {
+                "else" | "end" => break,
+                "collect" => {
+                    *pos += 1;
+                    if *pos >= items.len() { break; }
+                    clauses.push(LoopClause::Collect { expr: items[*pos].clone() });
+                    *pos += 1;
+                }
+                "sum" => {
+                    *pos += 1;
+                    if *pos >= items.len() { break; }
+                    clauses.push(LoopClause::Sum { expr: items[*pos].clone() });
+                    *pos += 1;
+                }
+                "count" => {
+                    *pos += 1;
+                    if *pos >= items.len() { break; }
+                    clauses.push(LoopClause::Count { expr: items[*pos].clone() });
+                    *pos += 1;
+                }
+                "do" => {
+                    *pos += 1;
+                    let body = self.collect_until_keyword(items, pos);
+                    clauses.push(LoopClause::Do { body });
+                }
+                "return" => {
+                    *pos += 1;
+                    let expr = if *pos < items.len() {
+                        let e = items[*pos].clone();
+                        *pos += 1;
+                        e
+                    } else {
+                        nil_form(span)
+                    };
+                    clauses.push(LoopClause::Return { expr });
+                }
+                "append" => {
+                    *pos += 1;
+                    if *pos >= items.len() { break; }
+                    clauses.push(LoopClause::Append { expr: items[*pos].clone() });
+                    *pos += 1;
+                }
+                "nconc" => {
+                    *pos += 1;
+                    if *pos >= items.len() { break; }
+                    clauses.push(LoopClause::Nconc { expr: items[*pos].clone() });
+                    *pos += 1;
+                }
+                _ => break,
+            }
+        }
+        Some(clauses)
+    }
+
+    fn collect_until_keyword(&self, items: &[SurfaceForm], pos: &mut usize) -> Vec<SurfaceForm> {
+        let mut body = Vec::new();
+        while *pos < items.len() {
+            let kw = items[*pos].symbol_name().unwrap_or("");
+            if is_loop_keyword(kw) { break; }
+            body.push(items[*pos].clone());
+            *pos += 1;
+        }
+        body
+    }
+}
+
+// ── cl-loop data structures ────────────────────────────────────────
+
+#[derive(Clone, Debug, PartialEq)]
+enum LoopClause {
+    ForFrom {
+        var: String,
+        start: SurfaceForm,
+        end: SurfaceForm,
+        step: Option<SurfaceForm>,
+    },
+    ForIn {
+        var: String,
+        list_expr: SurfaceForm,
+    },
+    ForOn {
+        var: String,
+        list_expr: SurfaceForm,
+    },
+    ForEquals {
+        var: String,
+        expr: SurfaceForm,
+    },
+    Collect {
+        expr: SurfaceForm,
+    },
+    Append {
+        expr: SurfaceForm,
+    },
+    Nconc {
+        expr: SurfaceForm,
+    },
+    Sum {
+        expr: SurfaceForm,
+    },
+    Count {
+        expr: SurfaceForm,
+    },
+    Do {
+        body: Vec<SurfaceForm>,
+    },
+    While {
+        cond: SurfaceForm,
+    },
+    Until {
+        cond: SurfaceForm,
+    },
+    Return {
+        expr: SurfaceForm,
+    },
+    If {
+        cond: SurfaceForm,
+        then_clauses: Vec<LoopClause>,
+        else_clauses: Option<Vec<LoopClause>>,
+    },
+    With {
+        var: String,
+        expr: SurfaceForm,
+    },
+    Finally {
+        body: Vec<SurfaceForm>,
+    },
+    Initially {
+        body: Vec<SurfaceForm>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AccumKind {
+    Collect,
+    Append,
+    Nconc,
+    Sum,
+    Count,
+}
+
+fn is_loop_keyword(kw: &str) -> bool {
+    matches!(kw,
+        "for" | "collect" | "append" | "nconc" | "sum" | "count"
+        | "do" | "while" | "until" | "return" | "if" | "when"
+        | "with" | "initially" | "finally" | "else" | "end"
+        | "minimize" | "maximize" | "always" | "never" | "thereis"
+        | "repeat" | "into"
+    )
+}
+
+fn clauses_contain_return(clauses: &[LoopClause]) -> bool {
+    clauses.iter().any(|c| match c {
+        LoopClause::Return { .. } => true,
+        LoopClause::If { then_clauses, else_clauses, .. } => {
+            clauses_contain_return(then_clauses)
+                || else_clauses.as_ref().map_or(false, |ec| clauses_contain_return(ec))
+        }
+        _ => false,
+    })
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1342,5 +2208,159 @@ mod tests {
         // The macro should have been expanded: (double 5) -> (+ 5 5)
         assert!(rendered.contains("\"+\""));
         assert!(rendered.contains("5"));
+    }
+
+    // ── cl-loop tests ─────────────────────────────────────────────
+
+    #[test]
+    fn cl_loop_for_from_collect() {
+        let artifact = compile_source(
+            "cl-loop-1.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 to 5 collect (* x x))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+        assert!(!rendered.contains("\"collect\""), "collect should be expanded away");
+    }
+
+    #[test]
+    fn cl_loop_for_in_collect() {
+        let artifact = compile_source(
+            "cl-loop-2.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3) collect (* x 2))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+        assert!(rendered.contains("\"car\""));
+        assert!(rendered.contains("\"cdr\""));
+    }
+
+    #[test]
+    fn cl_loop_sum() {
+        let artifact = compile_source(
+            "cl-loop-3.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 to 10 sum x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"+\""));
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_count() {
+        let artifact = compile_source(
+            "cl-loop-4.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3 4 5) count (> x 3))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"if\""));
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_do_body() {
+        let artifact = compile_source(
+            "cl-loop-5.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 to 3 do (foo x))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"foo\""));
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_with_binding() {
+        let artifact = compile_source(
+            "cl-loop-6.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop with y = 10 for x from 1 to 3 collect (+ x y))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_while_termination() {
+        let artifact = compile_source(
+            "cl-loop-7.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3 4 5) while (< x 4) collect x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+        assert!(rendered.contains("\"and\""));
+    }
+
+    #[test]
+    fn cl_loop_return() {
+        let artifact = compile_source(
+            "cl-loop-8.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 to 100 if (> x 5) return x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"catch\""));
+        assert!(rendered.contains("\"throw\""));
+    }
+
+    #[test]
+    fn cl_loop_by_step() {
+        let artifact = compile_source(
+            "cl-loop-9.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 0 to 10 by 2 collect x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_initially_finally() {
+        let artifact = compile_source(
+            "cl-loop-10.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop initially (bar) for x from 1 to 3 collect x finally (baz))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"bar\""));
+        assert!(rendered.contains("\"baz\""));
+        assert!(rendered.contains("\"nreverse\""));
+    }
+
+    #[test]
+    fn cl_loop_append_accumulation() {
+        let artifact = compile_source(
+            "cl-loop-11.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list (list 1 2) (list 3 4)) append x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"append\""));
+    }
+
+    #[test]
+    fn cl_loop_for_on() {
+        let artifact = compile_source(
+            "cl-loop-12.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x on (list 1 2 3) collect (car x))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"car\""));
+        assert!(rendered.contains("\"cdr\""));
+    }
+
+    #[test]
+    fn cl_loop_empty() {
+        let artifact = compile_source(
+            "cl-loop-empty.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
     }
 }
