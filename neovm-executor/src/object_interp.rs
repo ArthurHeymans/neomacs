@@ -1465,6 +1465,40 @@ impl Interpreter<'_, '_, '_> {
                 self.unsupported("float constants require float object support");
                 None
             }
+            SsaConst::Symbol(name) => Some(self.runtime.intern(name)),
+            SsaConst::Value(cv) => self.compile_value_to_lisp(cv),
+        }
+    }
+
+    fn compile_value_to_lisp(&mut self, cv: &neovm_compiler::compile_value::CompileValue) -> Option<LispValue> {
+        use neovm_compiler::compile_value::CompileValue;
+        match cv {
+            CompileValue::Nil => Some(LispValue::NIL),
+            CompileValue::Bool(true) => Some(LispValue::TRUE),
+            CompileValue::Bool(false) => Some(LispValue::NIL),
+            CompileValue::Int(n) => self.fixnum_value(*n, "compile value"),
+            CompileValue::Float(_) => {
+                self.unsupported("float compile values");
+                None
+            }
+            CompileValue::Char(c) => {
+                let code: u32 = (*c).try_into().ok()?;
+                char::from_u32(code).map(LispValue::from_char)
+            }
+            CompileValue::Symbol(name) => Some(self.runtime.intern(name)),
+            CompileValue::String(s) => Some(self.runtime.string(s.clone())),
+            CompileValue::Cons { car, cdr } => {
+                let car_val = self.compile_value_to_lisp(car)?;
+                let cdr_val = self.compile_value_to_lisp(cdr)?;
+                Some(self.runtime.cons(car_val, cdr_val))
+            }
+            CompileValue::Vector(items) => {
+                let vals: Vec<LispValue> = items
+                    .iter()
+                    .filter_map(|item| self.compile_value_to_lisp(item))
+                    .collect();
+                Some(self.runtime.vector(vals))
+            }
         }
     }
 

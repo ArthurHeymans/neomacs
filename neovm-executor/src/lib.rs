@@ -1281,4 +1281,122 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(12)));
     }
+
+    #[test]
+    fn jit_inline_fixnum_add_overflow_fallback() {
+        // Inline fixnum + should fallback to runtime for large results
+        let artifact = crate::jit_interp::execute_with_jit(
+            "overflow.el",
+            ";;; -*- lexical-binding: t; -*-\n(+ 1 2)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_inline_fixnum_mul() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "mul.el",
+            ";;; -*- lexical-binding: t; -*-\n(* 6 7)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_inline_comparison_chain() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cmp.el",
+            ";;; -*- lexical-binding: t; -*-\n(if (and (< 1 2) (> 3 2) (<= 5 5) (>= 4 3)) 1 0)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn jit_inline_eq_symbols() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "eq-sym.el",
+            ";;; -*- lexical-binding: t; -*-\n(if (eq 'foo 'foo) 1 0)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn jit_inline_eq_fixnums() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "eq-int.el",
+            ";;; -*- lexical-binding: t; -*-\n(if (eq 42 42) 1 0)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn jit_inline_integerp() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "intp.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (integerp 42) (integerp \"hello\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil)");
+    }
+
+    #[test]
+    fn jit_catch_throw_nested() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-catch.el",
+            ";;; -*- lexical-binding: t; -*-\n(catch 'a (catch 'b (throw 'a 99)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn jit_catch_throw_no_match_returns_nil() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "no-match.el",
+            ";;; -*- lexical-binding: t; -*-\n(catch 'x (+ 1 2))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_condition_case_no_error() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "no-err.el",
+            ";;; -*- lexical-binding: t; -*-\n(condition-case err (+ 1 2) (error 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_unwind_protect_normal_exit() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "unwind-normal.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(let ((x 0))
+  (unwind-protect
+      (setq x 10)
+    (setq x (+ x 1)))
+  x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(11)));
+    }
 }

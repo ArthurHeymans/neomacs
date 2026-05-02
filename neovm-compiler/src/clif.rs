@@ -802,6 +802,7 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                 call_conv,
                 diagnostics: Vec::new(),
                 exception_handlers: Vec::new(),
+                catch_result_value: None,
             };
             state.vmctx = entry_vmctx;
 
@@ -859,6 +860,7 @@ struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
     exception_handlers: Vec<ExceptionHandler>,
+    catch_result_value: Option<ir::Value>,
 }
 
 const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
@@ -1328,9 +1330,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         catch_tag,
                         continuation_block,
                     } => {
+                        // Add a block param for the catch result value
+                        let catch_result =
+                            self.builder.append_block_param(continuation_block, types::I64);
+                        // Normal path: body completed normally, pass NIL as the result
+                        let nil_val = self.builder.ins().iconst(types::I64, NIL_BITS);
                         self.builder
                             .ins()
-                            .jump(continuation_block, &[]);
+                            .jump(continuation_block, &[BlockArg::Value(nil_val)]);
                         self.builder.switch_to_block(handler.handler_block);
                         let Some(peek_ref) =
                             self.exception_func_ref("peek_throw_tag", 0)
@@ -1363,7 +1370,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         else {
                             return;
                         };
-                        let Some(_) = self.emit_runtime_call(
+                        let Some(throw_value) = self.emit_runtime_call(
                             get_val_ref,
                             &[],
                             ClifRuntimeCallKind::GetThrowValue,
@@ -1380,7 +1387,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             &[],
                             ClifRuntimeCallKind::CatchEnd,
                         );
-                        self.builder.ins().jump(continuation_block, &[]);
+                        self.builder.ins().jump(continuation_block, &[BlockArg::Value(throw_value)]);
                         self.builder.switch_to_block(rethrow_block);
                         let Some(catch_end_ref2) =
                             self.exception_func_ref("catch_end", 0)
@@ -1406,6 +1413,8 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         self.builder.seal_block(rethrow_block);
                         self.builder.switch_to_block(continuation_block);
                         self.builder.seal_block(continuation_block);
+                        // Store the catch result for Return(None) override
+                        self.catch_result_value = Some(catch_result);
                     }
                     _ => {
                         self.error("CatchEnd matched non-Catch handler");
@@ -1432,6 +1441,8 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 } else {
                     self.builder.ins().return_(&[result]);
                 }
+                let unreachable_block = self.builder.create_block();
+                self.builder.switch_to_block(unreachable_block);
             }
             SsaInstKind::ConditionCaseBegin { .. } => {
                 let Some(func_ref) =
@@ -1617,9 +1628,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
     fn lower_terminator(&mut self, terminator: &SsaTerminator) {
         match terminator {
             SsaTerminator::Return(value) => {
-                let value = value
-                    .and_then(|value| self.value(value))
-                    .unwrap_or_else(|| self.builder.ins().iconst(types::I64, 0));
+                let value = match value {
+                    Some(vid) => self.value(*vid),
+                    None => self.catch_result_value.take(),
+                }
+                .unwrap_or_else(|| self.builder.ins().iconst(types::I64, 0));
                 self.builder.ins().return_(&[value]);
             }
             SsaTerminator::Jump { target, args } => {
@@ -1691,7 +1704,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             handler_block,
             &[],
             normal_block,
-            &[],
+            &[BlockArg::Value(call_result)],
         );
         self.builder.switch_to_block(normal_block);
         Some(normal_result)
@@ -1744,15 +1757,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         self.builder.ins().ushr_imm(value, TAG_BITS as i64)
     }
 
-    fn tag_fixnum(&mut self, value: ir::Value) -> ir::Value {
-        self.builder.ins().ishl_imm(value, TAG_BITS as i64)
-    }
-
     /// Inline fixnum arithmetic with runtime fallback for non-fixnum args.
     /// For + and -, tagged arithmetic works directly since both tags are 0.
     /// For *, one operand must be untagged first.
     fn lower_fixnum_arithmetic(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
-        if args.len() < 2 {
+        if args.len() != 2 {
             return PrimitiveCallLowering::Unknown;
         }
 
@@ -1778,8 +1787,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             "-" => self.builder.ins().isub(a, b),
             "*" => {
                 let au = self.untag_fixnum(a);
-                let product = self.builder.ins().imul(au, b);
-                self.tag_fixnum(product)
+                self.builder.ins().imul(au, b)
             }
             _ => unreachable!(),
         };

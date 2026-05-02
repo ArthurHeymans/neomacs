@@ -6,7 +6,7 @@ use cranelift_module::{FuncId, Linkage, Module, default_libcall_names};
 use crate::clif::{ClifModuleBackend, ClifRuntimeAbi, ssa_to_clif_with_backend};
 use crate::diagnostic::Diagnostic;
 use crate::ids::FunctionId;
-use crate::ssa::{SsaLambdaTemplate, SsaModule};
+use crate::ssa::{SsaFunction, SsaInstKind, SsaLambdaTemplate, SsaModule};
 use crate::surface::SurfaceForm;
 
 use lasso::Rodeo;
@@ -68,19 +68,27 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let call_conv = runtime.module().call_conv();
 
     // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
-    // Only register functions with fixed arity (no &rest, no &optional).
+    // Only register functions with fixed arity (no &rest, no &optional) and no
+    // condition-case/unwind-protect (which require interpreter fallback for signal dispatch).
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
-            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty() {
+            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty()
+                && !has_unsupported_nonlocal_flow(func)
+            {
                 let arity = func.lambda_list.required.len();
                 runtime.register_local_function(name, arity, call_conv);
             }
         }
     }
 
-    // Phase 1: Lower each SSA function using the shared JIT module backend
+    // Phase 1: Lower each SSA function using the shared JIT module backend.
+    // Skip functions with condition-case/unwind-protect — they fall back to the interpreter.
     let mut lowered: Vec<(FunctionId, Option<cranelift_codegen::ir::Function>)> = Vec::new();
     for (fid, func) in ssa.functions.iter() {
+        if has_unsupported_nonlocal_flow(func) {
+            lowered.push((fid, None));
+            continue;
+        }
         let output = ssa_to_clif_with_backend(func, runtime);
         runtime = output.runtime;
         diagnostics.extend(output.diagnostics.iter().cloned());
@@ -157,7 +165,12 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         });
 
         if ssa.entry == Some(*ssa_fid) {
-            entry_code_ptr = Some(code_ptr);
+            // Only use JIT entry for functions without condition-case/unwind-protect,
+            // which require deeper signal-dispatch integration.
+            let func = &ssa.functions[*ssa_fid];
+            if !has_unsupported_nonlocal_flow(func) {
+                entry_code_ptr = Some(code_ptr);
+            }
         }
     }
 
@@ -176,4 +189,21 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         }),
         diagnostics,
     }
+}
+
+fn has_unsupported_nonlocal_flow(func: &SsaFunction) -> bool {
+    for block in func.blocks.values() {
+        for inst in &block.instructions {
+            match inst.kind {
+                SsaInstKind::ConditionCaseBegin { .. }
+                | SsaInstKind::ConditionCaseHandler { .. }
+                | SsaInstKind::ConditionCaseEnd
+                | SsaInstKind::UnwindProtectBegin
+                | SsaInstKind::UnwindProtectCleanup
+                | SsaInstKind::UnwindProtectEnd => return true,
+                _ => {}
+            }
+        }
+    }
+    false
 }

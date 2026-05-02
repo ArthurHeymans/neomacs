@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use lasso::Rodeo;
 use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::ids::FunctionId;
-use neovm_compiler::jit::{JitCompiledModule, compile_ssa_to_jit_with_builder};
+use neovm_compiler::jit::compile_ssa_to_jit_with_builder;
 use neovm_compiler::regir::RegModule;
 use neovm_compiler::surface::SurfaceForm;
 
@@ -62,6 +62,19 @@ fn register_runtime_shims(builder: &mut cranelift_jit::JITBuilder) {
     // apply shims
     builder.symbol("__neomacs_rt_apply_2", __neomacs_rt_apply_2 as *const u8);
     builder.symbol("__neomacs_rt_apply_3", __neomacs_rt_apply_3 as *const u8);
+    // exception / nonlocal control flow shims
+    builder.symbol("__neomacs_rt_catch_begin", __neomacs_rt_catch_begin as *const u8);
+    builder.symbol("__neomacs_rt_catch_end", __neomacs_rt_catch_end as *const u8);
+    builder.symbol("__neomacs_rt_throw", __neomacs_rt_throw as *const u8);
+    builder.symbol("__neomacs_rt_catch_match", __neomacs_rt_catch_match as *const u8);
+    builder.symbol("__neomacs_rt_get_throw_value", __neomacs_rt_get_throw_value as *const u8);
+    builder.symbol("__neomacs_rt_peek_throw_tag", __neomacs_rt_peek_throw_tag as *const u8);
+    builder.symbol("__neomacs_rt_check_exception", __neomacs_rt_check_exception as *const u8);
+    builder.symbol("__neomacs_rt_condition_case_begin", __neomacs_rt_condition_case_begin as *const u8);
+    builder.symbol("__neomacs_rt_condition_case_end", __neomacs_rt_condition_case_end as *const u8);
+    builder.symbol("__neomacs_rt_unwind_protect_begin", __neomacs_rt_unwind_protect_begin as *const u8);
+    builder.symbol("__neomacs_rt_unwind_protect_cleanup_enter", __neomacs_rt_unwind_protect_cleanup_enter as *const u8);
+    builder.symbol("__neomacs_rt_unwind_protect_end", __neomacs_rt_unwind_protect_end as *const u8);
 }
 
 pub struct JitExecuteArtifact {
