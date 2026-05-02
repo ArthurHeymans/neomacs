@@ -5696,7 +5696,7 @@ impl LayoutEngine {
             .map(|f| f.attributes.contains(FaceAttributes::ITALIC))
             .unwrap_or(false);
 
-        let (char_w, char_h, _ascent) = if let Some(fm) = font_metrics {
+        let (char_w, char_h, ascent) = if let Some(fm) = font_metrics {
             let m = fm.font_metrics(default_family, default_weight, default_italic, default_size);
             let cw = fm.char_width(
                 'm',
@@ -5721,9 +5721,9 @@ impl LayoutEngine {
 
         // Per-window layout.
         //
-        // begin_status_line_row now operates on current_matrix — the
-        // window being built.  Mode-line rows are added BEFORE end_window()
-        // so each window is self-contained when it closes.
+        // Row metrics (pixel_y, height, ascent) must be set so the
+        // renderer knows where to place each row.  Text rows stack from
+        // the window top; the mode-line is pinned to the window bottom.
         for window in &content.windows {
             let nrows = window.lines.len();
             let ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
@@ -5736,6 +5736,11 @@ impl LayoutEngine {
             );
             for (row_idx, line) in window.lines.iter().enumerate() {
                 builder.begin_row(row_idx, GlyphRowRole::Text);
+                builder.set_current_row_metrics(
+                    window.pixel_bounds.y + row_idx as f32 * char_h,
+                    char_h,
+                    ascent,
+                );
                 let lnum = format!("{:>3} ", row_idx + 1);
                 for ch in lnum.chars() {
                     builder.push_left_margin_char(ch, 2);
@@ -5769,8 +5774,13 @@ impl LayoutEngine {
                 builder.end_row();
             }
 
-            // Mode-line is part of this window — add before closing.
+            // Mode-line pinned to window bottom.
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
+            builder.set_current_row_metrics(
+                window.pixel_bounds.y + window.pixel_bounds.height - char_h,
+                char_h,
+                ascent,
+            );
             let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
             let mut ml: Vec<Glyph> = window
                 .mode_line
@@ -5792,6 +5802,11 @@ impl LayoutEngine {
             builder.begin_window(mini.window_id, 0, 0, mini.pixel_bounds, mini.selected);
 
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
+            builder.set_current_row_metrics(
+                mini.pixel_bounds.y + mini.pixel_bounds.height - char_h,
+                char_h,
+                ascent,
+            );
             let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
             let mut ml: Vec<Glyph> = mini
                 .mode_line
