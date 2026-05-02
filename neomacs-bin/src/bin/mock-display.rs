@@ -128,8 +128,6 @@ fn run_gui(demo: &str) {
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
-    // Use logical font size (12 pt).  fontconfig/cosmic-text measure in
-    // logical pixels; the X11 pre-scaling and GPU handle physical DPI.
     let logical_size = 12.0f32;
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
@@ -142,7 +140,7 @@ fn run_gui(demo: &str) {
             .max(1.0)
     };
     tracing::info!(
-        "mock-display gui: logical_size={:.1} family={} char_w={:.1} char_h={:.1}",
+        "mock-display gui: font_size={:.1} family={} char_w={:.1} char_h={:.1}",
         logical_size, family, char_w, char_h
     );
     let pixel_w = (cols as f32 * char_w) as u32;

@@ -49,16 +49,7 @@ pub(super) fn guess_initial_scale_factor(
     event_loop: Option<&winit::event_loop::ActiveEventLoop>,
 ) -> f64 {
     if !backend_uses_winit_logical_pixels() {
-        // Primary source: XRandR via winit (reads monitor EDID physical mm)
-        if let Some(eloop) = event_loop {
-            if let Some(monitor) = eloop.available_monitors().next() {
-                let s = monitor.scale_factor();
-                if s > 1.0 {
-                    return s;
-                }
-            }
-        }
-        // Fallbacks: desktop environment scale vars
+        // Explicit env vars take priority — the user set them intentionally.
         for var in &["GDK_SCALE", "QT_SCALE_FACTOR"] {
             if let Ok(val) = std::env::var(var) {
                 if let Ok(s) = val.parse::<f64>() {
