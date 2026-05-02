@@ -816,16 +816,16 @@ fn build_faces() -> HashMap<u32, Face> {
     );
     f.insert(7, mk(7, 0.4, 0.4, 0.4, 0.0, 0.0, 0.0, 400, false, None));
 
-    // Face 8: Rounded box border
+    // Face 8: Rounded box for key bindings — gray bg, black fg, gold border
     {
         let mut box_face = Face::new(8);
-        box_face.foreground = Color::new(0.87, 0.87, 0.87, 1.0);
-        box_face.background = Color::new(0.05, 0.05, 0.08, 1.0);
+        box_face.foreground = Color::new(0.0, 0.0, 0.0, 1.0);
+        box_face.background = Color::new(0.3, 0.3, 0.3, 1.0);
         box_face.font_weight = 400;
         box_face.box_type = neomacs_display_protocol::face::BoxType::Line;
         box_face.box_line_width = 2;
         box_face.box_corner_radius = 8;
-        box_face.box_color = Some(Color::new(0.2, 0.8, 0.4, 1.0));
+        box_face.box_color = Some(Color::new(1.0, 0.84, 0.0, 1.0));
         box_face.box_border_style = 1;
         box_face.box_border_speed = 0.5;
         f.insert(8, box_face);
