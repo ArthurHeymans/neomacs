@@ -861,6 +861,8 @@ pub struct TtyBackend {
 
     /// Last received FrameGlyphBuffer for rendering
     frame_glyphs: Option<FrameGlyphBuffer>,
+    /// Child frames to composite on top of the main frame.
+    child_frames: Vec<FrameGlyphBuffer>,
 }
 
 impl Default for TtyBackend {
@@ -885,7 +887,13 @@ impl TtyBackend {
             cursor_visible: false,
             cursor_shape: ansi::TerminalCursorShape::Block,
             frame_glyphs: None,
+            child_frames: Vec::new(),
         }
+    }
+
+    /// Set child frames to composite on top of the main frame.
+    pub fn set_child_frames(&mut self, frames: Vec<FrameGlyphBuffer>) {
+        self.child_frames = frames;
     }
 
     /// Set a FrameGlyphBuffer to be rendered on the next render() call.
@@ -1035,6 +1043,10 @@ impl DisplayBackend for TtyBackend {
                     self.cursor_shape = shape;
                 }
             }
+
+            // TODO: Composite child frames on top of the main frame.
+            // Child frames are stored in self.child_frames; their glyphs
+            // need parent_x/parent_y offset applied before rasterization.
         } else {
             // Fallback: render from Scene (limited -- Scene doesn't carry
             // per-character data in the same way)
