@@ -224,6 +224,8 @@ impl Expander {
                 }
             }
             "destructuring-bind" => self.expand_destructuring_bind(span, items),
+            "flet" => self.expand_flet(span, items),
+            "labels" | "cl-labels" => self.expand_labels(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -747,6 +749,85 @@ impl Expander {
         result.extend(body);
         list_form(result, span)
     }
+
+    fn expand_flet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (flet ((name (params) body...) ...) body...)
+        if items.len() < 3 {
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+        let bindings_form = &items[1];
+        let body: Vec<SurfaceForm> = items[2..].to_vec();
+
+        let bindings = self.parse_flet_bindings(bindings_form, span);
+        let mut let_bindings = Vec::new();
+        let mut prog_body = Vec::new();
+
+        for (name, params, fbody) in bindings {
+            let lambda = list_form(
+                vec![
+                    symbol_form("lambda", span),
+                    params,
+                ].into_iter().chain(fbody).collect(),
+                span,
+            );
+            let binding = list_form(vec![symbol_form(&name, span), lambda], span);
+            let_bindings.push(binding);
+        }
+
+        prog_body.extend(body);
+        let mut result = vec![symbol_form("let", span), list_form(let_bindings, span)];
+        result.extend(prog_body);
+        self.expand_form(list_form(result, span))
+    }
+
+    fn expand_labels(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (labels ((name (params) body...) ...) body...)
+        // Expand to: (let ((name1 nil) ...) (setq name1 (lambda ...)) ... body...)
+        if items.len() < 3 {
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+        let bindings_form = &items[1];
+        let body: Vec<SurfaceForm> = items[2..].to_vec();
+
+        let bindings = self.parse_flet_bindings(bindings_form, span);
+        let mut let_bindings = Vec::new();
+        let mut setqs = Vec::new();
+
+        for (name, params, fbody) in bindings {
+            // (let ((name nil)) ...)
+            let_bindings.push(list_form(vec![symbol_form(&name, span), nil_form(span)], span));
+            // (setq name (lambda (params) body...))
+            let lambda = list_form(
+                vec![symbol_form("lambda", span), params].into_iter().chain(fbody).collect(),
+                span,
+            );
+            setqs.push(list_form(vec![symbol_form("setq", span), symbol_form(&name, span), lambda], span));
+        }
+
+        let mut progn_body = setqs;
+        progn_body.extend(body);
+        let progn = list_form(vec![symbol_form("progn", span)].into_iter().chain(progn_body).collect(), span);
+        let result = list_form(vec![symbol_form("let", span), list_form(let_bindings, span), progn], span);
+        self.expand_form(result)
+    }
+
+    fn parse_flet_bindings(&self, bindings_form: &SurfaceForm, span: Span) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {
+        let SurfaceKind::List(bindings) = &bindings_form.kind else {
+            return Vec::new();
+        };
+        let mut result = Vec::new();
+        for binding in bindings {
+            let SurfaceKind::List(items) = &binding.kind else { continue };
+            if items.len() < 3 { continue; }
+            let Some(name) = items[0].symbol_name().map(str::to_string) else { continue };
+            let params = items[1].clone();
+            let body: Vec<SurfaceForm> = items[2..].to_vec();
+            result.push((name, params, body));
+        }
+        result
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1035,5 +1116,29 @@ mod tests {
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"car\""));
+    }
+
+    #[test]
+    fn expands_flet_to_let_with_lambda() {
+        let artifact = compile_source(
+            "flet.el",
+            ";;; -*- lexical-binding: t; -*-\n(flet ((add1 (x) (+ x 1))) (add1 5))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"lambda\""));
+        assert!(rendered.contains("\"let\""));
+    }
+
+    #[test]
+    fn expands_labels_to_let_with_setq() {
+        let artifact = compile_source(
+            "labels.el",
+            ";;; -*- lexical-binding: t; -*-\n(labels ((even? (n) (if (= n 0) t (odd? (- n 1)))) (odd? (n) (if (= n 0) nil (even? (- n 1))))) (even? 4))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"lambda\""));
+        assert!(rendered.contains("\"setq\""));
     }
 }
