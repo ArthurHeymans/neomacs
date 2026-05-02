@@ -584,3 +584,80 @@ fn m_x_help_shows_help_menu() {
         3,
     );
 }
+
+// ── Face remapping tests ────────────────────────────────────
+
+#[test]
+fn face_remapping_alist_with_filtered_window_system_not_match_on_tty() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Set face-remapping-alist to remap 'default to 'bold only on GUI
+    // (:window-system x).  On TTY, window-system is nil so the filter
+    // should NOT match and the face should remain unchanged.
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(setq face-remapping-alist '((default :filtered (:window-system x) bold)))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Insert some text — it should render as normal (not bold),
+    // because :filtered (:window-system x) doesn't match on TTY
+    send_both_raw(&mut gnu, &mut neo, b";; this text should NOT be bold on TTY");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // The mode-line includes "Fundamental" or "Lisp Interaction" — the
+    // mode-line face should also be unchanged since filtering didn't match
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| !row.trim().is_empty()),
+            "{label}: buffer should have visible content after face-remapping-alist setup"
+        );
+    }
+
+    // Screen comparison with reasonable tolerance
+    assert_pair_nearly_matches(
+        "face_remapping_alist_with_filtered_window_system_not_match_on_tty",
+        &gnu,
+        &neo,
+        3,
+    );
+}
+
+#[test]
+fn overlay_with_face_property_displays_correctly() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "overlay-face.el",
+        "alpha beta gamma delta\n",
+        "C-x C-f",
+    );
+
+    // Create an overlay on "beta" with a face property
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(let ((ov (make-overlay 7 11))) (overlay-put ov 'face 'bold) nil)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Both should show the buffer with the overlay applied
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("alpha") && row.contains("beta")),
+            "{label}: buffer should display overlay content"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "overlay_with_face_property_displays_correctly",
+        &gnu,
+        &neo,
+        2,
+    );
+}
