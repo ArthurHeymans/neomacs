@@ -156,13 +156,21 @@ fn remap_inst(inst: &mut crate::ssa::SsaInst, remap: impl Fn(ValueId) -> ValueId
         BindDynamic { value, .. } => {
             *value = remap(*value);
         }
-        CatchBegin { .. } | CatchEnd => {}
+        CatchBegin { tag } => {
+            *tag = remap(*tag);
+        }
+        CatchEnd => {}
         Throw { tag, value } => {
             *tag = remap(*tag);
             *value = remap(*value);
         }
         ConditionCaseHandlerResult { value } => {
             *value = remap(*value);
+        }
+        Lambda { captures, .. } => {
+            for c in captures.iter_mut() {
+                *c = remap(*c);
+            }
         }
         _ => {}
     }
@@ -302,10 +310,6 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
                 .map(|a| const_map.get(a))
                 .collect::<Option<Vec<_>>>()?;
             try_fold_call_named(name, &const_args)
-        }
-        SsaInstKind::LexicalCellGet { cell } => {
-            // If the cell contains a known constant, fold to that constant.
-            const_map.get(cell).cloned()
         }
         _ => None,
     }

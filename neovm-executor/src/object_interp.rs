@@ -204,8 +204,8 @@ pub(crate) fn execute_interpreter_primitive(
         lexicals: HashMap::new(),
         catch_stack: Vec::new(),
         condition_stack: Vec::new(),
-        active_condition_handler: None,
-        active_unwind_cleanup: None,
+        active_condition_handlers: Vec::new(),
+        active_unwind_cleanups: Vec::new(),
         pending_throw: None,
         pending_signal: None,
         last_value: None,
@@ -280,8 +280,8 @@ fn execute_with_module(
         lexicals: HashMap::new(),
         catch_stack: Vec::new(),
         condition_stack: Vec::new(),
-        active_condition_handler: None,
-        active_unwind_cleanup: None,
+        active_condition_handlers: Vec::new(),
+        active_unwind_cleanups: Vec::new(),
         pending_throw: None,
         pending_signal: None,
         last_value: None,
@@ -300,8 +300,8 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     lexicals: HashMap<String, LispValue>,
     catch_stack: Vec<LispValue>,
     condition_stack: Vec<ConditionFrame>,
-    active_condition_handler: Option<ActiveConditionHandler>,
-    active_unwind_cleanup: Option<ActiveUnwindCleanup>,
+    active_condition_handlers: Vec<ActiveConditionHandler>,
+    active_unwind_cleanups: Vec<ActiveUnwindCleanup>,
     pending_throw: Option<ThrownValue>,
     pending_signal: Option<SignaledValue>,
     last_value: Option<LispValue>,
@@ -348,20 +348,73 @@ impl Interpreter<'_, '_, '_> {
             let mut inst_index = 0;
             while inst_index < body.instructions.len() {
                 let inst = &body.instructions[inst_index];
+                // Check if the innermost active cleanup has reached its stop point.
                 if self
-                    .active_unwind_cleanup
-                    .as_ref()
+                    .active_unwind_cleanups
+                    .last()
                     .is_some_and(|cleanup| cleanup.stop_index == inst_index)
                 {
                     let cleanup = self
-                        .active_unwind_cleanup
-                        .take()
+                        .active_unwind_cleanups
+                        .pop()
                         .expect("active unwind cleanup");
                     match cleanup.pending {
                         NonlocalExit::Throw(thrown) => {
-                            return self.finish_throw(thrown);
+                            // If there's an outer cleanup still on the stack, update its
+                            // pending exit and continue to reach its stop_index.
+                            if let Some(outer) = self.active_unwind_cleanups.last_mut() {
+                                outer.pending = NonlocalExit::Throw(thrown);
+                                inst_index += 1;
+                                continue;
+                            }
+                            // After cleanup, check for new cleanup in the instruction stream.
+                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                                &body.instructions,
+                                inst_index,
+                                NonlocalExit::Throw(thrown),
+                                cleanup.result_reg,
+                            ) {
+                                inst_index = cleanup_start;
+                                continue;
+                            }
+                            // Try to catch the throw in this function.
+                            match self.try_catch_inline(thrown, &body.instructions, inst_index) {
+                                Ok(Some(next)) => {
+                                    inst_index = next;
+                                    continue;
+                                }
+                                Ok(None) => {
+                                    let value = self.last_value.take();
+                                    return self.finish(value);
+                                }
+                                Err(thrown) => {
+                                    return InternalInterpResult {
+                                        value: None,
+                                        thrown: Some(thrown),
+                                        signaled: None,
+                                        diagnostics: std::mem::take(&mut self.diagnostics),
+                                    };
+                                }
+                            }
                         }
                         NonlocalExit::Signal(signaled) => {
+                            // If there's an outer cleanup still on the stack, update its
+                            // pending exit and continue to reach its stop_index.
+                            if let Some(outer) = self.active_unwind_cleanups.last_mut() {
+                                outer.pending = NonlocalExit::Signal(signaled);
+                                inst_index += 1;
+                                continue;
+                            }
+                            // After cleanup, check for new cleanup in the instruction stream.
+                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                                &body.instructions,
+                                inst_index,
+                                NonlocalExit::Signal(signaled),
+                                cleanup.result_reg,
+                            ) {
+                                inst_index = cleanup_start;
+                                continue;
+                            }
                             if let Some(handler_start) = self.enter_condition_handler(
                                 &body.instructions,
                                 inst_index,
@@ -375,14 +428,15 @@ impl Interpreter<'_, '_, '_> {
                         }
                     }
                 }
+                // Check if the innermost active condition handler has reached its stop point.
                 if self
-                    .active_condition_handler
-                    .as_ref()
+                    .active_condition_handlers
+                    .last()
                     .is_some_and(|handler| handler.stop_index == inst_index)
                 {
                     let active = self
-                        .active_condition_handler
-                        .take()
+                        .active_condition_handlers
+                        .pop()
                         .expect("active condition handler");
                     let next_index = active.condition_end_index + 1;
                     let result_reg = active.result_reg;
@@ -409,32 +463,44 @@ impl Interpreter<'_, '_, '_> {
                 if !self.execute_inst(&inst.kind) {
                     let result_reg = instruction_result_reg(&inst.kind);
                     if let Some(thrown) = self.pending_throw.take() {
-                        let already_in_cleanup = self.active_unwind_cleanup.take().is_some();
-                        if !already_in_cleanup {
-                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
-                                &body.instructions,
-                                inst_index,
-                                NonlocalExit::Throw(thrown),
-                                result_reg,
-                            ) {
-                                inst_index = cleanup_start;
+                        if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                            &body.instructions,
+                            inst_index,
+                            NonlocalExit::Throw(thrown),
+                            result_reg,
+                        ) {
+                            inst_index = cleanup_start;
+                            continue;
+                        }
+                        // Try to catch the throw in this function.
+                        match self.try_catch_inline(thrown, &body.instructions, inst_index) {
+                            Ok(Some(next)) => {
+                                inst_index = next;
                                 continue;
+                            }
+                            Ok(None) => {
+                                let value = self.last_value.take();
+                                return self.finish(value);
+                            }
+                            Err(thrown) => {
+                                return InternalInterpResult {
+                                    value: None,
+                                    thrown: Some(thrown),
+                                    signaled: None,
+                                    diagnostics: std::mem::take(&mut self.diagnostics),
+                                };
                             }
                         }
-                        return self.finish_throw(thrown);
                     }
                     if let Some(signaled) = self.pending_signal.take() {
-                        let already_in_cleanup = self.active_unwind_cleanup.take().is_some();
-                        if !already_in_cleanup {
-                            if let Some(cleanup_start) = self.enter_unwind_cleanup(
-                                &body.instructions,
-                                inst_index,
-                                NonlocalExit::Signal(signaled),
-                                result_reg,
-                            ) {
-                                inst_index = cleanup_start;
-                                continue;
-                            }
+                        if let Some(cleanup_start) = self.enter_unwind_cleanup(
+                            &body.instructions,
+                            inst_index,
+                            NonlocalExit::Signal(signaled),
+                            result_reg,
+                        ) {
+                            inst_index = cleanup_start;
+                            continue;
                         }
                         if let Some(handler_start) = self.enter_condition_handler(
                             &body.instructions,
@@ -1405,6 +1471,10 @@ impl Interpreter<'_, '_, '_> {
             }
         };
         let target = find_condition_handler(instructions, signal_index, &signal_name)?;
+        // Pop skipped inner condition-case frames that didn't have a matching handler.
+        for _ in 0..target.frames_to_skip {
+            self.condition_stack.pop();
+        }
         let frame = self.condition_stack.pop()?;
         let mut dynamic_bind_count = 0;
         if let Some(var) = frame.var {
@@ -1416,7 +1486,7 @@ impl Interpreter<'_, '_, '_> {
             dynamic_bind_count = 1;
         }
         self.last_value = None;
-        self.active_condition_handler = Some(ActiveConditionHandler {
+        self.active_condition_handlers.push(ActiveConditionHandler {
             stop_index: target.stop_index,
             condition_end_index: target.condition_end_index,
             result_reg,
@@ -1443,7 +1513,7 @@ impl Interpreter<'_, '_, '_> {
         result_reg: Option<RegId>,
     ) -> Option<usize> {
         let target = find_unwind_cleanup(instructions, signal_index)?;
-        self.active_unwind_cleanup = Some(ActiveUnwindCleanup {
+        self.active_unwind_cleanups.push(ActiveUnwindCleanup {
             stop_index: target.end_index,
             pending,
             result_reg,
@@ -2317,16 +2387,33 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
-    fn finish_throw(mut self, thrown: ThrownValue) -> InternalInterpResult {
-        match self.catch_throw(thrown) {
-            Ok(value) => self.finish(Some(value)),
-            Err(thrown) => InternalInterpResult {
-                value: None,
-                thrown: Some(thrown),
-                signaled: None,
-                diagnostics: self.diagnostics,
-            },
+    /// Try to catch a throw inline. If caught, returns Ok with the next instruction
+    /// index (if more code after the catch) or None (if catch was the last expression).
+    /// If not caught in this function, returns Err(thrown).
+    fn try_catch_inline(
+        &mut self,
+        thrown: ThrownValue,
+        instructions: &[RegInst],
+        inst_index: usize,
+    ) -> Result<Option<usize>, ThrownValue> {
+        // Find the matching catch in catch_stack (without modifying the stack yet).
+        let Some(match_index) = self.catch_stack.iter().rposition(|tag| *tag == thrown.tag) else {
+            return Err(thrown);
+        };
+        let catch_depth = self.catch_stack.len() - match_index;
+        self.catch_stack.truncate(match_index);
+
+        // Find the CatchEnd corresponding to the caught catch, skipping nested ones.
+        let catch_end = find_catch_end_at_depth(instructions, inst_index, catch_depth);
+        let value = thrown.value;
+        if let Some(end) = catch_end {
+            if end + 1 < instructions.len() {
+                self.last_value = Some(value);
+                return Ok(Some(end + 1));
+            }
         }
+        self.last_value = Some(value);
+        Ok(None)
     }
 
     fn finish_signal(self, signaled: SignaledValue) -> InternalInterpResult {
@@ -2337,7 +2424,30 @@ impl Interpreter<'_, '_, '_> {
             diagnostics: self.diagnostics,
         }
     }
+}
 
+fn find_catch_end(instructions: &[RegInst], start_index: usize) -> Option<usize> {
+    find_catch_end_at_depth(instructions, start_index, 1)
+}
+
+/// Find the Nth CatchEnd instruction (at the outermost nesting level) starting
+/// from `start_index`. `depth` is the number of CatchEnds to skip through.
+fn find_catch_end_at_depth(instructions: &[RegInst], start_index: usize, mut depth: usize) -> Option<usize> {
+    let mut nesting = 0usize;
+    for (index, inst) in instructions.iter().enumerate().skip(start_index + 1) {
+        match &inst.kind {
+            RegInstKind::CatchBegin { .. } => nesting += 1,
+            RegInstKind::CatchEnd if nesting == 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            RegInstKind::CatchEnd => nesting -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 fn functions_by_name(module: &RegModule) -> HashMap<String, FunctionId> {
@@ -2353,6 +2463,7 @@ struct ConditionHandlerTarget {
     handler_index: usize,
     stop_index: usize,
     condition_end_index: usize,
+    frames_to_skip: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2405,15 +2516,21 @@ fn find_condition_handler(
     let mut depth = 0usize;
     let mut handler_index = None;
     let mut stop_index = None;
+    let mut frames_to_skip = 0;
     for (index, inst) in instructions.iter().enumerate().skip(signal_index + 1) {
         match &inst.kind {
             RegInstKind::ConditionCaseBegin { .. } => depth += 1,
             RegInstKind::ConditionCaseEnd if depth == 0 => {
-                return handler_index.map(|handler_index| ConditionHandlerTarget {
-                    handler_index,
-                    stop_index: stop_index.unwrap_or(index),
-                    condition_end_index: index,
-                });
+                if let Some(hi) = handler_index {
+                    return Some(ConditionHandlerTarget {
+                        handler_index: hi,
+                        stop_index: stop_index.unwrap_or(index),
+                        condition_end_index: index,
+                        frames_to_skip,
+                    });
+                }
+                // No matching handler in this scope, continue to outer.
+                frames_to_skip += 1;
             }
             RegInstKind::ConditionCaseEnd => depth -= 1,
             RegInstKind::ConditionCaseHandler { pattern } if depth == 0 => {
@@ -3077,5 +3194,63 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(catch 'tag (unwind-protect (throw 'tag 7) (throw 'tag 8)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(8)));
+    }
+
+    #[test]
+    fn nested_condition_case_outer_handler_catches_signal() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (condition-case outer-err
+              (condition-case inner-err
+                (signal 'wrong-type-argument '(x))
+                (args-out-of-range 99))
+              (wrong-type-argument 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn nested_unwind_protect_outer_cleanup_runs_after_signal() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))
+              (condition-case err
+                (unwind-protect
+                  (unwind-protect
+                    (signal 'error '(\"boom\"))
+                    (setq x (+ x 1)))
+                  (setq x (+ x 10)))
+                (error x)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(11)));
+    }
+
+    #[test]
+    fn nested_unwind_protect_inner_cleanup_runs_on_throw() {
+        // First verify single-level cleanup works
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))
+              (catch 'tag
+                (unwind-protect
+                  (throw 'tag 7)
+                  (setq x 1)))
+              x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+
+        // Then verify nested cleanup
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))
+              (catch 'tag
+                (unwind-protect
+                  (throw 'tag 7)
+                  (unwind-protect
+                    (throw 'tag 99)
+                    (setq x 1))))
+              x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 }
