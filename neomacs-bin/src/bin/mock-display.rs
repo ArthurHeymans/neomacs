@@ -352,12 +352,13 @@ fn build_single(
         windows: vec![WindowContent {
             window_id: 1,
             lines: scratch,
-            mode_line_text: " -:**-  *scratch*      Top L1     (Lisp Interaction)".into(),
-            pixel_bounds: Rect::new(0.0, 0.0, pixel_w, text_rows as f32 * char_h),
+            mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
+            pixel_bounds: Rect::new(0.0, 0.0, pixel_w, (text_rows + 1) as f32 * char_h),
             selected: true,
             truncated_lines: false,
         }],
         child_frames: vec![],
+        minibuffer: None,
         frame_pixel_width: pixel_w,
         frame_pixel_height: pixel_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
@@ -391,7 +392,7 @@ fn build_hsplit(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line_text: " -:**-  *scratch*      Top L1     (Lisp Interaction)".into(),
+                mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
                 pixel_bounds: Rect::new(0., 0., pixel_w, (half - 1) as f32 * char_h),
                 selected: true,
                 truncated_lines: false,
@@ -399,7 +400,7 @@ fn build_hsplit(
             WindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line_text: " -:---  *Messages*     Bot L1     (Messages)".into(),
+                mode_line: StyledLine::from_str(" -:---  *Messages*     Bot L1     (Messages)", 1),
                 pixel_bounds: Rect::new(
                     0.,
                     half as f32 * char_h,
@@ -411,6 +412,7 @@ fn build_hsplit(
             },
         ],
         child_frames: vec![],
+        minibuffer: None,
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
@@ -457,7 +459,7 @@ fn build_vsplit(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line_text: format!("{}|{}", ml_left, ml_right),
+                mode_line: StyledLine::from_str(&format!("{}|{}", ml_left, ml_right), 1),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -470,7 +472,7 @@ fn build_vsplit(
             WindowContent {
                 window_id: 2,
                 lines: help,
-                mode_line_text: String::new(),
+                mode_line: StyledLine::from_str("", 1),
                 pixel_bounds: Rect::new(
                     (left_cols + 1) as f32 * char_w,
                     0.,
@@ -482,6 +484,7 @@ fn build_vsplit(
             },
         ],
         child_frames: vec![],
+        minibuffer: None,
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
@@ -523,7 +526,7 @@ fn build_triple(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line_text: " -:**-  *scratch*      (Lisp Interaction)".into(),
+                mode_line: StyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
                 pixel_bounds: Rect::new(0., 0., left_cols as f32 * char_w, (r - 2) as f32 * char_h),
                 selected: true,
                 truncated_lines: false,
@@ -531,7 +534,7 @@ fn build_triple(
             WindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line_text: " -:---  *Messages*     (Messages)".into(),
+                mode_line: StyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -544,7 +547,7 @@ fn build_triple(
             WindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line_text: " -:---  *Help*         (Help)".into(),
+                mode_line: StyledLine::from_str(" -:---  *Help*         (Help)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     right_half as f32 * char_h,
@@ -556,6 +559,7 @@ fn build_triple(
             },
         ],
         child_frames: vec![],
+        minibuffer: None,
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
@@ -627,7 +631,7 @@ fn build_default(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line_text: " -:**-  *scratch*      (Lisp Interaction)".into(),
+                mode_line: StyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -640,7 +644,7 @@ fn build_default(
             WindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line_text: " -:---  *Messages*     (Messages)".into(),
+                mode_line: StyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -653,7 +657,7 @@ fn build_default(
             WindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line_text: " -:---  *Help*         (Help)".into(),
+                mode_line: StyledLine::from_str(" -:---  *Help*         (Help)", 1),
                 pixel_bounds: Rect::new(
                     0.,
                     top_half as f32 * char_h,
@@ -669,7 +673,7 @@ fn build_default(
             window: WindowContent {
                 window_id: 1,
                 lines: cf_lines,
-                mode_line_text: String::new(),
+                mode_line: StyledLine::from_str("", 1),
                 pixel_bounds: Rect::new(0., 0., cf_w, cf_h),
                 selected: false,
                 truncated_lines: false,
@@ -681,6 +685,7 @@ fn build_default(
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
+        minibuffer: None,
         menu_bar: None,
     }
 }

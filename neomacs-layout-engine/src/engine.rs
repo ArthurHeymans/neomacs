@@ -5763,9 +5763,28 @@ impl LayoutEngine {
             // Mode-line
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
             let ml: Vec<Glyph> = window
-                .mode_line_text
-                .chars()
-                .map(|ch| Glyph::char(ch, 1, 0))
+                .mode_line
+                .glyphs
+                .iter()
+                .map(|g| Glyph::char(g.ch, g.face_id, 0))
+                .collect();
+            builder.install_current_row_glyphs(ml);
+            builder.end_row();
+            builder.end_window();
+        }
+
+        // Minibuffer at frame bottom
+        if let Some(ref mini) = content.minibuffer {
+            builder.begin_window(
+                mini.window_id, 0, 0,
+                mini.pixel_bounds, mini.selected,
+            );
+            builder.begin_status_line_row(GlyphRowRole::ModeLine);
+            let ml: Vec<Glyph> = mini
+                .mode_line
+                .glyphs
+                .iter()
+                .map(|g| Glyph::char(g.ch, g.face_id, 0))
                 .collect();
             builder.install_current_row_glyphs(ml);
             builder.end_row();

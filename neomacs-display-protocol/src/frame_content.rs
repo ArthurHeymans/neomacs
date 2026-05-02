@@ -53,8 +53,9 @@ impl StyledLine {
 pub struct WindowContent {
     pub window_id: u64,
     pub lines: Vec<StyledLine>,
-    /// Pre-formatted mode-line text (evaluator-produced).
-    pub mode_line_text: String,
+    /// Pre-formatted mode-line.  Each glyph carries its own face_id,
+    /// matching GNU's propertized mode-line-format output.
+    pub mode_line: StyledLine,
     /// Pixel bounds relative to frame, computed by the evaluator from
     /// frame parameters and split configuration.
     pub pixel_bounds: Rect,
@@ -94,4 +95,6 @@ pub struct FrameContent {
     /// Per-level menu bar items, if any.  Pre-formatted strings keyed by
     /// level.  Level 0 is the top-level menu bar.
     pub menu_bar: Option<Vec<String>>,
+    /// Minibuffer / echo-area window.  Always present at frame bottom.
+    pub minibuffer: Option<WindowContent>,
 }
