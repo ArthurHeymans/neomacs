@@ -18,8 +18,8 @@ use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_layout_engine::engine::LayoutEngine;
 use std::collections::HashMap;
-use tracing;
 use std::io::{self, Read, Write};
+use tracing;
 
 // ===================================================================
 // Scene: Vec<FrameDisplayState> with GUI/TTY fan-out helpers
@@ -132,7 +132,8 @@ fn run_gui(demo: &str) {
     let font_size_px = neomacs_layout_engine::fontconfig::points_to_pixels(10.0);
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.char_width('m', family, 400, false, font_size_px).max(1.0)
+        fm.char_width('m', family, 400, false, font_size_px)
+            .max(1.0)
     };
     let char_h = {
         let fm = engine.font_metrics.as_mut().unwrap();
@@ -142,13 +143,19 @@ fn run_gui(demo: &str) {
     };
     tracing::info!(
         "mock-display gui: font_size_px={:.1} family={} char_w={:.1} char_h={:.1}",
-        font_size_px, family, char_w, char_h
+        font_size_px,
+        family,
+        char_w,
+        char_h
     );
     let pixel_w = (cols as f32 * char_w) as u32;
     let pixel_h = (rows as f32 * char_h) as u32;
     tracing::info!(
         "mock-display gui: cols={} rows={} pixel_w={} pixel_h={}",
-        cols, rows, pixel_w, pixel_h
+        cols,
+        rows,
+        pixel_w,
+        pixel_h
     );
 
     let comms = ThreadComms::new().expect("failed to create comms");
@@ -352,7 +359,10 @@ fn build_single(
         windows: vec![WindowContent {
             window_id: 1,
             lines: scratch,
-            mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
+            mode_line: StyledLine::from_str(
+                " -:**-  *scratch*      Top L1     (Lisp Interaction)",
+                1,
+            ),
             pixel_bounds: Rect::new(0.0, 0.0, pixel_w, (text_rows + 1) as f32 * char_h),
             selected: true,
             truncated_lines: false,
@@ -392,7 +402,10 @@ fn build_hsplit(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
+                mode_line: StyledLine::from_str(
+                    " -:**-  *scratch*      Top L1     (Lisp Interaction)",
+                    1,
+                ),
                 pixel_bounds: Rect::new(0., 0., pixel_w, half as f32 * char_h),
                 selected: true,
                 truncated_lines: false,

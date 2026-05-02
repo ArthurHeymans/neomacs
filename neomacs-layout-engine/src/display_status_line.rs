@@ -515,7 +515,7 @@ impl LayoutEngine {
                 }
                 .max(0.0)
                 .min(spec.height.max(1.0));
-                b.set_last_window_last_row_metrics(spec.y, spec.height, row_ascent);
+                b.set_current_window_last_row_metrics(spec.y, spec.height, row_ascent);
             }
         }
 

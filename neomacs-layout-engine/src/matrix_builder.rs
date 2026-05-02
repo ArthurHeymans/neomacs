@@ -745,61 +745,56 @@ impl GlyphMatrixBuilder {
         self.undecorated = undecorated;
     }
 
-    /// Begin a new status-line row on the most recently stored window.
+    /// Begin a new status-line row in the currently open window.
     ///
-    /// Call this AFTER `end_window()`.  It appends a new enabled, mode-line
-    /// row with the given `role` to the last window's matrix and returns
-    /// `true` on success.  Returns `false` when no window has been stored yet.
+    /// Call this BEFORE `end_window()`.  Pushes a new enabled, mode-line
+    /// row to the current window's matrix and returns `true` on success.
+    /// Returns `false` when no window is currently open (`current_matrix`
+    /// is None).
     pub fn begin_status_line_row(&mut self, role: GlyphRowRole) -> bool {
-        let Some(entry) = self.windows.last_mut() else {
+        let Some(ref mut matrix) = self.current_matrix else {
             return false;
         };
         let mut row = GlyphRow::new(role);
         row.enabled = true;
         row.mode_line = true;
-        self.current_row = entry.matrix.rows.len();
-        entry.matrix.rows.push(row);
-        entry.matrix.nrows += 1;
+        self.current_row = matrix.rows.len();
+        matrix.rows.push(row);
+        matrix.nrows += 1;
         true
     }
 
-    /// Record authoritative geometry for the most recently appended row on the
-    /// most recently closed window.
+    /// Record authoritative geometry for the last row in the currently
+    /// open window.
     ///
     /// `pixel_y` is frame-absolute; the stored row value is window-relative.
-    pub fn set_last_window_last_row_metrics(
+    pub fn set_current_window_last_row_metrics(
         &mut self,
         pixel_y: f32,
         height_px: f32,
         ascent_px: f32,
     ) {
-        let Some(entry) = self.windows.last_mut() else {
+        let window_y = self.current_pixel_bounds.y;
+        let Some(ref mut matrix) = self.current_matrix else {
             return;
         };
-        let Some(row) = entry.matrix.rows.last_mut() else {
+        let Some(row) = matrix.rows.last_mut() else {
             return;
         };
-        let pixel_y_rel = pixel_y - entry.pixel_bounds.y;
+        let pixel_y_rel = pixel_y - window_y;
         Self::write_row_metrics(row, pixel_y_rel, height_px, ascent_px);
     }
 
     /// Install a complete set of text-area glyphs into the current
-    /// (last) status-line row of the most recently stored window.
-    ///
-    /// This is the post-Step-3.6 replacement for the old per-glyph
-    /// `push_status_line_char` / `push_status_line_stretch` helpers.
-    /// The `_via_backend` walkers in `status_line.rs` accumulate
-    /// their glyphs inside a `TtyDisplayBackend`; on flush, the
-    /// completed row's text-area `Vec<Glyph>` is installed here
-    /// wholesale, which formalizes `TtyDisplayBackend` as the sole
-    /// producer of status-line glyphs in the TTY path.
+    /// status-line row of the currently open window.
     ///
     /// Must be called after `begin_status_line_row`.
     pub fn install_status_line_row_glyphs(&mut self, glyphs: Vec<Glyph>) {
-        let Some(entry) = self.windows.last_mut() else {
+        let Some(ref mut matrix) = self.current_matrix else {
             return;
         };
-        if let Some(row) = entry.matrix.rows.last_mut() {
+        if self.current_row < matrix.rows.len() {
+            let row = &mut matrix.rows[self.current_row];
             row.displays_text = !glyphs.is_empty();
             row.glyphs[GlyphArea::Text as usize] = glyphs;
             let _ = Self::reorder_row_bidi(row, None);

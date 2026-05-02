@@ -151,11 +151,8 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char('a', 0, 0);
     builder.end_row();
-    builder.end_window();
 
-    // Install a complete set of text-area glyphs (the post-
-    // Step-3.6 replacement for the old per-glyph
-    // push_status_line_char API).
+    // Status-line row is added to the current window BEFORE closing.
     builder.begin_status_line_row(GlyphRowRole::ModeLine);
     let glyphs = vec![
         Glyph::char('-', 5, 0),
@@ -163,6 +160,7 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
         Glyph::char(':', 5, 0),
     ];
     builder.install_status_line_row_glyphs(glyphs);
+    builder.end_window();
 
     let state = builder.finish(80, 3, 8.0, 16.0);
     let matrix = &state.window_matrices[0].matrix;
@@ -188,10 +186,10 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
 fn builder_status_line_empty_row_when_no_chars_pushed() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 40, Rect::new(0.0, 0.0, 320.0, 32.0), true);
-    builder.end_window();
 
-    // Begin a status-line row but push no characters
+    // Status-line row added before closing the window.
     builder.begin_status_line_row(GlyphRowRole::ModeLine);
+    builder.end_window();
 
     let state = builder.finish(40, 2, 8.0, 16.0);
     let ml_row = &state.window_matrices[0].matrix.rows[2]; // appended row
@@ -429,10 +427,11 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    builder.end_window();
 
+    // Status-line row added before closing the window.
     builder.begin_status_line_row(GlyphRowRole::ModeLine);
     builder.install_status_line_row_glyphs(vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)]);
+    builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
     let glyphs = &state.window_matrices[0].matrix.rows[1].glyphs[GlyphArea::Text as usize];

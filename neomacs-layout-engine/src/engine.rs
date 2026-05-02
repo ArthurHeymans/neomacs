@@ -5686,9 +5686,8 @@ impl LayoutEngine {
         let default_face = content.faces.first();
         // Face.font_size is in points (matching GNU Emacs).  Convert to
         // physical pixels via fontconfig DPI, same as GNU's POINT_TO_PIXEL.
-        let default_size = crate::fontconfig::points_to_pixels(
-            default_face.map(|f| f.font_size).unwrap_or(12.0),
-        );
+        let default_size =
+            crate::fontconfig::points_to_pixels(default_face.map(|f| f.font_size).unwrap_or(12.0));
         let default_family = default_face
             .map(|f| f.font_family.as_str())
             .unwrap_or("monospace");
@@ -5712,12 +5711,21 @@ impl LayoutEngine {
         };
         tracing::info!(
             "layout_frame_content: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
-            default_size, default_family, default_weight, default_italic, char_w, char_h
+            default_size,
+            default_family,
+            default_weight,
+            default_italic,
+            char_w,
+            char_h
         );
 
-        // Per-window layout
+        // Per-window layout.
+        //
+        // begin_status_line_row now operates on current_matrix — the
+        // window being built.  Mode-line rows are added BEFORE end_window()
+        // so each window is self-contained when it closes.
         for window in &content.windows {
-            let nrows = window.lines.len() + 1; // +1 for mode-line
+            let nrows = window.lines.len();
             let ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
             builder.begin_window(
                 window.window_id,
@@ -5760,7 +5768,8 @@ impl LayoutEngine {
                 }
                 builder.end_row();
             }
-            // Mode-line
+
+            // Mode-line is part of this window — add before closing.
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
             let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
             let mut ml: Vec<Glyph> = window
@@ -5773,17 +5782,15 @@ impl LayoutEngine {
                 ml.push(Glyph::char(' ', 1, 0));
             }
             ml.truncate(ml_ncols);
-            builder.install_current_row_glyphs(ml);
-            builder.end_row();
+            builder.install_status_line_row_glyphs(ml);
+
             builder.end_window();
         }
 
         // Minibuffer at frame bottom
         if let Some(ref mini) = content.minibuffer {
-            builder.begin_window(
-                mini.window_id, 0, 0,
-                mini.pixel_bounds, mini.selected,
-            );
+            builder.begin_window(mini.window_id, 0, 0, mini.pixel_bounds, mini.selected);
+
             builder.begin_status_line_row(GlyphRowRole::ModeLine);
             let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
             let mut ml: Vec<Glyph> = mini
@@ -5796,8 +5803,8 @@ impl LayoutEngine {
                 ml.push(Glyph::char(' ', 1, 0));
             }
             ml.truncate(mini_ncols);
-            builder.install_current_row_glyphs(ml);
-            builder.end_row();
+            builder.install_status_line_row_glyphs(ml);
+
             builder.end_window();
         }
 

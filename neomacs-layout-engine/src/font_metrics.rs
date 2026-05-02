@@ -455,14 +455,25 @@ impl FontMetricsService {
             r
         };
         let resolved_italic = resolved.slant.is_italic();
-        let resolved_key = MetricsCacheKey::new(&resolved.family, resolved.weight, resolved_italic, font_size);
+        let resolved_key = MetricsCacheKey::new(
+            &resolved.family,
+            resolved.weight,
+            resolved_italic,
+            font_size,
+        );
 
         let char_key = (resolved_key, ch);
         if let Some(&w) = self.char_cache.get(&char_key) {
             return w;
         }
 
-        let w = self.measure_char(ch, &resolved.family, resolved.weight, resolved_italic, font_size);
+        let w = self.measure_char(
+            ch,
+            &resolved.family,
+            resolved.weight,
+            resolved_italic,
+            font_size,
+        );
         self.char_cache.insert(char_key, w);
         w
     }
