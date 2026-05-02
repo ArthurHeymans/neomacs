@@ -787,19 +787,21 @@ fn adjust_delete_produces_no_negative_len_runs() {
     );
     assert_eq!(table.next_property_change(30), None);
 
-    // Verify no runs have start >= end
-    for run in &table.runs {
+    // Verify no intervals have start >= end
+    for (start, node) in &table.intervals {
         assert!(
-            run.start < run.end,
-            "run [{},{}) has start >= end",
-            run.start,
-            run.end
+            *start < node.end,
+            "interval [{},{}) has start >= end",
+            start,
+            node.end
         );
     }
-    // There should be exactly 2 non-empty runs (no empty gap runs needed
-    // since adjust_for_delete doesn't create them; next_property_change
-    // handles gaps naturally by skipping to the next non-empty run)
-    let non_empty: Vec<_> = table.runs.iter().filter(|r| !r.is_empty_plist()).collect();
+    // There should be exactly 2 non-empty intervals
+    let non_empty: Vec<_> = table
+        .intervals
+        .iter()
+        .filter(|(_, r)| !r.is_empty_plist())
+        .collect();
     assert_eq!(non_empty.len(), 2);
 }
 
