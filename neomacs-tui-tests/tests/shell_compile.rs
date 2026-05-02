@@ -505,3 +505,55 @@ fn diff_buffer_with_file_via_mx_shows_unsaved_changes() {
         10,
     );
 }
+
+#[test]
+fn shell_command_on_region_via_mbar_with_cat_preserves_text() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "shell-cat-region.txt",
+        "hello world\nfoo bar\n",
+        "C-x C-f",
+    );
+
+    // Select all and run shell-command-on-region with cat (no prefix)
+    send_both(&mut gnu, &mut neo, "C-x h M-|");
+    let prompt_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Shell command on region:"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"cat");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    // After cat (with no prefix), output goes to *Shell Command Output* buffer
+    // but the original region text should remain in the buffer
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("hello world"))
+    };
+    gnu.read_until(Duration::from_secs(8), ready);
+    neo.read_until(Duration::from_secs(12), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("hello world")),
+            "{label}: buffer should still contain original text after cat"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "shell_command_on_region_via_mbar_with_cat_preserves_text",
+        &gnu,
+        &neo,
+        3,
+    );
+}
