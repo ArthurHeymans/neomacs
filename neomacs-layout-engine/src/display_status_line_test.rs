@@ -568,7 +568,7 @@ fn build_rust_status_line_spec_preserves_display_space_align_entries() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let rendered = Value::string("C R");
     neovm_core::emacs_core::value::set_string_text_properties_for_value(
         rendered,
@@ -616,7 +616,7 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let rendered = Value::string("C R");
     neovm_core::emacs_core::value::set_string_text_properties_for_value(
         rendered,
@@ -679,7 +679,7 @@ fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let rendered = Value::string("C ");
     neovm_core::emacs_core::value::set_string_text_properties_for_value(
         rendered,
@@ -734,7 +734,7 @@ fn render_status_line_spec_skips_multi_byte_align_to_interval() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let rendered = Value::string("X   Y");
     neovm_core::emacs_core::value::set_string_text_properties_for_value(
         rendered,

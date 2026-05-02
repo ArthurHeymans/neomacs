@@ -1677,14 +1677,21 @@ impl LayoutEngine {
         // (TTY mode). No per-frame flag check; the backend choice
         // is frame-invariant.
 
-        let (bootstrap_bg, bootstrap_font_size) = {
+        let (bootstrap_bg, bootstrap_font_size, window_system) = {
             let Some(frame) = evaluator.frame_manager().get(frame_id) else {
                 tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
                 return;
             };
             let bootstrap =
                 super::neovm_bridge::frame_params_from_neovm(frame, evaluator.face_table());
-            (bootstrap.background, frame.font_pixel_size)
+            let ws = frame.window_system.as_ref().and_then(|v| {
+                v.as_symbol_name().map(|s| s.to_string())
+            });
+            (
+                bootstrap.background,
+                frame.font_pixel_size,
+                ws,
+            )
         };
 
         // Realize the default face before collecting window params so frame and
@@ -1694,6 +1701,7 @@ impl LayoutEngine {
             0x00FFFFFF,
             bootstrap_bg,
             bootstrap_font_size,
+            window_system.clone(),
         );
         let default_resolved = face_resolver.default_face();
         let default_metrics = self.font_metrics.as_mut().map(|svc| {
@@ -2122,6 +2130,7 @@ impl LayoutEngine {
                 0x00FFFFFF,
                 0x00000000,
                 frame_params.font_pixel_size,
+                window_system.clone(),
             );
             let menu_face = menu_face_resolver.resolve_named_face("menu");
             frame_display_state.menu_bar =
@@ -2139,6 +2148,7 @@ impl LayoutEngine {
                 0x00FFFFFF,
                 0x00000000,
                 frame_params.font_pixel_size,
+                window_system.clone(),
             );
             let pixel_to_tuple = |pixel: u32| -> (f32, f32, f32) {
                 (

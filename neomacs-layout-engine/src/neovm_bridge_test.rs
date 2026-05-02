@@ -1005,7 +1005,7 @@ fn test_face_resolver_default() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
 
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let df = resolver.default_face();
 
     // The standard TTY "default" face keeps GNU's terminal-default color
@@ -1028,7 +1028,7 @@ fn test_face_resolver_default() {
 fn test_face_resolver_with_text_property() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     // Create a buffer and set "face" text property to bold.
     let mut buf = test_buffer(1, "*test*");
@@ -1057,7 +1057,7 @@ fn test_face_resolver_with_text_property() {
 fn test_face_resolver_with_font_lock_face() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(2, "*fontlock*");
     buf.text.insert_str(0, "defun myfunction");
@@ -1083,7 +1083,7 @@ fn test_face_resolver_with_font_lock_face() {
 fn test_face_resolver_face_property_precedes_font_lock_face() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(20, "*scratch*");
     buf.text.insert_str(0, "C-x C-f");
@@ -1109,7 +1109,7 @@ fn test_face_resolver_face_property_precedes_font_lock_face() {
 fn test_face_resolver_next_check() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(3, "*nextcheck*");
     buf.text.insert_str(0, "aabbccdd");
@@ -1142,7 +1142,7 @@ fn test_face_resolver_next_check() {
 fn test_face_resolver_overlay_face() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     {
         let buf = evaluator
@@ -1182,7 +1182,7 @@ fn test_face_resolver_overlay_priority() {
     face_b.foreground = Some(NeoColor::rgb(0, 0, 255)); // blue
     table.define("face-b", face_b);
 
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     {
         let buf = evaluator
@@ -1226,7 +1226,7 @@ fn test_face_resolver_face_ref_list_respects_gnu_precedence() {
     face_b.foreground = Some(NeoColor::rgb(0, 0, 255));
     table.define("face-b", face_b);
 
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(51, "*face-ref-list*");
     buf.text.insert_str(0, "x");
@@ -1248,7 +1248,7 @@ fn test_face_resolver_face_ref_list_respects_gnu_precedence() {
 fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(52, "*default-remap*");
     buf.text.insert_str(0, "plain");
@@ -1272,7 +1272,7 @@ fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
 fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(53, "*named-remap*");
     buf.text.insert_str(0, "bold");
@@ -1306,7 +1306,7 @@ fn test_face_resolver_inverse_video() {
     inv_face.inverse_video = Some(true);
     table.define("inverse-test", inv_face);
 
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(6, "*inverse*");
     buf.text.insert_str(0, "inverted");
@@ -1327,7 +1327,7 @@ fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
     let _evaluator = neovm_core::emacs_core::Context::new();
 
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(7, "*utf8*");
     buf.text.insert_str(0, "a好b");
@@ -1348,7 +1348,7 @@ fn test_face_resolver_multibyte_overlay_uses_byte_offsets() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
 
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     {
         let buf = evaluator
@@ -1399,7 +1399,7 @@ fn test_resolve_face_value_list() {
 fn test_realize_face_height_absolute() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut face = NeoFace::new("tall");
     face.height = Some(FaceHeight::Absolute(240)); // 24pt
@@ -1412,7 +1412,7 @@ fn test_realize_face_height_absolute() {
 fn test_realize_face_height_relative() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut face = NeoFace::new("scaled");
     face.height = Some(FaceHeight::Relative(2.0));
@@ -1426,7 +1426,7 @@ fn test_realize_face_height_relative() {
 fn test_face_from_plist_realizes_relative_height_family_and_weight() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 26.666666);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 26.666666, None);
 
     let plist = Value::list(vec![
         Value::keyword("family"),

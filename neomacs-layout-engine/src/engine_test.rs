@@ -476,6 +476,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
                 .get(frame_id)
                 .expect("frame")
                 .font_pixel_size,
+            None,
         );
         let mut next_check = buffer.point_max_char();
         let resolved = face_resolver.face_at_pos(buffer, 0, &mut next_check);

@@ -630,8 +630,12 @@ pub fn window_params_from_neovm(
         .background
         .map(|color| color_to_pixel(&color))
         .unwrap_or(0x00FFFFFF);
+    let window_system = frame
+        .window_system
+        .as_ref()
+        .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
     let face_resolver =
-        FaceResolver::new(face_table, default_fg, default_bg, frame.font_pixel_size);
+        FaceResolver::new(face_table, default_fg, default_bg, frame.font_pixel_size, window_system);
 
     // Convert neovm-core Rect to display Rect (same fields, different types).
     let display_bounds = Rect::new(bounds.x, bounds.y, bounds.width, bounds.height);
@@ -1486,6 +1490,10 @@ pub struct FaceResolver {
     /// Next dynamic face ID.  Basic faces occupy 0–19 (matching
     /// [`BasicFaceId`]); dynamically realized faces start at 20+.
     next_dynamic_id: std::cell::Cell<u32>,
+    /// Window system in use: `None` for TTY, `Some("x")` for X11,
+    /// `Some("wayland")` for Wayland, etc.  Used to evaluate
+    /// `:filtered` face spec predicates.
+    window_system: Option<String>,
 }
 
 impl FaceResolver {
@@ -1510,6 +1518,7 @@ impl FaceResolver {
         default_fg: u32,
         default_bg: u32,
         default_font_size: f32,
+        window_system: Option<String>,
     ) -> Self {
         let neo_default = face_table.resolve("default");
         let mut df = ResolvedFace::default();
@@ -1566,6 +1575,7 @@ impl FaceResolver {
             next_dynamic_id: std::cell::Cell::new(
                 neomacs_display_protocol::face::BasicFaceId::SENTINEL,
             ),
+            window_system,
         }
     }
 
@@ -1751,16 +1761,73 @@ impl FaceResolver {
         }
     }
 
-    fn is_filtered_face_spec(items: &[Value]) -> bool {
-        match items.first() {
-            Some(v) if v.is_keyword() => items
-                .first()
-                .and_then(|v| v.as_symbol_name())
-                .is_some_and(|name| name == "filtered"),
-            Some(item) => item
-                .as_symbol_name()
-                .is_some_and(|name| name == ":filtered"),
-            None => false,
+    /// If `items` is a `(:filtered FILTER . FACE-SPEC)` form, evaluate
+    /// FILTER against the current frame context.  Returns `Some(face_spec)`
+    /// when the filter matches, `None` when it doesn't, or `None` when
+    /// `items` is not a `:filtered` form at all (caller should treat it as
+    /// an inline face plist or face list).
+    ///
+    /// Supported filter predicates:
+    ///   `:window-system SYM`  — matches when `self.window_system == SYM`
+    ///                          (nil for TTY, "x" for X11, etc.)
+    fn eval_filtered_face_spec(&self, items: &[Value]) -> Option<Vec<Value>> {
+        let first = items.first()?;
+        let name = if first.is_keyword() {
+            first.as_symbol_name()?
+        } else {
+            first.as_symbol_name()?
+        };
+        if name != "filtered" && name != ":filtered" {
+            return None; // not a :filtered form — caller handles
+        }
+        if items.len() < 3 {
+            return None; // malformed: need (:filtered FILTER . SPEC)
+        }
+
+        let filter = &items[1];
+        let spec = &items[2..];
+
+        // Evaluate filter predicates.  All predicates in the filter
+        // plist must pass; this mirrors GNU's `face_spec_match_p` in
+        // `src/xfaces.c`.
+        match filter.kind() {
+            ValueKind::Cons => {
+                let filter_items = list_to_vec(filter).unwrap_or_default();
+                let mut i = 0;
+                while i < filter_items.len() {
+                    let pred = filter_items.get(i)?;
+                    let pred_name = if pred.is_keyword() {
+                        pred.as_symbol_name()?
+                    } else {
+                        pred.as_symbol_name()?
+                    };
+                    match pred_name {
+                        ":window-system" | "window-system" => {
+                            i += 1;
+                            let val = filter_items.get(i)?;
+                            let ws_name = val.as_symbol_name().unwrap_or("");
+                            let current = self.window_system.as_deref().unwrap_or("nil");
+                            if current != ws_name && ws_name != "nil" {
+                                return None; // filter rejected
+                            }
+                            if ws_name == "nil" && self.window_system.is_some() {
+                                return None; // TTY filter, but we're on GUI
+                            }
+                        }
+                        _ => {
+                            // Unknown predicate — skip conservatively
+                            // (matches GNU: unknown predicates fail)
+                            return None;
+                        }
+                    }
+                    i += 1;
+                }
+                Some(spec.to_vec())
+            }
+            _ => {
+                // Non-list filter — malformed, skip
+                None
+            }
         }
     }
 
@@ -1820,8 +1887,17 @@ impl FaceResolver {
                 if items.is_empty() {
                     return None;
                 }
-                if Self::is_filtered_face_spec(&items) {
-                    return None;
+                if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
+                    if filtered_spec.is_empty() {
+                        return None;
+                    }
+                    // Recurse into the filtered spec (unwrap the :filtered wrapper)
+                    return self.resolve_buffer_face_value_over(
+                        buffer,
+                        base,
+                        &Value::list(filtered_spec),
+                        remap_stack,
+                    );
                 }
                 if Self::face_spec_is_plist(&items) {
                     let inline = NeoFace::from_plist("--inline--", &items);
@@ -1871,8 +1947,14 @@ impl FaceResolver {
                 if items.is_empty() {
                     return None;
                 }
-                if Self::is_filtered_face_spec(&items) {
-                    return None;
+                if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
+                    if filtered_spec.is_empty() {
+                        return None;
+                    }
+                    return self.resolve_face_value_over(
+                        base,
+                        &Value::list(filtered_spec),
+                    );
                 }
                 if Self::face_spec_is_plist(&items) {
                     let inline = NeoFace::from_plist("--inline--", &items);
