@@ -558,3 +558,58 @@ fn mode_line_shows_buffer_position_percent() {
         "NEO mode-line should have position indicator: {neo_mode}"
     );
 }
+
+// ── Lisp environment semantics tests ────────────────────────
+
+#[test]
+fn lisp_environment_variables_match_gnu_emacs_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Test (emacs-version) returns a string
+    support::eval_expression(&mut gnu, &mut neo, "(emacs-version)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('\"'),
+            "{label}: (emacs-version) should return a string. Echo: {echo}"
+        );
+    }
+
+    // Test (boundp 'enable-recursive-minibuffers) — should be t
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(boundp 'enable-recursive-minibuffers)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: (boundp 'enable-recursive-minibuffers) should be t. Echo: {echo}"
+        );
+    }
+
+    // Test (>= emacs-major-version 31) — NeoMacs is Emacs 31+
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(>= emacs-major-version 31)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: (>= emacs-major-version 31) should be t. Echo: {echo}"
+        );
+    }
+}
