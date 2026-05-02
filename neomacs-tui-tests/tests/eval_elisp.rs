@@ -828,4 +828,30 @@ fn string_and_numeric_operations_match_gnu_semantics() {
             "{label}: (+ 1 2 3) should be 6. Echo: {echo}"
         );
     }
+
+    // (symbol-name 'hello) should be "hello"
+    support::eval_expression(&mut gnu, &mut neo, "(symbol-name 'hello)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("hello"),
+            "{label}: (symbol-name 'hello) should be \"hello\". Echo: {echo}"
+        );
+    }
+
+    // (intern "hello") should return the symbol hello
+    support::eval_expression(&mut gnu, &mut neo, "(intern \"hello\")");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("hello"),
+            "{label}: (intern \"hello\") should be hello. Echo: {echo}"
+        );
+    }
 }
