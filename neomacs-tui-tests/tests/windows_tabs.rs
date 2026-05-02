@@ -657,3 +657,43 @@ fn make_frame_and_delete_frame_via_cx5() {
         2,
     );
 }
+
+#[test]
+fn window_point_independence_after_split_and_cursor_moves() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "win-pt.txt",
+        "line one\nline two\nline three\nline four\n",
+        "C-x C-f",
+    );
+
+    // Split window below, switch to bottom
+    send_both(&mut gnu, &mut neo, "C-x 2 C-x o");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Move down in bottom window
+    send_both(&mut gnu, &mut neo, "C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    // Switch back to top
+    send_both(&mut gnu, &mut neo, "C-x o");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("line one")),
+            "{label}: should show buffer content after window split ops"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "window_point_independence_after_split_and_cursor_moves",
+        &gnu,
+        &neo,
+        3,
+    );
+}
