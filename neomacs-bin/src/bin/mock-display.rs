@@ -123,8 +123,8 @@ fn run_gui(demo: &str) {
     // Express frame in character cells. The layout engine measures the
     // actual font metrics (DPI-aware via fontconfig) and we use the same
     // engine instance for measurement and layout — no duplicate FontSystem.
-    let cols = 220u16;
-    let rows = 220u16;
+    let cols = 160u16;
+    let rows = 160u16;
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
