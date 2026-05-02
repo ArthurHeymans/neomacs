@@ -3241,4 +3241,53 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
+
+    #[test]
+    fn dolist_var_is_nil_after_loop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (dolist (x (list 1 2 3)) x)",
+        );
+        // After dolist loop body, x is set to nil per Emacs spec
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn hash_hex_literal_execution() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+ #x10 #o10 #b10)",
+        );
+        // #x10 = 16, #o10 = 8, #b10 = 2 → 26
+        assert_eq!(value, Some(LispValue::expect_fixnum(26)));
+    }
+
+    #[test]
+    fn hash_hex_in_expression() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((mask #xff)) (+ mask 1))",
+        );
+        // #xff = 255, + 1 = 256
+        assert_eq!(value, Some(LispValue::expect_fixnum(256)));
+    }
+
+    #[test]
+    fn vector_operations_interpreter() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((v (vector 1 2 3)))\n\
+              (+ (aref v 0) (aref v 1) (aref v 2)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn mapcar_with_lambda() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((result (mapcar (lambda (x) (+ x 10)) (list 1 2 3))))\n\
+              (car (cdr (cdr result))))",
+        );
+        // (mapcar (lambda (x) (+ x 10)) '(1 2 3)) → (11 12 13)
+        assert_eq!(value, Some(LispValue::expect_fixnum(13)));
+    }
 }
