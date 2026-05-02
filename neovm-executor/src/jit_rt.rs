@@ -17,6 +17,8 @@ pub struct JitContext {
     pub lambda_templates: *mut Vec<SsaLambdaTemplate>,
     pub regir: *mut RegModule,
     pub functions_by_name: *mut HashMap<String, FunctionId>,
+    pub gc_roots: Vec<LispValue>,
+    pub gc_root_base: usize,
 }
 
 macro_rules! jit_shim {
@@ -612,6 +614,28 @@ jit_shim!(__neomacs_rt_unwind_protect_cleanup_enter(vmctx: i64) -> i64 {
 
 jit_shim!(__neomacs_rt_unwind_protect_end(vmctx: i64) -> i64 {
     pop_catch();
+    0
+});
+
+// --- GC root stack ---
+
+jit_shim!(__neomacs_rt_push_root(vmctx: i64, value: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    ctx.gc_roots.push(LispValue::from_abi_i64(value));
+    value
+});
+
+jit_shim!(__neomacs_rt_pop_roots(vmctx: i64, count: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let count = count as usize;
+    let base = ctx.gc_root_base;
+    ctx.gc_roots.truncate(base);
+    0
+});
+
+jit_shim!(__neomacs_rt_gc_safepoint(vmctx: i64) -> i64 {
+    // Stub: triggers GC if needed. Currently a no-op until the
+    // neovm-gc crate's Heap/Mutator replaces the current Runtime.
     0
 });
 

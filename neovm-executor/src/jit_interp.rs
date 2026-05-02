@@ -75,6 +75,10 @@ fn register_runtime_shims(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("__neomacs_rt_unwind_protect_begin", __neomacs_rt_unwind_protect_begin as *const u8);
     builder.symbol("__neomacs_rt_unwind_protect_cleanup_enter", __neomacs_rt_unwind_protect_cleanup_enter as *const u8);
     builder.symbol("__neomacs_rt_unwind_protect_end", __neomacs_rt_unwind_protect_end as *const u8);
+    // GC root stack shims
+    builder.symbol("__neomacs_rt_push_root", __neomacs_rt_push_root as *const u8);
+    builder.symbol("__neomacs_rt_pop_roots", __neomacs_rt_pop_roots as *const u8);
+    builder.symbol("__neomacs_rt_gc_safepoint", __neomacs_rt_gc_safepoint as *const u8);
 }
 
 pub struct JitExecuteArtifact {
@@ -145,6 +149,8 @@ pub fn execute_with_jit(
                 lambda_templates: &mut lambda_templates as *mut Vec<neovm_compiler::ssa::SsaLambdaTemplate>,
                 regir: &regir as *const RegModule as *mut RegModule,
                 functions_by_name: &functions_by_name as *const HashMap<String, FunctionId> as *mut HashMap<String, FunctionId>,
+                gc_roots: Vec::new(),
+                gc_root_base: 0,
             });
             let ctx_ptr = Box::into_raw(ctx);
 

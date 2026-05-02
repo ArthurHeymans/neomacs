@@ -27,7 +27,13 @@ pub struct JitCompiledModule {
     pub entry_arity: usize,
     pub functions: Vec<JitCompiledFunction>,
     pub runtime_tables: JitRuntimeTables,
+    pub safepoints: Vec<JitSafepoint>,
     _jit: JITModule,
+}
+
+pub struct JitSafepoint {
+    pub code_offset: usize,
+    pub live_root_offsets: Vec<usize>,
 }
 
 pub struct JitCompiledFunction {
@@ -179,6 +185,7 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
             entry_code_ptr,
             entry_arity,
             functions,
+            safepoints: Vec::new(), // Populated when GC root emission is enabled
             runtime_tables: JitRuntimeTables {
                 symbol_rodeo: tables.symbol_rodeo,
                 string_rodeo: tables.string_rodeo,
