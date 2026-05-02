@@ -142,7 +142,7 @@ impl Default for Face {
             strike_through_color: None,
             box_color: None,
             font_family: "monospace".to_string(),
-            font_size: 12.0,
+            font_size: 10.0,
             font_weight: 400,
             attributes: FaceAttributes::empty(),
             underline_style: UnderlineStyle::None,

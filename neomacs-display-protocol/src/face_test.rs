@@ -28,7 +28,7 @@ fn test_default_face_values() {
     assert_eq!(face.foreground, Color::WHITE);
     assert_eq!(face.background, Color::BLACK);
     assert_eq!(face.font_family, "monospace");
-    assert_eq!(face.font_size, 12.0);
+    assert_eq!(face.font_size, 10.0);
     assert_eq!(face.font_weight, 400);
     assert_eq!(face.attributes, FaceAttributes::empty());
     assert_eq!(face.underline_style, UnderlineStyle::None);

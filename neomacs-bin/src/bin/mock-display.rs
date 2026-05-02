@@ -129,7 +129,7 @@ fn run_gui(demo: &str) {
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
     // Face.font_size is in points; GNU's POINT_TO_PIXEL via fontconfig DPI.
-    let font_size_px = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
+    let font_size_px = neomacs_layout_engine::fontconfig::points_to_pixels(10.0);
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
         fm.char_width('m', family, 400, false, font_size_px).max(1.0)
