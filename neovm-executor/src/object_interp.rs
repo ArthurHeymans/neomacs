@@ -3291,6 +3291,205 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(13)));
     }
 
+    // --- Backquote expansion tests ---
+
+    #[test]
+    fn backquote_with_splice_in_middle() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs (list 2 3)))\n\
+              (car (cdr `(1 ,@xs 4))))",
+        );
+        // `(1 ,@xs 4) → (1 2 3 4), (car (cdr ...)) = 2
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn backquote_splice_empty_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs nil))\n\
+              (length `(a ,@xs b)))",
+        );
+        // Splicing nil should produce (a b), length 2
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn backquote_in_macro_body() {
+        // Defmacro using backquote, then invoke it
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defmacro my-let1 (var val &rest body)\n\
+              `(let ((,var ,val)) ,@body))\n\
+            (my-let1 x 10 (+ x 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn backquote_vector_with_splice() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs (list 2 3)))\n\
+              (aref `[1 ,@xs 4] 2))",
+        );
+        // [1 2 3 4], aref index 2 = 3
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    // --- HIR lowering edge cases ---
+
+    #[test]
+    fn catch_throw_with_computed_tag() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((tag 'my-tag))\n\
+              (catch tag (throw tag 99)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn condition_case_with_multiple_handlers() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (condition-case err\n\
+              (signal 'wrong-type-argument '(42))\n\
+              (arith-error -1)\n\
+              (wrong-type-argument (cadr err))\n\
+              (error -3))",
+        );
+        // Should match wrong-type-argument handler
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn unwind_protect_throw_in_cleanup() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (catch 'outer\n\
+              (unwind-protect\n\
+                (throw 'outer 1)\n\
+                (throw 'outer 2)))",
+        );
+        // Cleanup's throw replaces the original throw
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn prog1_returns_first() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))\n\
+              (prog1 (setq x 10) (setq x 20))\n\
+              x)",
+        );
+        // prog1 returns first value (10), but side effect sets x=20
+        assert_eq!(value, Some(LispValue::expect_fixnum(20)));
+    }
+
+    #[test]
+    fn lambda_with_rest_param() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (funcall (lambda (a &rest bs) (+ a (length bs))) 1 2 3 4)",
+        );
+        // a=1, bs=(2 3 4), length=3 → 1+3=4
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn lambda_with_optional_param() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((f (lambda (a &optional b) (if b (+ a b) a))))\n\
+              (+ (funcall f 10) (funcall f 10 5)))",
+        );
+        // (funcall f 10) = 10, (funcall f 10 5) = 15 → 25
+        assert_eq!(value, Some(LispValue::expect_fixnum(25)));
+    }
+
+    #[test]
+    fn forward_referenced_function() {
+        // Call a function defined later in the source
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defun caller () (callee 5))\n\
+            (defun callee (x) (+ x 1))\n\
+            (caller)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn setq_returns_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))\n\
+              (+ (setq x 10) x))",
+        );
+        // setq returns 10, then x is 10 → 20
+        assert_eq!(value, Some(LispValue::expect_fixnum(20)));
+    }
+
+    #[test]
+    fn and_or_short_circuit() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))\n\
+              (and nil (setq x 1))\n\
+              x)",
+        );
+        // and short-circuits, x stays 0
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))\n\
+              (or t (setq x 1))\n\
+              x)",
+        );
+        // or short-circuits, x stays 0
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn cond_with_multiple_clauses() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (cond (nil 1) ((= 1 1) 2) (t 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn deep_let_nesting() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((a 1))\n\
+              (let ((b (+ a 1)))\n\
+                (let ((c (+ b 1)))\n\
+                  (let ((d (+ c 1)))\n\
+                    (+ a b c d)))))",
+        );
+        // 1+2+3+4 = 10
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn closure_capture_shared_cell() {
+        // Two closures share a mutable cell via setq
+        let (value, _) = execute(
+            "(let ((counter 0) (getter nil) (setter nil))\n\
+              (setq getter (lambda () counter))\n\
+              (setq setter (lambda (v) (setq counter v)))\n\
+              (funcall setter 42)\n\
+              (funcall getter))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
     #[test]
     fn recursive_lambda_closure() {
         // Lambda that captures itself via symbol to recurse
