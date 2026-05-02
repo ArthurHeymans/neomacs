@@ -687,6 +687,78 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
         "booleanp" => Some(bool_value(args[0].is_nil() || args[0].is_true())),
         "natnump" | "wholenump" => Some(bool_value(args[0].as_fixnum().is_some_and(|v| v >= 0))),
         "zerop" => Some(bool_value(args[0].as_fixnum() == Some(0))),
+        "1+" => Some(args[0].as_fixnum()
+            .map(|n| LispValue::expect_fixnum(n + 1))
+            .unwrap_or(LispValue::NIL)),
+        "1-" => Some(args[0].as_fixnum()
+            .map(|n| LispValue::expect_fixnum(n - 1))
+            .unwrap_or(LispValue::NIL)),
+        "number-sequence" => {
+            let from = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(0);
+            let to = args.get(1).and_then(|v| v.as_fixnum()).unwrap_or(0);
+            let sep = args.get(2).and_then(|v| v.as_fixnum()).unwrap_or(1);
+            if sep == 0 { return Some(LispValue::NIL); }
+            let mut items = Vec::new();
+            let mut cur = from;
+            if sep > 0 {
+                while cur <= to {
+                    items.push(LispValue::expect_fixnum(cur));
+                    cur += sep;
+                }
+            } else {
+                while cur >= to {
+                    items.push(LispValue::expect_fixnum(cur));
+                    cur += sep;
+                }
+            }
+            Some(make_list(rt, items))
+        }
+        "last" => {
+            let mut list = args[0];
+            let n = args.get(1).and_then(|v| v.as_fixnum()).unwrap_or(1) as usize;
+            if n == 0 { return Some(list); }
+            let len: usize = {
+                let mut count: usize = 0;
+                let mut cur = list;
+                while !cur.is_nil() {
+                    count += 1;
+                    cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+                }
+                count
+            };
+            let skip = len.saturating_sub(n);
+            for _ in 0..skip {
+                list = rt.cdr(list).unwrap_or(LispValue::NIL);
+            }
+            Some(list)
+        }
+        "butlast" => {
+            let list = args[0];
+            let n = args.get(1).and_then(|v| v.as_fixnum()).unwrap_or(1) as usize;
+            let mut items = Vec::new();
+            let mut cur = list;
+            let mut count = 0;
+            while !cur.is_nil() {
+                items.push(rt.car(cur).unwrap_or(LispValue::NIL));
+                cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+                count += 1;
+            }
+            if n >= count { return Some(LispValue::NIL); }
+            items.truncate(count - n);
+            Some(make_list(rt, items))
+        }
+        "delete" => {
+            let el = args[0];
+            let list = args[1];
+            let mut items = Vec::new();
+            let mut cur = list;
+            while !cur.is_nil() {
+                let car = rt.car(cur).unwrap_or(LispValue::NIL);
+                if car != el { items.push(car); }
+                cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+            }
+            Some(make_list(rt, items))
+        }
         "number-or-marker-p" => Some(bool_value(rt.is_number(args[0]))),
         "string-or-null-p" => Some(bool_value(rt.is_string(args[0]) || args[0].is_nil())),
         "type-of" => Some(type_of(rt, args[0])),
