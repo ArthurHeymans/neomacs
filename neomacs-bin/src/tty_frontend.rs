@@ -36,22 +36,6 @@ fn install_tty_resize_handler() {
     });
 }
 
-#[cfg(unix)]
-fn query_terminal_size_cells() -> Option<(u32, u32)> {
-    use std::mem::MaybeUninit;
-
-    unsafe {
-        let mut winsize = MaybeUninit::<libc::winsize>::uninit();
-        if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, winsize.as_mut_ptr()) == 0 {
-            let winsize = winsize.assume_init();
-            if winsize.ws_col > 0 && winsize.ws_row > 0 {
-                return Some((u32::from(winsize.ws_col), u32::from(winsize.ws_row)));
-            }
-        }
-    }
-    None
-}
-
 fn tty_resize_event_for_size(
     last_size: &mut Option<(u32, u32)>,
     current_size: Option<(u32, u32)>,
@@ -84,12 +68,12 @@ fn spawn_tty_resize_watcher(
     let handle = thread::Builder::new()
         .name("tty-resize-watch".to_string())
         .spawn(move || {
-            let mut last_size = query_terminal_size_cells();
+            let mut last_size = super::tty_init::query_terminal_size_cells();
             while !stop.load(Ordering::Relaxed) {
                 let signal_pending = TTY_RESIZE_PENDING.swap(false, Ordering::Relaxed);
                 if let Some(event) = tty_resize_event_for_size(
                     &mut last_size,
-                    query_terminal_size_cells(),
+                    super::tty_init::query_terminal_size_cells(),
                     signal_pending,
                 ) {
                     tracing::debug!("tty_resize: forwarding resize event {:?}", event);
@@ -385,6 +369,35 @@ impl TtyInputReader {
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
+    }
+}
+
+// ── TTY terminal host (suspend/resume/delete) ────────────────────────────
+
+/// Implements `TerminalHost` for the TTY frontend so the Lisp-level
+/// `suspend-tty`, `resume-tty`, and `delete-terminal` functions can
+/// send commands to the render thread.
+pub struct TtyTerminalHost {
+    pub cmd_tx: crossbeam_channel::Sender<RenderCommand>,
+}
+
+impl neovm_core::emacs_core::terminal::pure::TerminalHost for TtyTerminalHost {
+    fn suspend_tty(&mut self) -> Result<(), String> {
+        self.cmd_tx
+            .send(RenderCommand::SuspendTty)
+            .map_err(|err| format!("failed to suspend tty frontend: {err}"))
+    }
+
+    fn resume_tty(&mut self) -> Result<(), String> {
+        self.cmd_tx
+            .send(RenderCommand::ResumeTty)
+            .map_err(|err| format!("failed to resume tty frontend: {err}"))
+    }
+
+    fn delete_terminal(&mut self) -> Result<(), String> {
+        self.cmd_tx
+            .send(RenderCommand::Shutdown)
+            .map_err(|err| format!("failed to delete tty terminal frontend: {err}"))
     }
 }
 

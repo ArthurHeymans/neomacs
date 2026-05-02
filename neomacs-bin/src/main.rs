@@ -11,7 +11,9 @@
 
 mod args;
 mod input_bridge;
-mod tty_frontend;
+pub(crate) mod tty_frontend;
+pub(crate) mod tty_init;
+pub(crate) mod tty_layout;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -62,7 +64,7 @@ enum EarlyCliAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FrontendKind {
+pub(crate) enum FrontendKind {
     Gui,
     Tty,
 }
@@ -123,7 +125,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct StartupOptions {
+pub(crate) struct StartupOptions {
     frontend: FrontendKind,
     forwarded_args: Vec<String>,
     terminal_device: Option<String>,
@@ -640,8 +642,8 @@ fn bootstrap_display_config(frontend: FrontendKind) -> BootstrapDisplayConfig {
         },
         FrontendKind::Tty => BootstrapDisplayConfig {
             frontend,
-            color_cells: detect_tty_color_cells(),
-            background_mode: detect_tty_background_mode(),
+            color_cells: tty_init::detect_tty_color_cells(),
+            background_mode: tty_init::detect_tty_background_mode(),
         },
     }
 }
@@ -663,73 +665,6 @@ impl BootstrapDisplayConfig {
     }
 }
 
-fn detect_tty_type() -> Option<String> {
-    std::env::var("TERM").ok().filter(|value| !value.is_empty())
-}
-
-fn default_controlling_tty_name() -> &'static str {
-    #[cfg(windows)]
-    {
-        "CONOUT$"
-    }
-    #[cfg(not(windows))]
-    {
-        "/dev/tty"
-    }
-}
-
-fn detect_tty_name(_startup: &StartupOptions) -> String {
-    // GNU `init_display_interactive` calls `init_tty(NULL, TERM, ...)` for
-    // normal `-nw`; `init_tty` names that controlling terminal DEV_TTY, not
-    // `ttyname(0)`.  `-t` device handoff is still not implemented here, so the
-    // live Neomacs terminal remains the current controlling tty.
-    default_controlling_tty_name().to_string()
-}
-
-fn detect_tty_runtime(startup: &StartupOptions) -> TerminalRuntimeConfig {
-    TerminalRuntimeConfig::interactive(detect_tty_type(), detect_tty_color_cells())
-        .with_name(detect_tty_name(startup))
-}
-
-fn detect_tty_color_cells() -> i64 {
-    let colorterm = std::env::var("COLORTERM")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if colorterm.contains("truecolor") || colorterm.contains("24bit") {
-        return 16777216;
-    }
-
-    let term = std::env::var("TERM")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if term.is_empty() || term == "dumb" {
-        return 0;
-    }
-    if term.contains("256color") {
-        return 256;
-    }
-    8
-}
-
-fn detect_tty_background_mode() -> &'static str {
-    let Some(colorfgbg) = std::env::var("COLORFGBG").ok() else {
-        return "dark";
-    };
-    let Some(background) = colorfgbg
-        .split(';')
-        .next_back()
-        .and_then(|value| value.parse::<i32>().ok())
-    else {
-        return "dark";
-    };
-
-    if (7..=15).contains(&background) {
-        "light"
-    } else {
-        "dark"
-    }
-}
-
 fn startup_dimensions(frontend: FrontendKind, frame_metrics: BootstrapFrameMetrics) -> (u32, u32) {
     match frontend {
         FrontendKind::Gui => {
@@ -744,31 +679,10 @@ fn startup_dimensions(frontend: FrontendKind, frame_metrics: BootstrapFrameMetri
         FrontendKind::Tty => {
             // TTY frames use 1x1 character cells (GNU Emacs frame.c:1184-1185),
             // so frame dimensions are in character cells, not pixels.
-            let (cols, rows) = query_terminal_size_cells().unwrap_or((80, 25));
-            (cols as u32, rows as u32)
+            let (cols, rows) = tty_init::query_terminal_size_cells().unwrap_or((80, 25));
+            (cols, rows)
         }
     }
-}
-
-#[cfg(unix)]
-fn query_terminal_size_cells() -> Option<(u16, u16)> {
-    use std::mem::MaybeUninit;
-
-    unsafe {
-        let mut winsize = MaybeUninit::<libc::winsize>::uninit();
-        if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, winsize.as_mut_ptr()) == 0 {
-            let winsize = winsize.assume_init();
-            if winsize.ws_col > 0 && winsize.ws_row > 0 {
-                return Some((winsize.ws_col, winsize.ws_row));
-            }
-        }
-    }
-    None
-}
-
-#[cfg(not(unix))]
-fn query_terminal_size_cells() -> Option<(u16, u16)> {
-    None
 }
 
 enum FrontendHandle {
@@ -828,80 +742,6 @@ struct PrimaryWindowDisplayHost {
     primary_window_size: SharedPrimaryWindowSize,
     image_dimensions: SharedImageDimensions,
     resolved_images: Mutex<HashMap<ImageResolveRequest, ResolvedImage>>,
-}
-
-struct TtyTerminalHost {
-    cmd_tx: crossbeam_channel::Sender<RenderCommand>,
-}
-
-impl TerminalHost for TtyTerminalHost {
-    fn suspend_tty(&mut self) -> Result<(), String> {
-        self.cmd_tx
-            .send(RenderCommand::SuspendTty)
-            .map_err(|err| format!("failed to suspend tty frontend: {err}"))
-    }
-
-    fn resume_tty(&mut self) -> Result<(), String> {
-        self.cmd_tx
-            .send(RenderCommand::ResumeTty)
-            .map_err(|err| format!("failed to resume tty frontend: {err}"))
-    }
-
-    fn delete_terminal(&mut self) -> Result<(), String> {
-        self.cmd_tx
-            .send(RenderCommand::Shutdown)
-            .map_err(|err| format!("failed to delete tty terminal frontend: {err}"))
-    }
-}
-
-fn should_enable_live_tty_io(startup: &StartupOptions) -> bool {
-    startup.frontend == FrontendKind::Tty && !startup.noninteractive
-}
-
-fn maybe_install_tty_redisplay_callback(evaluator: &mut Context, startup: &StartupOptions) {
-    if !should_enable_live_tty_io(startup) {
-        return;
-    }
-
-    provide_lisp_feature(evaluator, "tty-child-frames");
-
-    let (cols, rows) = query_terminal_size_cells().unwrap_or((80, 25));
-    let mut tty_rif = neomacs_display_protocol::tty_rif::TtyRif::new(cols as usize, rows as usize);
-    // TTY frames use 1x1 character cell metrics (GNU Emacs
-    // frame.c:1184-1185). Drop the layout engine's cosmic-text
-    // FontMetricsService so char_advance,
-    // status_line_font_metrics, etc. fall back to the
-    // char-cell grid.
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().disable_cosmic_metrics();
-    });
-    evaluator.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
-        eval.setup_thread_locals();
-        if let Some((cols, rows)) = query_terminal_size_cells() {
-            let cols = usize::from(cols);
-            let rows = usize::from(rows);
-            if tty_rif.width() != cols || tty_rif.height() != rows {
-                tty_rif.resize(cols, rows);
-            }
-        }
-        if let Some((root, children)) = run_tty_layout_tree(eval) {
-            run_tty_rif_redisplay(&mut tty_rif, &root, &children);
-        }
-    }));
-}
-
-fn provide_lisp_feature(evaluator: &mut Context, feature: &str) {
-    let features = evaluator
-        .obarray()
-        .symbol_value("features")
-        .copied()
-        .unwrap_or(Value::NIL);
-    let feature_value = Value::symbol(feature);
-    let already_present = neovm_core::emacs_core::value::list_to_vec(&features)
-        .is_some_and(|items| items.into_iter().any(|item| item == feature_value));
-    if !already_present {
-        evaluator.set_variable("features", Value::cons(feature_value, features));
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1811,7 +1651,7 @@ fn run_gui_evaluator_worker(
 
     evaluator.init_input_system(input_rx, emacs_comms.wakeup_read_fd);
 
-    LAYOUT_ENGINE.with(|engine| {
+    tty_layout::LAYOUT_ENGINE.with(|engine| {
         engine.borrow_mut().enable_cosmic_metrics();
     });
     let frame_tx = emacs_comms.frame_tx;
@@ -1972,9 +1812,9 @@ pub fn run(mode: RuntimeMode) {
     let mut evaluator = create_startup_evaluator_for_mode(mode, &startup);
     evaluator.setup_thread_locals();
     evaluator.set_max_depth(1600);
-    if should_enable_live_tty_io(&startup) {
+    if tty_init::should_enable_live_tty_io(&startup) {
         reset_terminal_host();
-        configure_terminal_runtime(detect_tty_runtime(&startup));
+        configure_terminal_runtime(tty_init::detect_tty_runtime(&startup));
     } else {
         reset_terminal_host();
         reset_terminal_runtime();
@@ -2003,8 +1843,8 @@ pub fn run(mode: RuntimeMode) {
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
-    if should_enable_live_tty_io(&startup) {
-        set_terminal_host(Box::new(TtyTerminalHost {
+    if tty_init::should_enable_live_tty_io(&startup) {
+        set_terminal_host(Box::new(tty_frontend::TtyTerminalHost {
             cmd_tx: emacs_comms.cmd_tx.clone(),
         }));
     }
@@ -2018,7 +1858,7 @@ pub fn run(mode: RuntimeMode) {
     } else {
         // Single-thread TTY path: terminal init here, rendering via TtyRif
         // on the evaluator thread, input reader on a background thread.
-        tty_init_terminal();
+        tty_init::tty_init_terminal();
         let input_reader = tty_frontend::TtyInputReader::spawn(render_comms);
         tracing::info!("TTY frontend spawned (TtyRif single-thread redisplay)");
         FrontendHandle::TtyRifInput(input_reader)
@@ -2074,7 +1914,7 @@ pub fn run(mode: RuntimeMode) {
     }
 
     // 8. Set up redisplay callback (layout engine + TTY RIF render).
-    maybe_install_tty_redisplay_callback(&mut evaluator, &startup);
+    tty_layout::install_tty_redisplay_callback(&mut evaluator, &startup);
 
     // Add undo boundary after startup so initial content isn't undoable
     if let Some(buf) = evaluator.buffer_manager_mut().current_buffer_mut() {
@@ -2101,8 +1941,8 @@ pub fn run(mode: RuntimeMode) {
         .cmd_tx
         .try_send(neomacs_display_runtime::thread_comm::RenderCommand::Shutdown);
     frontend.join();
-    if should_enable_live_tty_io(&startup) {
-        tty_shutdown_terminal();
+    if tty_init::should_enable_live_tty_io(&startup) {
+        tty_init::tty_shutdown_terminal();
     }
     log_clean_process_exit(process_started_at, &process_args);
 
@@ -2129,87 +1969,14 @@ fn log_clean_process_exit(started_at: Instant, args: &[OsString]) {
 // ---------------------------------------------------------------------------
 
 /// Saved original termios for the TtyRif path. Stored globally so
-/// `tty_shutdown_terminal` can restore it even from a panic handler.
+/// `tty_init::tty_shutdown_terminal` can restore it even from a panic handler.
 #[cfg(unix)]
-static TTY_SAVED_TERMIOS: std::sync::Mutex<Option<libc::termios>> = std::sync::Mutex::new(None);
 
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
-#[cfg(unix)]
-fn tty_init_terminal() {
-    use std::io::Write;
-    use std::mem::MaybeUninit;
-
-    unsafe {
-        let mut original = MaybeUninit::<libc::termios>::uninit();
-        if libc::tcgetattr(libc::STDIN_FILENO, original.as_mut_ptr()) != 0 {
-            tracing::error!("tty_init_terminal: tcgetattr failed");
-            return;
-        }
-        let original = original.assume_init();
-
-        // Save for later restore
-        if let Ok(mut guard) = TTY_SAVED_TERMIOS.lock() {
-            *guard = Some(original);
-        }
-
-        let mut raw = original;
-        // Input: no break, no CR->NL, no parity, no strip, no start/stop
-        raw.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
-        // Output: disable post-processing
-        raw.c_oflag &= !libc::OPOST;
-        // Control: 8-bit chars
-        raw.c_cflag |= libc::CS8;
-        // Local: no echo, no canonical, no signals, no extended
-        raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::ISIG | libc::IEXTEN);
-        // Non-blocking reads
-        raw.c_cc[libc::VMIN] = 0;
-        raw.c_cc[libc::VTIME] = 0;
-
-        if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &raw) != 0 {
-            tracing::error!("tty_init_terminal: tcsetattr failed");
-            return;
-        }
-    }
-
-    // Enter alternate screen, hide cursor, clear
-    let mut stdout = std::io::stdout();
-    let _ = stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[2J");
-    let _ = stdout.flush();
-    tracing::info!("TTY terminal initialized (raw mode + alt screen)");
-}
-
-#[cfg(not(unix))]
-fn tty_init_terminal() {
-    tracing::warn!("tty_init_terminal: not implemented on this platform");
-}
 
 /// Restore the terminal to its original state: show cursor, leave alt screen,
 /// reset SGR, restore saved termios.
-#[cfg(unix)]
-fn tty_shutdown_terminal() {
-    use std::io::Write;
-
-    // Show cursor, reset SGR, leave alternate screen
-    let mut stdout = std::io::stdout();
-    let _ = stdout.write_all(b"\x1b[0m\x1b[?25h\x1b[?1049l");
-    let _ = stdout.flush();
-
-    // Restore termios
-    if let Ok(guard) = TTY_SAVED_TERMIOS.lock() {
-        if let Some(ref original) = *guard {
-            unsafe {
-                let _ = libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, original);
-            }
-        }
-    }
-    tracing::info!("TTY terminal restored");
-}
-
-#[cfg(not(unix))]
-fn tty_shutdown_terminal() {
-    tracing::warn!("tty_shutdown_terminal: not implemented on this platform");
-}
 
 fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
     // Logging is already initialized by `run()` before this function is
@@ -2715,7 +2482,7 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
         FrontendKind::Tty => {
             eval.set_variable("window-system", Value::NIL);
             eval.set_variable("initial-window-system", Value::NIL);
-            if should_enable_live_tty_io(startup) {
+            if tty_init::should_enable_live_tty_io(startup) {
                 seed_live_tty_frame_parameters(eval, frame_id, startup);
             }
             (Value::make_frame(frame_id.0), Value::NIL, Value::NIL)
@@ -2740,8 +2507,8 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
 }
 
 fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup: &StartupOptions) {
-    let tty_name = detect_tty_name(startup);
-    let tty_type = detect_tty_type();
+    let tty_name = tty_init::detect_tty_name(startup);
+    let tty_type = tty_init::detect_tty_type();
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         frame.set_parameter(Value::symbol("tty"), Value::string(tty_name));
         if let Some(tty_type) = tty_type {
@@ -2936,13 +2703,6 @@ fn ensure_dir_string(path: &Path) -> String {
     dir
 }
 
-fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
-    evaluator
-        .frame_manager()
-        .selected_frame()
-        .map(|frame| frame.id)
-}
-
 fn publish_gui_frame(
     evaluator: &mut Context,
     frame_tx: &crossbeam_channel::Sender<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
@@ -2950,13 +2710,13 @@ fn publish_gui_frame(
 ) {
     evaluator.setup_thread_locals();
     sync_selected_gui_chrome_state(evaluator);
-    run_layout(evaluator);
+    tty_layout::run_layout(evaluator);
     sync_live_gui_frame_titles(evaluator);
 
     // Take the complete FrameDisplayState produced by the layout engine's
     // GlyphMatrixBuilder and hand it to the render thread.
-    let display_state =
-        LAYOUT_ENGINE.with(|engine| engine.borrow_mut().last_frame_display_state.take());
+    let display_state = tty_layout::LAYOUT_ENGINE
+        .with(|engine| engine.borrow_mut().last_frame_display_state.take());
     let Some(display_state) = display_state else {
         return;
     };
@@ -2964,111 +2724,6 @@ fn publish_gui_frame(
         if let Some(waker) = render_waker {
             waker.wake();
         }
-    }
-}
-
-thread_local! {
-    // Start without font metrics to avoid the ~500ms cosmic-text
-    // font database scan on first access. The GUI path enables
-    // cosmic metrics explicitly; the TTY path leaves it as None.
-    static LAYOUT_ENGINE: std::cell::RefCell<neomacs_display_runtime::layout::LayoutEngine> =
-        std::cell::RefCell::new(neomacs_display_runtime::layout::LayoutEngine::new_without_font_metrics());
-}
-
-/// Run the layout engine on the selected live frame.
-fn run_layout(evaluator: &mut Context) {
-    let Some(frame_id) = current_layout_frame_id(evaluator) else {
-        tracing::warn!("run_layout: no selected live frame");
-        return;
-    };
-
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().layout_frame_rust(evaluator, frame_id);
-    });
-}
-
-fn layout_frame_display_state(
-    evaluator: &mut Context,
-    frame_id: FrameId,
-) -> Option<neomacs_display_protocol::glyph_matrix::FrameDisplayState> {
-    LAYOUT_ENGINE.with(|engine| {
-        let mut engine = engine.borrow_mut();
-        engine.layout_frame_rust(evaluator, frame_id);
-        engine.last_frame_display_state.take()
-    })
-}
-
-fn frame_origin_in_root(evaluator: &Context, frame_id: FrameId) -> (f32, f32) {
-    let mut x = 0_i64;
-    let mut y = 0_i64;
-    let mut current = Some(frame_id);
-    let mut seen = std::collections::HashSet::new();
-    while let Some(fid) = current {
-        if !seen.insert(fid) {
-            break;
-        }
-        let Some(frame) = evaluator.frame_manager().get(fid) else {
-            break;
-        };
-        x += frame.left_pos;
-        y += frame.top_pos;
-        current = evaluator.frame_manager().frame_parent_id(fid);
-    }
-    (x as f32, y as f32)
-}
-
-fn run_tty_layout_tree(
-    evaluator: &mut Context,
-) -> Option<(
-    neomacs_display_protocol::glyph_matrix::FrameDisplayState,
-    Vec<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
-)> {
-    let selected = current_layout_frame_id(evaluator)?;
-    let root_id = evaluator
-        .frame_manager()
-        .root_frame_id(selected)
-        .unwrap_or(selected);
-    let frame_order = evaluator
-        .frame_manager()
-        .frames_in_reverse_z_order(root_id, true);
-
-    let mut root_state = layout_frame_display_state(evaluator, root_id)?;
-    root_state.parent_id = 0;
-    root_state.parent_x = 0.0;
-    root_state.parent_y = 0.0;
-
-    let mut child_states = Vec::new();
-    for frame_id in frame_order {
-        if frame_id == root_id {
-            continue;
-        }
-        let Some(mut state) = layout_frame_display_state(evaluator, frame_id) else {
-            continue;
-        };
-        let (x, y) = frame_origin_in_root(evaluator, frame_id);
-        state.parent_id = root_state.frame_id;
-        state.parent_x = x;
-        state.parent_y = y;
-        child_states.push(state);
-    }
-
-    Some((root_state, child_states))
-}
-
-/// Rasterize the display state into a `TtyRif` and write ANSI output to stdout.
-fn run_tty_rif_redisplay(
-    tty_rif: &mut neomacs_display_protocol::tty_rif::TtyRif,
-    root: &neomacs_display_protocol::glyph_matrix::FrameDisplayState,
-    children: &[neomacs_display_protocol::glyph_matrix::FrameDisplayState],
-) {
-    tty_rif.rasterize_frame_tree(root, children);
-    tty_rif.diff_and_render();
-    let output = tty_rif.take_output();
-    tracing::debug!("tty_rif: output {} bytes", output.len());
-    if !output.is_empty() {
-        use std::io::Write;
-        let _ = std::io::stdout().write_all(&output);
-        let _ = std::io::stdout().flush();
     }
 }
 
