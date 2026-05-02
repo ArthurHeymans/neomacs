@@ -1203,6 +1203,11 @@ impl Expander {
         // Explicit while/until conditions
         while_tests.extend(while_conds);
 
+        // always/never short-circuit: stop the loop when the flag becomes nil
+        if has_always_never {
+            while_tests.push(symbol_form("--cl-always--", span));
+        }
+
         let while_test = if while_tests.is_empty() {
             symbol_form("t", span)
         } else if while_tests.len() == 1 {
@@ -2558,5 +2563,28 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(cl-loop)",
         );
         assert_eq!(artifact.diagnostics, Vec::new());
+    }
+
+    #[test]
+    fn cl_loop_always_short_circuit() {
+        let artifact = compile_source(
+            "cl-loop-always.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3) always (> x 0))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"--cl-always--\""), "should have --cl-always-- flag for always clause");
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_never_short_circuit() {
+        let artifact = compile_source(
+            "cl-loop-never.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3) never (< x 0))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"--cl-always--\""), "never clause should use --cl-always-- flag");
     }
 }

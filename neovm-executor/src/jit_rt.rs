@@ -430,17 +430,6 @@ impl JitExceptionState {
 /// Checked by compiled code after each potentially-throwing call.
 const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
 
-fn check_exception(rt: &Runtime, result: LispValue) -> Option<LispValue> {
-    JIT_EXCEPTION_STATE.with(|state| {
-        let state = state.borrow();
-        if state.pending_throw.is_some() || state.pending_signal.is_some() {
-            None
-        } else {
-            Some(result)
-        }
-    })
-}
-
 fn has_pending_exception() -> bool {
     JIT_EXCEPTION_STATE.with(|state| {
         let state = state.borrow();

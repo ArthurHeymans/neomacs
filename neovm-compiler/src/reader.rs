@@ -243,6 +243,19 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                 continue;
             }
         }
+        // Case 6: #x, #o, #b numeric literals.
+        // These are lexed as Symbol("#x1f") etc. Convert to Int/Float.
+        if let TokenKind::Symbol(ref name) = tok.kind {
+            if let Some(value) = try_parse_hash_number(name) {
+                tokens.push(Token {
+                    kind: TokenKind::Int(value),
+                    span: tok.span,
+                    text: name.clone(),
+                });
+                i += 1;
+                continue;
+            }
+        }
         tokens.push(raw_tokens[i].clone());
         i += 1;
     }
@@ -374,6 +387,24 @@ fn parse_float(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<f64> {
 
 fn parse_int(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<i64> {
     lexer.slice().parse().ok()
+}
+
+/// Try to parse #x (hex), #o (octal), #b (binary) numeric literals.
+fn try_parse_hash_number(name: &str) -> Option<i64> {
+    let rest = name.strip_prefix('#')?;
+    let (prefix, digits) = if let Some(d) = rest.strip_prefix('x').or_else(|| rest.strip_prefix('X')) {
+        (16, d)
+    } else if let Some(d) = rest.strip_prefix('o').or_else(|| rest.strip_prefix('O')) {
+        (8, d)
+    } else if let Some(d) = rest.strip_prefix('b').or_else(|| rest.strip_prefix('B')) {
+        (2, d)
+    } else {
+        return None;
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    i64::from_str_radix(digits, prefix).ok()
 }
 
 fn decode_escapes(body: &str) -> String {
@@ -775,7 +806,11 @@ impl SurfaceExtractor<'_> {
         let text = token.text();
         let atom = match token.kind() {
             SyntaxKind::Symbol => SurfaceAtom::symbol(text),
-            SyntaxKind::Int => SurfaceAtom::Int(text.parse().ok()?),
+            SyntaxKind::Int => {
+                // Text may be a #x/#o/#b literal that doesn't parse directly.
+                let value = text.parse::<i64>().ok().or_else(|| try_parse_hash_number(text))?;
+                SurfaceAtom::Int(value)
+            }
             SyntaxKind::Float => SurfaceAtom::Float(text.parse().ok()?),
             SyntaxKind::String => SurfaceAtom::String(decode_escapes(&text[1..text.len() - 1])),
             SyntaxKind::Char => SurfaceAtom::Char(parse_char_code(text)?),
@@ -1003,5 +1038,43 @@ mod tests {
         let output = read("'\\,");  // Rust raw string: ' \ ,
         assert_eq!(output.diagnostics, Vec::new());
         assert_eq!(output.forms.len(), 1);
+    }
+
+    #[test]
+    fn reads_hash_hex_octal_binary_literals() {
+        let output = read("#x1f #o37 #b11111");
+        assert_eq!(output.diagnostics, Vec::new());
+        assert_eq!(output.forms.len(), 3);
+        assert_eq!(
+            output.forms[0].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(31))
+        );
+        assert_eq!(
+            output.forms[1].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(31))
+        );
+        assert_eq!(
+            output.forms[2].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(31))
+        );
+    }
+
+    #[test]
+    fn reads_hash_hex_uppercase_prefix() {
+        let output = read("#XFF #O17 #B1010");
+        assert_eq!(output.diagnostics, Vec::new());
+        assert_eq!(output.forms.len(), 3);
+        assert_eq!(
+            output.forms[0].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(255))
+        );
+        assert_eq!(
+            output.forms[1].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(15))
+        );
+        assert_eq!(
+            output.forms[2].kind,
+            SurfaceKind::Atom(SurfaceAtom::Int(10))
+        );
     }
 }

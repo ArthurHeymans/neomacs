@@ -211,6 +211,7 @@ pub fn lower_expanded_forms(
         lexical_binding,
         scopes: Vec::new(),
         special_scopes: Vec::new(),
+        declared_special: IndexSet::new(),
         diagnostics: Vec::new(),
     };
     let mut items = Vec::new();
@@ -233,6 +234,9 @@ struct Lowerer<'a> {
     lexical_binding: bool,
     scopes: Vec<IndexSet<String>>,
     special_scopes: Vec<IndexSet<String>>,
+    /// Variables declared special by defvar/defconst at top level. Persists
+    /// for the rest of the file, unlike special_scopes which are scoped.
+    declared_special: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -1013,6 +1017,13 @@ impl Lowerer<'_> {
                             },
                             span: form.span,
                         },
+                        // After the loop, set var to nil per Emacs spec.
+                        assign_expr(
+                            spec[0].symbol_name().unwrap_or("").to_string(),
+                            var_mode,
+                            nil_expr(form.span),
+                            form.span,
+                        ),
                         result,
                     ]),
                     span: form.span,
@@ -1194,6 +1205,8 @@ impl Lowerer<'_> {
             // Non-symbol name (e.g., backquote remnant) — evaluate as progn
             return self.lower_progn(form, tail);
         };
+        // Register the variable as dynamically scoped for the rest of the file.
+        self.declared_special.insert(name.clone());
         let quoted_name = quote_symbol_expr(&name, tail[0].span);
         let Some(init_form) = tail.get(1) else {
             return Some(quoted_name);
@@ -1241,6 +1254,8 @@ impl Lowerer<'_> {
             self.error(tail[0].span, "defconst variable name must be a symbol");
             return None;
         };
+        // Register the variable as dynamically scoped for the rest of the file.
+        self.declared_special.insert(name.clone());
         let quoted_name = quote_symbol_expr(&name, tail[0].span);
         let init = self.lower_expr(&tail[1])?;
         Some(HirExpr {
@@ -1702,6 +1717,7 @@ impl Lowerer<'_> {
             .iter()
             .rev()
             .any(|scope| scope.contains(name))
+            || self.declared_special.contains(name)
     }
 
     fn binding_mode_for(&self, name: &str) -> BindingMode {
@@ -2163,5 +2179,40 @@ mod tests {
         };
         assert!(matches!(args[0].kind, HirExprKind::LexicalGet(_)));
         assert!(matches!(args[1].kind, HirExprKind::LexicalGet(_)));
+    }
+
+    #[test]
+    fn defvar_registers_variable_as_special() {
+        // defvar makes the variable special. In a subsequent let* form, references to
+        // my-var should be SymbolGet (dynamic), not LexicalGet.
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(progn (defvar my-var 42) (let ((x my-var)) x))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Progn(exprs) = &expr.kind else {
+            panic!("expected progn");
+        };
+        // exprs[1] is the let form. Its binding init should reference my-var as SymbolGet.
+        let rendered = format!("{:?}", exprs[1].kind);
+        assert!(rendered.contains("SymbolGet"), "my-var should be SymbolGet (dynamic) after defvar, got: {rendered}");
+    }
+
+    #[test]
+    fn dolist_sets_var_to_nil_after_loop() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n(dolist (x (list 1 2 3)) (message \"%d\" x))");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr");
+        };
+        let HirExprKind::Let { body, .. } = &expr.kind else {
+            panic!("expected let");
+        };
+        let HirExprKind::Progn(parts) = &body.kind else {
+            panic!("expected progn body");
+        };
+        // After the while loop, there should be a setq setting x to nil
+        // Structure: [while, setq(x, nil), result]
+        assert!(parts.len() >= 2, "dolist should have while + setq nil + result");
+        let rendered = format!("{:?}", parts[1].kind);
+        assert!(rendered.contains("Nil"), "second body expr after while should set var to nil, got: {rendered}");
     }
 }

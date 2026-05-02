@@ -1448,14 +1448,6 @@ impl Interpreter<'_, '_, '_> {
         result.value
     }
 
-    fn catch_throw(&mut self, thrown: ThrownValue) -> Result<LispValue, ThrownValue> {
-        let Some(index) = self.catch_stack.iter().rposition(|tag| *tag == thrown.tag) else {
-            return Err(thrown);
-        };
-        self.catch_stack.truncate(index);
-        Ok(thrown.value)
-    }
-
     fn enter_condition_handler(
         &mut self,
         instructions: &[RegInst],
@@ -2424,10 +2416,6 @@ impl Interpreter<'_, '_, '_> {
             diagnostics: self.diagnostics,
         }
     }
-}
-
-fn find_catch_end(instructions: &[RegInst], start_index: usize) -> Option<usize> {
-    find_catch_end_at_depth(instructions, start_index, 1)
 }
 
 /// Find the Nth CatchEnd instruction (at the outermost nesting level) starting
