@@ -88,3 +88,38 @@ fn scratch_self_insert_ret_creates_three_visible_lines() {
         "Neomacs scratch buffer contents"
     );
 }
+
+#[test]
+fn electric_return_newline_and_indent_in_lisp_buffer() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "electric-ret.el",
+        "(defun my-fn ()\n  (message \"hello\"))\n",
+        "C-x C-f",
+    );
+
+    // Go to end of second line (after the closing paren), press RET
+    send_both(&mut gnu, &mut neo, "C-e RET");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    // Both should have auto-indented the new line
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let has_indent = grid.iter().any(|row| row.starts_with("  ") && row.trim().is_empty());
+        assert!(
+            has_indent || grid.iter().any(|row| row.trim().starts_with("(message")),
+            "{label}: after RET, should auto-indent or preserve code structure\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "electric_return_newline_and_indent_in_lisp_buffer",
+        &gnu,
+        &neo,
+        2,
+    );
+}

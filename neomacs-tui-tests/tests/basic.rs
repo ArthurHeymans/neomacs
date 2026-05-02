@@ -514,3 +514,46 @@ fn save_buffers_kill_terminal_prompts_for_modified_file_buffer_via_cx_cc() {
         2,
     );
 }
+
+#[test]
+fn disabled_command_shows_prompt_and_accepts_with_space() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // C-x C-l (downcase-region) is disabled by default
+    send_both(&mut gnu, &mut neo, "C-x C-l");
+
+    let disabled_prompt = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("disabled command")
+                || row.contains("disabled")
+                    && row.contains("downcase-region")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), disabled_prompt);
+    neo.read_until(Duration::from_secs(8), disabled_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    // Both should show the disabled command prompt
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| {
+                row.contains("disabled")
+                    && (row.contains("downcase-region") || row.contains("downcase"))
+            }),
+            "{label}: should show disabled command prompt for C-x C-l\n{}",
+            grid.join("\n")
+        );
+    }
+
+    // Accept with SPC — the command should execute
+    send_both(&mut gnu, &mut neo, "SPC");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    assert_pair_nearly_matches(
+        "disabled_command_shows_prompt_and_accepts_with_space",
+        &gnu,
+        &neo,
+        2,
+    );
+}
