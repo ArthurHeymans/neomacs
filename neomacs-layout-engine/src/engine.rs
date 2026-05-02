@@ -5680,7 +5680,11 @@ impl LayoutEngine {
         builder.set_faces(face_map);
 
         let default_face = content.faces.first();
-        let default_size = default_face.map(|f| f.font_size).unwrap_or(12.0);
+        // Face.font_size is in points (matching GNU Emacs).  Convert to
+        // physical pixels via fontconfig DPI, same as GNU's POINT_TO_PIXEL.
+        let default_size = crate::fontconfig::points_to_pixels(
+            default_face.map(|f| f.font_size).unwrap_or(12.0),
+        );
         let default_family = default_face
             .map(|f| f.font_family.as_str())
             .unwrap_or("monospace");

@@ -128,20 +128,21 @@ fn run_gui(demo: &str) {
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
-    let logical_size = 12.0f32;
+    // Face.font_size is in points; GNU's POINT_TO_PIXEL via fontconfig DPI.
+    let font_size_px = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.char_width('m', family, 400, false, logical_size).max(1.0)
+        fm.char_width('m', family, 400, false, font_size_px).max(1.0)
     };
     let char_h = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.font_metrics(family, 400, false, logical_size)
+        fm.font_metrics(family, 400, false, font_size_px)
             .line_height
             .max(1.0)
     };
     tracing::info!(
-        "mock-display gui: font_size={:.1} family={} char_w={:.1} char_h={:.1}",
-        logical_size, family, char_w, char_h
+        "mock-display gui: font_size_px={:.1} family={} char_w={:.1} char_h={:.1}",
+        font_size_px, family, char_w, char_h
     );
     let pixel_w = (cols as f32 * char_w) as u32;
     let pixel_h = (rows as f32 * char_h) as u32;

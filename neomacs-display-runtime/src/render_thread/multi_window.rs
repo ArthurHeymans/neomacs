@@ -12,7 +12,7 @@ use winit::window::{Window, WindowId};
 
 use super::child_frames::ChildFrameManager;
 use super::state::{
-    effective_window_scale_factor, guess_initial_scale_factor, window_size_from_emacs_pixels,
+    effective_window_scale_factor, window_size_from_emacs_pixels,
 };
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
@@ -137,7 +137,6 @@ impl MultiWindowManager {
                 .with_inner_size(window_size_from_emacs_pixels(
                     req.width,
                     req.height,
-                    guess_initial_scale_factor(Some(event_loop)),
                 ))
                 .with_transparent(true);
 

@@ -39,30 +39,6 @@ pub(super) fn backend_uses_winit_logical_pixels() -> bool {
     }
 }
 
-/// Guess the desktop scale factor before a window is created.
-///
-/// On X11 we need to pre-scale the window because winit uses physical
-/// pixels and won't scale it for us (unlike Wayland where the compositor
-/// tells the app the logical size).  Ask the hardware first (XRandR via
-/// winit's available_monitors), then fall back to desktop env vars.
-pub(super) fn guess_initial_scale_factor(
-    event_loop: Option<&winit::event_loop::ActiveEventLoop>,
-) -> f64 {
-    if !backend_uses_winit_logical_pixels() {
-        // Explicit env vars take priority — the user set them intentionally.
-        for var in &["GDK_SCALE", "QT_SCALE_FACTOR"] {
-            if let Ok(val) = std::env::var(var) {
-                if let Ok(s) = val.parse::<f64>() {
-                    if s > 0.0 {
-                        return s;
-                    }
-                }
-            }
-        }
-    }
-    1.0
-}
-
 pub(super) fn effective_window_scale_factor(raw_scale_factor: f64) -> f64 {
     // On X11 fontconfig already handles DPI — the font metrics returned are
     // already scaled for the display.  Only Wayland needs us to apply the
@@ -74,16 +50,14 @@ pub(super) fn effective_window_scale_factor(raw_scale_factor: f64) -> f64 {
     }
 }
 
-pub(super) fn window_size_from_emacs_pixels(width: u32, height: u32, guessed_scale: f64) -> Size {
+pub(super) fn window_size_from_emacs_pixels(width: u32, height: u32) -> Size {
     if backend_uses_winit_logical_pixels() {
         Size::Logical(LogicalSize::new(width as f64, height as f64))
     } else {
-        // X11: winit uses physical pixels.  Pre-scale so the window
-        // looks normal-sized on HiDPI displays.
-        Size::Physical(PhysicalSize::new(
-            (width as f64 * guessed_scale).round() as u32,
-            (height as f64 * guessed_scale).round() as u32,
-        ))
+        // X11: physical pixels as-is, matching GNU Emacs.  fontconfig DPI
+        // already scales font sizes, so window dimensions are already at
+        // the correct physical size.
+        Size::Physical(PhysicalSize::new(width, height))
     }
 }
 
