@@ -907,3 +907,73 @@ fn lookup_key_global_map_returns_correct_binding() {
         );
     }
 }
+
+// ── Hash table tests ────────────────────────────────────────
+
+#[test]
+fn hash_table_operations_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (make-hash-table) should create a hash table
+    support::eval_expression(&mut gnu, &mut neo, "(hash-table-p (make-hash-table))");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: (hash-table-p (make-hash-table)) should be t. Echo: {echo}"
+        );
+    }
+
+    // (gethash 'key (make-hash-table)) should be nil
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(gethash 'key (make-hash-table))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("nil"),
+            "{label}: (gethash 'key (make-hash-table)) should be nil. Echo: {echo}"
+        );
+    }
+}
+
+// ── Sequence tests ──────────────────────────────────────────
+
+#[test]
+fn sequence_operations_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (length [1 2 3]) should be 3
+    support::eval_expression(&mut gnu, &mut neo, "(length [1 2 3])");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('3'),
+            "{label}: (length [1 2 3]) should be 3. Echo: {echo}"
+        );
+    }
+
+    // (aref [1 2 3] 0) should be 1
+    support::eval_expression(&mut gnu, &mut neo, "(aref [1 2 3] 0)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('1'),
+            "{label}: (aref [1 2 3] 0) should be 1. Echo: {echo}"
+        );
+    }
+}
