@@ -1642,7 +1642,17 @@ impl Expander {
         let mut clauses = Vec::new();
         let mut pos = 0;
         while pos < items.len() {
-            let keyword = items[pos].symbol_name()?;
+            // Non-keyword forms at the top level are treated as implicit do body
+            let keyword = match items[pos].symbol_name() {
+                Some(kw) => kw,
+                None => {
+                    // Implicit do: treat this form as a body expression
+                    let body_form = items[pos].clone();
+                    pos += 1;
+                    clauses.push(LoopClause::Do { body: vec![body_form] });
+                    continue;
+                }
+            };
             match keyword {
                 "for" => {
                     pos += 1;
@@ -1677,6 +1687,24 @@ impl Expander {
                     pos += 1;
                     if pos >= items.len() { return None; }
                     clauses.push(LoopClause::Count { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "minimize" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Minimize { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "maximize" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Maximize { expr: items[pos].clone() });
+                    pos += 1;
+                }
+                "thereis" => {
+                    pos += 1;
+                    if pos >= items.len() { return None; }
+                    clauses.push(LoopClause::Thereis { expr: items[pos].clone() });
                     pos += 1;
                 }
                 "do" => {
@@ -1787,8 +1815,10 @@ impl Expander {
                     pos += 1;
                 }
                 _ => {
-                    // Unknown keyword — skip it
+                    // Unknown keyword — treat as implicit do body expression
+                    let body_form = items[pos].clone();
                     pos += 1;
+                    clauses.push(LoopClause::Do { body: vec![body_form] });
                 }
             }
         }
