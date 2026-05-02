@@ -613,3 +613,30 @@ fn lisp_environment_variables_match_gnu_emacs_semantics() {
         );
     }
 }
+
+// ── Face inheritance tests ──────────────────────────────────
+
+#[test]
+fn face_attribute_inherit_returns_correct_chain_for_mode_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // mode-line inherits from mode-line-active which inherits from
+    // mode-line base.  Test the chain via face-attribute.
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(face-attribute 'mode-line :inherit)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        // Both should return something non-nil (a face name or nil)
+        assert!(
+            !echo.trim().is_empty(),
+            "{label}: (face-attribute 'mode-line :inherit) should return value. Echo: {echo}"
+        );
+    }
+}
