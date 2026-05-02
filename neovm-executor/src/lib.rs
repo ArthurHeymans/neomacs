@@ -4,7 +4,7 @@ mod object_interp;
 pub mod runtime;
 pub mod value;
 mod jit_rt;
-mod jit_interp;
+pub mod jit_interp;
 
 pub use neovm_compiler::CompileArtifact;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
