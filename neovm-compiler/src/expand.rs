@@ -223,6 +223,7 @@ impl Expander {
                     nil_form(span)
                 }
             }
+            "destructuring-bind" => self.expand_destructuring_bind(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -617,6 +618,135 @@ impl Expander {
         self.diagnostics
             .push(Diagnostic::error(message.into()).with_span(span));
     }
+
+    fn expand_destructuring_bind(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (destructuring-bind pattern expr body...)
+        if items.len() < 4 {
+            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+        let pattern = &items[1];
+        let expr = &items[2];
+        let body: Vec<SurfaceForm> = items[3..].to_vec();
+        let expanded = self.destructure_pattern(pattern, expr.clone(), body, span, 0);
+        self.expand_form(expanded)
+    }
+
+    fn destructure_pattern(
+        &self,
+        pattern: &SurfaceForm,
+        expr: SurfaceForm,
+        body: Vec<SurfaceForm>,
+        span: Span,
+        depth: usize,
+    ) -> SurfaceForm {
+        match &pattern.kind {
+            SurfaceKind::Atom(atom) => {
+                if let Some(name) = match atom {
+                    SurfaceAtom::Symbol(s) => Some(s.as_str()),
+                    SurfaceAtom::Nil => Some("nil"),
+                    SurfaceAtom::True => Some("t"),
+                    _ => None,
+                } {
+                    if name == "nil" || name == "_" {
+                        let mut forms = vec![expr];
+                        forms.extend(body);
+                        return list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span);
+                    }
+                    let binding = list_form(vec![symbol_form(name, pattern.span), expr], pattern.span);
+                    let mut result = vec![symbol_form("let", span), list_form(vec![binding], span)];
+                    result.extend(body);
+                    list_form(result, span)
+                } else {
+                    let mut forms = vec![expr];
+                    forms.extend(body);
+                    list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+                }
+            }
+            SurfaceKind::Quote(_) | SurfaceKind::FunctionQuote(_) => {
+                let mut forms = vec![expr];
+                forms.extend(body);
+                list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+            }
+            SurfaceKind::List(patterns) => {
+                self.destructure_list_pattern(patterns, expr, body, span, depth)
+            }
+            _ => {
+                let mut forms = vec![expr];
+                forms.extend(body);
+                list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+            }
+        }
+    }
+
+    fn destructure_list_pattern(
+        &self,
+        patterns: &[SurfaceForm],
+        expr: SurfaceForm,
+        body: Vec<SurfaceForm>,
+        span: Span,
+        depth: usize,
+    ) -> SurfaceForm {
+        let tmp = symbol_form(&format!("\0dsb.{}.{}", depth, span.start), span);
+
+        let mut required: Vec<SurfaceForm> = Vec::new();
+        let mut optional: Vec<SurfaceForm> = Vec::new();
+        let mut rest_pattern: Option<SurfaceForm> = None;
+
+        let mut mode = 0;
+        for pat in patterns {
+            if let Some(name) = pat.symbol_name() {
+                if name == "&optional" { mode = 1; continue; }
+                if name == "&rest" { mode = 2; continue; }
+            }
+            match mode {
+                0 => required.push(pat.clone()),
+                1 => optional.push(pat.clone()),
+                2 => { rest_pattern = Some(pat.clone()); mode = 3; }
+                _ => {}
+            }
+        }
+
+        let mut bindings = vec![list_form(vec![tmp.clone(), expr], span)];
+        let mut current_list = tmp.clone();
+
+        for (i, pat) in required.iter().enumerate() {
+            let car_form = list_form(vec![symbol_form("car", span), current_list.clone()], span);
+            bindings.push(list_form(vec![pat.clone(), car_form], span));
+            let next = if i + 1 < required.len() || !optional.is_empty() || rest_pattern.is_some() {
+                let next_tmp = symbol_form(&format!("\0dsb.{}.{}.cdr", depth, i), span);
+                let cdr_form = list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
+                bindings.push(list_form(vec![next_tmp.clone(), cdr_form], span));
+                next_tmp
+            } else {
+                current_list.clone()
+            };
+            current_list = next;
+        }
+
+        for (i, pat) in optional.iter().enumerate() {
+            let car_form = list_form(vec![symbol_form("car", span), current_list.clone()], span);
+            let binding = list_form(vec![pat.clone(), car_form], span);
+            bindings.push(binding);
+            let next = if i + 1 < optional.len() || rest_pattern.is_some() {
+                let next_tmp = symbol_form(&format!("\0dsb.{}.{}.opt", depth, i), span);
+                let cdr_form = list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
+                bindings.push(list_form(vec![next_tmp.clone(), cdr_form], span));
+                next_tmp
+            } else {
+                current_list.clone()
+            };
+            current_list = next;
+        }
+
+        if let Some(rest_pat) = rest_pattern {
+            bindings.push(list_form(vec![rest_pat, current_list], span));
+        }
+
+        let mut result = vec![symbol_form("let", span), list_form(bindings, span)];
+        result.extend(body);
+        list_form(result, span)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -870,5 +1000,40 @@ mod tests {
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"progn\""));
         assert!(!rendered.contains("\"defmacro\""));
+    }
+
+    #[test]
+    fn expands_destructuring_bind_simple() {
+        let artifact = compile_source(
+            "dsb.el",
+            ";;; -*- lexical-binding: t; -*-\n(destructuring-bind (a b) (list 1 2) (+ a b))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"car\""));
+        assert!(rendered.contains("\"cdr\""));
+    }
+
+    #[test]
+    fn expands_destructuring_bind_with_rest() {
+        let artifact = compile_source(
+            "dsb-rest.el",
+            ";;; -*- lexical-binding: t; -*-\n(destructuring-bind (a &rest bs) (list 1 2 3) (list a bs))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"car\""));
+        assert!(rendered.contains("\"cdr\""));
+    }
+
+    #[test]
+    fn expands_destructuring_bind_with_optional() {
+        let artifact = compile_source(
+            "dsb-opt.el",
+            ";;; -*- lexical-binding: t; -*-\n(destructuring-bind (a &optional b) (list 1) (list a b))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"car\""));
     }
 }
