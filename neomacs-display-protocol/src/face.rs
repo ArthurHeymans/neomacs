@@ -44,6 +44,75 @@ pub enum BoxType {
     Sunken3D,
 }
 
+/// Basic face IDs — fixed cache slots matching GNU's `enum face_id`.
+///
+/// Realized at frame creation via `realize_basic_faces()` in GNU
+/// (`src/xfaces.c`).  NeoMacs mirrors this: basic faces always occupy
+/// IDs 0–19 in every frame's face cache; dynamic faces start at
+/// [`BasicFaceId::SENTINEL`].
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BasicFaceId {
+    Default = 0,
+    ModeLine = 1,
+    ModeLineInactive = 2,
+    ToolBar = 3,
+    Fringe = 4,
+    HeaderLine = 5,
+    HeaderLineInactive = 6,
+    ScrollBar = 7,
+    Border = 8,
+    Cursor = 9,
+    Mouse = 10,
+    Menu = 11,
+    VerticalBorder = 12,
+    WindowDivider = 13,
+    WindowDividerFirstPixel = 14,
+    WindowDividerLastPixel = 15,
+    InternalBorder = 16,
+    ChildFrameBorder = 17,
+    TabBar = 18,
+    TabLine = 19,
+}
+
+impl BasicFaceId {
+    /// One past the last basic face.  Dynamic face IDs start here.
+    pub const SENTINEL: u32 = 20;
+
+    /// Look up a basic face by its canonical name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "default" => Some(Self::Default),
+            "mode-line" => Some(Self::ModeLine),
+            "mode-line-inactive" => Some(Self::ModeLineInactive),
+            "tool-bar" => Some(Self::ToolBar),
+            "fringe" | "left-fringe" | "right-fringe" => Some(Self::Fringe),
+            "header-line" => Some(Self::HeaderLine),
+            "header-line-inactive" => Some(Self::HeaderLineInactive),
+            "scroll-bar" => Some(Self::ScrollBar),
+            "border" => Some(Self::Border),
+            "cursor" => Some(Self::Cursor),
+            "mouse" => Some(Self::Mouse),
+            "menu" => Some(Self::Menu),
+            "vertical-border" => Some(Self::VerticalBorder),
+            "window-divider" => Some(Self::WindowDivider),
+            "window-divider-first-pixel" => Some(Self::WindowDividerFirstPixel),
+            "window-divider-last-pixel" => Some(Self::WindowDividerLastPixel),
+            "internal-border" => Some(Self::InternalBorder),
+            "child-frame-border" => Some(Self::ChildFrameBorder),
+            "tab-bar" => Some(Self::TabBar),
+            "tab-line" => Some(Self::TabLine),
+            _ => None,
+        }
+    }
+}
+
+impl From<BasicFaceId> for u32 {
+    fn from(id: BasicFaceId) -> u32 {
+        id as u32
+    }
+}
+
 /// A face defines text styling (colors, font, decorations)
 #[repr(C)]
 #[derive(Debug, Clone)]

@@ -1436,6 +1436,9 @@ pub struct ResolvedFace {
     pub font_ascent: f32,
     /// Per-face line height (from FontMetricsService, 0.0 = use default).
     pub font_line_height: f32,
+    /// Face cache ID — matches [`BasicFaceId`] for basic faces (0–19)
+    /// or a dynamically allocated ID (≥20) for other faces.
+    pub face_id: u32,
 }
 
 impl Default for ResolvedFace {
@@ -1463,6 +1466,7 @@ impl Default for ResolvedFace {
             font_char_width: 0.0,
             font_ascent: 0.0,
             font_line_height: 0.0,
+            face_id: 0, // DEFAULT_FACE_ID
         }
     }
 }
@@ -1479,6 +1483,9 @@ impl Default for ResolvedFace {
 pub struct FaceResolver {
     face_table: FaceTable,
     default_face: ResolvedFace,
+    /// Next dynamic face ID.  Basic faces occupy 0–19 (matching
+    /// [`BasicFaceId`]); dynamically realized faces start at 20+.
+    next_dynamic_id: std::cell::Cell<u32>,
 }
 
 impl FaceResolver {
@@ -1556,6 +1563,9 @@ impl FaceResolver {
         Self {
             face_table: face_table.clone(),
             default_face: df,
+            next_dynamic_id: std::cell::Cell::new(
+                neomacs_display_protocol::face::BasicFaceId::SENTINEL,
+            ),
         }
     }
 
@@ -1564,14 +1574,24 @@ impl FaceResolver {
         &self.default_face
     }
 
-    /// Resolve a named face from the face table.
+    /// Resolve a named face from the face table, assigning a stable
+    /// face-cache ID.
     ///
-    /// Looks up the named face, resolves inheritance, and realizes all
-    /// attributes against the default face.  Returns the default face
-    /// if the name is not found.
+    /// Basic faces (see [`BasicFaceId`]) get their fixed enum value.
+    /// Other faces get a dynamically allocated ID ≥
+    /// [`BasicFaceId::SENTINEL`] (20).
     pub fn resolve_named_face(&self, name: &str) -> ResolvedFace {
+        use neomacs_display_protocol::face::BasicFaceId;
         let face = self.face_table.resolve(name);
-        self.realize_face(&face)
+        let mut resolved = self.realize_face(&face);
+        if let Some(basic) = BasicFaceId::from_name(name) {
+            resolved.face_id = basic.into();
+        } else {
+            let id = self.next_dynamic_id.get();
+            self.next_dynamic_id.set(id + 1);
+            resolved.face_id = id;
+        }
+        resolved
     }
 
     fn apply_inline_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {

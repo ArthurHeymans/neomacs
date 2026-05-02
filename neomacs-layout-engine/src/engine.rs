@@ -15,6 +15,7 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint, WindowTransitionKind,
 };
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::eval::{ImageResolveRequest, ImageResolveSource};
@@ -1341,6 +1342,9 @@ pub struct LayoutEngine {
     /// inserted `mode-line-inactive` ALSO at face_id=2 and
     /// overwrote the first entry, causing both mode lines to
     /// render with the inactive face after `C-x 2`.
+    /// Frame-scoped face-ID counter.  Starts at
+    /// [`BasicFaceId::SENTINEL`] so dynamic face IDs never collide
+    /// with the fixed basic-face slots (0–19).
     pub(crate) frame_face_id_counter: u32,
     /// Frame-level chrome rows built before leaf-window layout.
     ///
@@ -1375,7 +1379,7 @@ impl LayoutEngine {
             prev_background: None,
             matrix_builder: crate::matrix_builder::GlyphMatrixBuilder::new(),
             last_frame_display_state: None,
-            frame_face_id_counter: 1,
+            frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
         }
@@ -1403,7 +1407,7 @@ impl LayoutEngine {
             prev_background: None,
             matrix_builder: crate::matrix_builder::GlyphMatrixBuilder::new(),
             last_frame_display_state: None,
-            frame_face_id_counter: 1,
+            frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
         }
@@ -1767,7 +1771,7 @@ impl LayoutEngine {
 
             // Reset builder for new frame
             self.matrix_builder.reset();
-            self.frame_face_id_counter = 1;
+            self.frame_face_id_counter = BasicFaceId::SENTINEL;
             self.pending_frame_chrome_rows.clear();
             self.pending_tab_bar = None;
             let mut curr_window_infos: std::collections::HashMap<i64, WindowInfo> =
@@ -1939,8 +1943,7 @@ impl LayoutEngine {
                     // inherits from `mode-line-inactive` per
                     // `lisp/faces.el::vertical-border`.
                     let border_face = face_resolver.resolve_named_face("vertical-border");
-                    let border_face_id = self.frame_face_id_counter;
-                    self.frame_face_id_counter += 1;
+                    let border_face_id = border_face.face_id;
                     let realized_face = crate::display_status_line::StatusLineFace::from_resolved(
                         border_face_id,
                         &border_face,
@@ -5589,8 +5592,7 @@ impl LayoutEngine {
 
         let width = frame_params.width;
         let tab_bar_face = face_resolver.resolve_named_face("tab-bar");
-        let face_id = self.frame_face_id_counter.max(1);
-        self.frame_face_id_counter = face_id.saturating_add(1);
+        let face_id = tab_bar_face.face_id;
 
         let sl_face = self.realize_status_line_face(
             face_id,

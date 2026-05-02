@@ -813,8 +813,16 @@ impl LayoutEngine {
         kind: StatusLineKind,
     ) -> Option<StatusLineSpec> {
         let text = rendered.as_runtime_string_owned()?;
-        let base_face_id = *next_face_id;
-        *next_face_id += 1;
+        // Use the resolved face's cache ID when already assigned
+        // (basic faces get fixed IDs from BasicFaceId); otherwise
+        // allocate from the per-frame counter.
+        let base_face_id = if base_face.face_id != 0 {
+            base_face.face_id
+        } else {
+            let id = *next_face_id;
+            *next_face_id += 1;
+            id
+        };
         let face = self.realize_status_line_face(base_face_id, base_face, char_w, ascent, height);
         let char_width = self.status_line_char_width(&face, char_w);
         let mut spec =
