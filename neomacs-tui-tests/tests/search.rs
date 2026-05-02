@@ -579,3 +579,49 @@ fn isearch_forward() {
 
     send_both(&mut gnu, &mut neo, "C-g");
 }
+
+#[test]
+fn isearch_yank_word_via_cs_cw_appends_word_at_point_to_search() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "isearch-yank-word.txt",
+        "alpha beta gamma delta\nepsilon zeta eta theta\n",
+        "C-x C-f",
+    );
+
+    // Search for "alpha" to put isearch in a known state
+    send_both(&mut gnu, &mut neo, "C-s");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    send_both_raw(&mut gnu, &mut neo, b"alpha");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // RET to exit isearch at the match, then go to next word
+    send_both(&mut gnu, &mut neo, "RET M-f");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    // C-s C-w should yank "beta" into search
+    send_both(&mut gnu, &mut neo, "C-s C-w");
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("beta") && row.contains("I-search"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("I-search")),
+            "{label}: should show I-search prompt after C-s C-w"
+        );
+    }
+
+    send_both(&mut gnu, &mut neo, "C-g");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+}
