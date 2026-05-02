@@ -5801,7 +5801,7 @@ impl LayoutEngine {
         if let Some(ref mini) = content.minibuffer {
             builder.begin_window(mini.window_id, 0, 0, mini.pixel_bounds, mini.selected);
 
-            builder.begin_status_line_row(GlyphRowRole::ModeLine);
+            builder.begin_status_line_row(GlyphRowRole::Minibuffer);
             builder.set_current_row_metrics(
                 mini.pixel_bounds.y + mini.pixel_bounds.height - char_h,
                 char_h,
