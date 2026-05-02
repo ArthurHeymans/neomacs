@@ -429,7 +429,7 @@ fn compute_dominators(function: &SsaFunction) -> HashMap<BlockId, HashSet<BlockI
     dominators
 }
 
-fn predecessor_map(function: &SsaFunction) -> HashMap<BlockId, Vec<BlockId>> {
+pub(crate) fn predecessor_map(function: &SsaFunction) -> HashMap<BlockId, Vec<BlockId>> {
     let mut predecessors = HashMap::<BlockId, Vec<BlockId>>::new();
     for (block, _) in function.blocks.iter() {
         predecessors.entry(block).or_default();
@@ -442,7 +442,7 @@ fn predecessor_map(function: &SsaFunction) -> HashMap<BlockId, Vec<BlockId>> {
     predecessors
 }
 
-fn terminator_successors(terminator: &SsaTerminator) -> Vec<BlockId> {
+pub(crate) fn terminator_successors(terminator: &SsaTerminator) -> Vec<BlockId> {
     match terminator {
         SsaTerminator::Jump { target, .. } => vec![*target],
         SsaTerminator::BranchIfNil {

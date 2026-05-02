@@ -226,6 +226,9 @@ impl Expander {
             "destructuring-bind" => self.expand_destructuring_bind(span, items),
             "flet" => self.expand_flet(span, items),
             "labels" | "cl-labels" => self.expand_labels(span, items),
+            "cl-defun" => self.expand_cl_defun(span, items),
+            "cl-macrolet" => self.expand_cl_macrolet(span, items),
+            "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -813,7 +816,7 @@ impl Expander {
         self.expand_form(result)
     }
 
-    fn parse_flet_bindings(&self, bindings_form: &SurfaceForm, span: Span) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {
+    fn parse_flet_bindings(&self, bindings_form: &SurfaceForm, _span: Span) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {
         let SurfaceKind::List(bindings) = &bindings_form.kind else {
             return Vec::new();
         };
@@ -827,6 +830,167 @@ impl Expander {
             result.push((name, params, body));
         }
         result
+    }
+
+    fn expand_cl_defun(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-defun name (args &optional opt &rest rest) body...)
+        // Expand to (defun name (required-args) (destructuring-bind (...) (list required-args...) body...))
+        // Simplified: if params are all required, just produce (defun name (params) body...)
+        // If &optional/&rest present, use a wrapper approach.
+        if items.len() < 4 {
+            return nil_form(span);
+        }
+        let Some(name) = items[1].symbol_name().map(str::to_string) else {
+            return nil_form(span);
+        };
+        let params_form = &items[2];
+        let body: Vec<SurfaceForm> = items[3..].to_vec();
+
+        let (required, optional, rest) = self.parse_cl_lambda_list(params_form);
+
+        if optional.is_empty() && rest.is_none() {
+            // Simple case: all required params, expand to plain defun
+            let mut result = vec![
+                symbol_form("defun", span),
+                symbol_form(&name, span),
+                params_form.clone(),
+            ];
+            result.extend(body.into_iter().map(|f| self.expand_form(f)));
+            return list_form(result, span);
+        }
+
+        // Complex case: use a single &rest arg and destructuring-bind
+        // (cl-defun foo (a &optional b &rest c) body...)
+        // -> (defun foo (&rest --cl-rest--) (destructuring-bind (a &optional b &rest c) --cl-rest-- body...))
+        let rest_arg = symbol_form("--cl-rest--", span);
+        let rest_params = list_form(vec![symbol_form("&rest", span), rest_arg.clone()], span);
+
+        let mut dbind_params: Vec<SurfaceForm> = required.iter()
+            .map(|s| symbol_form(s, span))
+            .collect();
+        if !optional.is_empty() {
+            dbind_params.push(symbol_form("&optional", span));
+            for s in &optional {
+                dbind_params.push(symbol_form(s, span));
+            }
+        }
+        if let Some(ref r) = rest {
+            dbind_params.push(symbol_form("&rest", span));
+            dbind_params.push(symbol_form(r, span));
+        }
+        let dbind_pattern = list_form(dbind_params, span);
+
+        let mut dbind_body = vec![
+            symbol_form("destructuring-bind", span),
+            dbind_pattern,
+            rest_arg,
+        ];
+        dbind_body.extend(body.into_iter().map(|f| self.expand_form(f)));
+
+        let mut defun_body = vec![
+            symbol_form("defun", span),
+            symbol_form(&name, span),
+            rest_params,
+            list_form(dbind_body, span),
+        ];
+        list_form(defun_body, span)
+    }
+
+    fn parse_cl_lambda_list(&self, params_form: &SurfaceForm) -> (Vec<String>, Vec<String>, Option<String>) {
+        let items = match &params_form.kind {
+            SurfaceKind::List(items) => items,
+            _ => return (Vec::new(), Vec::new(), None),
+        };
+        let mut required = Vec::new();
+        let mut optional = Vec::new();
+        let mut rest = None;
+        let mut section = 0; // 0=required, 1=optional, 2=rest
+
+        for item in items {
+            let Some(name) = item.symbol_name() else { continue };
+            match name {
+                "&optional" => section = 1,
+                "&rest" => section = 2,
+                "&key" | "&allow-other-keys" | "&aux" => break, // not supported yet
+                _ => match section {
+                    0 => required.push(name.to_string()),
+                    1 => optional.push(name.to_string()),
+                    2 if rest.is_none() => {
+                        rest = Some(name.to_string());
+                        section = 3; // done
+                    }
+                    _ => {}
+                }
+            }
+        }
+        (required, optional, rest)
+    }
+
+    fn expand_cl_macrolet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-macrolet ((name (args) body...) ...) body...)
+        // Register each binding as a macro, expand the body, then unregister.
+        if items.len() < 3 {
+            return nil_form(span);
+        }
+        let bindings_form = &items[1];
+        let body = &items[2..];
+
+        let SurfaceKind::List(bindings) = &bindings_form.kind else {
+            return self.expand_progn(span, body.to_vec());
+        };
+
+        let mut defined_names: Vec<String> = Vec::new();
+        for binding in bindings {
+            let SurfaceKind::List(bitems) = &binding.kind else { continue };
+            if bitems.len() < 3 { continue; }
+            let Some(name) = bitems[0].symbol_name().map(str::to_string) else { continue };
+            let params_form = &bitems[1];
+            let macro_body: Vec<SurfaceForm> = bitems[2..].to_vec();
+            let macro_params = self.parse_macro_params(params_form).unwrap_or_default();
+            let def = MacroDef {
+                params: macro_params,
+                body: macro_body,
+                span: binding.span,
+            };
+            self.macros.insert(name.clone(), def);
+            defined_names.push(name);
+        }
+
+        let result = self.expand_progn(span, body.to_vec());
+
+        for name in &defined_names {
+            self.macros.remove(name);
+        }
+
+        result
+    }
+
+    fn expand_cl_symbol_macrolet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-symbol-macrolet ((name expansion) ...) body...)
+        // Register each binding as a value in the symbol-macro table.
+        // Simplified: expand body, replacing symbol occurrences.
+        if items.len() < 3 {
+            return nil_form(span);
+        }
+        // For now, just expand the body forms — symbol macros would need
+        // a full substitution pass which is complex. Most real uses of
+        // cl-symbol-macrolet are for macros that we handle differently.
+        let body: Vec<SurfaceForm> = items[2..].to_vec();
+        self.expand_progn(span, body)
+    }
+
+    fn expand_progn(&mut self, span: Span, forms: Vec<SurfaceForm>) -> SurfaceForm {
+        let expanded: Vec<SurfaceForm> = forms.into_iter()
+            .map(|f| self.expand_form(f))
+            .collect();
+        match expanded.len() {
+            0 => nil_form(span),
+            1 => expanded.into_iter().next().unwrap(),
+            _ => list_form(
+                std::iter::once(symbol_form("progn", span)).chain(expanded).collect(),
+                span,
+            ),
+        }
     }
 }
 
@@ -1140,5 +1304,43 @@ mod tests {
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"lambda\""));
         assert!(rendered.contains("\"setq\""));
+    }
+
+    #[test]
+    fn expands_cl_defun_simple_params() {
+        let artifact = compile_source(
+            "cl-defun-simple.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-defun add (x y) (+ x y))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"defun\""));
+        assert!(rendered.contains("\"add\""));
+    }
+
+    #[test]
+    fn expands_cl_defun_with_optional() {
+        let artifact = compile_source(
+            "cl-defun-opt.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-defun foo (a &optional b) (list a b))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"defun\""));
+        assert!(rendered.contains("\"destructuring-bind\""));
+        assert!(rendered.contains("&optional"));
+    }
+
+    #[test]
+    fn expands_cl_macrolet_and_uses_macro() {
+        let artifact = compile_source(
+            "cl-macrolet.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-macrolet ((double (x) (list '+ x x))) (double 5))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        // The macro should have been expanded: (double 5) -> (+ 5 5)
+        assert!(rendered.contains("\"+\""));
+        assert!(rendered.contains("5"));
     }
 }

@@ -22,6 +22,7 @@ pub mod ids;
 pub mod jit;
 pub mod liveness;
 pub mod lower;
+pub mod opt;
 pub mod pretty;
 pub mod reader;
 pub mod regir;
@@ -82,9 +83,10 @@ pub fn compile_source(name: impl Into<String>, text: impl Into<String>) -> Compi
             hir::lower_expanded_forms(&source, expand_output.forms.clone(), source.lexical_binding);
         diagnostics.extend(hir_output.diagnostics);
         if !diagnostics.iter().any(Diagnostic::is_error) {
-            let ssa_output = lower::hir_to_ssa_module(&hir_output.module);
+            let mut ssa_output = lower::hir_to_ssa_module(&hir_output.module);
             diagnostics.extend(ssa_output.diagnostics);
             if !diagnostics.iter().any(Diagnostic::is_error) {
+                opt::optimize_ssa_module(&mut ssa_output.value);
                 let regir_output = lower::ssa_module_to_regir(&ssa_output.value);
                 diagnostics.extend(regir_output.diagnostics);
                 regir = Some(regir_output.value);

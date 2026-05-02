@@ -5,9 +5,16 @@ use crate::expand_value::{surface_to_value, MacroValue};
 use crate::source::Span;
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
+#[derive(Clone, Debug)]
+pub struct MacroFunction {
+    pub params: Vec<String>,
+    pub body: Vec<SurfaceForm>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MacroEnv {
     bindings: HashMap<String, MacroValue>,
+    functions: HashMap<String, MacroFunction>,
 }
 
 impl MacroEnv {
@@ -21,6 +28,14 @@ impl MacroEnv {
 
     pub fn remove(&mut self, name: &str) {
         self.bindings.remove(name);
+    }
+
+    pub fn define_function(&mut self, name: String, func: MacroFunction) {
+        self.functions.insert(name, func);
+    }
+
+    pub fn lookup_function(&self, name: &str) -> Option<&MacroFunction> {
+        self.functions.get(name)
     }
 }
 
@@ -591,15 +606,18 @@ impl MacroEval {
 
             Some("mapcar") => {
                 // (mapcar function sequence) — map over list
-                // At macro time, support only trivial cases with nil/empty lists
                 if items.len() >= 3 {
+                    let func_val = self.eval(&items[1], env)?;
                     let seq = self.eval(&items[2], env)?;
                     if seq.is_nil() {
                         Ok(MacroValue::Nil)
                     } else {
-                        // Can't evaluate arbitrary function at macro time
-                        self.error(span, "cannot evaluate 'mapcar' with non-empty list at macro expansion time");
-                        Err(())
+                        let list_items = seq.to_vec().unwrap_or_default();
+                        let mut results = Vec::new();
+                        for item in &list_items {
+                            results.push(self.call_function(span, &func_val, &[item.clone()], env)?);
+                        }
+                        Ok(MacroValue::list(results))
                     }
                 } else {
                     Ok(MacroValue::Nil)
@@ -755,17 +773,31 @@ impl MacroEval {
             }
 
             Some("lambda") => {
-                // (lambda (args) body...) — return as an unevaluated form
-                // At macro time, we can't actually create closures.
-                // Return nil to allow expansion to continue.
-                Ok(MacroValue::Nil)
+                // (lambda (args) body...) — store as a callable closure value
+                if items.len() < 3 {
+                    return Ok(MacroValue::Nil);
+                }
+                let params = parse_lambda_params(&items[1]);
+                let body: Vec<SurfaceForm> = items[2..].to_vec();
+                // Store as a list (lambda (params...) body...) so it can be passed around
+                let mut parts = vec![
+                    MacroValue::Symbol("lambda".into()),
+                    MacroValue::list(params.iter().map(|s| MacroValue::Symbol(s.clone())).collect()),
+                ];
+                for b in &body {
+                    parts.push(surface_to_value(b));
+                }
+                Ok(MacroValue::list(parts))
             }
 
             Some("funcall") => {
                 // (funcall function &rest args) — call a function
-                // At macro time, we can't call arbitrary functions.
-                // Return nil to allow expansion to continue.
-                Ok(MacroValue::Nil)
+                if items.len() < 2 {
+                    return Ok(MacroValue::Nil);
+                }
+                let func_val = self.eval(&items[1], env)?;
+                let args: Vec<MacroValue> = items[2..].iter().map(|a| self.eval(a, env)).collect::<Result<Vec<_>, _>>()?;
+                self.call_function(span, &func_val, &args, env)
             }
 
             Some("cl-loop") => {
@@ -1660,6 +1692,46 @@ impl MacroEval {
         Ok(result)
     }
 
+    fn call_function(
+        &mut self,
+        _span: Span,
+        func_val: &MacroValue,
+        args: &[MacroValue],
+        env: &mut MacroEnv,
+    ) -> Result<MacroValue, ()> {
+        // Try named function lookup
+        if let MacroValue::Symbol(name) = func_val {
+            if let Some(func) = env.lookup_function(name).cloned() {
+                return self.call_macro_function(&func, args, env);
+            }
+        }
+        // Try lambda value
+        if let Some((params, body_forms)) = extract_lambda(func_val) {
+            let func = MacroFunction { params, body: body_forms };
+            return self.call_macro_function(&func, args, env);
+        }
+        // Unknown function — return nil
+        Ok(MacroValue::Nil)
+    }
+
+    fn call_macro_function(
+        &mut self,
+        func: &MacroFunction,
+        args: &[MacroValue],
+        env: &mut MacroEnv,
+    ) -> Result<MacroValue, ()> {
+        let saved: Vec<String> = func.params.iter().cloned().collect();
+        for (i, param) in func.params.iter().enumerate() {
+            let val = args.get(i).cloned().unwrap_or(MacroValue::Nil);
+            env.bind(param.clone(), val);
+        }
+        let result = self.eval_progn(&func.body, env);
+        for name in &saved {
+            env.remove(name);
+        }
+        result
+    }
+
     fn error(&mut self, span: Span, message: impl Into<String>) {
         self.diagnostics
             .push(Diagnostic::error(message.into()).with_span(span));
@@ -1682,6 +1754,43 @@ fn format_value_as_string(val: &MacroValue) -> String {
             format!("[{}]", parts.join(" "))
         }
     }
+}
+
+fn parse_lambda_params(form: &SurfaceForm) -> Vec<String> {
+    match &form.kind {
+        SurfaceKind::List(items) => {
+            items.iter().filter_map(|f| f.symbol_name().map(|s| s.to_string())).collect()
+        }
+        SurfaceKind::Atom(SurfaceAtom::Nil) => Vec::new(),
+        _ => Vec::new(),
+    }
+}
+
+fn extract_lambda(val: &MacroValue) -> Option<(Vec<String>, Vec<SurfaceForm>)> {
+    let items = val.to_vec()?;
+    if items.is_empty() {
+        return None;
+    }
+    if items[0] != MacroValue::Symbol("lambda".into()) {
+        return None;
+    }
+    let params: Vec<String> = items.get(1)?.to_vec()?
+        .into_iter()
+        .filter_map(|v| v.as_symbol_name().map(|s| s.to_string()))
+        .collect();
+    let body: Vec<SurfaceForm> = items[2..].iter()
+        .filter_map(|v| value_to_surface_form(v))
+        .collect();
+    if body.is_empty() {
+        return None;
+    }
+    Some((params, body))
+}
+
+fn value_to_surface_form(val: &MacroValue) -> Option<SurfaceForm> {
+    use crate::source::SourceId;
+    let span = Span::new(SourceId::new(0), 0, 0);
+    Some(crate::expand_value::value_to_surface(val, span))
 }
 
 #[cfg(test)]
@@ -1847,5 +1956,51 @@ mod tests {
     fn evals_length() {
         let v = eval_expr("(length (list 1 2 3))");
         assert_eq!(v, MacroValue::Int(3));
+    }
+
+    #[test]
+    fn funcall_lambda() {
+        let v = eval_expr("(funcall (lambda (x) (+ x 1)) 41)");
+        assert_eq!(v, MacroValue::Int(42));
+    }
+
+    #[test]
+    fn funcall_named_function() {
+        let mut eval = MacroEval::new();
+        let mut env = MacroEnv::default();
+        // Define add1 as a named function in the env
+        let body_src = SourceFile::new(SourceId::new(0), Some("test.el".into()), "(+ x 1)".into());
+        let body_output = crate::reader::read_source(&body_src);
+        env.define_function("add1".into(), MacroFunction {
+            params: vec!["x".into()],
+            body: body_output.forms,
+        });
+        // Call (funcall 'add1 10)
+        let call_src = SourceFile::new(SourceId::new(0), Some("test.el".into()), "(funcall 'add1 10)".into());
+        let call_output = crate::reader::read_source(&call_src);
+        let result = eval.eval(&call_output.forms[0], &mut env).unwrap();
+        assert_eq!(result, MacroValue::Int(11));
+    }
+
+    #[test]
+    fn funcall_calls_lambda_with_multiple_args() {
+        let v = eval_expr("(funcall (lambda (a b) (+ a b)) 3 4)");
+        assert_eq!(v, MacroValue::Int(7));
+    }
+
+    #[test]
+    fn mapcar_with_lambda() {
+        let v = eval_expr("(mapcar (lambda (x) (+ x 10)) (list 1 2 3))");
+        let vec = v.to_vec().unwrap();
+        assert_eq!(vec.len(), 3);
+        assert_eq!(vec[0], MacroValue::Int(11));
+        assert_eq!(vec[1], MacroValue::Int(12));
+        assert_eq!(vec[2], MacroValue::Int(13));
+    }
+
+    #[test]
+    fn mapcar_empty_list() {
+        let v = eval_expr("(mapcar (lambda (x) x) nil)");
+        assert_eq!(v, MacroValue::Nil);
     }
 }
