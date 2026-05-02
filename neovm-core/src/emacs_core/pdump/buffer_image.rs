@@ -151,9 +151,6 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     write_i64(out, buffer.chars_modified_tick);
     write_opt_i64(out, buffer.save_modified_tick);
     write_opt_i64(out, buffer.autosave_modified_tick);
-    write_opt_i64(out, buffer.modtime_sec);
-    write_opt_i32(out, buffer.modtime_nsec);
-    write_opt_i64(out, buffer.modtime_size);
     write_opt_usize(out, buffer.last_window_start)?;
     write_bool(out, buffer.read_only);
     write_bool(out, buffer.multibyte);
@@ -176,6 +173,9 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     write_values(out, &buffer.slots)?;
     write_u64(out, buffer.local_flags);
     write_value(out, &buffer.local_var_alist)?;
+    write_opt_i64(out, buffer.modtime_sec);
+    write_opt_i32(out, buffer.modtime_nsec);
+    write_opt_i64(out, buffer.modtime_size);
     Ok(())
 }
 
@@ -199,9 +199,6 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
         chars_modified_tick: read_i64(cursor, "buffer chars modified tick")?,
         save_modified_tick: read_opt_i64(cursor, "buffer save modified tick")?,
         autosave_modified_tick: read_opt_i64(cursor, "buffer autosave modified tick")?,
-        modtime_sec: read_opt_i64(cursor, "buffer modtime sec")?,
-        modtime_nsec: read_opt_i32(cursor, "buffer modtime nsec")?,
-        modtime_size: read_opt_i64(cursor, "buffer modtime size")?,
         last_window_start: read_opt_usize(cursor, "buffer last window start")?,
         read_only: cursor.read_bool("buffer read-only")?,
         multibyte: cursor.read_bool("buffer multibyte")?,
@@ -224,6 +221,9 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
         slots: read_values(cursor)?,
         local_flags: cursor.read_u64("buffer local flags")?,
         local_var_alist: cursor.read_value()?,
+        modtime_sec: read_opt_i64(cursor, "buffer modtime sec")?,
+        modtime_nsec: read_opt_i32(cursor, "buffer modtime nsec")?,
+        modtime_size: read_opt_i64(cursor, "buffer modtime size")?,
     })
 }
 
