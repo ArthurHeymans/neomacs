@@ -255,6 +255,22 @@ fn primitive_undo_inner(
                     // Non-zero modtimes would compare against file modtime;
                     // for now we just skip those.
                 }
+                // (nil . LEN) — undo a yank: delete LEN chars before point.
+                (ValueKind::Nil, ValueKind::Fixnum(len1)) => {
+                    let len = len1.max(0) as usize;
+                    if let Some(buf) = ctx.buffers.get(buf_id) {
+                        if buf.pt_byte >= len {
+                            let del_start = buf.pt_byte - len;
+                            let del_end = buf.pt_byte;
+                            if del_start >= buf.begv_byte && del_end <= buf.zv_byte {
+                                ctx.buffers
+                                    .goto_buffer_byte(buf_id, del_start);
+                                ctx.buffers
+                                    .delete_buffer_region(buf_id, del_start, del_end);
+                            }
+                        }
+                    }
+                }
                 // (nil PROP VAL BEG . END) — restore text property.
                 (ValueKind::Nil, _) => {
                     // cdr is (PROP VAL BEG . END)
