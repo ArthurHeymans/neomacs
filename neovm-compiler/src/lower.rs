@@ -935,7 +935,18 @@ impl SsaBuilder {
                 let mut dynamic_bind_count = 0;
                 if *sequential {
                     for binding in bindings {
-                        let value = self.lower_expr(&binding.init)?;
+                        let value = match self.lower_expr(&binding.init) {
+                            Some(v) => v,
+                            None => {
+                                // Init threw — unbind any dynamic bindings already established.
+                                if dynamic_bind_count > 0 {
+                                    self.emit_no_result(SsaInstKind::UnbindDynamic {
+                                        count: dynamic_bind_count,
+                                    });
+                                }
+                                return None;
+                            }
+                        };
                         self.emit_binding(binding.mode, binding.name.clone(), value);
                         if binding.mode == BindingMode::Dynamic {
                             dynamic_bind_count += 1;
@@ -955,7 +966,7 @@ impl SsaBuilder {
                     }
                 }
                 let body_value = self.lower_expr(body);
-                if dynamic_bind_count > 0 && body_value.is_some() {
+                if dynamic_bind_count > 0 {
                     self.emit_no_result(SsaInstKind::UnbindDynamic {
                         count: dynamic_bind_count,
                     });
@@ -1095,21 +1106,35 @@ impl SsaBuilder {
         });
 
         self.current_block = then_block;
-        let then_value = self.lower_expr(then_expr)?;
-        self.set_terminator(SsaTerminator::Jump {
-            target: merge_block,
-            args: vec![then_value],
-        });
+        let then_value = self.lower_expr(then_expr);
+        if let Some(tv) = then_value {
+            self.set_terminator(SsaTerminator::Jump {
+                target: merge_block,
+                args: vec![tv],
+            });
+        }
+        // If then_value is None, the block already has Unreachable from the
+        // divergent expression (throw, error, etc.).
 
         self.current_block = else_block;
-        let else_value = self.lower_expr(else_expr)?;
-        self.set_terminator(SsaTerminator::Jump {
-            target: merge_block,
-            args: vec![else_value],
-        });
+        let else_value = self.lower_expr(else_expr);
+        if let Some(ev) = else_value {
+            self.set_terminator(SsaTerminator::Jump {
+                target: merge_block,
+                args: vec![ev],
+            });
+        }
 
-        self.current_block = merge_block;
-        Some(merge_value)
+        match (then_value, else_value) {
+            (None, None) => {
+                // Both branches diverge — the if diverges.
+                return None;
+            }
+            _ => {
+                self.current_block = merge_block;
+                Some(merge_value)
+            }
+        }
     }
 
     fn lower_while(&mut self, test: &HirExpr, body: &HirExpr) -> Option<ValueId> {
