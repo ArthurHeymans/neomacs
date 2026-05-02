@@ -781,7 +781,7 @@ pub fn window_params_from_neovm(
         cursor_color,
         left_fringe_width: left_fringe,
         right_fringe_width: right_fringe,
-        indicate_empty_lines: 0,
+        indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") { 1 } else { 0 },
         show_trailing_whitespace: buffer_local_bool(buffer, "show-trailing-whitespace"),
         trailing_ws_bg: 0,
         fill_column_indicator: buffer_local_int(buffer, "display-fill-column-indicator-column", 0)
