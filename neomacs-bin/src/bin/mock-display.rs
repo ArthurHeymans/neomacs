@@ -782,7 +782,7 @@ fn build_faces() -> HashMap<u32, Face> {
     {
         let mut box_face = Face::new(8);
         box_face.foreground = Color::new(0.87, 0.87, 0.87, 1.0);
-        box_face.background = Color::new(0.05, 0.05, 0.08, 1.0);
+        box_face.background = Color::new(0.0, 0.0, 0.0, 1.0);
         box_face.font_weight = 400;
         box_face.box_type = neomacs_display_protocol::face::BoxType::Line;
         box_face.box_line_width = 2;
