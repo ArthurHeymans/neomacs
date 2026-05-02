@@ -1686,4 +1686,111 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(9)));
     }
+
+    // --- JIT/interpreter boundary tests ---
+
+    #[test]
+    fn jit_calls_interpreter_function() {
+        // Entry function is JIT-safe, callee has catch/throw (interpreter-only)
+        let artifact = crate::jit_interp::execute_with_jit(
+            "jit-interp-boundary.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun safe-caller (x)
+  (+ x (catchy 10)))
+(defun catchy (y)
+  (catch 'tag (throw 'tag y)))
+(safe-caller 5)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn jit_entry_with_catch_falls_back_to_interpreter() {
+        // Entry function itself has catch — entire module falls back
+        let artifact = crate::jit_interp::execute_with_jit(
+            "jit-catch-entry.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(catch 'tag (throw 'tag 42))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_condition_case_boundary() {
+        // JIT function calls a function that uses condition-case
+        let artifact = crate::jit_interp::execute_with_jit(
+            "jit-cond-boundary.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun safe-add (a b)
+  (+ a (safe-div b)))
+(defun safe-div (x)
+  (condition-case err
+    (/ x 1)
+    (arith-error 0)))
+(safe-add 10 3)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(13)));
+    }
+
+    #[test]
+    fn jit_unwind_protect_boundary() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "jit-unwind-boundary.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(defun with-cleanup (x)
+  (unwind-protect
+    (+ x 1)
+    (message \"cleaned\")))
+(with-cleanup 10)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(11)));
+    }
+
+    // --- Integer overflow / error tests ---
+
+    #[test]
+    fn division_by_zero_signals_error() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "div-zero.el",
+            "(condition-case err (/ 10 0) (arith-error -1))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(-1)));
+    }
+
+    #[test]
+    fn mod_by_zero_signals_error() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "mod-zero.el",
+            "(condition-case err (mod 10 0) (arith-error -1))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(-1)));
+    }
+
+    #[test]
+    fn error_signal_is_catchable() {
+        // (signal 'test-error '(42)) → err = (test-error 42), cadr = 42
+        let artifact = crate::jit_interp::execute_with_jit(
+            "error-catch.el",
+            "(condition-case err (signal 'test-error '(42)) (test-error (cadr err)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
 }
