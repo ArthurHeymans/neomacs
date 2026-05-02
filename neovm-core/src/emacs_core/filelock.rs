@@ -229,6 +229,27 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
     };
     let lock_path = PathBuf::from(lock_name);
 
+    // Supersession check: before locking a file-visiting buffer,
+    // verify that the file hasn't been modified on disk since we
+    // last read it.  Mirrors GNU's `lock_file` (filelock.c:603-608).
+    if eval
+        .buffers
+        .current_buffer()
+        .and_then(|b| b.file_name_value().as_runtime_string_owned())
+        .is_some_and(|fname| fname == filename)
+        && eval
+            .apply(
+                Value::symbol("verify-visited-file-modtime"),
+                vec![],
+            )
+            .is_ok_and(|v| v.is_nil())
+    {
+        let _ = eval.apply(
+            Value::symbol("userlock--ask-user-about-supersession-threat"),
+            vec![Value::string(filename)],
+        );
+    }
+
     match current_lock_owner(&lock_path)
         .map_err(|err| file_lock_error("Testing file lock", filename, err))?
     {

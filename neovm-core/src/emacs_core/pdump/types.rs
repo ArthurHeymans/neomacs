@@ -611,6 +611,12 @@ pub struct DumpBuffer {
     #[serde(default)]
     pub autosave_modified_tick: Option<i64>,
     #[serde(default)]
+    pub modtime_sec: Option<i64>,
+    #[serde(default)]
+    pub modtime_nsec: Option<i32>,
+    #[serde(default)]
+    pub modtime_size: Option<i64>,
+    #[serde(default)]
     pub last_window_start: Option<usize>,
     pub read_only: bool,
     pub multibyte: bool,

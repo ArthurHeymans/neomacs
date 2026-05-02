@@ -1433,6 +1433,13 @@ pub struct Buffer {
     /// `BVAR(buffer, keymap)` — the buffer's local keymap
     /// (`buffer.h:385`). `Value::NIL` when no local keymap is set.
     pub keymap: crate::emacs_core::value::Value,
+    /// File modification time as seconds since epoch (GNU `struct timespec`).
+    /// `None` means unknown or never visited.
+    pub modtime_sec: Option<i64>,
+    /// File modification time nanoseconds component.
+    pub modtime_nsec: Option<i32>,
+    /// File size in bytes when `modtime` was captured.
+    pub modtime_size: Option<i64>,
     /// `BUFFER_OBJFWD` slot table — per-buffer storage for variables
     /// that are forwarded into the C-side `struct buffer` in GNU.
     /// Mirrors the union of GNU's `Lisp_Object` slot fields in
@@ -1506,6 +1513,9 @@ impl Buffer {
             state_markers: None,
             local_var_alist: crate::emacs_core::value::Value::NIL,
             keymap: crate::emacs_core::value::Value::NIL,
+            modtime_sec: None,
+            modtime_nsec: None,
+            modtime_size: None,
             slots: {
                 // Phase 10C: seed every slot from BUFFER_SLOT_INFO.
                 // Mirrors GNU's `reset_buffer` (`buffer.c:1188`)

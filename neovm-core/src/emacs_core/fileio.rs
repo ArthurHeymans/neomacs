@@ -2872,43 +2872,116 @@ fn validate_set_visited_file_modtime_arg(arg: &Value) -> Result<(), Flow> {
     }
 }
 
-/// (visited-file-modtime) -> 0
-pub(crate) fn builtin_visited_file_modtime(args: Vec<Value>) -> EvalResult {
-    expect_args("visited-file-modtime", &args, 0)?;
-    Ok(Value::fixnum(0))
+/// `(visited-file-modtime)` — return the buffer's recorded modtime.
+pub(crate) fn builtin_visited_file_modtime(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("visited-file-modtime", &args, 0)?;
+    let buf = eval.buffers.current_buffer().ok_or_else(|| {
+        signal("error", vec![Value::string("No current buffer")])
+    })?;
+    let sec = buf.modtime_sec;
+    let nsec = buf.modtime_nsec;
+    match (sec, nsec) {
+        (Some(s), Some(ns)) => Ok(Value::cons(
+            Value::fixnum(s),
+            Value::fixnum(ns as i64),
+        )),
+        _ => Ok(Value::fixnum(0)),
+    }
 }
 
-/// `(verify-visited-file-modtime &optional BUFFER)` — stub returning t.
+/// `(verify-visited-file-modtime &optional BUFFER)` — check if file
+/// on disk matches the buffer's recorded modtime.
 pub(crate) fn builtin_verify_visited_file_modtime(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("verify-visited-file-modtime", &args, 1)?;
     validate_optional_buffer_arg_in_state(&eval.buffers, args.first())?;
-    Ok(Value::T)
+    let buf = eval.buffers.current_buffer().ok_or_else(|| {
+        signal("error", vec![Value::string("No current buffer")])
+    })?;
+    let Some((ref sec, ref nsec)) = buf.modtime_sec.zip(buf.modtime_nsec) else {
+        return Ok(Value::T); // unknown modtime — never complain (GNU: UNKNOWN_MODTIME_NSECS)
+    };
+    let Some(file_name) = buf.file_name_value().as_runtime_string_owned() else {
+        return Ok(Value::T);
+    };
+    match std::fs::metadata(&file_name) {
+        Ok(meta) => {
+            if let Ok(mtime) = meta.modified() {
+                let dur = mtime
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                let disk_sec = dur.as_secs() as i64;
+                let disk_nsec = dur.subsec_nanos() as i32;
+                if disk_sec == *sec && disk_nsec == *nsec && meta.len() as i64 == buf.modtime_size.unwrap_or(-1) {
+                    Ok(Value::T)
+                } else {
+                    Ok(Value::NIL)
+                }
+            } else {
+                Ok(Value::T) // can't read mtime — don't complain
+            }
+        }
+        Err(_) => Ok(Value::T), // can't stat — don't complain
+    }
 }
 
-/// `(set-visited-file-modtime &optional TIME-LIST)` — stub returning nil.
-pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+/// `(set-visited-file-modtime &optional TIME-LIST)` — set buffer's
+/// modtime from the file on disk or from explicit timestamp.
+pub(crate) fn builtin_set_visited_file_modtime(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("set-visited-file-modtime", &args, 1)?;
+
     if let Some(arg) = args.first() {
         if !arg.is_nil() {
+            // Explicit timestamp argument
             validate_set_visited_file_modtime_arg(arg)?;
+            if let Some(items) = list_to_vec(arg) {
+                if items.len() >= 2 {
+                    if let (Ok(sec), Ok(nsec)) = (expect_fixnum(&items[0]), expect_fixnum(&items[1])) {
+                        let buf = eval.buffers.current_buffer_mut()
+                            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                        buf.modtime_sec = Some(sec);
+                        buf.modtime_nsec = Some(nsec as i32);
+                        buf.modtime_size = None;
+                    }
+                }
+            }
             return Ok(Value::NIL);
         }
     }
 
+    // No arg — stat the visited file
     let file_name = eval
         .buffers
         .current_buffer()
-        .and_then(|buf| buf.file_name_value().as_runtime_string_owned());
-    if file_name.is_none() {
+        .and_then(|b| b.file_name_value().as_runtime_string_owned());
+    let Some(fname) = file_name else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), Value::NIL],
         ));
+    };
+    match std::fs::metadata(&fname) {
+        Ok(meta) => {
+            let buf = eval.buffers.current_buffer_mut()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            if let Ok(mtime) = meta.modified() {
+                let dur = mtime.duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                buf.modtime_sec = Some(dur.as_secs() as i64);
+                buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+                buf.modtime_size = Some(meta.len() as i64);
+            }
+        }
+        Err(_) => {}
     }
-
     Ok(Value::NIL)
 }
 
@@ -4222,6 +4295,20 @@ pub(crate) fn builtin_insert_file_contents(
             .buffers
             .set_buffer_file_name(current_id, Value::heap_string(resolved.clone()));
         let _ = eval.buffers.set_buffer_modified_flag(current_id, false);
+        // Store file modification time (GNU: insert-file-contents stores
+        // current_buffer->modtime = mtime; current_buffer->modtime_size = st_size).
+        if let Ok(meta) = std::fs::metadata(lisp_file_name_to_path_buf(&resolved)) {
+            if let Ok(mtime) = meta.modified() {
+                let dur = mtime
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                if let Some(buf) = eval.buffers.get_mut(current_id) {
+                    buf.modtime_sec = Some(dur.as_secs() as i64);
+                    buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+                    buf.modtime_size = Some(meta.len() as i64);
+                }
+            }
+        }
         if empty_undo_list_p {
             let _ = eval
                 .buffers

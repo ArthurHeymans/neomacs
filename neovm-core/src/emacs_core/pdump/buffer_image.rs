@@ -151,6 +151,9 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     write_i64(out, buffer.chars_modified_tick);
     write_opt_i64(out, buffer.save_modified_tick);
     write_opt_i64(out, buffer.autosave_modified_tick);
+    write_opt_i64(out, buffer.modtime_sec);
+    write_opt_i32(out, buffer.modtime_nsec);
+    write_opt_i64(out, buffer.modtime_size);
     write_opt_usize(out, buffer.last_window_start)?;
     write_bool(out, buffer.read_only);
     write_bool(out, buffer.multibyte);
@@ -196,6 +199,9 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
         chars_modified_tick: read_i64(cursor, "buffer chars modified tick")?,
         save_modified_tick: read_opt_i64(cursor, "buffer save modified tick")?,
         autosave_modified_tick: read_opt_i64(cursor, "buffer autosave modified tick")?,
+        modtime_sec: read_opt_i64(cursor, "buffer modtime sec")?,
+        modtime_nsec: read_opt_i32(cursor, "buffer modtime nsec")?,
+        modtime_size: read_opt_i64(cursor, "buffer modtime size")?,
         last_window_start: read_opt_usize(cursor, "buffer last window start")?,
         read_only: cursor.read_bool("buffer read-only")?,
         multibyte: cursor.read_bool("buffer multibyte")?,
@@ -745,6 +751,27 @@ fn read_opt_i64(cursor: &mut Cursor<'_>, what: &str) -> Result<Option<i64>, Dump
     }
 }
 
+fn write_opt_i32(out: &mut Vec<u8>, value: Option<i32>) {
+    match value {
+        Some(value) => {
+            write_bool(out, true);
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        None => write_bool(out, false),
+    }
+}
+
+fn read_opt_i32(cursor: &mut Cursor<'_>, what: &str) -> Result<Option<i32>, DumpError> {
+    if cursor.read_bool(what)? {
+        let bytes_slice = cursor.read_exact(4, what)?;
+        let mut bytes = [0u8; 4];
+        bytes.copy_from_slice(bytes_slice);
+        Ok(Some(i32::from_le_bytes(bytes)))
+    } else {
+        Ok(None)
+    }
+}
+
 fn write_string(out: &mut Vec<u8>, value: &str) -> Result<(), DumpError> {
     write_bytes(out, value.as_bytes())
 }
@@ -858,6 +885,9 @@ mod tests {
             chars_modified_tick: 4,
             save_modified_tick: Some(5),
             autosave_modified_tick: Some(6),
+            modtime_sec: Some(1234567890),
+            modtime_nsec: Some(500000000),
+            modtime_size: Some(1024),
             last_window_start: Some(7),
             read_only: false,
             multibyte: true,

@@ -4414,7 +4414,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "visited-file-modtime",
-        |_ctx, args| super::fileio::builtin_visited_file_modtime(args),
+        |ctx, args| super::fileio::builtin_visited_file_modtime(ctx, args),
         0,
         Some(0),
     );
