@@ -520,3 +520,41 @@ fn verify_visited_file_modtime_returns_t_for_unmodified_file() {
         2,
     );
 }
+
+// ── Narrowing / buffer position tests ────────────────────────
+
+#[test]
+fn mode_line_shows_buffer_position_percent() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "mode-pct.el",
+        "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n",
+        "C-x C-f",
+    );
+
+    // Move to bottom, check mode-line shows Top/Bot/All
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Mode-line row (second to last) should show buffer position
+    let gl = gnu.text_grid();
+    let nl = neo.text_grid();
+    let gnu_mode = &gl[gl.len().saturating_sub(2)];
+    let neo_mode = &nl[nl.len().saturating_sub(2)];
+
+    // Both should show some position indicator (Top, Bot, All, or %)
+    let has_pos = |row: &str| {
+        row.contains("Top") || row.contains("Bot") || row.contains("All") || row.contains('%')
+    };
+    assert!(
+        has_pos(gnu_mode),
+        "GNU mode-line should have position indicator: {gnu_mode}"
+    );
+    assert!(
+        has_pos(neo_mode),
+        "NEO mode-line should have position indicator: {neo_mode}"
+    );
+}
