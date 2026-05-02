@@ -746,7 +746,22 @@ fn build_faces() -> HashMap<u32, Face> {
         ),
     );
 
-    f.insert(2, mk(2, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 400, false, None));
+    // Face 2: Line numbers — gutter style
+    f.insert(
+        2,
+        mk(
+            2,
+            0.2,
+            0.65,
+            0.75,
+            0.0,
+            0.04,
+            0.06,
+            300,
+            true,
+            None,
+        ),
+    );
 
     // Face 3: Comments with radial gradient
     let comment_gradient = Some(Box::new(Gradient::Radial {
