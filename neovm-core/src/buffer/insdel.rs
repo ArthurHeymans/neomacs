@@ -156,12 +156,6 @@ impl Buffer {
                 self.zv += char_len;
             }
         }
-        if let Some(mark_byte) = self.mark_byte
-            && mark_byte > insert_pos
-        {
-            self.mark_byte = Some(mark_byte + byte_len);
-            self.mark = self.mark.map(|mark_char| mark_char + char_len);
-        }
         if adjust_shared_markers {
             if strict_after_markers {
                 self.text
@@ -227,16 +221,6 @@ impl Buffer {
             } else if self.zv_byte > start {
                 self.zv_byte = start;
                 self.zv = start_char;
-            }
-        }
-
-        if let Some(mark_byte) = self.mark_byte {
-            if mark_byte >= end {
-                self.mark_byte = Some(mark_byte - byte_len);
-                self.mark = self.mark.map(|mark_char| mark_char - char_len);
-            } else if mark_byte > start {
-                self.mark_byte = Some(start);
-                self.mark = Some(start_char);
             }
         }
 

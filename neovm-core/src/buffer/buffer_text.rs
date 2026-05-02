@@ -673,6 +673,38 @@ impl BufferText {
         }
     }
 
+    /// Read the byte position of a marker by id.
+    pub fn marker_bytepos(&self, marker_id: u64) -> usize {
+        let ptr = self.chain_find_by_id(marker_id);
+        if ptr.is_null() {
+            0
+        } else {
+            unsafe { (*ptr).data.bytepos }
+        }
+    }
+
+    /// Read the char position of a marker by id.
+    pub fn marker_charpos(&self, marker_id: u64) -> usize {
+        let ptr = self.chain_find_by_id(marker_id);
+        if ptr.is_null() {
+            0
+        } else {
+            unsafe { (*ptr).data.charpos }
+        }
+    }
+
+    /// Update the byte and char position of a marker in this chain.
+    pub fn move_marker_to(&self, marker_id: u64, bytepos: usize, charpos: usize) {
+        let ptr = self.chain_find_by_id(marker_id);
+        if ptr.is_null() {
+            return;
+        }
+        unsafe {
+            (*ptr).data.bytepos = bytepos;
+            (*ptr).data.charpos = charpos;
+        }
+    }
+
     /// Walk this buffer's intrusive marker chain and return the raw
     /// MarkerObj pointer for the first node whose `marker_id` matches,
     /// or null when none found. Used by pdump load (v26) to resolve

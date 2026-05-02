@@ -761,39 +761,50 @@ pub(crate) fn builtin_point_max_marker_in_buffers(
 
 /// (mark-marker) -> marker at mark, or error if no mark set
 pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_mark_marker_in_buffers(&eval.buffers, args)
+    expect_args("mark-marker", &args, 0)?;
+    let buffer_id = eval
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
+        .id;
+
+    // Return the real marker created by set_mark_byte, if it exists.
+    if let Some(buf) = eval.buffers.get(buffer_id) {
+        if !buf.mark_marker_ptr.is_null() {
+            unsafe {
+                return Ok(Value::from_veclike_ptr(
+                    buf.mark_marker_ptr as *const crate::tagged::header::VecLikeHeader,
+                ));
+            }
+        }
+    }
+
+    // No mark set — return a detached marker.
+    Ok(make_marker_value_with_id(
+        None,
+        None,
+        false,
+        Some(MARK_MARKER_ID),
+    ))
 }
 
-pub(crate) fn builtin_mark_marker_in_buffers(
+/// Find a marker Value by id in a buffer's chain.
+fn find_marker_value_in_chain(
     buffers: &BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("mark-marker", &args, 0)?;
-    let buf = buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let buffer_id = buf.id;
-    match buf.mark_char() {
-        Some(char_pos) => {
-            let pos = char_pos as i64 + 1; // 1-based
-            Ok(make_marker_value_with_id(
-                Some(buffer_id),
-                Some(pos),
-                false,
-                Some(MARK_MARKER_ID),
+    buffer_id: BufferId,
+    marker_id: u64,
+) -> Option<Value> {
+    let buf = buffers.get(buffer_id)?;
+    let ptr = buf.text.chain_find_by_id(marker_id);
+    if ptr.is_null() {
+        // Marker was removed from chain (e.g., by kill-buffer). Clear the stale id.
+        None
+    } else {
+        unsafe {
+            Some(Value::from_veclike_ptr(
+                ptr as *const crate::tagged::header::VecLikeHeader,
             ))
         }
-        // T7: with MarkerData.position deleted, an unset marker must be
-        // distinguishable solely by `buffer.is_none()`. Drop the buffer
-        // binding for unset mark-markers; `marker-position` on this value
-        // still returns nil, and `marker-buffer` returns nil, matching
-        // GNU's "unset marker points nowhere" semantics.
-        None => Ok(make_marker_value_with_id(
-            None,
-            None,
-            false,
-            Some(MARK_MARKER_ID),
-        )),
     }
 }
 

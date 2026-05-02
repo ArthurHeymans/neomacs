@@ -946,8 +946,7 @@ impl WgpuRenderer {
 
             // Only include glyphs whose face has box decorations
             match faces.get(&gface_id) {
-                Some(f)
-                    if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {}
+                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {}
                 _ => continue,
             };
 

@@ -11,11 +11,11 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint, WindowTransitionKind,
 };
-use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::eval::{ImageResolveRequest, ImageResolveSource};
@@ -5805,7 +5805,13 @@ impl LayoutEngine {
         if let Some(ref mini) = content.minibuffer {
             let nrows = mini.lines.len();
             let ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
-            builder.begin_window(mini.window_id, nrows, ncols, mini.pixel_bounds, mini.selected);
+            builder.begin_window(
+                mini.window_id,
+                nrows,
+                ncols,
+                mini.pixel_bounds,
+                mini.selected,
+            );
 
             for (row_idx, line) in mini.lines.iter().enumerate() {
                 builder.begin_row(row_idx, GlyphRowRole::Minibuffer);

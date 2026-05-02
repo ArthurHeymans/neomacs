@@ -360,7 +360,10 @@ fn build_single(
         windows: vec![WindowContent {
             window_id: 1,
             lines: scratch,
-            mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
+            mode_line: StyledLine::from_str(
+                " -:**-  *scratch*      Top L1     (Lisp Interaction)",
+                1,
+            ),
             pixel_bounds: Rect::new(0.0, 0.0, pixel_w, text_rows as f32 * char_h),
             selected: true,
             truncated_lines: false,
@@ -400,7 +403,10 @@ fn build_hsplit(
             WindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(" -:**-  *scratch*      Top L1     (Lisp Interaction)", 1),
+                mode_line: StyledLine::from_str(
+                    " -:**-  *scratch*      Top L1     (Lisp Interaction)",
+                    1,
+                ),
                 pixel_bounds: Rect::new(0., 0., pixel_w, (half - 1) as f32 * char_h),
                 selected: true,
                 truncated_lines: false,
@@ -697,12 +703,7 @@ fn build_default(
                 0,
             )],
             mode_line: StyledLine::from_str("", 0),
-            pixel_bounds: Rect::new(
-                0.,
-                (r - 1) as f32 * char_h,
-                pixel_w,
-                1.0 * char_h,
-            ),
+            pixel_bounds: Rect::new(0., (r - 1) as f32 * char_h, pixel_w, 1.0 * char_h),
             selected: false,
             truncated_lines: false,
         }),
@@ -747,21 +748,7 @@ fn build_faces() -> HashMap<u32, Face> {
     );
 
     // Face 2: Line numbers — gutter style
-    f.insert(
-        2,
-        mk(
-            2,
-            0.2,
-            0.65,
-            0.75,
-            0.0,
-            0.04,
-            0.06,
-            300,
-            true,
-            None,
-        ),
-    );
+    f.insert(2, mk(2, 0.2, 0.65, 0.75, 0.0, 0.04, 0.06, 300, true, None));
 
     // Face 3: Comments with radial gradient
     let comment_gradient = Some(Box::new(Gradient::Radial {
@@ -843,21 +830,7 @@ fn build_faces() -> HashMap<u32, Face> {
     );
 
     // Face 12: Comments — warm orange-red italic
-    f.insert(
-        12,
-        mk(
-            12,
-            1.0,
-            0.5,
-            0.3,
-            0.0,
-            0.0,
-            0.0,
-            400,
-            true,
-            None,
-        ),
-    );
+    f.insert(12, mk(12, 1.0, 0.5, 0.3, 0.0, 0.0, 0.0, 400, true, None));
     f
 }
 

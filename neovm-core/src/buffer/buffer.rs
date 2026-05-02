@@ -1393,10 +1393,14 @@ pub struct Buffer {
     pub pt: usize,
     /// Point — the current cursor byte position.
     pub pt_byte: usize,
-    /// Mark — optional character position for region operations.
-    pub mark: Option<usize>,
-    /// Mark — optional byte position for region operations.
-    pub mark_byte: Option<usize>,
+    /// GNU `BVAR(buf, mark)` — a real Lisp_Marker.  This IS the mark;
+    /// there are no separate mark position fields (matching GNU's design).
+    /// The marker tracks its own position through the chain; read it via
+    /// `mark_byte()` / `mark_char()` / `mark()`.
+    pub mark_marker_id: Option<u64>,
+    /// Cached raw pointer to the mark MarkerObj, for fast position reads
+    /// and GC root tracing (mirrors BufferStateMarkers pointers).
+    pub mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
     /// Beginning of accessible (narrowed) portion (char pos, inclusive).
     pub begv: usize,
     /// Beginning of accessible (narrowed) portion (byte pos, inclusive).
@@ -1489,8 +1493,8 @@ impl Buffer {
             text: BufferText::new(),
             pt: 0,
             pt_byte: 0,
-            mark: None,
-            mark_byte: None,
+            mark_marker_id: None,
+            mark_marker_ptr: std::ptr::null_mut(),
             begv: 0,
             begv_byte: 0,
             zv: 0,
@@ -2035,8 +2039,11 @@ impl Buffer {
     }
 
     // -- Mark ----------------------------------------------------------------
+    // GNU: the mark IS a Lisp_Marker (BVAR(buf, mark)).  There are no
+    // separate position fields.  The marker tracks its own position
+    // through the buffer's marker chain and auto-adjusts on edits.
 
-    /// Set the mark to the byte position `pos`.
+    /// Set the mark to byte position `pos`, creating the marker if needed.
     pub fn set_mark_byte(&mut self, pos: usize) {
         let clamped = pos.clamp(self.begv_byte, self.zv_byte);
         let char_pos = if clamped == self.begv_byte {
@@ -2046,28 +2053,74 @@ impl Buffer {
         } else {
             self.text.emacs_byte_to_char(clamped)
         };
-        self.mark = Some(char_pos);
-        self.mark_byte = Some(clamped);
+        if self.mark_marker_ptr.is_null() {
+            // Create the marker eagerly and register in the chain so it
+            // auto-adjusts on edits.
+            let marker =
+                crate::emacs_core::value::Value::make_marker(crate::heap_types::MarkerData {
+                    buffer: Some(self.id),
+                    insertion_type: false,
+                    marker_id: None,
+                    bytepos: clamped,
+                    charpos: char_pos,
+                    last_position_valid: true,
+                    next_marker: std::ptr::null_mut(),
+                });
+            let ptr = marker
+                .as_veclike_ptr()
+                .expect("freshly allocated marker should have veclike ptr")
+                as *mut crate::tagged::header::MarkerObj;
+            self.text.register_marker(
+                ptr,
+                self.id,
+                0,
+                clamped,
+                char_pos,
+                super::InsertionType::Before,
+            );
+            self.mark_marker_ptr = ptr;
+        } else {
+            // Update existing marker position via the chain
+            let ptr = self.mark_marker_ptr;
+            unsafe {
+                (*ptr).data.bytepos = clamped;
+                (*ptr).data.charpos = char_pos;
+            }
+        }
     }
 
-    /// Legacy mark setter retained while buffer internals are byte-only.
+    /// Legacy mark setter.
     pub fn set_mark(&mut self, pos: usize) {
         self.set_mark_byte(pos);
     }
 
-    /// Return the mark, if set.
+    /// Return the mark byte position, None if mark inactive.
     pub fn mark_byte(&self) -> Option<usize> {
-        self.mark_byte
+        if self.mark_marker_ptr.is_null() {
+            None
+        } else {
+            unsafe { Some((*self.mark_marker_ptr).data.bytepos) }
+        }
     }
 
-    /// Return the mark character position, if set.
+    /// Return the mark character position, None if mark inactive.
     pub fn mark_char(&self) -> Option<usize> {
-        self.mark
+        if self.mark_marker_ptr.is_null() {
+            None
+        } else {
+            unsafe { Some((*self.mark_marker_ptr).data.charpos) }
+        }
     }
 
-    /// Legacy mark accessor retained while buffer internals are byte-only.
+    /// Legacy mark accessor — returns byte position.
     pub fn mark(&self) -> Option<usize> {
         self.mark_byte()
+    }
+
+    /// Deactivate the mark.
+    pub fn clear_mark(&mut self) {
+        self.mark_marker_id = None;
+        self.mark_marker_ptr = std::ptr::null_mut();
     }
 
     // -- Modified flag -------------------------------------------------------
@@ -2815,8 +2868,9 @@ impl BufferManager {
         indirect.slots[BUFFER_SLOT_FILE_NAME] = Value::NIL;
         if !clone {
             indirect.overlays = OverlayList::new();
-            indirect.mark = None;
-            indirect.mark_byte = None;
+            indirect.mark_marker_id = None;
+            indirect.mark_marker_ptr = std::ptr::null_mut();
+            /* mark_byte removed */
         }
 
         self.buffers.insert(id, indirect);
@@ -3594,8 +3648,9 @@ impl BufferManager {
 
     pub fn clear_buffer_mark(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        buf.mark = None;
-        buf.mark_byte = None;
+        buf.mark_marker_id = None;
+        buf.mark_marker_ptr = std::ptr::null_mut();
+        /* mark_byte removed */
         Some(())
     }
 

@@ -1529,7 +1529,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 zv_byte: buffer
                     .text
                     .storage_byte_to_emacs_byte(buffer.zv_byte.min(buffer.text.len())),
-                mark_byte: buffer.mark_byte.map(|mark| {
+                mark_byte: buffer.mark_byte().map(|mark| {
                     buffer
                         .text
                         .storage_byte_to_emacs_byte(mark.min(buffer.text.len()))
@@ -1618,11 +1618,10 @@ pub(crate) fn builtin_set_buffer_multibyte(
         buf.zv_byte = zv_byte;
 
         if let Some(mark_byte) = mark_byte {
-            buf.mark = Some(lisp_string_byte_to_char(&new_storage, mark_byte));
-            buf.mark_byte = Some(mark_byte);
+            buf.set_mark_byte(mark_byte);
         } else {
-            buf.mark = None;
-            buf.mark_byte = None;
+            buf.mark_marker_id = None;
+            buf.mark_marker_ptr = std::ptr::null_mut();
         }
 
         buf.last_window_start = last_window_start_byte;
