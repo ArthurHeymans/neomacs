@@ -2587,4 +2587,52 @@ mod tests {
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"--cl-always--\""), "never clause should use --cl-always-- flag");
     }
+
+    #[test]
+    fn cl_loop_sum_accumulation() {
+        let artifact = compile_source(
+            "cl-loop-sum.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x in (list 1 2 3) sum x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"+\""), "sum should use + operator");
+        assert!(rendered.contains("\"--cl-acc-"));
+    }
+
+    #[test]
+    fn cl_loop_with_and_finally() {
+        let artifact = compile_source(
+            "cl-loop-with2.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop with total = 0 for x in (list 1 2 3) do (setq total (+ total x)) finally return total)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"total\""));
+    }
+
+    #[test]
+    fn cl_loop_do_and_message() {
+        let artifact = compile_source(
+            "cl-loop-do2.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 to 3 do (message \"%d\" x))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"message\""));
+        assert!(rendered.contains("\"while\""));
+    }
+
+    #[test]
+    fn cl_loop_for_from_no_end() {
+        // for x from 1 (no end) — should create infinite loop with no while test
+        let artifact = compile_source(
+            "cl-loop-noend.el",
+            ";;; -*- lexical-binding: t; -*-\n(cl-loop for x from 1 while (< x 5) collect x)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"while\""));
+        assert!(rendered.contains("\"<\""));
+    }
 }
