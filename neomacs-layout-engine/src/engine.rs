@@ -5675,7 +5675,11 @@ impl LayoutEngine {
 
         let mut face_map = std::collections::HashMap::new();
         for face in &content.faces {
-            face_map.insert(face.id, face.clone());
+            let mut f = face.clone();
+            // Convert points to physical pixels so the glyph atlas renders
+            // at the same DPI-aware size the layout engine measured.
+            f.font_size = crate::fontconfig::points_to_pixels(f.font_size);
+            face_map.insert(f.id, f);
         }
         builder.set_faces(face_map);
 
