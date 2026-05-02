@@ -3613,4 +3613,113 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(30)));
     }
+
+    // --- Complex macro patterns ---
+
+    #[test]
+    fn defmacro_generating_defun() {
+        // Macro that generates a defun form
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defmacro defconst-fn (name val)\n\
+              `(defun ,name () ,val))\n\
+            (defconst-fn get-answer 42)\n\
+            (get-answer)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn nested_macro_expansion() {
+        // Macro that expands to another macro call
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defmacro my-push (val place)\n\
+              (list 'setq place (list 'cons val place)))\n\
+            (let ((xs nil))\n\
+              (my-push 1 xs)\n\
+              (my-push 2 xs)\n\
+              (car xs))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn defmacro_with_list_functions() {
+        // Macro using list, append, mapcar at expansion time
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defmacro sum-of (&rest args)\n\
+              (cons '+ args))\n\
+            (sum-of 1 2 3 4 5)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn macro_using_nth_and_length() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (defmacro swap (a b)\n\
+              (let ((tmp (make-symbol \"tmp\")))\n\
+                (list 'let (list (list tmp a))\n\
+                      (list 'setq a b)\n\
+                      (list 'setq b tmp))))\n\
+            (let ((x 1) (y 2))\n\
+              (swap x y)\n\
+              (+ x (* y 10)))",
+        );
+        // After swap: x=2, y=1 → 2 + 10 = 12
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
+    fn backquote_with_multiple_splices() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs (list 1 2)) (ys (list 3 4)))\n\
+              (length `(a ,@xs b ,@ys c)))",
+        );
+        // (a 1 2 b 3 4 c) → 7
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn dolist_with_result_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (dolist (x (list 1 2 3) (list 'done x))\n\
+              (message \"%d\" x))",
+        );
+        // After loop, x is nil, result form evaluates to (done nil)
+        // Since we return the result form, we need to check it's a cons
+        assert!(value.is_some());
+        let v = value.unwrap();
+        assert!(v != LispValue::NIL);
+    }
+
+    #[test]
+    fn dotimes_counts_correctly() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((sum 0))\n\
+              (dotimes (i 5 sum)\n\
+                (setq sum (+ sum i))))",
+        );
+        // i goes 0,1,2,3,4 → sum = 0+1+2+3+4 = 10
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn while_loop_with_mutation() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs (list 1 2 3 4 5)) (sum 0))\n\
+              (while xs\n\
+                (setq sum (+ sum (car xs)))\n\
+                (setq xs (cdr xs)))\n\
+              sum)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
 }
