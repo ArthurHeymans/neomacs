@@ -28,6 +28,7 @@ struct FreshBuildOptions {
     dry_run: bool,
     native_comp: bool,
     skip_build: bool,
+    no_byte_compile: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -281,6 +282,7 @@ impl FreshBuildOptions {
         let mut native_comp =
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
         let mut skip_build = false;
+        let mut no_byte_compile = false;
 
         while let Some(arg) = args.next() {
             match arg.to_string_lossy().as_ref() {
@@ -301,6 +303,7 @@ impl FreshBuildOptions {
                 "--native-comp" => native_comp = true,
                 "--no-native-comp" => native_comp = false,
                 "--skip-build" => skip_build = true,
+                "--no-byte-compile" => no_byte_compile = true,
                 "--help" | "-h" => {
                     print_usage();
                     std::process::exit(0);
@@ -321,6 +324,7 @@ impl FreshBuildOptions {
             dry_run,
             native_comp,
             skip_build,
+            no_byte_compile,
         })
     }
 }
@@ -397,7 +401,9 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // bootstrap-emacs.  Keep primary loaddefs sources available for
     // pbootstrap/COMPILE_FIRST; GNU removes loaddefs.el later, in
     // autoloads-force, immediately before regenerating it.
-    remove_stale_lisp_bytecode(options, &paths)?;
+    if !options.no_byte_compile {
+        remove_stale_lisp_bytecode(options, &paths)?;
+    }
     remove_stale_generated_leim_sources(options, &paths)?;
     remove_stale_generated_custom_finder_sources(options, &paths)?;
     remove_stale_generated_unidata_sources(options, &paths)?;
@@ -424,45 +430,47 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         &envs,
     )?;
 
-    // ---------------------------------------------------------------
-    // COMPILE_FIRST: byte-compile the compiler infrastructure.
-    //
-    // GNU lisp/Makefile.in compiles COMPILE_FIRST files ONE AT A TIME,
-    // each in a SEPARATE emacs process, in the listed order:
-    //   macroexp.elc → cconv.elc → byte-opt.elc → bytecomp.elc
-    //   → loaddefs-gen.elc → radix-tree.elc
-    //
-    // This ordering is critical: each file is compiled with a compiler
-    // that already has the previously-compiled .elc files loaded,
-    // making each successive compilation faster.  The comment in GNU's
-    // Makefile explains: "They're ordered by size, so we use the
-    // slowest-compiler on the smallest file and move to larger files
-    // as the compiler gets faster."
-    //
-    // This MUST run before loaddefs generation, because
-    // loaddefs-generate--emacs-batch loads bytecomp.el which loads
-    // byte-opt.el.  Without compiled .elc files, the pcase macro
-    // expansion in byte-opt.el runs as interpreted elisp and hangs.
-    // ---------------------------------------------------------------
-    let compile_first_sources =
-        parse_compile_first_sources(&paths.makefile_in, &paths.lisp_root, options.native_comp)?;
-    let compile_first_sources: Vec<PathBuf> = compile_first_sources
-        .into_iter()
-        .filter(|source| options.dry_run || compile_first_needs_rebuild(source))
-        .collect();
-    // Compile one file at a time, each in its own bootstrap-neomacs
-    // process.  This matches GNU's make suffix rule which runs
-    // `$(emacs) -f batch-byte-compile $<` per file.  Each process
-    // picks up the .elc files from previous compilations.
-    for source in &compile_first_sources {
-        let compile_args = compile_first_args_for_source(options.native_comp, source);
-        run_command(
-            options,
-            &options.repo_root,
-            &paths.bootstrap,
-            &compile_args,
-            &envs,
-        )?;
+    if !options.no_byte_compile {
+        // ---------------------------------------------------------------
+        // COMPILE_FIRST: byte-compile the compiler infrastructure.
+        //
+        // GNU lisp/Makefile.in compiles COMPILE_FIRST files ONE AT A TIME,
+        // each in a SEPARATE emacs process, in the listed order:
+        //   macroexp.elc → cconv.elc → byte-opt.elc → bytecomp.elc
+        //   → loaddefs-gen.elc → radix-tree.elc
+        //
+        // This ordering is critical: each file is compiled with a compiler
+        // that already has the previously-compiled .elc files loaded,
+        // making each successive compilation faster.  The comment in GNU's
+        // Makefile explains: "They're ordered by size, so we use the
+        // slowest-compiler on the smallest file and move to larger files
+        // as the compiler gets faster."
+        //
+        // This MUST run before loaddefs generation, because
+        // loaddefs-generate--emacs-batch loads bytecomp.el which loads
+        // byte-opt.el.  Without compiled .elc files, the pcase macro
+        // expansion in byte-opt.el runs as interpreted elisp and hangs.
+        // ---------------------------------------------------------------
+        let compile_first_sources =
+            parse_compile_first_sources(&paths.makefile_in, &paths.lisp_root, options.native_comp)?;
+        let compile_first_sources: Vec<PathBuf> = compile_first_sources
+            .into_iter()
+            .filter(|source| options.dry_run || compile_first_needs_rebuild(source))
+            .collect();
+        // Compile one file at a time, each in its own bootstrap-neomacs
+        // process.  This matches GNU's make suffix rule which runs
+        // `$(emacs) -f batch-byte-compile $<` per file.  Each process
+        // picks up the .elc files from previous compilations.
+        for source in &compile_first_sources {
+            let compile_args = compile_first_args_for_source(options.native_comp, source);
+            run_command(
+                options,
+                &options.repo_root,
+                &paths.bootstrap,
+                &compile_args,
+                &envs,
+            )?;
+        }
     }
 
     // GNU src/Makefile.in generates the full Unicode data set with
@@ -521,8 +529,11 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // the final emacs target depend on that preloaded Lisp set.  That means
     // loadup's libraries are byte-compiled by bootstrap-emacs before the final
     // pdump, while the broad lisp/compile-main pass still runs later.
-    run_preloaded_lisp_byte_compile(options, &paths, &envs)?;
+    if !options.no_byte_compile {
+        run_preloaded_lisp_byte_compile(options, &paths, &envs)?;
+    }
 
+    print_synthetic_step("dump final Emacs executable (GNU temacs --temacs=pdump)");
     run_command(
         options,
         &options.repo_root,
@@ -541,7 +552,9 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // bootstrap-emacs.  This matters for Unicode property users such as
     // sgml-mode and char-fold: charprop.el is generated after pbootstrap, then
     // loaded into the final pdump before the broad Lisp byte-compile pass.
-    run_compile_main(options, &paths, &envs)?;
+    if !options.no_byte_compile {
+        run_compile_main(options, &paths, &envs)?;
+    }
 
     Ok(())
 }
@@ -3403,7 +3416,7 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] [--bin-dir DIR] [--runtime-root DIR] [--release] [--dry-run] [--native-comp|--no-native-comp] [--skip-build]
+Usage: cargo xtask [fresh-build] [--bin-dir DIR] [--runtime-root DIR] [--release] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile]
 
 Build the GNU-shaped Neomacs runtime pipeline:
   1. cargo build --verbose -p neomacs [--release]
@@ -3426,6 +3439,7 @@ Options:
   --native-comp       Include native-comp-only COMPILE_FIRST entries
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
   --skip-build        Skip the initial cargo build -p neomacs stage
+  --no-byte-compile   Skip byte-compilation steps (5, 9, 11); keep existing .elc
 
 Environment:
   NEOMACS_NATIVE_COMP=yes
