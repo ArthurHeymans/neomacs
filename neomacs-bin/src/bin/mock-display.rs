@@ -119,17 +119,26 @@ fn run_gui(demo: &str) {
 
     let _logging_guard = neovm_core::logging::init(neovm_core::logging::LogTarget::Stdout);
 
-    // Measure actual font metrics instead of hardcoding pixel sizes.
+    // Express frame in character cells. The layout engine measures the
+    // actual font metrics (DPI-aware via fontconfig) and we use the same
+    // engine instance for measurement and layout — no duplicate FontSystem.
     let cols = 130u16;
     let rows = 50u16;
-    let (char_w, char_h) = {
-        use neomacs_layout_engine::font_metrics::FontMetricsService;
-        let mut fm = FontMetricsService::new();
-        let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
-        let size = 12.0f32;
-        let m = fm.font_metrics(family, 400, false, size);
-        let cw = fm.char_width('m', family, 400, false, size);
-        (cw.max(1.0), m.line_height.max(1.0))
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    // font_size in points, converted to physical pixels via fontconfig DPI
+    let font_size_px =
+        neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
+    let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
+    let char_w = {
+        let fm = engine.font_metrics.as_mut().unwrap();
+        fm.char_width('m', family, 400, false, font_size_px).max(1.0)
+    };
+    let char_h = {
+        let fm = engine.font_metrics.as_mut().unwrap();
+        fm.font_metrics(family, 400, false, font_size_px)
+            .line_height
+            .max(1.0)
     };
     let pixel_w = (cols as f32 * char_w) as u32;
     let pixel_h = (rows as f32 * char_h) as u32;
@@ -803,6 +812,8 @@ fn mk(
     let mut face = Face::new(id);
     face.foreground = Color::new(fr, fg, fb, 1.0);
     face.background = Color::new(br, _bg, bb, 1.0);
+    // DPI-aware font size: convert from logical points to physical pixels
+    face.font_size = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
     face.font_weight = weight;
     face.attributes = attrs;
     face.background_gradient = gradient;

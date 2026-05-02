@@ -1312,7 +1312,7 @@ pub struct LayoutEngine {
     /// `use_cosmic_metrics: bool` runtime flag — the decision is
     /// now made once at startup by the binary that constructs the
     /// layout engine.
-    pub(crate) font_metrics: Option<FontMetricsService>,
+    pub font_metrics: Option<FontMetricsService>,
     /// Previous frame's per-window metadata for transition hint derivation.
     prev_window_infos: std::collections::HashMap<i64, WindowInfo>,
     /// Previous selected window id for switch-fade detection.
