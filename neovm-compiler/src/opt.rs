@@ -436,9 +436,7 @@ pub fn dead_code_elimination(function: &mut SsaFunction) -> OptOutput {
 
 pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
     let mut changed = false;
-    let mut loop_changed = true;
-    while loop_changed {
-        loop_changed = false;
+    loop {
         let preds = crate::verify::predecessor_map(function);
         let mut merge: Option<(BlockId, BlockId)> = None;
         for (bid, block) in function.blocks.iter() {
@@ -490,7 +488,6 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
             }
         }
         changed = true;
-        loop_changed = true;
     }
     OptOutput { changed }
 }

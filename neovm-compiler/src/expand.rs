@@ -1790,24 +1790,6 @@ impl Expander {
                     clauses.push(LoopClause::Never { expr: items[pos].clone() });
                     pos += 1;
                 }
-                "thereis" => {
-                    pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Thereis { expr: items[pos].clone() });
-                    pos += 1;
-                }
-                "minimize" => {
-                    pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Minimize { expr: items[pos].clone() });
-                    pos += 1;
-                }
-                "maximize" => {
-                    pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Maximize { expr: items[pos].clone() });
-                    pos += 1;
-                }
                 "repeat" => {
                     pos += 1;
                     if pos >= items.len() { return None; }
