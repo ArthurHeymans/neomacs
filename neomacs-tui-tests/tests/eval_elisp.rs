@@ -1018,3 +1018,61 @@ fn regexp_and_assoc_operations_match_gnu_semantics() {
         );
     }
 }
+
+// ── Evaluator core tests ────────────────────────────────────
+
+#[test]
+fn lambda_apply_funcall_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // ((lambda (x) (+ x 1)) 41) should be 42
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "((lambda (x) (+ x 1)) 41)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("42"),
+            "{label}: ((lambda (x) (+ x 1)) 41) should be 42. Echo: {echo}"
+        );
+    }
+
+    // (apply '+ '(1 2 3)) should be 6
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(apply '+ '(1 2 3))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('6'),
+            "{label}: (apply '+ '(1 2 3)) should be 6. Echo: {echo}"
+        );
+    }
+
+    // (funcall '+ 1 2 3) should be 6
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(funcall '+ 1 2 3)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('6'),
+            "{label}: (funcall '+ 1 2 3) should be 6. Echo: {echo}"
+        );
+    }
+}
