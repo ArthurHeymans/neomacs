@@ -106,7 +106,9 @@ pub enum SsaInstKind {
     CatchBegin {
         tag: ValueId,
     },
-    CatchEnd,
+    CatchEnd {
+        body_result: Option<ValueId>,
+    },
     Throw {
         tag: ValueId,
         value: ValueId,

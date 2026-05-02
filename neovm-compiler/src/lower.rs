@@ -383,7 +383,7 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::CatchBegin { tag } => RegInstKind::CatchBegin {
                 tag: self.value_reg(*tag),
             },
-            SsaInstKind::CatchEnd => RegInstKind::CatchEnd,
+            SsaInstKind::CatchEnd { .. } => RegInstKind::CatchEnd,
             SsaInstKind::Throw { tag, value } => RegInstKind::Throw {
                 tag: self.value_reg(*tag),
                 value: self.value_reg(*value),
@@ -1005,9 +1005,15 @@ impl SsaBuilder {
             HirExprKind::Catch { tag, body } => {
                 let tag = self.lower_expr(tag)?;
                 self.emit_no_result(SsaInstKind::CatchBegin { tag });
-                let result = self.lower_expr(body);
-                self.emit_no_result(SsaInstKind::CatchEnd);
-                result
+                let body_result = self.lower_expr(body);
+                // CatchEnd produces a result: the merge of normal-path body value
+                // and throw-path throw value. This ensures the catch expression
+                // always has a value_id even when the body throws.
+                let catch_result = self.emit_value(
+                    SsaInstKind::CatchEnd { body_result },
+                    Effects::single(Effect::MayGc),
+                );
+                Some(catch_result)
             }
             HirExprKind::Throw { tag, value } => {
                 let tag = self.lower_expr(tag)?;
@@ -1288,7 +1294,7 @@ impl SsaBuilder {
             SsaInstKind::UnbindDynamic { .. } => Effects::single(Effect::UnbindDynamic),
             SsaInstKind::DeclareSpecial(_) => Effects::pure(),
             SsaInstKind::CatchBegin { .. }
-            | SsaInstKind::CatchEnd
+            | SsaInstKind::CatchEnd { .. }
             | SsaInstKind::ConditionCaseBegin { .. }
             | SsaInstKind::ConditionCaseHandler { .. }
             | SsaInstKind::ConditionCaseHandlerResult { .. }

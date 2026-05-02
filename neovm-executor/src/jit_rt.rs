@@ -430,6 +430,20 @@ impl JitExceptionState {
 /// Checked by compiled code after each potentially-throwing call.
 const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
 
+/// Bridge an interpreter throw into the JIT exception state.
+/// Returns a sentinel LispValue so the JIT compiled code's exception check
+/// detects it and branches to the handler.
+pub fn bridge_interpreter_throw(tag: LispValue, value: LispValue) -> LispValue {
+    set_pending_throw(tag, value);
+    LispValue::from_abi_i64(EXCEPTION_SENTINEL)
+}
+
+/// Bridge an interpreter signal into the JIT exception state.
+pub fn bridge_interpreter_signal(symbol: LispValue, data: LispValue) -> LispValue {
+    set_pending_signal(symbol, data);
+    LispValue::from_abi_i64(EXCEPTION_SENTINEL)
+}
+
 fn has_pending_exception() -> bool {
     JIT_EXCEPTION_STATE.with(|state| {
         let state = state.borrow();
@@ -530,7 +544,8 @@ jit_shim!(__neomacs_rt_error_0(vmctx: i64, message_index: i64) -> i64 {
     let name = resolve_str!(ctx, message_index).to_string();
     let rt = &mut *ctx.runtime;
     let symbol = rt.intern("error");
-    let data = rt.cons(LispValue::from_abi_i64(message_index), LispValue::NIL);
+    let msg = rt.string(&name);
+    let data = rt.cons(msg, LispValue::NIL);
     set_pending_signal(symbol, data);
     EXCEPTION_SENTINEL
 });
@@ -676,12 +691,6 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
         "booleanp" => Some(bool_value(args[0].is_nil() || args[0].is_true())),
         "natnump" | "wholenump" => Some(bool_value(args[0].as_fixnum().is_some_and(|v| v >= 0))),
         "zerop" => Some(bool_value(args[0].as_fixnum() == Some(0))),
-        "1+" => Some(args[0].as_fixnum()
-            .map(|n| LispValue::expect_fixnum(n + 1))
-            .unwrap_or(LispValue::NIL)),
-        "1-" => Some(args[0].as_fixnum()
-            .map(|n| LispValue::expect_fixnum(n - 1))
-            .unwrap_or(LispValue::NIL)),
         "number-sequence" => {
             let from = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(0);
             let to = args.get(1).and_then(|v| v.as_fixnum()).unwrap_or(0);
@@ -1297,32 +1306,43 @@ fn format_string(rt: &mut Runtime, template: LispValue, args: &[LispValue]) -> O
     let tmpl = rt.string_contents(template).ok()?;
     let mut result = String::new();
     let mut chars = tmpl.chars().peekable();
+    let mut arg_idx = 0;
     while let Some(ch) = chars.next() {
         if ch == '%' {
             let spec = chars.peek().copied();
             match spec {
-                Some('s') => {
+                Some('s') | Some('S') => {
                     chars.next();
-                    if let Some(&arg) = args.first() {
-                        result.push_str(&rt.format_value(arg));
+                    if arg_idx < args.len() {
+                        let arg = args[arg_idx];
+                        // %s uses princ-style (no quotes for strings)
+                        if rt.is_string(arg) {
+                            result.push_str(rt.string_contents(arg).ok()?);
+                        } else {
+                            result.push_str(&rt.format_value(arg));
+                        }
+                        arg_idx += 1;
                     }
                 }
                 Some('d') => {
                     chars.next();
-                    if let Some(&arg) = args.first() {
-                        result.push_str(&arg.as_fixnum().unwrap_or(0).to_string());
+                    if arg_idx < args.len() {
+                        result.push_str(&args[arg_idx].as_fixnum().unwrap_or(0).to_string());
+                        arg_idx += 1;
                     }
                 }
                 Some('f') => {
                     chars.next();
-                    if let Some(&arg) = args.first() {
-                        let num = rt.as_number(arg).unwrap_or(0.0);
+                    if arg_idx < args.len() {
+                        let num = rt.as_number(args[arg_idx]).unwrap_or(0.0);
                         result.push_str(&num.to_string());
+                        arg_idx += 1;
                     }
                 }
                 Some('c') => {
                     chars.next();
-                    if let Some(&arg) = args.first() {
+                    if arg_idx < args.len() {
+                        let arg = args[arg_idx];
                         if let Some(ch) = arg.as_char() {
                             result.push(ch);
                         } else if let Some(n) = arg.as_fixnum() {
@@ -1330,6 +1350,7 @@ fn format_string(rt: &mut Runtime, template: LispValue, args: &[LispValue]) -> O
                                 result.push(ch);
                             }
                         }
+                        arg_idx += 1;
                     }
                 }
                 Some('%') => {

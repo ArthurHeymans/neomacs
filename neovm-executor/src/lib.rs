@@ -1793,4 +1793,45 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
     }
+
+    // --- JIT catch/throw with interpreter fallback bridge ---
+
+    #[test]
+    fn jit_catch_throw_from_interpreter_function() {
+        // JIT catch + call to a function that throws (runs in interpreter via bridge)
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-call.el",
+            "(defun do-throw () (throw 'tag 77))
+             (catch 'tag (do-throw))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(77)));
+    }
+
+    #[test]
+    fn jit_catch_throw_with_computation() {
+        // Catch that catches a throw from within a computation
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-comp.el",
+            "(+ 10 (catch 'tag (+ 1 (throw 'tag 20))))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(30)));
+    }
+
+    #[test]
+    fn jit_format_multiple_args() {
+        // Tests the fixed format_string that advances arg index
+        let artifact = crate::jit_interp::execute_with_jit(
+            "format-args.el",
+            "(format \"%s %d %s\" \"hello\" 42 \"world\")",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.string_contents(val).unwrap();
+        assert_eq!(s, "hello 42 world");
+    }
 }

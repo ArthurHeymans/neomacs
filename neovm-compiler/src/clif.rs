@@ -1227,7 +1227,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     call_args.extend(args.iter().copied());
                     let inst = self.builder.ins().call(func_ref, &call_args);
                     let result_value = self.builder.inst_results(inst)[0];
-                    self.value_map.insert(result, result_value);
+                    let Some(checked) = self.emit_exception_check(result_value) else {
+                        return;
+                    };
+                    self.value_map.insert(result, checked);
                     return;
                 }
                 let Some(func_ref) = self.call_named_ref(args.len()) else {
@@ -1310,7 +1313,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     },
                 });
             }
-            SsaInstKind::CatchEnd => {
+            SsaInstKind::CatchEnd { body_result } => {
                 let handler = self
                     .exception_handlers
                     .pop()
@@ -1333,11 +1336,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         // Add a block param for the catch result value
                         let catch_result =
                             self.builder.append_block_param(continuation_block, types::I64);
-                        // Normal path: body completed normally, pass NIL as the result
-                        let nil_val = self.builder.ins().iconst(types::I64, NIL_BITS);
+                        // Normal path: body completed normally, pass the body result
+                        let normal_val = match body_result.and_then(|v| self.value(v)) {
+                            Some(v) => v,
+                            None => self.builder.ins().iconst(types::I64, NIL_BITS),
+                        };
                         self.builder
                             .ins()
-                            .jump(continuation_block, &[BlockArg::Value(nil_val)]);
+                            .jump(continuation_block, &[BlockArg::Value(normal_val)]);
                         self.builder.switch_to_block(handler.handler_block);
                         let Some(peek_ref) =
                             self.exception_func_ref("peek_throw_tag", 0)
@@ -1413,7 +1419,15 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         self.builder.seal_block(rethrow_block);
                         self.builder.switch_to_block(continuation_block);
                         self.builder.seal_block(continuation_block);
-                        // Store the catch result for Return(None) override
+                        // Map CatchEnd's result to the catch_result block parameter
+                        if let Some(vid) = inst.result {
+                            self.value_map.insert(vid, catch_result);
+                        }
+                        // Also remap body_result if present (for legacy code that
+                        // references the body's value directly)
+                        if let Some(vid) = body_result {
+                            self.value_map.insert(*vid, catch_result);
+                        }
                         self.catch_result_value = Some(catch_result);
                     }
                     _ => {

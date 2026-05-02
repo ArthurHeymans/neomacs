@@ -265,8 +265,11 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::CatchBegin { tag } => {
             let _ = write!(out, "catch-begin {}", value_name(function, *tag));
         }
-        SsaInstKind::CatchEnd => {
-            let _ = write!(out, "catch-end");
+        SsaInstKind::CatchEnd { body_result } => {
+            match body_result {
+                Some(v) => { let _ = write!(out, "catch-end body={}", value_name(function, *v)); }
+                None => { let _ = write!(out, "catch-end"); }
+            }
         }
         SsaInstKind::Throw { tag, value } => {
             let _ = write!(

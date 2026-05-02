@@ -167,7 +167,9 @@ fn remap_inst(inst: &mut crate::ssa::SsaInst, remap: impl Fn(ValueId) -> ValueId
         CatchBegin { tag } => {
             *tag = remap(*tag);
         }
-        CatchEnd => {}
+        CatchEnd { body_result } => {
+            if let Some(v) = body_result { *v = remap(*v); }
+        }
         Throw { tag, value } => {
             *tag = remap(*tag);
             *value = remap(*value);

@@ -123,6 +123,7 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::MakeLexicalCell { initial: value }
         | SsaInstKind::LexicalCellGet { cell: value }
         | SsaInstKind::CatchBegin { tag: value } => vec![*value],
+        SsaInstKind::CatchEnd { body_result: Some(value) } => vec![*value],
         SsaInstKind::LexicalCellSet { cell, value } => vec![*cell, *value],
         SsaInstKind::Throw { tag, value } => vec![*tag, *value],
         SsaInstKind::CallNamed { args, .. } => args.clone(),
@@ -140,7 +141,7 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::SymbolGet(_)
         | SsaInstKind::UnbindDynamic { .. }
         | SsaInstKind::DeclareSpecial(_)
-        | SsaInstKind::CatchEnd
+        | SsaInstKind::CatchEnd { body_result: None }
         | SsaInstKind::ConditionCaseBegin { .. }
         | SsaInstKind::ConditionCaseHandler { .. }
         | SsaInstKind::ConditionCaseEnd

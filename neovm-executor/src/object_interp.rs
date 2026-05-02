@@ -119,12 +119,10 @@ pub(crate) fn execute_module_function(
     let adapted = adapt_lambda_args_standalone(&function.lambda_list, args, runtime)?;
     let result = execute_with_module(function, &adapted, module, functions_by_name, runtime, &mut fuel);
     if let Some(thrown) = result.thrown {
-        eprintln!("JIT: uncaught throw: {}", runtime.format_value(thrown.tag));
-        return None;
+        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
     }
     if let Some(signaled) = result.signaled {
-        eprintln!("JIT: unhandled signal: {}", runtime.format_value(signaled.symbol));
-        return None;
+        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
     }
     result.value
 }
@@ -167,12 +165,10 @@ pub(crate) fn execute_function_object_direct(
         &mut fuel,
     );
     if let Some(thrown) = result.thrown {
-        eprintln!("JIT: uncaught throw: {}", runtime.format_value(thrown.tag));
-        return None;
+        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
     }
     if let Some(signaled) = result.signaled {
-        eprintln!("JIT: unhandled signal: {}", runtime.format_value(signaled.symbol));
-        return None;
+        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
     }
     result.value
 }
@@ -215,7 +211,14 @@ pub(crate) fn execute_interpreter_primitive(
         fuel: &mut fuel,
         diagnostics: Vec::new(),
     };
-    interp.execute_primitive_call(name, args).flatten()
+    let result = interp.execute_primitive_call(name, args).flatten();
+    if let Some(thrown) = interp.pending_throw.take() {
+        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
+    }
+    if let Some(signaled) = interp.pending_signal.take() {
+        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
+    }
+    result
 }
 
 fn adapt_lambda_args_standalone(
@@ -936,7 +939,7 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_nil() || self.runtime.is_cons(args[0]))),
             "numberp" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(args[0].is_fixnum())),
+                .map(|_| bool_value(self.runtime.is_number(args[0]))),
             "integerp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_fixnum())),
