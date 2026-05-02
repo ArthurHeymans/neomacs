@@ -22,6 +22,12 @@ pub fn optimize_ssa_module(module: &mut SsaModule) -> bool {
 
 /// Run the default optimization pipeline on a single SSA function.
 pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
+    // Verify SSA is valid before optimization (debug only)
+    #[cfg(debug_assertions)]
+    {
+        let diags = crate::verify::verify_ssa(function);
+        assert!(diags.is_empty(), "SSA is invalid before optimization: {diags:?}");
+    }
     let mut any_changed = false;
     let mut changed = true;
     while changed {
@@ -34,11 +40,7 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
             changed = true;
             any_changed = true;
         }
-        if block_merging(function).changed {
-            changed = true;
-            any_changed = true;
-        }
-        if common_subexpression_elimination(function).changed {
+        if simplify_cfg(function) {
             changed = true;
             any_changed = true;
         }
@@ -187,6 +189,24 @@ fn remap_terminator(term: &mut SsaTerminator, remap: impl Fn(ValueId) -> ValueId
         }
         _ => {}
     }
+}
+
+/// Remove blocks that are no longer reachable after branch folding.
+fn simplify_cfg(function: &mut SsaFunction) -> bool {
+    let preds = crate::verify::predecessor_map(function);
+    let mut changed = false;
+    for (bid, block) in function.blocks.iter_mut() {
+        if Some(bid) == function.entry {
+            continue;
+        }
+        let n_preds = preds.get(&bid).map_or(0, |p| p.len());
+        if n_preds == 0 && !matches!(block.terminator, SsaTerminator::Unreachable) {
+            block.instructions.clear();
+            block.terminator = SsaTerminator::Unreachable;
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn const_to_bool(c: &SsaConst) -> Option<bool> {
@@ -440,6 +460,18 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
         // Mark merged block as unreachable (PrimaryMap has no remove)
         function.blocks[dst].instructions.clear();
         function.blocks[dst].terminator = SsaTerminator::Unreachable;
+        // Redirect any other jumps to the merged block so they point to src
+        for (_, block) in function.blocks.iter_mut() {
+            if let SsaTerminator::Jump { target, .. } = &mut block.terminator {
+                if *target == dst {
+                    *target = src;
+                }
+            }
+            if let SsaTerminator::BranchIfNil { then_target, else_target, .. } = &mut block.terminator {
+                if *then_target == dst { *then_target = src; }
+                if *else_target == dst { *else_target = src; }
+            }
+        }
         changed = true;
         loop_changed = true;
     }
