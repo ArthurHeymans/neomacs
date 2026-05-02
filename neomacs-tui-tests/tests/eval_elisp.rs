@@ -855,3 +855,55 @@ fn string_and_numeric_operations_match_gnu_semantics() {
         );
     }
 }
+
+// ── Environment and keymap tests ────────────────────────────
+
+#[test]
+fn getenv_returns_same_path_as_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    support::eval_expression(&mut gnu, &mut neo, "(getenv \"HOME\")");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('\"') || echo.contains('/'),
+            "{label}: (getenv HOME) should return a path. Echo: {echo}"
+        );
+    }
+
+    support::eval_expression(&mut gnu, &mut neo, "(getenv \"USER\")");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('\"'),
+            "{label}: (getenv USER) should return a string. Echo: {echo}"
+        );
+    }
+}
+
+#[test]
+fn lookup_key_global_map_returns_correct_binding() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(lookup-key global-map (kbd \"C-x C-f\"))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            !echo.trim().is_empty() && !echo.contains("nil"),
+            "{label}: (lookup-key global-map (kbd C-x C-f)) should find binding"
+        );
+    }
+}
