@@ -282,14 +282,14 @@ fn scratch_buffer_lines() -> Vec<(&'static str, u32)> {
         ("  \"Say hello to NAME.\"", 4),
         ("  (message \"Hello, %s!\" name))", 3),
         ("", 0),
-        (";; Type C-x C-e to evaluate", 2),
+        (";; Type C-x C-e to evaluate", 12),
         ("", 0),
         ("(setq neomacs-version \"0.1.0\")", 0),
         ("(setq display-pipeline 'glyph-matrix)", 0),
         ("", 0),
-        (";; GNU Emacs compatible glyph matrix model", 2),
-        (";; TTY rendering via TtyRif", 2),
-        (";; Single-thread, no channel, matching GNU", 2),
+        (";; GNU Emacs compatible glyph matrix model", 12),
+        (";; TTY rendering via TtyRif", 12),
+        (";; Single-thread, no channel, matching GNU", 12),
         ("", 0),
         ("", 0),
         ("", 0),
@@ -323,7 +323,7 @@ fn help_buffer_lines() -> Vec<(&'static str, u32)> {
         ("  customizable, self-documenting", 0),
         ("  real-time display editor.", 0),
         ("", 0),
-        (";; Key Bindings:", 2),
+        (";; Key Bindings:", 12),
         ("  C-x C-f  Find file", 0),
         ("  C-x C-s  Save file", 0),
         ("  C-x b    Switch buffer", 0),
@@ -840,6 +840,23 @@ fn build_faces() -> HashMap<u32, Face> {
     f.insert(
         11,
         mk(11, 0.9, 0.9, 0.95, 0.15, 0.20, 0.35, 400, false, None),
+    );
+
+    // Face 12: Comments — warm orange-red italic
+    f.insert(
+        12,
+        mk(
+            12,
+            1.0,
+            0.5,
+            0.3,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            true,
+            None,
+        ),
     );
     f
 }
