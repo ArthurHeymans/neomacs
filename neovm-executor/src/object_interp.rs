@@ -3290,4 +3290,128 @@ mod tests {
         // (mapcar (lambda (x) (+ x 10)) '(1 2 3)) → (11 12 13)
         assert_eq!(value, Some(LispValue::expect_fixnum(13)));
     }
+
+    #[test]
+    fn recursive_lambda_closure() {
+        // Lambda that captures itself via symbol to recurse
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((fib nil))\n\
+              (setq fib (lambda (n)\n\
+                (if (< n 2) n (+ (funcall fib (- n 1)) (funcall fib (- n 2))))))\n\
+              (funcall fib 6))",
+        );
+        // fib(6) = 8
+        assert_eq!(value, Some(LispValue::expect_fixnum(8)));
+    }
+
+    #[test]
+    fn dynamic_binding_across_function_call() {
+        // Dynamic var set in caller, read in callee
+        let (value, _) = execute(
+            "(defvar *dyn-var* nil)\n\
+            (defun get-dyn () *dyn-var*)\n\
+            (let ((*dyn-var* 42))\n\
+              (get-dyn))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn nested_condition_case() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (condition-case err\n\
+              (condition-case inner\n\
+                (signal 'test-error '(99))\n\
+                (wrong-type-argument inner))\n\
+              (test-error (cadr err)))",
+        );
+        // Outer handler catches test-error, (cadr err) = 99
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn unwind_protect_in_condition_case() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((x 0))\n\
+              (condition-case err\n\
+                (unwind-protect\n\
+                  (signal 'test-error '(1))\n\
+                  (setq x 10))\n\
+                (test-error (+ x (cadr err)))))",
+        );
+        // Cleanup sets x=10, handler returns x+1=11
+        assert_eq!(value, Some(LispValue::expect_fixnum(11)));
+    }
+
+    #[test]
+    fn vector_mutation_with_aset() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((v (vector 0 0 0)))\n\
+              (aset v 0 10)\n\
+              (aset v 1 20)\n\
+              (aset v 2 30)\n\
+              (+ (aref v 0) (aref v 1) (aref v 2)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(60)));
+    }
+
+    #[test]
+    fn hash_table_operations() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((ht (make-hash-table)))\n\
+              (puthash 'a 1 ht)\n\
+              (puthash 'b 2 ht)\n\
+              (+ (gethash 'a ht 0) (gethash 'b ht 0) (gethash 'c ht 0)))",
+        );
+        // a=1, b=2, c defaults to 0 → 3
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn let_star_sequential_binding() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let* ((x 1) (y (+ x 10)) (z (+ y 100)))\n\
+              z)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(111)));
+    }
+
+    #[test]
+    fn nested_catch_throw() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (catch 'outer\n\
+              (catch 'inner\n\
+                (throw 'outer 42))\n\
+              0)",
+        );
+        // throw 'outer skips inner catch and lands at outer
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn progn_returns_last_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (progn 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn multiple_dynamic_bindings() {
+        let (value, _) = execute(
+            "(defvar *x* 0)\n\
+            (defvar *y* 0)\n\
+            (let ((*x* 10) (*y* 20))\n\
+              (+ *x* *y*))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(30)));
+    }
 }
