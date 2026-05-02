@@ -18,6 +18,7 @@ use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_layout_engine::engine::LayoutEngine;
 use std::collections::HashMap;
+use tracing;
 use std::io::{self, Read, Write};
 
 // ===================================================================
@@ -140,8 +141,16 @@ fn run_gui(demo: &str) {
             .line_height
             .max(1.0)
     };
+    tracing::info!(
+        "mock-display gui: logical_size={:.1} family={} char_w={:.1} char_h={:.1}",
+        logical_size, family, char_w, char_h
+    );
     let pixel_w = (cols as f32 * char_w) as u32;
     let pixel_h = (rows as f32 * char_h) as u32;
+    tracing::info!(
+        "mock-display gui: cols={} rows={} pixel_w={} pixel_h={}",
+        cols, rows, pixel_w, pixel_h
+    );
 
     let comms = ThreadComms::new().expect("failed to create comms");
     let (emacs_comms, render_comms) = comms.split();

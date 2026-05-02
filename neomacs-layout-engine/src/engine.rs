@@ -5702,6 +5702,10 @@ impl LayoutEngine {
         } else {
             (content.frame_pixel_width / 80.0, 16.0, 14.0)
         };
+        tracing::info!(
+            "layout_frame_content: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
+            default_size, default_family, default_weight, default_italic, char_w, char_h
+        );
 
         // Per-window layout
         for window in &content.windows {
