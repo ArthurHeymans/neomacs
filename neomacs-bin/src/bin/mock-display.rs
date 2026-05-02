@@ -768,6 +768,7 @@ fn build_faces() -> HashMap<u32, Face> {
     // Face 8: Rounded box border
     {
         let mut box_face = Face::new(8);
+        box_face.font_size = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
         box_face.foreground = Color::new(0.87, 0.87, 0.87, 1.0);
         box_face.background = Color::new(0.05, 0.05, 0.08, 1.0);
         box_face.font_weight = 400;
