@@ -927,3 +927,34 @@ fn fido_vertical_mode_completions() {
         "Neomacs minibuffer should shrink after C-g (got {neo_nonempty_after} non-empty rows)"
     );
 }
+
+// ── Major mode switching tests ──────────────────────────────
+
+#[test]
+fn text_mode_and_fundamental_mode_switching_updates_modeline() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    invoke_mx_command(&mut gnu, &mut neo, "text-mode");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let mode_line = &grid[grid.len().saturating_sub(2)];
+        assert!(
+            mode_line.contains("Text"),
+            "{label}: mode-line should show Text after M-x text-mode. Mode-line: {mode_line}"
+        );
+    }
+
+    invoke_mx_command(&mut gnu, &mut neo, "fundamental-mode");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let mode_line = &grid[grid.len().saturating_sub(2)];
+        assert!(
+            mode_line.contains("Fundamental") || mode_line.contains("Lisp Interaction"),
+            "{label}: mode-line should update after M-x fundamental-mode. Mode-line: {mode_line}"
+        );
+    }
+}

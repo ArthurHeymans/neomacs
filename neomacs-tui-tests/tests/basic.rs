@@ -463,3 +463,54 @@ fn echo_area_message() {
         "NEO echo area should show cursor info after C-x ="
     );
 }
+
+// ── Session lifecycle tests ──────────────────────────────────
+
+#[test]
+fn save_buffers_kill_terminal_prompts_for_modified_file_buffer_via_cx_cc() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Visit a file and modify it (file-visiting buffers trigger save prompts)
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "quit-save-test.txt",
+        "original content\n",
+        "C-x C-f",
+    );
+
+    // Modify buffer without saving — makes it dirty
+    send_both_raw(&mut gnu, &mut neo, b"modified content added");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // C-x C-c should prompt to save the modified file buffer
+    send_both(&mut gnu, &mut neo, "C-x C-c");
+
+    let save_prompt = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Save file") && row.contains("quit-save-test"))
+    };
+    gnu.read_until(Duration::from_secs(6), save_prompt);
+    neo.read_until(Duration::from_secs(8), save_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("Save file") && row.contains("quit-save-test")),
+            "{label}: C-x C-c should prompt to save modified file buffer\n{}",
+            grid.join("\n")
+        );
+    }
+
+    // Cancel the quit with C-g to keep session alive for comparison
+    send_both(&mut gnu, &mut neo, "C-g");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "save_buffers_kill_terminal_prompts_for_modified_file_buffer_via_cx_cc",
+        &gnu,
+        &neo,
+        2,
+    );
+}
