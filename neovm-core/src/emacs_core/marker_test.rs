@@ -258,7 +258,7 @@ fn mark_marker_follows_cached_mark_char_position() {
 fn mark_marker_with_no_mark_returns_detached() {
     // T7 I-1 follow-up: when the current buffer has no mark set,
     // `(mark-marker)` returns a detached marker. Post-T7 the stale
-    // `MarkerData.position` cache is gone, so "unset" is discriminated
+    // `LispMarker.position` cache is gone, so "unset" is discriminated
     // solely by `buffer.is_none() && charpos == 0`. This pins the
     // invariant by checking that both `(marker-buffer ...)` and
     // `(marker-position ...)` report nil.

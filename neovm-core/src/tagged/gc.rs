@@ -55,7 +55,7 @@ pub enum HeapWriteKind {
     StringData,
     HashTableData,
     ByteCodeData,
-    MarkerData,
+    LispMarker,
     OverlayData,
 }
 
@@ -1238,7 +1238,7 @@ impl TaggedHeap {
     }
 
     /// Allocate a marker.
-    pub fn alloc_marker(&mut self, data: crate::heap_types::MarkerData) -> TaggedValue {
+    pub fn alloc_marker(&mut self, data: crate::heap_types::LispMarker) -> TaggedValue {
         let obj = Box::new(MarkerObj {
             header: VecLikeHeader::new(VecLikeType::Marker),
             data,

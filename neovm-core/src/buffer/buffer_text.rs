@@ -617,7 +617,7 @@ impl BufferText {
         self.storage.borrow().text_props.trace_roots(roots);
     }
 
-    /// Register a marker in this buffer. Updates `MarkerData` fields
+    /// Register a marker in this buffer. Updates `LispMarker` fields
     /// authoritatively (buffer/bytepos/charpos/marker_id/insertion_type)
     /// and splices the marker into this buffer's intrusive chain at head.
     ///
@@ -634,7 +634,7 @@ impl BufferText {
         char_pos: usize,
         insertion_type: InsertionType,
     ) {
-        // Update MarkerData so its fields are authoritative before the
+        // Update LispMarker so its fields are authoritative before the
         // chain ever exposes this marker.
         //
         // SAFETY: `marker_ptr` is a live MarkerObj allocated via
@@ -653,7 +653,7 @@ impl BufferText {
     }
 
     /// Walk the intrusive marker chain head→tail and invoke `f` on each
-    /// live `MarkerData` by reference. Read-only counterpart to
+    /// live `LispMarker` by reference. Read-only counterpart to
     /// `chain_walk_mut`; used by pdump (v26) to serialize the chain
     /// without materializing an intermediate Vec.
     ///
@@ -661,7 +661,7 @@ impl BufferText {
     /// `storage.markers_head` until null; each `(*curr).data` reference
     /// stays valid for the duration of the call because the GC sweep
     /// runs `unchain_dead_markers` between mark and free.
-    pub fn chain_walk_data<F: FnMut(&crate::heap_types::MarkerData)>(&self, mut f: F) {
+    pub fn chain_walk_data<F: FnMut(&crate::heap_types::LispMarker)>(&self, mut f: F) {
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         unsafe {
@@ -734,11 +734,11 @@ impl BufferText {
         std::ptr::null_mut()
     }
 
-    /// Walk the intrusive chain and return the MarkerData-derived fields
+    /// Walk the intrusive chain and return the LispMarker-derived fields
     /// `(bytepos, charpos, insertion_type)` for the marker with the given
     /// id, or `None` if no live chain node carries that id.
     ///
-    /// Production code should prefer reading `MarkerData` directly off a
+    /// Production code should prefer reading `LispMarker` directly off a
     /// Lisp `Value`. This helper exists for internal buffer-manager
     /// callers (e.g. `clone_marker_in_buffer`) that track markers by id
     /// without holding the Lisp value.
@@ -938,7 +938,7 @@ impl BufferText {
         }
     }
 
-    /// Unlink every chain node whose `MarkerData.buffer` is in `killed`.
+    /// Unlink every chain node whose `LispMarker.buffer` is in `killed`.
     /// Sole entry point for kill-buffer marker cleanup: covers both the
     /// kill-root case (killed_set contains the root and all its
     /// indirects, so every marker on the shared chain matches) and the

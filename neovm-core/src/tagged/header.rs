@@ -423,7 +423,7 @@ pub struct OverlayObj {
 #[repr(C)]
 pub struct MarkerObj {
     pub header: VecLikeHeader,
-    pub data: crate::heap_types::MarkerData,
+    pub data: crate::heap_types::LispMarker,
 }
 
 /// Heap-allocated buffer reference (wraps a BufferId).

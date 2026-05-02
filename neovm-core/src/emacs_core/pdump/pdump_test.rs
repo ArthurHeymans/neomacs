@@ -8,7 +8,7 @@ use crate::emacs_core::value::{
     StringTextPropertyRun, Value, get_string_text_properties_for_value, list_to_vec,
     set_string_text_properties_for_value,
 };
-use crate::heap_types::{LispString, MarkerData, OverlayData};
+use crate::heap_types::{LispMarker, LispString, OverlayData};
 
 #[test]
 fn test_pdump_round_trip_basic() {
@@ -616,7 +616,7 @@ fn file_pdump_loads_marker_object_from_mmap_image() {
     let mut eval = Context::new();
     eval.obarray.set_symbol_value(
         "test-pdump-mapped-marker",
-        Value::make_marker(MarkerData {
+        Value::make_marker(LispMarker {
             buffer: None,
             insertion_type: true,
             marker_id: Some(42),

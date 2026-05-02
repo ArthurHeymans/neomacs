@@ -20,7 +20,7 @@ fn register_marker_for_test(
     pos: usize,
     insertion_type: InsertionType,
 ) {
-    let marker_value = Value::make_marker(crate::heap_types::MarkerData {
+    let marker_value = Value::make_marker(crate::heap_types::LispMarker {
         buffer: Some(buf.id),
         insertion_type: insertion_type == InsertionType::After,
         marker_id: Some(marker_id),

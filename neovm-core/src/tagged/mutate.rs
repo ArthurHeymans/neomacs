@@ -6,7 +6,7 @@
 use crate::buffer::text_props::TextPropertyTable;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::value::LispHashTable;
-use crate::heap_types::{LispString, MarkerData, OverlayData};
+use crate::heap_types::{LispMarker, LispString, OverlayData};
 
 use super::gc::{HeapWriteKind, note_heap_slot_write, note_heap_write};
 use super::header::{
@@ -219,12 +219,12 @@ pub fn with_bytecode_data_mut<R>(
 #[inline]
 pub fn with_marker_data_mut<R>(
     value: TaggedValue,
-    f: impl FnOnce(&mut MarkerData) -> R,
+    f: impl FnOnce(&mut LispMarker) -> R,
 ) -> Option<R> {
     if value.veclike_type()? != VecLikeType::Marker {
         return None;
     }
-    note_heap_write(value, HeapWriteKind::MarkerData);
+    note_heap_write(value, HeapWriteKind::LispMarker);
     let ptr = value.as_veclike_ptr().unwrap() as *mut MarkerObj;
     Some(f(unsafe { &mut (*ptr).data }))
 }

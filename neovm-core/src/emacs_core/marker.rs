@@ -90,7 +90,7 @@ pub(crate) fn make_marker_value_with_id(
         _ => 0,
     };
     let last_position_valid = matches!(position, Some(p) if p > 0) || buffer_id.is_some();
-    Value::make_marker(crate::heap_types::MarkerData {
+    Value::make_marker(crate::heap_types::LispMarker {
         buffer: buffer_id,
         insertion_type,
         marker_id,
@@ -656,7 +656,7 @@ fn register_marker_in_buffers(
 
     // Remove old registration from all buffers (this also unchains the
     // marker on the old buffer's intrusive chain — BufferText::remove_marker
-    // walks the chain and unlinks, clearing MarkerData.buffer/bytepos/charpos).
+    // walks the chain and unlinks, clearing LispMarker.buffer/bytepos/charpos).
     if let Some(mid) = existing_mid {
         buffers.remove_marker(mid);
     }
@@ -673,7 +673,7 @@ fn register_marker_in_buffers(
         // above if it had a previous buffer binding. But Values freshly
         // created via `make_marker_value` (point-marker etc.) don't go
         // through that path — they arrive here with `next_marker == null`
-        // by construction of `MarkerData`. If for some reason this marker
+        // by construction of `LispMarker`. If for some reason this marker
         // is still on a chain (e.g. same-buffer re-registration where
         // `existing_mid` matched a chain entry we just removed), the
         // chain_splice_at_head precondition would fire; belt-and-braces

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn marker_data_new_fields_default() {
-    let data = MarkerData {
+    let data = LispMarker {
         buffer: None,
         insertion_type: false,
         marker_id: None,

@@ -1142,11 +1142,11 @@ impl<'a> LoadDecoder<'a> {
                 }
             }
             DumpHeapObject::Marker(marker) => {
-                let data = crate::heap_types::MarkerData {
+                let data = crate::heap_types::LispMarker {
                     buffer: marker.buffer.map(|id| BufferId(id.0)),
                     insertion_type: marker.insertion_type,
                     marker_id: marker.marker_id,
-                    // v26: bytepos/charpos round-trip directly from MarkerData.
+                    // v26: bytepos/charpos round-trip directly from LispMarker.
                     bytepos: marker.bytepos,
                     charpos: marker.charpos,
                     last_position_valid: marker.last_position_valid,
@@ -2196,7 +2196,7 @@ pub(crate) fn dump_ordered_sym_map(
 // --- Buffer types ---
 
 // `dump_insertion_type` / `load_insertion_type` were retired in v26: chain
-// entries now serialize the `MarkerData::insertion_type` bool directly via
+// entries now serialize the `LispMarker::insertion_type` bool directly via
 // `DumpMarker`. Together with the deletion of `DumpMarkerEntry` and the
 // `DumpInsertionType` enum this removes the last consumer of the
 // flat-tuple chain shape.
@@ -2239,8 +2239,8 @@ fn dump_overlay(encoder: &mut DumpEncoder, o: &Overlay) -> DumpOverlay {
     }
 }
 
-fn dump_marker_object(marker: &crate::heap_types::MarkerData) -> DumpMarker {
-    // T10 (v26): MarkerData fields are authoritative. We round-trip
+fn dump_marker_object(marker: &crate::heap_types::LispMarker) -> DumpMarker {
+    // T10 (v26): LispMarker fields are authoritative. We round-trip
     // `bytepos` and `charpos` directly; the legacy `position` cache is
     // gone in both runtime and on-disk shapes.
     DumpMarker {
@@ -3788,7 +3788,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             .copied()
             .unwrap_or_else(|| {
                 let scratch =
-                    crate::emacs_core::value::Value::make_marker(crate::heap_types::MarkerData {
+                    crate::emacs_core::value::Value::make_marker(crate::heap_types::LispMarker {
                         buffer: Some(buffer_id),
                         insertion_type: dump_marker.insertion_type,
                         marker_id: Some(marker_id),
@@ -3940,7 +3940,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
                     return p;
                 }
                 let scratch =
-                    crate::emacs_core::value::Value::make_marker(crate::heap_types::MarkerData {
+                    crate::emacs_core::value::Value::make_marker(crate::heap_types::LispMarker {
                         buffer: Some(BufferId(db.id.0)),
                         insertion_type: false,
                         marker_id: Some(mid),

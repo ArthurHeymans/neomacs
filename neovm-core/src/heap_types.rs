@@ -861,7 +861,7 @@ pub struct OverlayData {
 }
 
 #[derive(Clone, Debug)]
-pub struct MarkerData {
+pub struct LispMarker {
     pub buffer: Option<BufferId>,
     pub insertion_type: bool,
     pub marker_id: Option<u64>,

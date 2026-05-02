@@ -1075,7 +1075,7 @@ impl TaggedValue {
     }
 
     /// Allocate a marker.
-    pub fn make_marker(data: crate::heap_types::MarkerData) -> Self {
+    pub fn make_marker(data: crate::heap_types::LispMarker) -> Self {
         with_tagged_heap(|h| h.alloc_marker(data))
     }
 
@@ -1378,7 +1378,7 @@ impl TaggedValue {
     }
 
     /// Get the marker data from a marker value.
-    pub fn as_marker_data(self) -> Option<&'static crate::heap_types::MarkerData> {
+    pub fn as_marker_data(self) -> Option<&'static crate::heap_types::LispMarker> {
         if self.is_marker() {
             let ptr = self.as_veclike_ptr().unwrap() as *const MarkerObj;
             Some(unsafe { &(*ptr).data })
@@ -1390,7 +1390,7 @@ impl TaggedValue {
     /// Mutate marker data through the centralized tagged-runtime write path.
     pub fn with_marker_data_mut<R>(
         self,
-        f: impl FnOnce(&mut crate::heap_types::MarkerData) -> R,
+        f: impl FnOnce(&mut crate::heap_types::LispMarker) -> R,
     ) -> Option<R> {
         mutate::with_marker_data_mut(self, f)
     }

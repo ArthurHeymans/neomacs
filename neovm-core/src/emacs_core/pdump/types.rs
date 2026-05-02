@@ -502,7 +502,7 @@ pub struct DumpGapBuffer {
 
 // `DumpInsertionType` was retired in v26 alongside `DumpMarkerEntry`:
 // the marker chain now serializes through `DumpMarker`, which encodes
-// the insertion type as a plain `bool` matching `MarkerData`.
+// the insertion type as a plain `bool` matching `LispMarker`.
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpPropertyInterval {
@@ -526,10 +526,10 @@ pub struct DumpOverlay {
     pub rear_advance: bool,
 }
 
-/// Pdump v26: marker shape mirrors `MarkerData` post-GNU-parity refactor.
+/// Pdump v26: marker shape mirrors `LispMarker` post-GNU-parity refactor.
 ///
 /// The legacy `position: Option<i64>` cache is gone — `bytepos` and `charpos`
-/// are the authoritative on-disk fields, matching the runtime `MarkerData`
+/// are the authoritative on-disk fields, matching the runtime `LispMarker`
 /// layout. Used both for individual heap-object marker decode
 /// (`DumpHeapObject::Marker`) and for `DumpBuffer.markers` chain entries.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -539,7 +539,7 @@ pub struct DumpMarker {
     pub marker_id: Option<u64>,
     pub bytepos: usize,
     pub charpos: usize,
-    /// Mirror of `MarkerData.last_position_valid`. Defaulted for back-compat
+    /// Mirror of `LispMarker.last_position_valid`. Defaulted for back-compat
     /// with pre-parity dumps; older dumps come back as `false` and a single
     /// re-set will repopulate the flag.
     #[serde(default)]

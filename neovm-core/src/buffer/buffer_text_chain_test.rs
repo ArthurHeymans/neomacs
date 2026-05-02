@@ -1,10 +1,10 @@
 use super::*;
-use crate::heap_types::MarkerData;
+use crate::heap_types::LispMarker;
 use crate::tagged::gc::{TaggedHeap, set_tagged_heap};
 use crate::tagged::header::MarkerObj;
 
 fn alloc_marker_for_test(heap: &mut TaggedHeap) -> *mut MarkerObj {
-    let tv = heap.alloc_marker(MarkerData {
+    let tv = heap.alloc_marker(LispMarker {
         buffer: None,
         insertion_type: false,
         marker_id: None,

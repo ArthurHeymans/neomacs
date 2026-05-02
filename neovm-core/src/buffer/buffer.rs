@@ -2057,7 +2057,7 @@ impl Buffer {
             // Create the marker eagerly and register in the chain so it
             // auto-adjusts on edits.
             let marker =
-                crate::emacs_core::value::Value::make_marker(crate::heap_types::MarkerData {
+                crate::emacs_core::value::Value::make_marker(crate::heap_types::LispMarker {
                     buffer: Some(self.id),
                     insertion_type: false,
                     marker_id: None,
@@ -3117,7 +3117,7 @@ impl BufferManager {
 
         // Detach every marker that belongs to one of the dying buffers from
         // the (possibly shared, in the indirect-buffer case) chain. A single
-        // chain walk filters by `MarkerData.buffer ∈ killed_set`, which is
+        // chain walk filters by `LispMarker.buffer ∈ killed_set`, which is
         // correct for both kill-root (killed_set = {root, indirects}) and
         // kill-indirect (killed_set = {indirect}, root's markers untouched).
         // Mirrors GNU `kill_buffer` calling `unchain_marker` on each entry of
@@ -4056,7 +4056,7 @@ impl BufferManager {
         // Position fields are overwritten inside register_marker; starting
         // values are placeholders.
         let marker_value =
-            crate::emacs_core::value::Value::make_marker(crate::heap_types::MarkerData {
+            crate::emacs_core::value::Value::make_marker(crate::heap_types::LispMarker {
                 buffer: Some(buffer_id),
                 insertion_type: insertion_type == InsertionType::After,
                 marker_id: Some(marker_id),

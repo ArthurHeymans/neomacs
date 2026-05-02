@@ -227,7 +227,7 @@ fn format_opaque_handle_in_state(
                 out.push_str("(moves after insertion) ");
             }
             // T7: read authoritative charpos (1-based Lisp shape) directly
-            // from MarkerData, not the deleted stale `position` cache.
+            // from LispMarker, not the deleted stale `position` cache.
             if let Some(buffer_id) = marker.buffer
                 && let Some(buffer) = buffers.get(buffer_id)
             {
