@@ -200,6 +200,31 @@ impl MacroEval {
             }
             Some("append") => self.eval_append(span, &items[1..], env),
             Some("nth") => self.eval_nth(span, &items[1..], env),
+            Some("elt") => {
+                // (elt seq n) — nth element of sequence (list or vector)
+                if items.len() >= 3 {
+                    let seq = self.eval(&items[1], env)?;
+                    let n = self.eval(&items[2], env)?.as_int().unwrap_or(0) as usize;
+                    match &seq {
+                        MacroValue::Vector(vec) => {
+                            Ok(vec.get(n).cloned().unwrap_or(MacroValue::Nil))
+                        }
+                        _ => {
+                            // List path
+                            let mut current = seq;
+                            for _ in 0..n {
+                                current = current.cdr();
+                                if current.is_nil() {
+                                    return Ok(MacroValue::Nil);
+                                }
+                            }
+                            Ok(current.car())
+                        }
+                    }
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
             Some("length") => self.eval_length(span, &items[1..], env),
 
             Some("null") | Some("not") => self.eval_unary(span, "null", &items[1..], env, |v| {
@@ -753,6 +778,33 @@ impl MacroEval {
                 }
             }
 
+            Some("vector") => {
+                // (vector &rest args) — create vector from args
+                let mut results = Vec::new();
+                for arg in &items[1..] {
+                    results.push(self.eval(arg, env)?);
+                }
+                Ok(MacroValue::Vector(results))
+            }
+
+            Some("vconcat") => {
+                // (vconcat &rest sequences) — concatenate into vector
+                let mut all = Vec::new();
+                for arg in &items[1..] {
+                    let val = self.eval(arg, env)?;
+                    match val {
+                        MacroValue::Vector(vec) => all.extend(vec),
+                        MacroValue::Nil => {}
+                        other => {
+                            if let Some(vec) = other.to_vec() {
+                                all.extend(vec);
+                            }
+                        }
+                    }
+                }
+                Ok(MacroValue::Vector(all))
+            }
+
             Some("plist-put") => {
                 // (plist-put plist prop val) — set property in plist
                 // At macro time, return the modified plist
@@ -821,10 +873,32 @@ impl MacroEval {
             }
 
             Some("aref") => {
-                // (aref array idx) — get element from array
+                // (aref array idx) — get element from array/vector
                 if items.len() >= 3 {
-                    let _array = self.eval(&items[1], env)?;
-                    Ok(MacroValue::Nil) // Can't index into MacroValue::Vector here easily
+                    let array = self.eval(&items[1], env)?;
+                    let idx = self.eval(&items[2], env)?;
+                    match (&array, idx.as_int()) {
+                        (MacroValue::Vector(vec), Some(i)) => {
+                            let i = i as usize;
+                            if i < vec.len() {
+                                Ok(vec[i].clone())
+                            } else {
+                                Ok(MacroValue::Nil)
+                            }
+                        }
+                        (MacroValue::Cons(pair), Some(i)) => {
+                            // List aref: nth element
+                            let mut current = MacroValue::Cons(pair.clone());
+                            for _ in 0..i {
+                                match current.cdr() {
+                                    cdr if cdr.is_nil() => return Ok(MacroValue::Nil),
+                                    cdr => current = cdr,
+                                }
+                            }
+                            Ok(current.car())
+                        }
+                        _ => Ok(MacroValue::Nil),
+                    }
                 } else {
                     Ok(MacroValue::Nil)
                 }
