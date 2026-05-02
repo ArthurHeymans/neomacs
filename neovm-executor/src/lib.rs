@@ -1351,6 +1351,30 @@ total",
     }
 
     #[test]
+    fn jit_inline_add1_sub1() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "add1-sub1.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (1+ 9) (1- 11))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 10)");
+    }
+
+    #[test]
+    fn jit_inline_bitwise_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "bitwise.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (logand 15 6) (logior 8 4) (logxor 12 10))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(6 12 6)");
+    }
+
+    #[test]
     fn jit_catch_throw_nested() {
         let artifact = crate::jit_interp::execute_with_jit(
             "nested-catch.el",

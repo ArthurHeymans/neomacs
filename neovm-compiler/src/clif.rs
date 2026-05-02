@@ -1735,6 +1735,15 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_fix))
             }
             "+" | "-" | "*" => self.lower_fixnum_arithmetic(name, args),
+            "1+" | "1-" => {
+                let Some(value) = args.first() else {
+                    return PrimitiveCallLowering::Error;
+                };
+                let delta: i64 = if name == "1+" { 8 } else { -8 };
+                let result = self.builder.ins().iadd_imm(*value, delta);
+                PrimitiveCallLowering::Value(result)
+            }
+            "logand" | "logior" | "logxor" => self.lower_fixnum_bitwise(name, args),
             "=" | "<" | ">" | "<=" | ">=" => self.lower_fixnum_comparison(name, args),
             _ => PrimitiveCallLowering::Unknown,
         }
@@ -1845,6 +1854,57 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let cmp = self.builder.ins().icmp(cc, a, b);
         let inline_val = self.bool_to_lisp_value(cmp);
         self.builder.ins().jump(merge_block, &[BlockArg::Value(inline_val)]);
+
+        self.builder.switch_to_block(fallback_block);
+        let Some(func_ref) = self.call_named_ref(2) else {
+            return PrimitiveCallLowering::Error;
+        };
+        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
+            return PrimitiveCallLowering::Error;
+        };
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+
+        self.builder.switch_to_block(merge_block);
+        self.builder.seal_block(inline_block);
+        self.builder.seal_block(fallback_block);
+        self.builder.seal_block(merge_block);
+
+        PrimitiveCallLowering::Value(merge_result)
+    }
+
+    /// Inline fixnum bitwise ops: untag both operands, apply the op, retag result.
+    fn lower_fixnum_bitwise(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
+        if args.len() != 2 {
+            return PrimitiveCallLowering::Unknown;
+        }
+
+        let a = args[0];
+        let b = args[1];
+
+        let a_fix = self.is_fixnum(a);
+        let b_fix = self.is_fixnum(b);
+        let both_fix = self.builder.ins().band(a_fix, b_fix);
+
+        let inline_block = self.builder.create_block();
+        let fallback_block = self.builder.create_block();
+        let merge_block = self.builder.create_block();
+        let merge_result = self.builder.append_block_param(merge_block, types::I64);
+
+        self.builder
+            .ins()
+            .brif(both_fix, inline_block, &[], fallback_block, &[]);
+
+        self.builder.switch_to_block(inline_block);
+        let au = self.untag_fixnum(a);
+        let bu = self.untag_fixnum(b);
+        let result = match name {
+            "logand" => self.builder.ins().band(au, bu),
+            "logior" => self.builder.ins().bor(au, bu),
+            "logxor" => self.builder.ins().bxor(au, bu),
+            _ => unreachable!(),
+        };
+        let tagged = self.builder.ins().ishl_imm(result, TAG_BITS as i64);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(tagged)]);
 
         self.builder.switch_to_block(fallback_block);
         let Some(func_ref) = self.call_named_ref(2) else {
