@@ -418,3 +418,105 @@ fn eval_expression() {
         "NEO echo should show 3: {neo_echo:?}"
     );
 }
+
+// ── File modtime tests ───────────────────────────────────────
+
+#[test]
+fn visited_file_modtime_returns_cons_after_file_visit() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Visit a file with insert-file-contents :visit
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "modtime-test.el",
+        "(message \"hello\")\n",
+        "C-x C-f",
+    );
+
+    // Evaluate (visited-file-modtime) — should return a cons, not 0
+    send_both(&mut gnu, &mut neo, "M-:");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Eval:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"(visited-file-modtime)");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    // Result should show a cons like (12345 67890) in the echo area,
+    // not the integer 0
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains('(') && row.chars().filter(|&c| c.is_ascii_digit()).count() >= 4)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            !echo.contains(" 0 "),
+            "{label}: visited-file-modtime should return cons, not 0. Echo: {echo}"
+        );
+    }
+    assert_pair_nearly_matches(
+        "visited_file_modtime_returns_cons_after_file_visit",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
+fn verify_visited_file_modtime_returns_t_for_unmodified_file() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "modtime-u.el",
+        "(provide 'modtime-u)\n",
+        "C-x C-f",
+    );
+
+    // Evaluate (verify-visited-file-modtime) — should return t
+    send_both(&mut gnu, &mut neo, "M-:");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Eval:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"(verify-visited-file-modtime)");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains('t'));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('t'),
+            "{label}: verify-visited-file-modtime should return t. Echo: {echo}"
+        );
+    }
+    assert_pair_nearly_matches(
+        "verify_visited_file_modtime_returns_t_for_unmodified_file",
+        &gnu,
+        &neo,
+        2,
+    );
+}
