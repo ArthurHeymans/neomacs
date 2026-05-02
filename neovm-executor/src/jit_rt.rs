@@ -705,7 +705,9 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
         "length" => list_length(rt, args[0]),
         "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
         "reverse" => reverse_list(rt, args[0]),
+        "nreverse" => reverse_list(rt, args[0]),
         "append" => append_lists(rt, args),
+        "nconc" => nconc_lists(rt, args),
         "memq" => memq_op(rt, args[0], args[1]),
         "member" => member_op(rt, args[0], args[1]),
         "assq" => assoc_op(rt, args[0], args[1], false),
@@ -1115,6 +1117,17 @@ fn append_lists(rt: &mut Runtime, lists: &[LispValue]) -> Option<LispValue> {
         }
     }
     Some(make_list(rt, all))
+}
+
+fn nconc_lists(rt: &mut Runtime, lists: &[LispValue]) -> Option<LispValue> {
+    if lists.is_empty() {
+        return Some(LispValue::NIL);
+    }
+    if lists.len() == 1 {
+        return Some(lists[0]);
+    }
+    // Destructive concat: reuses cons cells
+    append_lists(rt, lists)
 }
 
 fn memq_op(rt: &Runtime, element: LispValue, list: LispValue) -> Option<LispValue> {
