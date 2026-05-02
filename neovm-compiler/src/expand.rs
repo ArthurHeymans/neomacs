@@ -1122,7 +1122,7 @@ impl Expander {
         }
 
         // For-from bindings and list temp bindings
-        let mut for_from_info: Vec<(String, SurfaceForm, SurfaceForm, Option<SurfaceForm>)> = Vec::new(); // var, start, end, step
+        let mut for_from_info: Vec<(String, SurfaceForm, Option<SurfaceForm>, Option<SurfaceForm>)> = Vec::new(); // var, start, end, step
         let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr
@@ -1179,14 +1179,17 @@ impl Expander {
         // Build while test
         let mut while_tests: Vec<SurfaceForm> = Vec::new();
 
-        // For-from: (<= var end)
+        // For-from: (<= var end) when end is specified
         for (var, start, end, _) in &for_from_info {
             let _ = start;
-            while_tests.push(list_form(vec![
-                symbol_form("<=", span),
-                symbol_form(var, span),
-                end.clone(),
-            ], span));
+            if let Some(end_val) = end {
+                while_tests.push(list_form(vec![
+                    symbol_form("<=", span),
+                    symbol_form(var, span),
+                    end_val.clone(),
+                ], span));
+            }
+            // No end means open-ended loop — only while/until conditions control termination
         }
 
         // For-in/for-on: list-temp truthiness
@@ -1829,7 +1832,7 @@ impl Expander {
                 Some(LoopClause::ForFrom {
                     var,
                     start,
-                    end: end?,
+                    end,
                     step,
                 })
             }
@@ -1944,7 +1947,7 @@ enum LoopClause {
     ForFrom {
         var: String,
         start: SurfaceForm,
-        end: SurfaceForm,
+        end: Option<SurfaceForm>,
         step: Option<SurfaceForm>,
     },
     ForIn {

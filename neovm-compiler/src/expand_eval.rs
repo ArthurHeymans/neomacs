@@ -26,8 +26,17 @@ impl MacroEnv {
         self.bindings.get(name)
     }
 
-    pub fn remove(&mut self, name: &str) {
-        self.bindings.remove(name);
+    /// Save the current value of a binding, returning the old value (or None if unbound).
+    pub fn save(&mut self, name: &str) -> Option<MacroValue> {
+        self.bindings.get(name).cloned()
+    }
+
+    /// Restore a binding to a previously saved value, or remove it if it was unbound.
+    pub fn restore(&mut self, name: String, saved: Option<MacroValue>) {
+        match saved {
+            Some(v) => { self.bindings.insert(name, v); }
+            None => { self.bindings.remove(&name); }
+        }
     }
 
     pub fn define_function(&mut self, name: String, func: MacroFunction) {
@@ -316,9 +325,10 @@ impl MacroEval {
                     let sym_val = self.eval(&items[2], env)?;
                     match var_name {
                         Some(name) if !name.is_empty() => {
+                            let saved = env.save(name);
                             env.bind(name.to_string(), sym_val);
                             let result = self.eval(&items[3], env);
-                            env.remove(name);
+                            env.restore(name.to_string(), saved);
                             result
                         }
                         _ => self.eval(&items[3], env),
@@ -401,9 +411,10 @@ impl MacroEval {
                     let sym_name = items[1].symbol_name();
                     let place_val = self.eval(&items[2], env)?;
                     if let Some(name) = sym_name {
+                        let saved = env.save(name);
                         env.bind(name.to_string(), place_val);
                         let result = self.eval(&items[3], env);
-                        env.remove(name);
+                        env.restore(name.to_string(), saved);
                         result
                     } else {
                         self.eval(&items[3], env)
@@ -438,9 +449,12 @@ impl MacroEval {
                             _ => {}
                         }
                     }
+                    let saved: Vec<(String, Option<MacroValue>)> = bound_names.iter()
+                        .map(|n| (n.clone(), env.save(n)))
+                        .collect();
                     let result = self.eval_progn(&items[2..], env);
-                    for name in bound_names {
-                        env.remove(&name);
+                    for (name, old) in saved {
+                        env.restore(name, old);
                     }
                     result
                 } else {
@@ -951,15 +965,13 @@ impl MacroEval {
             }
 
             Some("nconc") => {
-                // (nconc &rest lists) — concatenate lists
-                let mut result = MacroValue::Nil;
+                // (nconc &rest lists) — concatenate lists by appending
+                let mut lists = Vec::new();
                 for item in &items[1..] {
                     let val = self.eval(item, env)?;
-                    if !val.is_nil() {
-                        result = val;
-                    }
+                    lists.push(val);
                 }
-                Ok(result)
+                Ok(append_values(&lists))
             }
 
             Some("cl-pushnew") => {
@@ -973,7 +985,7 @@ impl MacroEval {
                 if items.len() >= 3 {
                     let elt = self.eval(&items[1], env)?;
                     let list = self.eval(&items[2], env)?;
-                    Ok(list.memq(&elt)) // Simplified: use eq instead of equal
+                    Ok(list.member(&elt))
                 } else {
                     Ok(MacroValue::Nil)
                 }
@@ -1134,7 +1146,10 @@ impl MacroEval {
         let body = &tail[1..];
         let bindings = self.parse_let_bindings(bindings_form)?;
 
-        let saved: Vec<String> = bindings.iter().map(|(n, _)| n.clone()).collect();
+        let saved: Vec<(String, Option<MacroValue>)> = bindings
+            .iter()
+            .map(|(n, _)| (n.clone(), env.save(n)))
+            .collect();
 
         if sequential {
             for (name, val_form) in &bindings {
@@ -1153,8 +1168,8 @@ impl MacroEval {
 
         let result = self.eval_progn(body, env);
 
-        for name in &saved {
-            env.remove(name);
+        for (name, old_value) in saved {
+            env.restore(name, old_value);
         }
 
         result
@@ -1720,14 +1735,16 @@ impl MacroEval {
         args: &[MacroValue],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {
-        let saved: Vec<String> = func.params.iter().cloned().collect();
+        let saved: Vec<(String, Option<MacroValue>)> = func.params.iter()
+            .map(|p| (p.clone(), env.save(p)))
+            .collect();
         for (i, param) in func.params.iter().enumerate() {
             let val = args.get(i).cloned().unwrap_or(MacroValue::Nil);
             env.bind(param.clone(), val);
         }
         let result = self.eval_progn(&func.body, env);
-        for name in &saved {
-            env.remove(name);
+        for (name, old) in saved {
+            env.restore(name, old);
         }
         result
     }
@@ -1791,6 +1808,26 @@ fn value_to_surface_form(val: &MacroValue) -> Option<SurfaceForm> {
     use crate::source::SourceId;
     let span = Span::new(SourceId::new(0), 0, 0);
     Some(crate::expand_value::value_to_surface(val, span))
+}
+
+fn append_values(values: &[MacroValue]) -> MacroValue {
+    use std::rc::Rc;
+    let mut all_elements: Vec<MacroValue> = Vec::new();
+    for val in values {
+        if val.is_nil() {
+            continue;
+        }
+        let mut cur = val.clone();
+        while let MacroValue::Cons(pair) = cur {
+            all_elements.push(pair.car.clone());
+            cur = pair.cdr.clone();
+        }
+    }
+    let mut result = MacroValue::Nil;
+    for item in all_elements.into_iter().rev() {
+        result = MacroValue::Cons(Rc::new(crate::expand_value::MacroCons { car: item, cdr: result }));
+    }
+    result
 }
 
 #[cfg(test)]

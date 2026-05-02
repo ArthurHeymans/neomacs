@@ -153,6 +153,18 @@ impl MacroValue {
         MacroValue::Nil
     }
 
+    /// (member elt list) — find elt in list using structural equal.
+    pub fn member(&self, el: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            if cell.car == *el {
+                return current.clone();
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
     /// (butlast list n) — return list without last n elements
     pub fn butlast(&self, n: usize) -> MacroValue {
         let Some(vec) = self.to_vec() else {
