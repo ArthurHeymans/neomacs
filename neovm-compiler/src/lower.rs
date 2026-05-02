@@ -1006,9 +1006,24 @@ impl SsaBuilder {
                 let tag = self.lower_expr(tag)?;
                 self.emit_no_result(SsaInstKind::CatchBegin { tag });
                 let body_result = self.lower_expr(body);
+                // If the body never returns normally (e.g. infinite while loop with
+                // throw), the current block has an Unreachable terminator. CatchEnd
+                // must be in a reachable block for the Cranelift codegen to set up
+                // the catch handler, so create a fresh block if needed.
+                if matches!(
+                    self.function.blocks[self.current_block].terminator,
+                    SsaTerminator::Unreachable
+                ) {
+                    let fresh = self.create_block();
+                    // Replace the Unreachable with a Jump to the fresh block.
+                    self.set_terminator(SsaTerminator::Jump {
+                        target: fresh,
+                        args: Vec::new(),
+                    });
+                    self.current_block = fresh;
+                }
                 // CatchEnd produces a result: the merge of normal-path body value
-                // and throw-path throw value. This ensures the catch expression
-                // always has a value_id even when the body throws.
+                // and throw-path throw value.
                 let catch_result = self.emit_value(
                     SsaInstKind::CatchEnd { body_result },
                     Effects::single(Effect::MayGc),
