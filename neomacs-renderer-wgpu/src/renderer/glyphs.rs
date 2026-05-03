@@ -1887,7 +1887,7 @@ impl WgpuRenderer {
                             // Log first few non-space chars for font-size debugging
                             if !want_overlay && *char != ' ' && glyph_samples < 3 && *face_id <= 12
                             {
-                                tracing::info!(
+                                tracing::debug!(
                                     glyph_sample = glyph_samples,
                                     char = %char,
                                     face_id = *face_id,
