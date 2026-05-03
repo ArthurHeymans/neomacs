@@ -111,3 +111,29 @@ fn indent_region_via_mx_indents_elisp_defun() {
         expected,
     );
 }
+
+#[test]
+fn forward_sexp_via_mx_moves_past_balanced_expression() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "forward-sexp.el";
+    let initial = "(foo bar) baz\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-a");
+    invoke_mx_command(&mut gnu, &mut neo, "forward-sexp");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // After moving past (foo bar), insert X to mark position
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"X");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("(foo bar) X") || r.contains("(foo bar)X")),
+            "{label}: forward-sexp should move past (foo bar)"
+        );
+    }
+}
