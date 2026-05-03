@@ -697,6 +697,7 @@ fn dispatch_primitive(
         "max" => numeric_max(rt, args),
         "min" => numeric_min(rt, args),
         "=" => numeric_eq(rt, args),
+        "/=" => numeric_ne(rt, args),
         "<" => numeric_cmp(rt, args, |a, b| a < b),
         "<=" => numeric_cmp(rt, args, |a, b| a <= b),
         ">" => numeric_cmp(rt, args, |a, b| a > b),
@@ -1507,6 +1508,18 @@ fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
     Some(bool_value(a == b))
+}
+
+fn numeric_ne(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    let has_float = any_float(rt, args);
+    if !has_float {
+        let a = args[0].as_fixnum()?;
+        let b = args[1].as_fixnum()?;
+        return Some(bool_value(a != b));
+    }
+    let a = to_f64(rt, args[0]);
+    let b = to_f64(rt, args[1]);
+    Some(bool_value(a != b))
 }
 
 fn numeric_cmp(

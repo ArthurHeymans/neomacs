@@ -49,9 +49,6 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-defun (name args &rest body)
   (cons 'defun (cons name (cons args body))))
 
-(defmacro cl-loop (&rest args)
-  (cons 'cl-loop args))
-
 (defmacro cl-return (&optional value)
   (list 'cl-return-from nil value))
 
