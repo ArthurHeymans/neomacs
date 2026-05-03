@@ -38,6 +38,14 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let alpha = textureSample(glyph_texture, glyph_sampler, in.tex_coords).r;
-    let a = in.color.a * alpha;
-    return vec4<f32>(in.color.rgb * a, a);
+    // Gamma-correct compositing: swash rasterizes glyphs as linear coverage.
+    // The GPU blends in sRGB space with pre-multiplied alpha, which darkens
+    // mid-coverage anti-aliased edges.  Convert foreground to approximate
+    // linear space, apply coverage, and convert back so the edge transition
+    // matches perceptual brightness.
+    let fg_srgb = in.color.rgb;
+    let fg_linear = pow(fg_srgb, vec3(2.2));
+    let result_linear = fg_linear * alpha;
+    let result_srgb = pow(result_linear, vec3(1.0 / 2.2));
+    return vec4<f32>(result_srgb, alpha);
 }

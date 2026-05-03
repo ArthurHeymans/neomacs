@@ -68,7 +68,9 @@ pub enum FontconfigSubpixelOrder {
 
 impl FontconfigSubpixelOrder {
     pub fn allows_horizontal_subpixel(self) -> bool {
-        matches!(self, Self::Rgb | Self::Bgr)
+        // Treat Unknown as RGB — the vast majority of LCD panels use
+        // horizontal RGB subpixel layout.
+        matches!(self, Self::Rgb | Self::Bgr | Self::Unknown)
     }
 }
 
