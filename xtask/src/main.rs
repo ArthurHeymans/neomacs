@@ -1978,7 +1978,7 @@ fn touch_bootstrap_pdump(options: &FreshBuildOptions, bootstrap_bin: &Path) -> R
         let entry = entry?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.starts_with(prefix.as_ref()) && name_str.ends_with(".pdump") {
+        if name_str.starts_with(&*prefix) && name_str.ends_with(".pdump") {
             if options.dry_run {
                 println!("  would touch: {}", entry.path().display());
             } else {
