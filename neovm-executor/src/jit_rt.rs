@@ -303,6 +303,12 @@ funcall_shim!(__neomacs_rt_funcall_6 a0 a1 a2 a3 a4 a5);
 funcall_shim!(__neomacs_rt_funcall_7 a0 a1 a2 a3 a4 a5 a6);
 funcall_shim!(__neomacs_rt_funcall_8 a0 a1 a2 a3 a4 a5 a6 a7);
 
+jit_shim!(__neomacs_rt_apply_1(vmctx: i64, callee: i64, arg0: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    dispatch_apply(ctx, LispValue::from_abi_i64(callee), &[LispValue::from_abi_i64(arg0)], rt)
+});
+
 jit_shim!(__neomacs_rt_apply_2(vmctx: i64, callee: i64, arg0: i64, arg1: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
     let rt = &mut *ctx.runtime;

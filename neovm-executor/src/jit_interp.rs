@@ -168,6 +168,7 @@ fn register_runtime_shims(builder: &mut cranelift_jit::JITBuilder) {
         __neomacs_rt_funcall_8 as *const u8,
     );
     // apply shims
+    builder.symbol("__neomacs_rt_apply_1", __neomacs_rt_apply_1 as *const u8);
     builder.symbol("__neomacs_rt_apply_2", __neomacs_rt_apply_2 as *const u8);
     builder.symbol("__neomacs_rt_apply_3", __neomacs_rt_apply_3 as *const u8);
     // exception / nonlocal control flow shims
