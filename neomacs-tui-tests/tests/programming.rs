@@ -87,3 +87,27 @@ fn imenu_via_mx_jumps_to_named_elisp_defun() {
         grid.iter().any(|row| row.contains("imenu-at-beta t"))
     });
 }
+
+#[test]
+fn indent_region_via_mx_indents_elisp_defun() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "indent-region-probe.el";
+    let initial = "(defun indent-region-probe ()\n(message \"hello\"))\n";
+    let expected = "(defun indent-region-probe ()\n  (message \"hello\"))\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    // Select whole buffer
+    send_both(&mut gnu, &mut neo, "C-x h");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Use M-x indent-region (C-M-\ may not transmit over PTY)
+    invoke_mx_command(&mut gnu, &mut neo, "indent-region");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    save_current_file_and_assert_contents(
+        "indent-region-via-mx",
+        &mut gnu,
+        &mut neo,
+        name,
+        expected,
+    );
+}
