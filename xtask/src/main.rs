@@ -526,6 +526,19 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // dump sees the completed generated-source set.
     run_custom_finder_generation(options, &paths, &envs)?;
 
+    // GNU `make install` copies the binary last, so its timestamp is newer
+    // than every .el file — `byte-compile-refresh-preloaded` never reloads
+    // anything.  Loaddefs generation above wrote generated .el files (e.g.
+    // ldefs-boot.el, theme-loaddefs.el) that are now newer than the pdump
+    // created by the earlier pbootstrap step.  Touch the pdump to match
+    // GNU's invariant: the dump is always the newest file.
+    //
+    // Without this, bootstrap-neomacs in the preloaded compile step would
+    // detect those generated files as "stale" and reload them as source,
+    // wasting ~200ms per file on the 3-pass load (full-file read + UTF-8
+    // decode + eager macroexpand).
+    touch_bootstrap_pdump(options, &paths.bootstrap)?;
+
     // GNU src/Makefile.in generates src/lisp.mk from loadup.el, then makes
     // the final emacs target depend on that preloaded Lisp set.  That means
     // loadup's libraries are byte-compiled by bootstrap-emacs before the final
@@ -1946,6 +1959,43 @@ fn remove_lisp_bytecode_without_source(
         }
     }
     println!("  INFO  removed {removed} stale compile-main .elc files");
+    Ok(())
+}
+
+/// Touch the pdump file so its timestamp is newer than all generated
+/// .el files.  This matches GNU `make install` semantics: the binary
+/// (dump) is always the last artifact, so `byte-compile-refresh-preloaded`
+/// never finds stale files and never reloads source during compilation.
+fn touch_bootstrap_pdump(options: &FreshBuildOptions, bootstrap_bin: &Path) -> Result<()> {
+    let bin_name = bootstrap_bin
+        .file_name()
+        .unwrap_or(bootstrap_bin.as_os_str())
+        .to_string_lossy();
+    let parent = bootstrap_bin.parent().unwrap_or(Path::new("."));
+    // pdump filenames are {binary}-{64-hex-chars}.pdump
+    let prefix = format!("{bin_name}-");
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with(prefix.as_ref()) && name_str.ends_with(".pdump") {
+            if options.dry_run {
+                println!("  would touch: {}", entry.path().display());
+            } else {
+                #[cfg(unix)]
+                {
+                    let path = entry.path();
+                    let status = std::process::Command::new("touch")
+                        .arg("-m")
+                        .arg(&path)
+                        .status()?;
+                    if !status.success() {
+                        eprintln!("  WARN  touch {} failed", path.display());
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
 

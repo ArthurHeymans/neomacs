@@ -2595,17 +2595,17 @@ impl LayoutEngine {
         self.current_resolved_family = current_font_family.clone();
         self.resolved_family_face_id = 0;
         face_space_w = char_advance(
-                &mut self.ascii_width_cache,
-                &mut self.font_metrics,
-                ' ',
-                1,
-                char_w,
-                current_font_size_px,
-                face_char_w,
-                &self.current_resolved_family,
-                current_font_weight,
-                current_font_italic,
-            );
+            &mut self.ascii_width_cache,
+            &mut self.font_metrics,
+            ' ',
+            1,
+            char_w,
+            current_font_size_px,
+            face_char_w,
+            &self.current_resolved_family,
+            current_font_weight,
+            current_font_italic,
+        );
 
         if let Some(echo_message) = echo_message {
             // The echo area is minibuffer content, not post-window chrome.
@@ -3082,7 +3082,9 @@ impl LayoutEngine {
                                 current_face_id.saturating_sub(1),
                                 charpos.max(0) as usize,
                             );
-                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                            x += char_pixel_advance(
+                                &mut self.ascii_width_cache,
+                                &mut self.font_metrics,
                                 '.',
                                 1,
                                 char_w,
@@ -3545,7 +3547,9 @@ impl LayoutEngine {
                                 if x + face_char_w > right_limit {
                                     break;
                                 }
-                                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                x += char_pixel_advance(
+                                    &mut self.ascii_width_cache,
+                                    &mut self.font_metrics,
                                     rch,
                                     1,
                                     char_w,
@@ -3639,9 +3643,17 @@ impl LayoutEngine {
                 let ellipsis_start_x = x;
                 let ellipsis_start_col = col;
                 for ech in ellipsis.chars() {
-                    let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
-                        ech, 1, char_w, current_font_size_px, face_char_w,
-                        &self.current_resolved_family, current_font_weight, current_font_italic,
+                    let adv = char_pixel_advance(
+                        &mut self.ascii_width_cache,
+                        &mut self.font_metrics,
+                        ech,
+                        1,
+                        char_w,
+                        current_font_size_px,
+                        face_char_w,
+                        &self.current_resolved_family,
+                        current_font_weight,
+                        current_font_italic,
                     );
                     if x + adv <= content_x + avail_width {
                         x += adv;
@@ -4073,11 +4085,21 @@ impl LayoutEngine {
                     col,
                     col + 2,
                 );
-                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
-                    '^', 1, char_w, current_font_size_px, face_char_w,
-                    &self.current_resolved_family, current_font_weight, current_font_italic,
+                x += char_pixel_advance(
+                    &mut self.ascii_width_cache,
+                    &mut self.font_metrics,
+                    '^',
+                    1,
+                    char_w,
+                    current_font_size_px,
+                    face_char_w,
+                    &self.current_resolved_family,
+                    current_font_weight,
+                    current_font_italic,
                 );
-                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                x += char_pixel_advance(
+                    &mut self.ascii_width_cache,
+                    &mut self.font_metrics,
                     ctrl_ch,
                     1,
                     char_w,
@@ -4119,7 +4141,9 @@ impl LayoutEngine {
                             col,
                             col + 1,
                         );
-                        x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                        x += char_pixel_advance(
+                            &mut self.ascii_width_cache,
+                            &mut self.font_metrics,
                             display_ch,
                             1,
                             char_w,
@@ -4157,7 +4181,9 @@ impl LayoutEngine {
                                 col,
                                 col + 2,
                             );
-                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                            x += char_pixel_advance(
+                                &mut self.ascii_width_cache,
+                                &mut self.font_metrics,
                                 '\\',
                                 1,
                                 char_w,
@@ -4167,7 +4193,9 @@ impl LayoutEngine {
                                 current_font_weight,
                                 current_font_italic,
                             );
-                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                            x += char_pixel_advance(
+                                &mut self.ascii_width_cache,
+                                &mut self.font_metrics,
                                 indicator,
                                 1,
                                 char_w,
@@ -4203,9 +4231,17 @@ impl LayoutEngine {
                     }
                     2 => {
                         // Empty box: render U+25A1 (□) character
-                        let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
-                            '\u{25A1}', 1, char_w, current_font_size_px, face_char_w,
-                            &self.current_resolved_family, current_font_weight, current_font_italic,
+                        let adv = char_pixel_advance(
+                            &mut self.ascii_width_cache,
+                            &mut self.font_metrics,
+                            '\u{25A1}',
+                            1,
+                            char_w,
+                            current_font_size_px,
+                            face_char_w,
+                            &self.current_resolved_family,
+                            current_font_weight,
+                            current_font_italic,
                         );
                         if x + adv <= content_x + avail_width {
                             x += adv;
@@ -4229,9 +4265,16 @@ impl LayoutEngine {
                         let right_limit = content_x + avail_width;
                         if x + needed <= right_limit {
                             for hch in hex_str.chars() {
-                                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
-                                    hch, 1, char_w, current_font_size_px, face_char_w,
-                                    &self.current_resolved_family, current_font_weight,
+                                x += char_pixel_advance(
+                                    &mut self.ascii_width_cache,
+                                    &mut self.font_metrics,
+                                    hch,
+                                    1,
+                                    char_w,
+                                    current_font_size_px,
+                                    face_char_w,
+                                    &self.current_resolved_family,
+                                    current_font_weight,
                                     current_font_italic,
                                 );
                             }
@@ -4239,9 +4282,16 @@ impl LayoutEngine {
                         } else {
                             // Partial rendering: emit as many chars as fit
                             for hch in hex_str.chars() {
-                                let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
-                                    hch, 1, char_w, current_font_size_px, face_char_w,
-                                    &self.current_resolved_family, current_font_weight,
+                                let adv = char_pixel_advance(
+                                    &mut self.ascii_width_cache,
+                                    &mut self.font_metrics,
+                                    hch,
+                                    1,
+                                    char_w,
+                                    current_font_size_px,
+                                    face_char_w,
+                                    &self.current_resolved_family,
+                                    current_font_weight,
                                     current_font_italic,
                                 );
                                 if x + adv > right_limit {
