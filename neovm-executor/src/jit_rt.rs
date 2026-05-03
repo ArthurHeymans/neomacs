@@ -1910,6 +1910,30 @@ fn surface_form_to_lisp(rt: &mut Runtime, form: &SurfaceForm) -> LispValue {
                 forms.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
             make_list(rt, elements)
         }
-        _ => LispValue::NIL, // DottedList, Vector, Quote, FunctionQuote, Backquote, Comma, CommaAt
+        SurfaceKind::DottedList(items, tail) => {
+            let mut result = surface_form_to_lisp(rt, tail);
+            for item in items.iter().rev() {
+                let car = surface_form_to_lisp(rt, item);
+                result = rt.cons(car, result);
+            }
+            result
+        }
+        SurfaceKind::Vector(items) => {
+            let elements: Vec<LispValue> =
+                items.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
+            rt.vector(elements)
+        }
+        SurfaceKind::Quote(inner) => prefixed_form(rt, "quote", inner),
+        SurfaceKind::FunctionQuote(inner) => prefixed_form(rt, "function", inner),
+        SurfaceKind::Backquote(inner) => prefixed_form(rt, "quasiquote", inner),
+        SurfaceKind::Comma(inner) => prefixed_form(rt, "unquote", inner),
+        SurfaceKind::CommaAt(inner) => prefixed_form(rt, "unquote-splicing", inner),
     }
+}
+
+fn prefixed_form(rt: &mut Runtime, name: &str, inner: &SurfaceForm) -> LispValue {
+    let head = rt.intern(name);
+    let body = surface_form_to_lisp(rt, inner);
+    let tail = rt.cons(body, LispValue::NIL);
+    rt.cons(head, tail)
 }

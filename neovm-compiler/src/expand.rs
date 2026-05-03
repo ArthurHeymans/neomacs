@@ -252,6 +252,7 @@ impl Expander {
             "cl-defun" => self.expand_cl_defun(span, items),
             "cl-macrolet" => self.expand_cl_macrolet(span, items),
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
+            "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
@@ -1133,6 +1134,72 @@ impl Expander {
         self.expand_form(result)
     }
 
+    fn expand_letrec(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (letrec ((var1 val1) (var2 val2) ...) body...)
+        // Expand to: (let ((var1 nil) (var2 nil) ...) (setq var1 val1) (setq var2 val2) ... body...)
+        if items.len() < 3 {
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+        let bindings_form = &items[1];
+        let body: Vec<SurfaceForm> = items[2..].to_vec();
+
+        let bindings = match &bindings_form.kind {
+            SurfaceKind::List(b) => b,
+            _ => {
+                return SurfaceForm::new(
+                    SurfaceKind::List(items.into_iter().map(|f| self.expand_form(f)).collect()),
+                    span,
+                );
+            }
+        };
+
+        let mut let_bindings = Vec::new();
+        let mut setqs = Vec::new();
+
+        for binding in bindings {
+            let (name, value) = match &binding.kind {
+                SurfaceKind::List(parts) if parts.len() >= 2 => match &parts[0].kind {
+                    SurfaceKind::Atom(SurfaceAtom::Symbol(n)) => (n.clone(), parts[1].clone()),
+                    _ => continue,
+                },
+                SurfaceKind::List(parts) if parts.len() == 1 => match &parts[0].kind {
+                    SurfaceKind::Atom(SurfaceAtom::Symbol(n)) => (n.clone(), nil_form(span)),
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            let_bindings.push(list_form(
+                vec![symbol_form(&name, span), nil_form(span)],
+                span,
+            ));
+            setqs.push(list_form(
+                vec![symbol_form("setq", span), symbol_form(&name, span), value],
+                span,
+            ));
+        }
+
+        let mut progn_body = setqs;
+        progn_body.extend(body);
+        let progn = list_form(
+            vec![symbol_form("progn", span)]
+                .into_iter()
+                .chain(progn_body)
+                .collect(),
+            span,
+        );
+        let result = list_form(
+            vec![
+                symbol_form("let", span),
+                list_form(let_bindings, span),
+                progn,
+            ],
+            span,
+        );
+        self.expand_form(result)
+    }
+
     /// Rewrite (name args...) to (funcall name args...) when name is a label.
     fn rewrite_labels_calls(form: &SurfaceForm, label_names: &[String]) -> SurfaceForm {
         match &form.kind {
@@ -1441,6 +1508,7 @@ impl Expander {
                 LoopClause::ForFrom { .. }
                 | LoopClause::ForIn { .. }
                 | LoopClause::ForOn { .. }
+                | LoopClause::ForAcross { .. }
                 | LoopClause::ForEquals { .. } => for_clauses.push(clause),
                 LoopClause::While { cond } => while_conds.push(cond.clone()),
                 LoopClause::Until { cond } => while_conds.push(list_form(
@@ -1555,6 +1623,7 @@ impl Expander {
         )> = Vec::new(); // var, start, end, step
         let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
+        let mut for_across_info: Vec<(String, String, String)> = Vec::new(); // var, vec-temp, idx-temp
         let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr (no then)
         let mut for_eq_step: Vec<(String, SurfaceForm)> = Vec::new(); // var, step (has then)
 
@@ -1590,6 +1659,24 @@ impl Expander {
                         span,
                     ));
                     for_on_info.push((var.clone(), list_temp, list_expr.clone()));
+                }
+                LoopClause::ForAcross { var, vec_expr } => {
+                    let vec_temp = format!("--cl-vec-{}--", list_counter);
+                    let idx_temp = format!("--cl-idx-{}--", list_counter);
+                    list_counter += 1;
+                    let_bindings.push(list_form(
+                        vec![symbol_form(&vec_temp, span), vec_expr.clone()],
+                        span,
+                    ));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(&idx_temp, span), int_form(0, span)],
+                        span,
+                    ));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(var, span), nil_form(span)],
+                        span,
+                    ));
+                    for_across_info.push((var.clone(), vec_temp, idx_temp));
                 }
                 LoopClause::ForEquals {
                     var,
@@ -1677,6 +1764,20 @@ impl Expander {
         for (_, list_temp, _) in &for_on_info {
             while_tests.push(symbol_form(list_temp, span));
         }
+        // For-across: (< idx (length vec))
+        for (_, vec_temp, idx_temp) in &for_across_info {
+            while_tests.push(list_form(
+                vec![
+                    symbol_form("<", span),
+                    symbol_form(idx_temp, span),
+                    list_form(
+                        vec![symbol_form("length", span), symbol_form(vec_temp, span)],
+                        span,
+                    ),
+                ],
+                span,
+            ));
+        }
 
         // Explicit while/until conditions
         while_tests.extend(while_conds);
@@ -1736,6 +1837,25 @@ impl Expander {
                     symbol_form("setq", span),
                     symbol_form(var, span),
                     symbol_form(list_temp, span),
+                ],
+                span,
+            ));
+        }
+
+        // For-across: setq var (aref vec idx)
+        for (var, vec_temp, idx_temp) in &for_across_info {
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(var, span),
+                    list_form(
+                        vec![
+                            symbol_form("aref", span),
+                            symbol_form(vec_temp, span),
+                            symbol_form(idx_temp, span),
+                        ],
+                        span,
+                    ),
                 ],
                 span,
             ));
@@ -2068,6 +2188,25 @@ impl Expander {
                     symbol_form(list_temp, span),
                     list_form(
                         vec![symbol_form("cdr", span), symbol_form(list_temp, span)],
+                        span,
+                    ),
+                ],
+                span,
+            ));
+        }
+
+        // For-across advance: setq --idx-- (+ --idx-- 1)
+        for (_, _, idx_temp) in &for_across_info {
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(idx_temp, span),
+                    list_form(
+                        vec![
+                            symbol_form("+", span),
+                            symbol_form(idx_temp, span),
+                            int_form(1, span),
+                        ],
                         span,
                     ),
                 ],
@@ -2785,6 +2924,12 @@ impl Expander {
                 *pos += 1;
                 Some(LoopClause::ForOn { var, list_expr })
             }
+            "across" => {
+                *pos += 1;
+                let vec_expr = items.get(*pos)?.clone();
+                *pos += 1;
+                Some(LoopClause::ForAcross { var, vec_expr })
+            }
             "=" => {
                 *pos += 1;
                 let expr = items.get(*pos)?.clone();
@@ -2938,6 +3083,10 @@ enum LoopClause {
     ForOn {
         var: String,
         list_expr: SurfaceForm,
+    },
+    ForAcross {
+        var: String,
+        vec_expr: SurfaceForm,
     },
     ForEquals {
         var: String,
@@ -3174,6 +3323,10 @@ fn quote_form(inner: SurfaceForm, span: Span) -> SurfaceForm {
 
 fn function_quote_form(inner: SurfaceForm, span: Span) -> SurfaceForm {
     SurfaceForm::new(SurfaceKind::FunctionQuote(Box::new(inner)), span)
+}
+
+fn int_form(value: i64, span: Span) -> SurfaceForm {
+    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(value)), span)
 }
 
 fn list_form(items: Vec<SurfaceForm>, span: Span) -> SurfaceForm {
