@@ -1183,3 +1183,26 @@ fn defun_and_optional_args_preserve_argument_semantics() {
         );
     }
 }
+
+#[test]
+fn where_is_internal_returns_key_bindings_for_commands() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let expr = r#"(let ((bindings (where-is-internal 'find-file)))
+  (message "where-is-find-file %s"
+    (if (and bindings (> (length bindings) 0)) "found" "empty")))"#;
+
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| grid.iter().any(|r| r.contains("where-is-find-file"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("where-is-find-file found")),
+            "{label}: where-is-internal should find bindings for find-file"
+        );
+    }
+}
