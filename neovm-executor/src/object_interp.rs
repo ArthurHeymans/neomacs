@@ -4426,4 +4426,53 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(26)));
     }
+
+    #[test]
+    fn executes_split_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (length (split-string \"a b c\"))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (length (split-string \"a,b,c\" \",\"))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (length (split-string \"a  b\" nil t))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_string_join() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (string= (string-join (list \"a\" \"b\" \"c\") \"-\") \"a-b-c\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_trim() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (+ (if (string= (string-trim \"  hello  \") \"hello\") 1 0)\n\
+               (if (string= (string-trim \"xxhelloxx\" \"x\") \"hello\") 2 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_substring_no_properties() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (string= (substring-no-properties \"hello world\" 0 5) \"hello\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
