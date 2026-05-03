@@ -840,7 +840,6 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                 call_conv,
                 diagnostics: Vec::new(),
                 exception_handlers: Vec::new(),
-                ended_handler_count: 0,
                 catch_result_value: None,
                 ssa: self.ssa,
                 condition_case_vars: Vec::new(),
@@ -901,9 +900,6 @@ struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
     exception_handlers: Vec<ExceptionHandler>,
-    /// Counts CatchEnd/ConditionCaseEnd/UnwindProtectEnd instructions processed.
-    /// Used to compute handler indices without popping the handler stack.
-    ended_handler_count: usize,
     catch_result_value: Option<ir::Value>,
     ssa: &'a SsaFunction,
     /// Condition-case variable names, indexed by exception_handlers position.
@@ -916,6 +912,7 @@ const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
 struct ExceptionHandler {
     handler_block: ir::Block,
     kind: ExceptionHandlerKind,
+    ended: bool,
 }
 
 impl ExceptionHandler {
@@ -951,6 +948,11 @@ enum ExceptionHandlerKind {
 }
 
 impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
+    /// Find the index of the last (innermost) handler that hasn't been ended yet.
+    fn last_active_handler_idx(&self) -> Option<usize> {
+        self.exception_handlers.iter().rposition(|h| !h.ended)
+    }
+
     fn lower_inst(&mut self, inst: &crate::ssa::SsaInst) {
         match &inst.kind {
             SsaInstKind::Const(value) => {
@@ -1377,22 +1379,16 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         catch_tag: tag_value,
                         continuation_block,
                     },
+                    ended: false,
                 });
             }
             SsaInstKind::CatchEnd { body_result } => {
-                // Compute handler index from the top of the stack, accounting
-                // for previous CatchEnd/ConditionCaseEnd/UnwindProtectEnd
-                // instructions that have been processed.  Don't pop the stack
-                // so that Throw in loop bodies can still find their handler.
-                let Some(handler_idx) = self
-                    .exception_handlers
-                    .len()
-                    .checked_sub(self.ended_handler_count + 1)
-                else {
+                // Find the innermost active handler.
+                let Some(handler_idx) = self.last_active_handler_idx() else {
                     self.error("CatchEnd without CatchBegin");
                     return;
                 };
-                self.ended_handler_count += 1;
+                self.exception_handlers[handler_idx].ended = true;
                 let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
                     self.error("CatchEnd handler index out of range");
                     return;
@@ -1546,6 +1542,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         transitioned: false,
                         no_match_block: None,
                     },
+                    ended: false,
                 });
                 self.condition_case_vars.push(var.clone());
             }
@@ -1565,11 +1562,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 self.value_map.insert(result, value);
             }
             SsaInstKind::ConditionCaseHandler { pattern } => {
-                let Some(handler_idx) = self
-                    .exception_handlers
-                    .len()
-                    .checked_sub(self.ended_handler_count + 1)
-                else {
+                let Some(handler_idx) = self.last_active_handler_idx() else {
                     self.error("ConditionCaseHandler without ConditionCaseBegin");
                     return;
                 };
@@ -1672,11 +1665,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 self.builder.switch_to_block(match_block);
             }
             SsaInstKind::ConditionCaseHandlerResult { value } => {
-                let Some(handler_idx) = self
-                    .exception_handlers
-                    .len()
-                    .checked_sub(self.ended_handler_count + 1)
-                else {
+                let Some(handler_idx) = self.last_active_handler_idx() else {
                     return;
                 };
                 let (continuation_block, no_match_block) =
@@ -1700,15 +1689,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 }
             }
             SsaInstKind::ConditionCaseEnd { .. } => {
-                let Some(handler_idx) = self
-                    .exception_handlers
-                    .len()
-                    .checked_sub(self.ended_handler_count + 1)
-                else {
+                let Some(handler_idx) = self.last_active_handler_idx() else {
                     self.error("ConditionCaseEnd without ConditionCaseBegin");
                     return;
                 };
-                self.ended_handler_count += 1;
+                self.exception_handlers[handler_idx].ended = true;
                 let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
                     self.error("ConditionCaseEnd handler index out of range");
                     return;
@@ -1785,6 +1770,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         continuation_block,
                         normal_block,
                     },
+                    ended: false,
                 });
             }
             SsaInstKind::UnwindProtectCleanup => {
@@ -1808,15 +1794,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 );
             }
             SsaInstKind::UnwindProtectEnd { body_result } => {
-                let Some(handler_idx) = self
-                    .exception_handlers
-                    .len()
-                    .checked_sub(self.ended_handler_count + 1)
-                else {
+                let Some(handler_idx) = self.last_active_handler_idx() else {
                     self.error("UnwindProtectEnd without UnwindProtectBegin");
                     return;
                 };
-                self.ended_handler_count += 1;
+                self.exception_handlers[handler_idx].ended = true;
                 let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
                     self.error("UnwindProtectEnd handler index out of range");
                     return;

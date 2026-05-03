@@ -1835,7 +1835,7 @@ impl Expander {
             Option<(SurfaceForm, EndDirection)>,
             Option<SurfaceForm>,
         )> = Vec::new(); // var, start, end, step
-        let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
+        let mut for_in_info: Vec<(String, String, SurfaceForm, Option<SurfaceForm>)> = Vec::new(); // var, list-temp, list-expr, step-fn
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_across_info: Vec<(String, String, String)> = Vec::new(); // var, vec-temp, idx-temp
         let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr (no then)
@@ -1852,7 +1852,11 @@ impl Expander {
                     let_bindings.push(list_form(vec![symbol_form(var, span), start.clone()], span));
                     for_from_info.push((var.clone(), start.clone(), end.clone(), step.clone()));
                 }
-                LoopClause::ForIn { var, list_expr } => {
+                LoopClause::ForIn {
+                    var,
+                    list_expr,
+                    step_fn,
+                } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
                     list_counter += 1;
                     let_bindings.push(list_form(
@@ -1863,7 +1867,7 @@ impl Expander {
                         vec![symbol_form(var, span), nil_form(span)],
                         span,
                     ));
-                    for_in_info.push((var.clone(), list_temp, list_expr.clone()));
+                    for_in_info.push((var.clone(), list_temp, list_expr.clone(), step_fn.clone()));
                 }
                 LoopClause::ForOn { var, list_expr } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
@@ -1972,7 +1976,7 @@ impl Expander {
         }
 
         // For-in/for-on: list-temp truthiness
-        for (_, list_temp, _) in &for_in_info {
+        for (_, list_temp, _, _) in &for_in_info {
             while_tests.push(symbol_form(list_temp, span));
         }
         for (_, list_temp, _) in &for_on_info {
@@ -2030,7 +2034,7 @@ impl Expander {
         }
 
         // For-in: setq var (car --list--)
-        for (var, list_temp, _) in &for_in_info {
+        for (var, list_temp, _, _) in &for_in_info {
             while_body.push(list_form(
                 vec![
                     symbol_form("setq", span),
@@ -2379,16 +2383,28 @@ impl Expander {
             }
         }
 
-        // For-in advance: setq --list-- (cdr --list--)
-        for (_, list_temp, _) in &for_in_info {
+        // For-in advance: setq --list-- (step-fn --list--) or (cdr --list--)
+        for (_, list_temp, _, step_fn) in &for_in_info {
+            let advance_expr = if let Some(step) = step_fn {
+                list_form(
+                    vec![
+                        symbol_form("funcall", span),
+                        step.clone(),
+                        symbol_form(list_temp, span),
+                    ],
+                    span,
+                )
+            } else {
+                list_form(
+                    vec![symbol_form("cdr", span), symbol_form(list_temp, span)],
+                    span,
+                )
+            };
             while_body.push(list_form(
                 vec![
                     symbol_form("setq", span),
                     symbol_form(list_temp, span),
-                    list_form(
-                        vec![symbol_form("cdr", span), symbol_form(list_temp, span)],
-                        span,
-                    ),
+                    advance_expr,
                 ],
                 span,
             ));
@@ -3133,7 +3149,23 @@ impl Expander {
                 *pos += 1;
                 let list_expr = items.get(*pos)?.clone();
                 *pos += 1;
-                Some(LoopClause::ForIn { var, list_expr })
+                let step_fn = if *pos < items.len() && items[*pos].symbol_name() == Some("by") {
+                    *pos += 1;
+                    if *pos < items.len() {
+                        let step = items[*pos].clone();
+                        *pos += 1;
+                        Some(step)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                Some(LoopClause::ForIn {
+                    var,
+                    list_expr,
+                    step_fn,
+                })
             }
             "on" => {
                 *pos += 1;
@@ -3296,6 +3328,7 @@ enum LoopClause {
     ForIn {
         var: String,
         list_expr: SurfaceForm,
+        step_fn: Option<SurfaceForm>,
     },
     ForOn {
         var: String,
