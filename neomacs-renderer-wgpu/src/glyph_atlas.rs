@@ -220,18 +220,13 @@ impl WgpuGlyphAtlas {
             ],
         });
 
-        // Create sampler for glyph textures
-        // Use Nearest filtering: swash rasterizes each glyph with the
-        // subpixel-bin offset already baked into the bitmap, so Nearest
-        // preserves the sharp anti-aliased edges.  Linear would smear
-        // them at fractional pixel positions.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Glyph Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
@@ -324,14 +319,39 @@ impl WgpuGlyphAtlas {
         }
 
         tracing::debug!(
-            "glyph_atlas: rasterized '{}' {}x{} bearing ({:.1},{:.1}) color={}",
+            "glyph_atlas: rasterized '{}' {}x{} bearing ({:.1},{:.1}) color={} subpixel={}",
             c,
             result.width,
             result.height,
             result.bearing_x,
             result.bearing_y,
-            result.is_color
+            result.is_color,
+            result.is_subpixel
         );
+
+        // Debug: dump raw glyph rasterization to /tmp for pixel-level inspection.
+        // Set NEOMACS_DUMP_GLYPH=1 to dump ALL glyphs, or NEOMACS_DUMP_GLYPH=I
+        // to dump only the specified character.
+        if let Ok(filter) = std::env::var("NEOMACS_DUMP_GLYPH") {
+            let should_dump = filter == "1" || filter.chars().next().map_or(false, |fc| c == fc);
+            if should_dump && !result.is_color {
+                use std::io::Write;
+                let ext = if result.is_subpixel { "rgba" } else { "pgm" };
+                let fname = format!(
+                    "/tmp/glyph_U+{:04X}_{}x{}_{}.{}",
+                    c as u32, result.width, result.height, result.advance_width as u32, ext
+                );
+                if let Ok(mut f) = std::fs::File::create(&fname) {
+                    if result.is_subpixel {
+                        let _ = f.write_all(&result.pixel_data);
+                    } else {
+                        let _ = writeln!(f, "P5\n{} {}\n255", result.width, result.height);
+                        let _ = f.write_all(&result.pixel_data);
+                    }
+                    tracing::info!("glyph_atlas: dumped '{}' to {}", c, fname);
+                }
+            }
+        }
 
         // Cache default font metrics only from glyphs rendered at the atlas
         // default size. The renderer syncs the atlas default from the current
