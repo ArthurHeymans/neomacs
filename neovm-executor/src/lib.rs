@@ -3955,4 +3955,29 @@ my-counter
         let s = artifact.runtime.format_value(val);
         assert!(s.contains("3"), "should have 3 keys and 3 vals, got: {s}");
     }
+
+    #[test]
+    fn jit_pcase_pattern_matching() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "pcase.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun classify-val (x)
+  (pcase x
+    (1 'one)
+    (2 'two)
+    ((guard (> x 10)) 'big)
+    (_ 'other)))
+(list (classify-val 1) (classify-val 2) (classify-val 42) (classify-val 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("one"), "should contain one, got: {s}");
+        assert!(s.contains("two"), "should contain two, got: {s}");
+        assert!(s.contains("big"), "should contain big, got: {s}");
+        assert!(s.contains("other"), "should contain other, got: {s}");
+    }
 }

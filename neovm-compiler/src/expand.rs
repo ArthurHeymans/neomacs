@@ -213,6 +213,15 @@ impl Expander {
                     SurfaceForm::new(SurfaceKind::List(expanded), span)
                 }
             }
+            "pcase" => {
+                if items.len() >= 3 {
+                    self.expand_pcase(span, items)
+                } else {
+                    let expanded: Vec<SurfaceForm> =
+                        items.into_iter().map(|f| self.expand_form(f)).collect();
+                    SurfaceForm::new(SurfaceKind::List(expanded), span)
+                }
+            }
             // cl-with-gensyms -> let (simplified: uses symbol names as-is)
             "cl-with-gensyms" => {
                 if items.len() >= 3 {
@@ -918,6 +927,161 @@ impl Expander {
     fn error(&mut self, span: Span, message: impl Into<String>) {
         self.diagnostics
             .push(Diagnostic::error(message.into()).with_span(span));
+    }
+
+    fn expand_pcase(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (pcase EXPR CLAUSE ...) -> (let ((--val-- EXPR)) (cond (MATCH BODY) ...))
+        let val_expr = self.expand_form(items[1].clone());
+        let val_sym = "--pcase-val--";
+        let val_binding = list_form(vec![symbol_form(val_sym, span), val_expr], span);
+        let mut cond_clauses = Vec::new();
+        for clause in &items[2..] {
+            let parts = match &clause.kind {
+                SurfaceKind::List(p) => p,
+                _ => continue,
+            };
+            if parts.is_empty() {
+                continue;
+            };
+            let pattern = &parts[0];
+            let body_forms: Vec<SurfaceForm> = parts[1..]
+                .iter()
+                .map(|f| self.expand_form(f.clone()))
+                .collect();
+            let body = if body_forms.len() == 1 {
+                body_forms.into_iter().next().unwrap()
+            } else {
+                list_form(
+                    std::iter::once(symbol_form("progn", span))
+                        .chain(body_forms)
+                        .collect(),
+                    span,
+                )
+            };
+            let (condition, bindings) = self.expand_pcase_pattern(pattern, val_sym, span);
+            let body_with_bindings = if bindings.is_empty() {
+                body
+            } else {
+                list_form(
+                    std::iter::once(symbol_form("let", span))
+                        .chain(std::iter::once(list_form(bindings, span)))
+                        .chain(std::iter::once(body))
+                        .collect(),
+                    span,
+                )
+            };
+            cond_clauses.push(list_form(vec![condition, body_with_bindings], span));
+        }
+        let cond_form = list_form(
+            std::iter::once(symbol_form("cond", span))
+                .chain(cond_clauses)
+                .collect(),
+            span,
+        );
+        list_form(
+            vec![
+                symbol_form("let", span),
+                list_form(vec![val_binding], span),
+                cond_form,
+            ],
+            span,
+        )
+    }
+
+    fn expand_pcase_pattern(
+        &mut self,
+        pattern: &SurfaceForm,
+        val_sym: &str,
+        span: Span,
+    ) -> (SurfaceForm, Vec<SurfaceForm>) {
+        use crate::surface::{SurfaceAtom, SurfaceKind};
+        let val_ref = symbol_form(val_sym, span);
+        match &pattern.kind {
+            // _ matches everything
+            SurfaceKind::Atom(SurfaceAtom::Symbol(name)) if name == "_" => {
+                (symbol_form("t", span), Vec::new())
+            }
+            // Bare symbol: always matches, binds the symbol
+            SurfaceKind::Atom(SurfaceAtom::Symbol(name)) => {
+                let binding = list_form(vec![symbol_form(name, span), val_ref], span);
+                (symbol_form("t", span), vec![binding])
+            }
+            // Integer literal: compare with =
+            SurfaceKind::Atom(SurfaceAtom::Int(n)) => {
+                let cond = list_form(
+                    vec![symbol_form("=", span), val_ref, int_form(*n, span)],
+                    span,
+                );
+                (cond, Vec::new())
+            }
+            // String literal: compare with equal
+            SurfaceKind::Atom(SurfaceAtom::String(s)) => {
+                let str_form =
+                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::String(s.clone())), span);
+                let cond = list_form(vec![symbol_form("equal", span), val_ref, str_form], span);
+                (cond, Vec::new())
+            }
+            // 'quoted value: compare with equal
+            SurfaceKind::Quote(inner) => {
+                let cond = list_form(
+                    vec![
+                        symbol_form("equal", span),
+                        val_ref,
+                        quote_form(*inner.clone(), span),
+                    ],
+                    span,
+                );
+                (cond, Vec::new())
+            }
+            // (guard EXPR): use EXPR as condition
+            SurfaceKind::List(parts) if !parts.is_empty() => {
+                if let SurfaceKind::Atom(SurfaceAtom::Symbol(head)) = &parts[0].kind {
+                    match head.as_str() {
+                        "guard" => {
+                            let expr = if parts.len() > 1 {
+                                self.expand_form(parts[1].clone())
+                            } else {
+                                symbol_form("nil", span)
+                            };
+                            (expr, Vec::new())
+                        }
+                        "pred" => {
+                            let func = if parts.len() > 1 {
+                                parts[1].clone()
+                            } else {
+                                symbol_form("nil", span)
+                            };
+                            let cond =
+                                list_form(vec![symbol_form("funcall", span), func, val_ref], span);
+                            (cond, Vec::new())
+                        }
+                        "quote" if parts.len() > 1 => {
+                            let cond = list_form(
+                                vec![symbol_form("equal", span), val_ref, parts[1].clone()],
+                                span,
+                            );
+                            (cond, Vec::new())
+                        }
+                        // List pattern (simplified): treat as app pattern for first element
+                        _ => {
+                            // Fallback: use equal for the whole pattern
+                            let cond = list_form(
+                                vec![symbol_form("equal", span), val_ref, pattern.clone()],
+                                span,
+                            );
+                            (cond, Vec::new())
+                        }
+                    }
+                } else {
+                    let cond = list_form(
+                        vec![symbol_form("equal", span), val_ref, pattern.clone()],
+                        span,
+                    );
+                    (cond, Vec::new())
+                }
+            }
+            _ => (symbol_form("t", span), Vec::new()),
+        }
     }
 
     fn expand_destructuring_bind(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
