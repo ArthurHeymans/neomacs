@@ -2364,3 +2364,43 @@ fn goto_line_via_mg_g_jumps_to_line_number() {
 
     assert_pair_nearly_matches("goto_line_via_mg_g", &gnu, &neo, 2);
 }
+
+#[test]
+fn keyboard_macro_record_line_kill_and_replay_via_cx_paren() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "kmacro-replay.txt",
+        "line one\nline two\nline three\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-a");
+    // Start recording: C-x (
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "(");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Record actions: C-k C-n (kill line and move down)
+    send_both(&mut gnu, &mut neo, "C-k");
+    send_both(&mut gnu, &mut neo, "C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Stop recording: C-x )
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, ")");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Replay once: C-x e
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "e");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // After replay: line two should be killed, cursor on line three
+    let gnug = gnu.text_grid();
+    let neog = neo.text_grid();
+    let gnu_ok = gnug.iter().any(|r| r.contains("line three"));
+    let neo_ok = neog.iter().any(|r| r.contains("line three"));
+    let gnu_not_two = !gnug.iter().any(|r| r.contains("line two"));
+    let neo_not_two = !neog.iter().any(|r| r.contains("line two"));
+    assert!(gnu_ok && gnu_not_two, "GNU should have killed line two");
+    assert!(neo_ok && neo_not_two, "NEO should have killed line two");
+}
