@@ -48,8 +48,7 @@ use neovm_core::emacs_core::load::RuntimeImageRole;
 #[cfg(test)]
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
-    configure_terminal_runtime, reset_terminal_host, reset_terminal_runtime,
-    set_terminal_host,
+    configure_terminal_runtime, reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
 use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest};
 use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth};

@@ -9877,10 +9877,7 @@ fn macro_expansion_scope_uses_lexenv_dynvars() {
 
     // lexical-binding is specbound as the last entry, with the GcRoot
     // for macroexp--dynvars at the penultimate position.
-    assert!(matches!(
-        ev.specpdl.last(),
-        Some(SpecBinding::Let { .. })
-    ));
+    assert!(matches!(ev.specpdl.last(), Some(SpecBinding::Let { .. })));
     assert!(matches!(
         ev.specpdl.get(specpdl_count + 1),
         Some(SpecBinding::GcRoot { .. })
