@@ -1341,3 +1341,34 @@ fn save_file_visit_another_switch_back_round_trip() {
         );
     }
 }
+
+#[test]
+fn copy_whole_buffer_and_yank_to_new_file_via_mw_cy() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let src_name = "copy-source.txt";
+    let src = "source content line\n";
+    let dst_name = "copy-dest.txt";
+    let empty = "";
+
+    // Open source file
+    open_home_file(&mut gnu, &mut neo, src_name, src, "C-x C-f");
+    // Select all and copy
+    send_both(&mut gnu, &mut neo, "C-x h");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    send_both(&mut gnu, &mut neo, "M-w");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    // Open destination file
+    open_home_file(&mut gnu, &mut neo, dst_name, empty, "C-x C-f");
+    // Yank
+    send_both(&mut gnu, &mut neo, "C-y");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("source content line")),
+            "{label}: should yank source content into new file"
+        );
+    }
+}
