@@ -221,14 +221,17 @@ impl WgpuGlyphAtlas {
         });
 
         // Create sampler for glyph textures
-        // Use Linear filtering for smooth antialiased text
+        // Use Nearest filtering: swash rasterizes each glyph with the
+        // subpixel-bin offset already baked into the bitmap, so Nearest
+        // preserves the sharp anti-aliased edges.  Linear would smear
+        // them at fractional pixel positions.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Glyph Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });

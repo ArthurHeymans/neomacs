@@ -38,6 +38,11 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let alpha = textureSample(glyph_texture, glyph_sampler, in.tex_coords).r;
-    let a = in.color.a * alpha;
+    // FreeType rasterizes grayscale glyphs with gamma applied
+    // (gamma ≈ 2.2 for sRGB displays).  Decode to linear before
+    // compositing so the alpha-blended edges match the foreground
+    // luminance instead of coming out darker/grayer than intended.
+    let alpha_linear = pow(alpha, 2.2);
+    let a = in.color.a * alpha_linear;
     return vec4<f32>(in.color.rgb * a, a);
 }
