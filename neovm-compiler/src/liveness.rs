@@ -144,10 +144,11 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::CatchEnd { body_result: None }
         | SsaInstKind::ConditionCaseBegin { .. }
         | SsaInstKind::ConditionCaseHandler { .. }
-        | SsaInstKind::ConditionCaseEnd
+        | SsaInstKind::ConditionCaseEnd { body_result: None }
         | SsaInstKind::UnwindProtectBegin
         | SsaInstKind::UnwindProtectCleanup
         | SsaInstKind::UnwindProtectEnd => Vec::new(),
+        SsaInstKind::ConditionCaseEnd { body_result: Some(v) } => vec![*v],
         SsaInstKind::ConditionCaseHandlerResult { value } => vec![*value],
     }
 }

@@ -143,7 +143,10 @@ pub enum RegInstKind {
     ConditionCaseHandler {
         pattern: SurfaceForm,
     },
-    ConditionCaseEnd,
+    ConditionCaseEnd {
+        dst: RegId,
+        body_result: Option<RegId>,
+    },
     UnwindProtectBegin,
     UnwindProtectCleanup,
     UnwindProtectEnd,

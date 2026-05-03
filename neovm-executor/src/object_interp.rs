@@ -442,7 +442,15 @@ impl Interpreter<'_, '_, '_> {
                         .pop()
                         .expect("active condition handler");
                     let next_index = active.condition_end_index + 1;
-                    let result_reg = active.result_reg;
+                    // Get the result reg from the ConditionCaseEnd instruction, not
+                    // from the failing instruction. The ConditionCaseEnd's dst is
+                    // where the merged body/handler result should go.
+                    let cc_end_reg = body.instructions.get(active.condition_end_index)
+                        .and_then(|inst| match &inst.kind {
+                            RegInstKind::ConditionCaseEnd { dst, .. } => Some(*dst),
+                            _ => None,
+                        });
+                    let result_reg = cc_end_reg.or(active.result_reg);
                     let Some(value) = self.complete_condition_handler(active) else {
                         return self.finish(None);
                     };
@@ -460,7 +468,9 @@ impl Interpreter<'_, '_, '_> {
                         return self.finish(None);
                     };
                     self.condition_stack.pop();
-                    inst_index = end_index + 1;
+                    // Jump to the ConditionCaseEnd so it writes the body result
+                    // to the destination register.
+                    inst_index = end_index;
                     continue;
                 }
                 if !self.execute_inst(&inst.kind) {
@@ -732,8 +742,16 @@ impl Interpreter<'_, '_, '_> {
                     .push(ConditionFrame { var: var.clone() });
             }
             RegInstKind::ConditionCaseHandler { .. } => {}
-            RegInstKind::ConditionCaseEnd => {
+            RegInstKind::ConditionCaseEnd { dst, body_result } => {
                 self.condition_stack.pop();
+                // On the normal path (no signal), use the body result register.
+                // On the signal path, the handler ran and last_value has its result.
+                let value = if let Some(src) = body_result {
+                    self.get(*src).unwrap_or_else(|| self.last_value.unwrap_or(LispValue::NIL))
+                } else {
+                    self.last_value.unwrap_or(LispValue::NIL)
+                };
+                self.set(*dst, value);
             }
             RegInstKind::UnwindProtectBegin
             | RegInstKind::UnwindProtectCleanup
@@ -2534,8 +2552,8 @@ fn find_condition_case_end(instructions: &[RegInst], handler_index: usize) -> Op
     for (index, inst) in instructions.iter().enumerate().skip(handler_index + 1) {
         match &inst.kind {
             RegInstKind::ConditionCaseBegin { .. } => depth += 1,
-            RegInstKind::ConditionCaseEnd if depth == 0 => return Some(index),
-            RegInstKind::ConditionCaseEnd => depth -= 1,
+            RegInstKind::ConditionCaseEnd { .. } if depth == 0 => return Some(index),
+            RegInstKind::ConditionCaseEnd { .. } => depth -= 1,
             _ => {}
         }
     }
@@ -2577,7 +2595,7 @@ fn find_condition_handler(
     for (index, inst) in instructions.iter().enumerate().skip(signal_index + 1) {
         match &inst.kind {
             RegInstKind::ConditionCaseBegin { .. } => depth += 1,
-            RegInstKind::ConditionCaseEnd if depth == 0 => {
+            RegInstKind::ConditionCaseEnd { .. } if depth == 0 => {
                 if let Some(hi) = handler_index {
                     return Some(ConditionHandlerTarget {
                         handler_index: hi,
@@ -2589,7 +2607,7 @@ fn find_condition_handler(
                 // No matching handler in this scope, continue to outer.
                 frames_to_skip += 1;
             }
-            RegInstKind::ConditionCaseEnd => depth -= 1,
+            RegInstKind::ConditionCaseEnd { .. } => depth -= 1,
             RegInstKind::ConditionCaseHandler { pattern } if depth == 0 => {
                 if handler_index.is_some() && stop_index.is_none() {
                     stop_index = Some(index);
@@ -2647,7 +2665,7 @@ fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
         | RegInstKind::Throw { .. }
         | RegInstKind::ConditionCaseBegin { .. }
         | RegInstKind::ConditionCaseHandler { .. }
-        | RegInstKind::ConditionCaseEnd
+        | RegInstKind::ConditionCaseEnd { .. }
         | RegInstKind::UnwindProtectBegin
         | RegInstKind::UnwindProtectCleanup
         | RegInstKind::UnwindProtectEnd

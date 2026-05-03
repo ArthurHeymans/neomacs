@@ -174,7 +174,7 @@ impl RegVerifier<'_> {
             | RegInstKind::CatchEnd { .. }
             | RegInstKind::ConditionCaseBegin { .. }
             | RegInstKind::ConditionCaseHandler { .. }
-            | RegInstKind::ConditionCaseEnd
+            | RegInstKind::ConditionCaseEnd { .. }
             | RegInstKind::UnwindProtectBegin
             | RegInstKind::UnwindProtectCleanup
             | RegInstKind::UnwindProtectEnd => {}

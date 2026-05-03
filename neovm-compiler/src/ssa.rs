@@ -122,7 +122,9 @@ pub enum SsaInstKind {
     ConditionCaseHandlerResult {
         value: ValueId,
     },
-    ConditionCaseEnd,
+    ConditionCaseEnd {
+        body_result: Option<ValueId>,
+    },
     UnwindProtectBegin,
     UnwindProtectCleanup,
     UnwindProtectEnd,

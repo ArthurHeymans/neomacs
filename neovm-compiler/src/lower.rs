@@ -402,7 +402,10 @@ impl<'a> RegLowerer<'a> {
                 // solely to prevent DCE from removing the handler body.
                 RegInstKind::Move { dst: self.value_reg(*value), src: self.value_reg(*value) }
             }
-            SsaInstKind::ConditionCaseEnd => RegInstKind::ConditionCaseEnd,
+            SsaInstKind::ConditionCaseEnd { body_result } => RegInstKind::ConditionCaseEnd {
+                dst: self.result_reg(inst),
+                body_result: body_result.map(|v| self.value_reg(v)),
+            },
             SsaInstKind::UnwindProtectBegin => RegInstKind::UnwindProtectBegin,
             SsaInstKind::UnwindProtectCleanup => RegInstKind::UnwindProtectCleanup,
             SsaInstKind::UnwindProtectEnd => RegInstKind::UnwindProtectEnd,
@@ -1061,8 +1064,12 @@ impl SsaBuilder {
                         );
                     }
                 }
-                self.emit_no_result(SsaInstKind::ConditionCaseEnd);
-                body_value
+                // ConditionCaseEnd produces the merged result (body or handler value)
+                let result = self.emit_value(
+                    SsaInstKind::ConditionCaseEnd { body_result: body_value },
+                    Effects::single(Effect::MaySignal),
+                );
+                Some(result)
             }
             HirExprKind::UnwindProtect { body, cleanup } => {
                 self.emit_no_result(SsaInstKind::UnwindProtectBegin);
@@ -1315,7 +1322,7 @@ impl SsaBuilder {
             | SsaInstKind::ConditionCaseBegin { .. }
             | SsaInstKind::ConditionCaseHandler { .. }
             | SsaInstKind::ConditionCaseHandlerResult { .. }
-            | SsaInstKind::ConditionCaseEnd
+            | SsaInstKind::ConditionCaseEnd { .. }
             | SsaInstKind::UnwindProtectBegin
             | SsaInstKind::UnwindProtectCleanup
             | SsaInstKind::UnwindProtectEnd => Effects::new([Effect::MayThrow, Effect::MaySignal]),

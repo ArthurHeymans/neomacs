@@ -1507,7 +1507,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             SsaInstKind::ConditionCaseHandlerResult { value } => {
                 let _ = value;
             }
-            SsaInstKind::ConditionCaseEnd => {
+            SsaInstKind::ConditionCaseEnd { .. } => {
                 let Some(handler_idx) =
                     self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
                 else {

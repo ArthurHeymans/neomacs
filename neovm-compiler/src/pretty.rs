@@ -292,8 +292,11 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::ConditionCaseHandlerResult { value } => {
             let _ = write!(out, "condition-case-handler-result {}", value);
         }
-        SsaInstKind::ConditionCaseEnd => {
-            let _ = write!(out, "condition-case-end");
+        SsaInstKind::ConditionCaseEnd { body_result } => {
+            match body_result {
+                Some(v) => { let _ = write!(out, "condition-case-end body={}", value_name(function, *v)); }
+                None => { let _ = write!(out, "condition-case-end"); }
+            }
         }
         SsaInstKind::UnwindProtectBegin => {
             let _ = write!(out, "unwind-protect-begin");
@@ -465,8 +468,11 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
         RegInstKind::ConditionCaseHandler { .. } => {
             let _ = write!(out, "condition-case-handler <pattern>");
         }
-        RegInstKind::ConditionCaseEnd => {
-            let _ = write!(out, "condition-case-end");
+        RegInstKind::ConditionCaseEnd { dst, body_result } => {
+            let _ = write!(out, "condition-case-end -> {}", reg_name(function, *dst));
+            if let Some(src) = body_result {
+                let _ = write!(out, " (body={})", reg_name(function, *src));
+            }
         }
         RegInstKind::UnwindProtectBegin => {
             let _ = write!(out, "unwind-protect-begin");
