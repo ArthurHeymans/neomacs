@@ -880,3 +880,36 @@ fn view_lossage_via_ch_l_shows_recent_keys_and_commands() {
         2,
     );
 }
+
+#[test]
+fn describe_char_via_cu_cx_equals_shows_character_details() {
+    let (mut gnu, mut neo) = boot_pair("");
+    // Insert a character to describe
+    send_both(&mut gnu, &mut neo, "ATA");
+
+    // Move point back to the 'A'
+    send_both(&mut gnu, &mut neo, "C-a");
+
+    // C-u C-x = runs describe-char
+    send_both(&mut gnu, &mut neo, "C-u");
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "=");
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("*Help*"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("character") || row.contains("LATIN")),
+            "{label} describe-char should show character info"
+        );
+        assert!(
+            grid.iter().any(|row| row.contains("*Help*")),
+            "{label} describe-char should open a Help buffer"
+        );
+    }
+}
