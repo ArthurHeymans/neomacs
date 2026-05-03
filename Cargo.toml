@@ -99,7 +99,7 @@ gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-sys
 # GPU / windowing
 winit = "0.30"
 wgpu = "29"
-wgpu-hal = { version = "28", features = ["vulkan"] }
+wgpu-hal = { version = "29", features = ["vulkan"] }
 raw-window-handle = "0.6"
 ash = "0.38"
 pollster = "0.4"
@@ -111,8 +111,8 @@ ttf-parser = "0.25"
 arboard = "3.4"
 
 # GStreamer (video)
-gstreamer = "0.23"
-gstreamer-video = "0.23"
+gstreamer = "0.25"
+gstreamer-video = "0.25"
 gstreamer-app = "0.25"
 gstreamer-allocators = "0.25"
 

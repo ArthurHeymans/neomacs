@@ -26,29 +26,32 @@ impl RenderApp {
                 let mut char_count = 0usize;
                 let mut bg_count = 0usize;
                 let mut border_count = 0usize;
-                let mut cursor_count = 0usize;
                 let mut scrollbar_count = 0usize;
                 let mut image_count = 0usize;
                 let mut stretch_count = 0usize;
+                let mut video_count = 0usize;
+                let mut webkit_count = 0usize;
                 let mut other_count = 0usize;
                 for g in &frame.glyphs {
                     match g {
                         crate::core::frame_glyphs::FrameGlyph::Char { .. } => char_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::Background { .. } => bg_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::Border { .. } => border_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Cursor { .. } => cursor_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::ScrollBar { .. } => {
                             scrollbar_count += 1
                         }
                         crate::core::frame_glyphs::FrameGlyph::Image { .. } => image_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::Stretch { .. } => stretch_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Video { .. } => video_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::WebKit { .. } => webkit_count += 1,
                         _ => other_count += 1,
                     }
                 }
+                let cursor_count = frame.window_cursors.len();
                 tracing::info!(
                     "poll_frame: frame_id={} parent_id={} size={:.0}x{:.0} char={:.1}x{:.1} \
-                     glyphs={} (char={} bg={} border={} cursor={} stretch={} scrollbar={} image={} other={}) \
-                     windows={} cursor={} faces={}",
+                     glyphs={} (char={} bg={} border={} stretch={} scrollbar={} image={} video={} webkit={} other={}) \
+                     windows={} cursors={} phys_cursor={} faces={}",
                     frame_id,
                     parent_id,
                     frame.width,
@@ -59,12 +62,14 @@ impl RenderApp {
                     char_count,
                     bg_count,
                     border_count,
-                    cursor_count,
                     stretch_count,
                     scrollbar_count,
                     image_count,
+                    video_count,
+                    webkit_count,
                     other_count,
                     frame.window_infos.len(),
+                    cursor_count,
                     if frame.phys_cursor.is_some() {
                         "yes"
                     } else {
