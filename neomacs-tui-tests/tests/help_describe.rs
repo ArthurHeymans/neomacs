@@ -975,3 +975,33 @@ fn describe_function_forward_char_via_ch_f_shows_docstring() {
         );
     }
 }
+
+#[test]
+fn describe_mode_via_ch_m_shows_lisp_interaction_bindings() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "m");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Help*"))
+            && grid.iter().any(|row| row.contains("Lisp Interaction"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("*Help*")),
+            "{label} C-h m should open a Help buffer"
+        );
+        assert!(
+            grid.iter().any(|row| row.contains("Lisp Interaction")),
+            "{label} C-h m should show Lisp Interaction mode info"
+        );
+        assert!(
+            grid.iter().any(|row| row.contains("eval-print-last-sexp")),
+            "{label} C-h m should show key bindings like eval-print-last-sexp"
+        );
+    }
+}
