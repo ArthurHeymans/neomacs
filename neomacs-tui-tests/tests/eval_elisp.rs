@@ -1117,3 +1117,44 @@ fn macroexpand_and_condition_case_match_gnu() {
         );
     }
 }
+
+// ── Non-local exit tests ────────────────────────────────────
+
+#[test]
+fn catch_throw_and_unwind_protect_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // (catch 'tag (throw 'tag 42)) should be 42
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(catch 'tag (throw 'tag 42))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("42"),
+            "{label}: (catch 'tag (throw 'tag 42)) should be 42"
+        );
+    }
+
+    // (unwind-protect 42 (message "cleanup")) should be 42
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(unwind-protect 42 (ignore))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("42"),
+            "{label}: (unwind-protect 42 ...) should return 42"
+        );
+    }
+}
