@@ -14,6 +14,7 @@ use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 pub enum MacroValue {
     Nil,
     Int(i64),
+    Float(f64),
     Symbol(String),
     String(String),
     Cons(Rc<MacroCons>),
@@ -67,6 +68,7 @@ impl MacroValue {
         match (self, other) {
             (MacroValue::Nil, MacroValue::Nil) => true,
             (MacroValue::Int(a), MacroValue::Int(b)) => a == b,
+            (MacroValue::Float(a), MacroValue::Float(b)) => a == b,
             (MacroValue::Symbol(a), MacroValue::Symbol(b)) => a == b,
             (MacroValue::String(a), MacroValue::String(b)) => a == b,
             (MacroValue::Cons(a), MacroValue::Cons(b)) => Rc::ptr_eq(a, b),
@@ -344,7 +346,7 @@ fn atom_to_value(atom: &SurfaceAtom) -> MacroValue {
         SurfaceAtom::Nil => MacroValue::Nil,
         SurfaceAtom::True => MacroValue::Symbol("t".into()),
         SurfaceAtom::Int(n) => MacroValue::Int(*n),
-        SurfaceAtom::Float(_) => MacroValue::Nil,
+        SurfaceAtom::Float(f) => MacroValue::Float(*f),
         SurfaceAtom::Symbol(s) => MacroValue::Symbol(s.clone()),
         SurfaceAtom::String(s) => MacroValue::String(s.clone()),
         SurfaceAtom::Char(c) => MacroValue::Int(*c),
@@ -356,6 +358,7 @@ pub fn value_to_surface(value: &MacroValue, span: Span) -> SurfaceForm {
     match value {
         MacroValue::Nil => SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Nil), span),
         MacroValue::Int(n) => SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(*n)), span),
+        MacroValue::Float(f) => SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Float(*f)), span),
         MacroValue::Symbol(s) => {
             let atom = SurfaceAtom::symbol(s);
             SurfaceForm::new(SurfaceKind::Atom(atom), span)

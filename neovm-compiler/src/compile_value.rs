@@ -171,6 +171,7 @@ impl CompileValue {
         match v {
             MacroValue::Nil => CompileValue::Nil,
             MacroValue::Int(n) => CompileValue::Int(*n),
+            MacroValue::Float(f) => CompileValue::Float(*f),
             MacroValue::Symbol(s) => CompileValue::Symbol(s.clone()),
             MacroValue::String(s) => CompileValue::String(s.clone()),
             MacroValue::Cons(pair) => CompileValue::Cons {

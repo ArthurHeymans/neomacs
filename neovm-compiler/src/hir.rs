@@ -1164,7 +1164,11 @@ impl Lowerer<'_> {
             // Extra items (e.g., docstring) — just use first two
         }
         let Some(name) = items[0].symbol_name().map(str::to_string) else {
-            // Destructuring binding (e.g., ((a b) expr)) — skip, can't lower yet
+            // Destructuring binding (e.g., ((a b) expr)) — not yet supported
+            self.error(
+                items[0].span,
+                "destructuring bindings in let are not yet supported",
+            );
             return None;
         };
         let init = if let Some(init_form) = items.get(1) {
@@ -1300,6 +1304,7 @@ impl Lowerer<'_> {
             self.error(tail[0].span, "defcustom variable name must be a symbol");
             return None;
         };
+        self.declared_special.insert(name.clone());
         let quoted_name = quote_symbol_expr(&name, tail[0].span);
         let boundp = HirExpr {
             kind: HirExprKind::CallNamed {
@@ -1649,7 +1654,8 @@ impl Lowerer<'_> {
         let mut section = ParamSection::Required;
         for item in items {
             let Some(name) = item.symbol_name() else {
-                // Destructuring parameter — skip
+                // Destructuring parameter — not yet supported
+                self.error(item.span, "destructuring parameters are not yet supported");
                 continue;
             };
             match name {

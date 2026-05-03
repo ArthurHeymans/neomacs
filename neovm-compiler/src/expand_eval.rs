@@ -112,7 +112,7 @@ impl MacroEval {
             SurfaceAtom::Nil => MacroValue::Nil,
             SurfaceAtom::True => MacroValue::Symbol("t".into()),
             SurfaceAtom::Int(n) => MacroValue::Int(*n),
-            SurfaceAtom::Float(_) => MacroValue::Nil,
+            SurfaceAtom::Float(f) => MacroValue::Float(*f),
             SurfaceAtom::Symbol(name) => env
                 .lookup(name)
                 .cloned()
@@ -439,23 +439,28 @@ impl MacroEval {
                             return self.eval_progn(&items[2..], env);
                         }
                     };
-                    let mut bound_names = Vec::new();
+                    // First pass: evaluate all values and collect names
+                    let mut bindings_to_apply: Vec<(String, MacroValue)> = Vec::new();
                     for binding in bindings {
                         match &binding.kind {
                             crate::surface::SurfaceKind::List(pair) if pair.len() == 2 => {
                                 if let Some(name) = pair[0].symbol_name() {
                                     let val = self.eval(&pair[1], env)?;
-                                    env.bind(name.to_string(), val);
-                                    bound_names.push(name.to_string());
+                                    bindings_to_apply.push((name.to_string(), val));
                                 }
                             }
                             _ => {}
                         }
                     }
-                    let saved: Vec<(String, Option<MacroValue>)> = bound_names
+                    // Save old values BEFORE binding any new ones
+                    let saved: Vec<(String, Option<MacroValue>)> = bindings_to_apply
                         .iter()
-                        .map(|n| (n.clone(), env.save(n)))
+                        .map(|(n, _)| (n.clone(), env.save(n)))
                         .collect();
+                    // Now bind all new values
+                    for (name, val) in &bindings_to_apply {
+                        env.bind(name.clone(), val.clone());
+                    }
                     let result = self.eval_progn(&items[2..], env);
                     for (name, old) in saved {
                         env.restore(name, old);
@@ -1812,6 +1817,7 @@ fn format_value_as_string(val: &MacroValue) -> String {
     match val {
         MacroValue::Nil => "nil".into(),
         MacroValue::Int(n) => n.to_string(),
+        MacroValue::Float(f) => f.to_string(),
         MacroValue::Symbol(s) => s.clone(),
         MacroValue::String(s) => format!("\"{}\"", s),
         MacroValue::Cons(_) => {
