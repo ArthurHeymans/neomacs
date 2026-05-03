@@ -922,6 +922,306 @@ fn dispatch_primitive(
         "cdddar" => car_cdr_chain(rt, args[0], &[false, false, false, true]),
         "cddddr" => car_cdr_chain(rt, args[0], &[false, false, false, false]),
 
+        // --- Bitwise ---
+        "logand" => {
+            if args.is_empty() {
+                return LispValue::from_fixnum(0);
+            }
+            let init = args[0].as_fixnum()?;
+            let result = args[1..]
+                .iter()
+                .filter_map(|v| v.as_fixnum())
+                .fold(init, |a, b| a & b);
+            LispValue::from_fixnum(result)
+        }
+        "logior" => {
+            if args.is_empty() {
+                return LispValue::from_fixnum(0);
+            }
+            let init = args[0].as_fixnum()?;
+            let result = args[1..]
+                .iter()
+                .filter_map(|v| v.as_fixnum())
+                .fold(init, |a, b| a | b);
+            LispValue::from_fixnum(result)
+        }
+        "logxor" => {
+            if args.is_empty() {
+                return LispValue::from_fixnum(0);
+            }
+            let init = args[0].as_fixnum()?;
+            let result = args[1..]
+                .iter()
+                .filter_map(|v| v.as_fixnum())
+                .fold(init, |a, b| a ^ b);
+            LispValue::from_fixnum(result)
+        }
+        "lognot" => LispValue::from_fixnum(!args[0].as_fixnum()?),
+        "ash" => {
+            let val = args[0].as_fixnum()?;
+            let count = args[1].as_fixnum()?;
+            let result = if count >= 0 {
+                val << count
+            } else {
+                val >> (-count)
+            };
+            LispValue::from_fixnum(result)
+        }
+        "lsh" => {
+            let val = args[0].as_fixnum()?;
+            let count = args[1].as_fixnum()?;
+            let result = if count >= 0 {
+                val << count
+            } else {
+                (val as u64 >> (-count)) as i64
+            };
+            LispValue::from_fixnum(result)
+        }
+        "evenp" => Some(bool_value(args[0].as_fixnum()? % 2 == 0)),
+        "expt" => {
+            let base = args[0].as_fixnum()?;
+            let exp = args[1].as_fixnum()?;
+            if exp < 0 {
+                return LispValue::from_fixnum(if base == 0 { 0 } else { 0 });
+            }
+            LispValue::from_fixnum(base.pow(exp as u32))
+        }
+
+        // --- String ops ---
+        "number-to-string" => {
+            let n = args[0].as_fixnum()?;
+            Some(rt.string(n.to_string()))
+        }
+        "string-to-number" => {
+            let contents = rt.string_contents(args[0]).ok()?.to_string();
+            let radix = args
+                .get(1)
+                .and_then(|v| v.as_fixnum())
+                .and_then(|v| u32::try_from(v).ok())
+                .unwrap_or(10);
+            let trimmed = contents.trim();
+            let trimmed = if trimmed.starts_with('+') {
+                &trimmed[1..]
+            } else {
+                trimmed
+            };
+            if trimmed.is_empty() {
+                return LispValue::from_fixnum(0);
+            }
+            let n = i64::from_str_radix(trimmed, radix).unwrap_or(0);
+            LispValue::from_fixnum(n)
+        }
+        "string-join" => {
+            let sep = rt.string_contents(args[1]).ok()?.to_string();
+            let mut parts = Vec::new();
+            let mut cur = args[0];
+            while !cur.is_nil() {
+                let car = rt.car(cur).ok()?;
+                parts.push(rt.string_contents(car).ok()?.to_string());
+                cur = rt.cdr(cur).ok()?;
+            }
+            Some(rt.string(parts.join(&sep)))
+        }
+        "string-trim" => {
+            let s = rt.string_contents(args[0]).ok()?.to_string();
+            let trimmed = match args.get(1) {
+                Some(re) if !re.is_nil() => {
+                    let pat = rt.string_contents(*re).ok()?.to_string();
+                    s.trim_matches(|c: char| pat.contains(c)).to_string()
+                }
+                _ => s.trim().to_string(),
+            };
+            Some(rt.string(trimmed))
+        }
+        "string-trim-left" => {
+            let s = rt.string_contents(args[0]).ok()?.to_string();
+            let trimmed = match args.get(1) {
+                Some(re) if !re.is_nil() => {
+                    let pat = rt.string_contents(*re).ok()?.to_string();
+                    s.trim_start_matches(|c: char| pat.contains(c)).to_string()
+                }
+                _ => s.trim_start().to_string(),
+            };
+            Some(rt.string(trimmed))
+        }
+        "string-trim-right" => {
+            let s = rt.string_contents(args[0]).ok()?.to_string();
+            let trimmed = match args.get(1) {
+                Some(re) if !re.is_nil() => {
+                    let pat = rt.string_contents(*re).ok()?.to_string();
+                    s.trim_end_matches(|c: char| pat.contains(c)).to_string()
+                }
+                _ => s.trim_end().to_string(),
+            };
+            Some(rt.string(trimmed))
+        }
+        "split-string" => {
+            let s = rt.string_contents(args[0]).ok()?.to_string();
+            let sep = args
+                .get(1)
+                .and_then(|v| {
+                    if v.is_nil() {
+                        None
+                    } else {
+                        rt.string_contents(*v).ok().map(|s| s.to_string())
+                    }
+                })
+                .unwrap_or_default();
+            let omit = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
+            let parts: Vec<&str> = if sep.is_empty() {
+                s.split_whitespace().collect()
+            } else {
+                s.split(&sep).collect()
+            };
+            let parts: Vec<&str> = if omit {
+                parts.into_iter().filter(|p| !p.is_empty()).collect()
+            } else {
+                parts
+            };
+            let values: Vec<LispValue> = parts.into_iter().map(|p| rt.string(p)).collect();
+            Some(make_list(rt, values))
+        }
+        "substring-no-properties" => substring_op(rt, args),
+        "downcase" => {
+            if rt.is_string(args[0]) {
+                let s = rt.string_contents(args[0]).ok()?.to_string();
+                Some(rt.string(s.to_lowercase()))
+            } else if rt.is_symbol(args[0]) {
+                let name = rt.symbol_name(args[0]).ok()?.to_string();
+                Some(rt.intern(&name.to_lowercase()))
+            } else {
+                Some(args[0])
+            }
+        }
+        "upcase" => {
+            if rt.is_string(args[0]) {
+                let s = rt.string_contents(args[0]).ok()?.to_string();
+                Some(rt.string(s.to_uppercase()))
+            } else if rt.is_symbol(args[0]) {
+                let name = rt.symbol_name(args[0]).ok()?.to_string();
+                Some(rt.intern(&name.to_uppercase()))
+            } else {
+                Some(args[0])
+            }
+        }
+        "capitalize" => {
+            if rt.is_string(args[0]) {
+                let s = rt.string_contents(args[0]).ok()?.to_string();
+                let mut chars: Vec<char> = s.chars().collect();
+                if let Some(first) = chars.first_mut() {
+                    *first = first.to_uppercase().next().unwrap_or(*first);
+                }
+                for ch in &mut chars[1..] {
+                    *ch = ch.to_lowercase().next().unwrap_or(*ch);
+                }
+                Some(rt.string(chars.into_iter().collect::<String>()))
+            } else if rt.is_symbol(args[0]) {
+                let name = rt.symbol_name(args[0]).ok()?.to_string();
+                let mut chars: Vec<char> = name.chars().collect();
+                if let Some(first) = chars.first_mut() {
+                    *first = first.to_uppercase().next().unwrap_or(*first);
+                }
+                for ch in &mut chars[1..] {
+                    *ch = ch.to_lowercase().next().unwrap_or(*ch);
+                }
+                Some(rt.intern(&chars.into_iter().collect::<String>()))
+            } else {
+                Some(args[0])
+            }
+        }
+
+        // --- Symbol ops ---
+        "make-symbol" => {
+            let name = rt.string_contents(args[0]).ok()?.to_string();
+            Some(rt.make_symbol(&name))
+        }
+        "intern-soft" => {
+            if rt.is_string(args[0]) {
+                let name = rt.string_contents(args[0]).ok()?.to_string();
+                return Some(rt.intern_soft(&name).unwrap_or(LispValue::NIL));
+            }
+            if rt.is_symbol(args[0]) {
+                let name = rt.symbol_name(args[0]).ok()?.to_string();
+                return Some(rt.intern_soft(&name).unwrap_or(LispValue::NIL));
+            }
+            Some(LispValue::NIL)
+        }
+        "keywordp" => {
+            let is_keyword = rt.is_symbol(args[0])
+                && rt
+                    .symbol_name(args[0])
+                    .map_or(false, |n| n.starts_with(':'));
+            Some(bool_value(is_keyword))
+        }
+
+        // --- List ops ---
+        "delq" => {
+            let obj = args[0];
+            let mut items = Vec::new();
+            let mut cur = args[1];
+            while !cur.is_nil() {
+                let car = rt.car(cur).unwrap_or(LispValue::NIL);
+                if car != obj {
+                    items.push(car);
+                }
+                cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+            }
+            Some(make_list(rt, items))
+        }
+        "remove" => {
+            let obj = args[0];
+            let mut items = Vec::new();
+            let mut cur = args[1];
+            while !cur.is_nil() {
+                let car = rt.car(cur).unwrap_or(LispValue::NIL);
+                if !rt.equal(car, obj) {
+                    items.push(car);
+                }
+                cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+            }
+            Some(make_list(rt, items))
+        }
+        "elt" => {
+            let index = args[1].as_fixnum()? as usize;
+            if rt.is_vector(args[0]) {
+                let elements = rt.vector_elements(args[0]).ok()?;
+                return Some(elements.get(index).copied().unwrap_or(LispValue::NIL));
+            }
+            let mut cur = args[0];
+            for _ in 0..index {
+                if cur.is_nil() {
+                    return Some(LispValue::NIL);
+                }
+                cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+            }
+            Some(if cur.is_nil() {
+                LispValue::NIL
+            } else {
+                rt.car(cur).unwrap_or(LispValue::NIL)
+            })
+        }
+        "vconcat" => {
+            let mut elements = Vec::new();
+            for arg in args {
+                if rt.is_vector(*arg) {
+                    elements.extend(rt.vector_elements(*arg).ok()?);
+                } else if rt.is_string(*arg) {
+                    elements.push(*arg);
+                } else {
+                    let mut cur = *arg;
+                    while !cur.is_nil() {
+                        elements.push(rt.car(cur).unwrap_or(LispValue::NIL));
+                        cur = rt.cdr(cur).unwrap_or(LispValue::NIL);
+                    }
+                }
+            }
+            Some(rt.vector(elements))
+        }
+        "prog1" => {
+            let first = args[0];
+            Some(first)
+        }
+
         // --- Misc ---
         "identity" => Some(args[0]),
         "ignore" => Some(LispValue::NIL),

@@ -2343,4 +2343,116 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(15 (1 2 3 4 5))");
     }
+
+    // ── JIT primitive parity tests ────────────────────────────────
+
+    #[test]
+    fn jit_bitwise_logand() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "bitwise.el",
+            ";;; -*- lexical-binding: t; -*-\n(logand 15 6)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_bitwise_logior_logxor_lognot() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "bitwise2.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (logior 4 2) (logxor 5 3) (lognot 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(6 6 -1)");
+    }
+
+    #[test]
+    fn jit_bitwise_ash_lsh() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "shift.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (ash 1 4) (ash 16 -2))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(16 4)");
+    }
+
+    #[test]
+    fn jit_string_number_conversion() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "strnum.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (number-to-string 42) (string-to-number \"99\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(\"42\" 99)");
+    }
+
+    #[test]
+    fn jit_string_case_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "case.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (downcase \"HELLO\") (upcase \"world\") (capitalize \"foo bar\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(\"hello\" \"WORLD\" \"Foo bar\")"
+        );
+    }
+
+    #[test]
+    fn jit_string_trim_split_join() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "trim.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (string-trim \"  hello  \") (string-join (list \"a\" \"b\" \"c\") \"-\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(\"hello\" \"a-b-c\")");
+    }
+
+    #[test]
+    fn jit_delq_remove_elt() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "listops.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (delq 2 (list 1 2 3 2)) (elt (list 10 20 30) 1))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "((1 3) 20)");
+    }
+
+    #[test]
+    fn jit_symbol_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "symops.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (keywordp :foo) (keywordp 'bar))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil)");
+    }
+
+    #[test]
+    fn jit_evenp_expt() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "math.el",
+            ";;; -*- lexical-binding: t; -*-\n(list (evenp 4) (evenp 3) (expt 2 10))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil 1024)");
+    }
 }
