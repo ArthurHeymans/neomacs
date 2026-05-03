@@ -2455,4 +2455,34 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(t nil 1024)");
     }
+
+    #[test]
+    fn jit_cl_loop_for_equals_then() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-then.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x = 0 then (+ x 2) repeat 5 collect x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(0 2 4 6 8)");
+    }
+
+    #[test]
+    fn jit_cl_loop_for_equals_no_then() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-eq.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for i from 1 to 3
+         for x = (* i i)
+         collect x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 4 9)");
+    }
 }

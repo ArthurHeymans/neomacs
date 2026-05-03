@@ -259,10 +259,6 @@ impl MacroValue {
             return self.clone();
         }
         let start = vec.len().saturating_sub(n);
-        // For n=1, return the last element (not a list)
-        if n == 1 {
-            return vec.last().cloned().unwrap_or(MacroValue::Nil);
-        }
         MacroValue::list(vec[start..].to_vec())
     }
 

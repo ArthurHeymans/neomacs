@@ -259,6 +259,17 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
         tokens.push(raw_tokens[i].clone());
         i += 1;
     }
+
+    // Detect unterminated strings: token text won't end with '"'
+    for tok in &tokens {
+        if let TokenKind::String(_) = &tok.kind {
+            if !tok.text.ends_with('"') {
+                diagnostics
+                    .push(Diagnostic::error("unterminated string literal").with_span(tok.span));
+            }
+        }
+    }
+
     tokens
 }
 
@@ -374,7 +385,7 @@ fn lex_string(lexer: &mut logos::Lexer<'_, TokenKind>) -> String {
         }
     }
     lexer.bump(remainder.len());
-    String::new()
+    decode_escapes(remainder)
 }
 
 fn parse_char(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<i64> {
@@ -816,7 +827,15 @@ impl SurfaceExtractor<'_> {
                 SurfaceAtom::Int(value)
             }
             SyntaxKind::Float => SurfaceAtom::Float(text.parse().ok()?),
-            SyntaxKind::String => SurfaceAtom::String(decode_escapes(&text[1..text.len() - 1])),
+            SyntaxKind::String => {
+                // Unterminated strings have text not ending with '"'
+                let content = if text.ends_with('"') {
+                    &text[1..text.len() - 1]
+                } else {
+                    &text[1..]
+                };
+                SurfaceAtom::String(decode_escapes(content))
+            }
             SyntaxKind::Char => SurfaceAtom::Char(parse_char_code(text)?),
             SyntaxKind::Dot
             | SyntaxKind::LParen
@@ -1079,6 +1098,25 @@ mod tests {
         assert_eq!(
             output.forms[2].kind,
             SurfaceKind::Atom(SurfaceAtom::Int(10))
+        );
+    }
+
+    #[test]
+    fn unterminated_string_emits_error() {
+        let output = read("\"hello");
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("unterminated string")),
+            "expected unterminated string diagnostic, got: {:?}",
+            output.diagnostics
+        );
+        // Should still produce a string atom with the partial content
+        assert_eq!(output.forms.len(), 1);
+        assert_eq!(
+            output.forms[0].kind,
+            SurfaceKind::Atom(SurfaceAtom::String("hello".into()))
         );
     }
 }

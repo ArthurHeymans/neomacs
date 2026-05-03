@@ -1303,7 +1303,8 @@ impl Expander {
         )> = Vec::new(); // var, start, end, step
         let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
-        let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr
+        let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr (no then)
+        let mut for_eq_step: Vec<(String, SurfaceForm)> = Vec::new(); // var, step (has then)
 
         for clause in &for_clauses {
             match clause {
@@ -1338,12 +1339,24 @@ impl Expander {
                     ));
                     for_on_info.push((var.clone(), list_temp, list_expr.clone()));
                 }
-                LoopClause::ForEquals { var, expr } => {
-                    let_bindings.push(list_form(
-                        vec![symbol_form(var, span), nil_form(span)],
-                        span,
-                    ));
-                    for_eq_info.push((var.clone(), expr.clone()));
+                LoopClause::ForEquals {
+                    var,
+                    expr,
+                    then_expr,
+                } => {
+                    if let Some(step) = then_expr {
+                        // for x = init then step: bind init, step goes after body
+                        let_bindings
+                            .push(list_form(vec![symbol_form(var, span), expr.clone()], span));
+                        for_eq_step.push((var.clone(), step.clone()));
+                    } else {
+                        // for x = expr: bind nil, setq expr at body start
+                        let_bindings.push(list_form(
+                            vec![symbol_form(var, span), nil_form(span)],
+                            span,
+                        ));
+                        for_eq_info.push((var.clone(), expr.clone()));
+                    }
                 }
                 _ => {}
             }
@@ -1817,6 +1830,18 @@ impl Expander {
                         vec![symbol_form("+", span), symbol_form(var, span), step_val],
                         span,
                     ),
+                ],
+                span,
+            ));
+        }
+
+        // For-equals step (for x = init then step): update at end of iteration
+        for (var, step) in &for_eq_step {
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(var, span),
+                    step.clone(),
                 ],
                 span,
             ));
@@ -2410,6 +2435,7 @@ impl Expander {
             return Some(LoopClause::ForEquals {
                 var,
                 expr: nil_form(span),
+                then_expr: None,
             });
         }
 
@@ -2461,21 +2487,31 @@ impl Expander {
                 *pos += 1;
                 let expr = items.get(*pos)?.clone();
                 *pos += 1;
-                // Optional "then"
-                // For simplicity, ignore "then" in phase 1
-                if *pos < items.len() && items[*pos].symbol_name() == Some("then") {
+                // Optional "then step-expr"
+                let then_expr = if *pos < items.len() && items[*pos].symbol_name() == Some("then") {
                     *pos += 1;
                     if *pos < items.len() {
+                        let step = items[*pos].clone();
                         *pos += 1;
-                    } // skip the then-expr
-                }
-                Some(LoopClause::ForEquals { var, expr })
+                        Some(step)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                Some(LoopClause::ForEquals {
+                    var,
+                    expr,
+                    then_expr,
+                })
             }
             _ => {
                 // No recognized sub-keyword: treat as for-equals with the next form
                 Some(LoopClause::ForEquals {
                     var,
                     expr: nil_form(span),
+                    then_expr: None,
                 })
             }
         }
@@ -2604,6 +2640,7 @@ enum LoopClause {
     ForEquals {
         var: String,
         expr: SurfaceForm,
+        then_expr: Option<SurfaceForm>,
     },
     Collect {
         expr: SurfaceForm,
