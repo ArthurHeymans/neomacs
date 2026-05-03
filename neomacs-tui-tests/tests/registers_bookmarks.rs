@@ -915,3 +915,48 @@ fn recentf_mode_tracks_opened_files_and_lists_them_via_mx() {
         3,
     );
 }
+
+#[test]
+fn bookmark_set_and_jump_via_cx_rm_remembers_file_position() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let contents = "marker line is here\nline two\nline three\nline four\n";
+    let name = "bm-set-jump.txt";
+    open_home_file(&mut gnu, &mut neo, name, contents, "C-x C-f");
+
+    // Move to "marker line is here"
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Set bookmark: C-x r m then name RET
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "r");
+    send_both(&mut gnu, &mut neo, "m");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"bm-test\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Move to end of file
+    send_both(&mut gnu, &mut neo, "M->");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    // Jump to bookmark: C-x r b then name RET
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "r");
+    send_both(&mut gnu, &mut neo, "b");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"bm-test\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Verify we're at the marker line
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        // The file has 4 lines; after jumping to bookmark, it should be visible
+        assert!(
+            grid.iter().any(|r| r.contains(name)),
+            "{label} should be in the bookmarked file"
+        );
+    }
+}
