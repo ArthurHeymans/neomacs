@@ -1042,3 +1042,33 @@ fn find_alternate_file_via_cx_cv_replaces_buffer() {
         2,
     );
 }
+
+#[test]
+fn find_file_via_cx_cf_opens_existing_file_with_contents_visible() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "cx-cf-find-visible.txt";
+    let content = "first line of visible content\nsecond line\n";
+
+    open_home_file(&mut gnu, &mut neo, name, content, "C-x C-f");
+
+    // Now re-open the same file via C-x C-f again (should go to same buffer)
+    send_both(&mut gnu, &mut neo, "C-x C-f");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(format!("{}\r", name).as_bytes());
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("first line of visible content")),
+            "{label}: reopening via C-x C-f should show the file content"
+        );
+        assert!(
+            grid.iter().any(|r| r.contains(name)),
+            "{label}: mode-line should show the reopened file name"
+        );
+    }
+}
