@@ -3881,36 +3881,48 @@ impl LayoutEngine {
             if ch == '\t' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                // Tab: advance to next tab stop using per-face char width
+                // Tab: advance to next tab stop.
+                // GNU xdisp.c:33444 computes next_tab_x from pixel position x:
+                //   int tab_width = it->tab_width * font->space_width;
+                //   int next_tab_x = ((1 + x + tab_width - 1) / tab_width) * tab_width;
+                //   it->pixel_width = next_tab_x - x0;
+                // Do the same here — use pixel x, not column col, so per-char
+                // pixel widths don't cause column↔pixel drift.
                 let x_before_tab = x;
-                let next_tab = if !params.tab_stop_list.is_empty() {
-                    // Custom tab stops from tab-stop-list
+                let pixel_tab_width = params.tab_width as f32 * face_space_w;
+                let next_tab_x = if !params.tab_stop_list.is_empty() {
+                    // Custom tab stops in pixels
                     params
                         .tab_stop_list
                         .iter()
-                        .find(|&&stop| (stop as usize) > col)
-                        .map(|&stop| stop as usize)
+                        .map(|&stop| stop as f32 * face_space_w)
+                        .find(|&stop_px| stop_px > x)
                         .unwrap_or_else(|| {
-                            // Past last defined stop: use fixed tabs from last stop
-                            let last = *params.tab_stop_list.last().unwrap() as usize;
-                            let tab_w = params.tab_width.max(1) as usize;
-                            if col >= last {
-                                last + ((col - last) / tab_w + 1) * tab_w
+                            let last =
+                                *params.tab_stop_list.last().unwrap() as f32 * face_space_w;
+                            if x >= last && pixel_tab_width > 0.0 {
+                                last + ((x - last) / pixel_tab_width).floor() * pixel_tab_width
+                                    + pixel_tab_width
                             } else {
                                 last
                             }
                         })
+                } else if pixel_tab_width > 0.0 {
+                    ((x / pixel_tab_width).floor() + 1.0) * pixel_tab_width
                 } else {
-                    let tab_w = params.tab_width as usize;
-                    if tab_w > 0 {
-                        ((col / tab_w) + 1) * tab_w
-                    } else {
-                        col + 1
-                    }
+                    x + face_space_w
                 };
-                // Ensure tab advances at least one column
-                let next_tab = next_tab.max(col + 1);
-                let spaces = next_tab - col;
+                // Ensure tab advances at least one space width (GNU: next_tab_x - x >= font->space_width)
+                let next_tab_x = if next_tab_x - x < face_space_w {
+                    next_tab_x + pixel_tab_width
+                } else {
+                    next_tab_x
+                };
+                let advance = (next_tab_x - x).max(face_space_w);
+                // col tracks column position on the fixed grid (multiples of
+                // face_space_w).  Recompute from the absolute tab-stop pixel
+                // so per-character width drift before the tab is absorbed.
+                let next_tab_col = (next_tab_x / face_space_w.max(1.0)).round() as usize;
                 if cursor_info.is_none() && params.point == charpos {
                     capture_cursor_info(
                         &mut cursor_info,
@@ -3926,7 +3938,7 @@ impl LayoutEngine {
                             face_id: current_face_id.saturating_sub(1),
                             face_space_w,
                             matrix_row: row,
-                            slot_width: Some((spaces as f32 * face_space_w).max(1.0)),
+                            slot_width: Some(advance.max(1.0)),
                             stretch_like: true,
                         },
                     );
@@ -3938,15 +3950,15 @@ impl LayoutEngine {
                     y,
                     x_before_tab,
                     y + raise_y_offset,
-                    spaces as f32 * face_space_w,
+                    advance,
                     char_h,
                     col,
-                    next_tab,
+                    next_tab_col,
                 );
                 self.matrix_builder
-                    .push_stretch(spaces as u16, current_face_id.saturating_sub(1));
-                x += spaces as f32 * face_space_w;
-                col = next_tab;
+                    .push_stretch((next_tab_col.saturating_sub(col)).max(1) as u16, current_face_id.saturating_sub(1));
+                x += advance;
+                col = next_tab_col;
                 charpos += 1;
                 if params.word_wrap {
                     _wrap_break_col = col;
