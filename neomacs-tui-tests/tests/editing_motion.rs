@@ -2404,3 +2404,32 @@ fn keyboard_macro_record_line_kill_and_replay_via_cx_paren() {
     assert!(gnu_ok && gnu_not_two, "GNU should have killed line two");
     assert!(neo_ok && neo_not_two, "NEO should have killed line two");
 }
+
+#[test]
+fn universal_argument_move_down_via_cu_5_cn() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let mut contents = String::new();
+    for line in 1..=10 {
+        contents.push_str(&format!("line {:02}\n", line));
+    }
+    open_home_file(&mut gnu, &mut neo, "move-down-5.txt", &contents, "C-x C-f");
+
+    // C-u 5 C-n should move down 5 lines
+    send_both(&mut gnu, &mut neo, "C-u");
+    send_both(&mut gnu, &mut neo, "5");
+    send_both(&mut gnu, &mut neo, "C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Verify we're on line 6 by using C-x = to check cursor position
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "=");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("line 06")),
+            "{label}: C-u 5 C-n should move to line 6"
+        );
+    }
+}
