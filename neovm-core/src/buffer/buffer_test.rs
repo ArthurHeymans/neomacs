@@ -324,8 +324,9 @@ fn gnu_style_buffer_fields_track_char_and_byte_positions() {
     assert_eq!(buf.pt_byte, 2);
 
     buf.set_mark_byte(3);
-    assert_eq!(buf.mark, Some(2));
-    assert_eq!(buf.mark_byte, Some(3));
+    assert_eq!(buf.mark(), Some(3));
+    assert_eq!(buf.mark_byte(), Some(3));
+    assert_eq!(buf.mark_char(), Some(2));
 }
 
 #[test]

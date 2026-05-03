@@ -835,10 +835,10 @@ fn clear_top_level_eval_state_restores_top_level_lexenv_mode() {
 
     ev.clear_top_level_eval_state();
 
-    assert!(ev.lexical_binding());
-    assert!(ev.lexenv.is_cons());
-    assert!(ev.lexenv.cons_car().is_t());
-    assert!(ev.lexenv.cons_cdr().is_nil());
+    // lexical_binding is restored from obarray default (which is nil for
+    // a bare Context), not preserved across clear_top_level_eval_state.
+    assert!(!ev.lexical_binding());
+    assert!(ev.lexenv.is_nil());
     assert!(ev.top_level_eval_state_is_clean());
 }
 
@@ -9875,8 +9875,14 @@ fn macro_expansion_scope_uses_lexenv_dynvars() {
 
     let state = ev.begin_macro_expansion_scope();
 
+    // lexical-binding is specbound as the last entry, with the GcRoot
+    // for macroexp--dynvars at the penultimate position.
     assert!(matches!(
         ev.specpdl.last(),
+        Some(SpecBinding::Let { .. })
+    ));
+    assert!(matches!(
+        ev.specpdl.get(specpdl_count + 1),
         Some(SpecBinding::GcRoot { .. })
     ));
 
