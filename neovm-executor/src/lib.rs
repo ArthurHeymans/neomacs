@@ -3768,4 +3768,96 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "5050");
     }
+
+    #[test]
+    fn jit_cl_labels_mutual_recursion() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "mutual-recurse.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-labels ((even-p (n) (if (= n 0) t (odd-p (- n 1))))
+            (odd-p (n) (if (= n 0) nil (even-p (- n 1)))))
+  (list (even-p 4) (odd-p 5) (even-p 3) (odd-p 2)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("t"), "even-p(4) should be t, got: {s}");
+    }
+
+    #[test]
+    fn jit_defvar_dynamic_scope() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "defvar.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defvar my-counter 0)
+(defun inc-counter ()
+  (setq my-counter (+ my-counter 1)))
+(inc-counter)
+(inc-counter)
+(inc-counter)
+my-counter
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "3");
+    }
+
+    #[test]
+    fn jit_setf_on_aref() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-aref.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((v (vector 1 2 3 4 5)))
+  (setf (aref v 2) 99)
+  (aref v 2))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "99");
+    }
+
+    #[test]
+    fn jit_cl_loop_for_in_do() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-do.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((sum 0))
+  (cl-loop for x in '(1 2 3 4 5) do (setq sum (+ sum x)))
+  sum)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "15");
+    }
+
+    #[test]
+    fn jit_nested_let_closures() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-closures.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun make-pair-adder (a b)
+  (let ((sum (+ a b)))
+    (lambda (x) (+ x sum))))
+(let ((f (make-pair-adder 10 20)))
+  (funcall f 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "35");
+    }
 }
