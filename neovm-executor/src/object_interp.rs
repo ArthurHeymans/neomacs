@@ -1115,6 +1115,10 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
                 .map(|values| make_list(self.runtime, values.iter().rev().copied())),
+            "nreverse" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.list_values(args[0]))
+                .map(|values| make_list(self.runtime, values.iter().rev().copied())),
             "append" => self.append(args),
             "nth" => self
                 .exact_arity(name, args, 2)

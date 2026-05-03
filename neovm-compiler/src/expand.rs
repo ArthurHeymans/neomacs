@@ -1114,21 +1114,12 @@ impl Expander {
             }
         }
 
-        // Allocate accumulators for collection/aggregation clauses
+        // Allocate accumulators for collection/aggregation clauses (including nested in when/if)
         let mut accum_map: Vec<(AccumKind, String, usize)> = Vec::new(); // (kind, var, index-into-accums)
-        for clause in &body_clauses {
-            let kind = match clause {
-                LoopClause::Collect { .. } => AccumKind::Collect,
-                LoopClause::Append { .. } => AccumKind::Append,
-                LoopClause::Nconc { .. } => AccumKind::Nconc,
-                LoopClause::Sum { .. } => AccumKind::Sum,
-                LoopClause::Count { .. } => AccumKind::Count,
-                LoopClause::Minimize { .. } => AccumKind::Minimize,
-                LoopClause::Maximize { .. } => AccumKind::Maximize,
-                _ => continue,
-            };
+        let all_accum_clauses = Self::collect_accum_kinds(body_clauses.iter().copied());
+        for kind in all_accum_clauses {
             // Reuse existing accumulator of same kind
-            if let Some(_existing) = accum_map.iter().find(|(k, _, _)| *k == kind) {
+            if accum_map.iter().any(|(k, _, _)| *k == kind) {
                 continue;
             }
             let name = format!("--cl-acc-{}--", acc_counter);
@@ -1571,6 +1562,30 @@ impl Expander {
             .find(|(k, _, _)| *k == kind)
             .map(|(_, name, _)| name.clone())
             .unwrap_or_else(|| "--cl-acc-unknown--".into())
+    }
+
+    /// Collect all AccumKinds from clauses, recursing into when/if branches.
+    fn collect_accum_kinds<'a>(clauses: impl IntoIterator<Item = &'a LoopClause>) -> Vec<AccumKind> {
+        let mut kinds = Vec::new();
+        for clause in clauses {
+            match clause {
+                LoopClause::Collect { .. } => kinds.push(AccumKind::Collect),
+                LoopClause::Append { .. } => kinds.push(AccumKind::Append),
+                LoopClause::Nconc { .. } => kinds.push(AccumKind::Nconc),
+                LoopClause::Sum { .. } => kinds.push(AccumKind::Sum),
+                LoopClause::Count { .. } => kinds.push(AccumKind::Count),
+                LoopClause::Minimize { .. } => kinds.push(AccumKind::Minimize),
+                LoopClause::Maximize { .. } => kinds.push(AccumKind::Maximize),
+                LoopClause::If { then_clauses, else_clauses, .. } => {
+                    kinds.extend(Self::collect_accum_kinds(then_clauses.iter()));
+                    if let Some(else_cls) = else_clauses {
+                        kinds.extend(Self::collect_accum_kinds(else_cls.iter()));
+                    }
+                }
+                _ => {}
+            }
+        }
+        kinds
     }
 
     fn build_if_body(&self, span: Span, clauses: &[LoopClause], accum_map: &[(AccumKind, String, usize)]) -> Vec<SurfaceForm> {

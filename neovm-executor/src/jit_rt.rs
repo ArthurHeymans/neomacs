@@ -783,6 +783,7 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
         "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
         "reverse" => reverse_list(rt, args[0]),
         "nreverse" => reverse_list(rt, args[0]),
+        "nreverse" => reverse_list(rt, args[0]),
         "append" => append_lists(rt, args),
         "nconc" => nconc_lists(rt, args),
         "memq" => memq_op(rt, args[0], args[1]),
