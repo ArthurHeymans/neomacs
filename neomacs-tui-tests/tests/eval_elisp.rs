@@ -1158,3 +1158,44 @@ fn catch_throw_and_unwind_protect_match_gnu() {
         );
     }
 }
+
+// ── Prefix argument diagnostic ──────────────────────────────
+
+#[test]
+fn prefix_arg_survives_from_cu_to_next_command() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Check prefix-arg is nil before any C-u
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(if (null prefix-arg) \"nil\" \"non-nil\")",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("nil"),
+            "{label}: prefix-arg should be nil before C-u. Echo: {echo}"
+        );
+    }
+
+    // Check current-prefix-arg is nil too
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(if (null current-prefix-arg) \"nil\" \"non-nil\")",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("nil"),
+            "{label}: current-prefix-arg should be nil"
+        );
+    }
+}
