@@ -3724,4 +3724,48 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "6");
     }
+
+    #[test]
+    fn jit_cond_multi_branch() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun classify (n)
+  (cond
+   ((< n 0) 'negative)
+   ((= n 0) 'zero)
+   ((< n 10) 'small)
+   (t 'large)))
+(list (classify -5) (classify 0) (classify 7) (classify 100))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("negative"), "should contain negative, got: {s}");
+        assert!(s.contains("zero"), "should contain zero, got: {s}");
+        assert!(s.contains("small"), "should contain small, got: {s}");
+        assert!(s.contains("large"), "should contain large, got: {s}");
+    }
+
+    #[test]
+    fn jit_recursive_accumulator() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "recurse-accum.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun sum-to (n acc)
+  (if (= n 0)
+      acc
+    (sum-to (- n 1) (+ acc n))))
+(sum-to 100 0)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "5050");
+    }
 }
