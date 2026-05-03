@@ -2,7 +2,15 @@ use crate::expand_value::MacroValue;
 
 /// Compile-time Lisp value for the compiler pipeline.
 /// Carries forward through SSA → RegIR → JIT as a richer alternative to bare i64.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// Equality semantics:
+/// - `eq`: pointer identity for Cons/Vector; value equality for atoms.
+/// - `equal`: deep structural comparison.
+/// - Rust `==` delegates to `equal`.
+///
+/// NOTE: Cons uses `Box`, so two separately-constructed Cons values are never `eq`.
+/// Vector uses `Vec`; two separately-constructed Vectors are never `eq`.
+#[derive(Clone, Debug)]
 pub enum CompileValue {
     Nil,
     Bool(bool),
@@ -18,7 +26,55 @@ pub enum CompileValue {
     Vector(Vec<CompileValue>),
 }
 
+// PartialEq delegates to `equal` (Emacs deep structural comparison).
+impl PartialEq for CompileValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.equal(other)
+    }
+}
+
 impl CompileValue {
+    /// Emacs `eq` — pointer identity for composite types, value equality for atoms.
+    /// Since Cons uses Box (unique ownership), two separate Cons values are never eq.
+    /// Since Vector uses Vec, two separate Vector values are never eq.
+    pub fn eq(&self, other: &CompileValue) -> bool {
+        match (self, other) {
+            (CompileValue::Nil, CompileValue::Nil) => true,
+            (CompileValue::Bool(a), CompileValue::Bool(b)) => a == b,
+            (CompileValue::Int(a), CompileValue::Int(b)) => a == b,
+            (CompileValue::Float(a), CompileValue::Float(b)) => a.to_bits() == b.to_bits(),
+            (CompileValue::Char(a), CompileValue::Char(b)) => a == b,
+            (CompileValue::Symbol(a), CompileValue::Symbol(b)) => a == b,
+            (CompileValue::String(a), CompileValue::String(b)) => a == b,
+            // Cons and Vector: use pointer identity (raw address comparison).
+            // Since Box/Vec are unique, self == other only if they are the same allocation.
+            (CompileValue::Cons { .. }, CompileValue::Cons { .. }) => {
+                std::ptr::eq(self, other)
+            }
+            (CompileValue::Vector(_), CompileValue::Vector(_)) => {
+                std::ptr::eq(self, other)
+            }
+            _ => false,
+        }
+    }
+
+    /// Emacs `equal` — deep recursive structural comparison.
+    pub fn equal(&self, other: &CompileValue) -> bool {
+        if self.eq(other) {
+            return true;
+        }
+        match (self, other) {
+            (CompileValue::Cons { car: a_car, cdr: a_cdr }, CompileValue::Cons { car: b_car, cdr: b_cdr }) => {
+                a_car.equal(b_car) && a_cdr.equal(b_cdr)
+            }
+            (CompileValue::Vector(a), CompileValue::Vector(b)) => {
+                a.len() == b.len()
+                    && a.iter().zip(b.iter()).all(|(l, r)| l.equal(r))
+            }
+            _ => false,
+        }
+    }
+
     pub fn is_nil(&self) -> bool {
         matches!(self, CompileValue::Nil)
     }
@@ -120,7 +176,7 @@ impl CompileValue {
                 cdr: Box::new(CompileValue::from_macro_value(&pair.cdr)),
             },
             MacroValue::Vector(items) => CompileValue::Vector(
-                items.iter().map(CompileValue::from_macro_value).collect(),
+                items.iter().map(|v| CompileValue::from_macro_value(v)).collect(),
             ),
         }
     }
@@ -139,7 +195,9 @@ impl CompileValue {
                 MacroValue::cons(car.to_macro_value(), cdr.to_macro_value())
             }
             CompileValue::Vector(v) => {
-                MacroValue::Vector(v.iter().map(|cv| cv.to_macro_value()).collect())
+                MacroValue::Vector(std::rc::Rc::new(
+                    v.iter().map(|cv| cv.to_macro_value()).collect(),
+                ))
             }
         }
     }

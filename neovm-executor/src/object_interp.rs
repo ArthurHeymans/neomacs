@@ -1065,6 +1065,124 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_nil())),
             "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "ignore" => Some(LispValue::NIL),
+            "prog1" => {
+                if args.is_empty() {
+                    Some(LispValue::NIL)
+                } else {
+                    Some(args[0])
+                }
+            }
+            "make-symbol" => self.exact_arity(name, args, 1).and_then(|_| {
+                let arg_name = match self.runtime.string_contents(args[0]) {
+                    Ok(n) => n.to_string(),
+                    Err(e) => { self.runtime_error(e); return None; }
+                };
+                Some(self.runtime.make_symbol(&arg_name))
+            }),
+            "intern-soft" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_string(args[0]) {
+                    let arg_name = match self.runtime.string_contents(args[0]) {
+                        Ok(n) => n.to_string(),
+                        Err(e) => { self.runtime_error(e); return None; }
+                    };
+                    return Some(self.runtime.intern_soft(&arg_name).unwrap_or(LispValue::NIL));
+                }
+                if self.runtime.is_symbol(args[0]) {
+                    let arg_name = match self.runtime.symbol_name(args[0]) {
+                        Ok(n) => n.to_string(),
+                        Err(e) => { self.runtime_error(e); return None; }
+                    };
+                    return Some(self.runtime.intern_soft(&arg_name).unwrap_or(LispValue::NIL));
+                }
+                Some(LispValue::NIL)
+            }),
+            "elt" => self.exact_arity(name, args, 2).and_then(|_| self.elt(args[0], args[1])),
+            "downcase" => self.exact_arity(name, args, 1).map(|_| self.downcase(args[0])),
+            "upcase" => self.exact_arity(name, args, 1).map(|_| self.upcase(args[0])),
+            "capitalize" => self.exact_arity(name, args, 1).map(|_| self.capitalize(args[0])),
+            "keywordp" => self.exact_arity(name, args, 1).map(|_| {
+                let is_keyword = self.runtime.is_symbol(args[0])
+                    && match self.runtime.symbol_name(args[0]) {
+                        Ok(n) => n.starts_with(':'),
+                        Err(_) => false,
+                    };
+                bool_value(is_keyword)
+            }),
+            "evenp" => self.exact_arity(name, args, 1).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                Some(bool_value(val % 2 == 0))
+            }),
+            "butlast" => self.min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.butlast(args[0], args.get(1).copied())),
+            "delq" => self.exact_arity(name, args, 2)
+                .and_then(|_| self.delq(args[0], args[1])),
+            "remove" => self.exact_arity(name, args, 2)
+                .and_then(|_| self.remove(args[0], args[1])),
+            "vconcat" => self.vconcat(args),
+            "nconc" => self.nconc(args),
+            "number-to-string" => self.exact_arity(name, args, 1).and_then(|_| {
+                let n = self.fixnum_arg(name, args[0])?;
+                Some(self.runtime.string(n.to_string()))
+            }),
+            "string-to-number" => self.min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.string_to_number(args[0], args.get(1).copied())),
+            "logand" | "logior" | "logxor" => {
+                if args.is_empty() {
+                    self.error("primitive `logand/logior/logxor` requires at least one argument");
+                    None
+                } else {
+                    let init = self.fixnum_arg(name, args[0])?;
+                    let op: fn(i64, i64) -> i64 = match name {
+                        "logand" => |a, b| a & b,
+                        "logior" => |a, b| a | b,
+                        "logxor" => |a, b| a ^ b,
+                        _ => unreachable!(),
+                    };
+                    let mut result = init;
+                    for arg in &args[1..] {
+                        let val = self.fixnum_arg(name, *arg)?;
+                        result = op(result, val);
+                    }
+                    self.fixnum(result, name)
+                }
+            }
+            "lognot" => self.exact_arity(name, args, 1).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                self.fixnum(!val, name)
+            }),
+            "ash" => self.exact_arity(name, args, 2).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                let count = self.fixnum_arg(name, args[1])?;
+                let result = if count >= 0 {
+                    val << count
+                } else {
+                    val >> (-count)
+                };
+                self.fixnum(result, name)
+            }),
+            "lsh" => self.exact_arity(name, args, 2).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                let count = self.fixnum_arg(name, args[1])?;
+                let result = if count >= 0 {
+                    val << count
+                } else {
+                    (val as u64 >> (-count)) as i64
+                };
+                self.fixnum(result, name)
+            }),
+            "expt" => self.exact_arity(name, args, 2).and_then(|_| {
+                let base = self.fixnum_arg(name, args[0])?;
+                let exp = self.fixnum_arg(name, args[1])?;
+                if exp < 0 {
+                    if base == 0 {
+                        self.error("arithmetic error in `expt`: 0 raised to a negative power");
+                        return None;
+                    }
+                    return self.fixnum(0, name);
+                }
+                let result = base.pow(exp as u32);
+                self.fixnum(result, name)
+            }),
             "list" => Some(make_list(self.runtime, args.iter().copied())),
             "length" => self
                 .exact_arity(name, args, 1)
@@ -2002,6 +2120,233 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn elt(&mut self, seq: LispValue, n: LispValue) -> Option<LispValue> {
+        let index = usize::try_from(self.fixnum_arg("elt", n)?).ok()?;
+        if self.runtime.is_vector(seq) {
+            let elements = match self.runtime.vector_elements(seq) {
+                Ok(e) => e,
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            };
+            return Some(elements.get(index).copied().unwrap_or(LispValue::NIL));
+        }
+        let mut current = seq;
+        for _ in 0..index {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            let Ok(next) = self.runtime.cdr(current) else {
+                return Some(LispValue::NIL);
+            };
+            current = next;
+        }
+        if current.is_nil() {
+            return Some(LispValue::NIL);
+        }
+        let Ok(car) = self.runtime.car(current) else {
+            return Some(LispValue::NIL);
+        };
+        Some(car)
+    }
+
+    fn downcase(&mut self, value: LispValue) -> LispValue {
+        if self.runtime.is_string(value) {
+            let contents = match self.runtime.string_contents(value) {
+                Ok(c) => c.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            return self.runtime.string(contents.to_lowercase());
+        }
+        if self.runtime.is_symbol(value) {
+            let name = match self.runtime.symbol_name(value) {
+                Ok(n) => n.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            let lowered = name.to_lowercase();
+            return self.runtime.intern(&lowered);
+        }
+        value
+    }
+
+    fn upcase(&mut self, value: LispValue) -> LispValue {
+        if self.runtime.is_string(value) {
+            let contents = match self.runtime.string_contents(value) {
+                Ok(c) => c.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            return self.runtime.string(contents.to_uppercase());
+        }
+        if self.runtime.is_symbol(value) {
+            let name = match self.runtime.symbol_name(value) {
+                Ok(n) => n.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            let uppered = name.to_uppercase();
+            return self.runtime.intern(&uppered);
+        }
+        value
+    }
+
+    fn capitalize(&mut self, value: LispValue) -> LispValue {
+        if self.runtime.is_string(value) {
+            let contents = match self.runtime.string_contents(value) {
+                Ok(c) => c.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            let mut chars: Vec<char> = contents.chars().collect();
+            if let Some(first) = chars.first_mut() {
+                *first = first.to_uppercase().next().unwrap_or(*first);
+            }
+            for ch in &mut chars[1..] {
+                *ch = ch.to_lowercase().next().unwrap_or(*ch);
+            }
+            let result: String = chars.into_iter().collect();
+            return self.runtime.string(result);
+        }
+        if self.runtime.is_symbol(value) {
+            let name = match self.runtime.symbol_name(value) {
+                Ok(n) => n.to_string(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return LispValue::NIL;
+                }
+            };
+            let mut chars: Vec<char> = name.chars().collect();
+            if let Some(first) = chars.first_mut() {
+                *first = first.to_uppercase().next().unwrap_or(*first);
+            }
+            for ch in &mut chars[1..] {
+                *ch = ch.to_lowercase().next().unwrap_or(*ch);
+            }
+            let result: String = chars.into_iter().collect();
+            return self.runtime.intern(&result);
+        }
+        value
+    }
+
+    fn butlast(
+        &mut self,
+        list: LispValue,
+        n: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let n = match n {
+            Some(v) => {
+                let val = self.fixnum_arg("butlast", v)?;
+                usize::try_from(val).ok()?
+            }
+            None => 1,
+        };
+        let values = self.list_values(list)?;
+        if n >= values.len() {
+            return Some(LispValue::NIL);
+        }
+        let result: Vec<_> = values[..values.len() - n].to_vec();
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn delq(&mut self, obj: LispValue, list: LispValue) -> Option<LispValue> {
+        let values = self.list_values(list)?;
+        let result: Vec<_> = values.into_iter().filter(|v| *v != obj).collect();
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn remove(&mut self, obj: LispValue, list: LispValue) -> Option<LispValue> {
+        let values = self.list_values(list)?;
+        let result: Vec<_> = values
+            .into_iter()
+            .filter(|v| !self.runtime.equal(*v, obj))
+            .collect();
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn vconcat(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let mut elements = Vec::new();
+        for arg in args {
+            if self.runtime.is_vector(*arg) {
+                let vec_elements = match self.runtime.vector_elements(*arg) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        self.runtime_error(e);
+                        return None;
+                    }
+                };
+                elements.extend(vec_elements);
+            } else if self.runtime.is_string(*arg) {
+                let raw_contents = self.runtime.string_contents(*arg);
+                let contents = match raw_contents {
+                    Ok(c) => c.to_string(),
+                    Err(e) => {
+                        self.runtime_error(e);
+                        return None;
+                    }
+                };
+                elements.push(self.runtime.string(contents));
+            } else {
+                let values = self.list_values(*arg)?;
+                elements.extend(values);
+            }
+        }
+        Some(self.runtime.vector(elements))
+    }
+
+    fn nconc(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.is_empty() {
+            return Some(LispValue::NIL);
+        }
+        let mut values = Vec::new();
+        for arg in args {
+            let sub = self.list_values(*arg)?;
+            values.extend(sub);
+        }
+        if values.is_empty() {
+            return Some(LispValue::NIL);
+        }
+        Some(make_list(self.runtime, values.into_iter()))
+    }
+
+    fn string_to_number(
+        &mut self,
+        string: LispValue,
+        base: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let contents = self.string_contents_owned(string)?;
+        let radix = match base {
+            Some(b) => {
+                let v = self.fixnum_arg("string-to-number", b)?;
+                u32::try_from(v).ok()?
+            }
+            None => 10,
+        };
+        let contents = contents.trim();
+        let contents = if contents.starts_with('+') {
+            &contents[1..]
+        } else {
+            contents
+        };
+        if contents.is_empty() {
+            return self.fixnum(0, "string-to-number");
+        }
+        let n = i64::from_str_radix(contents, radix).unwrap_or(0);
+        self.fixnum(n, "string-to-number")
+    }
+
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
         let format = self.string_contents_owned(format)?;
         let mut output = String::new();
@@ -2805,6 +3150,29 @@ fn is_primitive_name(name: &str) -> bool {
             | "floatp"
             | "string-or-null-p"
             | "booleanp"
+            | "prog1"
+            | "make-symbol"
+            | "intern-soft"
+            | "elt"
+            | "downcase"
+            | "upcase"
+            | "capitalize"
+            | "keywordp"
+            | "evenp"
+            | "butlast"
+            | "delq"
+            | "remove"
+            | "vconcat"
+            | "nconc"
+            | "number-to-string"
+            | "string-to-number"
+            | "logand"
+            | "logior"
+            | "logxor"
+            | "lognot"
+            | "ash"
+            | "lsh"
+            | "expt"
     )
 }
 
@@ -3808,5 +4176,57 @@ mod tests {
               sum)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn executes_downcase_upcase() {
+        // Test downcase on symbol with let*
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let* ((sym (downcase 'WORLD)))\n\
+              (if (eq sym 'world) 2 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+
+        // Test upcase on string with let*
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let* ((s (downcase \"HELLO\"))\n\
+                   (u (upcase s)))\n\
+              (if (string= u \"HELLO\") 4 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+
+        // Full test
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let* ((s (downcase \"HELLO\"))\n\
+                   (sym (downcase 'WORLD))\n\
+                   (u (upcase s)))\n\
+              (+ (if (string= s \"hello\") 1 0)\n\
+                 (if (eq sym 'world) 2 0)\n\
+                 (if (string= u \"HELLO\") 4 0)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn executes_capitalize() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (if (string= (capitalize \"hello world\") \"Hello world\") 9 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
+    fn executes_elt_on_list_and_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+            (let ((xs (list 10 20 30))\n\
+                  (v [4 5 6]))\n\
+              (+ (elt xs 1) (elt v 2)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(26)));
     }
 }

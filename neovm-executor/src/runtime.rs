@@ -168,6 +168,32 @@ impl Runtime {
         value
     }
 
+    pub fn make_symbol(&mut self, name: &str) -> LispValue {
+        let name = name.to_string();
+        let mut symbol = Box::new(Symbol {
+            header: HeapHeader {
+                kind: HeapKind::Symbol,
+            },
+            name: name.clone(),
+            value: None,
+            function: None,
+            plist: LispValue::NIL,
+        });
+        let addr = (&mut *symbol as *mut Symbol) as usize;
+        let value = LispValue::from_heap_addr(addr);
+        self.symbols.push(symbol);
+        value
+    }
+
+    pub fn intern_soft(&self, name: &str) -> Option<LispValue> {
+        match name {
+            "nil" => return Some(LispValue::NIL),
+            "t" => return Some(LispValue::TRUE),
+            _ => {}
+        }
+        self.interned_symbols.get(name).copied()
+    }
+
     pub fn car(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -1072,6 +1098,13 @@ impl Runtime {
                     .iter()
                     .zip(&right.elements)
                     .all(|(left, right)| self.equal_with_depth(*left, *right, depth - 1));
+        }
+        // Floats: compare by bit pattern for total ordering (NaN != NaN, same as Emacs).
+        if let (Some(left), Some(right)) = (
+            self.float_by_addr(left_addr),
+            self.float_by_addr(right_addr),
+        ) {
+            return left.value.to_bits() == right.value.to_bits();
         }
         false
     }

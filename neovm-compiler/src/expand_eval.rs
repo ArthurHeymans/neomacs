@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::diagnostic::Diagnostic;
 use crate::expand_value::{surface_to_value, MacroValue};
@@ -246,9 +247,9 @@ impl MacroEval {
                 MacroValue::from_bool(v.is_int())
             }),
             Some("eq") | Some("eql") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
-                a == b
+                a.eq(b)
             }),
-            Some("equal") => self.eval_binary_pred(span, &items[1..], env, |a, b| a == b),
+            Some("equal") => self.eval_binary_pred(span, &items[1..], env, |a, b| a.equal(b)),
 
             Some("+") => self.eval_fold(span, &items[1..], env, 0i64, |a, b| a.wrapping_add(b)),
             Some("-") => self.eval_sub(span, &items[1..], env),
@@ -772,9 +773,9 @@ impl MacroEval {
                     } else {
                         MacroValue::Nil
                     };
-                    Ok(MacroValue::Vector(vec![init; len.max(0) as usize]))
+                    Ok(MacroValue::Vector(Rc::new(vec![init; len.max(0) as usize])))
                 } else {
-                    Ok(MacroValue::Vector(Vec::new()))
+                    Ok(MacroValue::Vector(Rc::new(Vec::new())))
                 }
             }
 
@@ -784,7 +785,7 @@ impl MacroEval {
                 for arg in &items[1..] {
                     results.push(self.eval(arg, env)?);
                 }
-                Ok(MacroValue::Vector(results))
+                Ok(MacroValue::Vector(Rc::new(results)))
             }
 
             Some("vconcat") => {
@@ -793,7 +794,7 @@ impl MacroEval {
                 for arg in &items[1..] {
                     let val = self.eval(arg, env)?;
                     match val {
-                        MacroValue::Vector(vec) => all.extend(vec),
+                        MacroValue::Vector(vec) => all.extend(vec.iter().cloned()),
                         MacroValue::Nil => {}
                         other => {
                             if let Some(vec) = other.to_vec() {
@@ -802,7 +803,7 @@ impl MacroEval {
                         }
                     }
                 }
-                Ok(MacroValue::Vector(all))
+                Ok(MacroValue::Vector(Rc::new(all)))
             }
 
             Some("plist-put") => {
@@ -1747,7 +1748,7 @@ impl MacroEval {
                         result.push(self.eval_quasiquote(item, env, depth)?);
                     }
                 }
-                Ok(MacroValue::Vector(result))
+                Ok(MacroValue::Vector(Rc::new(result)))
             }
             _ => Ok(surface_to_value(form)),
         }
@@ -2107,5 +2108,67 @@ mod tests {
     fn mapcar_empty_list() {
         let v = eval_expr("(mapcar (lambda (x) x) nil)");
         assert_eq!(v, MacroValue::Nil);
+    }
+
+    #[test]
+    fn backquote_simple_list() {
+        let v = eval_expr("`(a 3 b)");
+        let vec = v.to_vec().unwrap();
+        assert_eq!(vec.len(), 3);
+        assert_eq!(vec[0], MacroValue::Symbol("a".into()));
+        assert_eq!(vec[1], MacroValue::Int(3));
+        assert_eq!(vec[2], MacroValue::Symbol("b".into()));
+    }
+
+    #[test]
+    fn backquote_with_comma() {
+        let v = eval_expr("(let ((x 3)) `(a ,x b))");
+        let vec = v.to_vec().unwrap();
+        assert_eq!(vec.len(), 3);
+        assert_eq!(vec[0], MacroValue::Symbol("a".into()));
+        assert_eq!(vec[1], MacroValue::Int(3));
+        assert_eq!(vec[2], MacroValue::Symbol("b".into()));
+    }
+
+    #[test]
+    fn backquote_with_splice() {
+        let v = eval_expr("(let ((xs (list 1 2 3))) `(a ,@xs b))");
+        let vec = v.to_vec().unwrap();
+        assert_eq!(vec.len(), 5);
+        assert_eq!(vec[0], MacroValue::Symbol("a".into()));
+        assert_eq!(vec[1], MacroValue::Int(1));
+        assert_eq!(vec[2], MacroValue::Int(2));
+        assert_eq!(vec[3], MacroValue::Int(3));
+        assert_eq!(vec[4], MacroValue::Symbol("b".into()));
+    }
+
+    #[test]
+    fn backquote_splice_over_list_quote() {
+        // Simulating (let ((xs '(1 2 3))) `(a ,@xs b))
+        let v = eval_expr("(let ((xs '(1 2 3))) `(a ,@xs b))");
+        let vec = v.to_vec().unwrap();
+        assert_eq!(vec.len(), 5);
+        assert_eq!(vec[0], MacroValue::Symbol("a".into()));
+        assert_eq!(vec[1], MacroValue::Int(1));
+        assert_eq!(vec[2], MacroValue::Int(2));
+        assert_eq!(vec[3], MacroValue::Int(3));
+        assert_eq!(vec[4], MacroValue::Symbol("b".into()));
+    }
+
+    #[test]
+    fn assq_finds_key() {
+        // assq returns the pair (b . c)
+        let v = eval_expr("(assq 'b '((a . 1) (b . c)))");
+        assert!(v.is_cons());
+        let car = v.car();
+        let cdr = v.cdr();
+        assert_eq!(car, MacroValue::Symbol("b".into()));
+        assert_eq!(cdr, MacroValue::Symbol("c".into()));
+    }
+
+    #[test]
+    fn concat_returns_string() {
+        let v = eval_expr("(concat \"hello\" \" \" \"world\")");
+        assert_eq!(v, MacroValue::String("hello world".into()));
     }
 }

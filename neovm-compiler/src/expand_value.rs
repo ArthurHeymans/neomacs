@@ -5,20 +5,32 @@ use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
 /// Lisp value for macro-time evaluation.
 /// Separates computed values from parsed syntax (SurfaceForm).
-#[derive(Clone, Debug, PartialEq)]
+///
+/// Equality semantics (matching GNU Emacs):
+/// - `eq`  (Emacs `eq`):  pointer-identity for Cons/Vector; value-equality for atoms.
+/// - `equal` (Emacs `equal`): recursive deep structural comparison.
+/// - Rust `==` delegates to `equal` (structural).
+#[derive(Clone, Debug)]
 pub enum MacroValue {
     Nil,
     Int(i64),
     Symbol(String),
     String(String),
     Cons(Rc<MacroCons>),
-    Vector(Vec<MacroValue>),
+    Vector(Rc<Vec<MacroValue>>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct MacroCons {
     pub car: MacroValue,
     pub cdr: MacroValue,
+}
+
+// PartialEq delegates to the Emacs `equal` semantics (deep structural comparison).
+impl PartialEq for MacroValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.equal(other)
+    }
 }
 
 impl MacroValue {
@@ -48,6 +60,39 @@ impl MacroValue {
 
     pub fn is_int(&self) -> bool {
         matches!(self, MacroValue::Int(_))
+    }
+
+    /// Emacs `eq` — pointer identity for composite types, value equality for atoms.
+    pub fn eq(&self, other: &MacroValue) -> bool {
+        match (self, other) {
+            (MacroValue::Nil, MacroValue::Nil) => true,
+            (MacroValue::Int(a), MacroValue::Int(b)) => a == b,
+            (MacroValue::Symbol(a), MacroValue::Symbol(b)) => a == b,
+            (MacroValue::String(a), MacroValue::String(b)) => a == b,
+            (MacroValue::Cons(a), MacroValue::Cons(b)) => Rc::ptr_eq(a, b),
+            (MacroValue::Vector(a), MacroValue::Vector(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+
+    /// Emacs `equal` — deep recursive structural comparison.
+    pub fn equal(&self, other: &MacroValue) -> bool {
+        // Fast path: same Rc identity (handles Cons/Vector, plus atoms via value equality).
+        if self.eq(other) {
+            return true;
+        }
+        match (self, other) {
+            (MacroValue::Cons(a), MacroValue::Cons(b)) => {
+                a.car.equal(&b.car) && a.cdr.equal(&b.cdr)
+            }
+            (MacroValue::Vector(a), MacroValue::Vector(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(l, r)| l.equal(r))
+            }
+            _ => false,
+        }
     }
 
     pub fn cons(car: MacroValue, cdr: MacroValue) -> MacroValue {
@@ -186,13 +231,7 @@ impl MacroValue {
     }
 
     fn eq_value(&self, other: &MacroValue) -> bool {
-        match (self, other) {
-            (MacroValue::Nil, MacroValue::Nil) => true,
-            (MacroValue::Int(a), MacroValue::Int(b)) => a == b,
-            (MacroValue::Symbol(a), MacroValue::Symbol(b)) => a == b,
-            (MacroValue::String(a), MacroValue::String(b)) => a == b,
-            _ => false,
-        }
+        self.eq(other)
     }
 
     /// (plist-get plist prop) — get value from property list
@@ -284,7 +323,7 @@ pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
             result
         }
         SurfaceKind::Vector(items) => {
-            MacroValue::Vector(items.iter().map(surface_to_value).collect())
+            MacroValue::Vector(Rc::new(items.iter().map(surface_to_value).collect()))
         }
         SurfaceKind::Quote(inner) => {
             MacroValue::list(vec![
@@ -494,5 +533,46 @@ mod tests {
         let pair = MacroValue::cons(MacroValue::Int(1), MacroValue::Int(2));
         assert_eq!(pair.car(), MacroValue::Int(1));
         assert_eq!(pair.cdr(), MacroValue::Int(2));
+    }
+
+    #[test]
+    fn eq_on_cons_is_pointer_identity() {
+        let a = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
+        let b = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
+        assert!(a.eq(&a));           // same object
+        assert!(a.equal(&b));        // equal structure
+        assert!(!a.eq(&b));           // different allocation → not eq
+    }
+
+    #[test]
+    fn eq_on_atoms_is_value_equality() {
+        assert!(MacroValue::Int(1).eq(&MacroValue::Int(1)));
+        assert!(MacroValue::Symbol("x".into()).eq(&MacroValue::Symbol("x".into())));
+        assert!(!MacroValue::Int(1).eq(&MacroValue::Int(2)));
+    }
+
+    #[test]
+    fn equal_on_vectors_is_deep() {
+        let a = MacroValue::Vector(Rc::new(vec![MacroValue::Int(1), MacroValue::Int(2)]));
+        let b = MacroValue::Vector(Rc::new(vec![MacroValue::Int(1), MacroValue::Int(2)]));
+        assert!(!a.eq(&b));          // different allocation
+        assert!(a.equal(&b));        // equal content
+    }
+
+    #[test]
+    fn equal_on_nested_cons_is_deep() {
+        let inner_a = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
+        let inner_b = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
+        let outer_a = MacroValue::cons(MacroValue::Symbol("x".into()), inner_a);
+        let outer_b = MacroValue::cons(MacroValue::Symbol("x".into()), inner_b);
+        assert!(!outer_a.eq(&outer_b));           // different allocation
+        assert!(outer_a.equal(&outer_b));         // deep structural equality
+    }
+
+    #[test]
+    fn equal_cross_type_returns_false() {
+        assert!(!MacroValue::Nil.equal(&MacroValue::Int(0)));
+        assert!(!MacroValue::Symbol("nil".into()).equal(&MacroValue::Nil));
+        assert!(!MacroValue::Int(1).equal(&MacroValue::String("1".into())));
     }
 }
