@@ -4747,4 +4747,246 @@ log
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(5 55)");
     }
+
+    // --- Edge case tests for parameter handling and advanced forms ---
+
+    #[test]
+    fn jit_defun_optional_rest_params() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "opt-rest.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun flex-fn (a &optional b &rest rest)
+  (list a b rest))
+(list (flex-fn 1) (flex-fn 1 2) (flex-fn 1 2 3 4 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "((1 nil nil) (1 2 nil) (1 2 (3 4 5)))"
+        );
+    }
+
+    #[test]
+    fn jit_destructuring_bind() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "destructure.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(destructuring-bind (a b . c) '(1 2 3 4 5)
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 (3 4 5))");
+    }
+
+    #[test]
+    fn jit_cl_labels_even_odd() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "labels-mutual.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-labels ((my-even (n) (if (= n 0) t (my-odd (- n 1))))
+            (my-odd (n) (if (= n 0) nil (my-even (- n 1)))))
+  (list (my-even 4) (my-odd 5) (my-even 3)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t t nil)");
+    }
+
+    #[test]
+    fn jit_cl_flet_basic() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "flet.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-flet ((double (x) (* x 2)))
+  (list (double 3) (double 7)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(6 14)");
+    }
+
+    #[test]
+    fn jit_while_sum_0_to_9() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "while-sum.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((i 0) (sum 0))
+  (while (< i 10)
+    (setq sum (+ sum i))
+    (setq i (+ i 1)))
+  sum)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(45)));
+    }
+
+    #[test]
+    fn jit_two_defun_calls() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "multi-defun.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun add1 (x) (+ x 1))
+(defun sub1 (x) (- x 1))
+(list (add1 5) (sub1 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(6 4)");
+    }
+
+    #[test]
+    fn jit_condition_case_with_unwind() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-exc.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defvar trace-log nil)
+(condition-case err
+    (unwind-protect
+      (error "test")
+      (setq trace-log (cons 'cleanup trace-log)))
+  (error (setq trace-log (cons 'caught trace-log))))
+trace-log
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(caught cleanup)");
+    }
+
+    #[test]
+    fn jit_catch_in_recursive_function() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-recurse.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun deep-search (n)
+  (if (= n 0) (throw 'found 42) (deep-search (- n 1))))
+(catch 'found (deep-search 10))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_let_star_sequential() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "letstar-seq.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let* ((a 1) (b (+ a 1)) (c (+ b a)))
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
+    }
+
+    #[test]
+    fn jit_cond_with_multiple_clauses() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond-multi.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun classify (n)
+  (cond ((< n 0) 'negative)
+        ((= n 0) 'zero)
+        (t 'positive)))
+(list (classify -5) (classify 0) (classify 7))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(negative zero positive)"
+        );
+    }
+
+    #[test]
+    fn jit_string_ops_comprehensive() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "string-ops.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (string= "abc" "abc")
+      (string< "abc" "abd")
+      (length "hello")
+      (substring "hello world" 6 11)
+      (concat "foo" "bar"))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(t t 5 \"world\" \"foobar\")"
+        );
+    }
+
+    #[test]
+    fn jit_type_check_predicates() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "num-pred.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (numberp 42) (numberp "x") (stringp "x") (listp '(1))
+      (symbolp 'a) (null nil) (atom 42) (consp '(1)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil t t t t t t)");
+    }
+
+    #[test]
+    fn jit_list_access_operations() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "list-ops.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((xs '((1 2) (3 4) (5 6))))
+  (list (car (car xs))
+        (cadr (cadr xs))
+        (length xs)
+        (nreverse (list 1 2 3))
+        (append '(1 2) '(3 4))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(1 4 3 (3 2 1) (1 2 3 4))"
+        );
+    }
 }

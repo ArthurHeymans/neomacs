@@ -715,6 +715,7 @@ fn dispatch_primitive(
         "floatp" => Some(bool_value(rt.is_float(args[0]))),
         "symbolp" => Some(bool_value(rt.is_symbol(args[0]))),
         "stringp" => Some(bool_value(rt.is_string(args[0]))),
+        "atom" => Some(bool_value(!rt.is_cons(args[0]))),
         "vectorp" => Some(bool_value(rt.is_vector(args[0]))),
         "hash-table-p" => Some(bool_value(rt.is_hash_table(args[0]))),
         "functionp" => {

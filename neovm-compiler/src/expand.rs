@@ -1156,6 +1156,13 @@ impl Expander {
             SurfaceKind::List(patterns) => {
                 self.destructure_list_pattern(patterns, expr, body, span, depth)
             }
+            SurfaceKind::DottedList(required, rest) => {
+                // Treat as (a b . c) where required=[a,b] and rest=c
+                let mut patterns = required.clone();
+                patterns.push(symbol_form("&rest", rest.span));
+                patterns.push((**rest).clone());
+                self.destructure_list_pattern(&patterns, expr, body, span, depth)
+            }
             _ => {
                 let mut forms = vec![expr];
                 forms.extend(body);
@@ -1245,7 +1252,7 @@ impl Expander {
             bindings.push(list_form(vec![rest_pat, current_list], span));
         }
 
-        let mut result = vec![symbol_form("let", span), list_form(bindings, span)];
+        let mut result = vec![symbol_form("let*", span), list_form(bindings, span)];
         result.extend(body);
         list_form(result, span)
     }
