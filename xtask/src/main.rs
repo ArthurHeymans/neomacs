@@ -556,6 +556,22 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         run_compile_main(options, &paths, &envs)?;
     }
 
+    let mode = if options.release { "release" } else { "debug" };
+    println!(
+        concat!(
+            "+ xtask fresh-build finished successfully ({mode})\n",
+            "  bin      = {bin}\n",
+            "  runtime  = {rt}\n",
+            "  repo     = {repo}\n",
+            "  options  = skip_build={sb} no_byte_compile={nbc}",
+        ),
+        mode = mode,
+        bin = options.bin_dir.display(),
+        rt = options.runtime_root.display(),
+        repo = options.repo_root.display(),
+        sb = options.skip_build,
+        nbc = options.no_byte_compile,
+    );
     Ok(())
 }
 
