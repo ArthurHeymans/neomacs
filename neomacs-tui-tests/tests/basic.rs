@@ -793,3 +793,22 @@ fn universal_argument_self_insert_via_cu_8_star_inserts_eight_asterisks() {
         );
     }
 }
+
+#[test]
+fn read_only_mode_toggle_via_cx_cq_shows_percent_sign_in_mode_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+    // Open a file, toggle read-only mode
+    let name = "readonly-test.txt";
+    open_home_file(&mut gnu, &mut neo, name, "test\n", "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-x C-q");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("%%") || r.contains("%@") || r.contains("Read-Only")),
+            "{label}: C-x C-q should show read-only indicator"
+        );
+    }
+}
