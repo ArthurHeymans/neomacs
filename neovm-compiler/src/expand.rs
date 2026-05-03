@@ -187,6 +187,8 @@ impl Expander {
             "push" => self.expand_push(span, items),
             "pop" => self.expand_pop(span, items),
             "setf" => self.expand_setf(span, items),
+            "cl-incf" | "incf" => self.expand_incf_decf(span, items, "+"),
+            "cl-decf" | "decf" => self.expand_incf_decf(span, items, "-"),
             "if-let*" => self.expand_if_let(span, items),
             "when-let*" => self.expand_when_let(span, items),
             // declare-function is a compile-time declaration — discard
@@ -446,6 +448,29 @@ impl Expander {
                     ],
                     span,
                 ),
+            ],
+            span,
+        );
+        self.expand_form(expanded)
+    }
+
+    fn expand_incf_decf(&mut self, span: Span, items: Vec<SurfaceForm>, op: &str) -> SurfaceForm {
+        // (cl-incf place delta) → (setf place (+ place delta))
+        // (cl-incf place) → (setf place (+ place 1))
+        if items.len() < 2 {
+            return nil_form(span);
+        }
+        let place = &items[1];
+        let delta = if items.len() >= 3 {
+            items[2].clone()
+        } else {
+            int_form(1, span)
+        };
+        let expanded = list_form(
+            vec![
+                symbol_form("setf", span),
+                place.clone(),
+                list_form(vec![symbol_form(op, span), place.clone(), delta], span),
             ],
             span,
         );

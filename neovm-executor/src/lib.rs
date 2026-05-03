@@ -3126,4 +3126,21 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "((a . 1) (b . 2))");
     }
+
+    #[test]
+    fn jit_cl_incf_decf() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "incf-decf.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((x 10) (y 20))
+               (cl-incf x)
+               (cl-decf y 5)
+               (cl-incf x 3)
+               (list x y))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(14 15)");
+    }
 }
