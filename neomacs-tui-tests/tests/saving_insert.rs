@@ -1301,3 +1301,43 @@ fn mx_view_hello_file_strict_match() {
         diffs.len()
     );
 }
+
+#[test]
+fn save_file_visit_another_switch_back_round_trip() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name_a = "roundtrip-A.txt";
+    let content_a = "file A content line\n";
+    let name_b = "roundtrip-B.txt";
+    let content_b = "file B content line\n";
+
+    open_home_file(&mut gnu, &mut neo, name_a, content_a, "C-x C-f");
+    // Save with C-x C-s
+    send_both(&mut gnu, &mut neo, "C-x C-s");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Visit file B
+    open_home_file(&mut gnu, &mut neo, name_b, content_b, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-x C-s");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Switch back to file A via C-x b
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "b");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(format!("{}\r", name_a).as_bytes());
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains(name_a)),
+            "{label} should switch back to file A"
+        );
+        assert!(
+            grid.iter().any(|r| r.contains("file A content line")),
+            "{label} file A should still have its content after round trip"
+        );
+    }
+}
