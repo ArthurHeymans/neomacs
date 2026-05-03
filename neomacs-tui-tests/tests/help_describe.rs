@@ -1005,3 +1005,34 @@ fn describe_mode_via_ch_m_shows_lisp_interaction_bindings() {
         );
     }
 }
+
+#[test]
+fn describe_key_cx_cf_via_ch_k_shows_find_file_doc() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "k");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    // Send the key to describe: C-x C-f
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "C-f");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Help*"))
+            && grid.iter().any(|row| row.contains("find-file"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("*Help*")),
+            "{label} C-h k should open a Help buffer"
+        );
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("find-file") && row.contains("C-x C-f")),
+            "{label} C-h k C-x C-f should show find-file binding"
+        );
+    }
+}
