@@ -1045,13 +1045,7 @@ impl DisplayBackend for TtyBackend {
                     self.cursor_shape = shape;
                 }
             }
-
-            // TODO: Composite child frames on top of the main frame.
-            // Child frames are stored in self.child_frames; their glyphs
-            // need parent_x/parent_y offset applied before rasterization.
         } else {
-            // Fallback: render from Scene (limited -- Scene doesn't carry
-            // per-character data in the same way)
             let bg_rgb = color_to_rgb8(&scene.background);
             self.current.clear();
             for cell in &mut self.current.cells {
