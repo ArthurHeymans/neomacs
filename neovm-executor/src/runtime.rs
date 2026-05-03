@@ -88,6 +88,10 @@ impl Runtime {
         LispValue::from_heap_addr(addr)
     }
 
+    pub fn make_vector(&mut self, len: usize, init: LispValue) -> LispValue {
+        self.vector(vec![init; len])
+    }
+
     pub fn vector(&mut self, elements: Vec<LispValue>) -> LispValue {
         let mut vector = Box::new(VectorObject {
             header: HeapHeader {

@@ -444,8 +444,8 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
         RegInstKind::CatchBegin { tag } => {
             let _ = write!(out, "catch-begin {}", reg_name(function, *tag));
         }
-        RegInstKind::CatchEnd => {
-            let _ = write!(out, "catch-end");
+        RegInstKind::CatchEnd { dst } => {
+            let _ = write!(out, "catch-end -> {}", reg_name(function, *dst));
         }
         RegInstKind::Throw { tag, value } => {
             let _ = write!(

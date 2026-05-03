@@ -383,7 +383,9 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::CatchBegin { tag } => RegInstKind::CatchBegin {
                 tag: self.value_reg(*tag),
             },
-            SsaInstKind::CatchEnd { .. } => RegInstKind::CatchEnd,
+            SsaInstKind::CatchEnd { .. } => RegInstKind::CatchEnd {
+                dst: self.result_reg(inst),
+            },
             SsaInstKind::Throw { tag, value } => RegInstKind::Throw {
                 tag: self.value_reg(*tag),
                 value: self.value_reg(*value),

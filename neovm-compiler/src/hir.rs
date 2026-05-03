@@ -549,8 +549,14 @@ impl Lowerer<'_> {
         let (parts, has_splice) = self.lower_quasiquote_list_parts(items, depth, form.span)?;
         if has_splice {
             Some(append_expr(parts, form.span))
+        } else if parts.len() == 1 {
+            // When no splicing, there is exactly one segment that is already
+            // (list ...) — return it directly to avoid double-wrapping.
+            Some(parts.into_iter().next().unwrap())
         } else {
-            Some(list_expr(parts, form.span))
+            // Multiple segments without splicing should not happen, but handle
+            // gracefully by appending them.
+            Some(append_expr(parts, form.span))
         }
     }
 
@@ -2214,5 +2220,19 @@ mod tests {
         assert!(parts.len() >= 2, "dolist should have while + setq nil + result");
         let rendered = format!("{:?}", parts[1].kind);
         assert!(rendered.contains("Nil"), "second body expr after while should set var to nil, got: {rendered}");
+    }
+
+    #[test]
+    fn lowers_simple_backquote() {
+        let module = hir(";;; -*- lexical-binding: t; -*-\n`(a b c)");
+        let HirItem::Expr(expr) = &module.items[0] else {
+            panic!("expected expr, got: {:?}", module.items[0]);
+        };
+        // Should produce (list (quote a) (quote b) (quote c))
+        let HirExprKind::CallNamed { name, args } = &expr.kind else {
+            panic!("expected CallNamed, got: {:?}", expr.kind);
+        };
+        assert_eq!(name, "list");
+        assert_eq!(args.len(), 3);
     }
 }

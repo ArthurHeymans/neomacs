@@ -171,7 +171,7 @@ impl RegVerifier<'_> {
             }
             RegInstKind::Safepoint { id } => self.check_safepoint(*id),
             RegInstKind::DeclareSpecial { .. }
-            | RegInstKind::CatchEnd
+            | RegInstKind::CatchEnd { .. }
             | RegInstKind::ConditionCaseBegin { .. }
             | RegInstKind::ConditionCaseHandler { .. }
             | RegInstKind::ConditionCaseEnd

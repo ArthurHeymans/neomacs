@@ -707,11 +707,15 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.catch_stack.push(tag);
             }
-            RegInstKind::CatchEnd => {
+            RegInstKind::CatchEnd { dst } => {
                 if self.catch_stack.pop().is_none() {
                     self.error("object interpreter reached catch end without catch begin");
                     return false;
                 }
+                // On the normal path, last_value holds the body result.
+                // On the throw path, try_catch_inline sets last_value to the thrown value.
+                let value = self.last_value.unwrap_or(LispValue::NIL);
+                self.set(*dst, value);
             }
             RegInstKind::Throw { tag, value } => {
                 let Some(tag) = self.get(*tag) else {
@@ -1069,6 +1073,15 @@ impl Interpreter<'_, '_, '_> {
                 .min_arity(name, args, 1)
                 .and_then(|_| self.format_string(args[0], &args[1..])),
             "vector" => Some(self.runtime.vector(args.to_vec())),
+            "make-vector" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| {
+                    let len = args[0].as_fixnum()?;
+                    if len < 0 {
+                        return None;
+                    }
+                    Some(self.runtime.make_vector(len as usize, args[1]))
+                }),
             "aref" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.aref(args[0], args[1])),
@@ -2440,13 +2453,13 @@ fn find_catch_end_at_depth(instructions: &[RegInst], start_index: usize, mut dep
     for (index, inst) in instructions.iter().enumerate().skip(start_index + 1) {
         match &inst.kind {
             RegInstKind::CatchBegin { .. } => nesting += 1,
-            RegInstKind::CatchEnd if nesting == 0 => {
+            RegInstKind::CatchEnd { .. } if nesting == 0 => {
                 depth -= 1;
                 if depth == 0 {
                     return Some(index);
                 }
             }
-            RegInstKind::CatchEnd => nesting -= 1,
+            RegInstKind::CatchEnd { .. } => nesting -= 1,
             _ => {}
         }
     }
@@ -2589,7 +2602,7 @@ fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
         | RegInstKind::UnbindDynamic { .. }
         | RegInstKind::DeclareSpecial { .. }
         | RegInstKind::CatchBegin { .. }
-        | RegInstKind::CatchEnd
+        | RegInstKind::CatchEnd { .. }
         | RegInstKind::Throw { .. }
         | RegInstKind::ConditionCaseBegin { .. }
         | RegInstKind::ConditionCaseHandler { .. }

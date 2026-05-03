@@ -130,7 +130,9 @@ pub enum RegInstKind {
     CatchBegin {
         tag: RegId,
     },
-    CatchEnd,
+    CatchEnd {
+        dst: RegId,
+    },
     Throw {
         tag: RegId,
         value: RegId,

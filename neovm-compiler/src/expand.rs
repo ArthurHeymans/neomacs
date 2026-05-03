@@ -796,6 +796,7 @@ impl Expander {
         let body: Vec<SurfaceForm> = items[2..].to_vec();
 
         let bindings = self.parse_flet_bindings(bindings_form, span);
+        let label_names: Vec<String> = bindings.iter().map(|(n, _, _)| n.clone()).collect();
         let mut let_bindings = Vec::new();
         let mut setqs = Vec::new();
 
@@ -810,11 +811,41 @@ impl Expander {
             setqs.push(list_form(vec![symbol_form("setq", span), symbol_form(&name, span), lambda], span));
         }
 
-        let mut progn_body = setqs;
-        progn_body.extend(body);
+        // Rewrite function calls to label names in the body AND lambda bodies to use funcall
+        let rewritten_body: Vec<SurfaceForm> = body.into_iter()
+            .map(|f| Self::rewrite_labels_calls(&f, &label_names))
+            .collect();
+        let rewritten_setqs: Vec<SurfaceForm> = setqs.into_iter()
+            .map(|f| Self::rewrite_labels_calls(&f, &label_names))
+            .collect();
+
+        let mut progn_body = rewritten_setqs;
+        progn_body.extend(rewritten_body);
         let progn = list_form(vec![symbol_form("progn", span)].into_iter().chain(progn_body).collect(), span);
         let result = list_form(vec![symbol_form("let", span), list_form(let_bindings, span), progn], span);
         self.expand_form(result)
+    }
+
+    /// Rewrite (name args...) to (funcall name args...) when name is a label.
+    fn rewrite_labels_calls(form: &SurfaceForm, label_names: &[String]) -> SurfaceForm {
+        match &form.kind {
+            SurfaceKind::List(items) if !items.is_empty() => {
+                if let SurfaceKind::Atom(SurfaceAtom::Symbol(name)) = &items[0].kind {
+                    if label_names.contains(name) {
+                        // (name args...) -> (funcall name args...)
+                        let mut new_items = vec![symbol_form("funcall", form.span), symbol_form(name, form.span)];
+                        new_items.extend(items[1..].iter().cloned().map(|arg| Self::rewrite_labels_calls(&arg, label_names)));
+                        return list_form(new_items, form.span);
+                    }
+                }
+                let rewritten: Vec<SurfaceForm> = items.iter()
+                    .map(|item| Self::rewrite_labels_calls(item, label_names))
+                    .collect();
+                SurfaceForm::new(SurfaceKind::List(rewritten), form.span)
+            }
+            SurfaceKind::List(items) => form.clone(),
+            _ => form.clone(),
+        }
     }
 
     fn parse_flet_bindings(&self, bindings_form: &SurfaceForm, _span: Span) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {

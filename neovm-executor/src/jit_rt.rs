@@ -802,6 +802,14 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
 
         // --- Vector operations ---
         "vector" => Some(rt.vector(args.to_vec())),
+        "make-vector" => {
+            let len = args[0].as_fixnum().unwrap_or(-1);
+            if len < 0 {
+                None
+            } else {
+                Some(rt.make_vector(len as usize, args[1]))
+            }
+        }
         "aref" => aref_op(rt, args[0], args[1]),
         "aset" => aset_op(rt, args[0], args[1], args[2]),
 
