@@ -1497,7 +1497,7 @@ impl Expander {
         let mut for_from_info: Vec<(
             String,
             SurfaceForm,
-            Option<SurfaceForm>,
+            Option<(SurfaceForm, EndDirection)>,
             Option<SurfaceForm>,
         )> = Vec::new(); // var, start, end, step
         let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
@@ -1595,13 +1595,19 @@ impl Expander {
         // Build while test
         let mut while_tests: Vec<SurfaceForm> = Vec::new();
 
-        // For-from: (<= var end) when end is specified
+        // For-from: comparison based on direction when end is specified
         for (var, start, end, _) in &for_from_info {
             let _ = start;
-            if let Some(end_val) = end {
+            if let Some((end_val, direction)) = end {
+                let cmp_op = match direction {
+                    EndDirection::To => "<=",
+                    EndDirection::Downto => ">=",
+                    EndDirection::Below => "<",
+                    EndDirection::Above => ">",
+                };
                 while_tests.push(list_form(
                     vec![
-                        symbol_form("<=", span),
+                        symbol_form(cmp_op, span),
                         symbol_form(var, span),
                         end_val.clone(),
                     ],
@@ -2017,10 +2023,14 @@ impl Expander {
         }
 
         // For-from advance: setq var (+ var step)
-        for (var, _, _, step) in &for_from_info {
+        for (var, _, end, step) in &for_from_info {
+            let default_step = match end {
+                Some((_, EndDirection::Downto | EndDirection::Above)) => -1,
+                _ => 1,
+            };
             let step_val = step
                 .clone()
-                .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span));
+                .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(default_step)), span));
             while_body.push(list_form(
                 vec![
                     symbol_form("setq", span),
@@ -2640,19 +2650,34 @@ impl Expander {
 
         let next_kw = items[*pos].symbol_name().unwrap_or("");
         match next_kw {
-            "from" => {
+            "from" | "upfrom" | "downfrom" => {
+                let is_down = next_kw == "downfrom";
                 *pos += 1;
                 let start = items.get(*pos)?.clone();
                 *pos += 1;
-                // Optional "to" and "by"
                 let mut end = None;
                 let mut step = None;
                 while *pos < items.len() {
                     let kw = items[*pos].symbol_name().unwrap_or("");
                     match kw {
-                        "to" => {
+                        "to" | "upto" => {
                             *pos += 1;
-                            end = Some(items.get(*pos)?.clone());
+                            end = Some((items.get(*pos)?.clone(), EndDirection::To));
+                            *pos += 1;
+                        }
+                        "downto" => {
+                            *pos += 1;
+                            end = Some((items.get(*pos)?.clone(), EndDirection::Downto));
+                            *pos += 1;
+                        }
+                        "below" => {
+                            *pos += 1;
+                            end = Some((items.get(*pos)?.clone(), EndDirection::Below));
+                            *pos += 1;
+                        }
+                        "above" => {
+                            *pos += 1;
+                            end = Some((items.get(*pos)?.clone(), EndDirection::Above));
                             *pos += 1;
                         }
                         "by" => {
@@ -2667,6 +2692,31 @@ impl Expander {
                     var,
                     start,
                     end,
+                    step,
+                })
+            }
+            // Implicit from 0: (for var to N) or (for var below N) etc.
+            "to" | "upto" | "downto" | "below" | "above" => {
+                let dir = match next_kw {
+                    "to" | "upto" => EndDirection::To,
+                    "downto" => EndDirection::Downto,
+                    "below" => EndDirection::Below,
+                    "above" => EndDirection::Above,
+                    _ => unreachable!(),
+                };
+                *pos += 1;
+                let end_val = items.get(*pos)?.clone();
+                *pos += 1;
+                let mut step = None;
+                if *pos < items.len() && items[*pos].symbol_name() == Some("by") {
+                    *pos += 1;
+                    step = Some(items.get(*pos)?.clone());
+                    *pos += 1;
+                }
+                Some(LoopClause::ForFrom {
+                    var,
+                    start: SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+                    end: Some((end_val, dir)),
                     step,
                 })
             }
@@ -2825,7 +2875,7 @@ enum LoopClause {
     ForFrom {
         var: String,
         start: SurfaceForm,
-        end: Option<SurfaceForm>,
+        end: Option<(SurfaceForm, EndDirection)>,
         step: Option<SurfaceForm>,
     },
     ForIn {
@@ -2908,6 +2958,14 @@ enum LoopClause {
     Repeat {
         count: SurfaceForm,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EndDirection {
+    To,     // <= (inclusive upper bound)
+    Downto, // >= (inclusive lower bound)
+    Below,  // <  (exclusive upper bound)
+    Above,  // >  (exclusive lower bound)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

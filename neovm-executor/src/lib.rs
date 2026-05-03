@@ -2644,4 +2644,56 @@ total",
         assert!(s.contains("\"42\""));
         assert!(s.contains("3.14"));
     }
+
+    #[test]
+    fn jit_cl_loop_downto() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-downto.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 5 downto 1 collect i)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(5 4 3 2 1)");
+    }
+
+    #[test]
+    fn jit_cl_loop_below() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-below.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i below 5 collect i)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(0 1 2 3 4)");
+    }
+
+    #[test]
+    fn jit_cl_loop_above() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-above.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 10 above 7 collect i)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 9 8)");
+    }
+
+    #[test]
+    fn jit_cl_loop_implicit_from() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-implicit.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i to 4 collect (* i i))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(0 1 4 9 16)");
+    }
 }
