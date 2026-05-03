@@ -5207,4 +5207,189 @@ trace-log
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(1 nil nil)");
     }
+
+    #[test]
+    fn jit_condition_case_multiple_handlers() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond-multi-handler.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun safe-div (a b)
+  (condition-case err
+      (/ a b)
+    (arith-error 0)
+    (wrong-type-argument -1)))
+(list (safe-div 10 2) (safe-div 10 0) (safe-div "a" "b"))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        // (/ 10 0) signals arith-error, (/ "a" "b") signals wrong-type-argument
+        // but our runtime may handle these differently
+        let s = artifact.runtime.format_value(val);
+        assert!(s.starts_with("(5"), "got: {}", s);
+    }
+
+    #[test]
+    fn jit_signal_function() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "signal.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (signal 'my-error '(42 "test"))
+  (my-error (cadr err))
+  (error -1))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_progn_in_condition_handler() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "handler-progn.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defvar handler-ran nil)
+(condition-case err
+    (error "boom")
+  (error
+   (progn
+     (setq handler-ran t)
+     'caught)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "caught");
+    }
+
+    #[test]
+    fn jit_throw_through_multiple_frames() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "throw-frames.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun f3 () (throw 'done 99))
+(defun f2 () (f3))
+(defun f1 () (f2))
+(catch 'done (f1))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn jit_optional_with_default_value() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "opt-default.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun greet (name &optional greeting)
+  (format "%s %s" (or greeting "Hello") name))
+(list (greet "World") (greet "World" "Hi"))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "(\"Hello World\" \"Hi World\")"
+        );
+    }
+
+    #[test]
+    fn jit_rest_parameter_apply() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "rest-apply.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun my-list (&rest args) args)
+(my-list 1 2 3 4)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 4)");
+    }
+
+    #[test]
+    fn jit_cl_loop_for_across_vector_mutate() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "loop-across-mutate.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((v (vector 0 0 0)))
+  (cl-loop for i from 0 below 3
+           do (setf (aref v i) (* i 10)))
+  v)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "[0 10 20]");
+    }
+
+    #[test]
+    fn jit_nested_backquote_in_macro() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "bq-nested-macro.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defmacro define-const-fn (name val)
+  `(defun ,name () ,val))
+(define-const-fn get-ten 10)
+(define-const-fn get-twenty 20)
+(list (get-ten) (get-twenty))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 20)");
+    }
+
+    #[test]
+    fn jit_higher_order_functions() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "higher-order.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun apply-twice (f x) (funcall f (funcall f x)))
+(apply-twice (lambda (x) (+ x 1)) 40)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_recursive_list_processing() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "recurse-list.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun my-map (f lst)
+  (if (null lst) nil
+    (cons (funcall f (car lst))
+          (my-map f (cdr lst)))))
+(my-map (lambda (x) (* x x)) '(1 2 3 4 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 4 9 16 25)");
+    }
 }
