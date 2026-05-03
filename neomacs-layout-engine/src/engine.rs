@@ -2594,8 +2594,7 @@ impl LayoutEngine {
 
         self.current_resolved_family = current_font_family.clone();
         self.resolved_family_face_id = 0;
-        face_space_w = unsafe {
-            char_advance(
+        face_space_w = char_advance(
                 &mut self.ascii_width_cache,
                 &mut self.font_metrics,
                 ' ',
@@ -2606,8 +2605,7 @@ impl LayoutEngine {
                 &self.current_resolved_family,
                 current_font_weight,
                 current_font_italic,
-            )
-        };
+            );
 
         if let Some(echo_message) = echo_message {
             // The echo area is minibuffer content, not post-window chrome.
@@ -2861,20 +2859,18 @@ impl LayoutEngine {
                     current_font_size_px = resolved.font_size.max(1.0).round() as i32;
                     self.current_resolved_family = current_font_family.clone();
                     self.resolved_family_face_id = face_id;
-                    face_space_w = unsafe {
-                        char_advance(
-                            &mut self.ascii_width_cache,
-                            &mut self.font_metrics,
-                            ' ',
-                            1,
-                            char_w,
-                            current_font_size_px,
-                            face_char_w,
-                            &self.current_resolved_family,
-                            current_font_weight,
-                            current_font_italic,
-                        )
-                    };
+                    face_space_w = char_advance(
+                        &mut self.ascii_width_cache,
+                        &mut self.font_metrics,
+                        ' ',
+                        1,
+                        char_w,
+                        current_font_size_px,
+                        face_char_w,
+                        &self.current_resolved_family,
+                        current_font_weight,
+                        current_font_italic,
+                    );
 
                     apply_resolved_face(&mut self.matrix_builder, face_id, &resolved, metrics);
                     current_face_id += 1;
@@ -3086,7 +3082,16 @@ impl LayoutEngine {
                                 current_face_id.saturating_sub(1),
                                 charpos.max(0) as usize,
                             );
-                            x += face_char_w;
+                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                '.',
+                                1,
+                                char_w,
+                                current_font_size_px,
+                                face_char_w,
+                                &self.current_resolved_family,
+                                current_font_weight,
+                                current_font_italic,
+                            );
                             col += 1;
                             output_emitter.emit_synthetic_text_span(
                                 evaluator,
@@ -3536,11 +3541,20 @@ impl LayoutEngine {
                             }
                             let placeholder = "[img]";
                             let right_limit = content_x + (text_width - lnum_pixel_width);
-                            for _rch in placeholder.chars() {
+                            for rch in placeholder.chars() {
                                 if x + face_char_w > right_limit {
                                     break;
                                 }
-                                x += face_char_w;
+                                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                    rch,
+                                    1,
+                                    char_w,
+                                    current_font_size_px,
+                                    face_char_w,
+                                    &self.current_resolved_family,
+                                    current_font_weight,
+                                    current_font_italic,
+                                );
                                 col += 1;
                             }
                             if x > replacement_start_x || col > replacement_start_col {
@@ -3624,9 +3638,13 @@ impl LayoutEngine {
                 let ellipsis = "...";
                 let ellipsis_start_x = x;
                 let ellipsis_start_col = col;
-                for _ech in ellipsis.chars() {
-                    if x + face_char_w <= content_x + avail_width {
-                        x += face_char_w;
+                for ech in ellipsis.chars() {
+                    let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                        ech, 1, char_w, current_font_size_px, face_char_w,
+                        &self.current_resolved_family, current_font_weight, current_font_italic,
+                    );
+                    if x + adv <= content_x + avail_width {
+                        x += adv;
                         col += 1;
                     }
                 }
@@ -3936,7 +3954,7 @@ impl LayoutEngine {
             if ch < ' ' || ch == '\x7F' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let _ctrl_ch = if ch == '\x7F' {
+                let ctrl_ch = if ch == '\x7F' {
                     '?'
                 } else {
                     char::from((ch as u8) + b'@')
@@ -4055,8 +4073,20 @@ impl LayoutEngine {
                     col,
                     col + 2,
                 );
-                x += face_char_w;
-                x += face_char_w;
+                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                    '^', 1, char_w, current_font_size_px, face_char_w,
+                    &self.current_resolved_family, current_font_weight, current_font_italic,
+                );
+                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                    ctrl_ch,
+                    1,
+                    char_w,
+                    current_font_size_px,
+                    face_char_w,
+                    &self.current_resolved_family,
+                    current_font_weight,
+                    current_font_italic,
+                );
                 col += 2;
                 charpos += 1;
                 word_wrap_may_wrap = false;
@@ -4076,7 +4106,7 @@ impl LayoutEngine {
                             current_face_id += 1;
                         }
                         // Render as visible space or hyphen
-                        let _display_ch = if ch == '\u{00A0}' { ' ' } else { '-' };
+                        let display_ch = if ch == '\u{00A0}' { ' ' } else { '-' };
                         output_emitter.emit_text_span(
                             evaluator,
                             charpos + 1,
@@ -4089,7 +4119,16 @@ impl LayoutEngine {
                             col,
                             col + 1,
                         );
-                        x += face_char_w;
+                        x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                            display_ch,
+                            1,
+                            char_w,
+                            current_font_size_px,
+                            face_char_w,
+                            &self.current_resolved_family,
+                            current_font_weight,
+                            current_font_italic,
+                        );
                         col += 1;
                         charpos += 1;
                         word_wrap_may_wrap = false;
@@ -4098,7 +4137,7 @@ impl LayoutEngine {
                     }
                     2 => {
                         // Escape notation mode: show as "\\ " for NBSP, "\\-" for soft hyphen
-                        let _indicator = if ch == '\u{00A0}' { ' ' } else { '-' };
+                        let indicator = if ch == '\u{00A0}' { ' ' } else { '-' };
                         if params.nobreak_char_fg != 0 {
                             let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                             current_face_id += 1;
@@ -4118,8 +4157,26 @@ impl LayoutEngine {
                                 col,
                                 col + 2,
                             );
-                            x += face_char_w;
-                            x += face_char_w;
+                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                '\\',
+                                1,
+                                char_w,
+                                current_font_size_px,
+                                face_char_w,
+                                &self.current_resolved_family,
+                                current_font_weight,
+                                current_font_italic,
+                            );
+                            x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                indicator,
+                                1,
+                                char_w,
+                                current_font_size_px,
+                                face_char_w,
+                                &self.current_resolved_family,
+                                current_font_weight,
+                                current_font_italic,
+                            );
                             col += 2;
                         }
                         charpos += 1;
@@ -4146,8 +4203,12 @@ impl LayoutEngine {
                     }
                     2 => {
                         // Empty box: render U+25A1 (□) character
-                        if x + face_char_w <= content_x + avail_width {
-                            x += face_char_w;
+                        let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                            '\u{25A1}', 1, char_w, current_font_size_px, face_char_w,
+                            &self.current_resolved_family, current_font_weight, current_font_italic,
+                        );
+                        if x + adv <= content_x + avail_width {
+                            x += adv;
                             col += 1;
                         }
                     }
@@ -4167,17 +4228,26 @@ impl LayoutEngine {
 
                         let right_limit = content_x + avail_width;
                         if x + needed <= right_limit {
-                            for _hch in hex_str.chars() {
-                                x += face_char_w;
+                            for hch in hex_str.chars() {
+                                x += char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                    hch, 1, char_w, current_font_size_px, face_char_w,
+                                    &self.current_resolved_family, current_font_weight,
+                                    current_font_italic,
+                                );
                             }
                             col += hex_str.len();
                         } else {
                             // Partial rendering: emit as many chars as fit
-                            for _hch in hex_str.chars() {
-                                if x + face_char_w > right_limit {
+                            for hch in hex_str.chars() {
+                                let adv = char_pixel_advance(&mut self.ascii_width_cache, &mut self.font_metrics,
+                                    hch, 1, char_w, current_font_size_px, face_char_w,
+                                    &self.current_resolved_family, current_font_weight,
+                                    current_font_italic,
+                                );
+                                if x + adv > right_limit {
                                     break;
                                 }
-                                x += face_char_w;
+                                x += adv;
                                 col += 1;
                             }
                         }
@@ -4233,20 +4303,18 @@ impl LayoutEngine {
             } else if is_extender {
                 0.0
             } else {
-                unsafe {
-                    char_advance(
-                        &mut self.ascii_width_cache,
-                        &mut self.font_metrics,
-                        ch,
-                        char_cols as i32,
-                        char_w,
-                        current_font_size_px,
-                        face_char_w,
-                        &self.current_resolved_family,
-                        current_font_weight,
-                        current_font_italic,
-                    )
-                }
+                char_advance(
+                    &mut self.ascii_width_cache,
+                    &mut self.font_metrics,
+                    ch,
+                    char_cols as i32,
+                    char_w,
+                    current_font_size_px,
+                    face_char_w,
+                    &self.current_resolved_family,
+                    current_font_weight,
+                    current_font_italic,
+                )
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if x + advance > content_x + avail_width {
@@ -5922,13 +5990,40 @@ impl LayoutEngine {
     }
 }
 
-/// Get the advance width for a character in a specific face.
-///
+/// Per-character pixel advance wrapper, matching GNU's `get_per_char_metric`.
+/// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
+#[inline(always)]
+fn char_pixel_advance(
+    ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
+    font_metrics_svc: &mut Option<FontMetricsService>,
+    ch: char,
+    char_cols: i32,
+    char_w: f32,
+    font_size: i32,
+    face_char_w: f32,
+    font_family: &str,
+    font_weight: u16,
+    font_italic: bool,
+) -> f32 {
+    char_advance(
+        ascii_width_cache,
+        font_metrics_svc,
+        ch,
+        char_cols,
+        char_w,
+        font_size,
+        face_char_w,
+        font_family,
+        font_weight,
+        font_italic,
+    )
+}
+
 /// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
 ///
 /// Uses `FontMetricsService` (cosmic-text) for measurement, matching the render
 /// thread's font resolution exactly.
-unsafe fn char_advance(
+fn char_advance(
     ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
     font_metrics_svc: &mut Option<FontMetricsService>,
     ch: char,
