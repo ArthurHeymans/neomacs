@@ -3587,4 +3587,141 @@ total",
             "squares should have 1..25: {s}"
         );
     }
+
+    #[test]
+    fn jit_comprehensive_integration() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "integration.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+
+;; Recursive Fibonacci with memoization using hash table
+(defun make-memoized-fib ()
+  (let ((cache (make-hash-table :test 'equal)))
+    (lambda (n)
+      (condition-case err
+          (if (<= n 1)
+              n
+            (let ((cached (gethash n cache)))
+              (if cached
+                  cached
+                (let ((result (+ (funcall (make-memoized-fib) (- n 1))
+                                 (funcall (make-memoized-fib) (- n 2)))))
+                  (puthash n result cache)
+                  result))))
+        (error 0)))))
+
+;; Higher-order: map with closure
+(defun make-adder (x)
+  (lambda (y) (+ x y)))
+
+(defun map-adder (lst x)
+  (let ((adder (make-adder x)))
+    (cl-loop for item in lst
+             collect (funcall adder item))))
+
+;; String processing
+(defun join-with-commas (lst)
+  (if (null lst)
+      ""
+    (let ((result (car lst)))
+      (dolist (item (cdr lst))
+        (setq result (concat result ", " item)))
+      result)))
+
+;; Main test
+(let* ((fib10 0)
+       (adder-result (map-adder '(1 2 3 4 5) 10))
+       (str-result (join-with-commas '("hello" "world" "test"))))
+  ;; Compute fib safely
+  (condition-case err
+      (setq fib10 (funcall (make-memoized-fib) 10))
+    (error (setq fib10 -1)))
+  (list fib10 adder-result str-result))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        // fib(10) = 55, adder-result = (11 12 13 14 15), str-result = "hello, world, test"
+        assert!(s.contains("55"), "fib(10) should be 55, got: {s}");
+        assert!(s.contains("11"), "adder-result should contain 11, got: {s}");
+        assert!(
+            s.contains("hello"),
+            "str-result should contain hello, got: {s}"
+        );
+    }
+
+    #[test]
+    fn jit_nested_condition_case_propagation() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-cc.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun safe-compute (x)
+  (condition-case outer-err
+      (condition-case inner-err
+          (if (< x 0)
+              (error "negative: %s" x)
+            (/ 100 x))
+        (arith-error 'div-error))
+    (error (cons 'caught outer-err))))
+(list (safe-compute 10) (safe-compute 0) (safe-compute -5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        // (safe-compute 10) = 10, (safe-compute 0) = div-error (arith caught by inner),
+        // (safe-compute -5) = (caught . (error "negative: -5"))
+        assert!(s.contains("10"), "should contain 10, got: {s}");
+    }
+
+    #[test]
+    fn jit_closure_over_let_loop() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "closure-loop.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun make-counter ()
+  (let ((count 0))
+    (lambda ()
+      (setq count (+ count 1))
+      count)))
+(let ((c (make-counter)))
+  (list (funcall c) (funcall c) (funcall c)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(
+            s.contains("1") && s.contains("2") && s.contains("3"),
+            "counter should be (1 2 3), got: {s}"
+        );
+    }
+
+    #[test]
+    fn jit_cl_loop_with_hash_table() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "ht-loop.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((ht (make-hash-table :test 'equal)))
+  (puthash "a" 1 ht)
+  (puthash "b" 2 ht)
+  (puthash "c" 3 ht)
+  (let ((sum 0))
+    (maphash (lambda (k v) (setq sum (+ sum v))) ht)
+    sum))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "6");
+    }
 }
