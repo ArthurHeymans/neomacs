@@ -82,16 +82,22 @@ pub fn compile_source(name: impl Into<String>, text: impl Into<String>) -> Compi
         let hir_output =
             hir::lower_expanded_forms(&source, expand_output.forms.clone(), source.lexical_binding);
         diagnostics.extend(hir_output.diagnostics);
+        diagnostics.extend(verify::verify_hir(&hir_output.module));
         if !diagnostics.iter().any(Diagnostic::is_error) {
             let mut ssa_output = lower::hir_to_ssa_module(&hir_output.module);
             diagnostics.extend(ssa_output.diagnostics);
+            diagnostics.extend(verify::verify_ssa_module(&ssa_output.value));
             if !diagnostics.iter().any(Diagnostic::is_error) {
                 opt::optimize_ssa_module(&mut ssa_output.value);
-                let regir_output = lower::ssa_module_to_regir(&ssa_output.value);
-                diagnostics.extend(regir_output.diagnostics);
-                regir = Some(regir_output.value);
+                diagnostics.extend(verify::verify_ssa_module(&ssa_output.value));
+                if !diagnostics.iter().any(Diagnostic::is_error) {
+                    let regir_output = lower::ssa_module_to_regir(&ssa_output.value);
+                    diagnostics.extend(regir_output.diagnostics);
+                    diagnostics.extend(verify::verify_regir_module(&regir_output.value));
+                    regir = Some(regir_output.value);
+                }
+                ssa = Some(ssa_output.value);
             }
-            ssa = Some(ssa_output.value);
         }
         hir = Some(hir_output.module);
     }
