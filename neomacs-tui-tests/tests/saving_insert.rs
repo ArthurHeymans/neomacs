@@ -1372,3 +1372,33 @@ fn copy_whole_buffer_and_yank_to_new_file_via_mw_cy() {
         );
     }
 }
+
+#[test]
+fn write_file_via_cx_cw_saves_buffer_to_new_name() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let src_name = "write-file-src.txt";
+    let src = "write this file\n";
+    let new_name = "write-file-dst.txt";
+
+    open_home_file(&mut gnu, &mut neo, src_name, src, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-x C-w");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(format!("{}\r", new_name).as_bytes());
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    // Overwrite confirmation
+    send_both(&mut gnu, &mut neo, "y");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    let gnu_dst = std::fs::read_to_string(gnu.home_dir().join(new_name)).unwrap_or_default();
+    let neo_dst = std::fs::read_to_string(neo.home_dir().join(new_name)).unwrap_or_default();
+    assert!(
+        gnu_dst.contains("write this file"),
+        "GNU write-file should save to new name"
+    );
+    assert!(
+        neo_dst.contains("write this file"),
+        "NEO write-file should save to new name"
+    );
+}
