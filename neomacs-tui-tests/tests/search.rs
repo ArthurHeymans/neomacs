@@ -624,3 +624,28 @@ fn isearch_yank_word_via_cs_cw_appends_word_at_point_to_search() {
     send_both(&mut gnu, &mut neo, "C-g");
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 }
+
+#[test]
+fn isearch_forward_for_word_then_repeat_via_cs_confirm() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "isearch-repeat.txt";
+    let content = "alpha beta alpha gamma alpha\n";
+
+    open_home_file(&mut gnu, &mut neo, name, content, "C-x C-f");
+    // C-s alpha
+    send_both(&mut gnu, &mut neo, "C-s");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"alpha");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("I-search: alpha") || r.contains("alpha")),
+            "{label}: isearch should find alpha"
+        );
+    }
+}
