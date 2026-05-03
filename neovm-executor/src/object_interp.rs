@@ -2930,7 +2930,10 @@ impl Interpreter<'_, '_, '_> {
             }
             crate::RuntimeError::ArgsOutOfRange { value, index } => {
                 let sym = self.runtime.intern("args-out-of-range");
-                let data = make_list(self.runtime, [*value, LispValue::expect_fixnum(*index as i64)]);
+                let data = make_list(
+                    self.runtime,
+                    [*value, LispValue::expect_fixnum(*index as i64)],
+                );
                 Some((sym, data))
             }
             _ => {

@@ -315,7 +315,7 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
             None => {
                 let _ = write!(out, "unwind-protect-end");
             }
-        }
+        },
     }
 }
 

@@ -1339,7 +1339,9 @@ impl SsaBuilder {
             | SsaInstKind::ConditionCaseEnd { .. }
             | SsaInstKind::UnwindProtectBegin
             | SsaInstKind::UnwindProtectCleanup
-            | SsaInstKind::UnwindProtectEnd { .. } => Effects::new([Effect::MayThrow, Effect::MaySignal]),
+            | SsaInstKind::UnwindProtectEnd { .. } => {
+                Effects::new([Effect::MayThrow, Effect::MaySignal])
+            }
             SsaInstKind::Throw { .. } => Effects::single(Effect::MayThrow),
             _ => Effects::pure(),
         };
