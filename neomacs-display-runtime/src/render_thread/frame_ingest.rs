@@ -20,6 +20,63 @@ impl RenderApp {
             // grid into pixel-positioned glyphs and appends non-grid items.
             let frame = display_state.materialize();
 
+            // ── Observation point: inspect what will be rendered ──
+            // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.
+            if std::env::var("NEOMACS_DUMP_FRAME_GLYPHS").as_deref() == Ok("1") {
+                let mut char_count = 0usize;
+                let mut bg_count = 0usize;
+                let mut border_count = 0usize;
+                let mut cursor_count = 0usize;
+                let mut scrollbar_count = 0usize;
+                let mut image_count = 0usize;
+                let mut stretch_count = 0usize;
+                let mut other_count = 0usize;
+                for g in &frame.glyphs {
+                    match g {
+                        crate::core::frame_glyphs::FrameGlyph::Char { .. } => char_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Background { .. } => bg_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Border { .. } => border_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Cursor { .. } => cursor_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::ScrollBar { .. } => {
+                            scrollbar_count += 1
+                        }
+                        crate::core::frame_glyphs::FrameGlyph::Image { .. } => image_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Stretch { .. } => stretch_count += 1,
+                        _ => other_count += 1,
+                    }
+                }
+                tracing::info!(
+                    "poll_frame: frame_id={} parent_id={} size={:.0}x{:.0} char={:.1}x{:.1} \
+                     glyphs={} (char={} bg={} border={} cursor={} stretch={} scrollbar={} image={} other={}) \
+                     windows={} cursor={} faces={}",
+                    frame_id,
+                    parent_id,
+                    frame.width,
+                    frame.height,
+                    frame.char_width,
+                    frame.char_height,
+                    frame.glyphs.len(),
+                    char_count,
+                    bg_count,
+                    border_count,
+                    cursor_count,
+                    stretch_count,
+                    scrollbar_count,
+                    image_count,
+                    other_count,
+                    frame.window_infos.len(),
+                    if frame.phys_cursor.is_some() {
+                        "yes"
+                    } else {
+                        "no"
+                    },
+                    frame.faces.len(),
+                );
+                for (i, g) in frame.glyphs.iter().enumerate() {
+                    tracing::info!("  glyph[{}]: {:?}", i, g);
+                }
+            }
+
             if frame_id != 0 && parent_id == 0 && self.multi_windows.windows.contains_key(&frame_id)
             {
                 self.multi_windows.route_frame(frame);
