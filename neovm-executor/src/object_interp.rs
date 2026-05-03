@@ -1177,9 +1177,13 @@ impl Interpreter<'_, '_, '_> {
                     };
                 bool_value(is_keyword)
             }),
-            "evenp" => self.exact_arity(name, args, 1).and_then(|_| {
+            "evenp" | "cl-evenp" => self.exact_arity(name, args, 1).and_then(|_| {
                 let val = self.fixnum_arg(name, args[0])?;
                 Some(bool_value(val % 2 == 0))
+            }),
+            "cl-oddp" => self.exact_arity(name, args, 1).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                Some(bool_value(val % 2 != 0))
             }),
             "butlast" => self
                 .min_max_arity(name, args, 1, 2)
@@ -3403,6 +3407,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "capitalize"
             | "keywordp"
             | "evenp"
+            | "cl-evenp"
+            | "cl-oddp"
             | "butlast"
             | "delq"
             | "remove"

@@ -2736,7 +2736,7 @@ total",
             "loop-if.el",
             ";;; -*- lexical-binding: t; -*-\n\
              (cl-loop for x in '(1 2 3 4 5 6)
-                      if (> (mod x 2) 0)
+                      if (cl-oddp x)
                       collect x)",
             &[],
         );
@@ -2791,7 +2791,7 @@ total",
             "loop-count.el",
             ";;; -*- lexical-binding: t; -*-\n\
              (cl-loop for x in '(1 2 3 4 5)
-                      count (> (mod x 2) 0))",
+                      count (cl-oddp x))",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());

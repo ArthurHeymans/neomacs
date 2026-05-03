@@ -977,7 +977,8 @@ fn dispatch_primitive(
             };
             LispValue::from_fixnum(result)
         }
-        "evenp" => Some(bool_value(args[0].as_fixnum()? % 2 == 0)),
+        "evenp" | "cl-evenp" => Some(bool_value(args[0].as_fixnum()? % 2 == 0)),
+        "cl-oddp" => Some(bool_value(args[0].as_fixnum()? % 2 != 0)),
         "expt" => {
             let base_is_float = rt.is_float(args[0]);
             let exp_is_float = rt.is_float(args[1]);
