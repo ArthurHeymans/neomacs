@@ -158,11 +158,15 @@ pub mod ansi {
             buf.extend_from_slice(SGR_INVERSE.as_bytes());
         }
 
-        // Foreground color (24-bit)
-        fg_truecolor(buf, attrs.fg.0, attrs.fg.1, attrs.fg.2);
+        // Foreground color (24-bit) — skip if terminal default
+        if let Some((r, g, b)) = attrs.fg {
+            fg_truecolor(buf, r, g, b);
+        }
 
-        // Background color (24-bit)
-        bg_truecolor(buf, attrs.bg.0, attrs.bg.1, attrs.bg.2);
+        // Background color (24-bit) — skip if terminal default
+        if let Some((r, g, b)) = attrs.bg {
+            bg_truecolor(buf, r, g, b);
+        }
 
         // Underline color if different from fg
         if let Some((r, g, b)) = attrs.underline_color {
@@ -173,10 +177,10 @@ pub mod ansi {
     /// Cell attributes that map to SGR sequences.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct CellAttrs {
-        /// Foreground color as (R, G, B) in 0-255
-        pub fg: (u8, u8, u8),
-        /// Background color as (R, G, B) in 0-255
-        pub bg: (u8, u8, u8),
+        /// Foreground color as (R, G, B).  None = terminal default.
+        pub fg: Option<(u8, u8, u8)>,
+        /// Background color as (R, G, B).  None = terminal default.
+        pub bg: Option<(u8, u8, u8)>,
         /// Bold
         pub bold: bool,
         /// Italic
@@ -194,8 +198,8 @@ pub mod ansi {
     impl Default for CellAttrs {
         fn default() -> Self {
             Self {
-                fg: (255, 255, 255),
-                bg: (0, 0, 0),
+                fg: None,
+                bg: None,
                 bold: false,
                 italic: false,
                 underline: 0,
@@ -490,14 +494,12 @@ fn render_full(grid: &TtyGrid) -> Vec<u8> {
 ///
 /// This maps pixel-coordinate glyphs into character-cell positions using
 /// the frame's `char_width` and `char_height` as the cell dimensions.
-fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color: (u8, u8, u8)) {
-    // Clear grid with background
+fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_color: (u8, u8, u8)) {
+    // Clear grid — blank cells use terminal default colors (no SGR bg/fg)
     for cell in &mut grid.cells {
         cell.text = " ".to_string();
         cell.width = 1;
         cell.attrs = ansi::CellAttrs {
-            fg: (255, 255, 255),
-            bg: bg_color,
             ..Default::default()
         };
     }
@@ -534,7 +536,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
                 };
 
                 let fg_rgb = color_to_rgb8(fg);
-                let bg_rgb = bg.map(|c| color_to_rgb8(&c)).unwrap_or(bg_color);
+                let bg_rgb = bg.map(|c| color_to_rgb8(&c));
                 let ul_color = underline_color.map(|c| {
                     let (r, g, b) = color_to_rgb8(&c);
                     (r, g, b)
@@ -542,9 +544,9 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
 
                 let cell = TtyCell {
                     text,
-                    width: 1, // will be updated below for wide chars
+                    width: 1,
                     attrs: ansi::CellAttrs {
-                        fg: fg_rgb,
+                        fg: Some(fg_rgb),
                         bg: bg_rgb,
                         bold: *font_weight >= 700,
                         italic: *italic,
@@ -572,7 +574,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
                             text: String::new(),
                             width: 0, // continuation cell
                             attrs: ansi::CellAttrs {
-                                fg: fg_rgb,
+                                fg: Some(fg_rgb),
                                 bg: bg_rgb,
                                 ..Default::default()
                             },
@@ -600,7 +602,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
                 for row in row_start..row_end.min(grid.height) {
                     for col in col_start..col_end.min(grid.width) {
                         if let Some(cell) = grid.get_mut(col, row) {
-                            cell.attrs.bg = bg_rgb;
+                            cell.attrs.bg = Some(bg_rgb);
                         }
                     }
                 }
@@ -617,7 +619,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
                 for row in row_start..row_end.min(grid.height) {
                     for col in col_start..col_end.min(grid.width) {
                         if let Some(cell) = grid.get_mut(col, row) {
-                            cell.attrs.bg = bg_rgb;
+                            cell.attrs.bg = Some(bg_rgb);
                         }
                     }
                 }
@@ -645,7 +647,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, bg_color
                 for row in row_start..row_end.min(grid.height) {
                     for col in col_start..col_end.min(grid.width) {
                         if let Some(cell) = grid.get_mut(col, row) {
-                            cell.attrs.fg = border_rgb;
+                            cell.attrs.fg = Some(border_rgb);
                             if is_vertical {
                                 cell.text = "\u{2502}".to_string(); // │
                             } else if is_horizontal {
@@ -721,8 +723,8 @@ fn apply_tty_cursor_visual(
     match cursor.style {
         CursorStyle::FilledBox => {
             if let Some(cell) = grid.get_mut(col, row) {
-                cell.attrs.fg = cursor_fg_rgb;
-                cell.attrs.bg = cursor_rgb;
+                cell.attrs.fg = Some(cursor_fg_rgb);
+                cell.attrs.bg = Some(cursor_rgb);
             }
         }
         CursorStyle::Bar(_) => {
@@ -763,7 +765,7 @@ fn apply_tty_window_cursor_visual(
         CursorStyle::FilledBox => {
             if let Some(cell) = grid.get_mut(col, row) {
                 cell.attrs.fg = cell.attrs.bg;
-                cell.attrs.bg = cursor_rgb;
+                cell.attrs.bg = Some(cursor_rgb);
             }
         }
         CursorStyle::Bar(_) => {
@@ -1053,7 +1055,7 @@ impl DisplayBackend for TtyBackend {
             let bg_rgb = color_to_rgb8(&scene.background);
             self.current.clear();
             for cell in &mut self.current.cells {
-                cell.attrs.bg = bg_rgb;
+                cell.attrs.bg = Some(bg_rgb);
             }
         }
 
