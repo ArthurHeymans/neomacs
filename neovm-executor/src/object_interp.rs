@@ -2909,7 +2909,38 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn runtime_error(&mut self, error: crate::RuntimeError) {
-        self.error(error.to_string());
+        let signal = match &error {
+            crate::RuntimeError::WrongTypeArgument { expected, value } => {
+                let sym = self.runtime.intern("wrong-type-argument");
+                let exp = self.runtime.intern(expected);
+                let data = make_list(self.runtime, [exp, *value]);
+                Some((sym, data))
+            }
+            crate::RuntimeError::VoidVariable { name } => {
+                let sym = self.runtime.intern("void-variable");
+                let name_sym = self.runtime.intern(name);
+                let data = make_list(self.runtime, [name_sym]);
+                Some((sym, data))
+            }
+            crate::RuntimeError::VoidFunction { name } => {
+                let sym = self.runtime.intern("void-function");
+                let name_sym = self.runtime.intern(name);
+                let data = make_list(self.runtime, [name_sym]);
+                Some((sym, data))
+            }
+            crate::RuntimeError::ArgsOutOfRange { value, index } => {
+                let sym = self.runtime.intern("args-out-of-range");
+                let data = make_list(self.runtime, [*value, LispValue::expect_fixnum(*index as i64)]);
+                Some((sym, data))
+            }
+            _ => {
+                self.error(error.to_string());
+                return;
+            }
+        };
+        if let Some((symbol, data)) = signal {
+            self.pending_signal = Some(SignaledValue { symbol, data });
+        }
     }
 
     fn runtime_value(

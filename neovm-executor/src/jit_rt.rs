@@ -814,7 +814,6 @@ fn dispatch_primitive(
         "length" => list_length(rt, args[0]),
         "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
         "nthcdr" => nthcdr_list(rt, args[1], args[0].as_fixnum()? as usize),
-        "last" => last_pair(rt, args[0]),
         "reverse" => reverse_list(rt, args[0]),
         "nreverse" => reverse_list(rt, args[0]),
         "append" => append_lists(rt, args),
