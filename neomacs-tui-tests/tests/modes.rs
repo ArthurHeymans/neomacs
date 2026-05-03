@@ -995,3 +995,38 @@ fn header_line_format_displays_custom_header_above_buffer() {
         3,
     );
 }
+
+#[test]
+fn tab_line_format_displays_custom_tab_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "tab-line.txt",
+        "content\n",
+        "C-x C-f",
+    );
+
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (setq tab-line-format \"== TAB LINE ==\") (tab-line-mode 1))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("== TAB LINE ==")),
+            "{label}: should show tab-line with custom text"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "tab_line_format_displays_custom_tab_line",
+        &gnu,
+        &neo,
+        3,
+    );
+}
