@@ -264,7 +264,12 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
 
     /// Register a module-local function for direct JIT-to-JIT calls.
     /// The `declared_name` is the name used when declaring/defining the function in the backend module.
-    pub fn register_local_function(&mut self, declared_name: &str, arity: usize, call_conv: CallConv) {
+    pub fn register_local_function(
+        &mut self,
+        declared_name: &str,
+        arity: usize,
+        call_conv: CallConv,
+    ) {
         let mut sig = Signature::new(call_conv);
         sig.params.push(AbiParam::new(types::I64)); // vmctx
         for _ in 0..arity {
@@ -435,7 +440,8 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
         let id = self
             .module
             .declare_import("__neomacs_rt_symbol_get", &signature);
-        self.imported_names.push("__neomacs_rt_symbol_get".to_string());
+        self.imported_names
+            .push("__neomacs_rt_symbol_get".to_string());
         self.symbol_get = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -446,8 +452,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_symbol_set", &signature);
-        self.imported_names.push("__neomacs_rt_symbol_set".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_symbol_set", &signature);
+        self.imported_names
+            .push("__neomacs_rt_symbol_set".to_string());
         self.symbol_set = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -458,8 +467,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_bind_dynamic", &signature);
-        self.imported_names.push("__neomacs_rt_bind_dynamic".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_bind_dynamic", &signature);
+        self.imported_names
+            .push("__neomacs_rt_bind_dynamic".to_string());
         self.bind_dynamic = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -470,8 +482,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_unbind_dynamic", &signature);
-        self.imported_names.push("__neomacs_rt_unbind_dynamic".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_unbind_dynamic", &signature);
+        self.imported_names
+            .push("__neomacs_rt_unbind_dynamic".to_string());
         self.unbind_dynamic = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -482,8 +497,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_string_const", &signature);
-        self.imported_names.push("__neomacs_rt_string_const".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_string_const", &signature);
+        self.imported_names
+            .push("__neomacs_rt_string_const".to_string());
         self.string_const = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -494,8 +512,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_float_const", &signature);
-        self.imported_names.push("__neomacs_rt_float_const".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_float_const", &signature);
+        self.imported_names
+            .push("__neomacs_rt_float_const".to_string());
         self.float_const = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -518,8 +539,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_function_quote", &signature);
-        self.imported_names.push("__neomacs_rt_function_quote".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_function_quote", &signature);
+        self.imported_names
+            .push("__neomacs_rt_function_quote".to_string());
         self.function_quote = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -550,7 +574,8 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
         let id = self
             .module
             .declare_import("__neomacs_rt_make_lexical_cell", &signature);
-        self.imported_names.push("__neomacs_rt_make_lexical_cell".to_string());
+        self.imported_names
+            .push("__neomacs_rt_make_lexical_cell".to_string());
         self.make_lexical_cell = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -561,8 +586,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_lexical_cell_get", &signature);
-        self.imported_names.push("__neomacs_rt_lexical_cell_get".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_lexical_cell_get", &signature);
+        self.imported_names
+            .push("__neomacs_rt_lexical_cell_get".to_string());
         self.lexical_cell_get = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -573,8 +601,11 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             return Ok(RuntimeFuncImport { id, signature });
         }
 
-        let id = self.module.declare_import("__neomacs_rt_lexical_cell_set", &signature);
-        self.imported_names.push("__neomacs_rt_lexical_cell_set".to_string());
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_lexical_cell_set", &signature);
+        self.imported_names
+            .push("__neomacs_rt_lexical_cell_set".to_string());
         self.lexical_cell_set = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
@@ -716,7 +747,10 @@ struct ClifLowerer<'a, M: ClifModuleBackend = ModuleDeclarations> {
 }
 
 impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
-    fn new(ssa: &'a SsaFunction) -> Self where M: Default {
+    fn new(ssa: &'a SsaFunction) -> Self
+    where
+        M: Default,
+    {
         Self {
             ssa,
             runtime: ClifRuntimeAbi::default(),
@@ -946,14 +980,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         let Some(func_ref) = self.symbol_get_ref() else {
                             return;
                         };
-                        let symbol_idx =
-                            self.builder.ins().iconst(types::I64, symbol.into_usize() as i64);
+                        let symbol_idx = self
+                            .builder
+                            .ins()
+                            .iconst(types::I64, symbol.into_usize() as i64);
                         let Some(value) = self.emit_runtime_call(
                             func_ref,
                             &[symbol_idx],
-                            ClifRuntimeCallKind::SymbolGet {
-                                name: name.clone(),
-                            },
+                            ClifRuntimeCallKind::SymbolGet { name: name.clone() },
                         ) else {
                             return;
                         };
@@ -1298,15 +1332,15 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 self.value_map.insert(result, checked);
             }
             SsaInstKind::CatchBegin { tag } => {
-                let Some(tag_value) = self.value(*tag) else { return };
+                let Some(tag_value) = self.value(*tag) else {
+                    return;
+                };
                 let Some(func_ref) = self.exception_func_ref("catch_begin", 1) else {
                     return;
                 };
-                let Some(_) = self.emit_runtime_call(
-                    func_ref,
-                    &[tag_value],
-                    ClifRuntimeCallKind::CatchBegin,
-                ) else {
+                let Some(_) =
+                    self.emit_runtime_call(func_ref, &[tag_value], ClifRuntimeCallKind::CatchBegin)
+                else {
                     return;
                 };
                 let handler_block = self.builder.create_block();
@@ -1324,8 +1358,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 // for previous CatchEnd/ConditionCaseEnd/UnwindProtectEnd
                 // instructions that have been processed.  Don't pop the stack
                 // so that Throw in loop bodies can still find their handler.
-                let Some(handler_idx) =
-                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                let Some(handler_idx) = self
+                    .exception_handlers
+                    .len()
+                    .checked_sub(self.ended_handler_count + 1)
                 else {
                     self.error("CatchEnd without CatchBegin");
                     return;
@@ -1338,11 +1374,8 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let Some(func_ref) = self.exception_func_ref("catch_end", 0) else {
                     return;
                 };
-                let Some(_) = self.emit_runtime_call(
-                    func_ref,
-                    &[],
-                    ClifRuntimeCallKind::CatchEnd,
-                ) else {
+                let Some(_) = self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::CatchEnd)
+                else {
                     return;
                 };
                 match handler.kind {
@@ -1351,8 +1384,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         continuation_block,
                     } => {
                         // Add a block param for the catch result value
-                        let catch_result =
-                            self.builder.append_block_param(continuation_block, types::I64);
+                        let catch_result = self
+                            .builder
+                            .append_block_param(continuation_block, types::I64);
                         // Normal path: body completed normally, pass the body result
                         let normal_val = match body_result.and_then(|v| self.value(v)) {
                             Some(v) => v,
@@ -1362,9 +1396,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             .ins()
                             .jump(continuation_block, &[BlockArg::Value(normal_val)]);
                         self.builder.switch_to_block(handler.handler_block);
-                        let Some(peek_ref) =
-                            self.exception_func_ref("peek_throw_tag", 0)
-                        else {
+                        let Some(peek_ref) = self.exception_func_ref("peek_throw_tag", 0) else {
                             return;
                         };
                         let Some(throw_tag) = self.emit_runtime_call(
@@ -1374,22 +1406,15 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         ) else {
                             return;
                         };
-                        let tags_match = self
-                            .builder
-                            .ins()
-                            .icmp(IntCC::Equal, catch_tag, throw_tag);
+                        let tags_match =
+                            self.builder.ins().icmp(IntCC::Equal, catch_tag, throw_tag);
                         let match_block = self.builder.create_block();
                         let rethrow_block = self.builder.create_block();
-                        self.builder.ins().brif(
-                            tags_match,
-                            match_block,
-                            &[],
-                            rethrow_block,
-                            &[],
-                        );
+                        self.builder
+                            .ins()
+                            .brif(tags_match, match_block, &[], rethrow_block, &[]);
                         self.builder.switch_to_block(match_block);
-                        let Some(get_val_ref) =
-                            self.exception_func_ref("get_throw_value", 0)
+                        let Some(get_val_ref) = self.exception_func_ref("get_throw_value", 0)
                         else {
                             return;
                         };
@@ -1400,28 +1425,18 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         ) else {
                             return;
                         };
-                        let Some(catch_end_ref) =
-                            self.exception_func_ref("catch_end", 0)
-                        else {
+                        let Some(catch_end_ref) = self.exception_func_ref("catch_end", 0) else {
                             return;
                         };
-                        self.emit_runtime_call(
-                            catch_end_ref,
-                            &[],
-                            ClifRuntimeCallKind::CatchEnd,
-                        );
-                        self.builder.ins().jump(continuation_block, &[BlockArg::Value(throw_value)]);
+                        self.emit_runtime_call(catch_end_ref, &[], ClifRuntimeCallKind::CatchEnd);
+                        self.builder
+                            .ins()
+                            .jump(continuation_block, &[BlockArg::Value(throw_value)]);
                         self.builder.switch_to_block(rethrow_block);
-                        let Some(catch_end_ref2) =
-                            self.exception_func_ref("catch_end", 0)
-                        else {
+                        let Some(catch_end_ref2) = self.exception_func_ref("catch_end", 0) else {
                             return;
                         };
-                        self.emit_runtime_call(
-                            catch_end_ref2,
-                            &[],
-                            ClifRuntimeCallKind::CatchEnd,
-                        );
+                        self.emit_runtime_call(catch_end_ref2, &[], ClifRuntimeCallKind::CatchEnd);
                         // Rethrow to the outer handler (one level up).
                         // handler_idx is the index of THIS handler; the outer
                         // handler is at handler_idx - 1.
@@ -1459,8 +1474,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 }
             }
             SsaInstKind::Throw { tag, value } => {
-                let Some(tag_value) = self.value(*tag) else { return };
-                let Some(value_value) = self.value(*value) else { return };
+                let Some(tag_value) = self.value(*tag) else {
+                    return;
+                };
+                let Some(value_value) = self.value(*value) else {
+                    return;
+                };
                 let Some(func_ref) = self.exception_func_ref("throw", 2) else {
                     return;
                 };
@@ -1472,9 +1491,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     return;
                 };
                 if let Some(outer) = self.exception_handlers.last() {
-                    self.builder
-                        .ins()
-                        .jump(outer.handler_block, &[]);
+                    self.builder.ins().jump(outer.handler_block, &[]);
                 } else {
                     self.builder.ins().return_(&[result]);
                 }
@@ -1482,16 +1499,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 self.builder.switch_to_block(unreachable_block);
             }
             SsaInstKind::ConditionCaseBegin { .. } => {
-                let Some(func_ref) =
-                    self.exception_func_ref("condition_case_begin", 0)
-                else {
+                let Some(func_ref) = self.exception_func_ref("condition_case_begin", 0) else {
                     return;
                 };
-                let Some(_) = self.emit_runtime_call(
-                    func_ref,
-                    &[],
-                    ClifRuntimeCallKind::ConditionCaseBegin,
-                ) else {
+                let Some(_) =
+                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::ConditionCaseBegin)
+                else {
                     return;
                 };
                 let handler_block = self.builder.create_block();
@@ -1508,8 +1521,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let _ = value;
             }
             SsaInstKind::ConditionCaseEnd { .. } => {
-                let Some(handler_idx) =
-                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                let Some(handler_idx) = self
+                    .exception_handlers
+                    .len()
+                    .checked_sub(self.ended_handler_count + 1)
                 else {
                     self.error("ConditionCaseEnd without ConditionCaseBegin");
                     return;
@@ -1519,16 +1534,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error("ConditionCaseEnd handler index out of range");
                     return;
                 };
-                let Some(func_ref) =
-                    self.exception_func_ref("condition_case_end", 0)
-                else {
+                let Some(func_ref) = self.exception_func_ref("condition_case_end", 0) else {
                     return;
                 };
-                let Some(_) = self.emit_runtime_call(
-                    func_ref,
-                    &[],
-                    ClifRuntimeCallKind::ConditionCaseEnd,
-                ) else {
+                let Some(_) =
+                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::ConditionCaseEnd)
+                else {
                     return;
                 };
                 match handler.kind {
@@ -1557,16 +1568,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 }
             }
             SsaInstKind::UnwindProtectBegin => {
-                let Some(func_ref) =
-                    self.exception_func_ref("unwind_protect_begin", 0)
-                else {
+                let Some(func_ref) = self.exception_func_ref("unwind_protect_begin", 0) else {
                     return;
                 };
-                let Some(_) = self.emit_runtime_call(
-                    func_ref,
-                    &[],
-                    ClifRuntimeCallKind::UnwindProtectBegin,
-                ) else {
+                let Some(_) =
+                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::UnwindProtectBegin)
+                else {
                     return;
                 };
                 let handler_block = self.builder.create_block();
@@ -1585,15 +1592,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     .exception_handlers
                     .last()
                     .expect("UnwindProtectCleanup without UnwindProtectBegin");
-                if let ExceptionHandlerKind::UnwindProtect { normal_block, .. } =
-                    &handler.kind
-                {
+                if let ExceptionHandlerKind::UnwindProtect { normal_block, .. } = &handler.kind {
                     let nb = *normal_block;
                     self.builder.ins().jump(nb, &[]);
                     self.builder.switch_to_block(nb);
                 }
-                let Some(func_ref) =
-                    self.exception_func_ref("unwind_protect_cleanup_enter", 0)
+                let Some(func_ref) = self.exception_func_ref("unwind_protect_cleanup_enter", 0)
                 else {
                     return;
                 };
@@ -1604,8 +1608,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 );
             }
             SsaInstKind::UnwindProtectEnd => {
-                let Some(handler_idx) =
-                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                let Some(handler_idx) = self
+                    .exception_handlers
+                    .len()
+                    .checked_sub(self.ended_handler_count + 1)
                 else {
                     self.error("UnwindProtectEnd without UnwindProtectBegin");
                     return;
@@ -1615,24 +1621,16 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error("UnwindProtectEnd handler index out of range");
                     return;
                 };
-                let Some(func_ref) =
-                    self.exception_func_ref("unwind_protect_end", 0)
-                else {
+                let Some(func_ref) = self.exception_func_ref("unwind_protect_end", 0) else {
                     return;
                 };
-                self.emit_runtime_call(
-                    func_ref,
-                    &[],
-                    ClifRuntimeCallKind::UnwindProtectEnd,
-                );
+                self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::UnwindProtectEnd);
                 match handler.kind {
                     ExceptionHandlerKind::UnwindProtect {
                         continuation_block,
                         normal_block,
                     } => {
-                        let Some(check_ref) =
-                            self.exception_func_ref("check_exception", 0)
-                        else {
+                        let Some(check_ref) = self.exception_func_ref("check_exception", 0) else {
                             return;
                         };
                         let Some(check_result) = self.emit_runtime_call(
@@ -1642,12 +1640,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         ) else {
                             return;
                         };
-                        let sentinel =
-                            self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
-                        let is_exception = self
-                            .builder
-                            .ins()
-                            .icmp(IntCC::Equal, check_result, sentinel);
+                        let sentinel = self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                        let is_exception =
+                            self.builder
+                                .ins()
+                                .icmp(IntCC::Equal, check_result, sentinel);
                         let no_exception_block = self.builder.create_block();
                         if let Some(outer_idx) = handler_idx.checked_sub(1) {
                             if let Some(outer) = self.exception_handlers.get(outer_idx) {
@@ -1755,10 +1752,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let normal_block = self.builder.create_block();
         let normal_result = self.builder.append_block_param(normal_block, types::I64);
         let sentinel = self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
-        let is_sentinel = self
-            .builder
-            .ins()
-            .icmp(IntCC::Equal, call_result, sentinel);
+        let is_sentinel = self.builder.ins().icmp(IntCC::Equal, call_result, sentinel);
         self.builder.ins().brif(
             is_sentinel,
             handler_block,
@@ -1860,7 +1854,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             }
             _ => unreachable!(),
         };
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(inline_result)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(inline_result)]);
 
         self.builder.switch_to_block(fallback_block);
         let Some(func_ref) = self.call_named_ref(args.len()) else {
@@ -1869,7 +1865,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
             return PrimitiveCallLowering::Error;
         };
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(inline_block);
@@ -1913,7 +1911,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         };
         let cmp = self.builder.ins().icmp(cc, a, b);
         let inline_val = self.bool_to_lisp_value(cmp);
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(inline_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(inline_val)]);
 
         self.builder.switch_to_block(fallback_block);
         let Some(func_ref) = self.call_named_ref(2) else {
@@ -1922,7 +1922,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
             return PrimitiveCallLowering::Error;
         };
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(inline_block);
@@ -1964,7 +1966,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             _ => unreachable!(),
         };
         let tagged = self.builder.ins().ishl_imm(result, TAG_BITS as i64);
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(tagged)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(tagged)]);
 
         self.builder.switch_to_block(fallback_block);
         let Some(func_ref) = self.call_named_ref(2) else {
@@ -1973,7 +1977,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
             return PrimitiveCallLowering::Error;
         };
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(fallback_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(inline_block);
@@ -2292,7 +2298,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
     }
 
     fn exception_func_ref(&mut self, name: &str, num_extra_args: usize) -> Option<FuncRef> {
-        let import = match self.runtime.exception_func(name, num_extra_args, self.call_conv) {
+        let import = match self
+            .runtime
+            .exception_func(name, num_extra_args, self.call_conv)
+        {
             Ok(import) => import,
             Err(error) => {
                 self.error(format!("failed to declare exception runtime call: {error}"));
@@ -2313,11 +2322,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error(format!("compile value integer {n} requires bignum support"));
                     return self.builder.ins().iconst(types::I64, NIL_BITS);
                 }
-                self.builder.ins().iconst(types::I64, (*n << TAG_BITS as i64) | FIXNUM_TAG)
+                self.builder
+                    .ins()
+                    .iconst(types::I64, (*n << TAG_BITS as i64) | FIXNUM_TAG)
             }
-            CompileValue::Char(c) => {
-                self.builder.ins().iconst(types::I64, ((*c as i64) << TAG_BITS) | CHAR_TAG)
-            }
+            CompileValue::Char(c) => self
+                .builder
+                .ins()
+                .iconst(types::I64, ((*c as i64) << TAG_BITS) | CHAR_TAG),
             CompileValue::Float(f) => {
                 let bits = f.to_bits();
                 let Some(func_ref) = self.float_const_ref() else {
@@ -2351,8 +2363,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let Some(func_ref) = self.symbol_get_ref() else {
                     return self.builder.ins().iconst(types::I64, NIL_BITS);
                 };
-                let symbol_idx =
-                    self.builder.ins().iconst(types::I64, symbol.into_usize() as i64);
+                let symbol_idx = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, symbol.into_usize() as i64);
                 let Some(value) = self.emit_runtime_call(
                     func_ref,
                     &[symbol_idx],
@@ -3172,8 +3186,7 @@ mod tests {
         assert_eq!(clif.diagnostics, Vec::new());
         // Arithmetic goes through runtime dispatch for float promotion support
         assert!(
-            clif
-                .runtime
+            clif.runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_2")
         );
@@ -3194,8 +3207,7 @@ mod tests {
         assert_eq!(clif.diagnostics, Vec::new());
         // Comparisons go through runtime dispatch for float promotion support
         assert!(
-            clif
-                .runtime
+            clif.runtime
                 .imported_function_names()
                 .contains(&"__neomacs_rt_call_named_3")
         );

@@ -1,10 +1,10 @@
 use std::path::Path;
 
+pub mod jit_interp;
+mod jit_rt;
 mod object_interp;
 pub mod runtime;
 pub mod value;
-mod jit_rt;
-pub mod jit_interp;
 
 pub use neovm_compiler::CompileArtifact;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
@@ -37,7 +37,9 @@ pub struct Executor {
 
 impl Default for Executor {
     fn default() -> Self {
-        Self { engine: Engine::default() }
+        Self {
+            engine: Engine::default(),
+        }
     }
 }
 
@@ -436,7 +438,10 @@ total",
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
         let val = artifact.result.value.unwrap();
-        assert_eq!(artifact.runtime.format_value(val), "\"something went wrong\"");
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "\"something went wrong\""
+        );
     }
 
     #[test]
@@ -537,7 +542,10 @@ total",
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
         let val = artifact.result.value.unwrap();
-        assert_eq!(artifact.runtime.format_value(val), "((1 2 3) \"hi world\" \"hello emacs\")");
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "((1 2 3) \"hi world\" \"hello emacs\")"
+        );
     }
 
     #[test]
@@ -620,7 +628,10 @@ total",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3628800)));
+        assert_eq!(
+            artifact.result.value,
+            Some(LispValue::expect_fixnum(3628800))
+        );
     }
 
     #[test]
@@ -983,7 +994,10 @@ total",
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
         let val = artifact.result.value.unwrap();
-        assert_eq!(artifact.runtime.format_value(val), "((1 2 3) \"hi world\" \"hello emacs\")");
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "((1 2 3) \"hi world\" \"hello emacs\")"
+        );
     }
 
     #[test]
@@ -1052,7 +1066,10 @@ total",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3628800)));
+        assert_eq!(
+            artifact.result.value,
+            Some(LispValue::expect_fixnum(3628800))
+        );
     }
 
     #[test]
@@ -1242,7 +1259,10 @@ total",
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
         let val = artifact.result.value.unwrap();
-        assert_eq!(artifact.runtime.format_value(val), "\"something went wrong\"");
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "\"something went wrong\""
+        );
     }
 
     #[test]
@@ -2095,7 +2115,10 @@ total",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3628800)));
+        assert_eq!(
+            artifact.result.value,
+            Some(LispValue::expect_fixnum(3628800))
+        );
     }
 
     #[test]
@@ -2121,7 +2144,8 @@ total",
              (let ((s \"hello\"))
                (+ (length s) (if (string= s \"hello\") 100 0)))",
             &[],
-        );        assert_eq!(artifact.result.diagnostics, Vec::new());
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(105)));
     }
 

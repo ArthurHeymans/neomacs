@@ -144,12 +144,12 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
         // The Char regex matched ?\C-\ but \; was consumed by the Comment.
         // The Comment text is ;...] — take only the ; as the escaped char,
         // then re-lex the remainder (e.g. the ] in ;]) as new tokens.
-        if matches!(&tok.kind, TokenKind::Char(_)) && tok.text.ends_with('\\')
+        if matches!(&tok.kind, TokenKind::Char(_))
+            && tok.text.ends_with('\\')
             && i + 1 < raw_tokens.len()
         {
             let next = &raw_tokens[i + 1];
-            if matches!(&next.kind, TokenKind::Comment) && next.text.starts_with(';')
-            {
+            if matches!(&next.kind, TokenKind::Comment) && next.text.starts_with(';') {
                 let full_text = format!("{};", tok.text);
                 let full_value = parse_char_code(&full_text);
                 if let Some(value) = full_value {
@@ -392,15 +392,16 @@ fn parse_int(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<i64> {
 /// Try to parse #x (hex), #o (octal), #b (binary) numeric literals.
 fn try_parse_hash_number(name: &str) -> Option<i64> {
     let rest = name.strip_prefix('#')?;
-    let (prefix, digits) = if let Some(d) = rest.strip_prefix('x').or_else(|| rest.strip_prefix('X')) {
-        (16, d)
-    } else if let Some(d) = rest.strip_prefix('o').or_else(|| rest.strip_prefix('O')) {
-        (8, d)
-    } else if let Some(d) = rest.strip_prefix('b').or_else(|| rest.strip_prefix('B')) {
-        (2, d)
-    } else {
-        return None;
-    };
+    let (prefix, digits) =
+        if let Some(d) = rest.strip_prefix('x').or_else(|| rest.strip_prefix('X')) {
+            (16, d)
+        } else if let Some(d) = rest.strip_prefix('o').or_else(|| rest.strip_prefix('O')) {
+            (8, d)
+        } else if let Some(d) = rest.strip_prefix('b').or_else(|| rest.strip_prefix('B')) {
+            (2, d)
+        } else {
+            return None;
+        };
     if digits.is_empty() {
         return None;
     }
@@ -808,7 +809,10 @@ impl SurfaceExtractor<'_> {
             SyntaxKind::Symbol => SurfaceAtom::symbol(text),
             SyntaxKind::Int => {
                 // Text may be a #x/#o/#b literal that doesn't parse directly.
-                let value = text.parse::<i64>().ok().or_else(|| try_parse_hash_number(text))?;
+                let value = text
+                    .parse::<i64>()
+                    .ok()
+                    .or_else(|| try_parse_hash_number(text))?;
                 SurfaceAtom::Int(value)
             }
             SyntaxKind::Float => SurfaceAtom::Float(text.parse().ok()?),
@@ -1035,7 +1039,7 @@ mod tests {
     fn reads_escaped_symbols() {
         // `\,` in elisp is the symbol named ","
         // `'\,` is the quoted symbol ","
-        let output = read("'\\,");  // Rust raw string: ' \ ,
+        let output = read("'\\,"); // Rust raw string: ' \ ,
         assert_eq!(output.diagnostics, Vec::new());
         assert_eq!(output.forms.len(), 1);
     }

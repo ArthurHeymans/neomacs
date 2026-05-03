@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::diagnostic::Diagnostic;
-use crate::expand_value::{surface_to_value, MacroValue};
+use crate::expand_value::{MacroValue, surface_to_value};
 use crate::source::Span;
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
@@ -35,8 +35,12 @@ impl MacroEnv {
     /// Restore a binding to a previously saved value, or remove it if it was unbound.
     pub fn restore(&mut self, name: String, saved: Option<MacroValue>) {
         match saved {
-            Some(v) => { self.bindings.insert(name, v); }
-            None => { self.bindings.remove(&name); }
+            Some(v) => {
+                self.bindings.insert(name, v);
+            }
+            None => {
+                self.bindings.remove(&name);
+            }
         }
     }
 
@@ -76,11 +80,7 @@ impl MacroEval {
         Ok(result)
     }
 
-    pub fn eval(
-        &mut self,
-        form: &SurfaceForm,
-        env: &mut MacroEnv,
-    ) -> Result<MacroValue, ()> {
+    pub fn eval(&mut self, form: &SurfaceForm, env: &mut MacroEnv) -> Result<MacroValue, ()> {
         match &form.kind {
             SurfaceKind::Atom(atom) => Ok(self.eval_atom(atom, env)),
             SurfaceKind::List(items) => {
@@ -103,9 +103,7 @@ impl MacroEval {
                 );
                 Err(())
             }
-            SurfaceKind::DottedList(_, _) | SurfaceKind::Vector(_) => {
-                Ok(surface_to_value(form))
-            }
+            SurfaceKind::DottedList(_, _) | SurfaceKind::Vector(_) => Ok(surface_to_value(form)),
         }
     }
 
@@ -115,9 +113,10 @@ impl MacroEval {
             SurfaceAtom::True => MacroValue::Symbol("t".into()),
             SurfaceAtom::Int(n) => MacroValue::Int(*n),
             SurfaceAtom::Float(_) => MacroValue::Nil,
-            SurfaceAtom::Symbol(name) => {
-                env.lookup(name).cloned().unwrap_or(MacroValue::Symbol(name.clone()))
-            }
+            SurfaceAtom::Symbol(name) => env
+                .lookup(name)
+                .cloned()
+                .unwrap_or(MacroValue::Symbol(name.clone())),
             SurfaceAtom::String(s) => MacroValue::String(s.clone()),
             SurfaceAtom::Char(c) => MacroValue::Int(*c),
         }
@@ -169,28 +168,28 @@ impl MacroEval {
             Some("car") | Some("first") => {
                 self.eval_unary(span, "car", &items[1..], env, |v| v.car())
             }
-            Some("car-safe") => {
-                self.eval_unary(span, "car-safe", &items[1..], env, |v| {
-                    if v.is_cons() { v.car() } else { MacroValue::Nil }
-                })
-            }
+            Some("car-safe") => self.eval_unary(span, "car-safe", &items[1..], env, |v| {
+                if v.is_cons() {
+                    v.car()
+                } else {
+                    MacroValue::Nil
+                }
+            }),
             Some("cdr") | Some("rest") => {
                 self.eval_unary(span, "cdr", &items[1..], env, |v| v.cdr())
             }
-            Some("cdr-safe") => {
-                self.eval_unary(span, "cdr-safe", &items[1..], env, |v| {
-                    if v.is_cons() { v.cdr() } else { MacroValue::Nil }
-                })
-            }
-            Some("cadr") => {
-                self.eval_unary(span, "cadr", &items[1..], env, |v| v.cdr().car())
-            }
+            Some("cdr-safe") => self.eval_unary(span, "cdr-safe", &items[1..], env, |v| {
+                if v.is_cons() {
+                    v.cdr()
+                } else {
+                    MacroValue::Nil
+                }
+            }),
+            Some("cadr") => self.eval_unary(span, "cadr", &items[1..], env, |v| v.cdr().car()),
             Some("caddr") => {
                 self.eval_unary(span, "caddr", &items[1..], env, |v| v.cdr().cdr().car())
             }
-            Some("cddr") => {
-                self.eval_unary(span, "cddr", &items[1..], env, |v| v.cdr().cdr())
-            }
+            Some("cddr") => self.eval_unary(span, "cddr", &items[1..], env, |v| v.cdr().cdr()),
             Some("cons") => self.eval_binary(span, &items[1..], env, MacroValue::cons),
             Some("list") => {
                 let mut results = Vec::new();
@@ -246,9 +245,9 @@ impl MacroEval {
             Some("numberp") => self.eval_unary(span, "numberp", &items[1..], env, |v| {
                 MacroValue::from_bool(v.is_int())
             }),
-            Some("eq") | Some("eql") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
-                a.eq(b)
-            }),
+            Some("eq") | Some("eql") => {
+                self.eval_binary_pred(span, &items[1..], env, |a, b| a.eq(b))
+            }
             Some("equal") => self.eval_binary_pred(span, &items[1..], env, |a, b| a.equal(b)),
 
             Some("+") => self.eval_fold(span, &items[1..], env, 0i64, |a, b| a.wrapping_add(b)),
@@ -261,47 +260,31 @@ impl MacroEval {
             Some("<=") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a <= b),
             Some(">=") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a >= b),
 
-            Some("symbol-name") => {
-                self.eval_unary(span, "symbol-name", &items[1..], env, |v| {
-                    v.as_symbol_name()
-                        .map(|s| MacroValue::String(s.into()))
-                        .unwrap_or(MacroValue::Nil)
-                })
-            }
-            Some("intern") => {
-                self.eval_unary(span, "intern", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::String(s) => MacroValue::Symbol(s.clone()),
-                        other => other.clone(),
-                    }
-                })
-            }
+            Some("symbol-name") => self.eval_unary(span, "symbol-name", &items[1..], env, |v| {
+                v.as_symbol_name()
+                    .map(|s| MacroValue::String(s.into()))
+                    .unwrap_or(MacroValue::Nil)
+            }),
+            Some("intern") => self.eval_unary(span, "intern", &items[1..], env, |v| match v {
+                MacroValue::String(s) => MacroValue::Symbol(s.clone()),
+                other => other.clone(),
+            }),
             Some("make-symbol") => {
-                self.eval_unary(span, "make-symbol", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::String(s) => MacroValue::Symbol(format!(" {}", s)),
-                        other => other.clone(),
-                    }
+                self.eval_unary(span, "make-symbol", &items[1..], env, |v| match v {
+                    MacroValue::String(s) => MacroValue::Symbol(format!(" {}", s)),
+                    other => other.clone(),
                 })
             }
-            Some("downcase") => {
-                self.eval_unary(span, "downcase", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::String(s) => MacroValue::String(s.to_lowercase()),
-                        MacroValue::Symbol(s) => MacroValue::Symbol(s.to_lowercase()),
-                        other => other.clone(),
-                    }
-                })
-            }
-            Some("upcase") => {
-                self.eval_unary(span, "upcase", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::String(s) => MacroValue::String(s.to_uppercase()),
-                        MacroValue::Symbol(s) => MacroValue::Symbol(s.to_uppercase()),
-                        other => other.clone(),
-                    }
-                })
-            }
+            Some("downcase") => self.eval_unary(span, "downcase", &items[1..], env, |v| match v {
+                MacroValue::String(s) => MacroValue::String(s.to_lowercase()),
+                MacroValue::Symbol(s) => MacroValue::Symbol(s.to_lowercase()),
+                other => other.clone(),
+            }),
+            Some("upcase") => self.eval_unary(span, "upcase", &items[1..], env, |v| match v {
+                MacroValue::String(s) => MacroValue::String(s.to_uppercase()),
+                MacroValue::Symbol(s) => MacroValue::Symbol(s.to_uppercase()),
+                other => other.clone(),
+            }),
             Some("concat") => self.eval_concat(span, &items[1..], env),
             Some("substring") => self.eval_substring(span, &items[1..], env),
             Some("string=") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
@@ -369,44 +352,38 @@ impl MacroEval {
                 Ok(MacroValue::Nil)
             }
 
-            Some("keywordp") => {
-                self.eval_unary(span, "keywordp", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::Symbol(s) => MacroValue::from_bool(s.starts_with(':')),
-                        _ => MacroValue::from_bool(false),
-                    }
-                })
-            }
+            Some("keywordp") => self.eval_unary(span, "keywordp", &items[1..], env, |v| match v {
+                MacroValue::Symbol(s) => MacroValue::from_bool(s.starts_with(':')),
+                _ => MacroValue::from_bool(false),
+            }),
 
-            Some("evenp") => {
-                self.eval_unary(span, "evenp", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::Int(n) => MacroValue::from_bool(n % 2 == 0),
-                        _ => MacroValue::from_bool(false),
-                    }
-                })
-            }
+            Some("evenp") => self.eval_unary(span, "evenp", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::from_bool(n % 2 == 0),
+                _ => MacroValue::from_bool(false),
+            }),
 
-            Some("zerop") => {
-                self.eval_unary(span, "zerop", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::Int(n) => MacroValue::from_bool(n == 0),
-                        _ => MacroValue::from_bool(false),
-                    }
-                })
-            }
+            Some("zerop") => self.eval_unary(span, "zerop", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::from_bool(n == 0),
+                _ => MacroValue::from_bool(false),
+            }),
 
             Some("capitalize") => {
-                self.eval_unary(span, "capitalize", &items[1..], env, |v| {
-                    match v {
-                        MacroValue::String(s) => {
-                            let cap: String = s.chars().enumerate().map(|(i, c)| {
-                                if i == 0 { c.to_uppercase().to_string() } else { c.to_lowercase().to_string() }
-                            }).collect();
-                            MacroValue::String(cap)
-                        }
-                        other => other.clone(),
+                self.eval_unary(span, "capitalize", &items[1..], env, |v| match v {
+                    MacroValue::String(s) => {
+                        let cap: String = s
+                            .chars()
+                            .enumerate()
+                            .map(|(i, c)| {
+                                if i == 0 {
+                                    c.to_uppercase().to_string()
+                                } else {
+                                    c.to_lowercase().to_string()
+                                }
+                            })
+                            .collect();
+                        MacroValue::String(cap)
                     }
+                    other => other.clone(),
                 })
             }
 
@@ -475,7 +452,8 @@ impl MacroEval {
                             _ => {}
                         }
                     }
-                    let saved: Vec<(String, Option<MacroValue>)> = bound_names.iter()
+                    let saved: Vec<(String, Option<MacroValue>)> = bound_names
+                        .iter()
                         .map(|n| (n.clone(), env.save(n)))
                         .collect();
                     let result = self.eval_progn(&items[2..], env);
@@ -489,14 +467,12 @@ impl MacroEval {
             }
 
             Some("nreverse") => {
-                self.eval_unary(span, "nreverse", &items[1..], env, |v| {
-                    match v.to_vec() {
-                        Some(mut vals) => {
-                            vals.reverse();
-                            MacroValue::list(vals)
-                        }
-                        None => MacroValue::Nil,
+                self.eval_unary(span, "nreverse", &items[1..], env, |v| match v.to_vec() {
+                    Some(mut vals) => {
+                        vals.reverse();
+                        MacroValue::list(vals)
                     }
+                    None => MacroValue::Nil,
                 })
             }
 
@@ -512,7 +488,7 @@ impl MacroEval {
                             let pattern = &parts[0];
                             let matches = match &pattern.kind {
                                 crate::surface::SurfaceKind::Atom(
-                                    crate::surface::SurfaceAtom::Symbol(s)
+                                    crate::surface::SurfaceAtom::Symbol(s),
                                 ) if s == "_" => true,
                                 crate::surface::SurfaceKind::Quote(q) => {
                                     let qval = surface_to_value(q);
@@ -655,7 +631,12 @@ impl MacroEval {
                         let list_items = seq.to_vec().unwrap_or_default();
                         let mut results = Vec::new();
                         for item in &list_items {
-                            results.push(self.call_function(span, &func_val, &[item.clone()], env)?);
+                            results.push(self.call_function(
+                                span,
+                                &func_val,
+                                &[item.clone()],
+                                env,
+                            )?);
                         }
                         Ok(MacroValue::list(results))
                     }
@@ -849,7 +830,12 @@ impl MacroEval {
                 // Store as a list (lambda (params...) body...) so it can be passed around
                 let mut parts = vec![
                     MacroValue::Symbol("lambda".into()),
-                    MacroValue::list(params.iter().map(|s| MacroValue::Symbol(s.clone())).collect()),
+                    MacroValue::list(
+                        params
+                            .iter()
+                            .map(|s| MacroValue::Symbol(s.clone()))
+                            .collect(),
+                    ),
                 ];
                 for b in &body {
                     parts.push(surface_to_value(b));
@@ -863,7 +849,10 @@ impl MacroEval {
                     return Ok(MacroValue::Nil);
                 }
                 let func_val = self.eval(&items[1], env)?;
-                let args: Vec<MacroValue> = items[2..].iter().map(|a| self.eval(a, env)).collect::<Result<Vec<_>, _>>()?;
+                let args: Vec<MacroValue> = items[2..]
+                    .iter()
+                    .map(|a| self.eval(a, env))
+                    .collect::<Result<Vec<_>, _>>()?;
                 self.call_function(span, &func_val, &args, env)
             }
 
@@ -1116,10 +1105,13 @@ impl MacroEval {
             }
 
             _ => {
-                self.error(span, format!(
-                    "cannot evaluate '{}' at macro expansion time",
-                    head.unwrap_or("?")
-                ));
+                self.error(
+                    span,
+                    format!(
+                        "cannot evaluate '{}' at macro expansion time",
+                        head.unwrap_or("?")
+                    ),
+                );
                 Err(())
             }
         }
@@ -1171,11 +1163,7 @@ impl MacroEval {
         Ok(MacroValue::Nil)
     }
 
-    fn eval_and(
-        &mut self,
-        forms: &[SurfaceForm],
-        env: &mut MacroEnv,
-    ) -> Result<MacroValue, ()> {
+    fn eval_and(&mut self, forms: &[SurfaceForm], env: &mut MacroEnv) -> Result<MacroValue, ()> {
         let mut result = MacroValue::Symbol("t".into());
         for form in forms {
             result = self.eval(form, env)?;
@@ -1186,11 +1174,7 @@ impl MacroEval {
         Ok(result)
     }
 
-    fn eval_or(
-        &mut self,
-        forms: &[SurfaceForm],
-        env: &mut MacroEnv,
-    ) -> Result<MacroValue, ()> {
+    fn eval_or(&mut self, forms: &[SurfaceForm], env: &mut MacroEnv) -> Result<MacroValue, ()> {
         for form in forms {
             let result = self.eval(form, env)?;
             if result.is_truthy() {
@@ -1244,10 +1228,7 @@ impl MacroEval {
         result
     }
 
-    fn parse_let_bindings(
-        &mut self,
-        form: &SurfaceForm,
-    ) -> Result<Vec<(String, SurfaceForm)>, ()> {
+    fn parse_let_bindings(&mut self, form: &SurfaceForm) -> Result<Vec<(String, SurfaceForm)>, ()> {
         match &form.kind {
             SurfaceKind::List(items) => {
                 let mut bindings = Vec::new();
@@ -1263,10 +1244,7 @@ impl MacroEval {
         }
     }
 
-    fn parse_let_binding(
-        &mut self,
-        form: &SurfaceForm,
-    ) -> Result<(String, SurfaceForm), ()> {
+    fn parse_let_binding(&mut self, form: &SurfaceForm) -> Result<(String, SurfaceForm), ()> {
         match &form.kind {
             SurfaceKind::List(items) if items.len() >= 2 => {
                 let name = items[0].symbol_name().ok_or_else(|| {
@@ -1278,17 +1256,17 @@ impl MacroEval {
                 let name = items[0].symbol_name().ok_or_else(|| {
                     self.error(items[0].span, "binding name must be a symbol");
                 })?;
-                Ok((name.to_string(), SurfaceForm::new(
-                    SurfaceKind::Atom(SurfaceAtom::Nil),
-                    form.span,
-                )))
+                Ok((
+                    name.to_string(),
+                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Nil), form.span),
+                ))
             }
             SurfaceKind::Atom(_) => {
                 if let Some(name) = form.symbol_name() {
-                    Ok((name.to_string(), SurfaceForm::new(
-                        SurfaceKind::Atom(SurfaceAtom::Nil),
-                        form.span,
-                    )))
+                    Ok((
+                        name.to_string(),
+                        SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Nil), form.span),
+                    ))
                 } else {
                     self.error(form.span, "binding must be a symbol or (symbol value) list");
                     Err(())
@@ -1673,7 +1651,8 @@ impl MacroEval {
                     }
                     Some('d') => {
                         if arg_idx < format_args.len() {
-                            result.push_str(&format_args[arg_idx].as_int().unwrap_or(0).to_string());
+                            result
+                                .push_str(&format_args[arg_idx].as_int().unwrap_or(0).to_string());
                             arg_idx += 1;
                         }
                     }
@@ -1791,7 +1770,10 @@ impl MacroEval {
         }
         // Try lambda value
         if let Some((params, body_forms)) = extract_lambda(func_val) {
-            let func = MacroFunction { params, body: body_forms };
+            let func = MacroFunction {
+                params,
+                body: body_forms,
+            };
             return self.call_macro_function(&func, args, env);
         }
         // Unknown function — return nil
@@ -1804,7 +1786,9 @@ impl MacroEval {
         args: &[MacroValue],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {
-        let saved: Vec<(String, Option<MacroValue>)> = func.params.iter()
+        let saved: Vec<(String, Option<MacroValue>)> = func
+            .params
+            .iter()
             .map(|p| (p.clone(), env.save(p)))
             .collect();
         for (i, param) in func.params.iter().enumerate() {
@@ -1844,9 +1828,10 @@ fn format_value_as_string(val: &MacroValue) -> String {
 
 fn parse_lambda_params(form: &SurfaceForm) -> Vec<String> {
     match &form.kind {
-        SurfaceKind::List(items) => {
-            items.iter().filter_map(|f| f.symbol_name().map(|s| s.to_string())).collect()
-        }
+        SurfaceKind::List(items) => items
+            .iter()
+            .filter_map(|f| f.symbol_name().map(|s| s.to_string()))
+            .collect(),
         SurfaceKind::Atom(SurfaceAtom::Nil) => Vec::new(),
         _ => Vec::new(),
     }
@@ -1860,11 +1845,14 @@ fn extract_lambda(val: &MacroValue) -> Option<(Vec<String>, Vec<SurfaceForm>)> {
     if items[0] != MacroValue::Symbol("lambda".into()) {
         return None;
     }
-    let params: Vec<String> = items.get(1)?.to_vec()?
+    let params: Vec<String> = items
+        .get(1)?
+        .to_vec()?
         .into_iter()
         .filter_map(|v| v.as_symbol_name().map(|s| s.to_string()))
         .collect();
-    let body: Vec<SurfaceForm> = items[2..].iter()
+    let body: Vec<SurfaceForm> = items[2..]
+        .iter()
         .filter_map(|v| value_to_surface_form(v))
         .collect();
     if body.is_empty() {
@@ -1894,7 +1882,10 @@ fn append_values(values: &[MacroValue]) -> MacroValue {
     }
     let mut result = MacroValue::Nil;
     for item in all_elements.into_iter().rev() {
-        result = MacroValue::Cons(Rc::new(crate::expand_value::MacroCons { car: item, cdr: result }));
+        result = MacroValue::Cons(Rc::new(crate::expand_value::MacroCons {
+            car: item,
+            cdr: result,
+        }));
     }
     result
 }
@@ -2077,12 +2068,19 @@ mod tests {
         // Define add1 as a named function in the env
         let body_src = SourceFile::new(SourceId::new(0), Some("test.el".into()), "(+ x 1)".into());
         let body_output = crate::reader::read_source(&body_src);
-        env.define_function("add1".into(), MacroFunction {
-            params: vec!["x".into()],
-            body: body_output.forms,
-        });
+        env.define_function(
+            "add1".into(),
+            MacroFunction {
+                params: vec!["x".into()],
+                body: body_output.forms,
+            },
+        );
         // Call (funcall 'add1 10)
-        let call_src = SourceFile::new(SourceId::new(0), Some("test.el".into()), "(funcall 'add1 10)".into());
+        let call_src = SourceFile::new(
+            SourceId::new(0),
+            Some("test.el".into()),
+            "(funcall 'add1 10)".into(),
+        );
         let call_output = crate::reader::read_source(&call_src);
         let result = eval.eval(&call_output.forms[0], &mut env).unwrap();
         assert_eq!(result, MacroValue::Int(11));

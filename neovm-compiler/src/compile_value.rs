@@ -48,12 +48,8 @@ impl CompileValue {
             (CompileValue::String(a), CompileValue::String(b)) => a == b,
             // Cons and Vector: use pointer identity (raw address comparison).
             // Since Box/Vec are unique, self == other only if they are the same allocation.
-            (CompileValue::Cons { .. }, CompileValue::Cons { .. }) => {
-                std::ptr::eq(self, other)
-            }
-            (CompileValue::Vector(_), CompileValue::Vector(_)) => {
-                std::ptr::eq(self, other)
-            }
+            (CompileValue::Cons { .. }, CompileValue::Cons { .. }) => std::ptr::eq(self, other),
+            (CompileValue::Vector(_), CompileValue::Vector(_)) => std::ptr::eq(self, other),
             _ => false,
         }
     }
@@ -64,12 +60,18 @@ impl CompileValue {
             return true;
         }
         match (self, other) {
-            (CompileValue::Cons { car: a_car, cdr: a_cdr }, CompileValue::Cons { car: b_car, cdr: b_cdr }) => {
-                a_car.equal(b_car) && a_cdr.equal(b_cdr)
-            }
+            (
+                CompileValue::Cons {
+                    car: a_car,
+                    cdr: a_cdr,
+                },
+                CompileValue::Cons {
+                    car: b_car,
+                    cdr: b_cdr,
+                },
+            ) => a_car.equal(b_car) && a_cdr.equal(b_cdr),
             (CompileValue::Vector(a), CompileValue::Vector(b)) => {
-                a.len() == b.len()
-                    && a.iter().zip(b.iter()).all(|(l, r)| l.equal(r))
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(l, r)| l.equal(r))
             }
             _ => false,
         }
@@ -176,7 +178,10 @@ impl CompileValue {
                 cdr: Box::new(CompileValue::from_macro_value(&pair.cdr)),
             },
             MacroValue::Vector(items) => CompileValue::Vector(
-                items.iter().map(|v| CompileValue::from_macro_value(v)).collect(),
+                items
+                    .iter()
+                    .map(|v| CompileValue::from_macro_value(v))
+                    .collect(),
             ),
         }
     }
@@ -194,11 +199,9 @@ impl CompileValue {
             CompileValue::Cons { car, cdr } => {
                 MacroValue::cons(car.to_macro_value(), cdr.to_macro_value())
             }
-            CompileValue::Vector(v) => {
-                MacroValue::Vector(std::rc::Rc::new(
-                    v.iter().map(|cv| cv.to_macro_value()).collect(),
-                ))
-            }
+            CompileValue::Vector(v) => MacroValue::Vector(std::rc::Rc::new(
+                v.iter().map(|cv| cv.to_macro_value()).collect(),
+            )),
         }
     }
 }

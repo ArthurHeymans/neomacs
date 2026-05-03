@@ -55,8 +55,7 @@ pub struct JitCompileOutput {
 }
 
 pub fn compile_ssa_to_jit(ssa: &SsaModule) -> JitCompileOutput {
-    let builder = JITBuilder::new(default_libcall_names())
-        .expect("failed to create JITBuilder");
+    let builder = JITBuilder::new(default_libcall_names()).expect("failed to create JITBuilder");
     compile_ssa_to_jit_with_builder(ssa, builder)
 }
 
@@ -64,7 +63,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let mut diagnostics = Vec::new();
 
     let entry_arity = ssa.entry.map_or(0, |id| {
-        ssa.functions.get(id)
+        ssa.functions
+            .get(id)
             .map(|f| f.lambda_list.required.len())
             .unwrap_or(0)
     });
@@ -78,7 +78,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     // condition-case/unwind-protect (which require interpreter fallback for signal dispatch).
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
-            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty()
+            if func.lambda_list.rest.is_none()
+                && func.lambda_list.optional.is_empty()
                 && !has_unsupported_nonlocal_flow(func)
             {
                 let arity = func.lambda_list.required.len();

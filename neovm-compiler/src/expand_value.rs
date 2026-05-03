@@ -86,10 +86,7 @@ impl MacroValue {
                 a.car.equal(&b.car) && a.cdr.equal(&b.cdr)
             }
             (MacroValue::Vector(a), MacroValue::Vector(b)) => {
-                a.len() == b.len()
-                    && a.iter()
-                        .zip(b.iter())
-                        .all(|(l, r)| l.equal(r))
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(l, r)| l.equal(r))
             }
             _ => false,
         }
@@ -312,9 +309,7 @@ impl MacroValue {
 pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
     match &form.kind {
         SurfaceKind::Atom(atom) => atom_to_value(atom),
-        SurfaceKind::List(items) => {
-            MacroValue::list(items.iter().map(surface_to_value).collect())
-        }
+        SurfaceKind::List(items) => MacroValue::list(items.iter().map(surface_to_value).collect()),
         SurfaceKind::DottedList(items, tail) => {
             let mut result = surface_to_value(tail);
             for item in items.iter().rev() {
@@ -325,36 +320,26 @@ pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
         SurfaceKind::Vector(items) => {
             MacroValue::Vector(Rc::new(items.iter().map(surface_to_value).collect()))
         }
-        SurfaceKind::Quote(inner) => {
-            MacroValue::list(vec![
-                MacroValue::Symbol("quote".into()),
-                surface_to_value(inner),
-            ])
-        }
-        SurfaceKind::FunctionQuote(inner) => {
-            MacroValue::list(vec![
-                MacroValue::Symbol("function".into()),
-                surface_to_value(inner),
-            ])
-        }
-        SurfaceKind::Backquote(inner) => {
-            MacroValue::list(vec![
-                MacroValue::Symbol("backquote".into()),
-                surface_to_value(inner),
-            ])
-        }
-        SurfaceKind::Comma(inner) => {
-            MacroValue::list(vec![
-                MacroValue::Symbol("unquote".into()),
-                surface_to_value(inner),
-            ])
-        }
-        SurfaceKind::CommaAt(inner) => {
-            MacroValue::list(vec![
-                MacroValue::Symbol("splice-unquote".into()),
-                surface_to_value(inner),
-            ])
-        }
+        SurfaceKind::Quote(inner) => MacroValue::list(vec![
+            MacroValue::Symbol("quote".into()),
+            surface_to_value(inner),
+        ]),
+        SurfaceKind::FunctionQuote(inner) => MacroValue::list(vec![
+            MacroValue::Symbol("function".into()),
+            surface_to_value(inner),
+        ]),
+        SurfaceKind::Backquote(inner) => MacroValue::list(vec![
+            MacroValue::Symbol("backquote".into()),
+            surface_to_value(inner),
+        ]),
+        SurfaceKind::Comma(inner) => MacroValue::list(vec![
+            MacroValue::Symbol("unquote".into()),
+            surface_to_value(inner),
+        ]),
+        SurfaceKind::CommaAt(inner) => MacroValue::list(vec![
+            MacroValue::Symbol("splice-unquote".into()),
+            surface_to_value(inner),
+        ]),
     }
 }
 
@@ -405,8 +390,7 @@ pub fn value_to_surface(value: &MacroValue, span: Span) -> SurfaceForm {
             }
         }
         MacroValue::Vector(items) => {
-            let forms: Vec<SurfaceForm> =
-                items.iter().map(|v| value_to_surface(v, span)).collect();
+            let forms: Vec<SurfaceForm> = items.iter().map(|v| value_to_surface(v, span)).collect();
             SurfaceForm::new(SurfaceKind::Vector(forms), span)
         }
     }
@@ -430,7 +414,10 @@ mod tests {
     }
 
     fn str_form(s: &str) -> SurfaceForm {
-        SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::String(s.into())), test_span())
+        SurfaceForm::new(
+            SurfaceKind::Atom(SurfaceAtom::String(s.into())),
+            test_span(),
+        )
     }
 
     fn nil_form() -> SurfaceForm {
@@ -444,12 +431,7 @@ mod tests {
     #[test]
     fn atom_round_trips() {
         let span = test_span();
-        let cases: Vec<SurfaceForm> = vec![
-            nil_form(),
-            int_form(42),
-            sym("foo"),
-            str_form("hello"),
-        ];
+        let cases: Vec<SurfaceForm> = vec![nil_form(), int_form(42), sym("foo"), str_form("hello")];
         for form in &cases {
             let value = surface_to_value(form);
             let back = value_to_surface(&value, span);
@@ -492,10 +474,7 @@ mod tests {
     #[test]
     fn vector_round_trips() {
         let span = test_span();
-        let form = SurfaceForm::new(
-            SurfaceKind::Vector(vec![int_form(1), sym("x")]),
-            span,
-        );
+        let form = SurfaceForm::new(SurfaceKind::Vector(vec![int_form(1), sym("x")]), span);
         let value = surface_to_value(&form);
         let back = value_to_surface(&value, span);
         assert_eq!(back, form);
@@ -539,9 +518,9 @@ mod tests {
     fn eq_on_cons_is_pointer_identity() {
         let a = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
         let b = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
-        assert!(a.eq(&a));           // same object
-        assert!(a.equal(&b));        // equal structure
-        assert!(!a.eq(&b));           // different allocation → not eq
+        assert!(a.eq(&a)); // same object
+        assert!(a.equal(&b)); // equal structure
+        assert!(!a.eq(&b)); // different allocation → not eq
     }
 
     #[test]
@@ -555,8 +534,8 @@ mod tests {
     fn equal_on_vectors_is_deep() {
         let a = MacroValue::Vector(Rc::new(vec![MacroValue::Int(1), MacroValue::Int(2)]));
         let b = MacroValue::Vector(Rc::new(vec![MacroValue::Int(1), MacroValue::Int(2)]));
-        assert!(!a.eq(&b));          // different allocation
-        assert!(a.equal(&b));        // equal content
+        assert!(!a.eq(&b)); // different allocation
+        assert!(a.equal(&b)); // equal content
     }
 
     #[test]
@@ -565,8 +544,8 @@ mod tests {
         let inner_b = MacroValue::cons(MacroValue::Int(1), MacroValue::Nil);
         let outer_a = MacroValue::cons(MacroValue::Symbol("x".into()), inner_a);
         let outer_b = MacroValue::cons(MacroValue::Symbol("x".into()), inner_b);
-        assert!(!outer_a.eq(&outer_b));           // different allocation
-        assert!(outer_a.equal(&outer_b));         // deep structural equality
+        assert!(!outer_a.eq(&outer_b)); // different allocation
+        assert!(outer_a.equal(&outer_b)); // deep structural equality
     }
 
     #[test]

@@ -117,12 +117,25 @@ pub(crate) fn execute_module_function(
     };
     let mut fuel = 100_000usize;
     let adapted = adapt_lambda_args_standalone(&function.lambda_list, args, runtime)?;
-    let result = execute_with_module(function, &adapted, module, functions_by_name, runtime, &mut fuel);
+    let result = execute_with_module(
+        function,
+        &adapted,
+        module,
+        functions_by_name,
+        runtime,
+        &mut fuel,
+    );
     if let Some(thrown) = result.thrown {
-        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
+        return Some(crate::jit_rt::bridge_interpreter_throw(
+            thrown.tag,
+            thrown.value,
+        ));
     }
     if let Some(signaled) = result.signaled {
-        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
+        return Some(crate::jit_rt::bridge_interpreter_signal(
+            signaled.symbol,
+            signaled.data,
+        ));
     }
     result.value
 }
@@ -165,10 +178,16 @@ pub(crate) fn execute_function_object_direct(
         &mut fuel,
     );
     if let Some(thrown) = result.thrown {
-        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
+        return Some(crate::jit_rt::bridge_interpreter_throw(
+            thrown.tag,
+            thrown.value,
+        ));
     }
     if let Some(signaled) = result.signaled {
-        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
+        return Some(crate::jit_rt::bridge_interpreter_signal(
+            signaled.symbol,
+            signaled.data,
+        ));
     }
     result.value
 }
@@ -213,10 +232,16 @@ pub(crate) fn execute_interpreter_primitive(
     };
     let result = interp.execute_primitive_call(name, args).flatten();
     if let Some(thrown) = interp.pending_throw.take() {
-        return Some(crate::jit_rt::bridge_interpreter_throw(thrown.tag, thrown.value));
+        return Some(crate::jit_rt::bridge_interpreter_throw(
+            thrown.tag,
+            thrown.value,
+        ));
     }
     if let Some(signaled) = interp.pending_signal.take() {
-        return Some(crate::jit_rt::bridge_interpreter_signal(signaled.symbol, signaled.data));
+        return Some(crate::jit_rt::bridge_interpreter_signal(
+            signaled.symbol,
+            signaled.data,
+        ));
     }
     result
 }
@@ -227,11 +252,20 @@ fn adapt_lambda_args_standalone(
     runtime: &mut Runtime,
 ) -> Option<Vec<LispValue>> {
     if args.len() < lambda_list.min_arity() {
-        eprintln!("JIT: function requires at least {} args, got {}", lambda_list.min_arity(), args.len());
+        eprintln!(
+            "JIT: function requires at least {} args, got {}",
+            lambda_list.min_arity(),
+            args.len()
+        );
         return None;
     }
-    if let Some(max) = lambda_list.max_arity() && args.len() > max {
-        eprintln!("JIT: function requires at most {max} args, got {}", args.len());
+    if let Some(max) = lambda_list.max_arity()
+        && args.len() > max
+    {
+        eprintln!(
+            "JIT: function requires at most {max} args, got {}",
+            args.len()
+        );
         return None;
     }
     let mut adapted = Vec::with_capacity(lambda_list.entry_arity());
@@ -445,11 +479,13 @@ impl Interpreter<'_, '_, '_> {
                     // Get the result reg from the ConditionCaseEnd instruction, not
                     // from the failing instruction. The ConditionCaseEnd's dst is
                     // where the merged body/handler result should go.
-                    let cc_end_reg = body.instructions.get(active.condition_end_index)
-                        .and_then(|inst| match &inst.kind {
-                            RegInstKind::ConditionCaseEnd { dst, .. } => Some(*dst),
-                            _ => None,
-                        });
+                    let cc_end_reg =
+                        body.instructions
+                            .get(active.condition_end_index)
+                            .and_then(|inst| match &inst.kind {
+                                RegInstKind::ConditionCaseEnd { dst, .. } => Some(*dst),
+                                _ => None,
+                            });
                     let result_reg = cc_end_reg.or(active.result_reg);
                     let Some(value) = self.complete_condition_handler(active) else {
                         return self.finish(None);
@@ -747,7 +783,8 @@ impl Interpreter<'_, '_, '_> {
                 // On the normal path (no signal), use the body result register.
                 // On the signal path, the handler ran and last_value has its result.
                 let value = if let Some(src) = body_result {
-                    self.get(*src).unwrap_or_else(|| self.last_value.unwrap_or(LispValue::NIL))
+                    self.get(*src)
+                        .unwrap_or_else(|| self.last_value.unwrap_or(LispValue::NIL))
                 } else {
                     self.last_value.unwrap_or(LispValue::NIL)
                 };
@@ -1075,7 +1112,10 @@ impl Interpreter<'_, '_, '_> {
             "make-symbol" => self.exact_arity(name, args, 1).and_then(|_| {
                 let arg_name = match self.runtime.string_contents(args[0]) {
                     Ok(n) => n.to_string(),
-                    Err(e) => { self.runtime_error(e); return None; }
+                    Err(e) => {
+                        self.runtime_error(e);
+                        return None;
+                    }
                 };
                 Some(self.runtime.make_symbol(&arg_name))
             }),
@@ -1083,23 +1123,45 @@ impl Interpreter<'_, '_, '_> {
                 if self.runtime.is_string(args[0]) {
                     let arg_name = match self.runtime.string_contents(args[0]) {
                         Ok(n) => n.to_string(),
-                        Err(e) => { self.runtime_error(e); return None; }
+                        Err(e) => {
+                            self.runtime_error(e);
+                            return None;
+                        }
                     };
-                    return Some(self.runtime.intern_soft(&arg_name).unwrap_or(LispValue::NIL));
+                    return Some(
+                        self.runtime
+                            .intern_soft(&arg_name)
+                            .unwrap_or(LispValue::NIL),
+                    );
                 }
                 if self.runtime.is_symbol(args[0]) {
                     let arg_name = match self.runtime.symbol_name(args[0]) {
                         Ok(n) => n.to_string(),
-                        Err(e) => { self.runtime_error(e); return None; }
+                        Err(e) => {
+                            self.runtime_error(e);
+                            return None;
+                        }
                     };
-                    return Some(self.runtime.intern_soft(&arg_name).unwrap_or(LispValue::NIL));
+                    return Some(
+                        self.runtime
+                            .intern_soft(&arg_name)
+                            .unwrap_or(LispValue::NIL),
+                    );
                 }
                 Some(LispValue::NIL)
             }),
-            "elt" => self.exact_arity(name, args, 2).and_then(|_| self.elt(args[0], args[1])),
-            "downcase" => self.exact_arity(name, args, 1).map(|_| self.downcase(args[0])),
-            "upcase" => self.exact_arity(name, args, 1).map(|_| self.upcase(args[0])),
-            "capitalize" => self.exact_arity(name, args, 1).map(|_| self.capitalize(args[0])),
+            "elt" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.elt(args[0], args[1])),
+            "downcase" => self
+                .exact_arity(name, args, 1)
+                .map(|_| self.downcase(args[0])),
+            "upcase" => self
+                .exact_arity(name, args, 1)
+                .map(|_| self.upcase(args[0])),
+            "capitalize" => self
+                .exact_arity(name, args, 1)
+                .map(|_| self.capitalize(args[0])),
             "keywordp" => self.exact_arity(name, args, 1).map(|_| {
                 let is_keyword = self.runtime.is_symbol(args[0])
                     && match self.runtime.symbol_name(args[0]) {
@@ -1112,11 +1174,14 @@ impl Interpreter<'_, '_, '_> {
                 let val = self.fixnum_arg(name, args[0])?;
                 Some(bool_value(val % 2 == 0))
             }),
-            "butlast" => self.min_max_arity(name, args, 1, 2)
+            "butlast" => self
+                .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.butlast(args[0], args.get(1).copied())),
-            "delq" => self.exact_arity(name, args, 2)
+            "delq" => self
+                .exact_arity(name, args, 2)
                 .and_then(|_| self.delq(args[0], args[1])),
-            "remove" => self.exact_arity(name, args, 2)
+            "remove" => self
+                .exact_arity(name, args, 2)
                 .and_then(|_| self.remove(args[0], args[1])),
             "vconcat" => self.vconcat(args),
             "nconc" => self.nconc(args),
@@ -1124,7 +1189,8 @@ impl Interpreter<'_, '_, '_> {
                 let n = self.fixnum_arg(name, args[0])?;
                 Some(self.runtime.string(n.to_string()))
             }),
-            "string-to-number" => self.min_max_arity(name, args, 1, 2)
+            "string-to-number" => self
+                .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.string_to_number(args[0], args.get(1).copied())),
             "logand" | "logior" | "logxor" => {
                 if args.is_empty() {
@@ -1209,15 +1275,13 @@ impl Interpreter<'_, '_, '_> {
                 .min_arity(name, args, 1)
                 .and_then(|_| self.format_string(args[0], &args[1..])),
             "vector" => Some(self.runtime.vector(args.to_vec())),
-            "make-vector" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| {
-                    let len = args[0].as_fixnum()?;
-                    if len < 0 {
-                        return None;
-                    }
-                    Some(self.runtime.make_vector(len as usize, args[1]))
-                }),
+            "make-vector" => self.exact_arity(name, args, 2).and_then(|_| {
+                let len = args[0].as_fixnum()?;
+                if len < 0 {
+                    return None;
+                }
+                Some(self.runtime.make_vector(len as usize, args[1]))
+            }),
             "aref" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.aref(args[0], args[1])),
@@ -1455,34 +1519,28 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.cdr(cdr);
                 self.runtime_value(result)
             }),
-            "caaar" | "caadr" | "cadar" | "caddr"
-            | "cdaar" | "cdadr" | "cddar" | "cdddr"
-            | "caaaar" | "caaadr" | "caadar" | "caaddr"
-            | "cadaar" | "cadadr" | "caddar" | "cadddr"
-            | "cdaaar" | "cdaadr" | "cdadar" | "cdaddr"
-            | "cddaar" | "cddadr" | "cdddar" | "cddddr" => {
-                self.exact_arity(name, args, 1).and_then(|_| {
-                    let mut value = args[0];
-                    for ch in name[1..name.len() - 1].bytes().rev() {
-                        let result = if ch == b'a' {
-                            self.runtime.car(value)
-                        } else {
-                            self.runtime.cdr(value)
-                        };
-                        value = self.runtime_value(result)?;
-                    }
-                    Some(value)
-                })
-            }
+            "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
+            | "caaaar" | "caaadr" | "caadar" | "caaddr" | "cadaar" | "cadadr" | "caddar"
+            | "cadddr" | "cdaaar" | "cdaadr" | "cdadar" | "cdaddr" | "cddaar" | "cddadr"
+            | "cdddar" | "cddddr" => self.exact_arity(name, args, 1).and_then(|_| {
+                let mut value = args[0];
+                for ch in name[1..name.len() - 1].bytes().rev() {
+                    let result = if ch == b'a' {
+                        self.runtime.car(value)
+                    } else {
+                        self.runtime.cdr(value)
+                    };
+                    value = self.runtime_value(result)?;
+                }
+                Some(value)
+            }),
             "number-or-marker-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_fixnum())),
-            "floatp" => self
+            "floatp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "string-or-null-p" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(false)),
-            "string-or-null-p" => self.exact_arity(name, args, 1).map(|_| {
-                bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))
-            }),
+                .map(|_| bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))),
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
@@ -1628,7 +1686,9 @@ impl Interpreter<'_, '_, '_> {
         // Pop skipped inner condition-case frames. Clamp to avoid over-popping
         // when inner handlers have already been activated (and thus already
         // popped their frames from condition_stack).
-        let actual_skip = target.frames_to_skip.min(self.condition_stack.len().saturating_sub(1));
+        let actual_skip = target
+            .frames_to_skip
+            .min(self.condition_stack.len().saturating_sub(1));
         for _ in 0..actual_skip {
             self.condition_stack.pop();
         }
@@ -1706,7 +1766,10 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
-    fn compile_value_to_lisp(&mut self, cv: &neovm_compiler::compile_value::CompileValue) -> Option<LispValue> {
+    fn compile_value_to_lisp(
+        &mut self,
+        cv: &neovm_compiler::compile_value::CompileValue,
+    ) -> Option<LispValue> {
         use neovm_compiler::compile_value::CompileValue;
         match cv {
             CompileValue::Nil => Some(LispValue::NIL),
@@ -2241,11 +2304,7 @@ impl Interpreter<'_, '_, '_> {
         value
     }
 
-    fn butlast(
-        &mut self,
-        list: LispValue,
-        n: Option<LispValue>,
-    ) -> Option<LispValue> {
+    fn butlast(&mut self, list: LispValue, n: Option<LispValue>) -> Option<LispValue> {
         let n = match n {
             Some(v) => {
                 let val = self.fixnum_arg("butlast", v)?;
@@ -2852,7 +2911,11 @@ impl Interpreter<'_, '_, '_> {
 
 /// Find the Nth CatchEnd instruction (at the outermost nesting level) starting
 /// from `start_index`. `depth` is the number of CatchEnds to skip through.
-fn find_catch_end_at_depth(instructions: &[RegInst], start_index: usize, mut depth: usize) -> Option<usize> {
+fn find_catch_end_at_depth(
+    instructions: &[RegInst],
+    start_index: usize,
+    mut depth: usize,
+) -> Option<usize> {
     let mut nesting = 0usize;
     for (index, inst) in instructions.iter().enumerate().skip(start_index + 1) {
         match &inst.kind {
@@ -3139,13 +3202,34 @@ fn is_primitive_name(name: &str) -> bool {
             | "max"
             | "min"
             | "type-of"
-            | "cadr" | "caar" | "cdar" | "cddr"
-            | "caaar" | "caadr" | "cadar" | "caddr"
-            | "cdaar" | "cdadr" | "cddar" | "cdddr"
-            | "caaaar" | "caaadr" | "caadar" | "caaddr"
-            | "cadaar" | "cadadr" | "caddar" | "cadddr"
-            | "cdaaar" | "cdaadr" | "cdadar" | "cdaddr"
-            | "cddaar" | "cddadr" | "cdddar" | "cddddr"
+            | "cadr"
+            | "caar"
+            | "cdar"
+            | "cddr"
+            | "caaar"
+            | "caadr"
+            | "cadar"
+            | "caddr"
+            | "cdaar"
+            | "cdadr"
+            | "cddar"
+            | "cdddr"
+            | "caaaar"
+            | "caaadr"
+            | "caadar"
+            | "caaddr"
+            | "cadaar"
+            | "cadadr"
+            | "caddar"
+            | "cadddr"
+            | "cdaaar"
+            | "cdaadr"
+            | "cdadar"
+            | "cdaddr"
+            | "cddaar"
+            | "cddadr"
+            | "cdddar"
+            | "cddddr"
             | "number-or-marker-p"
             | "floatp"
             | "string-or-null-p"
@@ -3709,18 +3793,14 @@ mod tests {
 
     #[test]
     fn hash_hex_literal_execution() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(+ #x10 #o10 #b10)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(+ #x10 #o10 #b10)");
         // #x10 = 16, #o10 = 8, #b10 = 2 → 26
         assert_eq!(value, Some(LispValue::expect_fixnum(26)));
     }
 
     #[test]
     fn hash_hex_in_expression() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(let ((mask #xff)) (+ mask 1))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(let ((mask #xff)) (+ mask 1))");
         // #xff = 255, + 1 = 256
         assert_eq!(value, Some(LispValue::expect_fixnum(256)));
     }

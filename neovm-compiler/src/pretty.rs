@@ -265,12 +265,14 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::CatchBegin { tag } => {
             let _ = write!(out, "catch-begin {}", value_name(function, *tag));
         }
-        SsaInstKind::CatchEnd { body_result } => {
-            match body_result {
-                Some(v) => { let _ = write!(out, "catch-end body={}", value_name(function, *v)); }
-                None => { let _ = write!(out, "catch-end"); }
+        SsaInstKind::CatchEnd { body_result } => match body_result {
+            Some(v) => {
+                let _ = write!(out, "catch-end body={}", value_name(function, *v));
             }
-        }
+            None => {
+                let _ = write!(out, "catch-end");
+            }
+        },
         SsaInstKind::Throw { tag, value } => {
             let _ = write!(
                 out,
@@ -292,12 +294,14 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::ConditionCaseHandlerResult { value } => {
             let _ = write!(out, "condition-case-handler-result {}", value);
         }
-        SsaInstKind::ConditionCaseEnd { body_result } => {
-            match body_result {
-                Some(v) => { let _ = write!(out, "condition-case-end body={}", value_name(function, *v)); }
-                None => { let _ = write!(out, "condition-case-end"); }
+        SsaInstKind::ConditionCaseEnd { body_result } => match body_result {
+            Some(v) => {
+                let _ = write!(out, "condition-case-end body={}", value_name(function, *v));
             }
-        }
+            None => {
+                let _ = write!(out, "condition-case-end");
+            }
+        },
         SsaInstKind::UnwindProtectBegin => {
             let _ = write!(out, "unwind-protect-begin");
         }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::diagnostic::Diagnostic;
 use crate::expand_eval::{MacroEnv, MacroEval};
-use crate::expand_value::{surface_to_value, value_to_surface, MacroValue};
+use crate::expand_value::{MacroValue, surface_to_value, value_to_surface};
 use crate::source::{SourceId, Span};
 use crate::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
 
@@ -146,10 +146,12 @@ impl Expander {
             }
         }
 
-        results.pop().unwrap_or_else(|| SurfaceForm::new(
-            SurfaceKind::Atom(SurfaceAtom::Nil),
-            Span::new(SourceId::new(0), 0, 0),
-        ))
+        results.pop().unwrap_or_else(|| {
+            SurfaceForm::new(
+                SurfaceKind::Atom(SurfaceAtom::Nil),
+                Span::new(SourceId::new(0), 0, 0),
+            )
+        })
     }
 
     /// Expand a single list form (non-recursive: sub-forms are expanded
@@ -183,14 +185,18 @@ impl Expander {
                 if items.len() >= 3 {
                     // items[1] = ((pattern expr) ...), items[2..] = body
                     let bindings_form = &items[1];
-                    let body: Vec<SurfaceForm> = items[2..].iter().map(|f| self.expand_form(f.clone())).collect();
+                    let body: Vec<SurfaceForm> = items[2..]
+                        .iter()
+                        .map(|f| self.expand_form(f.clone()))
+                        .collect();
                     // Convert pcase bindings to let* bindings: ((pat expr) ...) -> ((sym expr) ...)
                     let simple_bindings = self.simplify_pcase_bindings(bindings_form);
                     let mut result = vec![symbol_form("let*", span), simple_bindings];
                     result.extend(body);
                     list_form(result, span)
                 } else {
-                    let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+                    let expanded: Vec<SurfaceForm> =
+                        items.into_iter().map(|f| self.expand_form(f)).collect();
                     SurfaceForm::new(SurfaceKind::List(expanded), span)
                 }
             }
@@ -198,9 +204,15 @@ impl Expander {
             "cl-with-gensyms" => {
                 if items.len() >= 3 {
                     let bindings = items[1].clone();
-                    let body: Vec<SurfaceForm> = items[2..].iter().map(|f| self.expand_form(f.clone())).collect();
+                    let body: Vec<SurfaceForm> = items[2..]
+                        .iter()
+                        .map(|f| self.expand_form(f.clone()))
+                        .collect();
                     list_form(
-                        vec![symbol_form("let", span), bindings.clone()].into_iter().chain(body).collect(),
+                        vec![symbol_form("let", span), bindings.clone()]
+                            .into_iter()
+                            .chain(body)
+                            .collect(),
                         span,
                     )
                 } else {
@@ -270,10 +282,11 @@ impl Expander {
                 break;
             };
             let expansion_span = form.span;
-            let expansion_items = match std::mem::replace(&mut form.kind, SurfaceKind::Atom(SurfaceAtom::Nil)) {
-                SurfaceKind::List(items) => items,
-                _ => unreachable!(),
-            };
+            let expansion_items =
+                match std::mem::replace(&mut form.kind, SurfaceKind::Atom(SurfaceAtom::Nil)) {
+                    SurfaceKind::List(items) => items,
+                    _ => unreachable!(),
+                };
             form = match self.invoke_macro(&next_def, &expansion_items[1..]) {
                 Some(expanded) => expanded,
                 None => {
@@ -322,13 +335,16 @@ impl Expander {
         for (index, name) in def.params.optional.iter().enumerate() {
             env.bind(
                 name.clone(),
-                arg_values.get(optional_start + index)
+                arg_values
+                    .get(optional_start + index)
                     .cloned()
                     .unwrap_or(MacroValue::Nil),
             );
         }
         if let Some(rest) = &def.params.rest {
-            let rest_start = arg_values.len().min(optional_start + def.params.optional.len());
+            let rest_start = arg_values
+                .len()
+                .min(optional_start + def.params.optional.len());
             env.bind(
                 rest.clone(),
                 MacroValue::list(arg_values[rest_start..].to_vec()),
@@ -354,12 +370,14 @@ impl Expander {
     fn expand_push(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         if items.len() != 3 {
             // Wrong arity — expand sub-forms, pass through
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let Some(place) = items[2].symbol_name().map(str::to_string) else {
             // Non-symbol place (e.g., list access) — expand sub-forms, pass through
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         };
         let value = items[1].clone();
@@ -384,12 +402,14 @@ impl Expander {
     fn expand_pop(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         if items.len() != 2 {
             // Wrong arity — expand sub-forms, pass through
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let Some(place) = items[1].symbol_name().map(str::to_string) else {
             // Non-symbol place — expand sub-forms, pass through
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         };
         let place_span = items[1].span;
@@ -437,12 +457,24 @@ impl Expander {
                     let pat = &binding_items[0];
                     let expr = &binding_items[1];
                     if let Some(name) = pat.symbol_name() {
-                        Some(list_form(vec![symbol_form(name, pat.span), expr.clone()], span))
+                        Some(list_form(
+                            vec![symbol_form(name, pat.span), expr.clone()],
+                            span,
+                        ))
                     } else {
-                        Some(list_form(vec![symbol_form("_", pat.span), expr.clone()], span))
+                        Some(list_form(
+                            vec![symbol_form("_", pat.span), expr.clone()],
+                            span,
+                        ))
                     }
                 } else if binding_items.len() == 1 {
-                    Some(list_form(vec![symbol_form("_", binding_items[0].span), binding_items[0].clone()], span))
+                    Some(list_form(
+                        vec![
+                            symbol_form("_", binding_items[0].span),
+                            binding_items[0].clone(),
+                        ],
+                        span,
+                    ))
                 } else {
                     None
                 }
@@ -628,7 +660,8 @@ impl Expander {
     fn expand_destructuring_bind(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         // (destructuring-bind pattern expr body...)
         if items.len() < 4 {
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let pattern = &items[1];
@@ -657,22 +690,41 @@ impl Expander {
                     if name == "nil" || name == "_" {
                         let mut forms = vec![expr];
                         forms.extend(body);
-                        return list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span);
+                        return list_form(
+                            vec![symbol_form("progn", span)]
+                                .into_iter()
+                                .chain(forms)
+                                .collect(),
+                            span,
+                        );
                     }
-                    let binding = list_form(vec![symbol_form(name, pattern.span), expr], pattern.span);
+                    let binding =
+                        list_form(vec![symbol_form(name, pattern.span), expr], pattern.span);
                     let mut result = vec![symbol_form("let", span), list_form(vec![binding], span)];
                     result.extend(body);
                     list_form(result, span)
                 } else {
                     let mut forms = vec![expr];
                     forms.extend(body);
-                    list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+                    list_form(
+                        vec![symbol_form("progn", span)]
+                            .into_iter()
+                            .chain(forms)
+                            .collect(),
+                        span,
+                    )
                 }
             }
             SurfaceKind::Quote(_) | SurfaceKind::FunctionQuote(_) => {
                 let mut forms = vec![expr];
                 forms.extend(body);
-                list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+                list_form(
+                    vec![symbol_form("progn", span)]
+                        .into_iter()
+                        .chain(forms)
+                        .collect(),
+                    span,
+                )
             }
             SurfaceKind::List(patterns) => {
                 self.destructure_list_pattern(patterns, expr, body, span, depth)
@@ -680,7 +732,13 @@ impl Expander {
             _ => {
                 let mut forms = vec![expr];
                 forms.extend(body);
-                list_form(vec![symbol_form("progn", span)].into_iter().chain(forms).collect(), span)
+                list_form(
+                    vec![symbol_form("progn", span)]
+                        .into_iter()
+                        .chain(forms)
+                        .collect(),
+                    span,
+                )
             }
         }
     }
@@ -702,13 +760,22 @@ impl Expander {
         let mut mode = 0;
         for pat in patterns {
             if let Some(name) = pat.symbol_name() {
-                if name == "&optional" { mode = 1; continue; }
-                if name == "&rest" { mode = 2; continue; }
+                if name == "&optional" {
+                    mode = 1;
+                    continue;
+                }
+                if name == "&rest" {
+                    mode = 2;
+                    continue;
+                }
             }
             match mode {
                 0 => required.push(pat.clone()),
                 1 => optional.push(pat.clone()),
-                2 => { rest_pattern = Some(pat.clone()); mode = 3; }
+                2 => {
+                    rest_pattern = Some(pat.clone());
+                    mode = 3;
+                }
                 _ => {}
             }
         }
@@ -721,7 +788,8 @@ impl Expander {
             bindings.push(list_form(vec![pat.clone(), car_form], span));
             let next = if i + 1 < required.len() || !optional.is_empty() || rest_pattern.is_some() {
                 let next_tmp = symbol_form(&format!("\0dsb.{}.{}.cdr", depth, i), span);
-                let cdr_form = list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
+                let cdr_form =
+                    list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
                 bindings.push(list_form(vec![next_tmp.clone(), cdr_form], span));
                 next_tmp
             } else {
@@ -736,7 +804,8 @@ impl Expander {
             bindings.push(binding);
             let next = if i + 1 < optional.len() || rest_pattern.is_some() {
                 let next_tmp = symbol_form(&format!("\0dsb.{}.{}.opt", depth, i), span);
-                let cdr_form = list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
+                let cdr_form =
+                    list_form(vec![symbol_form("cdr", span), current_list.clone()], span);
                 bindings.push(list_form(vec![next_tmp.clone(), cdr_form], span));
                 next_tmp
             } else {
@@ -757,7 +826,8 @@ impl Expander {
     fn expand_flet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         // (flet ((name (params) body...) ...) body...)
         if items.len() < 3 {
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let bindings_form = &items[1];
@@ -769,10 +839,10 @@ impl Expander {
 
         for (name, params, fbody) in bindings {
             let lambda = list_form(
-                vec![
-                    symbol_form("lambda", span),
-                    params,
-                ].into_iter().chain(fbody).collect(),
+                vec![symbol_form("lambda", span), params]
+                    .into_iter()
+                    .chain(fbody)
+                    .collect(),
                 span,
             );
             let binding = list_form(vec![symbol_form(&name, span), lambda], span);
@@ -789,7 +859,8 @@ impl Expander {
         // (labels ((name (params) body...) ...) body...)
         // Expand to: (let ((name1 nil) ...) (setq name1 (lambda ...)) ... body...)
         if items.len() < 3 {
-            let expanded: Vec<SurfaceForm> = items.into_iter().map(|f| self.expand_form(f)).collect();
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
         }
         let bindings_form = &items[1];
@@ -802,27 +873,51 @@ impl Expander {
 
         for (name, params, fbody) in bindings {
             // (let ((name nil)) ...)
-            let_bindings.push(list_form(vec![symbol_form(&name, span), nil_form(span)], span));
+            let_bindings.push(list_form(
+                vec![symbol_form(&name, span), nil_form(span)],
+                span,
+            ));
             // (setq name (lambda (params) body...))
             let lambda = list_form(
-                vec![symbol_form("lambda", span), params].into_iter().chain(fbody).collect(),
+                vec![symbol_form("lambda", span), params]
+                    .into_iter()
+                    .chain(fbody)
+                    .collect(),
                 span,
             );
-            setqs.push(list_form(vec![symbol_form("setq", span), symbol_form(&name, span), lambda], span));
+            setqs.push(list_form(
+                vec![symbol_form("setq", span), symbol_form(&name, span), lambda],
+                span,
+            ));
         }
 
         // Rewrite function calls to label names in the body AND lambda bodies to use funcall
-        let rewritten_body: Vec<SurfaceForm> = body.into_iter()
+        let rewritten_body: Vec<SurfaceForm> = body
+            .into_iter()
             .map(|f| Self::rewrite_labels_calls(&f, &label_names))
             .collect();
-        let rewritten_setqs: Vec<SurfaceForm> = setqs.into_iter()
+        let rewritten_setqs: Vec<SurfaceForm> = setqs
+            .into_iter()
             .map(|f| Self::rewrite_labels_calls(&f, &label_names))
             .collect();
 
         let mut progn_body = rewritten_setqs;
         progn_body.extend(rewritten_body);
-        let progn = list_form(vec![symbol_form("progn", span)].into_iter().chain(progn_body).collect(), span);
-        let result = list_form(vec![symbol_form("let", span), list_form(let_bindings, span), progn], span);
+        let progn = list_form(
+            vec![symbol_form("progn", span)]
+                .into_iter()
+                .chain(progn_body)
+                .collect(),
+            span,
+        );
+        let result = list_form(
+            vec![
+                symbol_form("let", span),
+                list_form(let_bindings, span),
+                progn,
+            ],
+            span,
+        );
         self.expand_form(result)
     }
 
@@ -833,12 +928,21 @@ impl Expander {
                 if let SurfaceKind::Atom(SurfaceAtom::Symbol(name)) = &items[0].kind {
                     if label_names.contains(name) {
                         // (name args...) -> (funcall name args...)
-                        let mut new_items = vec![symbol_form("funcall", form.span), symbol_form(name, form.span)];
-                        new_items.extend(items[1..].iter().cloned().map(|arg| Self::rewrite_labels_calls(&arg, label_names)));
+                        let mut new_items = vec![
+                            symbol_form("funcall", form.span),
+                            symbol_form(name, form.span),
+                        ];
+                        new_items.extend(
+                            items[1..]
+                                .iter()
+                                .cloned()
+                                .map(|arg| Self::rewrite_labels_calls(&arg, label_names)),
+                        );
                         return list_form(new_items, form.span);
                     }
                 }
-                let rewritten: Vec<SurfaceForm> = items.iter()
+                let rewritten: Vec<SurfaceForm> = items
+                    .iter()
                     .map(|item| Self::rewrite_labels_calls(item, label_names))
                     .collect();
                 SurfaceForm::new(SurfaceKind::List(rewritten), form.span)
@@ -848,15 +952,25 @@ impl Expander {
         }
     }
 
-    fn parse_flet_bindings(&self, bindings_form: &SurfaceForm, _span: Span) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {
+    fn parse_flet_bindings(
+        &self,
+        bindings_form: &SurfaceForm,
+        _span: Span,
+    ) -> Vec<(String, SurfaceForm, Vec<SurfaceForm>)> {
         let SurfaceKind::List(bindings) = &bindings_form.kind else {
             return Vec::new();
         };
         let mut result = Vec::new();
         for binding in bindings {
-            let SurfaceKind::List(items) = &binding.kind else { continue };
-            if items.len() < 3 { continue; }
-            let Some(name) = items[0].symbol_name().map(str::to_string) else { continue };
+            let SurfaceKind::List(items) = &binding.kind else {
+                continue;
+            };
+            if items.len() < 3 {
+                continue;
+            }
+            let Some(name) = items[0].symbol_name().map(str::to_string) else {
+                continue;
+            };
             let params = items[1].clone();
             let body: Vec<SurfaceForm> = items[2..].to_vec();
             result.push((name, params, body));
@@ -897,9 +1011,8 @@ impl Expander {
         let rest_arg = symbol_form("--cl-rest--", span);
         let rest_params = list_form(vec![symbol_form("&rest", span), rest_arg.clone()], span);
 
-        let mut dbind_params: Vec<SurfaceForm> = required.iter()
-            .map(|s| symbol_form(s, span))
-            .collect();
+        let mut dbind_params: Vec<SurfaceForm> =
+            required.iter().map(|s| symbol_form(s, span)).collect();
         if !optional.is_empty() {
             dbind_params.push(symbol_form("&optional", span));
             for s in &optional {
@@ -928,7 +1041,10 @@ impl Expander {
         list_form(defun_body, span)
     }
 
-    fn parse_cl_lambda_list(&self, params_form: &SurfaceForm) -> (Vec<String>, Vec<String>, Option<String>) {
+    fn parse_cl_lambda_list(
+        &self,
+        params_form: &SurfaceForm,
+    ) -> (Vec<String>, Vec<String>, Option<String>) {
         let items = match &params_form.kind {
             SurfaceKind::List(items) => items,
             _ => return (Vec::new(), Vec::new(), None),
@@ -939,7 +1055,9 @@ impl Expander {
         let mut section = 0; // 0=required, 1=optional, 2=rest
 
         for item in items {
-            let Some(name) = item.symbol_name() else { continue };
+            let Some(name) = item.symbol_name() else {
+                continue;
+            };
             match name {
                 "&optional" => section = 1,
                 "&rest" => section = 2,
@@ -952,7 +1070,7 @@ impl Expander {
                         section = 3; // done
                     }
                     _ => {}
-                }
+                },
             }
         }
         (required, optional, rest)
@@ -973,9 +1091,15 @@ impl Expander {
 
         let mut defined_names: Vec<String> = Vec::new();
         for binding in bindings {
-            let SurfaceKind::List(bitems) = &binding.kind else { continue };
-            if bitems.len() < 3 { continue; }
-            let Some(name) = bitems[0].symbol_name().map(str::to_string) else { continue };
+            let SurfaceKind::List(bitems) = &binding.kind else {
+                continue;
+            };
+            if bitems.len() < 3 {
+                continue;
+            }
+            let Some(name) = bitems[0].symbol_name().map(str::to_string) else {
+                continue;
+            };
             let params_form = &bitems[1];
             let macro_body: Vec<SurfaceForm> = bitems[2..].to_vec();
             let macro_params = self.parse_macro_params(params_form).unwrap_or_default();
@@ -1012,14 +1136,14 @@ impl Expander {
     }
 
     fn expand_progn(&mut self, span: Span, forms: Vec<SurfaceForm>) -> SurfaceForm {
-        let expanded: Vec<SurfaceForm> = forms.into_iter()
-            .map(|f| self.expand_form(f))
-            .collect();
+        let expanded: Vec<SurfaceForm> = forms.into_iter().map(|f| self.expand_form(f)).collect();
         match expanded.len() {
             0 => nil_form(span),
             1 => expanded.into_iter().next().unwrap(),
             _ => list_form(
-                std::iter::once(symbol_form("progn", span)).chain(expanded).collect(),
+                std::iter::once(symbol_form("progn", span))
+                    .chain(expanded)
+                    .collect(),
                 span,
             ),
         }
@@ -1067,18 +1191,22 @@ impl Expander {
                 | LoopClause::ForOn { .. }
                 | LoopClause::ForEquals { .. } => for_clauses.push(clause),
                 LoopClause::While { cond } => while_conds.push(cond.clone()),
-                LoopClause::Until { cond } => while_conds.push(
-                    list_form(vec![symbol_form("null", span), cond.clone()], span)
-                ),
+                LoopClause::Until { cond } => while_conds.push(list_form(
+                    vec![symbol_form("null", span), cond.clone()],
+                    span,
+                )),
                 LoopClause::With { var, expr } => with_bindings.push((var.clone(), expr.clone())),
                 LoopClause::Repeat { count } => {
                     // repeat N → counter var, checked in while test, decremented in body
                     let counter_var = "--cl-repeat--";
-                    while_conds.push(list_form(vec![
-                        symbol_form(">", span),
-                        symbol_form(counter_var, span),
-                        SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
-                    ], span));
+                    while_conds.push(list_form(
+                        vec![
+                            symbol_form(">", span),
+                            symbol_form(counter_var, span),
+                            SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+                        ],
+                        span,
+                    ));
                     has_repeat = true;
                     repeat_count = Some(count.clone());
                 }
@@ -1096,17 +1224,27 @@ impl Expander {
                     has_thereis = true;
                     body_clauses.push(clause);
                 }
-                LoopClause::If { then_clauses, else_clauses, .. } => {
+                LoopClause::If {
+                    then_clauses,
+                    else_clauses,
+                    ..
+                } => {
                     if clauses_contain_return(then_clauses)
-                        || else_clauses.as_ref().map_or(false, |ec| clauses_contain_return(ec))
+                        || else_clauses
+                            .as_ref()
+                            .map_or(false, |ec| clauses_contain_return(ec))
                     {
                         has_return = true;
                     }
                     if !has_always_never {
-                        has_always_never = clauses.iter().any(|c| matches!(c, LoopClause::Always { .. } | LoopClause::Never { .. }));
+                        has_always_never = clauses.iter().any(|c| {
+                            matches!(c, LoopClause::Always { .. } | LoopClause::Never { .. })
+                        });
                     }
                     if !has_thereis {
-                        has_thereis = clauses.iter().any(|c| matches!(c, LoopClause::Thereis { .. }));
+                        has_thereis = clauses
+                            .iter()
+                            .any(|c| matches!(c, LoopClause::Thereis { .. }));
                     }
                     body_clauses.push(clause);
                 }
@@ -1125,9 +1263,9 @@ impl Expander {
             let name = format!("--cl-acc-{}--", acc_counter);
             let init = match kind {
                 AccumKind::Collect | AccumKind::Append | AccumKind::Nconc => nil_form(span),
-                AccumKind::Sum | AccumKind::Count => SurfaceForm::new(
-                    SurfaceKind::Atom(SurfaceAtom::Int(0)), span
-                ),
+                AccumKind::Sum | AccumKind::Count => {
+                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span)
+                }
                 AccumKind::Minimize | AccumKind::Maximize => nil_form(span),
             };
             accums.push((kind, name.clone(), init));
@@ -1144,32 +1282,54 @@ impl Expander {
         }
 
         // For-from bindings and list temp bindings
-        let mut for_from_info: Vec<(String, SurfaceForm, Option<SurfaceForm>, Option<SurfaceForm>)> = Vec::new(); // var, start, end, step
+        let mut for_from_info: Vec<(
+            String,
+            SurfaceForm,
+            Option<SurfaceForm>,
+            Option<SurfaceForm>,
+        )> = Vec::new(); // var, start, end, step
         let mut for_in_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr
 
         for clause in &for_clauses {
             match clause {
-                LoopClause::ForFrom { var, start, end, step } => {
+                LoopClause::ForFrom {
+                    var,
+                    start,
+                    end,
+                    step,
+                } => {
                     let_bindings.push(list_form(vec![symbol_form(var, span), start.clone()], span));
                     for_from_info.push((var.clone(), start.clone(), end.clone(), step.clone()));
                 }
                 LoopClause::ForIn { var, list_expr } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
                     list_counter += 1;
-                    let_bindings.push(list_form(vec![symbol_form(&list_temp, span), list_expr.clone()], span));
-                    let_bindings.push(list_form(vec![symbol_form(var, span), nil_form(span)], span));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(&list_temp, span), list_expr.clone()],
+                        span,
+                    ));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(var, span), nil_form(span)],
+                        span,
+                    ));
                     for_in_info.push((var.clone(), list_temp, list_expr.clone()));
                 }
                 LoopClause::ForOn { var, list_expr } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
                     list_counter += 1;
-                    let_bindings.push(list_form(vec![symbol_form(&list_temp, span), list_expr.clone()], span));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(&list_temp, span), list_expr.clone()],
+                        span,
+                    ));
                     for_on_info.push((var.clone(), list_temp, list_expr.clone()));
                 }
                 LoopClause::ForEquals { var, expr } => {
-                    let_bindings.push(list_form(vec![symbol_form(var, span), nil_form(span)], span));
+                    let_bindings.push(list_form(
+                        vec![symbol_form(var, span), nil_form(span)],
+                        span,
+                    ));
                     for_eq_info.push((var.clone(), expr.clone()));
                 }
                 _ => {}
@@ -1184,18 +1344,27 @@ impl Expander {
         // Repeat binding
         if has_repeat {
             if let Some(count) = &repeat_count {
-                let_bindings.push(list_form(vec![symbol_form("--cl-repeat--", span), count.clone()], span));
+                let_bindings.push(list_form(
+                    vec![symbol_form("--cl-repeat--", span), count.clone()],
+                    span,
+                ));
             }
         }
 
         // Always/never flag variable
         if has_always_never {
-            let_bindings.push(list_form(vec![symbol_form("--cl-always--", span), symbol_form("t", span)], span));
+            let_bindings.push(list_form(
+                vec![symbol_form("--cl-always--", span), symbol_form("t", span)],
+                span,
+            ));
         }
 
         // Thereis result variable
         if has_thereis {
-            let_bindings.push(list_form(vec![symbol_form("--cl-thereis--", span), nil_form(span)], span));
+            let_bindings.push(list_form(
+                vec![symbol_form("--cl-thereis--", span), nil_form(span)],
+                span,
+            ));
         }
 
         // Build while test
@@ -1205,11 +1374,14 @@ impl Expander {
         for (var, start, end, _) in &for_from_info {
             let _ = start;
             if let Some(end_val) = end {
-                while_tests.push(list_form(vec![
-                    symbol_form("<=", span),
-                    symbol_form(var, span),
-                    end_val.clone(),
-                ], span));
+                while_tests.push(list_form(
+                    vec![
+                        symbol_form("<=", span),
+                        symbol_form(var, span),
+                        end_val.clone(),
+                    ],
+                    span,
+                ));
             }
             // No end means open-ended loop — only while/until conditions control termination
         }
@@ -1248,29 +1420,41 @@ impl Expander {
 
         // For-equals: setq at body start
         for (var, expr) in &for_eq_info {
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(var, span),
-                expr.clone(),
-            ], span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(var, span),
+                    expr.clone(),
+                ],
+                span,
+            ));
         }
 
         // For-in: setq var (car --list--)
         for (var, list_temp, _) in &for_in_info {
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(var, span),
-                list_form(vec![symbol_form("car", span), symbol_form(list_temp, span)], span),
-            ], span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(var, span),
+                    list_form(
+                        vec![symbol_form("car", span), symbol_form(list_temp, span)],
+                        span,
+                    ),
+                ],
+                span,
+            ));
         }
 
         // For-on: setq var --list--
         for (var, list_temp, _) in &for_on_info {
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(var, span),
-                symbol_form(list_temp, span),
-            ], span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(var, span),
+                    symbol_form(list_temp, span),
+                ],
+                span,
+            ));
         }
 
         // Body clauses (collect, sum, do, return, if, etc.)
@@ -1278,171 +1462,300 @@ impl Expander {
             match clause {
                 LoopClause::Collect { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Collect);
-                    while_body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("cons", span),
-                            expr.clone(),
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("cons", span),
+                                    expr.clone(),
+                                    symbol_form(&acc_var, span),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Append { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Append);
-                    while_body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("append", span),
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("append", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Nconc { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Nconc);
-                    while_body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("nconc", span),
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("nconc", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Sum { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Sum);
-                    while_body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("+", span),
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("+", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Count { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Count);
-                    while_body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("+", span),
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            list_form(vec![
-                                symbol_form("if", span),
-                                expr.clone(),
-                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
-                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
-                            ], span),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("+", span),
+                                    symbol_form(&acc_var, span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("if", span),
+                                            expr.clone(),
+                                            SurfaceForm::new(
+                                                SurfaceKind::Atom(SurfaceAtom::Int(1)),
+                                                span,
+                                            ),
+                                            SurfaceForm::new(
+                                                SurfaceKind::Atom(SurfaceAtom::Int(0)),
+                                                span,
+                                            ),
+                                        ],
+                                        span,
+                                    ),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Do { body } => {
                     while_body.extend(body.iter().cloned());
                 }
                 LoopClause::Return { expr } => {
-                    while_body.push(list_form(vec![
-                        symbol_form("throw", span),
-                        list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
-                        expr.clone(),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("throw", span),
+                            list_form(
+                                vec![
+                                    symbol_form("quote", span),
+                                    symbol_form("--cl-loop-tag--", span),
+                                ],
+                                span,
+                            ),
+                            expr.clone(),
+                        ],
+                        span,
+                    ));
                 }
-                LoopClause::If { cond, then_clauses, else_clauses } => {
+                LoopClause::If {
+                    cond,
+                    then_clauses,
+                    else_clauses,
+                } => {
                     let then_body = self.build_if_body(span, then_clauses, &accum_map);
                     let if_form = if let Some(else_cls) = else_clauses {
                         let else_body = self.build_if_body(span, else_cls, &accum_map);
-                        list_form(vec![
-                            symbol_form("if", span),
-                            cond.clone(),
-                            self.wrap_progn(then_body, span),
-                            self.wrap_progn(else_body, span),
-                        ], span)
+                        list_form(
+                            vec![
+                                symbol_form("if", span),
+                                cond.clone(),
+                                self.wrap_progn(then_body, span),
+                                self.wrap_progn(else_body, span),
+                            ],
+                            span,
+                        )
                     } else {
-                        list_form(vec![
-                            symbol_form("if", span),
-                            cond.clone(),
-                            self.wrap_progn(then_body, span),
-                        ], span)
+                        list_form(
+                            vec![
+                                symbol_form("if", span),
+                                cond.clone(),
+                                self.wrap_progn(then_body, span),
+                            ],
+                            span,
+                        )
                     };
                     while_body.push(if_form);
                 }
                 LoopClause::Always { expr } => {
                     // (if (null expr) (setq --cl-always-- nil))
-                    while_body.push(list_form(vec![
-                        symbol_form("if", span),
-                        list_form(vec![symbol_form("null", span), expr.clone()], span),
-                        list_form(vec![
-                            symbol_form("setq", span),
-                            symbol_form("--cl-always--", span),
-                            nil_form(span),
-                        ], span),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(vec![symbol_form("null", span), expr.clone()], span),
+                            list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form("--cl-always--", span),
+                                    nil_form(span),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Never { expr } => {
                     // (if expr (setq --cl-always-- nil))
-                    while_body.push(list_form(vec![
-                        symbol_form("if", span),
-                        expr.clone(),
-                        list_form(vec![
-                            symbol_form("setq", span),
-                            symbol_form("--cl-always--", span),
-                            nil_form(span),
-                        ], span),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("if", span),
+                            expr.clone(),
+                            list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form("--cl-always--", span),
+                                    nil_form(span),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Thereis { expr } => {
                     // (if (and (null --cl-thereis--) expr)
                     //     (setq --cl-thereis-- expr))
-                    while_body.push(list_form(vec![
-                        symbol_form("if", span),
-                        list_form(vec![
-                            symbol_form("and", span),
-                            list_form(vec![symbol_form("null", span), symbol_form("--cl-thereis--", span)], span),
-                            expr.clone(),
-                        ], span),
-                        list_form(vec![
-                            symbol_form("setq", span),
-                            symbol_form("--cl-thereis--", span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(
+                                vec![
+                                    symbol_form("and", span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("null", span),
+                                            symbol_form("--cl-thereis--", span),
+                                        ],
+                                        span,
+                                    ),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                            list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form("--cl-thereis--", span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Minimize { expr } => {
                     // (if (or (null acc) (< expr acc)) (setq acc expr))
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Minimize);
-                    while_body.push(list_form(vec![
-                        symbol_form("if", span),
-                        list_form(vec![
-                            symbol_form("or", span),
-                            list_form(vec![symbol_form("null", span), symbol_form(&acc_var, span)], span),
-                            list_form(vec![symbol_form("<", span), expr.clone(), symbol_form(&acc_var, span)], span),
-                        ], span),
-                        list_form(vec![
-                            symbol_form("setq", span),
-                            symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(
+                                vec![
+                                    symbol_form("or", span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("null", span),
+                                            symbol_form(&acc_var, span),
+                                        ],
+                                        span,
+                                    ),
+                                    list_form(
+                                        vec![
+                                            symbol_form("<", span),
+                                            expr.clone(),
+                                            symbol_form(&acc_var, span),
+                                        ],
+                                        span,
+                                    ),
+                                ],
+                                span,
+                            ),
+                            list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Maximize { expr } => {
                     let acc_var = self.find_accum_var(&accum_map, AccumKind::Maximize);
-                    while_body.push(list_form(vec![
-                        symbol_form("if", span),
-                        list_form(vec![
-                            symbol_form("or", span),
-                            list_form(vec![symbol_form("null", span), symbol_form(&acc_var, span)], span),
-                            list_form(vec![symbol_form(">", span), expr.clone(), symbol_form(&acc_var, span)], span),
-                        ], span),
-                        list_form(vec![
-                            symbol_form("setq", span),
-                            symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                    while_body.push(list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(
+                                vec![
+                                    symbol_form("or", span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("null", span),
+                                            symbol_form(&acc_var, span),
+                                        ],
+                                        span,
+                                    ),
+                                    list_form(
+                                        vec![
+                                            symbol_form(">", span),
+                                            expr.clone(),
+                                            symbol_form(&acc_var, span),
+                                        ],
+                                        span,
+                                    ),
+                                ],
+                                span,
+                            ),
+                            list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 _ => {}
             }
@@ -1450,50 +1763,70 @@ impl Expander {
 
         // For-in advance: setq --list-- (cdr --list--)
         for (_, list_temp, _) in &for_in_info {
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(list_temp, span),
-                list_form(vec![symbol_form("cdr", span), symbol_form(list_temp, span)], span),
-            ], span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(list_temp, span),
+                    list_form(
+                        vec![symbol_form("cdr", span), symbol_form(list_temp, span)],
+                        span,
+                    ),
+                ],
+                span,
+            ));
         }
 
         // For-on advance: setq --list-- (cdr --list--)
         for (_, list_temp, _) in &for_on_info {
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(list_temp, span),
-                list_form(vec![symbol_form("cdr", span), symbol_form(list_temp, span)], span),
-            ], span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(list_temp, span),
+                    list_form(
+                        vec![symbol_form("cdr", span), symbol_form(list_temp, span)],
+                        span,
+                    ),
+                ],
+                span,
+            ));
         }
 
         // For-from advance: setq var (+ var step)
         for (var, _, _, step) in &for_from_info {
-            let step_val = step.clone().unwrap_or_else(|| {
-                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span)
-            });
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(var, span),
-                list_form(vec![
-                    symbol_form("+", span),
+            let step_val = step
+                .clone()
+                .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span));
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
                     symbol_form(var, span),
-                    step_val,
-                ], span),
-            ], span));
+                    list_form(
+                        vec![symbol_form("+", span), symbol_form(var, span), step_val],
+                        span,
+                    ),
+                ],
+                span,
+            ));
         }
 
         // Repeat counter decrement
         if has_repeat {
             let counter_var = "--cl-repeat--";
-            while_body.push(list_form(vec![
-                symbol_form("setq", span),
-                symbol_form(counter_var, span),
-                list_form(vec![
-                    symbol_form("-", span),
+            while_body.push(list_form(
+                vec![
+                    symbol_form("setq", span),
                     symbol_form(counter_var, span),
-                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
-                ], span),
-            ], span));
+                    list_form(
+                        vec![
+                            symbol_form("-", span),
+                            symbol_form(counter_var, span),
+                            SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
+                        ],
+                        span,
+                    ),
+                ],
+                span,
+            ));
         }
 
         // Build result expression (after while loop)
@@ -1502,11 +1835,17 @@ impl Expander {
         // nreverse for collect accumulators
         for (kind, name, _) in &accums {
             if *kind == AccumKind::Collect {
-                after_while.push(list_form(vec![
-                    symbol_form("setq", span),
-                    symbol_form(name, span),
-                    list_form(vec![symbol_form("nreverse", span), symbol_form(name, span)], span),
-                ], span));
+                after_while.push(list_form(
+                    vec![
+                        symbol_form("setq", span),
+                        symbol_form(name, span),
+                        list_form(
+                            vec![symbol_form("nreverse", span), symbol_form(name, span)],
+                            span,
+                        ),
+                    ],
+                    span,
+                ));
             }
         }
 
@@ -1547,25 +1886,37 @@ impl Expander {
 
         // Wrap in catch/throw if return clause present
         if has_return {
-            list_form(vec![
-                symbol_form("catch", span),
-                list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
-                let_form,
-            ], span)
+            list_form(
+                vec![
+                    symbol_form("catch", span),
+                    list_form(
+                        vec![
+                            symbol_form("quote", span),
+                            symbol_form("--cl-loop-tag--", span),
+                        ],
+                        span,
+                    ),
+                    let_form,
+                ],
+                span,
+            )
         } else {
             let_form
         }
     }
 
     fn find_accum_var(&self, accum_map: &[(AccumKind, String, usize)], kind: AccumKind) -> String {
-        accum_map.iter()
+        accum_map
+            .iter()
             .find(|(k, _, _)| *k == kind)
             .map(|(_, name, _)| name.clone())
             .unwrap_or_else(|| "--cl-acc-unknown--".into())
     }
 
     /// Collect all AccumKinds from clauses, recursing into when/if branches.
-    fn collect_accum_kinds<'a>(clauses: impl IntoIterator<Item = &'a LoopClause>) -> Vec<AccumKind> {
+    fn collect_accum_kinds<'a>(
+        clauses: impl IntoIterator<Item = &'a LoopClause>,
+    ) -> Vec<AccumKind> {
         let mut kinds = Vec::new();
         for clause in clauses {
             match clause {
@@ -1576,7 +1927,11 @@ impl Expander {
                 LoopClause::Count { .. } => kinds.push(AccumKind::Count),
                 LoopClause::Minimize { .. } => kinds.push(AccumKind::Minimize),
                 LoopClause::Maximize { .. } => kinds.push(AccumKind::Maximize),
-                LoopClause::If { then_clauses, else_clauses, .. } => {
+                LoopClause::If {
+                    then_clauses,
+                    else_clauses,
+                    ..
+                } => {
                     kinds.extend(Self::collect_accum_kinds(then_clauses.iter()));
                     if let Some(else_cls) = else_clauses {
                         kinds.extend(Self::collect_accum_kinds(else_cls.iter()));
@@ -1588,82 +1943,135 @@ impl Expander {
         kinds
     }
 
-    fn build_if_body(&self, span: Span, clauses: &[LoopClause], accum_map: &[(AccumKind, String, usize)]) -> Vec<SurfaceForm> {
+    fn build_if_body(
+        &self,
+        span: Span,
+        clauses: &[LoopClause],
+        accum_map: &[(AccumKind, String, usize)],
+    ) -> Vec<SurfaceForm> {
         let mut body: Vec<SurfaceForm> = Vec::new();
         for clause in clauses {
             match clause {
                 LoopClause::Collect { expr } => {
                     let acc_var = self.find_accum_var(accum_map, AccumKind::Collect);
-                    body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("cons", span),
-                            expr.clone(),
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("cons", span),
+                                    expr.clone(),
+                                    symbol_form(&acc_var, span),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Append { expr } => {
                     let acc_var = self.find_accum_var(accum_map, AccumKind::Append);
-                    body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("append", span),
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("append", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Nconc { expr } => {
                     let acc_var = self.find_accum_var(accum_map, AccumKind::Nconc);
-                    body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("nconc", span),
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("nconc", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Sum { expr } => {
                     let acc_var = self.find_accum_var(accum_map, AccumKind::Sum);
-                    body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("+", span),
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            expr.clone(),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("+", span),
+                                    symbol_form(&acc_var, span),
+                                    expr.clone(),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Count { expr } => {
                     let acc_var = self.find_accum_var(accum_map, AccumKind::Count);
-                    body.push(list_form(vec![
-                        symbol_form("setq", span),
-                        symbol_form(&acc_var, span),
-                        list_form(vec![
-                            symbol_form("+", span),
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
                             symbol_form(&acc_var, span),
-                            list_form(vec![
-                                symbol_form("if", span),
-                                expr.clone(),
-                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(1)), span),
-                                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
-                            ], span),
-                        ], span),
-                    ], span));
+                            list_form(
+                                vec![
+                                    symbol_form("+", span),
+                                    symbol_form(&acc_var, span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("if", span),
+                                            expr.clone(),
+                                            SurfaceForm::new(
+                                                SurfaceKind::Atom(SurfaceAtom::Int(1)),
+                                                span,
+                                            ),
+                                            SurfaceForm::new(
+                                                SurfaceKind::Atom(SurfaceAtom::Int(0)),
+                                                span,
+                                            ),
+                                        ],
+                                        span,
+                                    ),
+                                ],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
                 }
                 LoopClause::Do { body: b } => body.extend(b.iter().cloned()),
                 LoopClause::Return { expr } => {
-                    body.push(list_form(vec![
-                        symbol_form("throw", span),
-                        list_form(vec![symbol_form("quote", span), symbol_form("--cl-loop-tag--", span)], span),
-                        expr.clone(),
-                    ], span));
+                    body.push(list_form(
+                        vec![
+                            symbol_form("throw", span),
+                            list_form(
+                                vec![
+                                    symbol_form("quote", span),
+                                    symbol_form("--cl-loop-tag--", span),
+                                ],
+                                span,
+                            ),
+                            expr.clone(),
+                        ],
+                        span,
+                    ));
                 }
                 _ => {}
             }
@@ -1676,7 +2084,9 @@ impl Expander {
             0 => nil_form(span),
             1 => forms.into_iter().next().unwrap(),
             _ => list_form(
-                std::iter::once(symbol_form("progn", span)).chain(forms).collect(),
+                std::iter::once(symbol_form("progn", span))
+                    .chain(forms)
+                    .collect(),
                 span,
             ),
         }
@@ -1695,7 +2105,9 @@ impl Expander {
                     // Implicit do: treat this form as a body expression
                     let body_form = items[pos].clone();
                     pos += 1;
-                    clauses.push(LoopClause::Do { body: vec![body_form] });
+                    clauses.push(LoopClause::Do {
+                        body: vec![body_form],
+                    });
                     continue;
                 }
             };
@@ -1707,50 +2119,82 @@ impl Expander {
                 }
                 "collect" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Collect { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Collect {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "append" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Append { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Append {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "nconc" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Nconc { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Nconc {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "sum" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Sum { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Sum {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "count" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Count { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Count {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "minimize" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Minimize { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Minimize {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "maximize" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Maximize { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Maximize {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "thereis" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Thereis { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Thereis {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "do" => {
@@ -1760,14 +2204,22 @@ impl Expander {
                 }
                 "while" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::While { cond: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::While {
+                        cond: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "until" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Until { cond: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Until {
+                        cond: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "return" => {
@@ -1783,29 +2235,40 @@ impl Expander {
                 }
                 "if" | "when" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
+                    if pos >= items.len() {
+                        return None;
+                    }
                     let cond = items[pos].clone();
                     pos += 1;
                     let then_clauses = self.parse_sub_clauses(span, items, &mut pos)?;
-                    let else_clauses = if pos < items.len() && items[pos].symbol_name() == Some("else") {
-                        pos += 1;
-                        Some(self.parse_sub_clauses(span, items, &mut pos)?)
-                    } else {
-                        None
-                    };
+                    let else_clauses =
+                        if pos < items.len() && items[pos].symbol_name() == Some("else") {
+                            pos += 1;
+                            Some(self.parse_sub_clauses(span, items, &mut pos)?)
+                        } else {
+                            None
+                        };
                     if pos < items.len() && items[pos].symbol_name() == Some("end") {
                         pos += 1;
                     }
-                    clauses.push(LoopClause::If { cond, then_clauses, else_clauses });
+                    clauses.push(LoopClause::If {
+                        cond,
+                        then_clauses,
+                        else_clauses,
+                    });
                 }
                 "with" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
+                    if pos >= items.len() {
+                        return None;
+                    }
                     let var = items[pos].symbol_name()?.to_string();
                     pos += 1;
                     let expr = if pos < items.len() && items[pos].symbol_name() == Some("=") {
                         pos += 1;
-                        if pos >= items.len() { return None; }
+                        if pos >= items.len() {
+                            return None;
+                        }
                         let e = items[pos].clone();
                         pos += 1;
                         e
@@ -1826,35 +2289,56 @@ impl Expander {
                 }
                 "always" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Always { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Always {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "never" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Never { expr: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Never {
+                        expr: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 "repeat" => {
                     pos += 1;
-                    if pos >= items.len() { return None; }
-                    clauses.push(LoopClause::Repeat { count: items[pos].clone() });
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    clauses.push(LoopClause::Repeat {
+                        count: items[pos].clone(),
+                    });
                     pos += 1;
                 }
                 _ => {
                     // Unknown keyword — treat as implicit do body expression
                     let body_form = items[pos].clone();
                     pos += 1;
-                    clauses.push(LoopClause::Do { body: vec![body_form] });
+                    clauses.push(LoopClause::Do {
+                        body: vec![body_form],
+                    });
                 }
             }
         }
         Some(clauses)
     }
 
-    fn parse_for_clause(&self, span: Span, items: &[SurfaceForm], pos: &mut usize) -> Option<LoopClause> {
-        if *pos >= items.len() { return None; }
+    fn parse_for_clause(
+        &self,
+        span: Span,
+        items: &[SurfaceForm],
+        pos: &mut usize,
+    ) -> Option<LoopClause> {
+        if *pos >= items.len() {
+            return None;
+        }
         let var = items[*pos].symbol_name()?.to_string();
         *pos += 1;
 
@@ -1919,7 +2403,9 @@ impl Expander {
                 // For simplicity, ignore "then" in phase 1
                 if *pos < items.len() && items[*pos].symbol_name() == Some("then") {
                     *pos += 1;
-                    if *pos < items.len() { *pos += 1; } // skip the then-expr
+                    if *pos < items.len() {
+                        *pos += 1;
+                    } // skip the then-expr
                 }
                 Some(LoopClause::ForEquals { var, expr })
             }
@@ -1933,7 +2419,12 @@ impl Expander {
         }
     }
 
-    fn parse_sub_clauses(&self, span: Span, items: &[SurfaceForm], pos: &mut usize) -> Option<Vec<LoopClause>> {
+    fn parse_sub_clauses(
+        &self,
+        span: Span,
+        items: &[SurfaceForm],
+        pos: &mut usize,
+    ) -> Option<Vec<LoopClause>> {
         let mut clauses = Vec::new();
         while *pos < items.len() {
             let kw = items[*pos].symbol_name().unwrap_or("");
@@ -1941,20 +2432,32 @@ impl Expander {
                 "else" | "end" => break,
                 "collect" => {
                     *pos += 1;
-                    if *pos >= items.len() { break; }
-                    clauses.push(LoopClause::Collect { expr: items[*pos].clone() });
+                    if *pos >= items.len() {
+                        break;
+                    }
+                    clauses.push(LoopClause::Collect {
+                        expr: items[*pos].clone(),
+                    });
                     *pos += 1;
                 }
                 "sum" => {
                     *pos += 1;
-                    if *pos >= items.len() { break; }
-                    clauses.push(LoopClause::Sum { expr: items[*pos].clone() });
+                    if *pos >= items.len() {
+                        break;
+                    }
+                    clauses.push(LoopClause::Sum {
+                        expr: items[*pos].clone(),
+                    });
                     *pos += 1;
                 }
                 "count" => {
                     *pos += 1;
-                    if *pos >= items.len() { break; }
-                    clauses.push(LoopClause::Count { expr: items[*pos].clone() });
+                    if *pos >= items.len() {
+                        break;
+                    }
+                    clauses.push(LoopClause::Count {
+                        expr: items[*pos].clone(),
+                    });
                     *pos += 1;
                 }
                 "do" => {
@@ -1975,14 +2478,22 @@ impl Expander {
                 }
                 "append" => {
                     *pos += 1;
-                    if *pos >= items.len() { break; }
-                    clauses.push(LoopClause::Append { expr: items[*pos].clone() });
+                    if *pos >= items.len() {
+                        break;
+                    }
+                    clauses.push(LoopClause::Append {
+                        expr: items[*pos].clone(),
+                    });
                     *pos += 1;
                 }
                 "nconc" => {
                     *pos += 1;
-                    if *pos >= items.len() { break; }
-                    clauses.push(LoopClause::Nconc { expr: items[*pos].clone() });
+                    if *pos >= items.len() {
+                        break;
+                    }
+                    clauses.push(LoopClause::Nconc {
+                        expr: items[*pos].clone(),
+                    });
                     *pos += 1;
                 }
                 _ => break,
@@ -1995,7 +2506,9 @@ impl Expander {
         let mut body = Vec::new();
         while *pos < items.len() {
             let kw = items[*pos].symbol_name().unwrap_or("");
-            if is_loop_keyword(kw) { break; }
+            if is_loop_keyword(kw) {
+                break;
+            }
             body.push(items[*pos].clone());
             *pos += 1;
         }
@@ -2099,21 +2612,47 @@ enum AccumKind {
 }
 
 fn is_loop_keyword(kw: &str) -> bool {
-    matches!(kw,
-        "for" | "collect" | "append" | "nconc" | "sum" | "count"
-        | "do" | "while" | "until" | "return" | "if" | "when"
-        | "with" | "initially" | "finally" | "else" | "end"
-        | "minimize" | "maximize" | "always" | "never" | "thereis"
-        | "repeat" | "into"
+    matches!(
+        kw,
+        "for"
+            | "collect"
+            | "append"
+            | "nconc"
+            | "sum"
+            | "count"
+            | "do"
+            | "while"
+            | "until"
+            | "return"
+            | "if"
+            | "when"
+            | "with"
+            | "initially"
+            | "finally"
+            | "else"
+            | "end"
+            | "minimize"
+            | "maximize"
+            | "always"
+            | "never"
+            | "thereis"
+            | "repeat"
+            | "into"
     )
 }
 
 fn clauses_contain_return(clauses: &[LoopClause]) -> bool {
     clauses.iter().any(|c| match c {
         LoopClause::Return { .. } => true,
-        LoopClause::If { then_clauses, else_clauses, .. } => {
+        LoopClause::If {
+            then_clauses,
+            else_clauses,
+            ..
+        } => {
             clauses_contain_return(then_clauses)
-                || else_clauses.as_ref().map_or(false, |ec| clauses_contain_return(ec))
+                || else_clauses
+                    .as_ref()
+                    .map_or(false, |ec| clauses_contain_return(ec))
         }
         _ => false,
     })
@@ -2480,7 +3019,10 @@ mod tests {
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"while\""));
-        assert!(!rendered.contains("\"collect\""), "collect should be expanded away");
+        assert!(
+            !rendered.contains("\"collect\""),
+            "collect should be expanded away"
+        );
     }
 
     #[test]
@@ -2631,7 +3173,10 @@ mod tests {
         );
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
-        assert!(rendered.contains("\"--cl-always--\""), "should have --cl-always-- flag for always clause");
+        assert!(
+            rendered.contains("\"--cl-always--\""),
+            "should have --cl-always-- flag for always clause"
+        );
         assert!(rendered.contains("\"while\""));
     }
 
@@ -2643,7 +3188,10 @@ mod tests {
         );
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
-        assert!(rendered.contains("\"--cl-always--\""), "never clause should use --cl-always-- flag");
+        assert!(
+            rendered.contains("\"--cl-always--\""),
+            "never clause should use --cl-always-- flag"
+        );
     }
 
     #[test]

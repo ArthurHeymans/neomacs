@@ -258,10 +258,7 @@ impl Lowerer<'_> {
         kind: &str,
     ) -> Option<HirDefun> {
         if list.len() < 3 {
-            self.error(
-                form.span,
-                format!("{kind} requires a name and arg list"),
-            );
+            self.error(form.span, format!("{kind} requires a name and arg list"));
             return None;
         }
         let Some(name) = list[1].symbol_name().map(str::to_string) else {
@@ -304,9 +301,7 @@ impl Lowerer<'_> {
                 kind: HirExprKind::Quote(Box::new(form.clone())),
                 span: form.span,
             }),
-            SurfaceKind::DottedList(items, tail) => {
-                self.lower_dotted_list(form, items, tail)
-            }
+            SurfaceKind::DottedList(items, tail) => self.lower_dotted_list(form, items, tail),
             SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
             SurfaceKind::Comma(inner) => {
                 // Unexpanded comma — evaluate the inner form
@@ -2191,7 +2186,8 @@ mod tests {
     fn defvar_registers_variable_as_special() {
         // defvar makes the variable special. In a subsequent let* form, references to
         // my-var should be SymbolGet (dynamic), not LexicalGet.
-        let module = hir(";;; -*- lexical-binding: t; -*-\n(progn (defvar my-var 42) (let ((x my-var)) x))");
+        let module =
+            hir(";;; -*- lexical-binding: t; -*-\n(progn (defvar my-var 42) (let ((x my-var)) x))");
         let HirItem::Expr(expr) = &module.items[0] else {
             panic!("expected expr");
         };
@@ -2200,12 +2196,16 @@ mod tests {
         };
         // exprs[1] is the let form. Its binding init should reference my-var as SymbolGet.
         let rendered = format!("{:?}", exprs[1].kind);
-        assert!(rendered.contains("SymbolGet"), "my-var should be SymbolGet (dynamic) after defvar, got: {rendered}");
+        assert!(
+            rendered.contains("SymbolGet"),
+            "my-var should be SymbolGet (dynamic) after defvar, got: {rendered}"
+        );
     }
 
     #[test]
     fn dolist_sets_var_to_nil_after_loop() {
-        let module = hir(";;; -*- lexical-binding: t; -*-\n(dolist (x (list 1 2 3)) (message \"%d\" x))");
+        let module =
+            hir(";;; -*- lexical-binding: t; -*-\n(dolist (x (list 1 2 3)) (message \"%d\" x))");
         let HirItem::Expr(expr) = &module.items[0] else {
             panic!("expected expr");
         };
@@ -2217,9 +2217,15 @@ mod tests {
         };
         // After the while loop, there should be a setq setting x to nil
         // Structure: [while, setq(x, nil), result]
-        assert!(parts.len() >= 2, "dolist should have while + setq nil + result");
+        assert!(
+            parts.len() >= 2,
+            "dolist should have while + setq nil + result"
+        );
         let rendered = format!("{:?}", parts[1].kind);
-        assert!(rendered.contains("Nil"), "second body expr after while should set var to nil, got: {rendered}");
+        assert!(
+            rendered.contains("Nil"),
+            "second body expr after while should set var to nil, got: {rendered}"
+        );
     }
 
     #[test]

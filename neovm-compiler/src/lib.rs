@@ -11,9 +11,9 @@
 
 pub mod ast;
 pub mod clif;
+pub mod compile_value;
 pub mod diagnostic;
 pub mod effects;
-pub mod compile_value;
 pub mod expand;
 pub mod expand_eval;
 pub mod expand_value;
@@ -139,7 +139,10 @@ mod tests {
 
     #[test]
     fn condition_case_no_error_regir() {
-        let artifact = compile_source("cc.el", ";;; -*- lexical-binding: t; -*-\n(defun safe-div (a b) (condition-case err (/ a b) (arith-error 0)))\n(safe-div 10 3)");
+        let artifact = compile_source(
+            "cc.el",
+            ";;; -*- lexical-binding: t; -*-\n(defun safe-div (a b) (condition-case err (/ a b) (arith-error 0)))\n(safe-div 10 3)",
+        );
         assert_eq!(artifact.diagnostics, Vec::new());
         let ssa = artifact.ssa.expect("ssa");
         let ssa_dump = crate::pretty::dump_ssa_module(&ssa);

@@ -275,8 +275,16 @@ impl Runtime {
     }
 
     pub fn float_data(&self, value: LispValue) -> Result<f64, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "float", value })?;
-        let obj = self.float_by_addr(addr).ok_or(RuntimeError::WrongTypeArgument { expected: "float", value })?;
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "float",
+            value,
+        })?;
+        let obj = self
+            .float_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "float",
+                value,
+            })?;
         Ok(obj.value)
     }
 

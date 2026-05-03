@@ -400,7 +400,10 @@ impl<'a> RegLowerer<'a> {
                 // No-op in RegIR: the handler body's value is already in its register,
                 // and the runtime captures it via last_value. This instruction exists
                 // solely to prevent DCE from removing the handler body.
-                RegInstKind::Move { dst: self.value_reg(*value), src: self.value_reg(*value) }
+                RegInstKind::Move {
+                    dst: self.value_reg(*value),
+                    src: self.value_reg(*value),
+                }
             }
             SsaInstKind::ConditionCaseEnd { body_result } => RegInstKind::ConditionCaseEnd {
                 dst: self.result_reg(inst),
@@ -475,8 +478,9 @@ impl<'a> RegLowerer<'a> {
     fn needs_safepoint(&self, kind: &SsaInstKind) -> bool {
         matches!(
             kind,
-            SsaInstKind::Const(SsaConst::Float(_) | SsaConst::String(_) | SsaConst::Symbol(_) | SsaConst::Value(_))
-                | SsaInstKind::Quote(_)
+            SsaInstKind::Const(
+                SsaConst::Float(_) | SsaConst::String(_) | SsaConst::Symbol(_) | SsaConst::Value(_)
+            ) | SsaInstKind::Quote(_)
                 | SsaInstKind::FunctionQuote(_)
                 | SsaInstKind::Lambda { .. }
                 | SsaInstKind::MakeLexicalCell { .. }
@@ -1066,7 +1070,9 @@ impl SsaBuilder {
                 }
                 // ConditionCaseEnd produces the merged result (body or handler value)
                 let result = self.emit_value(
-                    SsaInstKind::ConditionCaseEnd { body_result: body_value },
+                    SsaInstKind::ConditionCaseEnd {
+                        body_result: body_value,
+                    },
                     Effects::single(Effect::MaySignal),
                 );
                 Some(result)

@@ -26,7 +26,10 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
     #[cfg(debug_assertions)]
     {
         let diags = crate::verify::verify_ssa(function);
-        assert!(diags.is_empty(), "SSA is invalid before optimization: {diags:?}");
+        assert!(
+            diags.is_empty(),
+            "SSA is invalid before optimization: {diags:?}"
+        );
     }
     let mut any_changed = false;
     let mut changed = true;
@@ -56,7 +59,10 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
     #[cfg(debug_assertions)]
     {
         let diags = crate::verify::verify_ssa(function);
-        assert!(diags.is_empty(), "optimization produced invalid SSA: {diags:?}");
+        assert!(
+            diags.is_empty(),
+            "optimization produced invalid SSA: {diags:?}"
+        );
     }
     any_changed
 }
@@ -168,7 +174,9 @@ fn remap_inst(inst: &mut crate::ssa::SsaInst, remap: impl Fn(ValueId) -> ValueId
             *tag = remap(*tag);
         }
         CatchEnd { body_result } => {
-            if let Some(v) = body_result { *v = remap(*v); }
+            if let Some(v) = body_result {
+                *v = remap(*v);
+            }
         }
         Throw { tag, value } => {
             *tag = remap(*tag);
@@ -352,7 +360,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         }
         "=" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a == b { SsaConst::True } else { SsaConst::Nil })
+            Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         "<" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
@@ -364,21 +376,35 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         }
         "<=" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a <= b { SsaConst::True } else { SsaConst::Nil })
+            Some(if a <= b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         ">=" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a >= b { SsaConst::True } else { SsaConst::Nil })
+            Some(if a >= b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
-        "eq" | "eql" if args.len() == 2 => {
-            match (args[0], args[1]) {
-                (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-                (SsaConst::Symbol(a), SsaConst::Symbol(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-                (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
-                (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
-                _ => None,
-            }
-        }
+        "eq" | "eql" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::Symbol(a), SsaConst::Symbol(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
+            (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
+            _ => None,
+        },
         "1+" if args.len() == 1 => {
             let a = args[0].as_int()?;
             Some(SsaConst::Int(a.wrapping_add(1)))
@@ -387,13 +413,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let a = args[0].as_int()?;
             Some(SsaConst::Int(a.wrapping_sub(1)))
         }
-        "null" | "not" if args.len() == 1 => {
-            match const_to_bool(args[0]) {
-                Some(false) => Some(SsaConst::True),
-                Some(true) => Some(SsaConst::Nil),
-                None => None,
-            }
-        }
+        "null" | "not" if args.len() == 1 => match const_to_bool(args[0]) {
+            Some(false) => Some(SsaConst::True),
+            Some(true) => Some(SsaConst::Nil),
+            None => None,
+        },
         _ => None,
     }
 }
@@ -407,9 +431,9 @@ pub fn dead_code_elimination(function: &mut SsaFunction) -> OptOutput {
         for (block_id, block) in function.blocks.iter_mut() {
             let mut new_instructions = Vec::new();
             for inst in &block.instructions {
-                let is_used = inst.result.map_or(true, |r| {
-                    *use_counts.get(&r).unwrap_or(&0) > 0
-                });
+                let is_used = inst
+                    .result
+                    .map_or(true, |r| *use_counts.get(&r).unwrap_or(&0) > 0);
                 if !is_used && is_pure(&inst.effects) {
                     loop_changed = true;
                     changed = true;
@@ -482,9 +506,18 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
                     *target = src;
                 }
             }
-            if let SsaTerminator::BranchIfNil { then_target, else_target, .. } = &mut block.terminator {
-                if *then_target == dst { *then_target = src; }
-                if *else_target == dst { *else_target = src; }
+            if let SsaTerminator::BranchIfNil {
+                then_target,
+                else_target,
+                ..
+            } = &mut block.terminator
+            {
+                if *then_target == dst {
+                    *then_target = src;
+                }
+                if *else_target == dst {
+                    *else_target = src;
+                }
             }
         }
         changed = true;
@@ -574,18 +607,15 @@ mod tests {
 
     #[test]
     fn folds_integer_addition() {
-        let artifact = compile_source(
-            "fold.el",
-            ";;; -*- lexical-binding: t; -*-\n(+ 1 2)",
-        );
+        let artifact = compile_source("fold.el", ";;; -*- lexical-binding: t; -*-\n(+ 1 2)");
         assert_eq!(artifact.diagnostics, Vec::new());
         let ssa = artifact.ssa.unwrap();
         let func = ssa.functions.values().next().unwrap();
         // After optimization, the + call should be folded to Const(3)
         let has_const_3 = func.blocks.values().any(|b| {
-            b.instructions.iter().any(|inst| {
-                matches!(&inst.kind, SsaInstKind::Const(SsaConst::Int(3)))
-            })
+            b.instructions
+                .iter()
+                .any(|inst| matches!(&inst.kind, SsaInstKind::Const(SsaConst::Int(3))))
         });
         assert!(has_const_3, "expected constant 3 after folding");
     }
@@ -600,9 +630,10 @@ mod tests {
         let ssa = artifact.ssa.unwrap();
         let func = ssa.functions.values().next().unwrap();
         // After folding, BranchIfNil should be replaced with Jump
-        let has_branch = func.blocks.values().any(|b| {
-            matches!(b.terminator, SsaTerminator::BranchIfNil { .. })
-        });
+        let has_branch = func
+            .blocks
+            .values()
+            .any(|b| matches!(b.terminator, SsaTerminator::BranchIfNil { .. }));
         assert!(!has_branch, "BranchIfNil should be folded to Jump");
     }
 
@@ -616,11 +647,14 @@ mod tests {
         let ssa = artifact.ssa.unwrap();
         let func = ssa.functions.values().next().unwrap();
         let has_const_10 = func.blocks.values().any(|b| {
-            b.instructions.iter().any(|inst| {
-                matches!(&inst.kind, SsaInstKind::Const(SsaConst::Int(10)))
-            })
+            b.instructions
+                .iter()
+                .any(|inst| matches!(&inst.kind, SsaInstKind::Const(SsaConst::Int(10))))
         });
-        assert!(has_const_10, "expected constant 10 after folding (* 2 3) + 4");
+        assert!(
+            has_const_10,
+            "expected constant 10 after folding (* 2 3) + 4"
+        );
     }
 
     #[test]
@@ -634,9 +668,9 @@ mod tests {
         let func = ssa.functions.values().next().unwrap();
         // After optimization, (+ 1 2) should be eliminated since x is unused
         let has_add_call = func.blocks.values().any(|b| {
-            b.instructions.iter().any(|inst| {
-                matches!(&inst.kind, SsaInstKind::CallNamed { name, .. } if name == "+")
-            })
+            b.instructions.iter().any(
+                |inst| matches!(&inst.kind, SsaInstKind::CallNamed { name, .. } if name == "+"),
+            )
         });
         assert!(!has_add_call, "unused + should be eliminated by DCE");
     }
