@@ -802,6 +802,7 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                 call_conv,
                 diagnostics: Vec::new(),
                 exception_handlers: Vec::new(),
+                ended_handler_count: 0,
                 catch_result_value: None,
             };
             state.vmctx = entry_vmctx;
@@ -860,16 +861,21 @@ struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     call_conv: CallConv,
     diagnostics: Vec<Diagnostic>,
     exception_handlers: Vec<ExceptionHandler>,
+    /// Counts CatchEnd/ConditionCaseEnd/UnwindProtectEnd instructions processed.
+    /// Used to compute handler indices without popping the handler stack.
+    ended_handler_count: usize,
     catch_result_value: Option<ir::Value>,
 }
 
 const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
 
+#[derive(Clone, Copy)]
 struct ExceptionHandler {
     handler_block: ir::Block,
     kind: ExceptionHandlerKind,
 }
 
+#[derive(Clone, Copy)]
 enum ExceptionHandlerKind {
     Catch {
         catch_tag: ir::Value,
@@ -1314,10 +1320,21 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 });
             }
             SsaInstKind::CatchEnd { body_result } => {
-                let handler = self
-                    .exception_handlers
-                    .pop()
-                    .expect("CatchEnd without CatchBegin");
+                // Compute handler index from the top of the stack, accounting
+                // for previous CatchEnd/ConditionCaseEnd/UnwindProtectEnd
+                // instructions that have been processed.  Don't pop the stack
+                // so that Throw in loop bodies can still find their handler.
+                let Some(handler_idx) =
+                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                else {
+                    self.error("CatchEnd without CatchBegin");
+                    return;
+                };
+                self.ended_handler_count += 1;
+                let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
+                    self.error("CatchEnd handler index out of range");
+                    return;
+                };
                 let Some(func_ref) = self.exception_func_ref("catch_end", 0) else {
                     return;
                 };
@@ -1405,20 +1422,26 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             &[],
                             ClifRuntimeCallKind::CatchEnd,
                         );
-                        if let Some(outer) = self.exception_handlers.last() {
-                            self.builder
-                                .ins()
-                                .jump(outer.handler_block, &[]);
+                        // Rethrow to the outer handler (one level up).
+                        // handler_idx is the index of THIS handler; the outer
+                        // handler is at handler_idx - 1.
+                        if let Some(outer_idx) = handler_idx.checked_sub(1) {
+                            if let Some(outer) = self.exception_handlers.get(outer_idx) {
+                                self.builder.ins().jump(outer.handler_block, &[]);
+                            } else {
+                                let sentinel =
+                                    self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                                self.builder.ins().return_(&[sentinel]);
+                            }
                         } else {
                             let sentinel =
                                 self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
                             self.builder.ins().return_(&[sentinel]);
                         }
-                        self.builder.seal_block(handler.handler_block);
-                        self.builder.seal_block(match_block);
-                        self.builder.seal_block(rethrow_block);
+                        // Don't seal blocks here — defer to seal_all_blocks.
+                        // Throw in later blocks may need to add predecessors
+                        // to the handler_block.
                         self.builder.switch_to_block(continuation_block);
-                        self.builder.seal_block(continuation_block);
                         // Map CatchEnd's result to the catch_result block parameter
                         if let Some(vid) = inst.result {
                             self.value_map.insert(vid, catch_result);
@@ -1485,10 +1508,17 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let _ = value;
             }
             SsaInstKind::ConditionCaseEnd => {
-                let handler = self
-                    .exception_handlers
-                    .pop()
-                    .expect("ConditionCaseEnd without ConditionCaseBegin");
+                let Some(handler_idx) =
+                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                else {
+                    self.error("ConditionCaseEnd without ConditionCaseBegin");
+                    return;
+                };
+                self.ended_handler_count += 1;
+                let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
+                    self.error("ConditionCaseEnd handler index out of range");
+                    return;
+                };
                 let Some(func_ref) =
                     self.exception_func_ref("condition_case_end", 0)
                 else {
@@ -1505,18 +1535,21 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     ExceptionHandlerKind::ConditionCase { continuation_block } => {
                         self.builder.ins().jump(continuation_block, &[]);
                         self.builder.switch_to_block(handler.handler_block);
-                        if let Some(outer) = self.exception_handlers.last() {
-                            self.builder
-                                .ins()
-                                .jump(outer.handler_block, &[]);
+                        if let Some(outer_idx) = handler_idx.checked_sub(1) {
+                            if let Some(outer) = self.exception_handlers.get(outer_idx) {
+                                self.builder.ins().jump(outer.handler_block, &[]);
+                            } else {
+                                let sentinel =
+                                    self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                                self.builder.ins().return_(&[sentinel]);
+                            }
                         } else {
                             let sentinel =
                                 self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
                             self.builder.ins().return_(&[sentinel]);
                         }
-                        self.builder.seal_block(handler.handler_block);
+                        // Don't seal — defer to seal_all_blocks.
                         self.builder.switch_to_block(continuation_block);
-                        self.builder.seal_block(continuation_block);
                     }
                     _ => {
                         self.error("ConditionCaseEnd matched non-ConditionCase handler");
@@ -1571,10 +1604,17 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 );
             }
             SsaInstKind::UnwindProtectEnd => {
-                let handler = self
-                    .exception_handlers
-                    .pop()
-                    .expect("UnwindProtectEnd without UnwindProtectBegin");
+                let Some(handler_idx) =
+                    self.exception_handlers.len().checked_sub(self.ended_handler_count + 1)
+                else {
+                    self.error("UnwindProtectEnd without UnwindProtectBegin");
+                    return;
+                };
+                self.ended_handler_count += 1;
+                let Some(handler) = self.exception_handlers.get(handler_idx).cloned() else {
+                    self.error("UnwindProtectEnd handler index out of range");
+                    return;
+                };
                 let Some(func_ref) =
                     self.exception_func_ref("unwind_protect_end", 0)
                 else {
@@ -1609,14 +1649,20 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             .ins()
                             .icmp(IntCC::Equal, check_result, sentinel);
                         let no_exception_block = self.builder.create_block();
-                        if let Some(outer) = self.exception_handlers.last() {
-                            self.builder.ins().brif(
-                                is_exception,
-                                outer.handler_block,
-                                &[],
-                                no_exception_block,
-                                &[],
-                            );
+                        if let Some(outer_idx) = handler_idx.checked_sub(1) {
+                            if let Some(outer) = self.exception_handlers.get(outer_idx) {
+                                self.builder.ins().brif(
+                                    is_exception,
+                                    outer.handler_block,
+                                    &[],
+                                    no_exception_block,
+                                    &[],
+                                );
+                            } else {
+                                let sentinel_v =
+                                    self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                                self.builder.ins().return_(&[sentinel_v]);
+                            }
                         } else {
                             self.builder.ins().brif(
                                 is_exception,
@@ -1628,11 +1674,8 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         }
                         self.builder.switch_to_block(no_exception_block);
                         self.builder.ins().jump(continuation_block, &[]);
-                        self.builder.seal_block(handler.handler_block);
-                        self.builder.seal_block(normal_block);
-                        self.builder.seal_block(no_exception_block);
+                        // Don't seal — defer to seal_all_blocks.
                         self.builder.switch_to_block(continuation_block);
-                        self.builder.seal_block(continuation_block);
                     }
                     _ => {
                         self.error("UnwindProtectEnd matched non-UnwindProtect handler");

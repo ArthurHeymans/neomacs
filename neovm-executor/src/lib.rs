@@ -2037,25 +2037,17 @@ total",
     }
 
     #[test]
-    fn jit_cl_loop_with_return_via_catch() {
-        // NOTE: catch/throw inside while/cl-loop loops currently returns
-        // EXCEPTION_SENTINEL instead of the caught value. This is a known
-        // issue with the JIT codegen's exception handling inside loops.
-        // The interpreter path works correctly for these patterns.
-        // Test catch/throw in a simpler context (no loop) to verify the mechanism.
+    fn jit_catch_throw_inside_cl_loop() {
         let artifact = crate::jit_interp::execute_with_jit(
-            "catch-progn.el",
+            "catch-loop.el",
             ";;; -*- lexical-binding: t; -*-
              (catch 'done
-               (progn
-                 (+ 1 2)
-                 (+ 3 4)
-                 (throw 'done 42)
-                 (+ 5 6)))",
+               (cl-loop for i from 0 to 10
+                        do (if (> i 5) (throw 'done (* i 10)))))",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
-        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(60)));
     }
 
     #[test]
