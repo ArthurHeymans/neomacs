@@ -1043,3 +1043,41 @@ fn left_margin_width_preserves_buffer_content() {
         );
     }
 }
+
+#[test]
+fn abbrev_expand_interactively_via_cx_apostrophe_after_typing() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "abbrev-expand.txt";
+    let initial = "";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    // Define abbrev via M-x define-global-abbrev
+    invoke_mx_command(&mut gnu, &mut neo, "define-global-abbrev");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"omwexp\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"on my way expanded\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Type the abbrev name and expand
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"omwexp");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Expand via C-x '
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "'");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("on my way expanded")),
+            "{label}: abbrev expand should replace omwexp with expansion"
+        );
+    }
+}
