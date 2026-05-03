@@ -130,7 +130,7 @@ fn run_gui(demo: &str) {
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
     // Use logical font size (12 pt).  fontconfig/cosmic-text measure in
     // logical pixels; the X11 pre-scaling and GPU handle physical DPI.
-    let logical_size = 12.0f32;
+    let logical_size = 10.0f32;
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
         fm.char_width('m', family, 400, false, logical_size)
