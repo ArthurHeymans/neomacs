@@ -3390,4 +3390,76 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(1 99)");
     }
+
+    // --- Real-world integration test ---
+
+    #[test]
+    fn jit_real_world_integration() {
+        // Simulates a typical Elisp utility library with:
+        // - defun with &optional/&rest
+        // - recursive calls
+        // - cl-loop with various clauses
+        // - setf on multiple places
+        // - closures and higher-order functions
+        // - hash tables
+        // - condition-case error handling
+        // - pcase pattern matching
+        let artifact = crate::jit_interp::execute_with_jit(
+            "integration.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defun my-filter (pred lst)\n\
+               \"Filter elements of LST by PRED.\"\n\
+               (cl-loop for x in lst\n\
+                        if (funcall pred x) collect x))\n\
+\n\
+             (defun my-reduce (fn init lst)\n\
+               \"Reduce LST using FN starting from INIT.\"\n\
+               (if (null lst) init\n\
+                 (my-reduce fn (funcall fn init (car lst)) (cdr lst))))\n\
+\n\
+             (defun my-partition (pred lst)\n\
+               \"Partition LST into (matching . non-matching).\"\n\
+               (let ((yes nil) (no nil))\n\
+                 (dolist (x lst)\n\
+                   (if (funcall pred x)\n\
+                       (push x yes)\n\
+                     (push x no)))\n\
+                 (cons (nreverse yes) (nreverse no))))\n\
+\n\
+             (defun safe-div (a b)\n\
+               \"Divide A by B, return nil on division by zero.\"\n\
+               (condition-case nil\n\
+                   (/ a b)\n\
+                 (arith-error nil)))\n\
+\n\
+             (defun my-compose (f g)\n\
+               \"Return a function that is F composed with G.\"\n\
+               (lambda (x) (funcall f (funcall g x))))\n\
+\n\
+             (let* ((nums '(1 2 3 4 5 6 7 8 9 10))\n\
+                    (evens (my-filter (lambda (x) (cl-evenp x)) nums))\n\
+                    (odds (my-filter (lambda (x) (cl-oddp x)) nums))\n\
+                    (sum (my-reduce (lambda (a b) (+ a b)) 0 nums))\n\
+                    (part (my-partition (lambda (x) (> x 5)) nums))\n\
+                    (double-then-inc (my-compose (lambda (x) (+ x 1))\n\
+                                                 (lambda (x) (* x 2))))\n\
+                    (div-result (list (safe-div 10 3) (safe-div 10 0))))\n\
+               (list evens\n\
+                     odds\n\
+                     sum\n\
+                     (car part)  ; matching (> 5)\n\
+                     (cdr part)  ; non-matching (<= 5)\n\
+                     (funcall double-then-inc 5)  ; 5*2+1=11\n\
+                     div-result))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        // Verify key results
+        assert!(s.contains("(2 4 6 8 10)"), "evens: {s}");
+        assert!(s.contains("(1 3 5 7 9)"), "odds: {s}");
+        assert!(s.contains("55"), "sum: {s}"); // 1+2+...+10 = 55
+        assert!(s.contains("11"), "compose: {s}"); // 5*2+1 = 11
+    }
 }

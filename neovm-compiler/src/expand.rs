@@ -249,7 +249,7 @@ impl Expander {
                 }
             }
             "destructuring-bind" => self.expand_destructuring_bind(span, items),
-            "flet" => self.expand_flet(span, items),
+            "flet" | "cl-flet" => self.expand_flet(span, items),
             "labels" | "cl-labels" => self.expand_labels(span, items),
             "cl-defun" => self.expand_cl_defun(span, items),
             "cl-macrolet" => self.expand_cl_macrolet(span, items),
