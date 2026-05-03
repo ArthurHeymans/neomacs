@@ -398,9 +398,7 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
                     .args(["--force", "--sign", "-", bin.to_str().unwrap()])
                     .status()?;
                 if !status.success() {
-                    return Err(
-                        format!("codesign failed on {}", bin.display()).into()
-                    );
+                    return Err(format!("codesign failed on {}", bin.display()).into());
                 }
             }
         }
