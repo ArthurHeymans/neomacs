@@ -1953,6 +1953,20 @@ impl<'a> Vm<'a> {
             // SAFETY: redirect() already confirmed Plainval, so val.plain is active
             let val = unsafe { sym.val.plain };
             if !val.is_unbound() {
+                // For variables like `buffer-undo-list`: the obarray
+                // default is nil but the buffer-local value (via
+                // SharedUndoState / local_var_alist) is the live value.
+                // Check buffer-local when the Plainval is nil.
+                if !val.is_nil() {
+                    return Ok(val);
+                }
+                if let Some(buf) = self.ctx.buffers.current_buffer() {
+                    if let Some(blv) = buf.get_buffer_local_by_sym_id(name_id) {
+                        if !blv.is_nil() {
+                            return Ok(blv);
+                        }
+                    }
+                }
                 return Ok(val);
             }
         }
@@ -2026,15 +2040,34 @@ impl<'a> Vm<'a> {
             }
         }
 
-        // GNU `bytecode.c:Bvarref` falls back to `Fsymbol_value`,
-        // not the raw symbol cell. Route the VM fallback through the
-        // shared runtime reader so forwarded slot-backed vars like
-        // `buffer-undo-list` observe current-buffer state.
+        // For variables like `buffer-undo-list` that are not slot-backed
+        // but have per-buffer state (SharedUndoState), the obarray
+        // default is nil while the buffer-local value is the live
+        // undo list.  Check buffer-local before falling through to
+        // the obarray default so the byte-compiled code sees the
+        // correct per-buffer value.
+        if let Some(buf) = self.ctx.buffers.current_buffer() {
+            if let Some(val) = buf.get_buffer_local_by_sym_id(name_id) {
+                if !val.is_nil() {
+                    return Ok(val);
+                }
+            }
+        }
+
+        // GNU `bytecode.c:Bvarref` falls back to `Fsymbol_value`.
         if let Some(val) = self
             .ctx
             .visible_runtime_variable_value_by_id_resolved(resolved)
         {
             return Ok(val);
+        }
+
+        // Retry buffer-local for nil-valued defaults (e.g. unset
+        // `buffer-undo-list` on a clean buffer).
+        if let Some(buf) = self.ctx.buffers.current_buffer() {
+            if let Some(val) = buf.get_buffer_local_by_sym_id(name_id) {
+                return Ok(val);
+            }
         }
 
         Err(signal("void-variable", vec![Value::from_sym_id(name_id)]))

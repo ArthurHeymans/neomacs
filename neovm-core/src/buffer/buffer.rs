@@ -240,7 +240,6 @@ pub const BUFFER_SLOT_CATEGORY_TABLE: usize = 60;
 /// / `(set-case-table)`. Always-local per GNU `buffer.c:4731-4734`
 /// (flag=0 means every buffer has its own value, no conditional gate).
 pub const BUFFER_SLOT_CASE_TABLE: usize = 61;
-pub const BUFFER_SLOT_UNDO_LIST: usize = 62;
 
 // ---------------------------------------------------------------------------
 // BUFFER_SLOT_INFO table — declarative metadata for every BUFFER_OBJFWD
@@ -1069,16 +1068,6 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         install_as_forwarder: false,
         permanent_local: false,
     },
-    BufferSlotInfo {
-        name: "buffer-undo-list",
-        offset: BUFFER_SLOT_UNDO_LIST,
-        default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
-        reset_on_kill: true,
-        local_flags_idx: -1,
-        install_as_forwarder: true,
-        permanent_local: false,
-    },
 ];
 
 /// Look up a [`BufferSlotInfo`] by Lisp variable name. Returns `None`
@@ -1826,11 +1815,6 @@ impl Buffer {
     /// indirect-buffer chain is queried.
     pub fn set_undo_list(&mut self, value: Value) {
         self.undo_state.set_list(value);
-        // Sync the forwarded slot so byte-compiled code reading
-        // `buffer-undo-list` via varref sees the live undo list.
-        if let Some(info) = lookup_buffer_slot_by_sym_id(buffer_undo_list_sym()) {
-            self.slots[info.offset] = value;
-        }
     }
 
     // -- Text queries --------------------------------------------------------
@@ -2233,22 +2217,17 @@ impl Buffer {
     }
 
     pub fn set_buffer_local_by_sym_id(&mut self, sym_id: SymId, value: Value) {
-        // buffer-undo-list must be handled before the slot lookup:
-        // it stores into SharedUndoState, and we sync the slot after.
-        if sym_id == buffer_undo_list_sym() {
-            self.undo_state.set_list(value);
-            if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-                self.slots[info.offset] = value;
-            }
-            if value.is_nil() {
-                self.undo_state.set_recorded_first_change(false);
-            }
-            return;
-        }
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
             self.slots[info.offset] = coerce_to_slot(info, value, self.slots[info.offset]);
             if info.local_flags_idx >= 0 {
                 self.set_slot_local_flag(info.offset, true);
+            }
+            return;
+        }
+        if sym_id == buffer_undo_list_sym() {
+            self.undo_state.set_list(value);
+            if value.is_nil() {
+                self.undo_state.set_recorded_first_change(false);
             }
             return;
         }
@@ -2265,17 +2244,13 @@ impl Buffer {
     }
 
     pub fn set_buffer_local_void_by_sym_id(&mut self, sym_id: SymId) {
-        // buffer-undo-list must be handled before the slot lookup.
+        if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
+            self.slots[info.offset] = Value::NIL;
+            return;
+        }
         if sym_id == buffer_undo_list_sym() {
             self.undo_state.set_list(Value::NIL);
             self.undo_state.set_recorded_first_change(false);
-            if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-                self.slots[info.offset] = Value::NIL;
-            }
-            return;
-        }
-        if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-            self.slots[info.offset] = Value::NIL;
             return;
         }
         remove_local_var_alist_entry(&mut self.local_var_alist, Value::from_sym_id(sym_id));
@@ -2459,19 +2434,21 @@ impl Buffer {
     }
 
     pub fn get_buffer_local_by_sym_id(&self, sym_id: SymId) -> Option<Value> {
-        // `buffer-undo-list` reads through `SharedUndoState` so
-        // indirect buffers see the root buffer's undo state.
-        // Must precede the general slot lookup since it also has
-        // a slot now (BUFFER_SLOT_UNDO_LIST).
-        if sym_id == buffer_undo_list_sym() {
-            return Some(self.get_undo_list());
-        }
-        // Slot-backed names resolve to the live slot value.
+        // Slot-backed names resolve to the live slot value, mirroring
+        // GNU's `BVAR(buf, …)` accessor. Conditional slots only
+        // report a per-buffer binding when the local-flags bit is
+        // set; the caller falls through to the global default at a
+        // higher layer that has access to `BufferManager::buffer_defaults`.
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
             if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset) {
                 return None;
             }
             return Some(self.slots[info.offset]);
+        }
+        // `buffer-undo-list` reads through `SharedUndoState` so
+        // indirect buffers see the root buffer's undo state.
+        if sym_id == buffer_undo_list_sym() {
+            return Some(self.get_undo_list());
         }
         // Everything else: walk `local_var_alist`. Mirrors GNU's
         // `assq_no_quit (var, BVAR (buf, local_var_alist))` at
