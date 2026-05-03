@@ -77,9 +77,22 @@ impl RenderApp {
                     },
                     frame.faces.len(),
                 );
-                for (i, g) in frame.glyphs.iter().enumerate() {
-                    tracing::info!("  glyph[{}]: {:?}", i, g);
-                }
+                let all_glyphs: String =
+                    frame
+                        .glyphs
+                        .iter()
+                        .enumerate()
+                        .fold(String::new(), |acc, (i, g)| {
+                            let slot = g.slot_id();
+                            acc + &format!(
+                                "  glyph[{}][r={},c={}]: {:?}\n",
+                                i,
+                                slot.map_or(0, |s| s.row),
+                                slot.map_or(0, |s| s.col),
+                                g
+                            )
+                        });
+                tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
             if frame_id != 0 && parent_id == 0 && self.multi_windows.windows.contains_key(&frame_id)

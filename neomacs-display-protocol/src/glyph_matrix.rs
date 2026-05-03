@@ -1216,7 +1216,16 @@ impl FrameDisplayState {
                         });
                     }
                 }
-                col += if glyph.wide { 2 } else { 1 };
+                col += match &glyph.glyph_type {
+                    GlyphType::Stretch { width_cols } => *width_cols as usize,
+                    _ => {
+                        if glyph.wide {
+                            2
+                        } else {
+                            1
+                        }
+                    }
+                };
             }
         }
 
