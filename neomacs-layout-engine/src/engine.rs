@@ -2826,6 +2826,11 @@ impl LayoutEngine {
                         )
                     });
                     if let Some(m) = metrics {
+                        // face_char_w is the canonical column width for the
+                        // default face ('m' advance).  Per-character advance
+                        // for non-ASCII glyphs is measured individually via
+                        // char_pixel_advance() below — matching GNU's
+                        // get_per_char_metric(font, &char2b).
                         face_char_w = m.char_width;
                         face_h = m.line_height;
                         face_ascent_val = m.ascent;
