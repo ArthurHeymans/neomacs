@@ -1274,6 +1274,28 @@ impl Interpreter<'_, '_, '_> {
             "format" | "format-message" => self
                 .min_arity(name, args, 1)
                 .and_then(|_| self.format_string(args[0], &args[1..])),
+            "split-string" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
+                self.split_string(args[0], args.get(1).copied(), args.get(2).copied())
+            }),
+            "string-join" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_join(args[0], args[1])),
+            "string-trim" => self
+                .min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.string_trim(args[0], args.get(1).copied())),
+            "string-trim-left" => self
+                .min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.string_trim_left(args[0], args.get(1).copied())),
+            "string-trim-right" => self
+                .min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.string_trim_right(args[0], args.get(1).copied())),
+            "substring-no-properties" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
+                self.substring(
+                    args[0],
+                    args.get(1).copied().unwrap_or(LispValue::expect_fixnum(0)),
+                    args.get(2).copied(),
+                )
+            }),
             "vector" => Some(self.runtime.vector(args.to_vec())),
             "make-vector" => self.exact_arity(name, args, 2).and_then(|_| {
                 let len = args[0].as_fixnum()?;
@@ -2162,6 +2184,95 @@ impl Interpreter<'_, '_, '_> {
         let left = self.string_bytes(left)?;
         let right = self.string_bytes(right)?;
         Some(bool_value(left == right))
+    }
+
+    fn split_string(
+        &mut self,
+        string: LispValue,
+        separators: Option<LispValue>,
+        omit_nulls: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let s = self.string_contents_owned(string)?;
+        let sep = match separators {
+            Some(sep) if !sep.is_nil() => self.string_contents_owned(sep)?,
+            _ => String::new(),
+        };
+        let omit = omit_nulls.map(|v| !v.is_nil()).unwrap_or(false);
+        let parts: Vec<&str> = if sep.is_empty() {
+            s.split_whitespace().collect()
+        } else {
+            s.split(&sep).collect()
+        };
+        let parts: Vec<&str> = if omit {
+            parts.into_iter().filter(|p| !p.is_empty()).collect()
+        } else {
+            parts
+        };
+        let values: Vec<LispValue> = parts.into_iter().map(|p| self.runtime.string(p)).collect();
+        Some(make_list(self.runtime, values.into_iter()))
+    }
+
+    fn string_join(&mut self, list: LispValue, separator: LispValue) -> Option<LispValue> {
+        let sep = self.string_contents_owned(separator)?;
+        let values = self.list_values(list)?;
+        let parts: Vec<String> = values
+            .into_iter()
+            .filter_map(|v| self.string_contents_owned(v))
+            .collect();
+        Some(self.runtime.string(parts.join(&sep)))
+    }
+
+    fn string_trim(&mut self, string: LispValue, regexp: Option<LispValue>) -> Option<LispValue> {
+        let mut s = self.string_contents_owned(string)?;
+        if let Some(re) = regexp {
+            if !re.is_nil() {
+                let pat = self.string_contents_owned(re)?;
+                s = s.trim_matches(|c: char| pat.contains(c)).to_string();
+            } else {
+                s = s.trim().to_string();
+            }
+        } else {
+            s = s.trim().to_string();
+        }
+        Some(self.runtime.string(s))
+    }
+
+    fn string_trim_left(
+        &mut self,
+        string: LispValue,
+        regexp: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let mut s = self.string_contents_owned(string)?;
+        if let Some(re) = regexp {
+            if !re.is_nil() {
+                let pat = self.string_contents_owned(re)?;
+                s = s.trim_start_matches(|c: char| pat.contains(c)).to_string();
+            } else {
+                s = s.trim_start().to_string();
+            }
+        } else {
+            s = s.trim_start().to_string();
+        }
+        Some(self.runtime.string(s))
+    }
+
+    fn string_trim_right(
+        &mut self,
+        string: LispValue,
+        regexp: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let mut s = self.string_contents_owned(string)?;
+        if let Some(re) = regexp {
+            if !re.is_nil() {
+                let pat = self.string_contents_owned(re)?;
+                s = s.trim_end_matches(|c: char| pat.contains(c)).to_string();
+            } else {
+                s = s.trim_end().to_string();
+            }
+        } else {
+            s = s.trim_end().to_string();
+        }
+        Some(self.runtime.string(s))
     }
 
     fn string_lessp(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
@@ -3149,6 +3260,12 @@ fn is_primitive_name(name: &str) -> bool {
             | "length"
             | "concat"
             | "substring"
+            | "split-string"
+            | "string-join"
+            | "string-trim"
+            | "string-trim-left"
+            | "string-trim-right"
+            | "substring-no-properties"
             | "string="
             | "string-equal"
             | "string<"

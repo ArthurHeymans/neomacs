@@ -3898,8 +3898,7 @@ impl LayoutEngine {
                         .map(|&stop| stop as f32 * face_space_w)
                         .find(|&stop_px| stop_px > x)
                         .unwrap_or_else(|| {
-                            let last =
-                                *params.tab_stop_list.last().unwrap() as f32 * face_space_w;
+                            let last = *params.tab_stop_list.last().unwrap() as f32 * face_space_w;
                             if x >= last && pixel_tab_width > 0.0 {
                                 last + ((x - last) / pixel_tab_width).floor() * pixel_tab_width
                                     + pixel_tab_width
@@ -3955,8 +3954,10 @@ impl LayoutEngine {
                     col,
                     next_tab_col,
                 );
-                self.matrix_builder
-                    .push_stretch((next_tab_col.saturating_sub(col)).max(1) as u16, current_face_id.saturating_sub(1));
+                self.matrix_builder.push_stretch(
+                    (next_tab_col.saturating_sub(col)).max(1) as u16,
+                    current_face_id.saturating_sub(1),
+                );
                 x += advance;
                 col = next_tab_col;
                 charpos += 1;
