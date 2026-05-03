@@ -913,3 +913,65 @@ fn describe_char_via_cu_cx_equals_shows_character_details() {
         );
     }
 }
+
+#[test]
+fn describe_variable_fill_column_via_ch_v_shows_docstring() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "v");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"fill-column\r");
+    }
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Help*"))
+            && grid.iter().any(|row| row.contains("fill-column"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("*Help*")),
+            "{label} C-h v should open a Help buffer"
+        );
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("fill-column") && row.contains("column")),
+            "{label} C-h v fill-column should show variable info"
+        );
+    }
+}
+
+#[test]
+fn describe_function_forward_char_via_ch_f_shows_docstring() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "f");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"forward-char\r");
+    }
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Help*"))
+            && grid.iter().any(|row| row.contains("forward-char"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("*Help*")),
+            "{label} C-h f should open a Help buffer"
+        );
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("forward-char") && !row.contains("C-h f")),
+            "{label} C-h f forward-char should show function doc"
+        );
+    }
+}
