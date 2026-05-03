@@ -176,8 +176,13 @@ impl RegVerifier<'_> {
             | RegInstKind::ConditionCaseHandler { .. }
             | RegInstKind::ConditionCaseEnd { .. }
             | RegInstKind::UnwindProtectBegin
-            | RegInstKind::UnwindProtectCleanup
-            | RegInstKind::UnwindProtectEnd => {}
+            | RegInstKind::UnwindProtectCleanup => {}
+            RegInstKind::UnwindProtectEnd { dst, body_result } => {
+                self.check_reg(*dst);
+                if let Some(src) = body_result {
+                    self.check_reg(*src);
+                }
+            }
         }
     }
 

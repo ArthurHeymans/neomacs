@@ -1607,7 +1607,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     ClifRuntimeCallKind::UnwindProtectCleanupEnter,
                 );
             }
-            SsaInstKind::UnwindProtectEnd => {
+            SsaInstKind::UnwindProtectEnd { body_result } => {
                 let Some(handler_idx) = self
                     .exception_handlers
                     .len()

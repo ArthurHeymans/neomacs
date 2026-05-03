@@ -149,7 +149,10 @@ pub enum RegInstKind {
     },
     UnwindProtectBegin,
     UnwindProtectCleanup,
-    UnwindProtectEnd,
+    UnwindProtectEnd {
+        dst: RegId,
+        body_result: Option<RegId>,
+    },
     Safepoint {
         id: SafepointId,
     },

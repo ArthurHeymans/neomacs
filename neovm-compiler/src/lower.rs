@@ -411,7 +411,10 @@ impl<'a> RegLowerer<'a> {
             },
             SsaInstKind::UnwindProtectBegin => RegInstKind::UnwindProtectBegin,
             SsaInstKind::UnwindProtectCleanup => RegInstKind::UnwindProtectCleanup,
-            SsaInstKind::UnwindProtectEnd => RegInstKind::UnwindProtectEnd,
+            SsaInstKind::UnwindProtectEnd { body_result } => RegInstKind::UnwindProtectEnd {
+                dst: self.result_reg(inst),
+                body_result: body_result.map(|v| self.value_reg(v)),
+            },
         };
         self.emit(block, reg_inst);
         if self.needs_safepoint(&inst.kind) {
@@ -1079,11 +1082,16 @@ impl SsaBuilder {
             }
             HirExprKind::UnwindProtect { body, cleanup } => {
                 self.emit_no_result(SsaInstKind::UnwindProtectBegin);
-                let value = self.lower_expr(body);
+                let body_value = self.lower_expr(body);
                 self.emit_no_result(SsaInstKind::UnwindProtectCleanup);
                 let _ = self.lower_expr(cleanup);
-                self.emit_no_result(SsaInstKind::UnwindProtectEnd);
-                value
+                let result = self.emit_value(
+                    SsaInstKind::UnwindProtectEnd {
+                        body_result: body_value,
+                    },
+                    Effects::single(Effect::MaySignal),
+                );
+                Some(result)
             }
             HirExprKind::Funcall { callee, args } => {
                 let callee = self.lower_expr(callee)?;
@@ -1331,7 +1339,7 @@ impl SsaBuilder {
             | SsaInstKind::ConditionCaseEnd { .. }
             | SsaInstKind::UnwindProtectBegin
             | SsaInstKind::UnwindProtectCleanup
-            | SsaInstKind::UnwindProtectEnd => Effects::new([Effect::MayThrow, Effect::MaySignal]),
+            | SsaInstKind::UnwindProtectEnd { .. } => Effects::new([Effect::MayThrow, Effect::MaySignal]),
             SsaInstKind::Throw { .. } => Effects::single(Effect::MayThrow),
             _ => Effects::pure(),
         };

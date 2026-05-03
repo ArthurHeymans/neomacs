@@ -790,9 +790,16 @@ impl Interpreter<'_, '_, '_> {
                 };
                 self.set(*dst, value);
             }
-            RegInstKind::UnwindProtectBegin
-            | RegInstKind::UnwindProtectCleanup
-            | RegInstKind::UnwindProtectEnd => {}
+            RegInstKind::UnwindProtectBegin | RegInstKind::UnwindProtectCleanup => {}
+            RegInstKind::UnwindProtectEnd { dst, body_result } => {
+                let value = if let Some(src) = body_result {
+                    self.get(*src)
+                        .unwrap_or_else(|| self.last_value.unwrap_or(LispValue::NIL))
+                } else {
+                    self.last_value.unwrap_or(LispValue::NIL)
+                };
+                self.set(*dst, value);
+            }
         }
         true
     }
@@ -3089,13 +3096,13 @@ fn find_unwind_cleanup(
         match &inst.kind {
             RegInstKind::UnwindProtectBegin => depth += 1,
             RegInstKind::UnwindProtectCleanup if depth == 0 => cleanup_index = Some(index),
-            RegInstKind::UnwindProtectEnd if depth == 0 => {
+            RegInstKind::UnwindProtectEnd { .. } if depth == 0 => {
                 return cleanup_index.map(|cleanup_index| UnwindCleanupTarget {
                     cleanup_index,
                     end_index: index,
                 });
             }
-            RegInstKind::UnwindProtectEnd => depth -= 1,
+            RegInstKind::UnwindProtectEnd { .. } => depth -= 1,
             _ => {}
         }
     }
@@ -3187,7 +3194,7 @@ fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
         | RegInstKind::ConditionCaseEnd { .. }
         | RegInstKind::UnwindProtectBegin
         | RegInstKind::UnwindProtectCleanup
-        | RegInstKind::UnwindProtectEnd
+        | RegInstKind::UnwindProtectEnd { .. }
         | RegInstKind::Safepoint { .. } => None,
     }
 }

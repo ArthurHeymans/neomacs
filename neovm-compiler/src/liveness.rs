@@ -149,7 +149,10 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::ConditionCaseEnd { body_result: None }
         | SsaInstKind::UnwindProtectBegin
         | SsaInstKind::UnwindProtectCleanup
-        | SsaInstKind::UnwindProtectEnd => Vec::new(),
+        | SsaInstKind::UnwindProtectEnd { body_result: None } => Vec::new(),
+        SsaInstKind::UnwindProtectEnd {
+            body_result: Some(v),
+        } => vec![*v],
         SsaInstKind::ConditionCaseEnd {
             body_result: Some(v),
         } => vec![*v],

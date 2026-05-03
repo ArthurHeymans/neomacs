@@ -127,7 +127,9 @@ pub enum SsaInstKind {
     },
     UnwindProtectBegin,
     UnwindProtectCleanup,
-    UnwindProtectEnd,
+    UnwindProtectEnd {
+        body_result: Option<ValueId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

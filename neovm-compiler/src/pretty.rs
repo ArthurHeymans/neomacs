@@ -308,8 +308,13 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
         SsaInstKind::UnwindProtectCleanup => {
             let _ = write!(out, "unwind-protect-cleanup");
         }
-        SsaInstKind::UnwindProtectEnd => {
-            let _ = write!(out, "unwind-protect-end");
+        SsaInstKind::UnwindProtectEnd { body_result } => match body_result {
+            Some(v) => {
+                let _ = write!(out, "unwind-protect-end body={}", value_name(function, *v));
+            }
+            None => {
+                let _ = write!(out, "unwind-protect-end");
+            }
         }
     }
 }
@@ -484,8 +489,11 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
         RegInstKind::UnwindProtectCleanup => {
             let _ = write!(out, "unwind-protect-cleanup");
         }
-        RegInstKind::UnwindProtectEnd => {
-            let _ = write!(out, "unwind-protect-end");
+        RegInstKind::UnwindProtectEnd { dst, body_result } => {
+            let _ = write!(out, "unwind-protect-end dst={}", reg_name(function, *dst));
+            if let Some(src) = body_result {
+                let _ = write!(out, " body={}", reg_name(function, *src));
+            }
         }
         RegInstKind::Safepoint { id } => {
             let roots = function.safepoints.entries[*id]
