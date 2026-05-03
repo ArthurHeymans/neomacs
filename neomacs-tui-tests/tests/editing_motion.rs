@@ -2334,3 +2334,33 @@ fn comment_line_via_cx_csemicolon_toggles_current_line() {
         2,
     );
 }
+
+#[test]
+fn goto_line_via_mg_g_jumps_to_line_number() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let mut contents = String::new();
+    for line in 1..=20 {
+        contents.push_str(&format!("line {:02}\n", line));
+    }
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "goto-line-usage.txt",
+        &contents,
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-g");
+    send_both(&mut gnu, &mut neo, "g");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"10\r");
+    }
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("line 10"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches("goto_line_via_mg_g", &gnu, &neo, 2);
+}
