@@ -958,3 +958,40 @@ fn text_mode_and_fundamental_mode_switching_updates_modeline() {
         );
     }
 }
+
+#[test]
+fn header_line_format_displays_custom_header_above_buffer() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "header-line.txt",
+        "buffer content line\n",
+        "C-x C-f",
+    );
+
+    // Set header-line-format to display a custom string
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(setq header-line-format \"== HEADER ==\")",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let has_header = grid.iter().any(|row| row.contains("== HEADER =="));
+        assert!(
+            has_header,
+            "{label}: should show header-line with custom text"
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "header_line_format_displays_custom_header_above_buffer",
+        &gnu,
+        &neo,
+        3,
+    );
+}
