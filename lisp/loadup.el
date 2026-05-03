@@ -252,6 +252,7 @@
 
 (load "indent")
 (load "emacs-lisp/cl-generic")
+(load "emacs-lisp/timer")
 (load "simple")
 (load "emacs-lisp/seq")
 (load "emacs-lisp/nadvice")
