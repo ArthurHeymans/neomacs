@@ -2341,10 +2341,13 @@ impl Expander {
         // Finally body
         after_while.extend(finally_body.iter().cloned());
 
-        // Result expression
-        if !accums.is_empty() {
-            let (_, name, _) = &accums[0];
-            after_while.push(symbol_form(name, span));
+        // Result expression — use first default accumulator (without `into`)
+        let default_accum = accum_map
+            .iter()
+            .find(|(_, into_name, _)| into_name.is_none())
+            .map(|(_, _, var_name)| var_name.clone());
+        if let Some(var_name) = default_accum {
+            after_while.push(symbol_form(&var_name, span));
         } else if has_always_never {
             after_while.push(symbol_form("--cl-always--", span));
         } else if has_thereis {

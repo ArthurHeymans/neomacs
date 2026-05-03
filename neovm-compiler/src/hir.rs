@@ -1438,7 +1438,13 @@ impl Lowerer<'_> {
                 self.error(handler_form.span, "condition-case handler cannot be empty");
                 return None;
             }
+            if let Some(ref var_name) = var {
+                self.push_scope(std::iter::once(var_name.clone()));
+            }
             let body = self.lower_body(&items[1..], handler_form.span)?;
+            if var.is_some() {
+                self.pop_scope();
+            }
             handlers.push(HirConditionHandler {
                 pattern: items[0].clone(),
                 body,

@@ -393,6 +393,9 @@ impl<'a> RegLowerer<'a> {
             SsaInstKind::ConditionCaseBegin { var } => {
                 RegInstKind::ConditionCaseBegin { var: var.clone() }
             }
+            SsaInstKind::ConditionCaseGetVar => RegInstKind::ConditionCaseGetVar {
+                dst: self.result_reg(inst),
+            },
             SsaInstKind::ConditionCaseHandler { pattern } => RegInstKind::ConditionCaseHandler {
                 pattern: pattern.clone(),
             },
@@ -499,6 +502,7 @@ impl<'a> RegLowerer<'a> {
                 | SsaInstKind::CatchBegin { .. }
                 | SsaInstKind::Throw { .. }
                 | SsaInstKind::ConditionCaseBegin { .. }
+                | SsaInstKind::ConditionCaseGetVar
                 | SsaInstKind::ConditionCaseHandler { .. }
                 | SsaInstKind::ConditionCaseHandlerResult { .. }
                 | SsaInstKind::UnwindProtectBegin
@@ -1060,6 +1064,17 @@ impl SsaBuilder {
                     self.emit_no_result(SsaInstKind::ConditionCaseHandler {
                         pattern: handler.pattern.clone(),
                     });
+                    // Bind the condition-case variable in lexical scope for the handler body
+                    if let Some(var_name) = &var {
+                        let signal_data = self.emit_value(
+                            SsaInstKind::ConditionCaseGetVar,
+                            Effects::single(Effect::MaySignal),
+                        );
+                        self.emit_no_result(SsaInstKind::BindLexical {
+                            name: var_name.clone(),
+                            value: signal_data,
+                        });
+                    }
                     let handler_value = self.lower_expr(&handler.body);
                     // Emit a barrier that prevents DCE from removing the handler body.
                     // The runtime uses last_value to get the handler result, so the
@@ -1334,6 +1349,7 @@ impl SsaBuilder {
             SsaInstKind::CatchBegin { .. }
             | SsaInstKind::CatchEnd { .. }
             | SsaInstKind::ConditionCaseBegin { .. }
+            | SsaInstKind::ConditionCaseGetVar
             | SsaInstKind::ConditionCaseHandler { .. }
             | SsaInstKind::ConditionCaseHandlerResult { .. }
             | SsaInstKind::ConditionCaseEnd { .. }

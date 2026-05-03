@@ -129,6 +129,10 @@ pub enum ClifRuntimeCallKind {
     CheckException,
     ConditionCaseBegin,
     ConditionCaseEnd,
+    ConditionHandlerMatch,
+    ConditionCasePop,
+    GetSignalData,
+    ConditionCaseGetVar,
     UnwindProtectBegin,
     UnwindProtectCleanupEnter,
     UnwindProtectEnd,
@@ -838,6 +842,8 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
                 exception_handlers: Vec::new(),
                 ended_handler_count: 0,
                 catch_result_value: None,
+                ssa: self.ssa,
+                condition_case_vars: Vec::new(),
             };
             state.vmctx = entry_vmctx;
 
@@ -899,6 +905,9 @@ struct ClifBlockLowerer<'a, M: ClifModuleBackend> {
     /// Used to compute handler indices without popping the handler stack.
     ended_handler_count: usize,
     catch_result_value: Option<ir::Value>,
+    ssa: &'a SsaFunction,
+    /// Condition-case variable names, indexed by exception_handlers position.
+    condition_case_vars: Vec<Option<String>>,
 }
 
 const EXCEPTION_SENTINEL: i64 = 0x0DEAD_BEEF_DEAD_BEEFu64 as i64;
@@ -909,6 +918,20 @@ struct ExceptionHandler {
     kind: ExceptionHandlerKind,
 }
 
+impl ExceptionHandler {
+    fn set_transitioned(&mut self) {
+        if let ExceptionHandlerKind::ConditionCase { transitioned, .. } = &mut self.kind {
+            *transitioned = true;
+        }
+    }
+
+    fn set_no_match_block(&mut self, block: ir::Block) {
+        if let ExceptionHandlerKind::ConditionCase { no_match_block, .. } = &mut self.kind {
+            *no_match_block = Some(block);
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum ExceptionHandlerKind {
     Catch {
@@ -917,6 +940,9 @@ enum ExceptionHandlerKind {
     },
     ConditionCase {
         continuation_block: ir::Block,
+        result_param: ir::Value,
+        transitioned: bool,
+        no_match_block: Option<ir::Block>,
     },
     UnwindProtect {
         continuation_block: ir::Block,
@@ -1498,7 +1524,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let unreachable_block = self.builder.create_block();
                 self.builder.switch_to_block(unreachable_block);
             }
-            SsaInstKind::ConditionCaseBegin { .. } => {
+            SsaInstKind::ConditionCaseBegin { var } => {
                 let Some(func_ref) = self.exception_func_ref("condition_case_begin", 0) else {
                     return;
                 };
@@ -1509,16 +1535,169 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 };
                 let handler_block = self.builder.create_block();
                 let continuation_block = self.builder.create_block();
+                let result_param = self
+                    .builder
+                    .append_block_param(continuation_block, types::I64);
                 self.exception_handlers.push(ExceptionHandler {
                     handler_block,
-                    kind: ExceptionHandlerKind::ConditionCase { continuation_block },
+                    kind: ExceptionHandlerKind::ConditionCase {
+                        continuation_block,
+                        result_param,
+                        transitioned: false,
+                        no_match_block: None,
+                    },
                 });
+                self.condition_case_vars.push(var.clone());
+            }
+            SsaInstKind::ConditionCaseGetVar => {
+                let Some(result) = inst.result else {
+                    self.error("ConditionCaseGetVar has no result");
+                    return;
+                };
+                let Some(func_ref) = self.exception_func_ref("get_signal_data", 0) else {
+                    return;
+                };
+                let Some(value) =
+                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::ConditionCaseGetVar)
+                else {
+                    return;
+                };
+                self.value_map.insert(result, value);
             }
             SsaInstKind::ConditionCaseHandler { pattern } => {
-                let _ = pattern;
+                let Some(handler_idx) = self
+                    .exception_handlers
+                    .len()
+                    .checked_sub(self.ended_handler_count + 1)
+                else {
+                    self.error("ConditionCaseHandler without ConditionCaseBegin");
+                    return;
+                };
+                let handler_block = self.exception_handlers[handler_idx].handler_block;
+                let (continuation_block, result_param, transitioned, no_match_block) =
+                    match &mut self.exception_handlers[handler_idx].kind {
+                        ExceptionHandlerKind::ConditionCase {
+                            continuation_block,
+                            result_param,
+                            transitioned,
+                            no_match_block,
+                        } => (
+                            *continuation_block,
+                            *result_param,
+                            transitioned,
+                            *no_match_block,
+                        ),
+                        _ => {
+                            self.error("ConditionCaseHandler matched non-ConditionCase handler");
+                            return;
+                        }
+                    };
+
+                if !*transitioned {
+                    // First handler — body has finished, transition to handler dispatch
+                    self.exception_handlers[handler_idx].set_transitioned();
+                    let body_result_ir = self
+                        .peek_body_result()
+                        .unwrap_or_else(|| self.builder.ins().iconst(types::I64, NIL_BITS));
+
+                    // Check if an exception is pending
+                    let Some(check_ref) = self.exception_func_ref("check_exception", 0) else {
+                        return;
+                    };
+                    let Some(check_result) =
+                        self.emit_runtime_call(check_ref, &[], ClifRuntimeCallKind::CheckException)
+                    else {
+                        return;
+                    };
+                    let zero = self.builder.ins().iconst(types::I64, 0);
+                    let is_exception = self.builder.ins().icmp(IntCC::NotEqual, check_result, zero);
+
+                    let normal_block = self.builder.create_block();
+
+                    // If exception: go to handler_block for dispatch
+                    // If no exception: go to normal_block (pop catch, clear signal, jump to continuation)
+                    self.builder
+                        .ins()
+                        .brif(is_exception, handler_block, &[], normal_block, &[]);
+
+                    // Normal path: pop catch frame and clear signal, then jump to continuation
+                    self.builder.switch_to_block(normal_block);
+                    let Some(end_ref) = self.exception_func_ref("condition_case_end", 0) else {
+                        return;
+                    };
+                    self.emit_runtime_call(end_ref, &[], ClifRuntimeCallKind::ConditionCaseEnd);
+                    self.builder
+                        .ins()
+                        .jump(continuation_block, &[BlockArg::Value(body_result_ir)]);
+
+                    // Exception path: switch to handler_block for dispatch
+                    self.builder.switch_to_block(handler_block);
+                } else {
+                    // Subsequent handler — previous handler's no_match_block is current block
+                    if let Some(nmb) = no_match_block {
+                        self.builder.switch_to_block(nmb);
+                    }
+                }
+
+                // Check if this handler's condition matches the pending signal
+                let pattern_index = self.runtime.intern_quoted_form(pattern.clone());
+                let pattern_idx_val = self.builder.ins().iconst(types::I64, pattern_index as i64);
+                let dummy = self.builder.ins().iconst(types::I64, 0);
+                let Some(func_ref) = self.exception_func_ref("condition_handler_match", 2) else {
+                    return;
+                };
+                let Some(match_result) = self.emit_runtime_call(
+                    func_ref,
+                    &[dummy, pattern_idx_val],
+                    ClifRuntimeCallKind::ConditionHandlerMatch,
+                ) else {
+                    return;
+                };
+                let true_bits = self.builder.ins().iconst(types::I64, TRUE_BITS);
+                let is_match = self
+                    .builder
+                    .ins()
+                    .icmp(IntCC::Equal, match_result, true_bits);
+
+                let match_block = self.builder.create_block();
+                let no_match_block = self.builder.create_block();
+                self.builder
+                    .ins()
+                    .brif(is_match, match_block, &[], no_match_block, &[]);
+
+                // Store no_match_block for next handler or ConditionCaseEnd
+                self.exception_handlers[handler_idx].set_no_match_block(no_match_block);
+
+                // Handler body follows in match_block
+                self.builder.switch_to_block(match_block);
             }
             SsaInstKind::ConditionCaseHandlerResult { value } => {
-                let _ = value;
+                let Some(handler_idx) = self
+                    .exception_handlers
+                    .len()
+                    .checked_sub(self.ended_handler_count + 1)
+                else {
+                    return;
+                };
+                let (continuation_block, no_match_block) =
+                    match &self.exception_handlers[handler_idx].kind {
+                        ExceptionHandlerKind::ConditionCase {
+                            continuation_block,
+                            no_match_block,
+                            ..
+                        } => (*continuation_block, *no_match_block),
+                        _ => return,
+                    };
+                let handler_result_ir = self
+                    .value(*value)
+                    .unwrap_or_else(|| self.builder.ins().iconst(types::I64, NIL_BITS));
+                self.builder
+                    .ins()
+                    .jump(continuation_block, &[BlockArg::Value(handler_result_ir)]);
+                // Switch to no_match_block for next handler or ConditionCaseEnd
+                if let Some(nmb) = no_match_block {
+                    self.builder.switch_to_block(nmb);
+                }
             }
             SsaInstKind::ConditionCaseEnd { .. } => {
                 let Some(handler_idx) = self
@@ -1534,37 +1713,58 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error("ConditionCaseEnd handler index out of range");
                     return;
                 };
-                let Some(func_ref) = self.exception_func_ref("condition_case_end", 0) else {
-                    return;
+                let (continuation_block, result_param, transitioned) = match handler.kind {
+                    ExceptionHandlerKind::ConditionCase {
+                        continuation_block,
+                        result_param,
+                        transitioned,
+                        ..
+                    } => (continuation_block, result_param, transitioned),
+                    _ => {
+                        self.error("ConditionCaseEnd matched non-ConditionCase handler");
+                        return;
+                    }
                 };
-                let Some(_) =
-                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::ConditionCaseEnd)
-                else {
-                    return;
-                };
-                match handler.kind {
-                    ExceptionHandlerKind::ConditionCase { continuation_block } => {
-                        self.builder.ins().jump(continuation_block, &[]);
-                        self.builder.switch_to_block(handler.handler_block);
-                        if let Some(outer_idx) = handler_idx.checked_sub(1) {
-                            if let Some(outer) = self.exception_handlers.get(outer_idx) {
-                                self.builder.ins().jump(outer.handler_block, &[]);
-                            } else {
-                                let sentinel =
-                                    self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
-                                self.builder.ins().return_(&[sentinel]);
-                            }
+
+                if !transitioned {
+                    // No ConditionCaseHandler was emitted — body succeeded, no handlers to check.
+                    let Some(func_ref) = self.exception_func_ref("condition_case_end", 0) else {
+                        return;
+                    };
+                    self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::ConditionCaseEnd);
+                    let body_result_ir = self
+                        .value_from_end()
+                        .unwrap_or_else(|| self.builder.ins().iconst(types::I64, NIL_BITS));
+                    self.builder
+                        .ins()
+                        .jump(continuation_block, &[BlockArg::Value(body_result_ir)]);
+                    self.builder.switch_to_block(continuation_block);
+                } else {
+                    // We're in the last no_match_block — no handler matched.
+                    // Pop catch without clearing signal (outer handlers need it).
+                    let Some(pop_ref) = self.exception_func_ref("condition_case_pop", 0) else {
+                        return;
+                    };
+                    self.emit_runtime_call(pop_ref, &[], ClifRuntimeCallKind::ConditionCasePop);
+                    // Propagate the exception to the outer handler.
+                    if let Some(outer_idx) = handler_idx.checked_sub(1) {
+                        if let Some(outer) = self.exception_handlers.get(outer_idx) {
+                            self.builder.ins().jump(outer.handler_block, &[]);
                         } else {
                             let sentinel =
                                 self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
                             self.builder.ins().return_(&[sentinel]);
                         }
-                        // Don't seal — defer to seal_all_blocks.
-                        self.builder.switch_to_block(continuation_block);
+                    } else {
+                        let sentinel = self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
+                        self.builder.ins().return_(&[sentinel]);
                     }
-                    _ => {
-                        self.error("ConditionCaseEnd matched non-ConditionCase handler");
-                    }
+                    self.builder.switch_to_block(continuation_block);
+                }
+
+                // Bind the result to the continuation block's parameter
+                if let Some(result_vid) = inst.result {
+                    self.value_map.insert(result_vid, result_param);
                 }
             }
             SsaInstKind::UnwindProtectBegin => {
@@ -2035,6 +2235,47 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             return None;
         };
         Some(value)
+    }
+
+    /// Peek ahead in the current block to find the ConditionCaseEnd's body_result.
+    /// Used at the first ConditionCaseHandler to get the body's result value.
+    fn peek_body_result(&self) -> Option<ir::Value> {
+        let (block_id, inst_index) = self.current_inst?;
+        let block = &self.ssa.blocks[block_id];
+        for inst in &block.instructions[inst_index + 1..] {
+            if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind {
+                if let Some(vid) = body_result {
+                    return self.value_map.get(vid).copied();
+                }
+            }
+        }
+        None
+    }
+
+    /// Get the body_result from the current ConditionCaseEnd instruction.
+    fn value_from_end(&self) -> Option<ir::Value> {
+        let (block_id, inst_index) = self.current_inst?;
+        let block = &self.ssa.blocks[block_id];
+        if let Some(inst) = block.instructions.get(inst_index) {
+            if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind {
+                if let Some(vid) = body_result {
+                    return self.value_map.get(vid).copied();
+                }
+            }
+        }
+        None
+    }
+
+    /// Find the ConditionCaseBegin's var name by scanning backwards in the current block.
+    fn find_condition_case_var(&self) -> Option<String> {
+        let (block_id, inst_index) = self.current_inst?;
+        let block = &self.ssa.blocks[block_id];
+        for inst in block.instructions[..inst_index].iter().rev() {
+            if let SsaInstKind::ConditionCaseBegin { var } = &inst.kind {
+                return var.clone();
+            }
+        }
+        None
     }
 
     fn block(&mut self, block: BlockId) -> Option<ir::Block> {

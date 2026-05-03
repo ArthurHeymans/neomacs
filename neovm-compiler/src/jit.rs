@@ -75,7 +75,7 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
 
     // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
     // Only register functions with fixed arity (no &rest, no &optional) and no
-    // condition-case/unwind-protect (which require interpreter fallback for signal dispatch).
+    // unwind-protect (which still requires interpreter fallback).
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
             if func.lambda_list.rest.is_none()
@@ -89,7 +89,7 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     }
 
     // Phase 1: Lower each SSA function using the shared JIT module backend.
-    // Skip functions with condition-case/unwind-protect — they fall back to the interpreter.
+    // Skip functions with unwind-protect — they fall back to the interpreter.
     let mut lowered: Vec<(FunctionId, Option<cranelift_codegen::ir::Function>)> = Vec::new();
     for (fid, func) in ssa.functions.iter() {
         if has_unsupported_nonlocal_flow(func) {
@@ -119,8 +119,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let mut jit_func_ids: Vec<(FunctionId, FuncId)> = Vec::new();
     for (ssa_fid, function) in &lowered {
         let Some(mut function) = function.clone() else {
-            // Function has nonlocal control flow (catch/throw, condition-case, etc.)
-            // and can't be JIT-compiled. It will be called through the interpreter.
+            // Function has unwind-protect and can't be JIT-compiled.
+            // It will be called through the interpreter.
             continue;
         };
 
@@ -172,8 +172,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         });
 
         if ssa.entry == Some(*ssa_fid) {
-            // Only use JIT entry for functions without condition-case/unwind-protect,
-            // which require deeper signal-dispatch integration.
+            // Only use JIT entry for functions without unwind-protect,
+            // which still requires interpreter fallback.
             let func = &ssa.functions[*ssa_fid];
             if !has_unsupported_nonlocal_flow(func) {
                 entry_code_ptr = Some(code_ptr);
@@ -203,11 +203,7 @@ fn has_unsupported_nonlocal_flow(func: &SsaFunction) -> bool {
     for block in func.blocks.values() {
         for inst in &block.instructions {
             match inst.kind {
-                SsaInstKind::ConditionCaseBegin { .. }
-                | SsaInstKind::ConditionCaseHandler { .. }
-                | SsaInstKind::ConditionCaseHandlerResult { .. }
-                | SsaInstKind::ConditionCaseEnd { .. }
-                | SsaInstKind::UnwindProtectBegin
+                SsaInstKind::UnwindProtectBegin
                 | SsaInstKind::UnwindProtectCleanup
                 | SsaInstKind::UnwindProtectEnd { .. } => return true,
                 _ => {}

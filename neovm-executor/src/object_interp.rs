@@ -223,6 +223,7 @@ pub(crate) fn execute_interpreter_primitive(
         active_unwind_cleanups: Vec::new(),
         pending_throw: None,
         pending_signal: None,
+        caught_signal: None,
         last_value: None,
         module,
         functions_by_name,
@@ -321,6 +322,7 @@ fn execute_with_module(
         active_unwind_cleanups: Vec::new(),
         pending_throw: None,
         pending_signal: None,
+        caught_signal: None,
         last_value: None,
         module,
         functions_by_name,
@@ -341,6 +343,7 @@ struct Interpreter<'a, 'runtime, 'fuel> {
     active_unwind_cleanups: Vec<ActiveUnwindCleanup>,
     pending_throw: Option<ThrownValue>,
     pending_signal: Option<SignaledValue>,
+    caught_signal: Option<SignaledValue>,
     last_value: Option<LispValue>,
     module: &'a RegModule,
     functions_by_name: &'a HashMap<String, FunctionId>,
@@ -776,6 +779,14 @@ impl Interpreter<'_, '_, '_> {
             RegInstKind::ConditionCaseBegin { var } => {
                 self.condition_stack
                     .push(ConditionFrame { var: var.clone() });
+            }
+            RegInstKind::ConditionCaseGetVar { dst } => {
+                let value = self
+                    .caught_signal
+                    .as_ref()
+                    .map(|s| self.runtime.cons(s.symbol, s.data))
+                    .unwrap_or(LispValue::NIL);
+                self.registers.insert(*dst, value);
             }
             RegInstKind::ConditionCaseHandler { .. } => {}
             RegInstKind::ConditionCaseEnd { dst, body_result } => {
@@ -1729,6 +1740,7 @@ impl Interpreter<'_, '_, '_> {
         }
         let frame = self.condition_stack.pop()?;
         let mut dynamic_bind_count = 0;
+        self.caught_signal = Some(signaled.clone());
         if let Some(var) = frame.var {
             let binding = self.runtime.cons(signaled.symbol, signaled.data);
             if let Err(error) = self.runtime.bind_dynamic_by_name(&var, binding) {
@@ -3219,6 +3231,7 @@ fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
         | RegInstKind::LexicalCellSet { dst, .. }
         | RegInstKind::SymbolGet { dst, .. }
         | RegInstKind::SymbolSet { dst, .. }
+        | RegInstKind::ConditionCaseGetVar { dst }
         | RegInstKind::CallNamed { dst, .. }
         | RegInstKind::Funcall { dst, .. }
         | RegInstKind::Apply { dst, .. } => Some(*dst),

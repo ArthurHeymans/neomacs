@@ -288,6 +288,9 @@ fn dump_ssa_inst(kind: &SsaInstKind, function: &SsaFunction, out: &mut String) {
                 var.as_deref().unwrap_or("nil")
             );
         }
+        SsaInstKind::ConditionCaseGetVar => {
+            let _ = write!(out, "condition-case-get-var");
+        }
         SsaInstKind::ConditionCaseHandler { .. } => {
             let _ = write!(out, "condition-case-handler <pattern>");
         }
@@ -472,6 +475,13 @@ fn dump_reg_inst(kind: &RegInstKind, function: &RegFunction, out: &mut String) {
                 out,
                 "condition-case-begin {}",
                 var.as_deref().unwrap_or("nil")
+            );
+        }
+        RegInstKind::ConditionCaseGetVar { dst } => {
+            let _ = write!(
+                out,
+                "condition-case-get-var -> {}",
+                reg_name(function, *dst)
             );
         }
         RegInstKind::ConditionCaseHandler { .. } => {

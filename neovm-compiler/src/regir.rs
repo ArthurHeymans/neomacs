@@ -140,6 +140,9 @@ pub enum RegInstKind {
     ConditionCaseBegin {
         var: Option<String>,
     },
+    ConditionCaseGetVar {
+        dst: RegId,
+    },
     ConditionCaseHandler {
         pattern: SurfaceForm,
     },

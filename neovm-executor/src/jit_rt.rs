@@ -595,6 +595,11 @@ jit_shim!(__neomacs_rt_condition_case_end(vmctx: i64) -> i64 {
     0
 });
 
+jit_shim!(__neomacs_rt_condition_case_pop(vmctx: i64) -> i64 {
+    pop_catch();
+    0
+});
+
 jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pattern_index: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
     let rt = &mut *ctx.runtime;
@@ -622,8 +627,13 @@ jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pa
 });
 
 jit_shim!(__neomacs_rt_get_signal_data(vmctx: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
     match take_pending_signal() {
-        Some((_symbol, data)) => data.to_abi_i64(),
+        Some((symbol, data)) => {
+            let condition = rt.cons(symbol, data);
+            condition.to_abi_i64()
+        }
         None => LispValue::NIL.to_abi_i64(),
     }
 });
@@ -1268,6 +1278,25 @@ fn dispatch_primitive(
         "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
         "print" | "prin1" => Some(args[0]),
         "autoload" => Some(LispValue::NIL),
+
+        // --- Error signaling ---
+        "error" => {
+            let symbol = rt.intern("error");
+            let msg = args.first().copied().unwrap_or(LispValue::NIL);
+            let data = rt.cons(msg, LispValue::NIL);
+            Some(set_pending_signal_and_return_sentinel(symbol, data))
+        }
+        "signal" => {
+            let symbol = args.first().copied().unwrap_or(LispValue::NIL);
+            let data = args.get(1).copied().unwrap_or(LispValue::NIL);
+            Some(set_pending_signal_and_return_sentinel(symbol, data))
+        }
+        "user-error" => {
+            let symbol = rt.intern("error");
+            let msg = args.first().copied().unwrap_or(LispValue::NIL);
+            let data = rt.cons(msg, LispValue::NIL);
+            Some(set_pending_signal_and_return_sentinel(symbol, data))
+        }
 
         _ => None,
     }

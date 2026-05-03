@@ -3462,4 +3462,129 @@ total",
         assert!(s.contains("55"), "sum: {s}"); // 1+2+...+10 = 55
         assert!(s.contains("11"), "compose: {s}"); // 5*2+1 = 11
     }
+
+    // ── cl-loop `into` variable tests ────────────────────────────────────
+
+    #[test]
+    fn jit_cl_loop_into_sum_finally() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 5 sum i into total
+           finally return total))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn jit_cl_loop_into_all_no_finally() {
+        // When all accumulations use `into`, the loop result should be nil
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 5 sum i into total))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert!(
+            artifact.result.value.unwrap().is_nil(),
+            "expected nil when all accums use into"
+        );
+    }
+
+    #[test]
+    fn jit_cl_loop_into_collect_finally() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 4 collect (* i i) into squares
+           finally return squares))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert_eq!(s, "(1 4 9 16)");
+    }
+
+    #[test]
+    fn jit_cl_loop_into_count_finally() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 10
+           count (cl-oddp i) into odd-count
+           finally return odd-count))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn jit_cl_loop_into_mixed_default() {
+        // sum with into + count without into → count is the loop result
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 10
+           sum i into total
+           count (cl-oddp i)))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn jit_cl_loop_into_maximize_finally() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for x in (list 3 7 2 9 5)
+           maximize x into biggest
+           finally return biggest))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
+    fn jit_cl_loop_into_multiple_finally() {
+        // Multiple into variables used in finally
+        let artifact = crate::jit_interp::execute_with_jit(
+            "test",
+            ";;; -*- lexical-binding: t; -*-
+(defun f ()
+  (cl-loop for i from 1 to 5
+           sum i into total
+           collect (* i i) into squares
+           finally return (list total squares)))
+(f)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("15"), "total should be 15: {s}");
+        assert!(
+            s.contains("1") && s.contains("25"),
+            "squares should have 1..25: {s}"
+        );
+    }
 }

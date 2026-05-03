@@ -206,6 +206,18 @@ fn register_runtime_shims(builder: &mut cranelift_jit::JITBuilder) {
         __neomacs_rt_condition_case_end as *const u8,
     );
     builder.symbol(
+        "__neomacs_rt_condition_handler_match",
+        __neomacs_rt_condition_handler_match as *const u8,
+    );
+    builder.symbol(
+        "__neomacs_rt_condition_case_pop",
+        __neomacs_rt_condition_case_pop as *const u8,
+    );
+    builder.symbol(
+        "__neomacs_rt_get_signal_data",
+        __neomacs_rt_get_signal_data as *const u8,
+    );
+    builder.symbol(
         "__neomacs_rt_unwind_protect_begin",
         __neomacs_rt_unwind_protect_begin as *const u8,
     );

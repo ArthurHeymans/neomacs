@@ -145,6 +145,7 @@ pub fn inst_uses(kind: &SsaInstKind) -> Vec<ValueId> {
         | SsaInstKind::DeclareSpecial(_)
         | SsaInstKind::CatchEnd { body_result: None }
         | SsaInstKind::ConditionCaseBegin { .. }
+        | SsaInstKind::ConditionCaseGetVar
         | SsaInstKind::ConditionCaseHandler { .. }
         | SsaInstKind::ConditionCaseEnd { body_result: None }
         | SsaInstKind::UnwindProtectBegin

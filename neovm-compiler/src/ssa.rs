@@ -116,6 +116,7 @@ pub enum SsaInstKind {
     ConditionCaseBegin {
         var: Option<String>,
     },
+    ConditionCaseGetVar,
     ConditionCaseHandler {
         pattern: SurfaceForm,
     },
