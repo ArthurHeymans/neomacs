@@ -444,6 +444,13 @@ pub fn bridge_interpreter_signal(symbol: LispValue, data: LispValue) -> LispValu
     LispValue::from_abi_i64(EXCEPTION_SENTINEL)
 }
 
+/// Set a pending signal and return the EXCEPTION_SENTINEL as a LispValue.
+/// Used by primitives that need to signal errors (e.g., division by zero).
+fn set_pending_signal_and_return_sentinel(symbol: LispValue, data: LispValue) -> LispValue {
+    set_pending_signal(symbol, data);
+    LispValue::from_abi_i64(EXCEPTION_SENTINEL)
+}
+
 fn has_pending_exception() -> bool {
     JIT_EXCEPTION_STATE.with(|state| {
         let state = state.borrow();
@@ -953,12 +960,22 @@ fn numeric_div(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     if !has_float {
         let a = args[0].as_fixnum()?;
         let b = args[1].as_fixnum()?;
-        if b == 0 { return None; }
+        if b == 0 {
+            let symbol = rt.intern("arith-error");
+            let msg = rt.string("Division by zero");
+            let data = rt.cons(msg, LispValue::NIL);
+            return Some(set_pending_signal_and_return_sentinel(symbol, data));
+        }
         return LispValue::from_fixnum(a / b);
     }
     let a = to_f64(rt, args[0]);
     let b = to_f64(rt, args[1]);
-    if b == 0.0 { return None; }
+    if b == 0.0 {
+        let symbol = rt.intern("arith-error");
+        let msg = rt.string("Division by zero");
+        let data = rt.cons(msg, LispValue::NIL);
+        return Some(set_pending_signal_and_return_sentinel(symbol, data));
+    }
     Some(rt.float(a / b))
 }
 
