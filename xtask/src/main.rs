@@ -9,6 +9,7 @@ use std::fs;
 use std::io::{ErrorKind, Seek, SeekFrom, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
+use std::time::Instant;
 
 type DynError = Box<dyn Error>;
 type Result<T> = std::result::Result<T, DynError>;
@@ -2272,6 +2273,9 @@ fn run_command(
         return Ok(());
     }
 
+    let started = Instant::now();
+    let program_name = program.file_name().unwrap_or(program.as_os_str());
+
     let mut command = Command::new(program);
     command.current_dir(cwd);
     command.args(args.iter().map(OsString::as_os_str));
@@ -2281,6 +2285,18 @@ fn run_command(
     }
 
     let status = command.status()?;
+    let elapsed_ms = started.elapsed().as_millis();
+    let args_str = args
+        .iter()
+        .map(|a| a.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ");
+    println!(
+        "  INFO  [{program_name:?} {args_str}] exited with {} in {elapsed_ms}ms",
+        status
+            .code()
+            .map_or_else(|| "signal".to_string(), |c| c.to_string()),
+    );
     if !status.success() {
         return Err(command_failure(program, args, status).into());
     }
