@@ -240,7 +240,6 @@ pub const BUFFER_SLOT_CATEGORY_TABLE: usize = 60;
 /// / `(set-case-table)`. Always-local per GNU `buffer.c:4731-4734`
 /// (flag=0 means every buffer has its own value, no conditional gate).
 pub const BUFFER_SLOT_CASE_TABLE: usize = 61;
-pub const BUFFER_SLOT_UNDO_LIST: usize = 62;
 
 // ---------------------------------------------------------------------------
 // BUFFER_SLOT_INFO table — declarative metadata for every BUFFER_OBJFWD
@@ -1069,16 +1068,6 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         install_as_forwarder: false,
         permanent_local: false,
     },
-    BufferSlotInfo {
-        name: "buffer-undo-list",
-        offset: BUFFER_SLOT_UNDO_LIST,
-        default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
-        reset_on_kill: true,
-        local_flags_idx: -1,
-        install_as_forwarder: true,
-        permanent_local: false,
-    },
 ];
 
 /// Look up a [`BufferSlotInfo`] by Lisp variable name. Returns `None`
@@ -1826,13 +1815,6 @@ impl Buffer {
     /// indirect-buffer chain is queried.
     pub fn set_undo_list(&mut self, value: Value) {
         self.undo_state.set_list(value);
-        // Sync the forwarded slot so byte-compiled code reading
-        // `buffer-undo-list` via varref (which goes through the
-        // slot reader in find_symbol_value_in_buffer) sees the
-        // live undo list.
-        if let Some(info) = lookup_buffer_slot_by_sym_id(buffer_undo_list_sym()) {
-            self.slots[info.offset] = value;
-        }
     }
 
     // -- Text queries --------------------------------------------------------
@@ -2244,14 +2226,6 @@ impl Buffer {
         }
         if sym_id == buffer_undo_list_sym() {
             self.undo_state.set_list(value);
-            // Sync to the forwarded buffer slot so bytecode varref/varref
-            // (which reads through the Forwarded descriptor) sees the
-            // current value.  Without this the slot stays nil and
-            // byte-compiled code like `undo-start` reads the wrong
-            // `buffer-undo-list`.
-            if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-                self.slots[info.offset] = value;
-            }
             if value.is_nil() {
                 self.undo_state.set_recorded_first_change(false);
             }
