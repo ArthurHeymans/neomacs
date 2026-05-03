@@ -399,6 +399,20 @@ impl Lowerer<'_> {
             Some("funcall") => self.lower_funcall(form, &items[1..]),
             Some("apply") => self.lower_apply(form, &items[1..]),
             Some("setq") => self.lower_setq(form, &items[1..]),
+            Some(name) if self.is_lexical(name) => {
+                let callee = HirExpr {
+                    kind: HirExprKind::LexicalGet(name.to_string()),
+                    span: head.span,
+                };
+                let args = self.lower_exprs(&items[1..])?;
+                Some(HirExpr {
+                    kind: HirExprKind::Funcall {
+                        callee: Box::new(callee),
+                        args,
+                    },
+                    span: form.span,
+                })
+            }
             Some(name) => self.lower_call_named(form, name, &items[1..]),
             None => self.lower_call_value(form, head, &items[1..]),
         }
