@@ -801,13 +801,15 @@ fn test_restore_active_runtime_after_clone_reinstalls_live_charset_registry() {
         .iter()
         .find(|info| info.name == charset_name)
         .expect("restored charset entry");
+    assert_eq!(entry.plist.len(), 2);
+    assert_eq!(entry.plist[0].0, doc_key);
     assert_eq!(
-        entry.plist,
-        vec![(
-            doc_key,
-            value::Value::string("live charset registry should survive clone handoff"),
-        )]
+        entry.plist[0].1,
+        value::Value::string("live charset registry should survive clone handoff")
     );
+    let dim_sym = crate::emacs_core::intern::intern(":dimension");
+    assert_eq!(entry.plist[1].0, dim_sym);
+    assert_eq!(entry.plist[1].1, value::Value::fixnum(1));
 }
 
 #[test]
