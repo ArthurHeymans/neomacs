@@ -772,3 +772,24 @@ fn what_cursor_position_via_cx_equals_shows_char_info() {
         );
     }
 }
+
+#[test]
+fn universal_argument_self_insert_via_cu_8_star_inserts_eight_asterisks() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "C-u");
+    send_both(&mut gnu, &mut neo, "8");
+    send_both(&mut gnu, &mut neo, "*");
+
+    let ready = |grid: &[String]| grid.iter().any(|r| r.contains("********"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("********")),
+            "{label}: C-u 8 * should insert 8 asterisks"
+        );
+    }
+}
