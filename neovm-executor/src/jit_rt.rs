@@ -781,8 +781,9 @@ fn dispatch_primitive(name: &str, args: &[LispValue], rt: &mut Runtime, jit_func
         "list" => Some(make_list(rt, args.iter().copied())),
         "length" => list_length(rt, args[0]),
         "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
+        "nthcdr" => nthcdr_list(rt, args[1], args[0].as_fixnum()? as usize),
+        "last" => last_pair(rt, args[0]),
         "reverse" => reverse_list(rt, args[0]),
-        "nreverse" => reverse_list(rt, args[0]),
         "nreverse" => reverse_list(rt, args[0]),
         "append" => append_lists(rt, args),
         "nconc" => nconc_lists(rt, args),
@@ -1178,6 +1179,25 @@ fn nth_element(rt: &mut Runtime, list: LispValue, n: usize) -> Option<LispValue>
     let mut current = list;
     for _ in 0..n { current = rt.cdr(current).ok()?; }
     rt.car(current).ok()
+}
+
+fn nthcdr_list(rt: &mut Runtime, list: LispValue, n: usize) -> Option<LispValue> {
+    let mut current = list;
+    for _ in 0..n {
+        if current.is_nil() { return Some(LispValue::NIL); }
+        current = rt.cdr(current).ok()?;
+    }
+    Some(current)
+}
+
+fn last_pair(rt: &mut Runtime, list: LispValue) -> Option<LispValue> {
+    let mut current = list;
+    if current.is_nil() { return Some(LispValue::NIL); }
+    loop {
+        let cdr = rt.cdr(current).ok()?;
+        if cdr.is_nil() { return Some(current); }
+        current = cdr;
+    }
 }
 
 fn reverse_list(rt: &mut Runtime, list: LispValue) -> Option<LispValue> {

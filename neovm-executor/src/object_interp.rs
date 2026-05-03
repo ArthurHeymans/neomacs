@@ -1123,6 +1123,12 @@ impl Interpreter<'_, '_, '_> {
             "nth" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.nth(args[0], args[1])),
+            "nthcdr" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.nthcdr(args[0], args[1])),
+            "last" => self
+                .min_arity(name, args, 1)
+                .and_then(|_| self.last(args[0])),
             "memq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.memq(args[0], args[1])),
@@ -1700,6 +1706,37 @@ impl Interpreter<'_, '_, '_> {
         }
         let result = self.runtime.car(current);
         self.runtime_value(result)
+    }
+
+    fn nthcdr(&mut self, index: LispValue, list: LispValue) -> Option<LispValue> {
+        let index = self.fixnum_arg("nthcdr", index)?;
+        if index < 0 {
+            return Some(LispValue::NIL);
+        }
+        let mut current = list;
+        for _ in 0..index {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            let result = self.runtime.cdr(current);
+            current = self.runtime_value(result)?;
+        }
+        Some(current)
+    }
+
+    fn last(&mut self, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        if current.is_nil() {
+            return Some(LispValue::NIL);
+        }
+        loop {
+            let cdr = self.runtime.cdr(current);
+            let cdr_val = self.runtime_value(cdr)?;
+            if cdr_val.is_nil() {
+                return Some(current);
+            }
+            current = cdr_val;
+        }
     }
 
     fn memq(&mut self, needle: LispValue, list: LispValue) -> Option<LispValue> {
