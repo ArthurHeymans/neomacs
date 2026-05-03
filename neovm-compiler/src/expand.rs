@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::diagnostic::Diagnostic;
 use crate::expand_eval::{MacroEnv, MacroEval};
@@ -17,24 +17,176 @@ pub struct ExpandOutput {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
-    let mut expander = Expander {
-        macros: HashMap::new(),
-        symbol_macros: HashMap::new(),
-        diagnostics: Vec::new(),
-    };
-    let mut expanded_forms = Vec::new();
-    for form in forms {
-        if let Some(defalias_form) = expander.register_top_level_macro(&form) {
-            expanded_forms.push(defalias_form);
-        } else {
-            expanded_forms.push(expander.expand_form(form));
+/// Tracks compiler state across multiple source files, enabling
+/// `require`-based macro import and feature tracking.
+pub struct CompilerSession {
+    macros: HashMap<String, MacroDef>,
+    symbol_macros: HashMap<String, SurfaceForm>,
+    loaded_features: HashSet<String>,
+    loading_stack: Vec<String>,
+    builtin_libraries: HashMap<String, &'static str>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl CompilerSession {
+    pub fn new() -> Self {
+        let mut session = Self {
+            macros: HashMap::new(),
+            symbol_macros: HashMap::new(),
+            loaded_features: HashSet::new(),
+            loading_stack: Vec::new(),
+            builtin_libraries: HashMap::new(),
+            diagnostics: Vec::new(),
+        };
+        session.register_builtin("cl-lib", crate::builtin_libs::CL_LIB_SOURCE);
+        session
+    }
+
+    pub fn register_builtin(&mut self, feature: &str, source: &'static str) {
+        self.builtin_libraries.insert(feature.to_string(), source);
+    }
+
+    pub fn is_loaded(&self, feature: &str) -> bool {
+        self.loaded_features.contains(feature)
+    }
+
+    pub fn mark_loaded(&mut self, feature: &str) {
+        self.loaded_features.insert(feature.to_string());
+    }
+
+    /// Expand top-level forms from a source file, processing `require`
+    /// forms eagerly to import macros from required features.
+    pub fn expand_file_forms(&mut self, forms: Vec<SurfaceForm>) -> ExpandOutput {
+        let mut expander = Expander {
+            macros: std::mem::take(&mut self.macros),
+            symbol_macros: std::mem::take(&mut self.symbol_macros),
+            diagnostics: Vec::new(),
+        };
+
+        let mut expanded_forms = Vec::new();
+        for form in forms {
+            // Handle top-level (require 'feature)
+            if let Some(feature) = extract_require_feature(&form) {
+                // Move macros back to session for recursive load
+                self.macros = std::mem::take(&mut expander.macros);
+                self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
+
+                if !self.is_loaded(&feature) {
+                    self.load_feature(&feature, form.span);
+                }
+
+                // Move updated macros back into expander
+                expander.macros = std::mem::take(&mut self.macros);
+                expander.symbol_macros = std::mem::take(&mut self.symbol_macros);
+                expander
+                    .diagnostics
+                    .extend(std::mem::take(&mut self.diagnostics));
+
+                expanded_forms.push(form);
+                continue;
+            }
+
+            // Handle top-level (provide 'feature)
+            if let Some(feature) = extract_provide_feature(&form) {
+                self.mark_loaded(&feature);
+                expanded_forms.push(form);
+                continue;
+            }
+
+            if let Some(defalias_form) = expander.register_top_level_macro(&form) {
+                expanded_forms.push(defalias_form);
+            } else {
+                expanded_forms.push(expander.expand_form(form));
+            }
+        }
+
+        // Merge macros back into session
+        self.macros = expander.macros;
+        self.symbol_macros = expander.symbol_macros;
+        self.diagnostics.extend(expander.diagnostics);
+
+        ExpandOutput {
+            forms: expanded_forms,
+            diagnostics: std::mem::take(&mut self.diagnostics),
         }
     }
-    ExpandOutput {
-        forms: expanded_forms,
-        diagnostics: expander.diagnostics,
+
+    fn load_feature(&mut self, feature: &str, span: Span) {
+        if self.loading_stack.contains(&feature.to_string()) {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "circular require dependency on '{}'",
+                feature
+            )));
+            return;
+        }
+
+        self.loading_stack.push(feature.to_string());
+
+        let source_text = match self.builtin_libraries.get(feature) {
+            Some(src) => src.to_string(),
+            None => {
+                self.diagnostics.push(Diagnostic::error(format!(
+                    "cannot find source for required feature '{}'",
+                    feature
+                )));
+                self.loading_stack.pop();
+                return;
+            }
+        };
+
+        let source = crate::source::SourceFile::new(
+            SourceId::new(0),
+            Some(format!("{}.el", feature)),
+            source_text,
+        );
+        let reader_output = crate::reader::read_source(&source);
+        self.diagnostics.extend(reader_output.diagnostics);
+
+        if !self.diagnostics.iter().any(Diagnostic::is_error) {
+            // Recursively expand — macros auto-register in session
+            self.expand_file_forms(reader_output.forms);
+        }
+
+        self.loading_stack.pop();
+        self.loaded_features.insert(feature.to_string());
     }
+}
+
+fn extract_require_feature(form: &SurfaceForm) -> Option<String> {
+    let SurfaceKind::List(items) = &form.kind else {
+        return None;
+    };
+    if items.first().and_then(SurfaceForm::symbol_name) != Some("require") {
+        return None;
+    }
+    items.get(1).and_then(|arg| {
+        if let SurfaceKind::Quote(inner) = &arg.kind {
+            inner.symbol_name().map(str::to_string)
+        } else {
+            None
+        }
+    })
+}
+
+fn extract_provide_feature(form: &SurfaceForm) -> Option<String> {
+    let SurfaceKind::List(items) = &form.kind else {
+        return None;
+    };
+    if items.first().and_then(SurfaceForm::symbol_name) != Some("provide") {
+        return None;
+    }
+    items.get(1).and_then(|arg| {
+        if let SurfaceKind::Quote(inner) = &arg.kind {
+            inner.symbol_name().map(str::to_string)
+        } else {
+            None
+        }
+    })
+}
+
+pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
+    let mut session = CompilerSession::new();
+    session.expand_file_forms(forms)
 }
 
 struct Expander {

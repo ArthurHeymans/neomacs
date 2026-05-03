@@ -255,7 +255,17 @@ pub fn execute_with_jit(
     text: impl Into<String>,
     args: &[i64],
 ) -> JitExecuteArtifact {
-    let compile = neovm_compiler::compile_source(name, text);
+    let mut session = neovm_compiler::expand::CompilerSession::new();
+    execute_with_jit_session(name, text, args, &mut session)
+}
+
+pub fn execute_with_jit_session(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    args: &[i64],
+    session: &mut neovm_compiler::expand::CompilerSession,
+) -> JitExecuteArtifact {
+    let compile = neovm_compiler::compile_source_with_session(name, text, session);
     let mut diagnostics = compile.diagnostics.clone();
     let mut value = None;
     let mut runtime = Runtime::new();

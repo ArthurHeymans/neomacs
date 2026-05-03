@@ -5392,4 +5392,112 @@ trace-log
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(1 4 9 16 25)");
     }
+
+    // --- require / multi-file compilation tests ---
+
+    #[test]
+    fn jit_require_cl_lib() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "require-test.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(let ((x 5))
+  (cl-incf x)
+  x)
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_require_cl_lib_macros_available() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "require-macros.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(let ((x 10))
+  (cl-decf x 3)
+  x)
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn jit_require_twice_no_error() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "require-twice.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(require 'cl-lib)
+(let ((x 1)) (cl-incf x) x)
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn jit_provide_and_require() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        // First file provides a feature
+        let _ = crate::jit_interp::execute_with_jit_session(
+            "provider.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(provide 'my-feature)
+"#,
+            &[],
+            &mut session,
+        );
+        // Second file requires it — should be no-op since already loaded
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "consumer.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'my-feature)
+42
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_require_unknown_feature() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "require-unknown.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'nonexistent-feature)
+42
+"#,
+            &[],
+            &mut session,
+        );
+        assert!(
+            artifact
+                .result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot find source"))
+        );
+    }
 }

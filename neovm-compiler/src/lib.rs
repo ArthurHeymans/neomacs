@@ -10,6 +10,7 @@
 //! Elisp-semantic VM IR; Cranelift lowering is an optional backend layer.
 
 pub mod ast;
+pub mod builtin_libs;
 pub mod clif;
 pub mod compile_value;
 pub mod diagnostic;
@@ -66,9 +67,20 @@ impl CompileArtifact {
 /// This function intentionally does not depend on `neovm-core`; all values and
 /// symbols are compiler-owned representations.
 pub fn compile_source(name: impl Into<String>, text: impl Into<String>) -> CompileArtifact {
+    let mut session = expand::CompilerSession::new();
+    compile_source_with_session(name, text, &mut session)
+}
+
+/// Compile with a reusable session that accumulates macro definitions
+/// across multiple files. Use this for multi-file compilation with `require`.
+pub fn compile_source_with_session(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    session: &mut expand::CompilerSession,
+) -> CompileArtifact {
     let source = SourceFile::new(SourceId::new(0), Some(name.into()), text.into());
     let reader_output = reader::read_source(&source);
-    let expand_output = expand::expand_forms(reader_output.forms);
+    let expand_output = session.expand_file_forms(reader_output.forms);
 
     let mut diagnostics = Vec::new();
     diagnostics.extend(reader_output.diagnostics);
