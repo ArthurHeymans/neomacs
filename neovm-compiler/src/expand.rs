@@ -1211,7 +1211,15 @@ impl Expander {
                     repeat_count = Some(count.clone());
                 }
                 LoopClause::Initially { body } => initially_body.extend(body.iter().cloned()),
-                LoopClause::Finally { body } => finally_body.extend(body.iter().cloned()),
+                LoopClause::Finally { body } => {
+                    // If finally body contains (throw '--cl-loop-tag-- ...), need catch wrapper
+                    if body.first().map_or(false, |f| {
+                        matches!(&f.kind, SurfaceKind::List(items) if items.first().and_then(|i| i.symbol_name()) == Some("throw"))
+                    }) {
+                        has_return = true;
+                    }
+                    finally_body.extend(body.iter().cloned());
+                }
                 LoopClause::Return { .. } => {
                     has_return = true;
                     body_clauses.push(clause);
@@ -1253,14 +1261,19 @@ impl Expander {
         }
 
         // Allocate accumulators for collection/aggregation clauses (including nested in when/if)
-        let mut accum_map: Vec<(AccumKind, String, usize)> = Vec::new(); // (kind, var, index-into-accums)
+        let mut accum_map: Vec<(AccumKind, Option<String>, String)> = Vec::new(); // (kind, into_name, var_name)
         let all_accum_clauses = Self::collect_accum_kinds(body_clauses.iter().copied());
-        for kind in all_accum_clauses {
-            // Reuse existing accumulator of same kind
-            if accum_map.iter().any(|(k, _, _)| *k == kind) {
+        for (kind, into_name) in all_accum_clauses {
+            // Reuse existing accumulator of same kind + into name
+            if accum_map
+                .iter()
+                .any(|(k, n, _)| *k == kind && n.as_ref() == into_name.as_ref())
+            {
                 continue;
             }
-            let name = format!("--cl-acc-{}--", acc_counter);
+            let var_name = into_name
+                .clone()
+                .unwrap_or_else(|| format!("--cl-acc-{}--", acc_counter));
             let init = match kind {
                 AccumKind::Collect | AccumKind::Append | AccumKind::Nconc => nil_form(span),
                 AccumKind::Sum | AccumKind::Count => {
@@ -1268,8 +1281,8 @@ impl Expander {
                 }
                 AccumKind::Minimize | AccumKind::Maximize => nil_form(span),
             };
-            accums.push((kind, name.clone(), init));
-            accum_map.push((kind, name, acc_counter));
+            accums.push((kind, var_name.clone(), init));
+            accum_map.push((kind, into_name, var_name));
             acc_counter += 1;
         }
 
@@ -1460,8 +1473,8 @@ impl Expander {
         // Body clauses (collect, sum, do, return, if, etc.)
         for clause in &body_clauses {
             match clause {
-                LoopClause::Collect { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Collect);
+                LoopClause::Collect { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Collect, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1478,8 +1491,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Append { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Append);
+                LoopClause::Append { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Append, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1496,8 +1509,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Nconc { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Nconc);
+                LoopClause::Nconc { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Nconc, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1514,8 +1527,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Sum { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Sum);
+                LoopClause::Sum { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Sum, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1532,8 +1545,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Count { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Count);
+                LoopClause::Count { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Count, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1680,9 +1693,9 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Minimize { expr } => {
+                LoopClause::Minimize { expr, into } => {
                     // (if (or (null acc) (< expr acc)) (setq acc expr))
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Minimize);
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Minimize, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("if", span),
@@ -1719,8 +1732,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Maximize { expr } => {
-                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Maximize);
+                LoopClause::Maximize { expr, into } => {
+                    let acc_var = self.find_accum_var(&accum_map, AccumKind::Maximize, into);
                     while_body.push(list_form(
                         vec![
                             symbol_form("if", span),
@@ -1905,28 +1918,37 @@ impl Expander {
         }
     }
 
-    fn find_accum_var(&self, accum_map: &[(AccumKind, String, usize)], kind: AccumKind) -> String {
+    fn find_accum_var(
+        &self,
+        accum_map: &[(AccumKind, Option<String>, String)],
+        kind: AccumKind,
+        into: &Option<String>,
+    ) -> String {
         accum_map
             .iter()
-            .find(|(k, _, _)| *k == kind)
-            .map(|(_, name, _)| name.clone())
+            .find(|(k, n, _)| *k == kind && n.as_ref() == into.as_ref())
+            .map(|(_, _, name)| name.clone())
             .unwrap_or_else(|| "--cl-acc-unknown--".into())
     }
 
-    /// Collect all AccumKinds from clauses, recursing into when/if branches.
+    /// Collect all AccumKinds with their into-names from clauses, recursing into when/if branches.
     fn collect_accum_kinds<'a>(
         clauses: impl IntoIterator<Item = &'a LoopClause>,
-    ) -> Vec<AccumKind> {
+    ) -> Vec<(AccumKind, Option<String>)> {
         let mut kinds = Vec::new();
         for clause in clauses {
             match clause {
-                LoopClause::Collect { .. } => kinds.push(AccumKind::Collect),
-                LoopClause::Append { .. } => kinds.push(AccumKind::Append),
-                LoopClause::Nconc { .. } => kinds.push(AccumKind::Nconc),
-                LoopClause::Sum { .. } => kinds.push(AccumKind::Sum),
-                LoopClause::Count { .. } => kinds.push(AccumKind::Count),
-                LoopClause::Minimize { .. } => kinds.push(AccumKind::Minimize),
-                LoopClause::Maximize { .. } => kinds.push(AccumKind::Maximize),
+                LoopClause::Collect { into, .. } => kinds.push((AccumKind::Collect, into.clone())),
+                LoopClause::Append { into, .. } => kinds.push((AccumKind::Append, into.clone())),
+                LoopClause::Nconc { into, .. } => kinds.push((AccumKind::Nconc, into.clone())),
+                LoopClause::Sum { into, .. } => kinds.push((AccumKind::Sum, into.clone())),
+                LoopClause::Count { into, .. } => kinds.push((AccumKind::Count, into.clone())),
+                LoopClause::Minimize { into, .. } => {
+                    kinds.push((AccumKind::Minimize, into.clone()))
+                }
+                LoopClause::Maximize { into, .. } => {
+                    kinds.push((AccumKind::Maximize, into.clone()))
+                }
                 LoopClause::If {
                     then_clauses,
                     else_clauses,
@@ -1947,13 +1969,13 @@ impl Expander {
         &self,
         span: Span,
         clauses: &[LoopClause],
-        accum_map: &[(AccumKind, String, usize)],
+        accum_map: &[(AccumKind, Option<String>, String)],
     ) -> Vec<SurfaceForm> {
         let mut body: Vec<SurfaceForm> = Vec::new();
         for clause in clauses {
             match clause {
-                LoopClause::Collect { expr } => {
-                    let acc_var = self.find_accum_var(accum_map, AccumKind::Collect);
+                LoopClause::Collect { expr, into } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Collect, into);
                     body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1970,8 +1992,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Append { expr } => {
-                    let acc_var = self.find_accum_var(accum_map, AccumKind::Append);
+                LoopClause::Append { expr, into } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Append, into);
                     body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -1988,8 +2010,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Nconc { expr } => {
-                    let acc_var = self.find_accum_var(accum_map, AccumKind::Nconc);
+                LoopClause::Nconc { expr, into } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Nconc, into);
                     body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -2006,8 +2028,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Sum { expr } => {
-                    let acc_var = self.find_accum_var(accum_map, AccumKind::Sum);
+                LoopClause::Sum { expr, into } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Sum, into);
                     body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -2024,8 +2046,8 @@ impl Expander {
                         span,
                     ));
                 }
-                LoopClause::Count { expr } => {
-                    let acc_var = self.find_accum_var(accum_map, AccumKind::Count);
+                LoopClause::Count { expr, into } => {
+                    let acc_var = self.find_accum_var(accum_map, AccumKind::Count, into);
                     body.push(list_form(
                         vec![
                             symbol_form("setq", span),
@@ -2094,6 +2116,18 @@ impl Expander {
 
     // ── cl-loop clause parser ──────────────────────────────────────────
 
+    fn parse_into_keyword(items: &[SurfaceForm], pos: &mut usize) -> Option<String> {
+        if *pos < items.len() && items[*pos].symbol_name() == Some("into") {
+            *pos += 1;
+            if *pos < items.len() {
+                let name = items[*pos].symbol_name().map(str::to_string);
+                *pos += 1;
+                return name;
+            }
+        }
+        None
+    }
+
     fn parse_loop_clauses(&self, span: Span, items: &[SurfaceForm]) -> Option<Vec<LoopClause>> {
         let mut clauses = Vec::new();
         let mut pos = 0;
@@ -2122,70 +2156,70 @@ impl Expander {
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Collect {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Collect { expr, into });
                 }
                 "append" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Append {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Append { expr, into });
                 }
                 "nconc" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Nconc {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Nconc { expr, into });
                 }
                 "sum" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Sum {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Sum { expr, into });
                 }
                 "count" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Count {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Count { expr, into });
                 }
                 "minimize" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Minimize {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Minimize { expr, into });
                 }
                 "maximize" => {
                     pos += 1;
                     if pos >= items.len() {
                         return None;
                     }
-                    clauses.push(LoopClause::Maximize {
-                        expr: items[pos].clone(),
-                    });
+                    let expr = items[pos].clone();
                     pos += 1;
+                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    clauses.push(LoopClause::Maximize { expr, into });
                 }
                 "thereis" => {
                     pos += 1;
@@ -2284,8 +2318,36 @@ impl Expander {
                 }
                 "finally" => {
                     pos += 1;
-                    let body = self.collect_until_keyword(items, &mut pos);
-                    clauses.push(LoopClause::Finally { body });
+                    // Handle "finally return expr" — generate a throw in the finally body
+                    if pos < items.len() && items[pos].symbol_name() == Some("return") {
+                        pos += 1;
+                        if pos < items.len() {
+                            let expr = items[pos].clone();
+                            pos += 1;
+                            clauses.push(LoopClause::Finally {
+                                body: vec![list_form(
+                                    vec![
+                                        symbol_form("throw", span),
+                                        list_form(
+                                            vec![
+                                                symbol_form("quote", span),
+                                                symbol_form("--cl-loop-tag--", span),
+                                            ],
+                                            span,
+                                        ),
+                                        expr,
+                                    ],
+                                    span,
+                                )],
+                            });
+                        } else {
+                            let body = self.collect_until_keyword(items, &mut pos);
+                            clauses.push(LoopClause::Finally { body });
+                        }
+                    } else {
+                        let body = self.collect_until_keyword(items, &mut pos);
+                        clauses.push(LoopClause::Finally { body });
+                    }
                 }
                 "always" => {
                     pos += 1;
@@ -2437,6 +2499,7 @@ impl Expander {
                     }
                     clauses.push(LoopClause::Collect {
                         expr: items[*pos].clone(),
+                        into: None,
                     });
                     *pos += 1;
                 }
@@ -2447,6 +2510,7 @@ impl Expander {
                     }
                     clauses.push(LoopClause::Sum {
                         expr: items[*pos].clone(),
+                        into: None,
                     });
                     *pos += 1;
                 }
@@ -2457,6 +2521,7 @@ impl Expander {
                     }
                     clauses.push(LoopClause::Count {
                         expr: items[*pos].clone(),
+                        into: None,
                     });
                     *pos += 1;
                 }
@@ -2482,6 +2547,7 @@ impl Expander {
                         break;
                     }
                     clauses.push(LoopClause::Append {
+                        into: None,
                         expr: items[*pos].clone(),
                     });
                     *pos += 1;
@@ -2492,6 +2558,7 @@ impl Expander {
                         break;
                     }
                     clauses.push(LoopClause::Nconc {
+                        into: None,
                         expr: items[*pos].clone(),
                     });
                     *pos += 1;
@@ -2540,18 +2607,23 @@ enum LoopClause {
     },
     Collect {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Append {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Nconc {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Sum {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Count {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Do {
         body: Vec<SurfaceForm>,
@@ -2591,9 +2663,11 @@ enum LoopClause {
     },
     Minimize {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Maximize {
         expr: SurfaceForm,
+        into: Option<String>,
     },
     Repeat {
         count: SurfaceForm,

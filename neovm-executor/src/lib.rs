@@ -2280,4 +2280,67 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(600)));
     }
+
+    // ── cl-loop `into` variable tests ─────────────────────────────
+
+    #[test]
+    fn jit_cl_loop_sum_into() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-sum-into.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for i from 1 to 5 sum i into total finally return total)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn jit_cl_loop_count_into() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-count-into.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for i from 1 to 10
+         count (= (mod i 2) 0) into evens
+         finally return evens)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn jit_cl_loop_collect_into() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-collect-into.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x from 1 to 3
+         collect (* x x) into squares
+         finally return squares)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 4 9)");
+    }
+
+    #[test]
+    fn jit_cl_loop_multiple_into() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-multi-into.el",
+            "\
+;;; -*- lexical-binding: t; -*-
+(cl-loop for i from 1 to 5
+         sum i into total
+         collect i into items
+         finally return (list total items))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(15 (1 2 3 4 5))");
+    }
 }
