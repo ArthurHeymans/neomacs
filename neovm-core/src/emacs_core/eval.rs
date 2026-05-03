@@ -10275,7 +10275,17 @@ impl Context {
         entry.dispatch_kind == SubrDispatchKind::Builtin
             && matches!(
                 entry.function,
-                Some(SubrFn::A0(_) | SubrFn::A1(_) | SubrFn::A2(_) | SubrFn::A3(_))
+                Some(
+                    SubrFn::A0(_)
+                        | SubrFn::A1(_)
+                        | SubrFn::A2(_)
+                        | SubrFn::A3(_)
+                        | SubrFn::A4(_)
+                        | SubrFn::A5(_)
+                        | SubrFn::A6(_)
+                        | SubrFn::A7(_)
+                        | SubrFn::A8(_),
+                )
             )
     }
 
@@ -10320,6 +10330,51 @@ impl Context {
                 let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
                 Some(func(self, arg0, arg1, arg2))
             }
+            SubrFn::A4(func) => {
+                let arg0 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 0);
+                let arg1 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 1);
+                let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
+                let arg3 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 3);
+                Some(func(self, arg0, arg1, arg2, arg3))
+            }
+            SubrFn::A5(func) => {
+                let arg0 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 0);
+                let arg1 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 1);
+                let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
+                let arg3 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 3);
+                let arg4 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 4);
+                Some(func(self, arg0, arg1, arg2, arg3, arg4))
+            }
+            SubrFn::A6(func) => {
+                let arg0 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 0);
+                let arg1 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 1);
+                let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
+                let arg3 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 3);
+                let arg4 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 4);
+                let arg5 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 5);
+                Some(func(self, arg0, arg1, arg2, arg3, arg4, arg5))
+            }
+            SubrFn::A7(func) => {
+                let arg0 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 0);
+                let arg1 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 1);
+                let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
+                let arg3 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 3);
+                let arg4 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 4);
+                let arg5 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 5);
+                let arg6 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 6);
+                Some(func(self, arg0, arg1, arg2, arg3, arg4, arg5, arg6))
+            }
+            SubrFn::A8(func) => {
+                let arg0 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 0);
+                let arg1 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 1);
+                let arg2 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 2);
+                let arg3 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 3);
+                let arg4 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 4);
+                let arg5 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 5);
+                let arg6 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 6);
+                let arg7 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 7);
+                Some(func(self, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7))
+            }
             SubrFn::Many(_) | SubrFn::ManySlice(_) => None,
         }
     }
@@ -10347,6 +10402,51 @@ impl Context {
                 args.first().copied().unwrap_or(Value::NIL),
                 args.get(1).copied().unwrap_or(Value::NIL),
                 args.get(2).copied().unwrap_or(Value::NIL),
+            ),
+            crate::tagged::header::SubrFn::A4(func) => func(
+                self,
+                args.first().copied().unwrap_or(Value::NIL),
+                args.get(1).copied().unwrap_or(Value::NIL),
+                args.get(2).copied().unwrap_or(Value::NIL),
+                args.get(3).copied().unwrap_or(Value::NIL),
+            ),
+            crate::tagged::header::SubrFn::A5(func) => func(
+                self,
+                args.first().copied().unwrap_or(Value::NIL),
+                args.get(1).copied().unwrap_or(Value::NIL),
+                args.get(2).copied().unwrap_or(Value::NIL),
+                args.get(3).copied().unwrap_or(Value::NIL),
+                args.get(4).copied().unwrap_or(Value::NIL),
+            ),
+            crate::tagged::header::SubrFn::A6(func) => func(
+                self,
+                args.first().copied().unwrap_or(Value::NIL),
+                args.get(1).copied().unwrap_or(Value::NIL),
+                args.get(2).copied().unwrap_or(Value::NIL),
+                args.get(3).copied().unwrap_or(Value::NIL),
+                args.get(4).copied().unwrap_or(Value::NIL),
+                args.get(5).copied().unwrap_or(Value::NIL),
+            ),
+            crate::tagged::header::SubrFn::A7(func) => func(
+                self,
+                args.first().copied().unwrap_or(Value::NIL),
+                args.get(1).copied().unwrap_or(Value::NIL),
+                args.get(2).copied().unwrap_or(Value::NIL),
+                args.get(3).copied().unwrap_or(Value::NIL),
+                args.get(4).copied().unwrap_or(Value::NIL),
+                args.get(5).copied().unwrap_or(Value::NIL),
+                args.get(6).copied().unwrap_or(Value::NIL),
+            ),
+            crate::tagged::header::SubrFn::A8(func) => func(
+                self,
+                args.first().copied().unwrap_or(Value::NIL),
+                args.get(1).copied().unwrap_or(Value::NIL),
+                args.get(2).copied().unwrap_or(Value::NIL),
+                args.get(3).copied().unwrap_or(Value::NIL),
+                args.get(4).copied().unwrap_or(Value::NIL),
+                args.get(5).copied().unwrap_or(Value::NIL),
+                args.get(6).copied().unwrap_or(Value::NIL),
+                args.get(7).copied().unwrap_or(Value::NIL),
             ),
         }
     }

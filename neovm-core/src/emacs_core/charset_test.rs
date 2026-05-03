@@ -46,7 +46,9 @@ fn registry_plist_returns_empty_for_standard() {
     crate::test_utils::init_test_tracing();
     let reg = CharsetRegistry::new();
     let plist = reg.plist(intern("ascii")).unwrap();
-    assert!(plist.is_empty());
+    assert_eq!(plist.len(), 1);
+    assert_eq!(resolve_sym(plist[0].0), ":dimension");
+    assert_eq!(plist[0].1, Value::fixnum(1));
 }
 
 #[test]
@@ -226,8 +228,8 @@ fn char_charset_wrong_arg_count() {
 fn charset_plist_known() {
     crate::test_utils::init_test_tracing();
     let r = builtin_charset_plist(vec![Value::symbol("ascii")]).unwrap();
-    // Standard charsets have empty plists.
-    assert!(r.is_nil());
+    // Standard charsets now include :dimension (matching GNU define-charset).
+    assert_eq!(list_length(&r), Some(2)); // (:dimension 1)
 }
 
 #[test]
@@ -370,11 +372,14 @@ fn define_charset_internal_keeps_symbol_plist_keys_and_roots_unify_map_value() {
         let plist = reg
             .plist(intern("test-charset-live-metadata"))
             .expect("charset plist should exist");
-        assert_eq!(plist.len(), 2);
+        assert_eq!(plist.len(), 3);
         assert_eq!(resolve_sym(plist[0].0), ":foo");
         assert_eq!(plist[0].1, Value::fixnum(42));
         assert_eq!(resolve_sym(plist[1].0), "bar");
         assert_eq!(plist[1].1, Value::T);
+        // :dimension is auto-pushed by register()
+        assert_eq!(resolve_sym(plist[2].0), ":dimension");
+        assert_eq!(plist[2].1, Value::fixnum(1));
     });
 
     let mut roots = Vec::new();

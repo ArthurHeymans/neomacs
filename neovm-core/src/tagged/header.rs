@@ -482,6 +482,51 @@ pub type SubrFn3 = fn(
     super::value::TaggedValue,
     super::value::TaggedValue,
 ) -> crate::emacs_core::error::EvalResult;
+pub type SubrFn4 = fn(
+    &mut crate::emacs_core::eval::Context,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+) -> crate::emacs_core::error::EvalResult;
+pub type SubrFn5 = fn(
+    &mut crate::emacs_core::eval::Context,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+) -> crate::emacs_core::error::EvalResult;
+pub type SubrFn6 = fn(
+    &mut crate::emacs_core::eval::Context,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+) -> crate::emacs_core::error::EvalResult;
+pub type SubrFn7 = fn(
+    &mut crate::emacs_core::eval::Context,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+) -> crate::emacs_core::error::EvalResult;
+pub type SubrFn8 = fn(
+    &mut crate::emacs_core::eval::Context,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+    super::value::TaggedValue,
+) -> crate::emacs_core::error::EvalResult;
 
 #[derive(Clone, Copy)]
 pub enum SubrFn {
@@ -491,6 +536,11 @@ pub enum SubrFn {
     A1(SubrFn1),
     A2(SubrFn2),
     A3(SubrFn3),
+    A4(SubrFn4),
+    A5(SubrFn5),
+    A6(SubrFn6),
+    A7(SubrFn7),
+    A8(SubrFn8),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
