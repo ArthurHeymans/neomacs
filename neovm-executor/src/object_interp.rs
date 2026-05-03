@@ -1201,23 +1201,25 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.string_to_number(args[0], args.get(1).copied())),
             "logand" | "logior" | "logxor" => {
                 if args.is_empty() {
-                    self.error("primitive `logand/logior/logxor` requires at least one argument");
-                    None
-                } else {
-                    let init = self.fixnum_arg(name, args[0])?;
-                    let op: fn(i64, i64) -> i64 = match name {
-                        "logand" => |a, b| a & b,
-                        "logior" => |a, b| a | b,
-                        "logxor" => |a, b| a ^ b,
-                        _ => unreachable!(),
+                    let identity = match name {
+                        "logand" => -1i64,
+                        _ => 0i64,
                     };
-                    let mut result = init;
-                    for arg in &args[1..] {
-                        let val = self.fixnum_arg(name, *arg)?;
-                        result = op(result, val);
-                    }
-                    self.fixnum(result, name)
+                    return Some(self.fixnum(identity, name));
                 }
+                let init = self.fixnum_arg(name, args[0])?;
+                let op: fn(i64, i64) -> i64 = match name {
+                    "logand" => |a, b| a & b,
+                    "logior" => |a, b| a | b,
+                    "logxor" => |a, b| a ^ b,
+                    _ => unreachable!(),
+                };
+                let mut result = init;
+                for arg in &args[1..] {
+                    let val = self.fixnum_arg(name, *arg)?;
+                    result = op(result, val);
+                }
+                self.fixnum(result, name)
             }
             "lognot" => self.exact_arity(name, args, 1).and_then(|_| {
                 let val = self.fixnum_arg(name, args[0])?;
@@ -1227,9 +1229,9 @@ impl Interpreter<'_, '_, '_> {
                 let val = self.fixnum_arg(name, args[0])?;
                 let count = self.fixnum_arg(name, args[1])?;
                 let result = if count >= 0 {
-                    val << count
+                    val.wrapping_shl(count as u32)
                 } else {
-                    val >> (-count)
+                    val.wrapping_shr((-count) as u32)
                 };
                 self.fixnum(result, name)
             }),
@@ -1237,9 +1239,9 @@ impl Interpreter<'_, '_, '_> {
                 let val = self.fixnum_arg(name, args[0])?;
                 let count = self.fixnum_arg(name, args[1])?;
                 let result = if count >= 0 {
-                    val << count
+                    val.wrapping_shl(count as u32)
                 } else {
-                    (val as u64 >> (-count)) as i64
+                    ((val as u64).wrapping_shr((-count) as u32)) as i64
                 };
                 self.fixnum(result, name)
             }),
