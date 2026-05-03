@@ -728,3 +728,23 @@ fn overlay_with_face_property_displays_correctly() {
         2,
     );
 }
+
+#[test]
+fn eval_expression_addition_via_mcolon_shows_result() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "M-:");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"(+ 1 2)\r");
+    }
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("3"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    let gnu_has = gnu.text_grid().iter().any(|r| r.contains("3"));
+    let neo_has = neo.text_grid().iter().any(|r| r.contains("3"));
+    assert!(gnu_has, "GNU should display result 3 after M-: (+ 1 2)");
+    assert!(neo_has, "NEO should display result 3 after M-: (+ 1 2)");
+}
