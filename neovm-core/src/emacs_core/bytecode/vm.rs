@@ -598,7 +598,7 @@ impl<'a> Vm<'a> {
                 // -- Variable access --
                 Op::VarRef(idx) => {
                     let name_id = sym_id_at(constants, *idx);
-                    let val = vm_try!(self.lookup_var_id(name_id));
+                    let val = vm_try!(self.fast_path_var_ref(name_id));
                     stk_push!(val);
                 }
                 Op::VarSet(idx) => {
@@ -1941,6 +1941,24 @@ impl<'a> Vm<'a> {
     /// GNU `src/bytecode.c` reads bytecode variables with `Fsymbol_value`;
     /// it does not consult the interpreter lexical environment.  Lexical
     /// bytecode variables are compiled as stack/closure accesses instead.
+    /// Fast path for variable reads matching GNU bytecode.c:626-647
+    /// Bvarref: if the symbol is a plain global with a bound value,
+    /// read the value cell directly without full symbolic resolution.
+    fn fast_path_var_ref(&mut self, name_id: SymId) -> EvalResult {
+        let ob = &self.ctx.obarray;
+        let sym = ob
+            .get_by_id(name_id)
+            .ok_or_else(|| signal("void-variable", vec![Value::from_sym_id(name_id)]))?;
+        if sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval {
+            // SAFETY: redirect() already confirmed Plainval, so val.plain is active
+            let val = unsafe { sym.val.plain };
+            if !val.is_unbound() {
+                return Ok(val);
+            }
+        }
+        self.lookup_var_id(name_id)
+    }
+
     fn lookup_var_id(&mut self, name_id: SymId) -> EvalResult {
         let resolved = crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
             &self.ctx.obarray,
