@@ -1030,3 +1030,31 @@ fn tab_line_format_displays_custom_tab_line() {
         3,
     );
 }
+
+#[test]
+fn left_margin_width_preserves_buffer_content() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "left-margin.txt",
+        "hello world\nfoo bar\n",
+        "C-x C-f",
+    );
+
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(setq left-margin-width 4)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("hello")),
+            "{label}: buffer visible with left-margin-width 4"
+        );
+    }
+}
