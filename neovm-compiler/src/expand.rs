@@ -670,6 +670,31 @@ impl Expander {
                 );
                 self.expand_form(expanded)
             }
+            "symbol-plist" if place_items.len() == 2 => {
+                // (setf (symbol-plist sym) val) → (setplist sym val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("setplist", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "plist-get" if place_items.len() == 3 => {
+                // (setf (plist-get plist key) val) → (plist-put plist key val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("plist-put", span),
+                        place_items[1].clone(),
+                        place_items[2].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
             _ => {
                 // Unknown place — pass through as-is
                 let expanded = vec![symbol_form("setf", span), place.clone(), value.clone()];

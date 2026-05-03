@@ -3360,4 +3360,34 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(2 10)");
     }
+
+    #[test]
+    fn jit_setf_symbol_plist() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-plist.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((sym (intern \"test-sym\")))\n\
+               (setf (symbol-plist sym) '(a 1 b 2))\n\
+               (list (get sym 'a) (get sym 'b)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2)");
+    }
+
+    #[test]
+    fn jit_setf_plist_get() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-plist-get.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((plist '(a 1 b 2)))\n\
+               (setf (plist-get plist 'b) 99)\n\
+               (list (plist-get plist 'a) (plist-get plist 'b)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 99)");
+    }
 }
