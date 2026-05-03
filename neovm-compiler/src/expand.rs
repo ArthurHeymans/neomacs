@@ -20,6 +20,7 @@ pub struct ExpandOutput {
 pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
     let mut expander = Expander {
         macros: HashMap::new(),
+        symbol_macros: HashMap::new(),
         diagnostics: Vec::new(),
     };
     let mut expanded_forms = Vec::new();
@@ -38,6 +39,7 @@ pub fn expand_forms(forms: Vec<SurfaceForm>) -> ExpandOutput {
 
 struct Expander {
     macros: HashMap<String, MacroDef>,
+    symbol_macros: HashMap<String, SurfaceForm>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -126,8 +128,16 @@ impl Expander {
                         | SurfaceKind::FunctionQuote(_)
                         | SurfaceKind::Backquote(_)
                         | SurfaceKind::Comma(_)
-                        | SurfaceKind::CommaAt(_)
-                        | SurfaceKind::Atom(_) => {
+                        | SurfaceKind::CommaAt(_) => {
+                            results.push(form);
+                        }
+                        SurfaceKind::Atom(ref atom) => {
+                            if let SurfaceAtom::Symbol(name) = atom {
+                                if let Some(expansion) = self.symbol_macros.get(name) {
+                                    stack.push(Work::Expand(expansion.clone()));
+                                    continue;
+                                }
+                            }
                             results.push(form);
                         }
                     }
@@ -1325,13 +1335,56 @@ impl Expander {
 
     fn expand_cl_symbol_macrolet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         // (cl-symbol-macrolet ((name expansion) ...) body...)
-        // Symbol macros would need a full substitution pass. Most real uses
-        // are from cl-defstruct/etc. where the macro already expanded.
-        if items.len() < 3 {
+        if items.len() < 2 {
             return nil_form(span);
         }
+        // Parse bindings
+        let bindings = match &items[1].kind {
+            SurfaceKind::List(binding_items) => {
+                let mut pairs = Vec::new();
+                for item in binding_items {
+                    if let SurfaceKind::List(b) = &item.kind
+                        && b.len() == 2
+                        && let Some(name) = b[0].symbol_name()
+                    {
+                        pairs.push((name.to_string(), b[1].clone()));
+                    }
+                }
+                pairs
+            }
+            _ => Vec::new(),
+        };
+
+        // Save old bindings and set new ones
+        let saved: Vec<(String, Option<SurfaceForm>)> = bindings
+            .iter()
+            .map(|(name, _)| {
+                let old = self.symbol_macros.get(name).cloned();
+                (name.clone(), old)
+            })
+            .collect();
+
+        for (name, expansion) in &bindings {
+            self.symbol_macros.insert(name.clone(), expansion.clone());
+        }
+
+        // Expand body with symbol macros in scope
         let body: Vec<SurfaceForm> = items[2..].to_vec();
-        self.expand_progn(span, body)
+        let result = self.expand_progn(span, body);
+
+        // Restore old bindings
+        for (name, old) in saved {
+            match old {
+                Some(prev) => {
+                    self.symbol_macros.insert(name, prev);
+                }
+                None => {
+                    self.symbol_macros.remove(&name);
+                }
+            }
+        }
+
+        result
     }
 
     fn expand_progn(&mut self, span: Span, forms: Vec<SurfaceForm>) -> SurfaceForm {
@@ -2028,9 +2081,9 @@ impl Expander {
                 Some((_, EndDirection::Downto | EndDirection::Above)) => -1,
                 _ => 1,
             };
-            let step_val = step
-                .clone()
-                .unwrap_or_else(|| SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(default_step)), span));
+            let step_val = step.clone().unwrap_or_else(|| {
+                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(default_step)), span)
+            });
             while_body.push(list_form(
                 vec![
                     symbol_form("setq", span),

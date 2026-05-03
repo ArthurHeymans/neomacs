@@ -2696,4 +2696,35 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(0 1 4 9 16)");
     }
+
+    #[test]
+    fn jit_cl_symbol_macrolet() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "symacro.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-symbol-macrolet ((x (+ 1 2)))
+               (* x 10))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(30));
+    }
+
+    #[test]
+    fn jit_cl_symbol_macrolet_shadowing() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "symacro-shadow.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((x 5))
+               (cl-symbol-macrolet ((x (+ 1 2)))
+                 (+ x x)))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        // x inside symbol-macrolet body expands to (+ 1 2) = 3
+        // (+ 3 3) = 6
+        assert_eq!(val, LispValue::expect_fixnum(6));
+    }
 }
