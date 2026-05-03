@@ -3904,4 +3904,55 @@ my-counter
         assert!(s.contains("5"), "should have 5 evens, got: {s}");
         assert!(s.contains("55"), "sum should be 55, got: {s}");
     }
+
+    #[test]
+    fn jit_shared_mutable_closure_cells() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "shared-cells.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun make-cell (init)
+  (let ((val init))
+    (list
+     (lambda () val)
+     (lambda (new) (setq val new) new))))
+(let* ((cell (make-cell 0))
+       (getter (car cell))
+       (setter (cadr cell)))
+  (funcall setter 10)
+  (funcall setter 20)
+  (funcall getter))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "20");
+    }
+
+    #[test]
+    fn jit_cl_loop_with_hash_table_collect() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "ht-collect.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((ht (make-hash-table :test 'equal)))
+  (puthash "a" 1 ht)
+  (puthash "b" 2 ht)
+  (puthash "c" 3 ht)
+  (let ((keys nil)
+        (vals nil))
+    (maphash (lambda (k v)
+               (setq keys (cons k keys))
+               (setq vals (cons v vals)))
+             ht)
+    (list (length keys) (length vals))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("3"), "should have 3 keys and 3 vals, got: {s}");
+    }
 }
