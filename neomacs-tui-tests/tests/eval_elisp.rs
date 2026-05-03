@@ -1206,3 +1206,31 @@ fn where_is_internal_returns_key_bindings_for_commands() {
         );
     }
 }
+
+#[test]
+fn apropos_command_includes_key_binding_for_find_file() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let expr = r#"(progn
+  (apropos-command "find-file")
+  (with-current-buffer "*Apropos*"
+    (message "apropos-content %s"
+      (if (search-forward "C-x C-f" nil t)
+          "has-C-x-C-f"
+        "no-C-x-C-f"))))"#;
+
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| grid.iter().any(|r| r.contains("apropos-content"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("apropos-content has-C-x-C-f")),
+            "{label}: apropos-command find-file should list C-x C-f binding"
+        );
+    }
+}
