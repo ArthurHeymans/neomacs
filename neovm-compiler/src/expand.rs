@@ -176,6 +176,7 @@ impl Expander {
             "quote" | "function" => SurfaceForm::new(SurfaceKind::List(items), span),
             "push" => self.expand_push(span, items),
             "pop" => self.expand_pop(span, items),
+            "setf" => self.expand_setf(span, items),
             "if-let*" => self.expand_if_let(span, items),
             "when-let*" => self.expand_when_let(span, items),
             // declare-function is a compile-time declaration — discard
@@ -438,6 +439,207 @@ impl Expander {
             span,
         );
         self.expand_form(expanded)
+    }
+
+    fn expand_setf(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (setf place value [place value ...])
+        // Handle pairs of place/value
+        if items.len() < 3 || items.len() % 2 == 0 {
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+
+        // Handle single pair for now: (setf place value)
+        if items.len() == 3 {
+            return self.expand_setf_pair(span, &items[1], &items[2]);
+        }
+
+        // Multiple pairs: (setf p1 v1 p2 v2 ...)
+        // Expand as nested progn
+        let mut forms = Vec::new();
+        let mut i = 1;
+        while i + 1 < items.len() {
+            forms.push(self.expand_setf_pair(span, &items[i], &items[i + 1]));
+            i += 2;
+        }
+        if forms.len() == 1 {
+            forms.pop().unwrap()
+        } else {
+            let expanded = list_form(
+                std::iter::once(symbol_form("progn", span))
+                    .chain(forms)
+                    .collect(),
+                span,
+            );
+            self.expand_form(expanded)
+        }
+    }
+
+    fn expand_setf_pair(
+        &mut self,
+        span: Span,
+        place: &SurfaceForm,
+        value: &SurfaceForm,
+    ) -> SurfaceForm {
+        // (setf sym val) → (setq sym val)
+        if let Some(name) = place.symbol_name() {
+            let expanded = list_form(
+                vec![
+                    symbol_form("setq", span),
+                    symbol_form(name, place.span),
+                    value.clone(),
+                ],
+                span,
+            );
+            return self.expand_form(expanded);
+        }
+
+        // (setf (func args...) val) → dispatch on func
+        let SurfaceKind::List(place_items) = &place.kind else {
+            // Unknown place form — pass through
+            let expanded: Vec<SurfaceForm> =
+                vec![symbol_form("setf", span), place.clone(), value.clone()];
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        };
+
+        let Some(func_name) = place_items.first().and_then(SurfaceForm::symbol_name) else {
+            let expanded = vec![symbol_form("setf", span), place.clone(), value.clone()];
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        };
+
+        match func_name {
+            "car" if place_items.len() == 2 => {
+                // (setf (car x) v) → (setcar x v)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("setcar", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "cdr" if place_items.len() == 2 => {
+                // (setf (cdr x) v) → (setcdr x v)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("setcdr", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "aref" if place_items.len() == 3 => {
+                // (setf (aref v i) val) → (aset v i val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("aset", span),
+                        place_items[1].clone(),
+                        place_items[2].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "gethash" if place_items.len() >= 3 => {
+                // (setf (gethash key table) val) → (puthash key val table)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("puthash", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                        place_items[2].clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "nth" if place_items.len() == 3 => {
+                // (setf (nth n list) val)
+                // → (let ((--v-- val)) (setcar (nthcdr n list) --v--) --v--)
+                let temp = symbol_form("--setf-val--", span);
+                let expanded = list_form(
+                    vec![
+                        symbol_form("let", span),
+                        list_form(
+                            vec![list_form(vec![temp.clone(), value.clone()], span)],
+                            span,
+                        ),
+                        list_form(
+                            vec![
+                                symbol_form("setcar", span),
+                                list_form(
+                                    vec![
+                                        symbol_form("nthcdr", span),
+                                        place_items[1].clone(),
+                                        place_items[2].clone(),
+                                    ],
+                                    span,
+                                ),
+                                temp.clone(),
+                            ],
+                            span,
+                        ),
+                        temp,
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "elt" if place_items.len() == 3 => {
+                // Same as nth — use nthcdr+setcar pattern
+                let temp = symbol_form("--setf-val--", span);
+                let expanded = list_form(
+                    vec![
+                        symbol_form("let", span),
+                        list_form(
+                            vec![list_form(vec![temp.clone(), value.clone()], span)],
+                            span,
+                        ),
+                        list_form(
+                            vec![
+                                symbol_form("setcar", span),
+                                list_form(
+                                    vec![
+                                        symbol_form("nthcdr", span),
+                                        place_items[1].clone(),
+                                        place_items[2].clone(),
+                                    ],
+                                    span,
+                                ),
+                                temp.clone(),
+                            ],
+                            span,
+                        ),
+                        temp,
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            "symbol-value" if place_items.len() == 2 => {
+                // (setf (symbol-value sym) val) → (set sym val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("set", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
+            _ => {
+                // Unknown place — pass through as-is
+                let expanded = vec![symbol_form("setf", span), place.clone(), value.clone()];
+                SurfaceForm::new(SurfaceKind::List(expanded), span)
+            }
+        }
     }
 
     /// Simplify pcase-let* bindings: ((pattern expr) ...) -> ((sym expr) ...)

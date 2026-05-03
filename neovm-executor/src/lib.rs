@@ -2485,4 +2485,77 @@ total",
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(1 4 9)");
     }
+
+    // ── setf expansion tests ───────────────────────────────────────
+
+    #[test]
+    fn jit_setf_symbol() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-sym.el",
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 1)) (setf x 42) x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_setf_car_cdr() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-car.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((x (list 1 2 3)))
+               (setf (car x) 10)
+               (setf (cdr x) (list 20))
+               x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 20)");
+    }
+
+    #[test]
+    fn jit_setf_aref() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-aref.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (vector 1 2 3)))
+               (setf (aref v 1) 99)
+               v)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "[1 99 3]");
+    }
+
+    #[test]
+    fn jit_setf_nth() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-nth.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((x (list 10 20 30)))
+               (setf (nth 1 x) 99)
+               x)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 99 30)");
+    }
+
+    #[test]
+    fn jit_setf_gethash() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-hash.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((h (make-hash-table)))
+               (setf (gethash 'a h) 42)
+               (gethash 'a h))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
 }
