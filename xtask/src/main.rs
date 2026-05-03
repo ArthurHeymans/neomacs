@@ -2677,12 +2677,45 @@ fn run_preloaded_lisp_byte_compile(
         return Ok(());
     }
 
+    let jobs = compile_main_jobs();
     println!(
-        "  INFO  byte-compiling {} loadup preloaded .el files",
+        "  INFO  byte-compiling {} loadup preloaded .el files with {jobs} parallel jobs",
         sources.len()
     );
-    for source in &sources {
-        run_preloaded_lisp_byte_compile_source(options, paths, envs, source)?;
+
+    if options.dry_run {
+        for source in &sources {
+            run_preloaded_lisp_byte_compile_source(options, paths, envs, source)?;
+        }
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
+        let errors: Vec<String> = pool.install(|| {
+            sources
+                .par_iter()
+                .filter_map(|source| {
+                    run_preloaded_lisp_byte_compile_source(options, paths, envs, source)
+                        .err()
+                        .map(|err| format!("{} ({err})", source.display()))
+                })
+                .collect()
+        });
+
+        if !errors.is_empty() {
+            eprintln!(
+                "  ERROR  {} preloaded .el file{} failed to byte-compile:",
+                errors.len(),
+                if errors.len() == 1 { "" } else { "s" }
+            );
+            for error in &errors {
+                eprintln!("    - {error}");
+            }
+            return Err(format!(
+                "{} preloaded file{} failed to byte-compile",
+                errors.len(),
+                if errors.len() == 1 { "" } else { "s" }
+            )
+            .into());
+        }
     }
 
     Ok(())
