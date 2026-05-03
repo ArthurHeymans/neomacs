@@ -75,6 +75,75 @@ fn terminal_resize_updates_frame_geometry() {
 }
 
 #[test]
+fn live_resize_reflow_content_and_adapt_modeline() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Open a file with known content
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "resize-reflow.txt",
+        "short line\nlonger line with more text here\nthird line\n",
+        "C-x C-f",
+    );
+
+    // Resize to narrow (40 cols) — content should re-wrap, mode-line shrinks
+    resize_both(&mut gnu, &mut neo, 24, 40);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("short line")),
+            "{label}: content visible after resize to 40 cols"
+        );
+    }
+
+    // Resize to wider (100 cols) — content spreads out, mode-line fills
+    resize_both(&mut gnu, &mut neo, 24, 100);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("short line")),
+            "{label}: content still visible after resize to 100 cols"
+        );
+    }
+
+    // Resize back to narrow — content should re-wrap again
+    resize_both(&mut gnu, &mut neo, 24, 50);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("short line")),
+            "{label}: content visible after third resize"
+        );
+    }
+
+    // Check mode-line is present (should adapt to terminal width)
+    let gl = gnu.text_grid();
+    let nl = neo.text_grid();
+    assert!(
+        gl.iter().any(|r| r.contains("resize-reflow.txt")),
+        "GNU mode-line should show filename"
+    );
+    assert!(
+        nl.iter().any(|r| r.contains("resize-reflow.txt")),
+        "NEO mode-line should show filename"
+    );
+
+    assert_pair_nearly_matches(
+        "live_resize_reflow_content_and_adapt_modeline",
+        &gnu,
+        &neo,
+        4,
+    );
+}
+
+#[test]
 fn execute_extended_command_tab_completion_via_mx_completes_unique_command() {
     let (mut gnu, mut neo) = boot_pair("");
 
