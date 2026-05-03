@@ -3860,4 +3860,48 @@ my-counter
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "35");
     }
+
+    #[test]
+    fn jit_real_world_functional_lib() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "dash-like.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun my-map (fn list)
+  (let ((result nil))
+    (dolist (item list)
+      (setq result (cons (funcall fn item) result)))
+    (nreverse result)))
+
+(defun my-filter (pred list)
+  (let ((result nil))
+    (dolist (item list)
+      (when (funcall pred item)
+        (setq result (cons item result))))
+    (nreverse result)))
+
+(defun my-reduce (fn init list)
+  (let ((acc init))
+    (dolist (item list)
+      (setq acc (funcall fn acc item)))
+    acc))
+
+(let* ((nums '(1 2 3 4 5 6 7 8 9 10))
+       (doubled (my-map (lambda (x) (* x 2)) nums))
+       (evens (my-filter (lambda (x) (= (mod x 2) 0)) nums))
+       (sum (my-reduce (lambda (acc x) (+ acc x)) 0 nums)))
+  (list (nth 0 doubled) (nth 4 doubled)
+        (length evens)
+        sum))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("2"), "first doubled should be 2, got: {s}");
+        assert!(s.contains("10"), "fifth doubled should be 10, got: {s}");
+        assert!(s.contains("5"), "should have 5 evens, got: {s}");
+        assert!(s.contains("55"), "sum should be 55, got: {s}");
+    }
 }
