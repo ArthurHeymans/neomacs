@@ -1041,3 +1041,29 @@ fn kill_buffer_removes_from_frame_buried_buffer_list() {
         3,
     );
 }
+
+#[test]
+fn list_buffers_via_cx_cb_shows_scratch_and_messages_buffers() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "C-x C-b");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|r| r.contains("*Buffer List*"))
+            && grid.iter().any(|r| r.contains("*scratch*"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("*Buffer List*")),
+            "{label}: C-x C-b should open Buffer List"
+        );
+        assert!(
+            grid.iter().any(|r| r.contains("*scratch*")),
+            "{label}: Buffer List should show *scratch*"
+        );
+    }
+}
