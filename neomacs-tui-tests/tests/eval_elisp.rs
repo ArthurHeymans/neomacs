@@ -1199,3 +1199,44 @@ fn prefix_arg_survives_from_cu_to_next_command() {
         );
     }
 }
+
+// ── Function definition and call tests ──────────────────────
+
+#[test]
+fn defun_and_optional_args_preserve_argument_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // Define and call a function
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (defun tui-test-fn (x) (* x x)) (tui-test-fn 7))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains("49"),
+            "{label}: (defun fn (x) (* x x)) then (fn 7) should be 49"
+        );
+    }
+
+    // Test &optional args
+    support::eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (defun tui-opt (a &optional b) (if b (+ a b) a)) (tui-opt 5 3))",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let empty = String::new();
+        let echo = grid.last().unwrap_or(&empty);
+        assert!(
+            echo.contains('8'),
+            "{label}: (defun fn (a &optional b)) then (fn 5 3) should be 8"
+        );
+    }
+}
