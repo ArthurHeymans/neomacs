@@ -185,6 +185,16 @@ fn remap_inst(inst: &mut crate::ssa::SsaInst, remap: impl Fn(ValueId) -> ValueId
         ConditionCaseHandlerResult { value } => {
             *value = remap(*value);
         }
+        ConditionCaseEnd { body_result } => {
+            if let Some(v) = body_result {
+                *v = remap(*v);
+            }
+        }
+        UnwindProtectEnd { body_result } => {
+            if let Some(v) = body_result {
+                *v = remap(*v);
+            }
+        }
         Lambda { captures, .. } => {
             for c in captures.iter_mut() {
                 *c = remap(*c);
