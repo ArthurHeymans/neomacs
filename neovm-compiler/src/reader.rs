@@ -917,6 +917,12 @@ fn parse_escaped_char_code(text: &str) -> Option<i64> {
         let ch = decode_single_escape(rest)?;
         return Some(control_code(ch) as i64);
     }
+    // ^A through ^_ → control codes 1-31 (same as C-a through C-_)
+    if let Some(rest) = text.strip_prefix('^') {
+        let ch = rest.chars().next()?;
+        let code = (ch as u32) & 0x1f;
+        return Some(code as i64);
+    }
     if let Some(rest) = text.strip_prefix("M-") {
         let ch = decode_single_escape(rest)?;
         return Some(0x0800_0000 + ch as i64);

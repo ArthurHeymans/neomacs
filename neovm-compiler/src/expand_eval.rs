@@ -304,11 +304,15 @@ impl MacroEval {
             }
 
             Some("ignore-errors") => {
-                // Best-effort: evaluate body, swallow errors
+                // Evaluate body, return last value; swallow errors
+                let mut result = MacroValue::Nil;
                 for form in &items[1..] {
-                    let _ = self.eval(form, env);
+                    match self.eval(form, env) {
+                        Ok(v) => result = v,
+                        Err(_) => return Ok(MacroValue::Nil),
+                    }
                 }
-                Ok(MacroValue::Nil)
+                Ok(result)
             }
 
             Some("require") => {
@@ -389,7 +393,29 @@ impl MacroEval {
 
             Some("macroexp--fgrep") => {
                 // (macroexp--fgrep BINDINGS FORM) — check if form references any binding
-                // Simplified: return nil
+                // Returns the subset of BINDINGS referenced in FORM, or nil.
+                // Simplified: check if any binding name appears in the form,
+                // return the bindings list if so, nil otherwise.
+                if items.len() >= 3 {
+                    if let Ok(binding_vals) = self.eval(&items[1], env) {
+                        if let Some(binding_pairs) = binding_vals.to_vec() {
+                            let binding_names: Vec<String> = binding_pairs
+                                .iter()
+                                .filter_map(|pair| {
+                                    let car = pair.car();
+                                    if let MacroValue::Symbol(s) = car {
+                                        Some(s)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            if form_references_bindings(&items[2], &binding_names) {
+                                return Ok(binding_vals);
+                            }
+                        }
+                    }
+                }
                 Ok(MacroValue::Nil)
             }
 
@@ -697,8 +723,8 @@ impl MacroEval {
 
             Some("string-match") => {
                 // (string-match regexp string &optional start)
-                // At macro time, return 0 (matched) or nil
-                Ok(MacroValue::Int(0))
+                // Conservative default: return nil (no match)
+                Ok(MacroValue::Nil)
             }
 
             Some("plist-get") => {
@@ -1894,6 +1920,29 @@ fn append_values(values: &[MacroValue]) -> MacroValue {
         }));
     }
     result
+}
+
+/// Check if a SurfaceForm references any of the given binding names.
+/// Recursively walks lists, dotted lists, quotes, etc.
+fn form_references_bindings(form: &SurfaceForm, names: &[String]) -> bool {
+    match &form.kind {
+        SurfaceKind::Atom(atom) => {
+            if let SurfaceAtom::Symbol(s) = atom {
+                names.iter().any(|n| n == s)
+            } else {
+                false
+            }
+        }
+        SurfaceKind::List(items) => items.iter().any(|f| form_references_bindings(f, names)),
+        SurfaceKind::DottedList(items, tail) => {
+            items.iter().any(|f| form_references_bindings(f, names))
+                || form_references_bindings(tail, names)
+        }
+        SurfaceKind::Quote(f) | SurfaceKind::FunctionQuote(f) => form_references_bindings(f, names),
+        SurfaceKind::Backquote(f) => form_references_bindings(f, names),
+        SurfaceKind::Comma(f) | SurfaceKind::CommaAt(f) => form_references_bindings(f, names),
+        SurfaceKind::Vector(items) => items.iter().any(|f| form_references_bindings(f, names)),
+    }
 }
 
 #[cfg(test)]

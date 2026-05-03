@@ -1325,14 +1325,11 @@ impl Expander {
 
     fn expand_cl_symbol_macrolet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         // (cl-symbol-macrolet ((name expansion) ...) body...)
-        // Register each binding as a value in the symbol-macro table.
-        // Simplified: expand body, replacing symbol occurrences.
+        // Symbol macros would need a full substitution pass. Most real uses
+        // are from cl-defstruct/etc. where the macro already expanded.
         if items.len() < 3 {
             return nil_form(span);
         }
-        // For now, just expand the body forms — symbol macros would need
-        // a full substitution pass which is complex. Most real uses of
-        // cl-symbol-macrolet are for macros that we handle differently.
         let body: Vec<SurfaceForm> = items[2..].to_vec();
         self.expand_progn(span, body)
     }
