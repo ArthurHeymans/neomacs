@@ -535,9 +535,7 @@ fn shell_command_on_region_via_mbar_with_cat_preserves_text() {
 
     // After cat (with no prefix), output goes to *Shell Command Output* buffer
     // but the original region text should remain in the buffer
-    let ready = |grid: &[String]| {
-        grid.iter().any(|row| row.contains("hello world"))
-    };
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("hello world"));
     gnu.read_until(Duration::from_secs(8), ready);
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));

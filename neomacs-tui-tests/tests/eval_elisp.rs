@@ -449,10 +449,9 @@ fn visited_file_modtime_returns_cons_after_file_visit() {
     // Result should show a cons like (12345 67890) in the echo area,
     // not the integer 0
     let ready = |grid: &[String]| {
-        grid.iter()
-            .rev()
-            .take(4)
-            .any(|row| row.contains('(') && row.chars().filter(|&c| c.is_ascii_digit()).count() >= 4)
+        grid.iter().rev().take(4).any(|row| {
+            row.contains('(') && row.chars().filter(|&c| c.is_ascii_digit()).count() >= 4
+        })
     };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
@@ -580,11 +579,7 @@ fn lisp_environment_variables_match_gnu_emacs_semantics() {
     }
 
     // Test (boundp 'enable-recursive-minibuffers) — should be t
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(boundp 'enable-recursive-minibuffers)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(boundp 'enable-recursive-minibuffers)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -597,11 +592,7 @@ fn lisp_environment_variables_match_gnu_emacs_semantics() {
     }
 
     // Test (>= emacs-major-version 31) — NeoMacs is Emacs 31+
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(>= emacs-major-version 31)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(>= emacs-major-version 31)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -622,11 +613,7 @@ fn face_attribute_inherit_returns_correct_chain_for_mode_line() {
 
     // mode-line inherits from mode-line-active which inherits from
     // mode-line base.  Test the chain via face-attribute.
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(face-attribute 'mode-line :inherit)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(face-attribute 'mode-line :inherit)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
 
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
@@ -647,13 +634,7 @@ fn face_attribute_inherit_returns_correct_chain_for_mode_line() {
 fn buffer_positions_are_correct_1_based_after_file_visit() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    open_home_file(
-        &mut gnu,
-        &mut neo,
-        "pos-check.txt",
-        "abc\n",
-        "C-x C-f",
-    );
+    open_home_file(&mut gnu, &mut neo, "pos-check.txt", "abc\n", "C-x C-f");
 
     // Check (point-min) is 1
     support::eval_expression(&mut gnu, &mut neo, "(point-min)");
@@ -677,7 +658,10 @@ fn buffer_positions_are_correct_1_based_after_file_visit() {
     let neo_num: String = neo_pm.chars().filter(|c| c.is_ascii_digit()).collect();
     assert!(!gnu_num.is_empty(), "GNU point-max not found: {gnu_pm}");
     assert!(!neo_num.is_empty(), "NEO point-max not found: {neo_pm}");
-    assert_eq!(gnu_num, neo_num, "point-max mismatch: GNU={gnu_num} NEO={neo_num}");
+    assert_eq!(
+        gnu_num, neo_num,
+        "point-max mismatch: GNU={gnu_num} NEO={neo_num}"
+    );
 
     // (buffer-size) should also match
     support::eval_expression(&mut gnu, &mut neo, "(buffer-size)");
@@ -686,7 +670,10 @@ fn buffer_positions_are_correct_1_based_after_file_visit() {
     let neo_bs = neo.text_grid().last().cloned().unwrap_or_default();
     let gnu_bs_num: String = gnu_bs.chars().filter(|c| c.is_ascii_digit()).collect();
     let neo_bs_num: String = neo_bs.chars().filter(|c| c.is_ascii_digit()).collect();
-    assert_eq!(gnu_bs_num, neo_bs_num, "buffer-size mismatch: GNU={gnu_bs_num} NEO={neo_bs_num}");
+    assert_eq!(
+        gnu_bs_num, neo_bs_num,
+        "buffer-size mismatch: GNU={gnu_bs_num} NEO={neo_bs_num}"
+    );
 
     // (point) at start of buffer should be 1
     send_both(&mut gnu, &mut neo, "M-<");
@@ -737,11 +724,7 @@ fn fundamental_elisp_operations_return_correct_values() {
     }
 
     // Test (equal (cons 1 2) (cons 1 2)) should be t
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(equal (cons 1 2) (cons 1 2))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(equal (cons 1 2) (cons 1 2))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -787,11 +770,7 @@ fn string_and_numeric_operations_match_gnu_semantics() {
     }
 
     // (substring "hello" 1 3) should be "el" (0-indexed in GNU!)
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(substring \"hello\" 1 3)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(substring \"hello\" 1 3)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -928,11 +907,7 @@ fn hash_table_operations_match_gnu_semantics() {
     }
 
     // (gethash 'key (make-hash-table)) should be nil
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(gethash 'key (make-hash-table))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(gethash 'key (make-hash-table))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -985,11 +960,7 @@ fn regexp_and_assoc_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
     // (string-match "foo" "foobar") should be 0 (match at position 0)
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(string-match \"foo\" \"foobar\")",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(string-match \"foo\" \"foobar\")");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1002,11 +973,7 @@ fn regexp_and_assoc_operations_match_gnu_semantics() {
     }
 
     // (assoc 'b '((a . 1) (b . 2))) should be (b . 2)
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(assoc 'b '((a . 1) (b . 2)))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(assoc 'b '((a . 1) (b . 2)))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1026,11 +993,7 @@ fn lambda_apply_funcall_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
     // ((lambda (x) (+ x 1)) 41) should be 42
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "((lambda (x) (+ x 1)) 41)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "((lambda (x) (+ x 1)) 41)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1043,11 +1006,7 @@ fn lambda_apply_funcall_match_gnu_semantics() {
     }
 
     // (apply '+ '(1 2 3)) should be 6
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(apply '+ '(1 2 3))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(apply '+ '(1 2 3))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1060,11 +1019,7 @@ fn lambda_apply_funcall_match_gnu_semantics() {
     }
 
     // (funcall '+ 1 2 3) should be 6
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(funcall '+ 1 2 3)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(funcall '+ 1 2 3)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1101,11 +1056,7 @@ fn macroexpand_and_condition_case_match_gnu() {
     }
 
     // (eval '(+ 1 2)) should be 3
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(eval '(+ 1 2))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(eval '(+ 1 2))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1125,11 +1076,7 @@ fn catch_throw_and_unwind_protect_match_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
     // (catch 'tag (throw 'tag 42)) should be 42
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(catch 'tag (throw 'tag 42))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(catch 'tag (throw 'tag 42))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
@@ -1142,11 +1089,7 @@ fn catch_throw_and_unwind_protect_match_gnu() {
     }
 
     // (unwind-protect 42 (message "cleanup")) should be 42
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(unwind-protect 42 (ignore))",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(unwind-protect 42 (ignore))");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();

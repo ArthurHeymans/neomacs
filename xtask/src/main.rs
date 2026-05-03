@@ -493,7 +493,7 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // lisp/theme-loaddefs.el, and secondary loaddefs such as
     // org/org-loaddefs.el and dired-loaddefs.el.
     // ---------------------------------------------------------------
-    let loaddefs_gen = paths.lisp_root.join("emacs-lisp/loaddefs-gen.el");
+    let loaddefs_gen = paths.lisp_root.join("emacs-lisp/loaddefs-gen.elc");
     let loaddefs_dirs = loaddefs_dirs(&paths.lisp_root)?;
     let loaddefs_args = loaddefs_generation_args(&loaddefs_gen, &loaddefs_dirs);
     remove_primary_loaddefs_for_regeneration(options, &paths, &loaddefs_el, &theme_loaddefs_el)?;

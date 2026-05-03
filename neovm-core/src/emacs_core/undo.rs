@@ -263,10 +263,8 @@ fn primitive_undo_inner(
                             let del_start = buf.pt_byte - len;
                             let del_end = buf.pt_byte;
                             if del_start >= buf.begv_byte && del_end <= buf.zv_byte {
-                                ctx.buffers
-                                    .goto_buffer_byte(buf_id, del_start);
-                                ctx.buffers
-                                    .delete_buffer_region(buf_id, del_start, del_end);
+                                ctx.buffers.goto_buffer_byte(buf_id, del_start);
+                                ctx.buffers.delete_buffer_region(buf_id, del_start, del_end);
                             }
                         }
                     }

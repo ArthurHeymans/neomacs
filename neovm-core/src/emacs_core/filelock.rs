@@ -238,10 +238,7 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
         .and_then(|b| b.file_name_value().as_runtime_string_owned())
         .is_some_and(|fname| fname == filename)
         && eval
-            .apply(
-                Value::symbol("verify-visited-file-modtime"),
-                vec![],
-            )
+            .apply(Value::symbol("verify-visited-file-modtime"), vec![])
             .is_ok_and(|v| v.is_nil())
     {
         let _ = eval.apply(

@@ -1000,13 +1000,7 @@ fn header_line_format_displays_custom_header_above_buffer() {
 fn tab_line_format_displays_custom_tab_line() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    open_home_file(
-        &mut gnu,
-        &mut neo,
-        "tab-line.txt",
-        "content\n",
-        "C-x C-f",
-    );
+    open_home_file(&mut gnu, &mut neo, "tab-line.txt", "content\n", "C-x C-f");
 
     support::eval_expression(
         &mut gnu,
@@ -1023,12 +1017,7 @@ fn tab_line_format_displays_custom_tab_line() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "tab_line_format_displays_custom_tab_line",
-        &gnu,
-        &neo,
-        3,
-    );
+    assert_pair_nearly_matches("tab_line_format_displays_custom_tab_line", &gnu, &neo, 3);
 }
 
 #[test]
@@ -1043,11 +1032,7 @@ fn left_margin_width_preserves_buffer_content() {
         "C-x C-f",
     );
 
-    support::eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(setq left-margin-width 4)",
-    );
+    support::eval_expression(&mut gnu, &mut neo, "(setq left-margin-width 4)");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {

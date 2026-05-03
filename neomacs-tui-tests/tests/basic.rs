@@ -594,8 +594,7 @@ fn disabled_command_shows_prompt_and_accepts_with_space() {
     let disabled_prompt = |grid: &[String]| {
         grid.iter().any(|row| {
             row.contains("disabled command")
-                || row.contains("disabled")
-                    && row.contains("downcase-region")
+                || row.contains("disabled") && row.contains("downcase-region")
         })
     };
     gnu.read_until(Duration::from_secs(6), disabled_prompt);
@@ -638,20 +637,14 @@ fn m_x_help_shows_help_menu() {
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
         assert!(
-            grid.iter().any(|row| {
-                row.contains("Help") || row.contains("help")
-            }),
+            grid.iter()
+                .any(|row| { row.contains("Help") || row.contains("help") }),
             "{label}: M-x help should show help information\n{}",
             grid.join("\n")
         );
     }
 
-    assert_pair_nearly_matches(
-        "m_x_help_shows_help_menu",
-        &gnu,
-        &neo,
-        3,
-    );
+    assert_pair_nearly_matches("m_x_help_shows_help_menu", &gnu, &neo, 3);
 }
 
 // ── Face remapping tests ────────────────────────────────────
@@ -672,7 +665,11 @@ fn face_remapping_alist_with_filtered_window_system_not_match_on_tty() {
 
     // Insert some text — it should render as normal (not bold),
     // because :filtered (:window-system x) doesn't match on TTY
-    send_both_raw(&mut gnu, &mut neo, b";; this text should NOT be bold on TTY");
+    send_both_raw(
+        &mut gnu,
+        &mut neo,
+        b";; this text should NOT be bold on TTY",
+    );
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     // The mode-line includes "Fundamental" or "Lisp Interaction" — the
@@ -718,7 +715,8 @@ fn overlay_with_face_property_displays_correctly() {
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
         assert!(
-            grid.iter().any(|row| row.contains("alpha") && row.contains("beta")),
+            grid.iter()
+                .any(|row| row.contains("alpha") && row.contains("beta")),
             "{label}: buffer should display overlay content"
         );
     }

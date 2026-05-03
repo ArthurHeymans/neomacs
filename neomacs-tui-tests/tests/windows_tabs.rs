@@ -650,12 +650,7 @@ fn make_frame_and_delete_frame_via_cx5() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "make_frame_and_delete_frame_via_cx5",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_nearly_matches("make_frame_and_delete_frame_via_cx5", &gnu, &neo, 2);
 }
 
 #[test]

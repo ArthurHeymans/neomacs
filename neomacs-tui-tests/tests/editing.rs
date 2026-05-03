@@ -108,7 +108,9 @@ fn electric_return_newline_and_indent_in_lisp_buffer() {
     // Both should have auto-indented the new line
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
-        let has_indent = grid.iter().any(|row| row.starts_with("  ") && row.trim().is_empty());
+        let has_indent = grid
+            .iter()
+            .any(|row| row.starts_with("  ") && row.trim().is_empty());
         assert!(
             has_indent || grid.iter().any(|row| row.trim().starts_with("(message")),
             "{label}: after RET, should auto-indent or preserve code structure\n{}",

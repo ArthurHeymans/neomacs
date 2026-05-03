@@ -634,8 +634,13 @@ pub fn window_params_from_neovm(
         .window_system
         .as_ref()
         .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
-    let face_resolver =
-        FaceResolver::new(face_table, default_fg, default_bg, frame.font_pixel_size, window_system);
+    let face_resolver = FaceResolver::new(
+        face_table,
+        default_fg,
+        default_bg,
+        frame.font_pixel_size,
+        window_system,
+    );
 
     // Convert neovm-core Rect to display Rect (same fields, different types).
     let display_bounds = Rect::new(bounds.x, bounds.y, bounds.width, bounds.height);
@@ -781,7 +786,11 @@ pub fn window_params_from_neovm(
         cursor_color,
         left_fringe_width: left_fringe,
         right_fringe_width: right_fringe,
-        indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") { 1 } else { 0 },
+        indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") {
+            1
+        } else {
+            0
+        },
         show_trailing_whitespace: buffer_local_bool(buffer, "show-trailing-whitespace"),
         trailing_ws_bg: 0,
         fill_column_indicator: buffer_local_int(buffer, "display-fill-column-indicator-column", 0)
@@ -1951,10 +1960,7 @@ impl FaceResolver {
                     if filtered_spec.is_empty() {
                         return None;
                     }
-                    return self.resolve_face_value_over(
-                        base,
-                        &Value::list(filtered_spec),
-                    );
+                    return self.resolve_face_value_over(base, &Value::list(filtered_spec));
                 }
                 if Self::face_spec_is_plist(&items) {
                     let inline = NeoFace::from_plist("--inline--", &items);

@@ -616,8 +616,7 @@ fn isearch_yank_word_via_cs_cw_appends_word_at_point_to_search() {
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
         assert!(
-            grid.iter()
-                .any(|row| row.contains("I-search")),
+            grid.iter().any(|row| row.contains("I-search")),
             "{label}: should show I-search prompt after C-s C-w"
         );
     }

@@ -2873,21 +2873,16 @@ fn validate_set_visited_file_modtime_arg(arg: &Value) -> Result<(), Flow> {
 }
 
 /// `(visited-file-modtime)` — return the buffer's recorded modtime.
-pub(crate) fn builtin_visited_file_modtime(
-    eval: &mut Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn builtin_visited_file_modtime(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("visited-file-modtime", &args, 0)?;
-    let buf = eval.buffers.current_buffer().ok_or_else(|| {
-        signal("error", vec![Value::string("No current buffer")])
-    })?;
+    let buf = eval
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let sec = buf.modtime_sec;
     let nsec = buf.modtime_nsec;
     match (sec, nsec) {
-        (Some(s), Some(ns)) => Ok(Value::cons(
-            Value::fixnum(s),
-            Value::fixnum(ns as i64),
-        )),
+        (Some(s), Some(ns)) => Ok(Value::cons(Value::fixnum(s), Value::fixnum(ns as i64))),
         _ => Ok(Value::fixnum(0)),
     }
 }
@@ -2900,9 +2895,10 @@ pub(crate) fn builtin_verify_visited_file_modtime(
 ) -> EvalResult {
     expect_max_args("verify-visited-file-modtime", &args, 1)?;
     validate_optional_buffer_arg_in_state(&eval.buffers, args.first())?;
-    let buf = eval.buffers.current_buffer().ok_or_else(|| {
-        signal("error", vec![Value::string("No current buffer")])
-    })?;
+    let buf = eval
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let Some((ref sec, ref nsec)) = buf.modtime_sec.zip(buf.modtime_nsec) else {
         return Ok(Value::T); // unknown modtime — never complain (GNU: UNKNOWN_MODTIME_NSECS)
     };
@@ -2917,7 +2913,10 @@ pub(crate) fn builtin_verify_visited_file_modtime(
                     .unwrap_or_default();
                 let disk_sec = dur.as_secs() as i64;
                 let disk_nsec = dur.subsec_nanos() as i32;
-                if disk_sec == *sec && disk_nsec == *nsec && meta.len() as i64 == buf.modtime_size.unwrap_or(-1) {
+                if disk_sec == *sec
+                    && disk_nsec == *nsec
+                    && meta.len() as i64 == buf.modtime_size.unwrap_or(-1)
+                {
                     Ok(Value::T)
                 } else {
                     Ok(Value::NIL)
@@ -2932,10 +2931,7 @@ pub(crate) fn builtin_verify_visited_file_modtime(
 
 /// `(set-visited-file-modtime &optional TIME-LIST)` — set buffer's
 /// modtime from the file on disk or from explicit timestamp.
-pub(crate) fn builtin_set_visited_file_modtime(
-    eval: &mut Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("set-visited-file-modtime", &args, 1)?;
 
     if let Some(arg) = args.first() {
@@ -2944,9 +2940,12 @@ pub(crate) fn builtin_set_visited_file_modtime(
             validate_set_visited_file_modtime_arg(arg)?;
             if let Some(items) = list_to_vec(arg) {
                 if items.len() >= 2 {
-                    if let (Ok(sec), Ok(nsec)) = (expect_fixnum(&items[0]), expect_fixnum(&items[1])) {
-                        let buf = eval.buffers.current_buffer_mut()
-                            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                    if let (Ok(sec), Ok(nsec)) =
+                        (expect_fixnum(&items[0]), expect_fixnum(&items[1]))
+                    {
+                        let buf = eval.buffers.current_buffer_mut().ok_or_else(|| {
+                            signal("error", vec![Value::string("No current buffer")])
+                        })?;
                         buf.modtime_sec = Some(sec);
                         buf.modtime_nsec = Some(nsec as i32);
                         buf.modtime_size = None;
@@ -2970,10 +2969,13 @@ pub(crate) fn builtin_set_visited_file_modtime(
     };
     match std::fs::metadata(&fname) {
         Ok(meta) => {
-            let buf = eval.buffers.current_buffer_mut()
+            let buf = eval
+                .buffers
+                .current_buffer_mut()
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             if let Ok(mtime) = meta.modified() {
-                let dur = mtime.duration_since(std::time::UNIX_EPOCH)
+                let dur = mtime
+                    .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default();
                 buf.modtime_sec = Some(dur.as_secs() as i64);
                 buf.modtime_nsec = Some(dur.subsec_nanos() as i32);

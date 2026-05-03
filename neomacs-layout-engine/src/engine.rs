@@ -1684,14 +1684,11 @@ impl LayoutEngine {
             };
             let bootstrap =
                 super::neovm_bridge::frame_params_from_neovm(frame, evaluator.face_table());
-            let ws = frame.window_system.as_ref().and_then(|v| {
-                v.as_symbol_name().map(|s| s.to_string())
-            });
-            (
-                bootstrap.background,
-                frame.font_pixel_size,
-                ws,
-            )
+            let ws = frame
+                .window_system
+                .as_ref()
+                .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
+            (bootstrap.background, frame.font_pixel_size, ws)
         };
 
         // Realize the default face before collecting window params so frame and
