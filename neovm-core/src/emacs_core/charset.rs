@@ -285,7 +285,17 @@ impl CharsetRegistry {
         ];
     }
 
-    fn register(&mut self, info: CharsetInfo) {
+    fn register(&mut self, mut info: CharsetInfo) {
+        // Ensure the plist includes :dimension so that Elisp
+        // charset-dimension (which reads the plist) returns a value.
+        // GNU define-charset includes :dimension in the plist
+        // (charset.c:1269-1273).  Builtin charsets start with an
+        // empty plist; dynamic charsets from define-charset already
+        // include it — only push if absent.
+        let dim_sym = intern(":dimension");
+        if !info.plist.iter().any(|(k, _)| *k == dim_sym) {
+            info.plist.push((dim_sym, Value::fixnum(info.dimension)));
+        }
         self.charsets.insert(info.name, info);
     }
 
