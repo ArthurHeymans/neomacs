@@ -2558,4 +2558,90 @@ total",
         assert_eq!(artifact.result.diagnostics, Vec::new());
         assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
     }
+
+    #[test]
+    fn jit_ash_shift_safety() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "ash.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (ash 1 100) (ash 1 -100) (ash -1 0))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        // Should not panic; results may wrap but must be valid fixnums
+        let s = artifact.runtime.format_value(val);
+        assert!(s.starts_with('('));
+    }
+
+    #[test]
+    fn jit_logand_identity() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "logand.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (logand) (logand 15) (logand 15 6))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(-1 15 6)");
+    }
+
+    #[test]
+    fn jit_expt_float_args() {
+        // Integer expt returns fixnum
+        let artifact = crate::jit_interp::execute_with_jit(
+            "expt-int.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (expt 2 10)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(1024));
+
+        // Float expt returns float
+        let artifact = crate::jit_interp::execute_with_jit(
+            "expt-float.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (expt 2.0 3)",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert!(
+            artifact.runtime.is_float(val),
+            "expt 2.0 3 should return float"
+        );
+        assert_eq!(artifact.runtime.float_data(val).unwrap(), 8.0);
+    }
+
+    #[test]
+    fn jit_string_to_number_float() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "s2n.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (string-to-number \"42\") (string-to-number \"3.14\"))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(42 3.14)");
+    }
+
+    #[test]
+    fn jit_number_to_string_float() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "n2s.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (number-to-string 42) (number-to-string 3.14))",
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        // 3.14 becomes a float, number-to-string should produce "3.14"
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("\"42\""));
+        assert!(s.contains("3.14"));
+    }
 }

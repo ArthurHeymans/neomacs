@@ -925,7 +925,7 @@ fn dispatch_primitive(
         // --- Bitwise ---
         "logand" => {
             if args.is_empty() {
-                return LispValue::from_fixnum(0);
+                return LispValue::from_fixnum(-1);
             }
             let init = args[0].as_fixnum()?;
             let result = args[1..]
@@ -961,9 +961,9 @@ fn dispatch_primitive(
             let val = args[0].as_fixnum()?;
             let count = args[1].as_fixnum()?;
             let result = if count >= 0 {
-                val << count
+                val.wrapping_shl(count as u32)
             } else {
-                val >> (-count)
+                val.wrapping_shr((-count) as u32)
             };
             LispValue::from_fixnum(result)
         }
@@ -971,26 +971,51 @@ fn dispatch_primitive(
             let val = args[0].as_fixnum()?;
             let count = args[1].as_fixnum()?;
             let result = if count >= 0 {
-                val << count
+                val.wrapping_shl(count as u32)
             } else {
-                (val as u64 >> (-count)) as i64
+                ((val as u64).wrapping_shr((-count) as u32)) as i64
             };
             LispValue::from_fixnum(result)
         }
         "evenp" => Some(bool_value(args[0].as_fixnum()? % 2 == 0)),
         "expt" => {
-            let base = args[0].as_fixnum()?;
-            let exp = args[1].as_fixnum()?;
-            if exp < 0 {
-                return LispValue::from_fixnum(if base == 0 { 0 } else { 0 });
+            let base_is_float = rt.is_float(args[0]);
+            let exp_is_float = rt.is_float(args[1]);
+            let any_float = base_is_float || exp_is_float;
+            let base_float = if let Ok(f) = rt.float_data(args[0]) {
+                f
+            } else if let Some(i) = args[0].as_fixnum() {
+                i as f64
+            } else {
+                return None;
+            };
+            let exp_float = if let Ok(f) = rt.float_data(args[1]) {
+                f
+            } else if let Some(i) = args[1].as_fixnum() {
+                i as f64
+            } else {
+                return None;
+            };
+            let result = base_float.powf(exp_float);
+            if any_float {
+                Some(rt.float(result))
+            } else if result.is_finite() && result.fract() == 0.0 && result.abs() < i64::MAX as f64
+            {
+                LispValue::from_fixnum(result as i64)
+            } else {
+                Some(rt.float(result))
             }
-            LispValue::from_fixnum(base.pow(exp as u32))
         }
 
         // --- String ops ---
         "number-to-string" => {
-            let n = args[0].as_fixnum()?;
-            Some(rt.string(n.to_string()))
+            if let Some(n) = args[0].as_fixnum() {
+                Some(rt.string(n.to_string()))
+            } else if let Ok(f) = rt.float_data(args[0]) {
+                Some(rt.string(format!("{}", f)))
+            } else {
+                None
+            }
         }
         "string-to-number" => {
             let contents = rt.string_contents(args[0]).ok()?.to_string();
@@ -1007,6 +1032,14 @@ fn dispatch_primitive(
             };
             if trimmed.is_empty() {
                 return LispValue::from_fixnum(0);
+            }
+            if radix == 10 && trimmed.contains('.') {
+                if let Ok(f) = trimmed.parse::<f64>() {
+                    if f.is_finite() && f.fract() == 0.0 && f.abs() < i64::MAX as f64 {
+                        return LispValue::from_fixnum(f as i64);
+                    }
+                    return Some(rt.float(f));
+                }
             }
             let n = i64::from_str_radix(trimmed, radix).unwrap_or(0);
             LispValue::from_fixnum(n)
