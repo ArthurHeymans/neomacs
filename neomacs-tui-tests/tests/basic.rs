@@ -748,3 +748,27 @@ fn eval_expression_addition_via_mcolon_shows_result() {
     assert!(gnu_has, "GNU should display result 3 after M-: (+ 1 2)");
     assert!(neo_has, "NEO should display result 3 after M-: (+ 1 2)");
 }
+
+#[test]
+fn what_cursor_position_via_cx_equals_shows_char_info() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "ATA");
+
+    send_both(&mut gnu, &mut neo, "C-a");
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "=");
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("#x41"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("#x41") && r.contains("Char")),
+            "{label} C-x = should show Char: A (#x41) info"
+        );
+    }
+}
