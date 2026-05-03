@@ -3980,4 +3980,50 @@ my-counter
         assert!(s.contains("big"), "should contain big, got: {s}");
         assert!(s.contains("other"), "should contain other, got: {s}");
     }
+
+    #[test]
+    fn jit_pcase_symbol_binding() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "pcase-bind.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+;; Symbol binding pattern: matches anything, binds variable
+(defun describe-pair (x)
+  (pcase x
+    ((guard (consp x))
+     (let ((a (car x)) (b (cdr x)))
+       (+ a b)))
+    (_ 0)))
+(list (describe-pair '(3 . 7)) (describe-pair 42))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        let s = artifact.runtime.format_value(val);
+        assert!(s.contains("10"), "3+7=10, got: {s}");
+        assert!(s.contains("0"), "non-pair returns 0, got: {s}");
+    }
+
+    #[test]
+    fn jit_pcase_quoted_patterns() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "pcase-quote.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun decode-command (cmd)
+  (pcase cmd
+    ('start 1)
+    ('stop 2)
+    ('pause 3)
+    (_ 0)))
+(list (decode-command 'start) (decode-command 'stop)
+      (decode-command 'pause) (decode-command 'unknown))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 0)");
+    }
 }
