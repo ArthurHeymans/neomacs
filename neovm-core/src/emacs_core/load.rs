@@ -1246,7 +1246,6 @@ fn with_load_context<F>(
 where
     F: FnOnce(&mut super::eval::Context) -> Result<Value, EvalError>,
 {
-    let old_reader_load_file = super::value_reader::get_reader_load_file_name_public();
     let old_macro_cache_disabled = eval.macro_cache_disabled;
 
     let specpdl_count = eval.specpdl.len();
@@ -1276,9 +1275,6 @@ where
     }
 
     let roots = eval.save_specpdl_roots();
-    if let Some(v) = old_reader_load_file {
-        eval.push_specpdl_root(v);
-    }
 
     let load_file_value = Value::heap_string(hist_file_name.clone());
     eval.push_specpdl_root(load_file_value);
@@ -1293,9 +1289,6 @@ where
     eval.specbind(intern("load-file-name"), load_file_value);
     eval.specbind(intern("load-true-file-name"), load_true_file_value);
     eval.specbind(intern("current-load-list"), current_load_list);
-    // Set the reader's #$ thread-local so value_reader produces the
-    // actual file path string (matching GNU lread.c Vload_file_name).
-    super::value_reader::set_reader_load_file_name(Some(load_file_value));
     // GNU eager load walks the current function cells directly and does not
     // keep a separate runtime macro-expansion cache. Disable the NeoVM cache
     // across file loads so exact GC does not retain or traverse stale
@@ -1304,8 +1297,6 @@ where
 
     let result = body(eval);
 
-    // Restore reader load-file-name
-    super::value_reader::set_reader_load_file_name(old_reader_load_file);
     eval.macro_cache_disabled = old_macro_cache_disabled;
 
     // Restore lexenv via specpdl unbind_to, matching GNU's
@@ -1350,31 +1341,35 @@ fn streaming_readevalloop(
             load_specpdl_base,
             "streaming_readevalloop leaked specpdl entries before {file_name} form {form_idx}",
         );
-        let read_result =
-            super::value_reader::read_one_with_source_multibyte(content, source_multibyte, pos)
-                .map_err(|e| {
-                    // GNU `Fload` (`src/lread.c`) signals `end-of-file`
-                    // when the reader hits EOF mid-form (e.g. a single-line
-                    // shebang that exhausts the file with no trailing
-                    // newline before any forms). Mirror that here.
-                    if e.message.contains("end of input") || e.message.contains("unterminated") {
-                        return EvalError::Signal {
-                            symbol: intern("end-of-file"),
-                            data: vec![],
-                            raw_data: None,
-                        };
-                    }
-                    EvalError::Signal {
-                        symbol: intern("error"),
-                        data: vec![Value::string(format!(
-                            "Read error in {}: {} at position {}",
-                            path.display(),
-                            e.message,
-                            e.position
-                        ))],
-                        raw_data: None,
-                    }
-                })?;
+        let read_result = super::value_reader::read_one_with_source_multibyte(
+            content,
+            source_multibyte,
+            pos,
+            &eval.obarray,
+        )
+        .map_err(|e| {
+            // GNU `Fload` (`src/lread.c`) signals `end-of-file`
+            // when the reader hits EOF mid-form (e.g. a single-line
+            // shebang that exhausts the file with no trailing
+            // newline before any forms). Mirror that here.
+            if e.message.contains("end of input") || e.message.contains("unterminated") {
+                return EvalError::Signal {
+                    symbol: intern("end-of-file"),
+                    data: vec![],
+                    raw_data: None,
+                };
+            }
+            EvalError::Signal {
+                symbol: intern("error"),
+                data: vec![Value::string(format!(
+                    "Read error in {}: {} at position {}",
+                    path.display(),
+                    e.message,
+                    e.position
+                ))],
+                raw_data: None,
+            }
+        })?;
 
         let Some((form, next_pos)) = read_result else {
             break; // EOF
@@ -1469,7 +1464,7 @@ fn streaming_readevalloop_lisp_source(
             load_specpdl_base,
             "streaming_readevalloop_lisp_source leaked specpdl entries before {file_name} form {form_idx}",
         );
-        let read_result = read_source.read_one(pos).map_err(|e| {
+        let read_result = read_source.read_one(pos, &eval.obarray).map_err(|e| {
             if e.message.contains("end of input") || e.message.contains("unterminated") {
                 return EvalError::Signal {
                     symbol: intern("end-of-file"),
@@ -1725,23 +1720,9 @@ pub(crate) fn load_file_with_requested_and_found_flags(
         .unwrap_or(Value::NIL);
     eval.set_variable("load-in-progress", Value::T);
 
-    // Set the #$ reader macro thread-local so the reader can expand #$
-    // to the file being loaded.  Nested loads are handled by the
-    // save/restore pattern: each invocation saves the outer file's
-    // path and restores it on return.  The root is needed because the
-    // Value lives across GC points during eval.
-    let old_reader_file = super::value_reader::get_reader_load_file_name_public();
-    let found_value = Value::heap_string(found.clone());
-    let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(found_value);
-    super::value_reader::set_reader_load_file_name(Some(found_value));
-
     let result = stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
         load_file_body(eval, path, requested, found, noerror, nomessage)
     });
-
-    super::value_reader::set_reader_load_file_name(old_reader_file);
-    eval.restore_specpdl_roots(roots);
 
     eval.set_variable("load-in-progress", old_load_in_progress);
     eval.loads_in_progress.pop();
@@ -2727,15 +2708,18 @@ fn collect_source_surface_from_paths(
             raw_data: None,
         })?;
         let source = decode_emacs_utf8(&bytes);
-        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(&source, true)
-            .map_err(|err| EvalError::Signal {
-                symbol: intern("error"),
-                data: vec![Value::string(format!(
-                    "{error_context}: failed parsing {}: {err}",
-                    path.display()
-                ))],
-                raw_data: None,
-            })?;
+        let obarray = crate::emacs_core::symbol::Obarray::new();
+        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+            &source, true, &obarray,
+        )
+        .map_err(|err| EvalError::Signal {
+            symbol: intern("error"),
+            data: vec![Value::string(format!(
+                "{error_context}: failed parsing {}: {err}",
+                path.display()
+            ))],
+            raw_data: None,
+        })?;
 
         for form in forms {
             collect_source_surface(form, &mut state);
@@ -2880,15 +2864,18 @@ fn collect_loaddefs_surface_from_paths(
             raw_data: None,
         })?;
         let source = decode_emacs_utf8(&bytes);
-        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(&source, true)
-            .map_err(|err| EvalError::Signal {
-                symbol: intern("error"),
-                data: vec![Value::string(format!(
-                    "{error_context}: failed parsing {}: {err}",
-                    path.display()
-                ))],
-                raw_data: None,
-            })?;
+        let obarray = crate::emacs_core::symbol::Obarray::new();
+        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+            &source, true, &obarray,
+        )
+        .map_err(|err| EvalError::Signal {
+            symbol: intern("error"),
+            data: vec![Value::string(format!(
+                "{error_context}: failed parsing {}: {err}",
+                path.display()
+            ))],
+            raw_data: None,
+        })?;
 
         for form in &forms {
             collect_loaddefs_autoload_args(*form, allowed_files, allowed_names, &mut state);
@@ -3029,15 +3016,19 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
         ))],
         raw_data: None,
     })?;
-    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(&source, true)
-        .map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "ldefs-boot autoload restore: failed parsing {}: {err}",
-                ldefs_path.display()
-            ))],
-            raw_data: None,
-        })?;
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &source,
+        true,
+        &eval.obarray,
+    )
+    .map_err(|err| EvalError::Signal {
+        symbol: intern("error"),
+        data: vec![Value::string(format!(
+            "ldefs-boot autoload restore: failed parsing {}: {err}",
+            ldefs_path.display()
+        ))],
+        raw_data: None,
+    })?;
 
     // Phase: parsed Lisp forms in `forms` (a Vec<Value>) live on
     // the malloc heap and are NOT reachable via conservative stack

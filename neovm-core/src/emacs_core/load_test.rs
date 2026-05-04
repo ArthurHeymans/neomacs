@@ -1,4 +1,7 @@
 use super::*;
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::fontset::{
     DEFAULT_FONTSET_NAME, FontSpecEntry, matching_entries_for_fontset,
@@ -437,8 +440,8 @@ fn gnu_subr_x_string_chop_newline_loads_without_rust_builtin() {
         bootstrap_fixture_path(&load_path, "emacs-lisp/subr-x", false).expect("subr-x path");
     let subr_x_source =
         fs::read_to_string(&subr_x_path).unwrap_or_else(|err| panic!("read subr-x.el: {err}"));
-    let subr_x_forms =
-        crate::emacs_core::value_reader::read_all(&subr_x_source).expect("parse subr-x.el");
+    let subr_x_forms = crate::emacs_core::value_reader::read_all(&subr_x_source, &test_ob())
+        .expect("parse subr-x.el");
     let roots = eval.save_specpdl_roots();
     for form in &subr_x_forms {
         eval.push_specpdl_root(*form);
@@ -570,7 +573,8 @@ fn bindings_split_source_survives_gc_stress_after_help_runtime() {
 
     let path = source_bootstrap_path("bindings.el");
     let content = std::fs::read_to_string(&path).expect("read bindings.el");
-    let forms = crate::emacs_core::value_reader::read_all(&content).expect("parse bindings.el");
+    let forms =
+        crate::emacs_core::value_reader::read_all(&content, &test_ob()).expect("parse bindings.el");
 
     let split_at = forms.len().saturating_sub(16);
     let prefix_source = format!(
@@ -948,6 +952,7 @@ fn after_pdump_load_hook_runs_after_finalize_and_only_once() {
                     (setq compat-pdump-hook-fired t)
                     (setq compat-pdump-hook-saw-load-path
                           (consp load-path))))))",
+        &test_ob(),
     )
     .unwrap();
     eval.eval_sub(setup[0]).expect("setup hook should evaluate");
@@ -7225,10 +7230,15 @@ fn collect_loaddefs_autoload_args_preserves_raw_unibyte_file_name() {
     .into_iter()
     .map(char::from)
     .collect();
-    let form = crate::emacs_core::value_reader::read_one_with_source_multibyte(&source, false, 0)
-        .expect("parse unibyte autoload form")
-        .expect("autoload form should parse")
-        .0;
+    let form = crate::emacs_core::value_reader::read_one_with_source_multibyte(
+        &source,
+        false,
+        0,
+        &test_ob(),
+    )
+    .expect("parse unibyte autoload form")
+    .expect("autoload form should parse")
+    .0;
 
     let mut state = LoaddefsSurfaceState::default();
     collect_loaddefs_autoload_args(form, None, None, &mut state);
@@ -8689,7 +8699,7 @@ fn elc_loading_defines_defcustom_variables() {
     // Test Form 0 in the same evaluator using the streaming Value reader
     let raw_bytes = std::fs::read(general_elc).unwrap();
     let content = super::skip_elc_header(&raw_bytes);
-    let (form0, _next_pos) = crate::emacs_core::value_reader::read_one(&content, 0)
+    let (form0, _next_pos) = crate::emacs_core::value_reader::read_one(&content, 0, &test_ob())
         .expect("read first form")
         .expect("EOF before first form");
     eprintln!("Read Form 0 from general.elc via value reader");
@@ -8783,7 +8793,8 @@ fn source_cycle_spacing_form_loads_after_bootstrap_prefix() {
     let load_path = get_load_path(&eval.obarray());
     let path = bootstrap_fixture_path(&load_path, "simple", false).expect("simple.el path");
     let content = std::fs::read_to_string(&path).expect("read simple.el");
-    let forms = crate::emacs_core::value_reader::read_all(&content).expect("parse simple.el");
+    let forms =
+        crate::emacs_core::value_reader::read_all(&content, &test_ob()).expect("parse simple.el");
 
     let cycle_spacing_form = forms
         .get(89)
@@ -9243,8 +9254,8 @@ fn bootstrap_tool_bar_mode_comes_from_gnu_mode_macro_path() {
         bootstrap_fixture_path(&load_path, "tool-bar", false).expect("tool-bar fixture path");
     tracing::info!("tool-bar probe: loading {}", tool_bar_path.display());
     let source = fs::read_to_string(&tool_bar_path).expect("read tool-bar source");
-    let top_level_forms =
-        crate::emacs_core::value_reader::read_all(&source).expect("parse tool-bar source");
+    let top_level_forms = crate::emacs_core::value_reader::read_all(&source, &test_ob())
+        .expect("parse tool-bar source");
     // GNU `readevalloop` keeps each form live while it is being expanded and
     // evaluated. This probe pre-parses the whole file, so root those forms
     // across the later bootstrap/helper evaluation that can trigger GC.
@@ -11357,7 +11368,7 @@ fn macroexpand_all_pcase_terminates() {
     tracing::debug!("Testing eager expansion on a simple defun with cond...");
     let test_form =
         "(defun test-eager (x) (cond ((= x 1) \"one\") ((= x 2) \"two\") (t \"other\")))";
-    let form_value = crate::emacs_core::value_reader::read_all(test_form)
+    let form_value = crate::emacs_core::value_reader::read_all(test_form, &test_ob())
         .unwrap()
         .into_iter()
         .next()
@@ -11494,11 +11505,12 @@ fn eager_expand_toplevel_forms_keeps_recursive_progn_forms_alive_under_exact_gc(
     )
     .expect("define progn macro");
 
-    let form_value = crate::emacs_core::value_reader::read_all("(neomacs-test-progn-macro)")
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap();
+    let form_value =
+        crate::emacs_core::value_reader::read_all("(neomacs-test-progn-macro)", &test_ob())
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
     let macroexpand_fn = get_eager_macroexpand_fn(&eval).expect("eager macroexpand fn");
     let mut expanded = Vec::new();
     eager_expand_toplevel_forms(

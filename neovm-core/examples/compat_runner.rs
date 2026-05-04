@@ -1,5 +1,5 @@
 use neovm_core::emacs_core::{
-    Context, format_eval_result_bytes_with_eval, print::print_value, value_reader,
+    Context, format_eval_result_bytes_with_eval, print::print_value, symbol::Obarray, value_reader,
 };
 use std::fs;
 use std::io::{self, Write};
@@ -18,7 +18,7 @@ fn main() {
         }
     };
 
-    let forms = match value_reader::read_all(&source) {
+    let forms = match value_reader::read_all(&source, &Obarray::new()) {
         Ok(forms) => forms,
         Err(err) => {
             eprintln!("failed to parse forms: {err}");

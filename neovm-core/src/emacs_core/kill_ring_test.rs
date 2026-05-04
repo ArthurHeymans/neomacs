@@ -1,4 +1,7 @@
 use crate::emacs_core::{Context, format_eval_result};
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
 
 fn eval_one(src: &str) -> String {
@@ -9,7 +12,7 @@ fn eval_one(src: &str) -> String {
 
 fn eval_all(src: &str) -> Vec<String> {
     let mut ev = Context::new();
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     // Root all parsed forms across the eval loop. The Vec<Value>
     // lives on the malloc heap and is invisible to conservative
     // stack scanning; without rooting, any intervening GC reclaims

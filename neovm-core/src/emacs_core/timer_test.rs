@@ -1,4 +1,7 @@
 use super::super::value::next_float_id;
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use super::*;
 use crate::emacs_core::eval::Context;
 use std::cell::RefCell;
@@ -11,7 +14,7 @@ fn eval_first_form_after_marker(eval: &mut Context, source: &str, marker: &str) 
     let start = source
         .find(marker)
         .unwrap_or_else(|| panic!("missing GNU subr.el marker: {marker}"));
-    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0)
+    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0, &test_ob())
         .unwrap_or_else(|err| panic!("parse GNU subr.el from {marker} failed: {:?}", err))
         .unwrap_or_else(|| panic!("no GNU subr.el form found after marker: {marker}"));
     eval.eval_form(form)

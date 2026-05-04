@@ -18,36 +18,7 @@ use super::intern::{intern, intern_lisp_string, intern_uninterned_lisp_string, r
 use super::emacs_char;
 use crate::buffer::Buffer;
 use smallvec::SmallVec;
-use std::cell::RefCell;
 
-thread_local! {
-    /// Current load-file-name for `#$` reader macro.
-    /// Set by `with_load_context` in load.rs before reading a file.
-    static READER_LOAD_FILE_NAME: RefCell<Option<Value>> = const { RefCell::new(None) };
-}
-
-pub(crate) fn collect_value_reader_gc_roots(roots: &mut Vec<Value>) {
-    READER_LOAD_FILE_NAME.with(|slot| {
-        if let Some(value) = *slot.borrow() {
-            roots.push(value);
-        }
-    });
-}
-
-/// Set the current load-file-name for the `#$` reader macro.
-pub fn set_reader_load_file_name(value: Option<Value>) {
-    READER_LOAD_FILE_NAME.with(|slot| *slot.borrow_mut() = value);
-}
-
-/// Get the current load-file-name for the `#$` reader macro.
-fn get_reader_load_file_name() -> Value {
-    READER_LOAD_FILE_NAME.with(|slot| slot.borrow().unwrap_or(Value::NIL))
-}
-
-/// Public getter for save/restore in with_load_context.
-pub fn get_reader_load_file_name_public() -> Option<Value> {
-    READER_LOAD_FILE_NAME.with(|slot| *slot.borrow())
-}
 use super::value::{HashTableTest, Value, build_hash_table_literal_value};
 
 const UNICODE_CHARACTER_NAME_LENGTH_BOUND: usize = 200;
@@ -76,8 +47,8 @@ fn apply_control_modifier(value: u32) -> u32 {
 // ---------------------------------------------------------------------------
 
 /// Read all top-level forms from `input`, returning them as `Value`.
-pub fn read_all(input: &str) -> Result<Vec<Value>, ReadError> {
-    read_all_with_source_multibyte(input, true)
+pub fn read_all(input: &str, obarray: &super::symbol::Obarray) -> Result<Vec<Value>, ReadError> {
+    read_all_with_source_multibyte(input, true, obarray)
 }
 
 /// Read all top-level forms from `input`, preserving the source string's
@@ -85,8 +56,9 @@ pub fn read_all(input: &str) -> Result<Vec<Value>, ReadError> {
 pub fn read_all_with_source_multibyte(
     input: &str,
     source_multibyte: bool,
+    obarray: &super::symbol::Obarray,
 ) -> Result<Vec<Value>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte);
+    let mut reader = Reader::new(input, source_multibyte, obarray);
     let mut forms = Vec::new();
     while reader.skip_ws_and_comments() {
         forms.push(reader.read_form()?);
@@ -97,8 +69,12 @@ pub fn read_all_with_source_multibyte(
 /// Read a single form from `input` starting at byte offset `start`.
 /// Returns `None` if there is nothing to read (only whitespace/comments remain).
 /// On success returns `(value, end_position)`.
-pub fn read_one(input: &str, start: usize) -> Result<Option<(Value, usize)>, ReadError> {
-    read_one_with_source_multibyte(input, true, start)
+pub fn read_one(
+    input: &str,
+    start: usize,
+    obarray: &super::symbol::Obarray,
+) -> Result<Option<(Value, usize)>, ReadError> {
+    read_one_with_source_multibyte(input, true, start, obarray)
 }
 
 /// Read a single form from `input`, preserving whether the original source was
@@ -107,8 +83,9 @@ pub fn read_one_with_source_multibyte(
     input: &str,
     source_multibyte: bool,
     start: usize,
+    obarray: &super::symbol::Obarray,
 ) -> Result<Option<(Value, usize)>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte);
+    let mut reader = Reader::new(input, source_multibyte, obarray);
     reader.pos = start;
     if !reader.skip_ws_and_comments() {
         return Ok(None);
@@ -125,8 +102,9 @@ pub fn read_one_with_locate_syms(
     source_multibyte: bool,
     start: usize,
     locate_syms: bool,
+    obarray: &super::symbol::Obarray,
 ) -> Result<Option<(Value, usize)>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte);
+    let mut reader = Reader::new(input, source_multibyte, obarray);
     reader.pos = start;
     reader.locate_syms = locate_syms;
     if !reader.skip_ws_and_comments() {
@@ -147,8 +125,9 @@ pub fn read_one_from_buffer_with_locate_syms(
     start: usize,
     end: usize,
     locate_syms: bool,
+    obarray: &super::symbol::Obarray,
 ) -> Result<(Option<Value>, usize), ReadError> {
-    let mut reader = Reader::new_buffer(buffer, start, end);
+    let mut reader = Reader::new_buffer(buffer, start, end, obarray);
     reader.locate_syms = locate_syms;
     if !reader.skip_ws_and_comments() {
         return Ok((None, reader.pos));
@@ -192,16 +171,21 @@ impl<'a> LispReadSource<'a> {
         crate::emacs_core::builtins::runtime_string_from_lisp_string(&slice)
     }
 
-    pub fn read_one(&self, start: usize) -> Result<Option<(Value, usize)>, ReadError> {
-        self.read_one_range(start, self.logical_len())
+    pub fn read_one(
+        &self,
+        start: usize,
+        obarray: &super::symbol::Obarray,
+    ) -> Result<Option<(Value, usize)>, ReadError> {
+        self.read_one_range(start, self.logical_len(), obarray)
     }
 
     pub fn read_one_range(
         &self,
         start: usize,
         end: usize,
+        obarray: &super::symbol::Obarray,
     ) -> Result<Option<(Value, usize)>, ReadError> {
-        let mut reader = Reader::new_lisp_string(self.input, start, end);
+        let mut reader = Reader::new_lisp_string(self.input, start, end, obarray);
         if !reader.skip_ws_and_comments() {
             return Ok(None);
         }
@@ -213,8 +197,9 @@ impl<'a> LispReadSource<'a> {
         &self,
         start: usize,
         locate_syms: bool,
+        obarray: &super::symbol::Obarray,
     ) -> Result<Option<(Value, usize)>, ReadError> {
-        self.read_one_range_with_locate_syms(start, self.logical_len(), locate_syms)
+        self.read_one_range_with_locate_syms(start, self.logical_len(), locate_syms, obarray)
     }
 
     pub fn read_one_range_with_locate_syms(
@@ -222,8 +207,9 @@ impl<'a> LispReadSource<'a> {
         start: usize,
         end: usize,
         locate_syms: bool,
+        obarray: &super::symbol::Obarray,
     ) -> Result<Option<(Value, usize)>, ReadError> {
-        let mut reader = Reader::new_lisp_string(self.input, start, end);
+        let mut reader = Reader::new_lisp_string(self.input, start, end, obarray);
         reader.locate_syms = locate_syms;
         if !reader.skip_ws_and_comments() {
             return Ok(None);
@@ -270,6 +256,9 @@ struct Reader<'a> {
     read_labels: std::collections::HashMap<usize, Value>,
     /// When true, wrap interned symbols in symbol-with-pos objects.
     locate_syms: bool,
+    /// The active obarray, for resolving `#$` to the current value of
+    /// `load-file-name` (matching GNU's `Vload_file_name`).
+    obarray: &'a super::symbol::Obarray,
 }
 
 struct ReaderToken {
@@ -292,7 +281,7 @@ fn translate_runtime_source_char(ch: char) -> u32 {
 }
 
 impl<'a> Reader<'a> {
-    fn new(input: &'a str, source_multibyte: bool) -> Self {
+    fn new(input: &'a str, source_multibyte: bool, obarray: &'a super::symbol::Obarray) -> Self {
         Self {
             source: ReaderSource::Runtime(input),
             source_multibyte,
@@ -300,10 +289,16 @@ impl<'a> Reader<'a> {
             limit: input.len(),
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            obarray,
         }
     }
 
-    fn new_lisp_string(input: &'a crate::heap_types::LispString, start: usize, end: usize) -> Self {
+    fn new_lisp_string(
+        input: &'a crate::heap_types::LispString,
+        start: usize,
+        end: usize,
+        obarray: &'a super::symbol::Obarray,
+    ) -> Self {
         assert!(start <= end, "invalid Lisp reader range: {start}..{end}");
         assert!(
             end <= input.sbytes(),
@@ -317,10 +312,16 @@ impl<'a> Reader<'a> {
             limit: end,
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            obarray,
         }
     }
 
-    fn new_buffer(input: &'a Buffer, start: usize, end: usize) -> Self {
+    fn new_buffer(
+        input: &'a Buffer,
+        start: usize,
+        end: usize,
+        obarray: &'a super::symbol::Obarray,
+    ) -> Self {
         assert!(start <= end, "invalid buffer reader range: {start}..{end}");
         assert!(
             end <= input.total_bytes(),
@@ -334,6 +335,7 @@ impl<'a> Reader<'a> {
             limit: end,
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            obarray,
         }
     }
 
@@ -1347,7 +1349,12 @@ impl<'a> Reader<'a> {
                 // Matches GNU lread.c: returns Vload_file_name (the actual
                 // file path string), not the symbol `load-file-name`.
                 self.bump();
-                Ok(get_reader_load_file_name())
+                let sym_id = super::intern::intern("load-file-name");
+                Ok(self
+                    .obarray
+                    .symbol_value_id(sym_id)
+                    .copied()
+                    .unwrap_or(Value::NIL))
             }
             x if x == b'#' as u32 => {
                 // ## — symbol with empty name.

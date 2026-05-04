@@ -4,13 +4,15 @@ use crate::emacs_core::value::{Value, ValueKind};
 
 /// Helper: read one form from a string, panic on error.
 fn read1(input: &str) -> Value {
-    let result = read_one(input, 0).expect("read_one failed");
+    let ob = crate::emacs_core::symbol::Obarray::new();
+    let result = read_one(input, 0, &ob).expect("read_one failed");
     result.expect("no form found").0
 }
 
 /// Helper: read all forms from a string, panic on error.
 fn read_all_ok(input: &str) -> Vec<Value> {
-    read_all(input).expect("read_all failed")
+    let ob = crate::emacs_core::symbol::Obarray::new();
+    read_all(input, &ob).expect("read_all failed")
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +352,7 @@ fn char_literal_named_unicode_escape_keeps_gnu_exact_name_rules() {
         r"?\N{Aé}",
     ] {
         assert!(
-            read_one(input, 0).is_err(),
+            read_one(input, 0, &crate::emacs_core::symbol::Obarray::new()).is_err(),
             "reader should reject GNU-incompatible named escape {input:?}"
         );
     }
@@ -482,7 +484,7 @@ fn dotted_tail_before_reader_prefix_without_whitespace() {
 #[test]
 fn leading_dot_in_list_is_invalid() {
     crate::test_utils::init_test_tracing();
-    assert!(read_one("(. a)", 0).is_err());
+    assert!(read_one("(. a)", 0, &crate::emacs_core::symbol::Obarray::new()).is_err());
 }
 
 #[test]
@@ -557,7 +559,8 @@ fn empty_symbol() {
 #[test]
 fn byte_code_literal_short_vector() {
     crate::test_utils::init_test_tracing();
-    let err = super::read_one("#[1 2 3]", 0).expect_err("GNU signals invalid byte-code object");
+    let err = super::read_one("#[1 2 3]", 0, &crate::emacs_core::symbol::Obarray::new())
+        .expect_err("GNU signals invalid byte-code object");
     assert!(err.message.contains("Invalid byte-code object"));
 }
 
@@ -669,7 +672,9 @@ fn read_all_skips_autoload_cookie_comment_before_defun() {
 #[test]
 fn read_one_returns_position() {
     crate::test_utils::init_test_tracing();
-    let (val, pos) = read_one("42 rest", 0).unwrap().unwrap();
+    let (val, pos) = read_one("42 rest", 0, &crate::emacs_core::symbol::Obarray::new())
+        .unwrap()
+        .unwrap();
     assert_eq!(val.as_fixnum(), Some(42));
     assert_eq!(pos, 2);
 }
@@ -677,14 +682,16 @@ fn read_one_returns_position() {
 #[test]
 fn read_one_empty() {
     crate::test_utils::init_test_tracing();
-    let result = read_one("   ", 0).unwrap();
+    let result = read_one("   ", 0, &crate::emacs_core::symbol::Obarray::new()).unwrap();
     assert!(result.is_none());
 }
 
 #[test]
 fn read_one_with_offset() {
     crate::test_utils::init_test_tracing();
-    let (val, pos) = read_one("42 99", 3).unwrap().unwrap();
+    let (val, pos) = read_one("42 99", 3, &crate::emacs_core::symbol::Obarray::new())
+        .unwrap()
+        .unwrap();
     assert_eq!(val.as_fixnum(), Some(99));
     assert_eq!(pos, 5);
 }
@@ -753,7 +760,12 @@ fn read_window_elc_does_not_leak_docstring_fragments() {
 
     let mut form_idx = 0;
     while form_idx < 50 {
-        let res = read_one_with_source_multibyte(&content, false, pos);
+        let res = read_one_with_source_multibyte(
+            &content,
+            false,
+            pos,
+            &crate::emacs_core::symbol::Obarray::new(),
+        );
         match res {
             Ok(Some((form, next_pos))) => {
                 // Make sure we never produce a symbol whose name appears
@@ -844,7 +856,8 @@ fn hash_skip_doc_string_handles_high_bit_source_bytes() {
     elc.extend_from_slice(b"(window-state-put)");
 
     let content: String = elc.iter().map(|&b| b as char).collect();
-    let forms = read_all(&content).expect("read should succeed");
+    let forms = read_all(&content, &crate::emacs_core::symbol::Obarray::new())
+        .expect("read should succeed");
     assert_eq!(forms.len(), 1, "expected exactly one top-level form");
     assert!(
         forms[0].cons_car().is_symbol_named("window-state-put"),
@@ -891,10 +904,15 @@ fn hash_caret_reads_nested_sub_char_table_literal() {
 fn unibyte_source_preserves_direct_latin1_string_bytes() {
     crate::test_utils::init_test_tracing();
     let input: String = [b'"', 0xFF, b'"'].into_iter().map(char::from).collect();
-    let result = read_one_with_source_multibyte(&input, false, 0)
-        .expect("read_one_with_source_multibyte should succeed")
-        .expect("reader should produce one form")
-        .0;
+    let result = read_one_with_source_multibyte(
+        &input,
+        false,
+        0,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("read_one_with_source_multibyte should succeed")
+    .expect("reader should produce one form")
+    .0;
     let text = result
         .as_lisp_string()
         .expect("reader should return a LispString");
@@ -910,7 +928,7 @@ fn lisp_read_source_tracks_logical_offsets_for_unibyte_input() {
     let source = LispReadSource::new(&input);
 
     let (first, first_end) = source
-        .read_one(0)
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("first read should succeed")
         .expect("first form should exist");
     let first_text = first
@@ -920,7 +938,7 @@ fn lisp_read_source_tracks_logical_offsets_for_unibyte_input() {
     assert_eq!(first_end, 3);
 
     let (second, second_end) = source
-        .read_one(first_end)
+        .read_one(first_end, &crate::emacs_core::symbol::Obarray::new())
         .expect("second read should succeed")
         .expect("second form should exist");
     assert_eq!(second.as_fixnum(), Some(42));
@@ -942,7 +960,7 @@ fn lisp_read_source_reads_late_multibyte_forms_directly() {
 
     for _ in 0..1024 {
         let (form, next_pos) = source
-            .read_one(pos)
+            .read_one(pos, &crate::emacs_core::symbol::Obarray::new())
             .expect("multibyte read should succeed")
             .expect("multibyte form should exist");
         assert!(form.is_string(), "expected string form, got {form:?}");
@@ -950,7 +968,7 @@ fn lisp_read_source_reads_late_multibyte_forms_directly() {
     }
 
     let (last, end_pos) = source
-        .read_one(pos)
+        .read_one(pos, &crate::emacs_core::symbol::Obarray::new())
         .expect("final read should succeed")
         .expect("final form should exist");
     assert_eq!(last.as_fixnum(), Some(42));
@@ -972,7 +990,7 @@ fn lisp_read_source_preserves_extended_emacs_chars_in_string_literals() {
     let input = crate::heap_types::LispString::from_emacs_bytes(bytes);
     let source = LispReadSource::new(&input);
     let (form, end) = source
-        .read_one(0)
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("read should not panic on extended Emacs chars")
         .expect("reader should produce a form");
     let text = form
@@ -1001,7 +1019,7 @@ fn lisp_read_source_preserves_extended_emacs_chars_in_char_literals() {
     let input = crate::heap_types::LispString::from_emacs_bytes(bytes);
     let source = LispReadSource::new(&input);
     let (form, end) = source
-        .read_one(0)
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("read should not panic on extended Emacs char literals")
         .expect("reader should produce a form");
 
@@ -1022,7 +1040,7 @@ fn lisp_read_source_reads_nonunicode_emacs_char_literal() {
     let source = LispReadSource::new(&input);
 
     let (form, end_pos) = source
-        .read_one(0)
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("read should not panic on non-Unicode Emacs chars")
         .expect("form should exist");
 
@@ -1044,7 +1062,7 @@ fn lisp_read_source_reads_nonunicode_emacs_string_literal() {
     let source = LispReadSource::new(&input);
 
     let (form, end_pos) = source
-        .read_one(0)
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("read should not panic on non-Unicode Emacs chars")
         .expect("form should exist");
     let text = form.as_lisp_string().expect("form should be a string");

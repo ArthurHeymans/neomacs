@@ -1,4 +1,7 @@
 use super::*;
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
 use crate::emacs_core::format_eval_result;
@@ -20,7 +23,7 @@ fn eval_one(src: &str) -> String {
 
 fn eval_all(src: &str) -> Vec<String> {
     let mut ev = Context::new();
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     // Root all parsed forms across the eval loop. Without rooting,
     // any intervening GC reclaims the cons cells in the unrooted
     // `forms` Vec<Value> (malloc heap, invisible to conservative
@@ -498,6 +501,7 @@ fn recursive_edit_without_input_receiver_still_runs_noninteractive_top_level() {
     ev.set_variable("noninteractive", Value::T);
     let top_level = crate::emacs_core::value_reader::read_all(
         "(progn (setq neomacs--batch-no-input-probe 42) nil)",
+        &test_ob(),
     )
     .expect("parse top-level form")
     .into_iter()
@@ -10181,7 +10185,7 @@ fn gc_safe_point_runs_post_gc_hook_when_incremental_collection_finishes() {
 
 fn eval_stress(src: &str) -> Vec<String> {
     let mut ev = Context::new();
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     ev.gc_stress = true;
     // Force very low threshold so gc_safe_point triggers on every call
     ev.tagged_heap.set_gc_threshold(1);

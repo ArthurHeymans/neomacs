@@ -1,4 +1,5 @@
 use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::value::Value;
 use neovm_core::emacs_core::value_reader;
 use std::time::Instant;
@@ -76,7 +77,7 @@ fn main() {
     };
 
     let source = INTROSPECTION_FORMS.join("\n");
-    let forms = match value_reader::read_all(&source) {
+    let forms = match value_reader::read_all(&source, &Obarray::new()) {
         Ok(forms) => forms,
         Err(err) => {
             eprintln!("failed to parse benchmark forms: {err}");

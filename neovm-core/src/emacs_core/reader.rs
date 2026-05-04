@@ -627,24 +627,8 @@ fn read_from_string_impl_inner(
         ));
     }
 
-    // Mirror GNU `Fread_from_string` (`src/lread.c`): the `#$` reader
-    // shorthand expands to the *current* value of the elisp variable
-    // `load-file-name`. NeoVM's reader keeps this in a thread-local
-    // (set by `with_load_context` in load.rs); when called from
-    // `read-from-string` outside of a load, the elisp obarray binding
-    // is the only source of truth, so bridge it across before reading.
-    let saved_reader_load_file_name = super::value_reader::get_reader_load_file_name_public();
-    let load_file_name_value = obarray.symbol_value("load-file-name").copied();
-    let load_file_name_for_reader = match load_file_name_value {
-        Some(v) if !v.is_nil() => Some(v),
-        _ => None,
-    };
-    super::value_reader::set_reader_load_file_name(load_file_name_for_reader);
-
     let read_result =
-        read_source.read_one_range_with_locate_syms(start_byte, end_byte, locate_syms);
-
-    super::value_reader::set_reader_load_file_name(saved_reader_load_file_name);
+        read_source.read_one_range_with_locate_syms(start_byte, end_byte, locate_syms, obarray);
 
     let (value, absolute_end_byte) = read_result
         .map_err(|e| {
@@ -798,6 +782,7 @@ pub fn builtin_read_impl(
                     start,
                     end,
                     locate_syms,
+                    &ctx.obarray,
                 ) {
                     Ok(result) => result,
                     Err(e) => {

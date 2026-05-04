@@ -3,6 +3,10 @@ mod common;
 use common::{oracle_enabled, run_neovm_eval, run_oracle_eval};
 use neovm_core::emacs_core::value_reader;
 
+fn test_ob() -> neovm_core::emacs_core::symbol::Obarray {
+    neovm_core::emacs_core::symbol::Obarray::new()
+}
+
 const EMPTY_OVERLAY_QUERIES_AND_CROSS_BUFFER_MOVE_FORM: &str = r#"(let ((a (get-buffer-create " *compat-overlay-a*"))
       (b (get-buffer-create " *compat-overlay-b*")))
   (unwind-protect
@@ -133,7 +137,8 @@ fn empty_overlay_cross_buffer_form_parses_in_neovm() {
     // The simplest way to install one for an integration test is to
     // construct an empty Context.
     let _eval = neovm_core::emacs_core::eval::Context::new();
-    let forms = value_reader::read_all(EMPTY_OVERLAY_QUERIES_AND_CROSS_BUFFER_MOVE_FORM)
-        .expect("overlay audit form should parse");
+    let forms =
+        value_reader::read_all(EMPTY_OVERLAY_QUERIES_AND_CROSS_BUFFER_MOVE_FORM, &test_ob())
+            .expect("overlay audit form should parse");
     assert_eq!(forms.len(), 1);
 }

@@ -1192,7 +1192,6 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
     super::syntax::collect_syntax_gc_roots(roots);
     super::casetab::collect_casetab_gc_roots(roots);
     super::category::collect_category_gc_roots(roots);
-    super::value_reader::collect_value_reader_gc_roots(roots);
     super::terminal::pure::collect_terminal_gc_roots(roots);
     super::font::collect_font_gc_roots(roots);
     super::charset::collect_charset_gc_roots(roots);
@@ -6814,10 +6813,12 @@ impl Context {
     /// Reads via the Value-native reader and evaluates via eval_sub.
     pub fn eval_str(&mut self, source: &str) -> Result<Value, EvalError> {
         crate::tagged::gc::set_tagged_heap(&mut self.tagged_heap);
-        let forms = super::value_reader::read_all(source).map_err(|e| EvalError::Signal {
-            symbol: crate::emacs_core::intern::intern("error"),
-            data: vec![Value::string(format!("Read error: {}", e.message))],
-            raw_data: None,
+        let forms = super::value_reader::read_all(source, &self.obarray).map_err(|e| {
+            EvalError::Signal {
+                symbol: crate::emacs_core::intern::intern("error"),
+                data: vec![Value::string(format!("Read error: {}", e.message))],
+                raw_data: None,
+            }
         })?;
         if forms.is_empty() {
             return Ok(Value::NIL);
@@ -7207,7 +7208,7 @@ impl Context {
     /// Uses the Value-native reader.
     pub fn eval_str_each(&mut self, source: &str) -> Vec<Result<Value, EvalError>> {
         crate::tagged::gc::set_tagged_heap(&mut self.tagged_heap);
-        let forms = match super::value_reader::read_all(source) {
+        let forms = match super::value_reader::read_all(source, &self.obarray) {
             Ok(f) => f,
             Err(e) => {
                 return vec![Err(EvalError::Signal {

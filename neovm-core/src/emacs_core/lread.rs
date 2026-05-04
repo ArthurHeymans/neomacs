@@ -128,14 +128,18 @@ fn eval_forms_from_source_streaming(
 
     let mut pos = 0;
     loop {
-        let read_result =
-            super::value_reader::read_one_with_source_multibyte(source, source_multibyte, pos)
-                .map_err(|e| {
-                    signal(
-                        "invalid-read-syntax",
-                        vec![Value::string(format!("Read error: {}", e.message))],
-                    )
-                })?;
+        let read_result = super::value_reader::read_one_with_source_multibyte(
+            source,
+            source_multibyte,
+            pos,
+            &eval.obarray,
+        )
+        .map_err(|e| {
+            signal(
+                "invalid-read-syntax",
+                vec![Value::string(format!("Read error: {}", e.message))],
+            )
+        })?;
         let Some((form, next_pos)) = read_result else {
             break;
         };
@@ -196,7 +200,7 @@ fn eval_forms_from_lisp_source_streaming(
     let read_source = super::value_reader::LispReadSource::new(source);
     let mut pos = start_pos;
     loop {
-        let read_result = read_source.read_one(pos).map_err(|e| {
+        let read_result = read_source.read_one(pos, &eval.obarray).map_err(|e| {
             signal(
                 "invalid-read-syntax",
                 vec![Value::string(format!("Read error: {}", e.message))],
@@ -567,7 +571,7 @@ fn eval_forms_from_source_in_vm_runtime_streaming(
         let read_source = super::value_reader::LispReadSource::new(source);
         let mut pos = start_pos;
         loop {
-            let read_result = read_source.read_one(pos).map_err(|e| {
+            let read_result = read_source.read_one(pos, &shared.obarray).map_err(|e| {
                 signal(
                     "invalid-read-syntax",
                     vec![Value::string(format!("Read error: {}", e.message))],

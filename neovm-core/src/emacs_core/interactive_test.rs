@@ -1,4 +1,7 @@
 use super::*;
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use crate::emacs_core::keymap::make_list_keymap;
 use crate::emacs_core::load::{
     apply_runtime_startup_state, bootstrap_load_path_entries, create_bootstrap_evaluator_cached,
@@ -57,7 +60,7 @@ fn parse_interactive_code_entries_preserves_raw_unibyte_prompt_bytes() {
 }
 
 fn eval_all_with(ev: &mut Context, src: &str) -> Vec<String> {
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     let roots = ev.save_specpdl_roots();
     for form in &forms {
         ev.push_specpdl_root(*form);
@@ -88,7 +91,7 @@ fn eval_first_form_after_marker(eval: &mut Context, source: &str, marker: &str) 
     let start = source
         .find(marker)
         .unwrap_or_else(|| panic!("missing GNU subr.el marker: {marker}"));
-    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0)
+    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0, &test_ob())
         .unwrap_or_else(|err| panic!("parse GNU subr.el from {marker} failed: {:?}", err))
         .unwrap_or_else(|| panic!("no GNU subr.el form found after marker: {marker}"));
     eval.eval_form(form)

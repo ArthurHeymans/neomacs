@@ -1,4 +1,7 @@
 use super::*;
+fn test_ob() -> crate::emacs_core::symbol::Obarray {
+    crate::emacs_core::symbol::Obarray::new()
+}
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::{Context, format_eval_result};
 use crate::heap_types::LispString;
@@ -14,7 +17,7 @@ fn eval_one(src: &str) -> String {
 
 fn eval_all(src: &str) -> Vec<String> {
     let mut ev = Context::new();
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     // Root all parsed forms across the eval loop. The Vec<Value>
     // lives on the malloc heap and is invisible to conservative
     // stack scanning; without rooting, any intervening GC reclaims
@@ -35,7 +38,7 @@ fn eval_all(src: &str) -> Vec<String> {
 }
 
 fn eval_all_with(ev: &mut Context, src: &str) -> Vec<String> {
-    let forms = crate::emacs_core::value_reader::read_all(src).expect("parse");
+    let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");
     let roots = ev.save_specpdl_roots();
     for form in &forms {
         ev.push_specpdl_root(*form);
@@ -66,7 +69,7 @@ fn eval_first_gnu_form_after_marker(eval: &mut Context, source: &str, marker: &s
     let start = source
         .find(marker)
         .unwrap_or_else(|| panic!("missing GNU source marker: {marker}"));
-    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0)
+    let (form, _) = crate::emacs_core::value_reader::read_one(&source[start..], 0, &test_ob())
         .unwrap_or_else(|err| panic!("parse GNU source from {marker} failed: {:?}", err))
         .unwrap_or_else(|| panic!("no GNU form found after marker: {marker}"));
     eval.eval_form(form)
