@@ -240,9 +240,23 @@ fn simplify_cfg(function: &mut SsaFunction) -> bool {
         }
         let n_preds = preds.get(&bid).map_or(0, |p| p.len());
         if n_preds == 0 && !matches!(block.terminator, SsaTerminator::Unreachable) {
-            block.instructions.clear();
-            block.terminator = SsaTerminator::Unreachable;
-            changed = true;
+            // Don't clear blocks that contain exception handler setup instructions
+            // (CatchEnd, ConditionCaseEnd, etc.) — the CLIF codegen needs these
+            // to populate handler blocks even if the SSA block is unreachable,
+            // because the handler can still be reached via throw/signal.
+            let has_exception_setup = block.instructions.iter().any(|inst| {
+                matches!(
+                    inst.kind,
+                    SsaInstKind::CatchEnd { .. }
+                        | SsaInstKind::ConditionCaseEnd { .. }
+                        | SsaInstKind::UnwindProtectEnd { .. }
+                )
+            });
+            if !has_exception_setup {
+                block.instructions.clear();
+                block.terminator = SsaTerminator::Unreachable;
+                changed = true;
+            }
         }
     }
     changed

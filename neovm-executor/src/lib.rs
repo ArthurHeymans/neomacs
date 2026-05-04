@@ -6020,4 +6020,147 @@ magic
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
     }
+
+    #[test]
+    fn jit_throw_from_nested_condition_case() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-cc-throw.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'outer
+  (condition-case err
+      (condition-case err2
+          (/ 1 0)
+        (arith-error (throw 'outer 'deep)))
+    (error (list 'should-not-reach err))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "deep");
+    }
+
+    #[test]
+    fn jit_condition_case_first_handler_no_match() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cc-no-match.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (signal 'wrong-type-argument '(x))
+  (arith-error 1)
+  (wrong-type-argument 2))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(2));
+    }
+
+    #[test]
+    fn jit_let_no_bindings() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "let-no-bind.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let () 42)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(42));
+    }
+
+    #[test]
+    fn jit_while_with_catch_break() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "while-break.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'break
+  (let ((i 0))
+    (while t
+      (setq i (+ i 1))
+      (when (> i 5)
+        (throw 'break i)))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(6));
+    }
+
+    #[test]
+    fn jit_apply_with_rest_args() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "apply-rest.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun my-sum (&rest args)
+  (let ((total 0))
+    (dolist (x args total)
+      (setq total (+ total x)))))
+(apply #'my-sum '(1 2 3 4 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(15));
+    }
+
+    #[test]
+    fn jit_nested_let_star() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-let-star.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let* ((a 1)
+       (b (+ a 1))
+       (c (+ a b)))
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
+    }
+
+    #[test]
+    fn jit_condition_case_body_succeeds_no_handlers_run() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cc-body-ok.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (+ 1 2)
+  (error 99))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(3));
+    }
+
+    #[test]
+    fn jit_funcall_with_closure() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "funcall-closure.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((x 10))
+  (funcall (lambda (y) (+ x y)) 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(15));
+    }
 }
