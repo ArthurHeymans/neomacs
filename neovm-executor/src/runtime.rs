@@ -1346,6 +1346,11 @@ impl Runtime {
         {
             return format!("{}", obj.value);
         }
+        if let Some(addr) = value.heap_addr()
+            && let Some(obj) = self.bignum_by_addr(addr)
+        {
+            return format!("{}", obj.value);
+        }
         format!("{value:?}")
     }
 }
