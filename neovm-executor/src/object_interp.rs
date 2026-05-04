@@ -1427,6 +1427,50 @@ impl Interpreter<'_, '_, '_> {
                     self.fixnum(result, name)
                 }
             }),
+            "float" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v)),
+            "truncate" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .and_then(|v| self.fixnum(v.trunc() as i64, name)),
+            "floor" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .and_then(|v| self.fixnum(v.floor() as i64, name)),
+            "ceiling" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .and_then(|v| self.fixnum(v.ceil() as i64, name)),
+            "round" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .and_then(|v| self.fixnum(v.round() as i64, name)),
+            "sqrt" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.sqrt())),
+            "sin" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.sin())),
+            "cos" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.cos())),
+            "tan" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.tan())),
+            "log" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.ln())),
+            "exp" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|v| self.runtime.float(v.exp())),
             "list" => Some(make_list(self.runtime, args.iter().copied())),
             "length" => self
                 .exact_arity(name, args, 1)
@@ -4462,6 +4506,17 @@ fn is_primitive_name(name: &str) -> bool {
             | "ash"
             | "lsh"
             | "expt"
+            | "float"
+            | "truncate"
+            | "floor"
+            | "ceiling"
+            | "round"
+            | "sqrt"
+            | "sin"
+            | "cos"
+            | "tan"
+            | "log"
+            | "exp"
             | "number-sequence"
     )
 }
