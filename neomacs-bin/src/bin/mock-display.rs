@@ -10,13 +10,13 @@
 //!   --dump      Dump grid as plain text (no terminal setup)
 
 use neomacs_display_protocol::face::{Face, FaceAttributes};
-use neomacs_display_protocol::frame_content::{
-    ChildFrameContent, FrameContent, StyledLine, WindowContent,
-};
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_layout_engine::engine::LayoutEngine;
+use neomacs_layout_engine::mock_frame::{
+    MockChildFrameContent, MockFrameContent, MockStyledLine, MockWindowContent,
+};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use tracing;
@@ -26,9 +26,9 @@ use tracing;
 // ===================================================================
 
 #[derive(Clone)]
-struct Scene(Vec<FrameDisplayState>);
+struct MockScene(Vec<FrameDisplayState>);
 
-impl Scene {
+impl MockScene {
     fn iter(&self) -> impl Iterator<Item = &FrameDisplayState> {
         self.0.iter()
     }
@@ -123,7 +123,7 @@ fn run_gui(demo: &str) {
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
-    // Use the same physical pixel size that layout_frame_content will
+    // Use the same physical pixel size that layout_mock_frame will
     // derive from the default face's point size via points_to_pixels.
     // Otherwise window pixel_bounds won't match the font metrics used
     // during layout, causing mode-lines and the minibuffer to be
@@ -220,7 +220,7 @@ fn run_gui(demo: &str) {
 // Scene utilities
 // ===================================================================
 
-fn scene_for_tty(scene: Scene) -> FrameDisplayState {
+fn scene_for_tty(scene: MockScene) -> FrameDisplayState {
     let mut iter = scene.0.into_iter();
     let mut main = iter.next().expect("Scene must have a main frame");
     for child in iter {
@@ -256,7 +256,7 @@ fn build_demo(
     char_h: f32,
     pixel_w: f32,
     pixel_h: f32,
-) -> Scene {
+) -> MockScene {
     let faces = build_faces();
     let content = match name {
         "default" => build_default(cols, rows, char_w, char_h, pixel_w, pixel_h, &faces),
@@ -267,8 +267,8 @@ fn build_demo(
     };
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
-    let states = engine.layout_frame_content(&content);
-    Scene(states)
+    let states = engine.layout_mock_frame(&content, char_w, char_h);
+    MockScene(states)
 }
 
 // ===================================================================
@@ -337,7 +337,7 @@ fn help_buffer_lines() -> Vec<(&'static str, u32)> {
 }
 
 // ===================================================================
-// Layout builders — produce FrameContent (the evaluator handoff)
+// Layout builders — produce MockFrameContent (the evaluator handoff)
 // ===================================================================
 
 fn build_single(
@@ -348,20 +348,20 @@ fn build_single(
     pixel_w: f32,
     pixel_h: f32,
     faces: &HashMap<u32, Face>,
-) -> FrameContent {
+) -> MockFrameContent {
     let r = rows as usize;
     let text_rows = r - 2;
-    let scratch: Vec<StyledLine> = scratch_buffer_lines()
+    let scratch: Vec<MockStyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    FrameContent {
+    MockFrameContent {
         frame_id: 1,
         faces: faces.values().cloned().collect(),
-        windows: vec![WindowContent {
+        windows: vec![MockWindowContent {
             window_id: 1,
             lines: scratch,
-            mode_line: StyledLine::from_str(
+            mode_line: MockStyledLine::from_str(
                 " -:**-  *scratch*      Top L1     (Lisp Interaction)",
                 1,
             ),
@@ -372,8 +372,6 @@ fn build_single(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: pixel_h,
-        char_width: pixel_w / cols as f32,
-        char_height: pixel_h / rows as f32,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -388,25 +386,25 @@ fn build_hsplit(
     pixel_w: f32,
     _pixel_h: f32,
     faces: &HashMap<u32, Face>,
-) -> FrameContent {
+) -> MockFrameContent {
     let r = rows as usize;
     let half = (r - 1) / 2;
-    let scratch: Vec<StyledLine> = scratch_buffer_lines()
+    let scratch: Vec<MockStyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let messages: Vec<StyledLine> = messages_buffer_lines()
+    let messages: Vec<MockStyledLine> = messages_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    FrameContent {
+    MockFrameContent {
         frame_id: 1,
         faces: faces.values().cloned().collect(),
         windows: vec![
-            WindowContent {
+            MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(
+                mode_line: MockStyledLine::from_str(
                     " -:**-  *scratch*      Top L1     (Lisp Interaction)",
                     1,
                 ),
@@ -414,10 +412,13 @@ fn build_hsplit(
                 selected: true,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line: StyledLine::from_str(" -:---  *Messages*     Bot L1     (Messages)", 1),
+                mode_line: MockStyledLine::from_str(
+                    " -:---  *Messages*     Bot L1     (Messages)",
+                    1,
+                ),
                 pixel_bounds: Rect::new(
                     0.,
                     half as f32 * char_h,
@@ -431,8 +432,6 @@ fn build_hsplit(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
-        char_width: char_w,
-        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -447,19 +446,19 @@ fn build_vsplit(
     pixel_w: f32,
     _pixel_h: f32,
     faces: &HashMap<u32, Face>,
-) -> FrameContent {
+) -> MockFrameContent {
     let c = cols as usize;
     let r = rows as usize;
     let left_cols = c / 2;
     let right_cols = c - left_cols - 1;
     let text_rows = r - 2;
-    let scratch: Vec<StyledLine> = scratch_buffer_lines()
+    let scratch: Vec<MockStyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let help: Vec<StyledLine> = help_buffer_lines()
+    let help: Vec<MockStyledLine> = help_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
     let ml_left = format!(
         " -:**-  *scratch*{:>w$}",
@@ -471,14 +470,14 @@ fn build_vsplit(
         "",
         w = right_cols.saturating_sub(15)
     );
-    FrameContent {
+    MockFrameContent {
         frame_id: 1,
         faces: faces.values().cloned().collect(),
         windows: vec![
-            WindowContent {
+            MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(&format!("{}|{}", ml_left, ml_right), 1),
+                mode_line: MockStyledLine::from_str(&format!("{}|{}", ml_left, ml_right), 1),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -488,10 +487,10 @@ fn build_vsplit(
                 selected: true,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 2,
                 lines: help,
-                mode_line: StyledLine::from_str("", 1),
+                mode_line: MockStyledLine::from_str("", 1),
                 pixel_bounds: Rect::new(
                     (left_cols + 1) as f32 * char_w,
                     0.,
@@ -505,8 +504,6 @@ fn build_vsplit(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
-        char_width: char_w,
-        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -521,41 +518,41 @@ fn build_triple(
     pixel_w: f32,
     _pixel_h: f32,
     faces: &HashMap<u32, Face>,
-) -> FrameContent {
+) -> MockFrameContent {
     let c = cols as usize;
     let r = rows as usize;
     let left_cols = c / 2;
     let right_cols = c - left_cols - 1;
     let right_half = (r - 1) / 2;
     let rx = (left_cols + 1) as f32 * char_w;
-    let scratch: Vec<StyledLine> = scratch_buffer_lines()
+    let scratch: Vec<MockStyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let messages: Vec<StyledLine> = messages_buffer_lines()
+    let messages: Vec<MockStyledLine> = messages_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let help: Vec<StyledLine> = help_buffer_lines()
+    let help: Vec<MockStyledLine> = help_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    FrameContent {
+    MockFrameContent {
         frame_id: 1,
         faces: faces.values().cloned().collect(),
         windows: vec![
-            WindowContent {
+            MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
+                mode_line: MockStyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
                 pixel_bounds: Rect::new(0., 0., left_cols as f32 * char_w, (r - 2) as f32 * char_h),
                 selected: true,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line: StyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
+                mode_line: MockStyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -565,10 +562,10 @@ fn build_triple(
                 selected: true,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line: StyledLine::from_str(" -:---  *Help*         (Help)", 1),
+                mode_line: MockStyledLine::from_str(" -:---  *Help*         (Help)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     right_half as f32 * char_h,
@@ -582,8 +579,6 @@ fn build_triple(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
-        char_width: char_w,
-        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -598,7 +593,7 @@ fn build_default(
     pixel_w: f32,
     _pixel_h: f32,
     faces: &HashMap<u32, Face>,
-) -> FrameContent {
+) -> MockFrameContent {
     let c = cols as usize;
     let r = rows as usize;
     let top_half = (r - 1) / 2;
@@ -608,17 +603,17 @@ fn build_default(
     let top_text = top_half - 1;
     let rx = (left_cols + 1) as f32 * char_w;
 
-    let scratch: Vec<StyledLine> = scratch_buffer_lines()
+    let scratch: Vec<MockStyledLine> = scratch_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let messages: Vec<StyledLine> = messages_buffer_lines()
+    let messages: Vec<MockStyledLine> = messages_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
-    let help: Vec<StyledLine> = help_buffer_lines()
+    let help: Vec<MockStyledLine> = help_buffer_lines()
         .into_iter()
-        .map(|(t, f)| StyledLine::from_str(t, f))
+        .map(|(t, f)| MockStyledLine::from_str(t, f))
         .collect();
 
     // Child-frame: 60% of top-right window, centered
@@ -629,8 +624,8 @@ fn build_default(
     let cf_h = (cf_rows as f32 + 2.0) * char_h;
     let cf_y = (top_text as f32 - (cf_rows as f32 + 2.0)) * 0.5 * char_h;
     let title_str = format!(" {:-<w$}", "Completions ", w = cf_cols.saturating_sub(1));
-    let mut cf_lines = vec![StyledLine::from_str(&" ".repeat(cf_cols), 9)];
-    cf_lines.push(StyledLine::from_str(&title_str, 11));
+    let mut cf_lines = vec![MockStyledLine::from_str(&" ".repeat(cf_cols), 9)];
+    cf_lines.push(MockStyledLine::from_str(&title_str, 11));
     let items = [
         "  describe-function     ",
         "  describe-variable     ",
@@ -644,17 +639,17 @@ fn build_default(
         "  describe-package      ",
     ];
     for (i, item) in items.iter().enumerate() {
-        cf_lines.push(StyledLine::from_str(item, if i == 2 { 10 } else { 9 }));
+        cf_lines.push(MockStyledLine::from_str(item, if i == 2 { 10 } else { 9 }));
     }
 
-    FrameContent {
+    MockFrameContent {
         frame_id: 1,
         faces: faces.values().cloned().collect(),
         windows: vec![
-            WindowContent {
+            MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: StyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
+                mode_line: MockStyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", 1),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -664,10 +659,10 @@ fn build_default(
                 selected: true,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line: StyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
+                mode_line: MockStyledLine::from_str(" -:---  *Messages*     (Messages)", 1),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -677,10 +672,10 @@ fn build_default(
                 selected: false,
                 truncated_lines: false,
             },
-            WindowContent {
+            MockWindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line: StyledLine::from_str(" -:---  *Help*         (Help)", 1),
+                mode_line: MockStyledLine::from_str(" -:---  *Help*         (Help)", 1),
                 pixel_bounds: Rect::new(
                     0.,
                     top_half as f32 * char_h,
@@ -691,12 +686,12 @@ fn build_default(
                 truncated_lines: false,
             },
         ],
-        child_frames: vec![ChildFrameContent {
+        child_frames: vec![MockChildFrameContent {
             frame_id: 100,
-            window: WindowContent {
+            window: MockWindowContent {
                 window_id: 1,
                 lines: cf_lines,
-                mode_line: StyledLine::from_str("", 1),
+                mode_line: MockStyledLine::from_str("", 1),
                 pixel_bounds: Rect::new(0., 0., cf_w, cf_h),
                 selected: false,
                 truncated_lines: false,
@@ -705,21 +700,19 @@ fn build_default(
             parent_y: cf_y,
             z_order: 1,
         }],
-        minibuffer: Some(WindowContent {
+        minibuffer: Some(MockWindowContent {
             window_id: 999,
-            lines: vec![StyledLine::from_str(
+            lines: vec![MockStyledLine::from_str(
                 "For information about GNU Emacs and the GNU system, type C-h C-a.",
                 0,
             )],
-            mode_line: StyledLine::from_str("", 0),
+            mode_line: MockStyledLine::from_str("", 0),
             pixel_bounds: Rect::new(0., (r - 1) as f32 * char_h, pixel_w, 1.0 * char_h),
             selected: false,
             truncated_lines: false,
         }),
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
-        char_width: char_w,
-        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         menu_bar: None,
     }

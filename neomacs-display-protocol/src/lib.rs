@@ -2,7 +2,6 @@
 
 pub mod effect_config;
 pub mod face;
-pub mod frame_content;
 pub mod frame_glyphs;
 pub mod glyph_matrix;
 pub mod gradient;
@@ -16,7 +15,6 @@ pub mod tty_rif;
 
 pub use effect_config::*;
 pub use face::*;
-pub use frame_content::*;
 pub use frame_glyphs::*;
 pub use gradient::*;
 pub use scene::*;

@@ -5798,17 +5798,19 @@ impl LayoutEngine {
         });
     }
 
-    /// Layout evaluator-free FrameContent into Scene (Vec<FrameDisplayState>).
+    /// Layout a MockFrameContent into FrameDisplayState snapshots.
     ///
-    /// Shared entry point for real neomacs (via evaluator bridge) and mock-display.
-    /// Computes font metrics, builds glyph matrices, zero evaluator access.
-    pub fn layout_frame_content(
+    /// This is the mock-display entry point.  The real neomacs GUI pipeline
+    /// goes through `layout_frame_rust()` which takes a live Lisp evaluator.
+    pub fn layout_mock_frame(
         &mut self,
-        content: &neomacs_display_protocol::frame_content::FrameContent,
+        content: &super::mock_frame::MockFrameContent,
+        char_w: f32,
+        char_h: f32,
     ) -> Vec<neomacs_display_protocol::glyph_matrix::FrameDisplayState> {
         use super::matrix_builder::GlyphMatrixBuilder;
+        use super::mock_frame::MockDisplayProperty;
         use neomacs_display_protocol::face::FaceAttributes;
-        use neomacs_display_protocol::frame_content::DisplayProperty;
         use neomacs_display_protocol::glyph_matrix::Glyph;
         use neomacs_display_protocol::types::Color;
 
@@ -5841,8 +5843,6 @@ impl LayoutEngine {
             .map(|f| f.attributes.contains(FaceAttributes::ITALIC))
             .unwrap_or(false);
 
-        let char_w = content.char_width;
-        let char_h = content.char_height;
         let ascent = font_metrics
             .and_then(|fm| {
                 let m =
@@ -5851,7 +5851,7 @@ impl LayoutEngine {
             })
             .unwrap_or(char_h * 0.8);
         tracing::info!(
-            "layout_frame_content: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
+            "layout_mock_frame: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
             default_size,
             default_family,
             default_weight,
@@ -5889,18 +5889,18 @@ impl LayoutEngine {
                 let mut cp = 0usize;
                 for glyph in &line.glyphs {
                     match &glyph.display {
-                        Some(DisplayProperty::Invisible) => {
+                        Some(MockDisplayProperty::Invisible) => {
                             cp += 1;
                             continue;
                         }
-                        Some(DisplayProperty::Replace(text, fid)) => {
+                        Some(MockDisplayProperty::Replace(text, fid)) => {
                             for ch in text.chars() {
                                 builder.push_char(ch, *fid, cp);
                                 cp += 1;
                             }
                             continue;
                         }
-                        Some(DisplayProperty::Composition(composed)) => {
+                        Some(MockDisplayProperty::Composition(composed)) => {
                             for cg in composed {
                                 builder.push_char(cg.ch, cg.face_id, cp);
                                 cp += 1;

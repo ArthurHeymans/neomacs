@@ -20,6 +20,7 @@ pub mod fontconfig;
 pub mod gui_chrome;
 pub mod hit_test;
 pub mod matrix_builder;
+pub mod mock_frame;
 pub mod neovm_bridge;
 pub mod tty_menu_bar;
 pub mod types;
