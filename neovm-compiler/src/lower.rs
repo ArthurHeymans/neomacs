@@ -317,7 +317,9 @@ pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFu
     }
 
     let value = builder.lower_expr(&template.body);
-    builder.set_terminator(SsaTerminator::Return(value));
+    if value.is_some() {
+        builder.set_terminator(SsaTerminator::Return(value));
+    }
     LowerOutput {
         value: builder.function,
         diagnostics: builder.diagnostics,
