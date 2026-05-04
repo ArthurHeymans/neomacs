@@ -131,6 +131,8 @@ enum ParamSection {
     Required,
     Optional,
     Rest,
+    Key,
+    Aux,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -138,6 +140,8 @@ pub struct LambdaList {
     pub required: Vec<String>,
     pub optional: Vec<String>,
     pub rest: Option<String>,
+    pub key: Vec<String>,
+    pub aux: Vec<String>,
 }
 
 impl LambdaList {
@@ -146,6 +150,8 @@ impl LambdaList {
             .iter()
             .chain(self.optional.iter())
             .chain(self.rest.iter())
+            .chain(self.key.iter())
+            .chain(self.aux.iter())
     }
 
     pub fn binding_names(&self) -> Vec<String> {
@@ -157,13 +163,30 @@ impl LambdaList {
     }
 
     pub fn max_arity(&self) -> Option<usize> {
-        self.rest
-            .is_none()
-            .then_some(self.required.len() + self.optional.len())
+        if self.rest.is_some() || !self.key.is_empty() {
+            return None;
+        }
+        Some(self.required.len() + self.optional.len())
     }
 
     pub fn entry_arity(&self) -> usize {
-        self.required.len() + self.optional.len() + usize::from(self.rest.is_some())
+        self.required.len()
+            + self.optional.len()
+            + usize::from(self.rest.is_some() || !self.key.is_empty())
+    }
+
+    pub fn rest_name(&self) -> Option<&str> {
+        self.rest.as_deref()
+    }
+
+    pub fn implicit_rest_name(&self) -> Option<String> {
+        if self.rest.is_some() {
+            self.rest.clone()
+        } else if !self.key.is_empty() {
+            Some("\0keys".to_string())
+        } else {
+            None
+        }
     }
 
     pub fn display_parts(&self) -> Vec<String> {
@@ -175,6 +198,14 @@ impl LambdaList {
         if let Some(rest) = &self.rest {
             parts.push("&rest".to_string());
             parts.push(rest.clone());
+        }
+        if !self.key.is_empty() {
+            parts.push("&key".to_string());
+            parts.extend(self.key.clone());
+        }
+        if !self.aux.is_empty() {
+            parts.push("&aux".to_string());
+            parts.extend(self.aux.clone());
         }
         parts
     }
@@ -1812,6 +1843,14 @@ impl Lowerer<'_> {
                     section = ParamSection::Rest;
                     continue;
                 }
+                "&key" => {
+                    section = ParamSection::Key;
+                    continue;
+                }
+                "&aux" => {
+                    section = ParamSection::Aux;
+                    continue;
+                }
                 _ if name.starts_with('&') => {
                     self.error(item.span, "lambda-list keyword is not supported yet");
                     return None;
@@ -1828,6 +1867,8 @@ impl Lowerer<'_> {
                     }
                     params.rest = Some(name.to_string());
                 }
+                ParamSection::Key => params.key.push(name.to_string()),
+                ParamSection::Aux => params.aux.push(name.to_string()),
             }
         }
         if section == ParamSection::Rest && params.rest.is_none() {
