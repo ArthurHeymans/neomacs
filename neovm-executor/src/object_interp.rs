@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
 use neovm_compiler::diagnostic::Diagnostic;
+use neovm_compiler::expand_value;
 use neovm_compiler::hir::LambdaList;
 use neovm_compiler::ids::{FunctionId, PrimaryMap, RegId};
 use neovm_compiler::lower::{lambda_template_to_ssa, ssa_to_regir};
+use neovm_compiler::reader;
 use neovm_compiler::regir::{RegFunction, RegInst, RegInstKind, RegModule, RegTerminator};
 use neovm_compiler::ssa::SsaConst;
 use neovm_compiler::surface::{SurfaceAtom, SurfaceForm, SurfaceKind};
@@ -1182,6 +1184,9 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.set_symbol_function(args[0], args[1]);
                 self.runtime_value(result).map(|_| args[0])
             }),
+            "read" => self
+                .min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.read_from_string(args[0])),
             "intern" => self.exact_arity(name, args, 1).and_then(|_| {
                 let name = match self.runtime.string_contents(args[0]) {
                     Ok(name) => name.to_string(),
@@ -3528,6 +3533,21 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn read_from_string(&mut self, string: LispValue) -> Option<LispValue> {
+        let contents = self.string_contents_owned(string)?;
+        let source = neovm_compiler::source::SourceFile::new(
+            neovm_compiler::source::SourceId::new(0),
+            Some("<read>".into()),
+            contents,
+        );
+        let reader_output = reader::read_source(&source);
+        if reader_output.forms.is_empty() {
+            return Some(LispValue::NIL);
+        }
+        let mv = expand_value::surface_to_value(&reader_output.forms[0]);
+        Some(macro_value_to_lisp(&mv, self.runtime))
+    }
+
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
         let format = self.string_contents_owned(format)?;
         let mut output = String::new();
@@ -4592,6 +4612,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "symbol-function"
             | "fset"
             | "defalias"
+            | "read"
             | "intern"
             | "symbol-name"
             | "not"
@@ -4764,6 +4785,38 @@ fn is_primitive_name(name: &str) -> bool {
             | "exp"
             | "number-sequence"
     )
+}
+
+fn macro_value_to_lisp(
+    mv: &neovm_compiler::expand_value::MacroValue,
+    rt: &mut Runtime,
+) -> LispValue {
+    use neovm_compiler::expand_value::MacroValue;
+    match mv {
+        MacroValue::Nil => LispValue::NIL,
+        MacroValue::Symbol(name) => {
+            if name == "t" {
+                LispValue::TRUE
+            } else {
+                rt.intern(name)
+            }
+        }
+        MacroValue::Int(n) => {
+            LispValue::from_fixnum(*n).unwrap_or_else(|| rt.bignum(rug::Integer::from(*n)))
+        }
+        MacroValue::Float(f) => rt.float(*f),
+        MacroValue::String(s) => rt.string(s.clone()),
+        MacroValue::Cons(cons) => {
+            let car_lisp = macro_value_to_lisp(&cons.car, rt);
+            let cdr_lisp = macro_value_to_lisp(&cons.cdr, rt);
+            rt.cons(car_lisp, cdr_lisp)
+        }
+        MacroValue::Vector(items) => {
+            let elements: Vec<LispValue> =
+                items.iter().map(|v| macro_value_to_lisp(v, rt)).collect();
+            rt.vector(elements)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -6311,5 +6364,26 @@ mod tests {
              (test-key 1 :b 42)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_read_integer() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(read \"42\")");
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_read_symbol() {
+        let (value, _rt) = execute(";;; -*- lexical-binding: t; -*-\n(read \"hello\")");
+        assert!(rt.is_symbol(value.unwrap()));
+    }
+
+    #[test]
+    fn executes_read_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (read \"(1 2 3)\"))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 }
