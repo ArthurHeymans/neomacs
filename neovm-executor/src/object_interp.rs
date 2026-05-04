@@ -5705,4 +5705,34 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_lambda_with_key_params() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((f (lambda (a &key b) b)))\n\
+               (funcall f 1 :b 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_lambda_with_key_params_missing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((f (lambda (a &key b) b)))\n\
+               (funcall f 5))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_lambda_with_aux_params() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((f (lambda (a &aux b) b)))\n\
+               (funcall f 7))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }

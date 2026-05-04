@@ -1358,6 +1358,14 @@ impl Lowerer<'_> {
             .names()
             .filter(|name| !self.is_special(name))
             .cloned()
+            .chain(params.key.iter().cloned())
+            .chain(params.aux.iter().cloned())
+            .chain(
+                params
+                    .destructured
+                    .iter()
+                    .filter_map(|(_, pat)| pat.symbol_name().map(str::to_string)),
+            )
             .collect::<Vec<_>>();
         self.push_scope(lexical_params);
         let body = self.lower_body(body_forms, form.span)?;
