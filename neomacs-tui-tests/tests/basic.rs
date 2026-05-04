@@ -844,3 +844,28 @@ fn line_number_mode_toggle_via_mx_shows_l_in_mode_line() {
         );
     }
 }
+
+#[test]
+fn what_line_via_mx_shows_current_line_number() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "what-line.txt",
+        "line 1\nline 2\nline 3\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-n");
+    invoke_mx_command(&mut gnu, &mut neo, "what-line");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("Line 2") || r.contains("line 2")),
+            "{label}: what-line on line 2 should report Line 2"
+        );
+    }
+}
