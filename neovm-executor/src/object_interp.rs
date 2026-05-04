@@ -3331,15 +3331,47 @@ impl Interpreter<'_, '_, '_> {
         if args.is_empty() {
             return Some(LispValue::NIL);
         }
-        let mut values = Vec::new();
-        for arg in args {
-            let sub = self.list_values(*arg)?;
-            values.extend(sub);
-        }
-        if values.is_empty() {
+        let Some(first) = args.iter().find(|v| !v.is_nil()) else {
             return Some(LispValue::NIL);
+        };
+        let first = *first;
+        let mut last = first;
+        loop {
+            let cdr = self.runtime.cdr(last);
+            let cdr_val = self.runtime_value(cdr)?;
+            if cdr_val.is_nil() {
+                break;
+            }
+            if !self.runtime.is_cons(cdr_val) {
+                self.error("nconc: improper list");
+                return None;
+            }
+            last = cdr_val;
         }
-        Some(make_list(self.runtime, values.into_iter()))
+        for arg in args {
+            if *arg == first || arg.is_nil() {
+                continue;
+            }
+            let result = self.runtime.set_cdr(last, *arg);
+            if result.is_err() {
+                return Some(first);
+            }
+            let mut current = *arg;
+            loop {
+                let cdr = self.runtime.cdr(current);
+                let cdr_val = self.runtime_value(cdr)?;
+                if cdr_val.is_nil() {
+                    break;
+                }
+                if !self.runtime.is_cons(cdr_val) {
+                    self.error("nconc: improper list");
+                    return None;
+                }
+                current = cdr_val;
+            }
+            last = current;
+        }
+        Some(first)
     }
 
     fn string_to_number(
