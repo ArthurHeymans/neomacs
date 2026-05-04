@@ -112,6 +112,7 @@ pub enum ClifRuntimeCallKind {
     UnbindDynamic { count: usize },
     StringConst { value: String },
     FloatConst { bits: u64 },
+    BignumConst { value: i64 },
     Quote { index: usize },
     FunctionQuote { index: usize },
     Lambda { index: usize, capture_count: usize },
@@ -174,6 +175,7 @@ pub struct ClifRuntimeAbi<M: ClifModuleBackend = ModuleDeclarations> {
     unbind_dynamic: Option<FuncId>,
     string_const: Option<FuncId>,
     float_const: Option<FuncId>,
+    bignum_const: Option<FuncId>,
     quote: Option<FuncId>,
     function_quote: Option<FuncId>,
     lambda_by_capture_count: HashMap<usize, FuncId>,
@@ -205,6 +207,7 @@ impl<M: ClifModuleBackend + Default> Default for ClifRuntimeAbi<M> {
             unbind_dynamic: None,
             string_const: None,
             float_const: None,
+            bignum_const: None,
             quote: None,
             function_quote: None,
             lambda_by_capture_count: HashMap::new(),
@@ -238,6 +241,7 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
             unbind_dynamic: None,
             string_const: None,
             float_const: None,
+            bignum_const: None,
             quote: None,
             function_quote: None,
             lambda_by_capture_count: HashMap::new(),
@@ -522,6 +526,20 @@ impl<M: ClifModuleBackend> ClifRuntimeAbi<M> {
         self.imported_names
             .push("__neomacs_rt_float_const".to_string());
         self.float_const = Some(id);
+        Ok(RuntimeFuncImport { id, signature })
+    }
+
+    fn bignum_const(&mut self, call_conv: CallConv) -> Result<RuntimeFuncImport, String> {
+        let signature = indexed_runtime_signature(call_conv);
+        if let Some(id) = self.bignum_const {
+            return Ok(RuntimeFuncImport { id, signature });
+        }
+        let id = self
+            .module
+            .declare_import("__neomacs_rt_bignum_const", &signature);
+        self.imported_names
+            .push("__neomacs_rt_bignum_const".to_string());
+        self.bignum_const = Some(id);
         Ok(RuntimeFuncImport { id, signature })
     }
 
@@ -966,11 +984,22 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     SsaConst::Nil => NIL_BITS,
                     SsaConst::True => TRUE_BITS,
                     SsaConst::Int(value) => {
-                        if !(FIXNUM_MIN..=FIXNUM_MAX).contains(value) {
-                            self.error(format!("integer constant {value} requires bignum support"));
+                        if (FIXNUM_MIN..=FIXNUM_MAX).contains(value) {
+                            (*value << TAG_BITS as i64) | FIXNUM_TAG
+                        } else {
+                            let Some(func_ref) = self.bignum_const_ref() else {
+                                return;
+                            };
+                            let Some(lisp_val) = self.emit_indexed_runtime_call(
+                                func_ref,
+                                *value,
+                                ClifRuntimeCallKind::BignumConst { value: *value },
+                            ) else {
+                                return;
+                            };
+                            self.value_map.insert(result, lisp_val);
                             return;
                         }
-                        (*value << TAG_BITS as i64) | FIXNUM_TAG
                     }
                     SsaConst::Char(value) => ((*value as i64) << TAG_BITS) | CHAR_TAG,
                     SsaConst::Float(value) => {
@@ -2053,25 +2082,16 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let is_eq = self.builder.ins().icmp(IntCC::Equal, args[0], args[1]);
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_eq))
             }
-            "integerp" => {
-                let Some(value) = args.first() else {
-                    return PrimitiveCallLowering::Error;
-                };
-                let tag = self.builder.ins().band_imm(*value, 7);
-                let is_fix = self.builder.ins().icmp_imm(IntCC::Equal, tag, FIXNUM_TAG);
-                PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_fix))
+            // Always use runtime for integerp: fixnum-only check misses bignums
+            "integerp" => PrimitiveCallLowering::Unknown,
+            // Route arithmetic through runtime: inline path has no overflow/bignum checks
+            "+" | "-" | "*" | "1+" | "1-" | "/" | "%" | "mod" | "rem" => {
+                PrimitiveCallLowering::Unknown
             }
-            "+" | "-" | "*" => self.lower_fixnum_arithmetic(name, args),
-            "1+" | "1-" => {
-                let Some(value) = args.first() else {
-                    return PrimitiveCallLowering::Error;
-                };
-                let delta: i64 = if name == "1+" { 8 } else { -8 };
-                let result = self.builder.ins().iadd_imm(*value, delta);
-                PrimitiveCallLowering::Value(result)
+            "logand" | "logior" | "logxor" | "lognot" | "ash" | "lsh" => {
+                PrimitiveCallLowering::Unknown
             }
-            "logand" | "logior" | "logxor" => self.lower_fixnum_bitwise(name, args),
-            "=" | "<" | ">" | "<=" | ">=" => self.lower_fixnum_comparison(name, args),
+            "=" | "<" | ">" | "<=" | ">=" | "/=" => PrimitiveCallLowering::Unknown,
             _ => PrimitiveCallLowering::Unknown,
         }
     }
@@ -2084,182 +2104,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             .select(condition, true_value, false_value)
     }
 
-    fn is_fixnum(&mut self, value: ir::Value) -> ir::Value {
-        let tag = self.builder.ins().band_imm(value, 7);
-        self.builder.ins().icmp_imm(IntCC::Equal, tag, FIXNUM_TAG)
-    }
-
-    fn untag_fixnum(&mut self, value: ir::Value) -> ir::Value {
-        self.builder.ins().ushr_imm(value, TAG_BITS as i64)
-    }
-
-    /// Inline fixnum arithmetic with runtime fallback for non-fixnum args.
-    /// For + and -, tagged arithmetic works directly since both tags are 0.
-    /// For *, one operand must be untagged first.
-    fn lower_fixnum_arithmetic(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
-        if args.len() != 2 {
-            return PrimitiveCallLowering::Unknown;
-        }
-
-        let a = args[0];
-        let b = args[1];
-
-        let a_fix = self.is_fixnum(a);
-        let b_fix = self.is_fixnum(b);
-        let both_fix = self.builder.ins().band(a_fix, b_fix);
-
-        let inline_block = self.builder.create_block();
-        let fallback_block = self.builder.create_block();
-        let merge_block = self.builder.create_block();
-        let merge_result = self.builder.append_block_param(merge_block, types::I64);
-
-        self.builder
-            .ins()
-            .brif(both_fix, inline_block, &[], fallback_block, &[]);
-
-        self.builder.switch_to_block(inline_block);
-        let inline_result = match name {
-            "+" => self.builder.ins().iadd(a, b),
-            "-" => self.builder.ins().isub(a, b),
-            "*" => {
-                let au = self.untag_fixnum(a);
-                self.builder.ins().imul(au, b)
-            }
-            _ => unreachable!(),
+    fn block(&mut self, block: BlockId) -> Option<ir::Block> {
+        let Some(block) = self.block_map.get(&block).copied() else {
+            self.error(format!("unknown SSA block {block:?} in Cranelift lowering"));
+            return None;
         };
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(inline_result)]);
-
-        self.builder.switch_to_block(fallback_block);
-        let Some(func_ref) = self.call_named_ref(args.len()) else {
-            return PrimitiveCallLowering::Error;
-        };
-        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
-            return PrimitiveCallLowering::Error;
-        };
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
-
-        self.builder.switch_to_block(merge_block);
-        self.builder.seal_block(inline_block);
-        self.builder.seal_block(fallback_block);
-        self.builder.seal_block(merge_block);
-
-        PrimitiveCallLowering::Value(merge_result)
-    }
-
-    /// Inline fixnum comparison with runtime fallback for float promotion.
-    /// Tagged fixnum comparison order is preserved since tag bits are 0.
-    fn lower_fixnum_comparison(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
-        if args.len() != 2 {
-            return PrimitiveCallLowering::Unknown;
-        }
-
-        let a = args[0];
-        let b = args[1];
-
-        let a_fix = self.is_fixnum(a);
-        let b_fix = self.is_fixnum(b);
-        let both_fix = self.builder.ins().band(a_fix, b_fix);
-
-        let inline_block = self.builder.create_block();
-        let fallback_block = self.builder.create_block();
-        let merge_block = self.builder.create_block();
-        let merge_result = self.builder.append_block_param(merge_block, types::I64);
-
-        self.builder
-            .ins()
-            .brif(both_fix, inline_block, &[], fallback_block, &[]);
-
-        self.builder.switch_to_block(inline_block);
-        let cc = match name {
-            "=" => IntCC::Equal,
-            "<" => IntCC::SignedLessThan,
-            ">" => IntCC::SignedGreaterThan,
-            "<=" => IntCC::SignedLessThanOrEqual,
-            ">=" => IntCC::SignedGreaterThanOrEqual,
-            _ => unreachable!(),
-        };
-        let cmp = self.builder.ins().icmp(cc, a, b);
-        let inline_val = self.bool_to_lisp_value(cmp);
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(inline_val)]);
-
-        self.builder.switch_to_block(fallback_block);
-        let Some(func_ref) = self.call_named_ref(2) else {
-            return PrimitiveCallLowering::Error;
-        };
-        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
-            return PrimitiveCallLowering::Error;
-        };
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
-
-        self.builder.switch_to_block(merge_block);
-        self.builder.seal_block(inline_block);
-        self.builder.seal_block(fallback_block);
-        self.builder.seal_block(merge_block);
-
-        PrimitiveCallLowering::Value(merge_result)
-    }
-
-    /// Inline fixnum bitwise ops: untag both operands, apply the op, retag result.
-    fn lower_fixnum_bitwise(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
-        if args.len() != 2 {
-            return PrimitiveCallLowering::Unknown;
-        }
-
-        let a = args[0];
-        let b = args[1];
-
-        let a_fix = self.is_fixnum(a);
-        let b_fix = self.is_fixnum(b);
-        let both_fix = self.builder.ins().band(a_fix, b_fix);
-
-        let inline_block = self.builder.create_block();
-        let fallback_block = self.builder.create_block();
-        let merge_block = self.builder.create_block();
-        let merge_result = self.builder.append_block_param(merge_block, types::I64);
-
-        self.builder
-            .ins()
-            .brif(both_fix, inline_block, &[], fallback_block, &[]);
-
-        self.builder.switch_to_block(inline_block);
-        let au = self.untag_fixnum(a);
-        let bu = self.untag_fixnum(b);
-        let result = match name {
-            "logand" => self.builder.ins().band(au, bu),
-            "logior" => self.builder.ins().bor(au, bu),
-            "logxor" => self.builder.ins().bxor(au, bu),
-            _ => unreachable!(),
-        };
-        let tagged = self.builder.ins().ishl_imm(result, TAG_BITS as i64);
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(tagged)]);
-
-        self.builder.switch_to_block(fallback_block);
-        let Some(func_ref) = self.call_named_ref(2) else {
-            return PrimitiveCallLowering::Error;
-        };
-        let Some(fallback_val) = self.emit_symbol_runtime_call(func_ref, name, args) else {
-            return PrimitiveCallLowering::Error;
-        };
-        self.builder
-            .ins()
-            .jump(merge_block, &[BlockArg::Value(fallback_val)]);
-
-        self.builder.switch_to_block(merge_block);
-        self.builder.seal_block(inline_block);
-        self.builder.seal_block(fallback_block);
-        self.builder.seal_block(merge_block);
-
-        PrimitiveCallLowering::Value(merge_result)
+        Some(block)
     }
 
     fn lower_pair_runtime_call(&mut self, name: &str, args: &[ir::Value]) -> PrimitiveCallLowering {
@@ -2310,8 +2160,6 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         Some(value)
     }
 
-    /// Peek ahead in the current block to find the ConditionCaseEnd's body_result.
-    /// Used at the first ConditionCaseHandler to get the body's result value.
     fn peek_body_result(&self) -> Option<ir::Value> {
         let (block_id, inst_index) = self.current_inst?;
         let block = &self.ssa.blocks[block_id];
@@ -2325,38 +2173,19 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         None
     }
 
-    /// Get the body_result from the current ConditionCaseEnd instruction.
     fn value_from_end(&self) -> Option<ir::Value> {
         let (block_id, inst_index) = self.current_inst?;
         let block = &self.ssa.blocks[block_id];
-        if let Some(inst) = block.instructions.get(inst_index) {
-            if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind {
+        if inst_index < block.instructions.len() {
+            if let SsaInstKind::ConditionCaseEnd { body_result } =
+                &block.instructions[inst_index].kind
+            {
                 if let Some(vid) = body_result {
                     return self.value_map.get(vid).copied();
                 }
             }
         }
         None
-    }
-
-    /// Find the ConditionCaseBegin's var name by scanning backwards in the current block.
-    fn find_condition_case_var(&self) -> Option<String> {
-        let (block_id, inst_index) = self.current_inst?;
-        let block = &self.ssa.blocks[block_id];
-        for inst in block.instructions[..inst_index].iter().rev() {
-            if let SsaInstKind::ConditionCaseBegin { var } = &inst.kind {
-                return var.clone();
-            }
-        }
-        None
-    }
-
-    fn block(&mut self, block: BlockId) -> Option<ir::Block> {
-        let Some(block) = self.block_map.get(&block).copied() else {
-            self.error(format!("unknown SSA block {block:?} in Cranelift lowering"));
-            return None;
-        };
-        Some(block)
     }
 
     fn def_lexical(&mut self, name: &str, value: ir::Value) {
@@ -2487,6 +2316,19 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             Err(error) => {
                 self.error(format!(
                     "failed to declare Cranelift float constant runtime call: {error}"
+                ));
+                return None;
+            }
+        };
+        self.runtime_func_ref(import)
+    }
+
+    fn bignum_const_ref(&mut self) -> Option<FuncRef> {
+        let import = match self.runtime.bignum_const(self.call_conv) {
+            Ok(import) => import,
+            Err(error) => {
+                self.error(format!(
+                    "failed to declare Cranelift bignum constant runtime call: {error}"
                 ));
                 return None;
             }

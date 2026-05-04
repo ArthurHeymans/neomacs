@@ -141,6 +141,12 @@ jit_shim!(__neomacs_rt_float_const(vmctx: i64, bits: i64) -> i64 {
     rt.float(value).to_abi_i64()
 });
 
+jit_shim!(__neomacs_rt_bignum_const(vmctx: i64, value: i64) -> i64 {
+    let ctx = &mut *(vmctx as *mut JitContext);
+    let rt = &mut *ctx.runtime;
+    rt.bignum(rug::Integer::from(value)).to_abi_i64()
+});
+
 // --- Quote / Lambda ---
 
 jit_shim!(__neomacs_rt_quote(vmctx: i64, form_index: i64) -> i64 {
