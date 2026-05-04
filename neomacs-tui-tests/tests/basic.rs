@@ -980,3 +980,19 @@ fn negative_argument_via_mminus_reverses_direction() {
         );
     }
 }
+
+#[test]
+fn column_number_mode_toggle_via_mx_shows_column_in_mode_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+    invoke_mx_command(&mut gnu, &mut neo, "column-number-mode");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("C") && !r.contains("column-number-mode")),
+            "{label}: column-number-mode should show column in mode line"
+        );
+    }
+}
