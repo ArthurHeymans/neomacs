@@ -91,7 +91,9 @@ fn lower_expr_to_ssa_function(expr: &HirExpr) -> LowerOutput<SsaFunction> {
     builder.mutable_lexicals = mutable_lexical_names(expr);
     builder.cell_lexicals = cell_lexical_names(expr);
     let value = builder.lower_expr(expr);
-    builder.set_terminator(SsaTerminator::Return(value));
+    if value.is_some() {
+        builder.set_terminator(SsaTerminator::Return(value));
+    }
     LowerOutput {
         value: builder.function,
         diagnostics: builder.diagnostics,
@@ -143,7 +145,9 @@ fn lower_defun_to_ssa_function(defun: &HirDefun) -> LowerOutput<SsaFunction> {
         });
     }
     let value = builder.lower_expr(&defun.body);
-    builder.set_terminator(SsaTerminator::Return(value));
+    if value.is_some() {
+        builder.set_terminator(SsaTerminator::Return(value));
+    }
     LowerOutput {
         value: builder.function,
         diagnostics: builder.diagnostics,
