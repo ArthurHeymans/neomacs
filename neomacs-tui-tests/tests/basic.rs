@@ -869,3 +869,25 @@ fn what_line_via_mx_shows_current_line_number() {
         );
     }
 }
+
+#[test]
+fn mx_history_recall_via_mp_shows_previous_command() {
+    let (mut gnu, mut neo) = boot_pair("");
+    // First, execute a command via M-x
+    invoke_mx_command(&mut gnu, &mut neo, "pwd");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Now open M-x and press M-p to recall
+    send_both(&mut gnu, &mut neo, "M-x");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    send_both(&mut gnu, &mut neo, "M-p");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("pwd")),
+            "{label}: M-p in M-x should recall pwd"
+        );
+    }
+}
