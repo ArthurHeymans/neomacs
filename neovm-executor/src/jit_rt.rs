@@ -710,6 +710,185 @@ jit_shim!(__neomacs_rt_gc_safepoint(vmctx: i64) -> i64 {
 
 // --- Primitives ---
 
+/// Sorted list of all built-in runtime primitive names handled by dispatch_primitive.
+/// Used by `fboundp` to recognize built-in functions.
+const BUILTIN_PRIMITIVE_NAMES: &[&str] = &[
+    "%",
+    "*",
+    "+",
+    "-",
+    "/",
+    "/=",
+    "<",
+    "<=",
+    "=",
+    ">",
+    ">=",
+    "1+",
+    "1-",
+    "abs",
+    "append",
+    "aref",
+    "arrayp",
+    "aset",
+    "ash",
+    "assoc",
+    "assq",
+    "atom",
+    "autoload",
+    "booleanp",
+    "boundp",
+    "butlast",
+    "caaaar",
+    "caaadr",
+    "caaar",
+    "caadar",
+    "caaddr",
+    "caadr",
+    "caar",
+    "cadaar",
+    "cadadr",
+    "cadar",
+    "caddar",
+    "cadddr",
+    "caddr",
+    "cadr",
+    "capitalize",
+    "car",
+    "car-safe",
+    "cdaaar",
+    "cdaadr",
+    "cdaar",
+    "cdadar",
+    "cdaddr",
+    "cdadr",
+    "cdar",
+    "cddaar",
+    "cddadr",
+    "cddar",
+    "cdddar",
+    "cddddr",
+    "cdddr",
+    "cddr",
+    "cdr",
+    "cdr-safe",
+    "char-table-p",
+    "char-to-string",
+    "cl-evenp",
+    "cl-minusp",
+    "cl-oddp",
+    "cl-plusp",
+    "clrhash",
+    "concat",
+    "cons",
+    "consp",
+    "copy-list",
+    "copy-sequence",
+    "defalias",
+    "delete",
+    "delq",
+    "downcase",
+    "elt",
+    "eq",
+    "eql",
+    "equal",
+    "error",
+    "expt",
+    "fboundp",
+    "featurep",
+    "floatp",
+    "format-message",
+    "fset",
+    "functionp",
+    "get",
+    "gethash",
+    "hash-table-count",
+    "hash-table-p",
+    "identity",
+    "ignore",
+    "integerp",
+    "intern",
+    "intern-soft",
+    "keywordp",
+    "last",
+    "length",
+    "list",
+    "listp",
+    "logand",
+    "logior",
+    "lognot",
+    "logxor",
+    "lsh",
+    "make-hash-table",
+    "make-list",
+    "make-symbol",
+    "make-vector",
+    "max",
+    "member",
+    "memq",
+    "message",
+    "min",
+    "mod",
+    "nconc",
+    "nlistp",
+    "not",
+    "nreverse",
+    "nth",
+    "nthcdr",
+    "number-or-marker-p",
+    "numberp",
+    "number-sequence",
+    "number-to-string",
+    "plist-get",
+    "plist-put",
+    "prin1",
+    "prog1",
+    "provide",
+    "put",
+    "puthash",
+    "rem",
+    "remhash",
+    "remove",
+    "reverse",
+    "set",
+    "setcar",
+    "setcdr",
+    "setplist",
+    "signal",
+    "split-string",
+    "string-bytes",
+    "string-equal",
+    "string-greaterp",
+    "string-join",
+    "string-lessp",
+    "string-or-null-p",
+    "stringp",
+    "string-to-char",
+    "string-to-number",
+    "string-trim",
+    "string-trim-left",
+    "string-trim-right",
+    "substring",
+    "substring-no-properties",
+    "symbol-function",
+    "symbol-name",
+    "symbolp",
+    "symbol-plist",
+    "symbol-value",
+    "type-of",
+    "upcase",
+    "user-error",
+    "vconcat",
+    "vector",
+    "vectorp",
+    "wholenump",
+    "zerop",
+];
+
+fn is_builtin_primitive(name: &str) -> bool {
+    BUILTIN_PRIMITIVE_NAMES.binary_search(&name).is_ok()
+}
+
 fn dispatch_primitive(
     name: &str,
     args: &[LispValue],
@@ -751,9 +930,19 @@ fn dispatch_primitive(
         "floatp" => Some(bool_value(rt.is_float(args[0]))),
         "symbolp" => Some(bool_value(rt.is_symbol(args[0]))),
         "stringp" => Some(bool_value(rt.is_string(args[0]))),
+        "string-bytes" => Some(
+            LispValue::from_fixnum(
+                rt.string_contents(args[0])
+                    .map(|s| s.len() as i64)
+                    .unwrap_or(0),
+            )
+            .unwrap_or(LispValue::NIL),
+        ),
         "atom" => Some(bool_value(!rt.is_cons(args[0]))),
         "vectorp" => Some(bool_value(rt.is_vector(args[0]))),
+        "arrayp" => Some(bool_value(rt.is_vector(args[0]) || rt.is_string(args[0]))),
         "hash-table-p" => Some(bool_value(rt.is_hash_table(args[0]))),
+        "char-table-p" => Some(LispValue::NIL),
         "functionp" => {
             let is_fn = rt.is_function(args[0]);
             let has_symbol_fn = rt.is_symbol(args[0])
@@ -864,6 +1053,28 @@ fn dispatch_primitive(
 
         // --- List operations ---
         "list" => Some(make_list(rt, args.iter().copied())),
+        "make-list" => {
+            let n = args[0].as_fixnum().unwrap_or(0) as usize;
+            let val = args[1];
+            let mut result = LispValue::NIL;
+            for _ in 0..n {
+                result = rt.cons(val, result);
+            }
+            Some(result)
+        }
+        "copy-list" => {
+            let mut src = args[0];
+            let mut stack = Vec::new();
+            while rt.is_cons(src) {
+                stack.push(rt.car(src).unwrap_or(LispValue::NIL));
+                src = rt.cdr(src).unwrap_or(LispValue::NIL);
+            }
+            let mut result = src; // final cdr
+            for val in stack.into_iter().rev() {
+                result = rt.cons(val, result);
+            }
+            Some(result)
+        }
         "length" => list_length(rt, args[0]),
         "nth" => nth_element(rt, args[1], args[0].as_fixnum()? as usize),
         "nthcdr" => nthcdr_list(rt, args[1], args[0].as_fixnum()? as usize),
@@ -911,11 +1122,22 @@ fn dispatch_primitive(
         // --- Symbol operations ---
         "symbol-value" => rt.symbol_value(args[0]).ok(),
         "symbol-name" => rt.symbol_name_value(args[0]).ok(),
-        "symbol-function" => rt
-            .symbol_function(args[0])
-            .ok()
-            .flatten()
-            .or(Some(LispValue::NIL)),
+        "symbol-function" => {
+            let sym_fn = rt.symbol_function(args[0]).ok().flatten();
+            if sym_fn.is_some() {
+                Some(sym_fn.unwrap())
+            } else if let Some(name) = rt.symbol_name(args[0]).ok() {
+                if jit_functions.contains_key(&name) || is_builtin_primitive(&name) {
+                    // JIT-compiled and builtin functions are resolved by name
+                    // at call time, so return the symbol itself as a callable.
+                    Some(args[0])
+                } else {
+                    Some(LispValue::NIL)
+                }
+            } else {
+                Some(LispValue::NIL)
+            }
+        }
         "symbol-plist" => rt.symbol_plist(args[0]).ok(),
         "set" => rt.set_symbol_value(args[0], args[1]).ok(),
         "setplist" => rt.set_symbol_plist(args[0], args[1]).ok(),
@@ -926,7 +1148,11 @@ fn dispatch_primitive(
                 .symbol_name(args[0])
                 .ok()
                 .is_some_and(|name| jit_functions.contains_key(&name));
-            Some(bool_value(has_fn || has_jit_fn))
+            let is_builtin = rt
+                .symbol_name(args[0])
+                .ok()
+                .is_some_and(|name| is_builtin_primitive(&name));
+            Some(bool_value(has_fn || has_jit_fn || is_builtin))
         }
         "fset" => rt.set_symbol_function(args[0], args[1]).ok(),
         "defalias" => {
@@ -1605,6 +1831,8 @@ fn type_of(rt: &mut Runtime, value: LispValue) -> LispValue {
         rt.intern("symbol")
     } else if value.is_fixnum() {
         rt.intern("integer")
+    } else if rt.is_symbol(value) {
+        rt.intern("symbol")
     } else if value.as_char().is_some() {
         rt.intern("symbol")
     } else if value.is_heap() {
