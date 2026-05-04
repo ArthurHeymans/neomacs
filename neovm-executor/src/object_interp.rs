@@ -1521,9 +1521,12 @@ impl Interpreter<'_, '_, '_> {
             "substring" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.substring(args[0], args[1], args.get(2).copied())),
-            "string=" | "string-equal" => self
+            "string=" => self
                 .exact_arity(name, args, 2)
-                .and_then(|_| self.string_equal(args[0], args[1])),
+                .and_then(|_| self.string_bytes_equal(args[0], args[1])),
+            "string-equal" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_case_insensitive_equal(args[0], args[1])),
             "string<" | "string-lessp" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.string_lessp(args[0], args[1])),
@@ -2939,10 +2942,20 @@ impl Interpreter<'_, '_, '_> {
         Some(normalized)
     }
 
-    fn string_equal(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
+    fn string_bytes_equal(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
         let left = self.string_bytes(left)?;
         let right = self.string_bytes(right)?;
         Some(bool_value(left == right))
+    }
+
+    fn string_case_insensitive_equal(
+        &mut self,
+        left: LispValue,
+        right: LispValue,
+    ) -> Option<LispValue> {
+        let left = self.string_contents_owned(left)?;
+        let right = self.string_contents_owned(right)?;
+        Some(bool_value(left.to_lowercase() == right.to_lowercase()))
     }
 
     fn split_string(
