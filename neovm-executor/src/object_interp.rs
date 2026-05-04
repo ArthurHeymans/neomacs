@@ -1086,6 +1086,30 @@ impl Interpreter<'_, '_, '_> {
                         .map(|value| bool_value(value > 0.0))
                 }
             }),
+            "random" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let limit = match args.first() {
+                    Some(v) if !v.is_nil() => self.fixnum_arg(name, *v)?,
+                    _ => i64::MAX,
+                };
+                if limit <= 0 {
+                    self.error("primitive `random` limit must be positive");
+                    return None;
+                }
+                // Simple deterministic "random" using hash of iteration
+                let val = (limit as u64)
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1);
+                self.fixnum((val % limit as u64) as i64, name)
+            }),
+            "gensym" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let prefix = args
+                    .first()
+                    .and_then(|v| self.string_contents_owned(*v))
+                    .unwrap_or_else(|| "g".to_string());
+                // Simple counter-based gensym
+                let sym = format!("{}{}", prefix, self.runtime.symbol_count());
+                Some(self.runtime.intern(&sym))
+            }),
             "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.symbol_value(args[0]);
                 self.runtime_value(result)
@@ -4531,6 +4555,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "cl-oddp"
             | "cl-minusp"
             | "cl-plusp"
+            | "random"
+            | "gensym"
             | "butlast"
             | "delq"
             | "delete"
