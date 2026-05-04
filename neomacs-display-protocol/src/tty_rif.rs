@@ -361,7 +361,15 @@ impl TtyRif {
             let win_row = origin_row + (entry.pixel_bounds.y / char_h) as usize;
 
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
-                self.rasterize_glyph_row(win_col, win_row + row_idx, glyph_row);
+                // Use the stored pixel_y (window-relative) when available,
+                // falling back to row_idx * char_h for rows without explicit
+                // metrics (matches materialize_grid_row in the GUI path).
+                let row_offset = if glyph_row.height_px > 0.0 {
+                    (glyph_row.pixel_y / char_h.max(1.0)).round() as usize
+                } else {
+                    row_idx
+                };
+                self.rasterize_glyph_row(win_col, win_row + row_offset, glyph_row);
             }
         }
 
