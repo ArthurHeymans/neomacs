@@ -255,6 +255,19 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                 i += 1;
                 continue;
             }
+            // Case 6b: Symbol starting with `?` that looks like a char literal.
+            // E.g. `?\x41`, `?\101` — convert to Char.
+            if name.starts_with('?') && name.len() > 1 {
+                if let Some(value) = parse_char_code(name) {
+                    tokens.push(Token {
+                        kind: TokenKind::Char(value),
+                        span: tok.span,
+                        text: name.clone(),
+                    });
+                    i += 1;
+                    continue;
+                }
+            }
         }
         tokens.push(raw_tokens[i].clone());
         i += 1;
@@ -428,20 +441,61 @@ fn decode_escapes(body: &str) -> String {
                 out.push(ch);
                 break;
             };
-            out.push(match escaped {
-                'a' => '\x07',
-                'b' => '\x08',
-                'f' => '\x0c',
-                'n' => '\n',
-                'r' => '\r',
-                's' => ' ',
-                't' => '\t',
-                'v' => '\x0b',
-                'e' => '\x1b',
-                '"' => '"',
-                '\\' => '\\',
-                other => other,
-            });
+            match escaped {
+                'a' => out.push('\x07'),
+                'b' => out.push('\x08'),
+                'f' => out.push('\x0c'),
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                's' => out.push(' '),
+                't' => out.push('\t'),
+                'v' => out.push('\x0b'),
+                'e' => out.push('\x1b'),
+                '"' => out.push('"'),
+                '\\' => out.push('\\'),
+                'x' => {
+                    let hex: String = chars.by_ref().take(2).collect();
+                    if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                        if let Some(c) = char::from_u32(code) {
+                            out.push(c);
+                        } else {
+                            out.push('x');
+                            out.push_str(&hex);
+                        }
+                    } else {
+                        out.push('x');
+                        out.push_str(&hex);
+                    }
+                }
+                '^' => {
+                    if let Some(c) = chars.next() {
+                        out.push(((c as u8) & 0x1f) as char);
+                    } else {
+                        out.push('^');
+                    }
+                }
+                '0'..='7' => {
+                    let mut octal = String::from(escaped);
+                    for _ in 0..2 {
+                        if let Some(d) = chars.clone().next().filter(|c| ('0'..='7').contains(c)) {
+                            octal.push(d);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if let Ok(code) = u32::from_str_radix(&octal, 8) {
+                        if let Some(c) = char::from_u32(code) {
+                            out.push(c);
+                        } else {
+                            out.push_str(&format!("\\{octal}"));
+                        }
+                    } else {
+                        out.push_str(&format!("\\{octal}"));
+                    }
+                }
+                other => out.push(other),
+            }
         } else {
             out.push(ch);
         }
@@ -927,6 +981,25 @@ fn parse_escaped_char_code(text: &str) -> Option<i64> {
         let ch = decode_single_escape(rest)?;
         return Some(0x0800_0000 + ch as i64);
     }
+    if text.starts_with('x') || text.starts_with('X') {
+        let rest = &text[1..];
+        let hex: String = rest.chars().take(2).collect();
+        if hex.len() >= 2 {
+            return u32::from_str_radix(&hex, 16).ok().map(|c| c as i64);
+        }
+    }
+    // Octal escape: if all remaining chars are octal digits, parse as octal
+    if text.chars().all(|c| ('0'..='7').contains(&c)) {
+        let octal: String = text.chars().take(3).collect();
+        return u32::from_str_radix(&octal, 8).ok().map(|c| c as i64);
+    }
+    // Also support \0NN explicit octal prefix
+    if let Some(rest) = text.strip_prefix('0') {
+        let octal: String = rest.chars().take(2).collect();
+        if octal.len() >= 2 {
+            return u32::from_str_radix(&octal, 8).ok().map(|c| c as i64);
+        }
+    }
     Some(decode_single_escape_value(text.chars().next()?) as i64)
 }
 
@@ -1043,6 +1116,36 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(values, vec![32, 1, 134_217_825, 134_217_729]);
+    }
+
+    #[test]
+    fn reads_hex_and_octal_char_escapes() {
+        let output = read(r"?\x41 ?\101 ?\x4e ?\116");
+        eprintln!("DEBUG diagnostics: {:?}", output.diagnostics);
+        for (i, form) in output.forms.iter().enumerate() {
+            eprintln!("DEBUG form[{}]: {:?}", i, form.kind);
+        }
+        assert_eq!(output.diagnostics, Vec::new());
+        let values = output
+            .forms
+            .iter()
+            .map(|form| match form.kind {
+                SurfaceKind::Atom(SurfaceAtom::Char(value)) => value,
+                ref other => panic!("expected char, got {:?}", other),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec![65, 65, 78, 78]);
+    }
+
+    #[test]
+    fn reads_hex_string_escapes() {
+        let output = read(r#""\x48\x65\x6c\x6c\x6f""#);
+        assert_eq!(output.diagnostics, Vec::new());
+        let text = match &output.forms[0].kind {
+            SurfaceKind::Atom(SurfaceAtom::String(s)) => s.clone(),
+            _ => panic!("expected string"),
+        };
+        assert_eq!(text, "Hello");
     }
 
     #[test]
