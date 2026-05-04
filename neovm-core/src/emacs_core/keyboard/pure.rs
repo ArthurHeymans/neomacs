@@ -47,6 +47,31 @@ pub(crate) fn make_event_array_value(events: &[Value]) -> Value {
     Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
 }
 
+/// Convert X11-style modifier bits (as stored in cons key events) to
+/// NeoMacs' internal modifier encoding.
+fn convert_input_mod_bits_to_internal(mod_bits: i64) -> i64 {
+    let mut result: i64 = 0;
+    if (mod_bits & 1) != 0 {
+        result |= KEY_CHAR_SHIFT;
+    } // shift   -> internal shift
+    if (mod_bits & 2) != 0 {
+        result |= KEY_CHAR_META;
+    } // meta    -> internal meta
+    if (mod_bits & 4) != 0 {
+        result |= KEY_CHAR_CTRL;
+    } // control -> internal ctrl
+    if (mod_bits & 8) != 0 {
+        result |= KEY_CHAR_ALT;
+    } // alt     -> internal alt
+    if (mod_bits & 16) != 0 {
+        result |= KEY_CHAR_HYPER;
+    } // hyper   -> internal hyper
+    if (mod_bits & 32) != 0 {
+        result |= KEY_CHAR_SUPER;
+    } // super   -> internal super
+    result
+}
+
 fn invalid_single_key_error() -> Flow {
     signal(
         "error",
@@ -222,6 +247,15 @@ pub(crate) fn describe_single_key_value(value: &Value, no_angles: bool) -> Resul
             .as_runtime_string_owned()
             .expect("ValueKind::String must carry LispString payload")),
         ValueKind::Cons => {
+            // Cons key event (MOD . CHAR): the car encodes X11-style modifier
+            // bits, the cdr is the base character code.  Convert to NeoMacs'
+            // internal modifier encoding and combine.
+            if let (Some(mod_bits), Some(base_char)) =
+                (value.cons_car().as_fixnum(), value.cons_cdr().as_fixnum())
+            {
+                let combined = convert_input_mod_bits_to_internal(mod_bits) | base_char;
+                return describe_int_key(combined);
+            }
             let items = list_to_vec(value).ok_or_else(invalid_single_key_error)?;
             if items.len() == 1 {
                 return describe_single_key_value(&items[0], no_angles);
