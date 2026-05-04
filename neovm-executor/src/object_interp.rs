@@ -822,6 +822,16 @@ impl Interpreter<'_, '_, '_> {
         if let Some(function_id) = self.functions_by_name.get(name).copied() {
             return self.execute_module_call(function_id, args);
         }
+        // Try symbol function binding (set via defalias, fset, etc.)
+        let symbol = self.runtime.intern(name);
+        if self.runtime.is_symbol(symbol) {
+            match self.runtime.symbol_function(symbol) {
+                Ok(Some(function)) if function != symbol => {
+                    return self.execute_funcall_with_depth(function, args, 16);
+                }
+                _ => {}
+            }
+        }
         self.unsupported(format!("named call `{name}` requires runtime support"));
         None
     }

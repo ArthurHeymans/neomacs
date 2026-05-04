@@ -5,9 +5,7 @@
 //! compilation/runtime error.
 //!
 //! Results summary:
-//!   Tests 1-3, 5-7, 9-10: PASS (correct results)
-//!   Test 4 (defalias): FAIL - object interpreter cannot call defalias'd functions by name
-//!   Test 8 (macroexpand): FAIL - `macroexpand` not implemented in object interpreter
+//!   All 10 tests PASS (correct results)
 
 use neovm_executor::Executor;
 
@@ -120,10 +118,6 @@ fn test_sharp_quote_primitive() {
 // ---------------------------------------------------------------
 // Test 4: defalias
 // Expected: 7
-// BUG: object interpreter cannot call defalias'd functions by name.
-// The defalias form itself succeeds, but calling (my-add 3 4) fails
-// because the interpreter's named-call dispatch doesn't resolve
-// alias-defined functions.
 // ---------------------------------------------------------------
 #[test]
 fn test_defalias() {
@@ -134,11 +128,6 @@ fn test_defalias() {
     eprintln!("[test 4] code: {code}");
     eprintln!("[test 4] outcome: {outcome}");
     match &outcome {
-        TestOutcome::RuntimeError(e) if e.contains("my-add") && e.contains("runtime support") => {
-            // Known bug: defalias'd functions can't be called by name
-            // through the object interpreter. Documenting as a known failure.
-            eprintln!("[test 4] KNOWN BUG: defalias'd function call by name not supported: {e}");
-        }
         TestOutcome::Value(v) => {
             assert_eq!(v, "7", "expected 7");
         }
