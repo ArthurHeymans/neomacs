@@ -1332,6 +1332,22 @@ impl Interpreter<'_, '_, '_> {
             "string>" | "string-greaterp" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.string_greaterp(args[0], args[1])),
+            "string-bytes" => self.exact_arity(name, args, 1).and_then(|_| {
+                let contents = self.string_contents_owned(args[0])?;
+                self.fixnum(contents.len() as i64, name)
+            }),
+            "string-match-p" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.string_match_p(args[0], args[1], args.get(2).copied())),
+            "replace-regexp-in-string" => self.min_max_arity(name, args, 3, 5).and_then(|_| {
+                self.replace_regexp_in_string(
+                    args[0],
+                    args[1],
+                    args[2],
+                    args.get(3).copied(),
+                    args.get(4).copied(),
+                )
+            }),
             "char-to-string" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.char_to_string(args[0])),
@@ -2560,6 +2576,61 @@ impl Interpreter<'_, '_, '_> {
         Some(bool_value(left > right))
     }
 
+    fn string_match_p(
+        &mut self,
+        regex: LispValue,
+        string: LispValue,
+        start: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let pattern = self.string_contents_owned(regex)?;
+        let text = self.string_contents_owned(string)?;
+        let re = match regex::Regex::new(&pattern) {
+            Ok(re) => re,
+            Err(_) => {
+                let symbol = self.runtime.intern("invalid-regexp");
+                let data = make_list(self.runtime, [regex].into_iter());
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                return None;
+            }
+        };
+        let start_idx = match start {
+            Some(s) if !s.is_nil() => self.sequence_index("string-match-p", s)?,
+            _ => 0,
+        };
+        if start_idx >= text.len() {
+            return Some(LispValue::NIL);
+        }
+        let haystack = &text[start_idx..];
+        match re.find(haystack) {
+            Some(m) => self.fixnum((start_idx + m.start()) as i64, "string-match-p"),
+            None => Some(LispValue::NIL),
+        }
+    }
+
+    fn replace_regexp_in_string(
+        &mut self,
+        regex: LispValue,
+        rep: LispValue,
+        string: LispValue,
+        _fixedcase: Option<LispValue>,
+        _literal: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let pattern = self.string_contents_owned(regex)?;
+        let replacement = self.string_contents_owned(rep)?;
+        let text = self.string_contents_owned(string)?;
+        let re = match regex::Regex::new(&pattern) {
+            Ok(re) => re,
+            Err(_) => {
+                let symbol = self.runtime.intern("invalid-regexp");
+                let data = make_list(self.runtime, [regex].into_iter());
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                return None;
+            }
+        };
+        let result = re.replace_all(&text, replacement.as_str()).to_string();
+        Some(self.runtime.string(result))
+    }
+
     fn char_to_string(&mut self, value: LispValue) -> Option<LispValue> {
         let ch = self.char_arg("char-to-string", value)?;
         Some(self.runtime.string(ch.to_string()))
@@ -3741,6 +3812,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-lessp"
             | "string>"
             | "string-greaterp"
+            | "string-bytes"
+            | "string-match-p"
+            | "replace-regexp-in-string"
             | "char-to-string"
             | "string-to-char"
             | "format"

@@ -962,8 +962,8 @@ impl Lowerer<'_> {
         let mut bindings = Vec::new();
         if !sequential {
             for binding_form in binding_forms {
-                if let Some(binding) = self.lower_binding(binding_form) {
-                    bindings.push(binding);
+                if let Some(new_bindings) = self.lower_binding(binding_form) {
+                    bindings.extend(new_bindings);
                 }
             }
             if mode == BindingMode::Lexical {
@@ -979,11 +979,13 @@ impl Lowerer<'_> {
                 self.push_scope(std::iter::empty());
             }
             for binding_form in binding_forms {
-                if let Some(binding) = self.lower_binding(binding_form) {
-                    if binding.mode == BindingMode::Lexical {
-                        self.declare_local(binding.name.clone());
+                if let Some(new_bindings) = self.lower_binding(binding_form) {
+                    for binding in &new_bindings {
+                        if binding.mode == BindingMode::Lexical {
+                            self.declare_local(binding.name.clone());
+                        }
                     }
-                    bindings.push(binding);
+                    bindings.extend(new_bindings);
                 }
             }
         }
@@ -1205,46 +1207,113 @@ impl Lowerer<'_> {
         })
     }
 
-    fn lower_binding(&mut self, form: &SurfaceForm) -> Option<HirBinding> {
-        if let Some(name) = form.symbol_name() {
-            let mode = self.binding_mode_for(&name);
-            return Some(HirBinding {
-                name: name.to_string(),
-                mode,
+    fn lower_binding(&mut self, form: &SurfaceForm) -> Option<Vec<HirBinding>> {
+        if matches!(&form.kind, SurfaceKind::Atom(SurfaceAtom::Symbol(_))) {
+            let name = form.symbol_name().unwrap_or("").to_string();
+            self.declare_local(name.clone());
+            return Some(vec![HirBinding {
+                name: name.clone(),
+                mode: self.binding_mode_for(&name),
                 init: nil_expr(form.span),
                 span: form.span,
-            });
+            }]);
         }
         let Some(items) = list_items(form) else {
-            // Non-list binding (could be nil atom) — skip it
             return None;
         };
         if items.is_empty() {
             return None;
         }
-        if items.len() > 2 {
-            // Extra items (e.g., docstring) — just use first two
-        }
-        let Some(name) = items[0].symbol_name().map(str::to_string) else {
-            // Destructuring binding (e.g., ((a b) expr)) — not yet supported
-            self.error(
-                items[0].span,
-                "destructuring bindings in let are not yet supported",
-            );
-            return None;
-        };
-        let init = if let Some(init_form) = items.get(1) {
-            self.lower_expr(init_form)?
+        if items.len() > 2 {}
+        let name_form = &items[0];
+        if let Some(name) = name_form.symbol_name().map(str::to_string) {
+            let init = if let Some(init_form) = items.get(1) {
+                self.lower_expr(init_form)?
+            } else {
+                nil_expr(form.span)
+            };
+            let mode = self.binding_mode_for(&name);
+            Some(vec![HirBinding {
+                name,
+                mode,
+                init,
+                span: form.span,
+            }])
         } else {
-            nil_expr(form.span)
+            self.lower_destructure_binding(name_form, items.get(1), form.span)
+        }
+    }
+
+    fn lower_destructure_binding(
+        &mut self,
+        pattern: &SurfaceForm,
+        init_form: Option<&SurfaceForm>,
+        span: Span,
+    ) -> Option<Vec<HirBinding>> {
+        let temp_id = self.fresh_id();
+        let temp_name = format!("\0destruct.{}", temp_id);
+        let init_expr = match init_form {
+            Some(init) => self.lower_expr(init)?,
+            None => nil_expr(span),
         };
-        let mode = self.binding_mode_for(&name);
-        Some(HirBinding {
-            name,
-            mode,
-            init,
-            span: form.span,
-        })
+        let mut bindings = vec![HirBinding {
+            name: temp_name.clone(),
+            mode: BindingMode::Lexical,
+            init: init_expr,
+            span,
+        }];
+        let accessor = lexical_get_expr(&temp_name, span);
+        self.emit_destructure_hir(pattern, &accessor, span, &mut bindings);
+        Some(bindings)
+    }
+
+    fn emit_destructure_hir(
+        &mut self,
+        pattern: &SurfaceForm,
+        accessor: &HirExpr,
+        span: Span,
+        bindings: &mut Vec<HirBinding>,
+    ) {
+        if let Some(name) = pattern.symbol_name() {
+            if name != "_" && name != "nil" {
+                bindings.push(HirBinding {
+                    name: name.to_string(),
+                    mode: BindingMode::Lexical,
+                    init: car_expr_inner(accessor.clone(), span),
+                    span,
+                });
+            }
+            return;
+        }
+        if let Some(parts) = list_items(pattern) {
+            let len = parts.len();
+            for (i, part) in parts.iter().enumerate() {
+                let elem_expr = car_expr_inner(nth_cdr_hir(accessor.clone(), i, span), span);
+                if part.symbol_name().is_some() {
+                    if let Some(name) = part.symbol_name() {
+                        if name != "_" && name != "nil" {
+                            bindings.push(HirBinding {
+                                name: name.to_string(),
+                                mode: BindingMode::Lexical,
+                                init: elem_expr,
+                                span,
+                            });
+                        }
+                    }
+                } else {
+                    let sub_temp = format!("\0destruct.{}", self.fresh_id());
+                    bindings.push(HirBinding {
+                        name: sub_temp.clone(),
+                        mode: BindingMode::Lexical,
+                        init: elem_expr,
+                        span,
+                    });
+                    let sub = lexical_get_expr(&sub_temp, span);
+                    self.emit_destructure_hir(part, &sub, span, bindings);
+                }
+            }
+            return;
+        }
     }
 
     fn lower_lambda(&mut self, form: &SurfaceForm, items: &[SurfaceForm]) -> Option<HirExpr> {
@@ -1928,6 +1997,42 @@ fn lexical_get_expr(name: &str, span: Span) -> HirExpr {
         kind: HirExprKind::LexicalGet(name.to_string()),
         span,
     }
+}
+
+fn car_expr_inner(inner: HirExpr, span: Span) -> HirExpr {
+    HirExpr {
+        kind: HirExprKind::CallNamed {
+            name: "car".to_string(),
+            args: vec![inner],
+        },
+        span,
+    }
+}
+
+fn cdr_expr_inner(inner: HirExpr, span: Span) -> HirExpr {
+    HirExpr {
+        kind: HirExprKind::CallNamed {
+            name: "cdr".to_string(),
+            args: vec![inner],
+        },
+        span,
+    }
+}
+
+fn nth_cdr_expr(accessor: &str, n: usize, span: Span) -> HirExpr {
+    let mut expr = lexical_get_expr(accessor, span);
+    for _ in 0..n {
+        expr = cdr_expr_inner(expr, span);
+    }
+    expr
+}
+
+fn nth_cdr_hir(accessor: HirExpr, n: usize, span: Span) -> HirExpr {
+    let mut expr = accessor;
+    for _ in 0..n {
+        expr = cdr_expr_inner(expr, span);
+    }
+    expr
 }
 
 fn name_get_expr(name: &str, mode: BindingMode, span: Span) -> HirExpr {
