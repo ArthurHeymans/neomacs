@@ -3199,7 +3199,7 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn elt(&mut self, seq: LispValue, n: LispValue) -> Option<LispValue> {
-        let index = usize::try_from(self.fixnum_arg("elt", n)?).ok()?;
+        let index = self.sequence_index("elt", n)?;
         if self.runtime.is_vector(seq) {
             let elements = match self.runtime.vector_elements(seq) {
                 Ok(e) => e,
@@ -3209,6 +3209,13 @@ impl Interpreter<'_, '_, '_> {
                 }
             };
             return Some(elements.get(index).copied().unwrap_or(LispValue::NIL));
+        }
+        if self.runtime.is_string(seq) {
+            let contents = self.string_contents_owned(seq)?;
+            let Some(ch) = contents.chars().nth(index) else {
+                return Some(LispValue::NIL);
+            };
+            return Some(LispValue::from_char(ch));
         }
         let mut current = seq;
         for _ in 0..index {
