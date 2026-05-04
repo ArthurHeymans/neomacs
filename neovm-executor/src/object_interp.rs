@@ -2570,9 +2570,7 @@ impl Interpreter<'_, '_, '_> {
             let going_up = step > 0.0;
             let mut count = 0;
             loop {
-                if count >= 1_000_000
-                    || (going_up && current > end)
-                    || (!going_up && current < end)
+                if count >= 1_000_000 || (going_up && current > end) || (!going_up && current < end)
                 {
                     break;
                 }
