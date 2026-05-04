@@ -1684,11 +1684,15 @@ impl Expander {
         ];
         dbind_body.extend(body.into_iter().map(|f| self.expand_form(f)));
 
+        // Must expand the destructuring-bind form before embedding in defun,
+        // since the HIR does not handle destructuring-bind directly.
+        let expanded_dbind = self.expand_form(list_form(dbind_body, span));
+
         let defun_body = vec![
             symbol_form("defun", span),
             symbol_form(&name, span),
             rest_params,
-            list_form(dbind_body, span),
+            expanded_dbind,
         ];
         list_form(defun_body, span)
     }

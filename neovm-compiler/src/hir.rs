@@ -213,6 +213,7 @@ pub fn lower_expanded_forms(
         special_scopes: Vec::new(),
         declared_special: IndexSet::new(),
         diagnostics: Vec::new(),
+        temp_counter: 0,
     };
     let mut items = Vec::new();
     for form in forms {
@@ -238,6 +239,7 @@ struct Lowerer<'a> {
     /// for the rest of the file, unlike special_scopes which are scoped.
     declared_special: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
+    temp_counter: usize,
 }
 
 impl Lowerer<'_> {
@@ -781,7 +783,7 @@ impl Lowerer<'_> {
         if rest.is_empty() {
             return Some(first);
         }
-        let temp = format!("\0prog1.{}", form.span.start);
+        let temp = format!("\0prog1.{}", self.fresh_id());
         let mut exprs = self.lower_exprs(rest)?;
         exprs.push(HirExpr {
             kind: HirExprKind::LexicalGet(temp.clone()),
@@ -1807,6 +1809,12 @@ impl Lowerer<'_> {
             }
         }
         declarations
+    }
+
+    fn fresh_id(&mut self) -> usize {
+        let id = self.temp_counter;
+        self.temp_counter += 1;
+        id
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {

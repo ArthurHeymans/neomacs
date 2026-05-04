@@ -5660,6 +5660,346 @@ trace-log
         assert_eq!(artifact.runtime.format_value(val), "(t t t t t t 3 3)");
     }
 
+    // ── setf on elt, push/pop, rotatef/shiftf, cl-defun, letrec ─────
+
+    #[test]
+    fn jit_setf_elt() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-elt.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((v (list 10 20 30)))
+  (setf (elt 1 v) 99)
+  v)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 99 30)");
+    }
+
+    #[test]
+    fn jit_push_pop_from_cl_lib() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "push-pop.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(let ((stack nil))
+  (cl-push 1 stack)
+  (cl-push 2 stack)
+  (cl-push 3 stack)
+  (let ((a (cl-pop stack))
+        (b (cl-pop stack))
+        (c (cl-pop stack)))
+    (list a b c stack)))
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(3 2 1 nil)");
+    }
+
+    #[test]
+    fn jit_rotatef_from_cl_lib() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "rotatef.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(let ((a 10) (b 20))
+  (cl-rotatef a b)
+  (list a b))
+"#,
+            &[],
+            &mut session,
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(20 10)");
+    }
+
+    #[test]
+    #[test]
+    fn jit_prog1_basic() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "prog1.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((a 1))
+  (prog1 a (setq a 42)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    #[test]
+    fn jit_prog1_nested() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "prog1-nested.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((a 1) (b 2) (c 3))
+  (let ((old (prog1 a
+               (setq a b)
+               (prog1 b (setq b c)))))
+    (list old a b c)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3 3)");
+    }
+
+    fn jit_prog1_with_multiple_forms() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "prog1-multi.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((a 1) (b 2) (c 3))
+  (prog1 a
+    (setq a b)
+    (setq b c))
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(2 3 3)");
+    }
+
+    #[test]
+    fn jit_shiftf_from_cl_lib() {
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let artifact = crate::jit_interp::execute_with_jit_session(
+            "shiftf.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(require 'cl-lib)
+(let ((a 1) (b 2) (c 3))
+  (let ((old (cl-shiftf a b c)))
+    (list old a b c)))
+"#,
+            &[],
+            &mut session,
+        );
+        let val = artifact.result.value.unwrap();
+        let actual = artifact.runtime.format_value(val);
+        assert_eq!(actual, "(1 2 3 3)", "shiftf got {actual}");
+    }
+
+    #[test]
+    fn jit_cl_defun_with_optional_rest() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-defun.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-defun my-flex (x &optional y &rest zs)
+  (list x y zs))
+(list (my-flex 1) (my-flex 1 2) (my-flex 1 2 3 4))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(
+            artifact.runtime.format_value(val),
+            "((1 nil nil) (1 2 nil) (1 2 (3 4)))"
+        );
+    }
+
+    #[test]
+    fn jit_letrec_mutual_recursion() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "letrec.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(letrec ((even? (lambda (n) (if (= n 0) t (odd? (- n 1)))))
+         (odd?  (lambda (n) (if (= n 0) nil (even? (- n 1))))))
+  (list (funcall even? 4) (funcall odd? 3) (funcall even? 5)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t t nil)");
+    }
+
+    #[test]
+    fn jit_cl_with_gensyms() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "gensyms.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-with-gensyms (a b c)
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        // gensyms should be uninterned symbols — they are printed as their names
+        // since we simplify to regular let, they'll be nil
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(nil nil nil)");
+    }
+
+    #[test]
+    fn jit_closure_returning_closure() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "closure-ret.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defun make-adder (base)
+  (lambda (x) (+ base x)))
+(let ((add5 (make-adder 5))
+      (add10 (make-adder 10)))
+  (list (funcall add5 3) (funcall add10 3)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(8 13)");
+    }
+
+    #[test]
+    fn jit_multiple_setq() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "multi-setq.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let (a b c)
+  (setq a 1 b 2 c 3)
+  (list a b c))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
+    }
+
+    #[test]
+    fn jit_defconst_expression() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "defconst-expr.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defconst magic (+ 20 22) "magic number")
+magic
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    // ── Nested exception handling ─────────────────────────────────
+
+    #[test]
+    fn jit_catch_inside_condition_case() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-in-cc.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (catch 'done
+      (throw 'done 42)
+      99)
+  (error 0))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_throw_inside_condition_case_no_signal() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "throw-in-cc.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'tag
+  (condition-case err
+      (/ 10 0)
+    (arith-error (throw 'tag 'recovered))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "recovered");
+    }
+
+    #[test]
+    fn jit_nested_unwind_protect_and_catch() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-exc.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((log nil))
+  (catch 'done
+    (unwind-protect
+        (throw 'done 'thrown)
+      (setq log (cons 'cleanup log))))
+  log)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(cleanup)");
+    }
+
+    #[test]
+    fn jit_condition_case_then_catch_sequential() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cc-then-catch.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (condition-case err (/ 10 0) (arith-error 'div-error))
+      (catch 'tag (throw 'tag 'caught)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(div-error caught)");
+    }
+
+    #[test]
+    fn jit_unwind_protect_inside_catch() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "unwind-in-catch.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((result nil))
+  (catch 'out
+    (unwind-protect
+        (unwind-protect
+            (throw 'out 'done)
+          (setq result (cons 'inner result)))
+      (setq result (cons 'outer result))))
+  result)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(outer inner)");
+    }
+
     #[test]
     fn jit_bytecode_style_function() {
         let artifact = crate::jit_interp::execute_with_jit(

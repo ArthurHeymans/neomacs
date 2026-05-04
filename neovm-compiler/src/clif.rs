@@ -869,6 +869,7 @@ impl<'a, M: ClifModuleBackend> ClifLowerer<'a, M> {
 
         let clif_diagnostics = verify_clif(&function);
         if !clif_diagnostics.is_empty() {
+            eprintln!("CLIF VERIFICATION FAILED:\n{}", function.display());
             self.diagnostics.extend(clif_diagnostics);
             return self.finish(None);
         }
@@ -940,6 +941,7 @@ enum ExceptionHandlerKind {
         result_param: ir::Value,
         transitioned: bool,
         no_match_block: Option<ir::Block>,
+        handler_result_seen: bool,
     },
     UnwindProtect {
         continuation_block: ir::Block,
@@ -1512,7 +1514,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 ) else {
                     return;
                 };
-                if let Some(outer) = self.exception_handlers.last() {
+                // Throw should be caught by catch/unwind-protect, not condition-case.
+                // Scan backwards for the first handler that is not a ConditionCase.
+                let target_handler = self
+                    .exception_handlers
+                    .iter()
+                    .rev()
+                    .find(|h| !matches!(h.kind, ExceptionHandlerKind::ConditionCase { .. }));
+                if let Some(outer) = target_handler {
                     self.builder.ins().jump(outer.handler_block, &[]);
                 } else {
                     self.builder.ins().return_(&[result]);
@@ -1541,6 +1550,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         result_param,
                         transitioned: false,
                         no_match_block: None,
+                        handler_result_seen: false,
                     },
                     ended: false,
                 });
@@ -1574,6 +1584,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             result_param,
                             transitioned,
                             no_match_block,
+                            ..
                         } => (
                             *continuation_block,
                             *result_param,
@@ -1687,6 +1698,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 if let Some(nmb) = no_match_block {
                     self.builder.switch_to_block(nmb);
                 }
+                // Mark that handler completed normally (didn't throw)
+                if let ExceptionHandlerKind::ConditionCase {
+                    handler_result_seen,
+                    ..
+                } = &mut self.exception_handlers[handler_idx].kind
+                {
+                    *handler_result_seen = true;
+                }
             }
             SsaInstKind::ConditionCaseEnd { .. } => {
                 let Some(handler_idx) = self.last_active_handler_idx() else {
@@ -1698,13 +1717,26 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error("ConditionCaseEnd handler index out of range");
                     return;
                 };
-                let (continuation_block, result_param, transitioned) = match handler.kind {
+                let (
+                    continuation_block,
+                    result_param,
+                    transitioned,
+                    no_match_block,
+                    handler_result_seen,
+                ) = match handler.kind {
                     ExceptionHandlerKind::ConditionCase {
                         continuation_block,
                         result_param,
                         transitioned,
-                        ..
-                    } => (continuation_block, result_param, transitioned),
+                        no_match_block,
+                        handler_result_seen,
+                    } => (
+                        continuation_block,
+                        result_param,
+                        transitioned,
+                        no_match_block,
+                        handler_result_seen,
+                    ),
                     _ => {
                         self.error("ConditionCaseEnd matched non-ConditionCase handler");
                         return;
@@ -1725,8 +1757,17 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         .jump(continuation_block, &[BlockArg::Value(body_result_ir)]);
                     self.builder.switch_to_block(continuation_block);
                 } else {
-                    // We're in the last no_match_block — no handler matched.
-                    // Pop catch without clearing signal (outer handlers need it).
+                    // Emit pop + propagate into no_match_block (the "no handler matched" path).
+                    // If the handler body completed normally (ConditionCaseHandlerResult switched
+                    // to no_match_block), we're already there — just emit directly.
+                    // If the handler threw, we're in a different block — jump to no_match_block
+                    // to give the current block a terminator, then switch.
+                    if let Some(nmb) = no_match_block {
+                        if !handler_result_seen {
+                            self.builder.ins().jump(nmb, &[]);
+                            self.builder.switch_to_block(nmb);
+                        }
+                    }
                     let Some(pop_ref) = self.exception_func_ref("condition_case_pop", 0) else {
                         return;
                     };
@@ -1744,6 +1785,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         let sentinel = self.builder.ins().iconst(types::I64, EXCEPTION_SENTINEL);
                         self.builder.ins().return_(&[sentinel]);
                     }
+                    // Switch to continuation_block so subsequent dead code has somewhere to go.
                     self.builder.switch_to_block(continuation_block);
                 }
 

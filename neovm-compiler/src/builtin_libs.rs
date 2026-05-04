@@ -35,10 +35,12 @@ pub const CL_LIB_SOURCE: &str = r#"
 
 (defmacro cl-shiftf (&rest args)
   (if (null (cdr args)) nil
-    (let ((tmp (make-symbol "--cl-shiftf--")))
-      (list 'let (list (list tmp (car args)))
-            (cons 'setq
-                  (append (butlast args) (list (car (last args)) tmp)))))))
+    (if (null (cddr args))
+        (list 'prog1 (car args)
+              (list 'setq (car args) (cadr args)))
+      (list 'prog1 (car args)
+            (list 'setq (car args) (cadr args))
+            (cons 'cl-shiftf (cdr args))))))
 
 (defmacro cl-assert (form &rest _)
   form)
