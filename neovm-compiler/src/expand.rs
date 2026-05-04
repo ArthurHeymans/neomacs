@@ -1115,7 +1115,7 @@ impl Expander {
                 body
             } else {
                 list_form(
-                    std::iter::once(symbol_form("let", span))
+                    std::iter::once(symbol_form("let*", span))
                         .chain(std::iter::once(list_form(bindings, span)))
                         .chain(std::iter::once(body))
                         .collect(),
@@ -1185,6 +1185,8 @@ impl Expander {
                 );
                 (cond, Vec::new())
             }
+            // `backquote pattern: destructure and match structure
+            SurfaceKind::Backquote(inner) => self.expand_pcase_backquote(inner, val_sym, span),
             // (guard EXPR): use EXPR as condition
             SurfaceKind::List(parts) if !parts.is_empty() => {
                 if let SurfaceKind::Atom(SurfaceAtom::Symbol(head)) = &parts[0].kind {
@@ -1233,6 +1235,130 @@ impl Expander {
                 }
             }
             _ => (symbol_form("t", span), Vec::new()),
+        }
+    }
+
+    /// Expand a pcase backquote pattern by destructuring the template.
+    /// `(,x ,y ,z) matching against val becomes:
+    ///   condition: (and (consp val) (consp (cdr val)) (consp (cddr val))
+    ///                    (null (cdddr val)))
+    ///   bindings: ((x (car val)) (y (cadr val)) (z (caddr val)))
+    fn expand_pcase_backquote(
+        &mut self,
+        template: &SurfaceForm,
+        val_sym: &str,
+        span: Span,
+    ) -> (SurfaceForm, Vec<SurfaceForm>) {
+        let mut conditions = Vec::new();
+        let mut bindings = Vec::new();
+        self.destructure_bq_pattern(template, val_sym, &mut conditions, &mut bindings, span);
+
+        let cond = if conditions.is_empty() {
+            symbol_form("t", span)
+        } else if conditions.len() == 1 {
+            conditions.into_iter().next().unwrap()
+        } else {
+            list_form(
+                std::iter::once(symbol_form("and", span))
+                    .chain(conditions)
+                    .collect(),
+                span,
+            )
+        };
+        (cond, bindings)
+    }
+
+    /// Build an inline (nthcdr n val) expression.
+    fn nthcdr_expr(n: usize, val: &str, span: Span) -> SurfaceForm {
+        if n == 0 {
+            return symbol_form(val, span);
+        }
+        let mut expr = symbol_form(val, span);
+        for _ in 0..n {
+            expr = list_form(vec![symbol_form("cdr", span), expr], span);
+        }
+        expr
+    }
+
+    /// Build an inline (nth n val) = (car (nthcdr n val)) expression.
+    fn nth_expr(n: usize, val: &str, span: Span) -> SurfaceForm {
+        if n == 0 {
+            return list_form(vec![symbol_form("car", span), symbol_form(val, span)], span);
+        }
+        list_form(
+            vec![symbol_form("car", span), Self::nthcdr_expr(n, val, span)],
+            span,
+        )
+    }
+
+    fn destructure_bq_pattern(
+        &mut self,
+        pattern: &SurfaceForm,
+        val_expr: &str,
+        conditions: &mut Vec<SurfaceForm>,
+        bindings: &mut Vec<SurfaceForm>,
+        span: Span,
+    ) {
+        use crate::surface::{SurfaceAtom, SurfaceKind};
+        match &pattern.kind {
+            // ,var: bind the variable to the current value expression
+            SurfaceKind::Comma(inner) => {
+                if let SurfaceKind::Atom(SurfaceAtom::Symbol(name)) = &inner.kind {
+                    let val_ref = symbol_form(val_expr, span);
+                    bindings.push(list_form(vec![symbol_form(name, span), val_ref], span));
+                }
+            }
+            // (a b c ...): destructure as a list
+            SurfaceKind::List(elements) => {
+                // Check that val is a consp for each cdr level needed
+                for i in 0..elements.len() {
+                    conditions.push(list_form(
+                        vec![
+                            symbol_form("consp", span),
+                            Self::nthcdr_expr(i, val_expr, span),
+                        ],
+                        span,
+                    ));
+                }
+                // Check the tail is nil
+                conditions.push(list_form(
+                    vec![
+                        symbol_form("null", span),
+                        Self::nthcdr_expr(elements.len(), val_expr, span),
+                    ],
+                    span,
+                ));
+
+                // Destructure each element
+                for (i, elem) in elements.iter().enumerate() {
+                    let elem_expr = format!("__bq_{}", bindings.len());
+                    // Bind the element to a temp name so nested destructuring works
+                    bindings.push(list_form(
+                        vec![
+                            symbol_form(&elem_expr, span),
+                            Self::nth_expr(i, val_expr, span),
+                        ],
+                        span,
+                    ));
+                    self.destructure_bq_pattern(elem, &elem_expr, conditions, bindings, span);
+                }
+            }
+            // Literal atoms: compare with equal
+            SurfaceKind::Atom(_) => {
+                let val_ref = symbol_form(val_expr, span);
+                conditions.push(list_form(
+                    vec![symbol_form("equal", span), val_ref, pattern.clone()],
+                    span,
+                ));
+            }
+            // Other: use equal
+            _ => {
+                let val_ref = symbol_form(val_expr, span);
+                conditions.push(list_form(
+                    vec![symbol_form("equal", span), val_ref, pattern.clone()],
+                    span,
+                ));
+            }
         }
     }
 

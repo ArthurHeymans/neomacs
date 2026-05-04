@@ -8677,4 +8677,189 @@ log
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "matched");
     }
+
+    // --- Batch 6: More edge cases ---
+
+    #[test]
+    fn jit_pcase_applicable_pattern() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "pcase-applicable.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(pcase '(1 2 3)
+  (`(,x ,y ,z) (list x y z)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(1 2 3)");
+    }
+
+    #[test]
+    fn jit_cl_loop_always_never_basic() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-always.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (cl-loop for x in '(2 4 6) always (cl-evenp x))
+      (cl-loop for x in '(2 3 6) always (cl-evenp x))
+      (cl-loop for x in '(1 3 5) never (cl-evenp x))
+      (cl-loop for x in '(1 2 5) never (cl-evenp x)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil t nil)");
+    }
+
+    #[test]
+    fn jit_cl_loop_count_keyword() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-count.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-loop for x in '(1 2 3 4 5 6) count (cl-evenp x))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn jit_setf_car_cdr_explicit() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "setf-car-cdr2.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((cell (cons 1 2)))
+  (setcar cell 10)
+  (setcdr cell 20)
+  cell)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(10 . 20)");
+    }
+
+    #[test]
+    fn jit_dolist_result_value() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "dolist-result.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((sum 0))
+  (dolist (x '(1 2 3 4 5) sum)
+    (setq sum (+ sum x))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(15)));
+    }
+
+    #[test]
+    fn jit_error_signaling_format() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "error-format.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(condition-case err
+    (error "test error %d" 42)
+  (error (car err)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "error");
+    }
+
+    #[test]
+    fn jit_delq_remove_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "delq-remove.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (delq 2 '(1 2 3 2 4))
+      (remove 2 '(1 2 3 2 4)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "((1 3 4) (1 3 4))");
+    }
+
+    #[test]
+    fn jit_nreverse_reverse_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nreverse-rev.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (reverse '(1 2 3))
+      (nreverse (list 1 2 3)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "((3 2 1) (3 2 1))");
+    }
+
+    #[test]
+    fn jit_identity_not_ops() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "identity-not.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (identity 42)
+      (not nil)
+      (not t)
+      (not 0))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(42 t nil nil)");
+    }
+
+    #[test]
+    fn jit_number_or_marker_predicate() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "num-marker.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (number-or-marker-p 42)
+      (number-or-marker-p "hello")
+      (number-or-marker-p nil))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(t nil nil)");
+    }
+
+    #[test]
+    fn jit_dotimes_build_vector() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "dotimes-vec.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((v (make-vector 5 0)))
+  (dotimes (i 5 v)
+    (aset v i (* i i))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "[0 1 4 9 16]");
+    }
 }
