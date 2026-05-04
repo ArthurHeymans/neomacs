@@ -17,6 +17,7 @@ use crate::ssa::{
     SsaBlock, SsaCaptureMode, SsaConst, SsaFunction, SsaInst, SsaInstKind, SsaLambdaCapture,
     SsaLambdaTemplate, SsaModule, SsaTerminator, SsaValue, SsaValueKind,
 };
+use crate::surface::{SurfaceForm, SurfaceKind};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LowerOutput<T> {
@@ -181,6 +182,54 @@ pub fn ssa_module_to_regir(module: &SsaModule) -> LowerOutput<RegModule> {
     }
 }
 
+fn lower_destructured_param(builder: &mut SsaBuilder, temp_name: &str, pattern: &SurfaceForm) {
+    let temp_val = builder.emit_value(
+        SsaInstKind::LexicalGet(temp_name.to_string()),
+        Effects::pure(),
+    );
+    if let SurfaceKind::List(parts) = &pattern.kind {
+        for (i, part) in parts.iter().enumerate() {
+            if let Some(name) = part.symbol_name() {
+                if name == "_" || name == "nil" {
+                    continue;
+                }
+                let elem = build_nth_car_cdr(builder, temp_val, i);
+                builder.emit_no_result(SsaInstKind::BindLexical {
+                    name: name.to_string(),
+                    value: elem,
+                });
+            }
+        }
+    } else if let Some(name) = pattern.symbol_name() {
+        if name != "_" && name != "nil" {
+            builder.emit_no_result(SsaInstKind::BindLexical {
+                name: name.to_string(),
+                value: temp_val,
+            });
+        }
+    }
+}
+
+fn build_nth_car_cdr(builder: &mut SsaBuilder, base: ValueId, n: usize) -> ValueId {
+    let mut current = base;
+    for _ in 0..n {
+        current = builder.emit_value(
+            SsaInstKind::CallNamed {
+                name: "cdr".to_string(),
+                args: vec![current],
+            },
+            Effects::conservative_call(),
+        );
+    }
+    builder.emit_value(
+        SsaInstKind::CallNamed {
+            name: "car".to_string(),
+            args: vec![current],
+        },
+        Effects::conservative_call(),
+    )
+}
+
 pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFunction> {
     let mut builder = SsaBuilder::new(Some("<lambda>".to_string()));
     builder.mutable_lexicals = mutable_lexical_names(&template.body);
@@ -215,6 +264,55 @@ pub fn lambda_template_to_ssa(template: &SsaLambdaTemplate) -> LowerOutput<SsaFu
         builder.emit_no_result(SsaInstKind::BindLexical {
             name: param.clone(),
             value,
+        });
+    }
+
+    // Create implicit rest param for &key when no explicit &rest exists
+    if !template.params.key.is_empty() && template.params.rest.is_none() {
+        let rest_name = template.params.implicit_rest_name().unwrap_or_default();
+        let rest_value = builder.append_block_param(builder.current_block, Some(rest_name.clone()));
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: rest_name.clone(),
+            value: rest_value,
+        });
+    }
+
+    // Lower destructured lambda parameters into car/cdr BindLexicals
+    for (temp_name, pattern) in &template.params.destructured {
+        lower_destructured_param(&mut builder, temp_name, pattern);
+    }
+
+    // Lower &key extraction: for each key param, bind from plist via plist-get
+    if !template.params.key.is_empty() {
+        let rest_name = template.params.implicit_rest_name().unwrap_or_default();
+        for key_name in &template.params.key {
+            let kw_name = format!(":{key_name}");
+            let rest_val =
+                builder.emit_value(SsaInstKind::LexicalGet(rest_name.clone()), Effects::pure());
+            let kw_val = builder.emit_value(
+                SsaInstKind::Const(SsaConst::Symbol(kw_name)),
+                Effects::pure(),
+            );
+            let plist_get = builder.emit_value(
+                SsaInstKind::CallNamed {
+                    name: "plist-get".to_string(),
+                    args: vec![rest_val, kw_val],
+                },
+                Effects::conservative_call(),
+            );
+            builder.emit_no_result(SsaInstKind::BindLexical {
+                name: key_name.clone(),
+                value: plist_get,
+            });
+        }
+    }
+
+    // Lower &aux initialization: bind each aux param to nil
+    for aux_name in &template.params.aux {
+        let nil = builder.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure());
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: aux_name.clone(),
+            value: nil,
         });
     }
 
@@ -563,7 +661,15 @@ impl<'a> RegLowerer<'a> {
 }
 
 fn lambda_capture_names(params: &crate::hir::LambdaList, body: &HirExpr) -> Vec<String> {
-    let bound = params.names().cloned().collect::<IndexSet<_>>();
+    let mut bound = params.names().cloned().collect::<IndexSet<_>>();
+    bound.extend(params.key.iter().cloned());
+    bound.extend(params.aux.iter().cloned());
+    bound.extend(
+        params
+            .destructured
+            .iter()
+            .filter_map(|(_, pattern)| pattern.symbol_name().map(str::to_string)),
+    );
     let mut free = IndexSet::new();
     collect_free_lexicals(body, &bound, &mut free);
     free.into_iter().collect()

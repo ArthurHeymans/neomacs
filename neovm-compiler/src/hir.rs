@@ -151,8 +151,6 @@ impl LambdaList {
             .iter()
             .chain(self.optional.iter())
             .chain(self.rest.iter())
-            .chain(self.key.iter())
-            .chain(self.aux.iter())
     }
 
     pub fn binding_names(&self) -> Vec<String> {

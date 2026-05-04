@@ -279,7 +279,7 @@ fn adapt_lambda_args_standalone(
                 .unwrap_or(LispValue::NIL),
         );
     }
-    if lambda_list.rest.is_some() {
+    if lambda_list.rest.is_some() || !lambda_list.key.is_empty() {
         let rest_start = args.len().min(optional_start + lambda_list.optional.len());
         adapted.push(make_list(runtime, args[rest_start..].iter().copied()));
     }
@@ -954,7 +954,7 @@ impl Interpreter<'_, '_, '_> {
                     .unwrap_or(LispValue::NIL),
             );
         }
-        if lambda_list.rest.is_some() {
+        if lambda_list.rest.is_some() || !lambda_list.key.is_empty() {
             let rest_start = args.len().min(optional_start + lambda_list.optional.len());
             adapted.push(make_list(self.runtime, args[rest_start..].iter().copied()));
         }
@@ -4262,6 +4262,8 @@ mod tests {
     use crate::object_interp::{ObjectInterpResult, execute_module_with_args};
     use crate::{LispValue, Runtime};
 
+    use super::make_list;
+
     fn execute_result(source: &str) -> (ObjectInterpResult, Runtime) {
         let artifact = compile_source("object.el", source);
         assert_eq!(artifact.diagnostics, Vec::new());
@@ -5682,6 +5684,24 @@ mod tests {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (equal (subseq [10 20 30 40] 1 3) [20 30])",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_plist_get_with_keyword() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (plist-get '(:b 42 :c 99) :b)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_lambda_with_key_params_creates_closure() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (functionp (lambda (a &key b) b))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
