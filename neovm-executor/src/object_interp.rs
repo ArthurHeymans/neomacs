@@ -2138,6 +2138,20 @@ impl Interpreter<'_, '_, '_> {
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
+            "file-exists-p" => self.exact_arity(name, args, 1).and_then(|_| {
+                let path = self.string_contents_owned(args[0])?;
+                Some(bool_value(std::path::Path::new(&path).exists()))
+            }),
+            "file-readable-p" => self.exact_arity(name, args, 1).and_then(|_| {
+                let path = self.string_contents_owned(args[0])?;
+                let meta = std::fs::metadata(&path).ok();
+                Some(bool_value(
+                    meta.is_some_and(|m| !m.permissions().readonly()),
+                ))
+            }),
+            "load" => self
+                .min_max_arity(name, args, 1, 5)
+                .and_then(|_| self.load_file(args[0])),
             _ => return None,
         };
         Some(value)
@@ -3571,6 +3585,35 @@ impl Interpreter<'_, '_, '_> {
         result.value
     }
 
+    fn load_file(&mut self, file: LispValue) -> Option<LispValue> {
+        let path = self.string_contents_owned(file)?;
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                let msg = format!("cannot open load file: {e}");
+                let error_symbol = self.runtime.intern("file-error");
+                let msg_val = self.runtime.string(msg);
+                let data = make_list(self.runtime, [msg_val].into_iter());
+                self.pending_signal = Some(SignaledValue {
+                    symbol: error_symbol,
+                    data,
+                });
+                return None;
+            }
+        };
+        let artifact = neovm_compiler::compile_source(&path, contents);
+        if !artifact.diagnostics.is_empty() {
+            self.diagnostics.extend(artifact.diagnostics);
+            return None;
+        }
+        let Some(regir) = artifact.regir else {
+            return Some(LispValue::NIL);
+        };
+        let result = execute_module_with_args(&regir, &[], self.runtime);
+        self.diagnostics.extend(result.diagnostics);
+        Some(LispValue::TRUE)
+    }
+
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
         let format = self.string_contents_owned(format)?;
         let mut output = String::new();
@@ -4759,6 +4802,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "floatp"
             | "string-or-null-p"
             | "booleanp"
+            | "file-exists-p"
+            | "file-readable-p"
+            | "load"
             | "prog1"
             | "make-symbol"
             | "intern-soft"
