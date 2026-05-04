@@ -1320,6 +1320,17 @@ impl SsaBuilder {
         let mut last = None;
         for expr in exprs {
             last = self.lower_expr(expr);
+            // Stop after diverging expressions (throw, error) that
+            // return None to indicate they don't produce a value
+            if last.is_none()
+                && self
+                    .function
+                    .blocks
+                    .get(self.current_block)
+                    .is_some_and(|b| !b.instructions.is_empty())
+            {
+                break;
+            }
         }
         last.or_else(|| Some(self.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure())))
     }
