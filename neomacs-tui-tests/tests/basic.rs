@@ -939,3 +939,24 @@ fn beginning_of_buffer_via_mlessthan_goes_to_start() {
         );
     }
 }
+
+#[test]
+fn universal_argument_cu_3_cf_moves_forward_three_chars() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "abcdefgh");
+    send_both(&mut gnu, &mut neo, "C-a");
+
+    // C-u 3 C-f should move forward 3 chars
+    send_both(&mut gnu, &mut neo, "C-u 3 C-f");
+    // Insert marker at point
+    send_both_raw(&mut gnu, &mut neo, b"X");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("abcXdef")),
+            "{label}: C-u 3 C-f should move 3 chars right"
+        );
+    }
+}
