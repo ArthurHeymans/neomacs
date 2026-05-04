@@ -1745,6 +1745,18 @@ impl Interpreter<'_, '_, '_> {
                         return None;
                     }
                     Some(self.runtime.float(dividend % divisor))
+                } else if self.has_bignum_arg(args) {
+                    let dividend = self.bignum_arg(name, args[0])?;
+                    let divisor = self.bignum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    Some(self.runtime.bignum(dividend % divisor))
                 } else {
                     let dividend = self.fixnum_arg(name, args[0])?;
                     let divisor = self.fixnum_arg(name, args[1])?;
@@ -1757,6 +1769,58 @@ impl Interpreter<'_, '_, '_> {
                         return None;
                     }
                     self.fixnum(dividend % divisor, name)
+                }
+            }),
+            "mod" => self.exact_arity(name, args, 2).and_then(|_| {
+                if self.has_float_arg(args) {
+                    let dividend = self.number_arg(name, args[0])?;
+                    let divisor = self.number_arg(name, args[1])?;
+                    if divisor == 0.0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    let result = dividend - divisor * (dividend / divisor).floor();
+                    Some(self.runtime.float(result))
+                } else if self.has_bignum_arg(args) {
+                    let dividend = self.bignum_arg(name, args[0])?;
+                    let divisor = self.bignum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    let result = rug::Integer::from(&dividend % &divisor);
+                    let zero = rug::Integer::new();
+                    if result != zero && (dividend < 0) != (divisor < 0) {
+                        Some(self.runtime.bignum(result + divisor))
+                    } else {
+                        Some(self.runtime.bignum(result))
+                    }
+                } else {
+                    let dividend = self.fixnum_arg(name, args[0])?;
+                    let divisor = self.fixnum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    let result = dividend % divisor;
+                    let result = if result != 0 && (dividend < 0) != (divisor < 0) {
+                        result + divisor
+                    } else {
+                        result
+                    };
+                    self.fixnum(result, name)
                 }
             }),
             "message" => {
