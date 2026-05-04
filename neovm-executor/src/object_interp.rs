@@ -3584,6 +3584,7 @@ impl Interpreter<'_, '_, '_> {
             contents,
         );
         let reader_output = reader::read_source(&source);
+        self.diagnostics.extend(reader_output.diagnostics);
         if reader_output.forms.is_empty() {
             return Some(LispValue::NIL);
         }
