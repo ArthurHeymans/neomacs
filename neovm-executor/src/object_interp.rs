@@ -3933,17 +3933,19 @@ impl Interpreter<'_, '_, '_> {
                 .iter()
                 .map(|value| self.bignum_arg("comparison", *value))
                 .collect::<Option<Vec<rug::Integer>>>()?;
-            Some(bool_value(match args.len() {
-                0 => true,
-                1 => true,
-                _ => values.windows(2).all(|pair| {
-                    let left: f64 = pair[0].to_f64();
-                    let right: f64 = pair[1].to_f64();
-                    // Use f64 for comparison when possible since Integer doesn't
-                    // implement Ord in all configurations
-                    compare(left, right)
-                }),
-            }))
+            // Use exact Integer comparison for bignums (f64 would lose precision)
+            Some(bool_value(values.windows(2).all(|pair| {
+                compare(
+                    if pair[0] < pair[1] {
+                        -1.0
+                    } else if pair[0] > pair[1] {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    0.0,
+                )
+            })))
         } else {
             let values = args
                 .iter()
@@ -6131,5 +6133,16 @@ mod tests {
              (string-match \"xyz\" \"hello\")",
         );
         assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_lexical_shadowing_in_let_star() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let* ((x 1)\n\
+                    (x (+ x 10)))\n\
+               x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(11)));
     }
 }

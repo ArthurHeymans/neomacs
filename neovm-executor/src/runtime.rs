@@ -1258,6 +1258,13 @@ impl Runtime {
         ) {
             return left.value.to_bits() == right.value.to_bits();
         }
+        // Bignums: compare values
+        if let (Some(left), Some(right)) = (
+            self.bignum_by_addr(left_addr),
+            self.bignum_by_addr(right_addr),
+        ) {
+            return left.value == right.value;
+        }
         false
     }
 
