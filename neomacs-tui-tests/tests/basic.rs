@@ -828,3 +828,19 @@ fn pwd_via_mx_shows_current_directory() {
         );
     }
 }
+
+#[test]
+fn line_number_mode_toggle_via_mx_shows_l_in_mode_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+    invoke_mx_command(&mut gnu, &mut neo, "line-number-mode");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|r| r.contains(" L") && !r.contains("line-number-mode")),
+            "{label}: enabling line-number-mode should show 'L' in mode line"
+        );
+    }
+}
