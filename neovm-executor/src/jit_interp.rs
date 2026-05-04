@@ -52,6 +52,10 @@ fn register_runtime_shims(builder: &mut cranelift_jit::JITBuilder) {
         "__neomacs_rt_float_const",
         __neomacs_rt_float_const as *const u8,
     );
+    builder.symbol(
+        "__neomacs_rt_bignum_const",
+        __neomacs_rt_bignum_const as *const u8,
+    );
     builder.symbol("__neomacs_rt_quote", __neomacs_rt_quote as *const u8);
     builder.symbol(
         "__neomacs_rt_function_quote",
