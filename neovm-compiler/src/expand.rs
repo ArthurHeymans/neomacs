@@ -1199,7 +1199,7 @@ impl Expander {
                         }
                         "pred" => {
                             let func = if parts.len() > 1 {
-                                parts[1].clone()
+                                function_quote_form(parts[1].clone(), span)
                             } else {
                                 symbol_form("nil", span)
                             };

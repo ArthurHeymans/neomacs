@@ -340,6 +340,18 @@ unsafe fn dispatch_named_call(
                     .unwrap_or(LispValue::NIL)
                     .to_abi_i64();
             }
+            // Check symbol function cell (populated by defalias/fset)
+            if let Some(sym) = rt.intern_soft(name) {
+                if let Ok(Some(func)) = rt.symbol_function(sym) {
+                    if rt.is_function(func) {
+                        return crate::object_interp::execute_function_object_direct(
+                            regir, fns, func, args, rt,
+                        )
+                        .unwrap_or(LispValue::NIL)
+                        .to_abi_i64();
+                    }
+                }
+            }
             // Fall back to interpreter's primitive dispatch for higher-order ops
             // (mapcar, mapc, maphash, require, etc.) that need evaluator context
             if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {

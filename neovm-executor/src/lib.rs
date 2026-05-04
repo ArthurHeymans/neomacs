@@ -7714,4 +7714,135 @@ magic
             "((0 . 10) (1 . 9) (2 . 8) (3 . 7) (4 . 6))"
         );
     }
+
+    #[test]
+    fn jit_pcase_pred_pattern() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "pcase-pred.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(pcase "hello" ((pred stringp) 'yes) (_ 'no))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "yes");
+    }
+
+    #[test]
+    fn jit_defalias_test() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "defalias.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defalias 'my-add (lambda (a b) (+ a b)))
+(my-add 3 4)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    #[test]
+    fn jit_lambda_in_function_position() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "lambda-fpos.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+((lambda (x) (+ x 1)) 5)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_sharp_quote_primitive() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "sharp-quote.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((f #'1+)) (funcall f 5))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_apply_with_spread() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "apply-spread.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(apply '+ 1 2 '(3 4))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn jit_funcall_lambda_rest_apply() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "funcall-rest.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(funcall (lambda (&rest args) (apply '+ args)) 1 2 3)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_cl_macrolet_basic() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-macrolet.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-macrolet ((my-when (cond &rest body)
+                `(if ,cond (progn ,@body))))
+  (my-when t 42))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn jit_symbol_function_via_defalias() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "symbol-function.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(defalias 'add1 (lambda (x) (+ x 1)))
+(funcall (symbol-function 'add1) 5)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
+    fn jit_nested_catch_outer_throw() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "nested-catch.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'a (catch 'b (throw 'a 1)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        assert_eq!(artifact.result.value, Some(LispValue::expect_fixnum(1)));
+    }
 }
