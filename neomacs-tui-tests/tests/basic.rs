@@ -996,3 +996,21 @@ fn column_number_mode_toggle_via_mx_shows_column_in_mode_line() {
         );
     }
 }
+
+#[test]
+fn execute_extended_command_tab_completion_via_mx_tab_shows_completions() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "M-x");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    send_both_raw(&mut gnu, &mut neo, b"find-fil");
+    send_both(&mut gnu, &mut neo, "TAB");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("find-file")),
+            "{label}: TAB completion in M-x should show find-file"
+        );
+    }
+}
