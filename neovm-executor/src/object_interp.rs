@@ -1259,6 +1259,22 @@ impl Interpreter<'_, '_, '_> {
                     };
                 bool_value(is_keyword)
             }),
+            "subrp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "compiled-function-p" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_function(args[0]))),
+            "special-variable-p" => self.exact_arity(name, args, 1).and_then(|_| {
+                if !self.runtime.is_symbol(args[0]) {
+                    return Some(bool_value(false));
+                }
+                match self.runtime.symbol_name(args[0]) {
+                    Ok(name) => Some(bool_value(
+                        ["t", "nil"].contains(&name.as_str())
+                            || self.runtime.is_bound_symbol(args[0]).unwrap_or(false),
+                    )),
+                    Err(_) => Some(bool_value(false)),
+                }
+            }),
             "evenp" | "cl-evenp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
@@ -4550,6 +4566,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "upcase"
             | "capitalize"
             | "keywordp"
+            | "subrp"
+            | "compiled-function-p"
+            | "special-variable-p"
             | "evenp"
             | "cl-evenp"
             | "cl-oddp"
