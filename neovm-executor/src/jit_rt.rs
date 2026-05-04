@@ -691,6 +691,7 @@ fn dispatch_primitive(
         "/" => numeric_div(rt, args),
         "1+" => numeric_add1(rt, args[0]),
         "1-" => numeric_sub1(rt, args[0]),
+        "%" => numeric_rem(rt, args),
         "mod" => numeric_mod(rt, args),
         "rem" => numeric_rem(rt, args),
         "abs" => numeric_abs(rt, args[0]),
@@ -847,6 +848,7 @@ fn dispatch_primitive(
         "substring" => substring_op(rt, args),
         "string=" | "string-equal" => string_equal(rt, args[0], args[1]),
         "string<" | "string-lessp" => string_lessp(rt, args[0], args[1]),
+        "string>" | "string-greaterp" => string_greaterp(rt, args[0], args[1]),
         "char-to-string" => char_to_string(rt, args[0]),
         "string-to-char" => string_to_char(rt, args[0]),
         "format" | "format-message" => format_string(rt, args[0], &args[1..]),
@@ -997,6 +999,8 @@ fn dispatch_primitive(
         }
         "evenp" | "cl-evenp" => Some(bool_value(args[0].as_fixnum()? % 2 == 0)),
         "cl-oddp" => Some(bool_value(args[0].as_fixnum()? % 2 != 0)),
+        "cl-plusp" => Some(bool_value(args[0].as_fixnum()? > 0)),
+        "cl-minusp" => Some(bool_value(args[0].as_fixnum()? < 0)),
         "expt" => {
             let base_is_float = rt.is_float(args[0]);
             let exp_is_float = rt.is_float(args[1]);
@@ -1382,25 +1386,31 @@ fn numeric_fold_mul(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
 fn numeric_div(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     let has_float = any_float(rt, args);
     if !has_float {
-        let a = args[0].as_fixnum()?;
-        let b = args[1].as_fixnum()?;
-        if b == 0 {
+        let mut result = args[0].as_fixnum()?;
+        for arg in &args[1..] {
+            let divisor = arg.as_fixnum()?;
+            if divisor == 0 {
+                let symbol = rt.intern("arith-error");
+                let msg = rt.string("Division by zero");
+                let data = rt.cons(msg, LispValue::NIL);
+                return Some(set_pending_signal_and_return_sentinel(symbol, data));
+            }
+            result /= divisor;
+        }
+        return LispValue::from_fixnum(result);
+    }
+    let mut result = to_f64(rt, args[0]);
+    for arg in &args[1..] {
+        let divisor = to_f64(rt, *arg);
+        if divisor == 0.0 {
             let symbol = rt.intern("arith-error");
             let msg = rt.string("Division by zero");
             let data = rt.cons(msg, LispValue::NIL);
             return Some(set_pending_signal_and_return_sentinel(symbol, data));
         }
-        return LispValue::from_fixnum(a / b);
+        result /= divisor;
     }
-    let a = to_f64(rt, args[0]);
-    let b = to_f64(rt, args[1]);
-    if b == 0.0 {
-        let symbol = rt.intern("arith-error");
-        let msg = rt.string("Division by zero");
-        let data = rt.cons(msg, LispValue::NIL);
-        return Some(set_pending_signal_and_return_sentinel(symbol, data));
-    }
-    Some(rt.float(a / b))
+    Some(rt.float(result))
 }
 
 fn numeric_add1(rt: &mut Runtime, v: LispValue) -> Option<LispValue> {
@@ -1805,6 +1815,12 @@ fn string_lessp(rt: &Runtime, a: LispValue, b: LispValue) -> Option<LispValue> {
     let sa = rt.string_contents(a).ok()?;
     let sb = rt.string_contents(b).ok()?;
     Some(bool_value(sa < sb))
+}
+
+fn string_greaterp(rt: &Runtime, a: LispValue, b: LispValue) -> Option<LispValue> {
+    let sa = rt.string_contents(a).ok()?;
+    let sb = rt.string_contents(b).ok()?;
+    Some(bool_value(sa > sb))
 }
 
 fn char_to_string(rt: &mut Runtime, value: LispValue) -> Option<LispValue> {

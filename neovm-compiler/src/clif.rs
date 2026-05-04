@@ -1845,15 +1845,22 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     self.error("UnwindProtectEnd handler index out of range");
                     return;
                 };
-                let Some(func_ref) = self.exception_func_ref("unwind_protect_end", 0) else {
-                    return;
-                };
-                self.emit_runtime_call(func_ref, &[], ClifRuntimeCallKind::UnwindProtectEnd);
                 match handler.kind {
                     ExceptionHandlerKind::UnwindProtect {
                         continuation_block,
                         normal_block,
                     } => {
+                        // We're currently in normal_block (cleanup code ran here).
+                        // Emit the normal UnwindProtectEnd logic first.
+                        let Some(func_ref) = self.exception_func_ref("unwind_protect_end", 0)
+                        else {
+                            return;
+                        };
+                        self.emit_runtime_call(
+                            func_ref,
+                            &[],
+                            ClifRuntimeCallKind::UnwindProtectEnd,
+                        );
                         let Some(check_ref) = self.exception_func_ref("check_exception", 0) else {
                             return;
                         };
@@ -1895,6 +1902,24 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         }
                         self.builder.switch_to_block(no_exception_block);
                         self.builder.ins().jump(continuation_block, &[]);
+
+                        // Now populate handler_block: when an exception occurs during
+                        // the body, call cleanup_enter and jump to normal_block where
+                        // cleanup code runs. After cleanup, UnwindProtectEnd logic
+                        // above will re-raise the exception to the outer handler.
+                        self.builder.switch_to_block(handler.handler_block);
+                        let Some(cleanup_ref) =
+                            self.exception_func_ref("unwind_protect_cleanup_enter", 0)
+                        else {
+                            return;
+                        };
+                        self.emit_runtime_call(
+                            cleanup_ref,
+                            &[],
+                            ClifRuntimeCallKind::UnwindProtectCleanupEnter,
+                        );
+                        self.builder.ins().jump(normal_block, &[]);
+
                         // Don't seal — defer to seal_all_blocks.
                         self.builder.switch_to_block(continuation_block);
                     }

@@ -75,7 +75,8 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
 
     // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
     // Only register functions with fixed arity (no &rest, no &optional) and no
-    // unwind-protect (which still requires interpreter fallback).
+    // unwind-protect (which still requires interpreter fallback due to safepoint
+    // liveness issues with exception handler blocks).
     for (_fid, func) in ssa.functions.iter() {
         if let Some(name) = &func.name {
             if func.lambda_list.rest.is_none()
@@ -89,7 +90,9 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     }
 
     // Phase 1: Lower each SSA function using the shared JIT module backend.
-    // Skip functions with unwind-protect — they fall back to the interpreter.
+    // Skip functions with unwind-protect — they fall back to the interpreter
+    // because the SSA safepoint liveness analysis doesn't account for
+    // CLIF-level exception handler block edges.
     let mut lowered: Vec<(FunctionId, Option<cranelift_codegen::ir::Function>)> = Vec::new();
     for (fid, func) in ssa.functions.iter() {
         if has_unsupported_nonlocal_flow(func) {
@@ -119,8 +122,6 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     let mut jit_func_ids: Vec<(FunctionId, FuncId)> = Vec::new();
     for (ssa_fid, function) in &lowered {
         let Some(mut function) = function.clone() else {
-            // Function has unwind-protect and can't be JIT-compiled.
-            // It will be called through the interpreter.
             continue;
         };
 
@@ -172,8 +173,6 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
         });
 
         if ssa.entry == Some(*ssa_fid) {
-            // Only use JIT entry for functions without unwind-protect,
-            // which still requires interpreter fallback.
             let func = &ssa.functions[*ssa_fid];
             if !has_unsupported_nonlocal_flow(func) {
                 entry_code_ptr = Some(code_ptr);
@@ -199,6 +198,12 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     }
 }
 
+/// Returns true if the function contains instructions that the JIT backend
+/// cannot yet handle natively. Currently this is unwind-protect: the CLIF
+/// codegen has handler_block population but the SSA safepoint liveness
+/// analysis doesn't account for exception handler block edges, causing
+/// "safepoint references unknown SSA value" verification errors. These
+/// functions fall back to the RegIR interpreter.
 fn has_unsupported_nonlocal_flow(func: &SsaFunction) -> bool {
     for block in func.blocks.values() {
         for inst in &block.instructions {

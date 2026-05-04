@@ -265,10 +265,7 @@ fn simplify_cfg(function: &mut SsaFunction) -> bool {
 fn const_to_bool(c: &SsaConst) -> Option<bool> {
     match c {
         SsaConst::Nil => Some(false),
-        SsaConst::True => Some(true),
-        SsaConst::Int(0) => Some(false),
-        SsaConst::Int(_) => Some(true),
-        _ => None,
+        _ => Some(true),
     }
 }
 
