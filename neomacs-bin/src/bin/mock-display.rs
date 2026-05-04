@@ -120,11 +120,6 @@ fn run_gui(demo: &str) {
 
     let _logging_guard = neovm_core::logging::init(neovm_core::logging::LogTarget::Stdout);
 
-    // Express frame in character cells. The layout engine measures the
-    // actual font metrics (DPI-aware via fontconfig) and we use the same
-    // engine instance for measurement and layout — no duplicate FontSystem.
-    let cols = 260u16;
-    let rows = 100u16;
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
     let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
@@ -133,7 +128,7 @@ fn run_gui(demo: &str) {
     // Otherwise window pixel_bounds won't match the font metrics used
     // during layout, causing mode-lines and the minibuffer to be
     // misplaced or clipped.
-    let physical_size = neomacs_layout_engine::fontconfig::points_to_pixels(12.0);
+    let physical_size = neomacs_layout_engine::fontconfig::points_to_pixels(10.0);
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
         fm.char_width('m', family, 400, false, physical_size)
@@ -145,6 +140,9 @@ fn run_gui(demo: &str) {
             .line_height
             .max(1.0)
     };
+    // Size the frame to fit on a typical screen.
+    let cols = (2400.0 / char_w).floor().max(80.0) as u16;
+    let rows = (1600.0 / char_h).floor().max(40.0) as u16;
     tracing::info!(
         "mock-display gui: physical_size={:.1} family={} char_w={:.1} char_h={:.1}",
         physical_size,
@@ -343,9 +341,9 @@ fn help_buffer_lines() -> Vec<(&'static str, u32)> {
 // ===================================================================
 
 fn build_single(
-    _cols: u16,
+    cols: u16,
     rows: u16,
-    _char_w: f32,
+    char_w: f32,
     char_h: f32,
     pixel_w: f32,
     pixel_h: f32,
@@ -374,6 +372,8 @@ fn build_single(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: pixel_h,
+        char_width: pixel_w / cols as f32,
+        char_height: pixel_h / rows as f32,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -381,9 +381,9 @@ fn build_single(
 }
 
 fn build_hsplit(
-    _cols: u16,
+    cols: u16,
     rows: u16,
-    _char_w: f32,
+    char_w: f32,
     char_h: f32,
     pixel_w: f32,
     _pixel_h: f32,
@@ -431,6 +431,8 @@ fn build_hsplit(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
+        char_width: char_w,
+        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -503,6 +505,8 @@ fn build_vsplit(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
+        char_width: char_w,
+        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -578,6 +582,8 @@ fn build_triple(
         child_frames: vec![],
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
+        char_width: char_w,
+        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         minibuffer: None,
         menu_bar: None,
@@ -712,6 +718,8 @@ fn build_default(
         }),
         frame_pixel_width: pixel_w,
         frame_pixel_height: r as f32 * char_h,
+        char_width: char_w,
+        char_height: char_h,
         background: Color::new(0.0, 0.0, 0.0, 1.0),
         menu_bar: None,
     }
@@ -856,7 +864,7 @@ fn mk(
     let mut face = Face::new(id);
     face.foreground = Color::new(fr, fg, fb, 1.0);
     face.background = Color::new(br, _bg, bb, 1.0);
-    // DPI-aware font size: convert from logical points to physical pixels
+    face.font_size = 10.0;
     face.font_weight = weight;
     face.attributes = attrs;
     face.background_gradient = gradient;

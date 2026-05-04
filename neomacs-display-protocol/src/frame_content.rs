@@ -91,6 +91,11 @@ pub struct FrameContent {
     /// Full frame pixel dimensions (from frame parameters).
     pub frame_pixel_width: f32,
     pub frame_pixel_height: f32,
+    /// Character cell dimensions used for layout (pixels).
+    /// The layout engine uses these instead of re-measuring so
+    /// window pixel_bounds stay consistent with the frame metrics.
+    pub char_width: f32,
+    pub char_height: f32,
     pub background: Color,
     /// Per-level menu bar items, if any.  Pre-formatted strings keyed by
     /// level.  Level 0 is the top-level menu bar.

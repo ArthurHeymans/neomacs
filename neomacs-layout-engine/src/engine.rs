@@ -5841,19 +5841,15 @@ impl LayoutEngine {
             .map(|f| f.attributes.contains(FaceAttributes::ITALIC))
             .unwrap_or(false);
 
-        let (char_w, char_h, ascent) = if let Some(fm) = font_metrics {
-            let m = fm.font_metrics(default_family, default_weight, default_italic, default_size);
-            let cw = fm.char_width(
-                'm',
-                default_family,
-                default_weight,
-                default_italic,
-                default_size,
-            );
-            (cw, m.line_height, m.ascent)
-        } else {
-            (content.frame_pixel_width / 80.0, 16.0, 14.0)
-        };
+        let char_w = content.char_width;
+        let char_h = content.char_height;
+        let ascent = font_metrics
+            .and_then(|fm| {
+                let m =
+                    fm.font_metrics(default_family, default_weight, default_italic, default_size);
+                Some(m.ascent)
+            })
+            .unwrap_or(char_h * 0.8);
         tracing::info!(
             "layout_frame_content: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
             default_size,
