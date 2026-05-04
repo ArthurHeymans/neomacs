@@ -3215,8 +3215,25 @@ impl Interpreter<'_, '_, '_> {
             return self.runtime_value(result);
         }
         if self.runtime.is_string(sequence) {
-            self.unsupported("aset on strings requires mutable multibyte string updates");
-            return None;
+            let contents = self.string_contents_owned(sequence)?;
+            let ch = self.char_arg("aset", value)?;
+            let mut chars: Vec<char> = contents.chars().collect();
+            if index >= chars.len() {
+                let symbol = self.runtime.intern("args-out-of-range");
+                let data = make_list(
+                    self.runtime,
+                    [
+                        sequence,
+                        LispValue::from_fixnum(index as i64).unwrap_or(LispValue::NIL),
+                    ]
+                    .into_iter(),
+                );
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                return None;
+            }
+            chars[index] = ch;
+            let new_string: String = chars.into_iter().collect();
+            return Some(self.runtime.string(new_string));
         }
         self.error(format!(
             "primitive `aset` expected a vector, got {}",
