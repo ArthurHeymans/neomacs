@@ -61,6 +61,7 @@ impl CompilerSession {
             macros: std::mem::take(&mut self.macros),
             symbol_macros: std::mem::take(&mut self.symbol_macros),
             diagnostics: Vec::new(),
+            pcase_counter: 0,
         };
 
         let mut expanded_forms = Vec::new();
@@ -193,6 +194,7 @@ struct Expander {
     macros: HashMap<String, MacroDef>,
     symbol_macros: HashMap<String, SurfaceForm>,
     diagnostics: Vec<Diagnostic>,
+    pcase_counter: usize,
 }
 
 impl Expander {
@@ -393,18 +395,75 @@ impl Expander {
                     nil_form(span)
                 }
             }
-            // cl-check-type -> progn (evaluate the form, ignore type check)
+            // cl-check-type: (cl-check-type FORM TYPE [STRING])
             "cl-check-type" => {
-                if items.len() >= 2 {
+                if items.len() >= 3 {
+                    let form = self.expand_form(items[1].clone());
+                    let type_form = &items[2];
+                    let v = symbol_form("--ct-val--", span);
+                    let binding = list_form(vec![v.clone(), form], span);
+                    let type_check = list_form(
+                        vec![
+                            symbol_form("eq", span),
+                            list_form(vec![symbol_form("type-of", span), v.clone()], span),
+                            quote_form(type_form.clone(), span),
+                        ],
+                        span,
+                    );
+                    let err_msg = SurfaceForm::new(
+                        SurfaceKind::Atom(SurfaceAtom::String("Wrong type argument".into())),
+                        span,
+                    );
+                    let check = list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(vec![symbol_form("not", span), type_check], span),
+                            list_form(vec![symbol_form("error", span), err_msg], span),
+                            v.clone(),
+                        ],
+                        span,
+                    );
+                    list_form(
+                        vec![
+                            symbol_form("let", span),
+                            list_form(vec![binding], span),
+                            check,
+                        ],
+                        span,
+                    )
+                } else if items.len() >= 2 {
                     self.expand_form(items[1].clone())
                 } else {
                     nil_form(span)
                 }
             }
-            // cl-assert -> progn (evaluate the assertion form)
+            // cl-assert: (cl-assert FORM [SHOW-ARGS-STRING MESSAGE args...])
             "cl-assert" => {
                 if items.len() >= 2 {
-                    self.expand_form(items[1].clone())
+                    let form = self.expand_form(items[1].clone());
+                    let v = symbol_form("--assert-val--", span);
+                    let binding = list_form(vec![v.clone(), form], span);
+                    let err_msg = SurfaceForm::new(
+                        SurfaceKind::Atom(SurfaceAtom::String("Assertion failed".into())),
+                        span,
+                    );
+                    let check = list_form(
+                        vec![
+                            symbol_form("if", span),
+                            list_form(vec![symbol_form("not", span), v.clone()], span),
+                            list_form(vec![symbol_form("error", span), err_msg], span),
+                            v.clone(),
+                        ],
+                        span,
+                    );
+                    list_form(
+                        vec![
+                            symbol_form("let", span),
+                            list_form(vec![binding], span),
+                            check,
+                        ],
+                        span,
+                    )
                 } else {
                     nil_form(span)
                 }
@@ -1111,18 +1170,24 @@ impl Expander {
                 )
             };
             let (condition, bindings) = self.expand_pcase_pattern(pattern, val_sym, span);
-            let body_with_bindings = if bindings.is_empty() {
-                body
+            let (wrapped_cond, body_with_bindings) = if bindings.is_empty() {
+                (condition, body)
             } else {
-                list_form(
+                let bindings_form = list_form(bindings.clone(), span);
+                let cond_wrapped = list_form(
+                    vec![symbol_form("let*", span), bindings_form.clone(), condition],
+                    span,
+                );
+                let body_wrapped = list_form(
                     std::iter::once(symbol_form("let*", span))
-                        .chain(std::iter::once(list_form(bindings, span)))
+                        .chain(std::iter::once(bindings_form))
                         .chain(std::iter::once(body))
                         .collect(),
                     span,
-                )
+                );
+                (cond_wrapped, body_wrapped)
             };
-            cond_clauses.push(list_form(vec![condition, body_with_bindings], span));
+            cond_clauses.push(list_form(vec![wrapped_cond, body_with_bindings], span));
         }
         let cond_form = list_form(
             std::iter::once(symbol_form("cond", span))
@@ -1152,6 +1217,14 @@ impl Expander {
             // _ matches everything
             SurfaceKind::Atom(SurfaceAtom::Symbol(name)) if name == "_" => {
                 (symbol_form("t", span), Vec::new())
+            }
+            // nil and t are matched literally
+            SurfaceKind::Atom(SurfaceAtom::Symbol(name)) if name == "nil" || name == "t" => {
+                let cond = list_form(
+                    vec![symbol_form("eq", span), val_ref, symbol_form(name, span)],
+                    span,
+                );
+                (cond, Vec::new())
             }
             // Bare symbol: always matches, binds the symbol
             SurfaceKind::Atom(SurfaceAtom::Symbol(name)) => {
@@ -1216,9 +1289,84 @@ impl Expander {
                             );
                             (cond, Vec::new())
                         }
-                        // List pattern (simplified): treat as app pattern for first element
+                        "and" => {
+                            let mut all_conds = Vec::new();
+                            let mut all_bindings = Vec::new();
+                            for sub_pat in &parts[1..] {
+                                let (cond, bindings) =
+                                    self.expand_pcase_pattern(sub_pat, val_sym, span);
+                                all_conds.push(cond);
+                                all_bindings.extend(bindings);
+                            }
+                            let cond = if all_conds.is_empty() {
+                                symbol_form("t", span)
+                            } else if all_conds.len() == 1 {
+                                all_conds.into_iter().next().unwrap()
+                            } else {
+                                list_form(
+                                    std::iter::once(symbol_form("and", span))
+                                        .chain(all_conds)
+                                        .collect(),
+                                    span,
+                                )
+                            };
+                            (cond, all_bindings)
+                        }
+                        "or" => {
+                            let mut all_conds = Vec::new();
+                            let mut first_bindings: Option<Vec<SurfaceForm>> = None;
+                            for sub_pat in &parts[1..] {
+                                let (cond, bindings) =
+                                    self.expand_pcase_pattern(sub_pat, val_sym, span);
+                                all_conds.push(cond);
+                                if first_bindings.is_none() {
+                                    first_bindings = Some(bindings);
+                                }
+                            }
+                            let cond = if all_conds.is_empty() {
+                                symbol_form("nil", span)
+                            } else if all_conds.len() == 1 {
+                                all_conds.into_iter().next().unwrap()
+                            } else {
+                                list_form(
+                                    std::iter::once(symbol_form("or", span))
+                                        .chain(all_conds)
+                                        .collect(),
+                                    span,
+                                )
+                            };
+                            (cond, first_bindings.unwrap_or_default())
+                        }
+                        "not" => {
+                            if parts.len() > 1 {
+                                let (cond, _) = self.expand_pcase_pattern(&parts[1], val_sym, span);
+                                let negated = list_form(vec![symbol_form("not", span), cond], span);
+                                (negated, Vec::new())
+                            } else {
+                                (symbol_form("nil", span), Vec::new())
+                            }
+                        }
+                        "app" => {
+                            if parts.len() >= 3 {
+                                let func = function_quote_form(parts[1].clone(), span);
+                                let fresh_id = self.pcase_counter;
+                                self.pcase_counter += 1;
+                                let fresh_sym = format!("--pcase-app-{}--", fresh_id);
+                                let app_call = list_form(
+                                    vec![symbol_form("funcall", span), func, val_ref.clone()],
+                                    span,
+                                );
+                                let app_binding =
+                                    list_form(vec![symbol_form(&fresh_sym, span), app_call], span);
+                                let (sub_cond, mut sub_bindings) =
+                                    self.expand_pcase_pattern(&parts[2], &fresh_sym, span);
+                                sub_bindings.insert(0, app_binding);
+                                (sub_cond, sub_bindings)
+                            } else {
+                                (symbol_form("t", span), Vec::new())
+                            }
+                        }
                         _ => {
-                            // Fallback: use equal for the whole pattern
                             let cond = list_form(
                                 vec![symbol_form("equal", span), val_ref, pattern.clone()],
                                 span,
@@ -1757,10 +1905,8 @@ impl Expander {
     }
 
     fn expand_cl_defun(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
-        // (cl-defun name (args &optional opt &rest rest) body...)
-        // Expand to (defun name (required-args) (destructuring-bind (...) (list required-args...) body...))
-        // Simplified: if params are all required, just produce (defun name (params) body...)
-        // If &optional/&rest present, use a wrapper approach.
+        // (cl-defun name (args &optional opt &rest rest &key k1 (k2 default) &aux (a val)) body...)
+        // Expand to (defun name (&rest --cl-rest--) (destructuring-bind (...) --cl-rest-- (let* (...) body...)))
         if items.len() < 4 {
             return nil_form(span);
         }
@@ -1770,9 +1916,9 @@ impl Expander {
         let params_form = &items[2];
         let body: Vec<SurfaceForm> = items[3..].to_vec();
 
-        let (required, optional, rest) = self.parse_cl_lambda_list(params_form);
+        let (required, optional, rest, key, aux) = self.parse_cl_lambda_list(params_form);
 
-        if optional.is_empty() && rest.is_none() {
+        if optional.is_empty() && rest.is_none() && key.is_empty() && aux.is_empty() {
             // Simple case: all required params, expand to plain defun
             let mut result = vec![
                 symbol_form("defun", span),
@@ -1784,8 +1930,6 @@ impl Expander {
         }
 
         // Complex case: use a single &rest arg and destructuring-bind
-        // (cl-defun foo (a &optional b &rest c) body...)
-        // -> (defun foo (&rest --cl-rest--) (destructuring-bind (a &optional b &rest c) --cl-rest-- body...))
         let rest_arg = symbol_form("--cl-rest--", span);
         let rest_params = list_form(vec![symbol_form("&rest", span), rest_arg.clone()], span);
 
@@ -1797,22 +1941,105 @@ impl Expander {
                 dbind_params.push(symbol_form(s, span));
             }
         }
-        if let Some(ref r) = rest {
+
+        // For &key: capture remaining args into a keys variable
+        let keys_var = if !key.is_empty() {
+            let keys_name = rest.clone().unwrap_or_else(|| "--cl-keys--".to_string());
             dbind_params.push(symbol_form("&rest", span));
-            dbind_params.push(symbol_form(r, span));
-        }
+            dbind_params.push(symbol_form(&keys_name, span));
+            Some(keys_name)
+        } else {
+            if let Some(ref r) = rest {
+                dbind_params.push(symbol_form("&rest", span));
+                dbind_params.push(symbol_form(r, span));
+            }
+            None
+        };
+
         let dbind_pattern = list_form(dbind_params, span);
 
-        let mut dbind_body = vec![
+        // Build the inner body from expanded body forms
+        let mut inner_body: Vec<SurfaceForm> =
+            body.into_iter().map(|f| self.expand_form(f)).collect();
+
+        // Wrap with &aux bindings (inside destructuring scope so aux can reference params)
+        if !aux.is_empty() {
+            let mut aux_bindings: Vec<SurfaceForm> = Vec::new();
+            for (param_name, value) in &aux {
+                let init = value.clone().unwrap_or_else(|| nil_form(span));
+                aux_bindings.push(list_form(vec![symbol_form(param_name, span), init], span));
+            }
+            let aux_body = if inner_body.len() == 1 {
+                inner_body.into_iter().next().unwrap()
+            } else {
+                list_form(
+                    std::iter::once(symbol_form("progn", span))
+                        .chain(inner_body)
+                        .collect(),
+                    span,
+                )
+            };
+            inner_body = vec![list_form(
+                vec![
+                    symbol_form("let*", span),
+                    list_form(aux_bindings, span),
+                    aux_body,
+                ],
+                span,
+            )];
+        }
+
+        // Wrap with &key bindings (inside destructuring scope so key can reference keys_var)
+        if let Some(ref keys_name) = keys_var {
+            let mut key_bindings: Vec<SurfaceForm> = Vec::new();
+            for (param_name, default) in &key {
+                let keyword = symbol_form(&format!(":{}", param_name), span);
+                let getter = list_form(
+                    vec![
+                        symbol_form("plist-get", span),
+                        symbol_form(keys_name, span),
+                        keyword,
+                    ],
+                    span,
+                );
+                let init = match default {
+                    Some(def) => {
+                        list_form(vec![symbol_form("or", span), getter, def.clone()], span)
+                    }
+                    None => getter,
+                };
+                key_bindings.push(list_form(vec![symbol_form(param_name, span), init], span));
+            }
+            if !key_bindings.is_empty() {
+                let key_body = if inner_body.len() == 1 {
+                    inner_body.into_iter().next().unwrap()
+                } else {
+                    list_form(
+                        std::iter::once(symbol_form("progn", span))
+                            .chain(inner_body)
+                            .collect(),
+                        span,
+                    )
+                };
+                inner_body = vec![list_form(
+                    vec![
+                        symbol_form("let*", span),
+                        list_form(key_bindings, span),
+                        key_body,
+                    ],
+                    span,
+                )];
+            }
+        }
+
+        // Build the destructuring-bind around everything
+        let mut dbind_form = vec![
             symbol_form("destructuring-bind", span),
             dbind_pattern,
             rest_arg,
         ];
-        dbind_body.extend(body.into_iter().map(|f| self.expand_form(f)));
-
-        // Must expand the destructuring-bind form before embedding in defun,
-        // since the HIR does not handle destructuring-bind directly.
-        let expanded_dbind = self.expand_form(list_form(dbind_body, span));
+        dbind_form.extend(inner_body);
+        let expanded_dbind = self.expand_form(list_form(dbind_form, span));
 
         let defun_body = vec![
             symbol_form("defun", span),
@@ -1826,36 +2053,60 @@ impl Expander {
     fn parse_cl_lambda_list(
         &self,
         params_form: &SurfaceForm,
-    ) -> (Vec<String>, Vec<String>, Option<String>) {
+    ) -> (
+        Vec<String>,
+        Vec<String>,
+        Option<String>,
+        Vec<(String, Option<SurfaceForm>)>,
+        Vec<(String, Option<SurfaceForm>)>,
+    ) {
         let items = match &params_form.kind {
             SurfaceKind::List(items) => items,
-            _ => return (Vec::new(), Vec::new(), None),
+            _ => return (Vec::new(), Vec::new(), None, Vec::new(), Vec::new()),
         };
         let mut required = Vec::new();
         let mut optional = Vec::new();
         let mut rest = None;
-        let mut section = 0; // 0=required, 1=optional, 2=rest
+        let mut key: Vec<(String, Option<SurfaceForm>)> = Vec::new();
+        let mut aux: Vec<(String, Option<SurfaceForm>)> = Vec::new();
+        let mut section = 0; // 0=required, 1=optional, 2=rest, 3=key, 4=aux
 
         for item in items {
-            let Some(name) = item.symbol_name() else {
+            if let Some(name) = item.symbol_name() {
+                match name {
+                    "&optional" => section = 1,
+                    "&rest" | "&body" => section = 2,
+                    "&key" => section = 3,
+                    "&allow-other-keys" => {} // skip, stay in key section
+                    "&aux" => section = 4,
+                    _ => match section {
+                        0 => required.push(name.to_string()),
+                        1 => optional.push(name.to_string()),
+                        2 if rest.is_none() => {
+                            rest = Some(name.to_string());
+                        }
+                        3 => key.push((name.to_string(), None)),
+                        4 => aux.push((name.to_string(), None)),
+                        _ => {}
+                    },
+                }
                 continue;
-            };
-            match name {
-                "&optional" => section = 1,
-                "&rest" => section = 2,
-                "&key" | "&allow-other-keys" | "&aux" => break, // not supported yet
-                _ => match section {
-                    0 => required.push(name.to_string()),
-                    1 => optional.push(name.to_string()),
-                    2 if rest.is_none() => {
-                        rest = Some(name.to_string());
-                        section = 3; // done
+            }
+            // List-form params: (name default) for &key or &aux
+            if let SurfaceKind::List(parts) = &item.kind {
+                if parts.is_empty() {
+                    continue;
+                }
+                if let Some(n) = parts[0].symbol_name() {
+                    match section {
+                        3 => key.push((n.to_string(), parts.get(1).cloned())),
+                        4 => aux.push((n.to_string(), parts.get(1).cloned())),
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
             }
         }
-        (required, optional, rest)
+        (required, optional, rest, key, aux)
     }
 
     fn expand_cl_macrolet(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {

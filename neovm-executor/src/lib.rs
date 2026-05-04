@@ -146,6 +146,12 @@ fn execute_with_object_interpreter(
 }
 
 #[cfg(test)]
+mod pcase_test;
+
+#[cfg(test)]
+mod lambda_keywords_test;
+
+#[cfg(test)]
 mod tests {
     use super::{Diagnostic, Executor, LispValue, execute_source};
 
