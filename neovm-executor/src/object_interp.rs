@@ -2213,6 +2213,25 @@ impl Interpreter<'_, '_, '_> {
         if !noerror.is_nil() {
             return Some(LispValue::NIL);
         }
+        // Try to load the feature file
+        let feat_name = match self.runtime.symbol_name(feature) {
+            Ok(n) => n,
+            Err(_) => {
+                let error_symbol = self.runtime.intern("error");
+                let message = self.runtime.string("required feature was not provided");
+                let data = make_list(self.runtime, [feature, message]);
+                self.pending_signal = Some(SignaledValue {
+                    symbol: error_symbol,
+                    data,
+                });
+                return None;
+            }
+        };
+        let path = format!("{}.el", feat_name);
+        if std::path::Path::new(&path).exists() {
+            let file_val = self.runtime.string(path);
+            return self.load_file(file_val);
+        }
         let error_symbol = self.runtime.intern("error");
         let message = self.runtime.string("required feature was not provided");
         let data = make_list(self.runtime, [feature, message]);
