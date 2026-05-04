@@ -94,13 +94,16 @@ impl Buffer {
         }
         let byte_len = bytes.len();
 
+        // GNU: undo-in-progress prevents undo-boundary and
+        // record_first_change, but record_insert still creates redo
+        // records so that an undo can itself be undone.
         if !self.undo_state.in_progress() {
             self.undo_prepare_change(insert_pos, self.pt_byte);
-            let mut ul = self.get_undo_list();
-            if !undo::undo_list_is_disabled(&ul) {
-                undo::undo_list_record_insert(&mut ul, insert_pos, byte_len, self.pt_byte);
-                self.set_undo_list(ul);
-            }
+        }
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            undo::undo_list_record_insert(&mut ul, insert_pos, byte_len, self.pt_byte);
+            self.set_undo_list(ul);
         }
 
         self.text
@@ -350,13 +353,16 @@ impl Buffer {
         self.text
             .copy_emacs_bytes_to(start, end, &mut deleted_bytes);
         let deleted_text = lisp_string_from_buffer_bytes(deleted_bytes, self.get_multibyte());
+        // GNU: undo-in-progress prevents undo-boundary and
+        // record_first_change, but record_delete still creates redo
+        // records so that an undo can itself be undone.
         if !self.undo_state.in_progress() {
             self.undo_prepare_change(start, self.pt_byte);
-            let mut ul = self.get_undo_list();
-            if !undo::undo_list_is_disabled(&ul) {
-                undo::undo_list_record_delete(&mut ul, start, deleted_text, self.pt_byte);
-                self.set_undo_list(ul);
-            }
+        }
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            undo::undo_list_record_delete(&mut ul, start, deleted_text, self.pt_byte);
+            self.set_undo_list(ul);
         }
 
         self.text
@@ -431,8 +437,10 @@ impl Buffer {
             return false;
         }
 
-        if !noundo && !self.undo_state.in_progress() {
-            self.undo_prepare_change(start, self.pt_byte);
+        if !noundo {
+            if !self.undo_state.in_progress() {
+                self.undo_prepare_change(start, self.pt_byte);
+            }
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 let deleted =

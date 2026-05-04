@@ -3514,7 +3514,8 @@ impl BufferManager {
     ) -> Option<bool> {
         let buf = self.buffers.get_mut(&id)?;
         // Record old value for undo before changing.
-        if !buf.undo_state.in_progress() && !undo::undo_list_is_disabled(&buf.get_undo_list()) {
+        // GNU: record property change for redo even during undo-in-progress.
+        if !undo::undo_list_is_disabled(&buf.get_undo_list()) {
             let old_val = buf
                 .text
                 .text_props_get_property(start, name)
@@ -3561,12 +3562,12 @@ impl BufferManager {
     ) -> Option<bool> {
         let buf = self.buffers.get_mut(&id)?;
         // Record old value for undo before removing.
-        if !buf.undo_state.in_progress() && !undo::undo_list_is_disabled(&buf.get_undo_list()) {
+        // GNU: record property change for redo even during undo-in-progress.
+        if !undo::undo_list_is_disabled(&buf.get_undo_list()) {
             let old_val = buf
                 .text
                 .text_props_get_property(start, name)
                 .unwrap_or(Value::NIL);
-            // Only record if property actually exists.
             if !old_val.is_nil() {
                 let mut ul = buf.get_undo_list();
                 undo::undo_list_record_property_change(&mut ul, name, old_val, start, end);
