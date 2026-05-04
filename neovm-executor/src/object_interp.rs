@@ -6302,4 +6302,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(11)));
     }
+
+    #[test]
+    fn executes_defun_with_key_params() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defun test-key (a &key b) b)\n\
+             (test-key 1 :b 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
 }
