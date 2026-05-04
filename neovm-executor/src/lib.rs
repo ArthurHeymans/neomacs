@@ -6163,4 +6163,141 @@ magic
         let val = artifact.result.value.unwrap();
         assert_eq!(val, LispValue::expect_fixnum(15));
     }
+
+    #[test]
+    fn jit_dolist_with_catch_early_return() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "dolist-early.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'found
+  (dolist (x '(1 2 3 4 5))
+    (when (= x 3)
+      (throw 'found x))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(3));
+    }
+
+    #[test]
+    fn jit_or_returns_first_truthy() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "or-truthy.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (or nil nil 42) (or 1 2 3) (or nil nil))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(42 1 nil)");
+    }
+
+    #[test]
+    fn jit_and_returns_first_nil() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "and-nil.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(list (and 1 2 3) (and 1 nil 3) (and))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "(3 nil t)");
+    }
+
+    #[test]
+    fn jit_multiple_catch_levels() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "catch-levels.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'outer
+  (catch 'inner
+    (throw 'outer 'from-inner))
+  'should-not-reach)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "from-inner");
+    }
+
+    #[test]
+    fn jit_cl_loop_sum_basic() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cl-loop-sum.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(cl-loop for i from 1 to 10 sum i)
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(55));
+    }
+
+    #[test]
+    fn jit_closure_counter() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "closure-counter.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((counter 0))
+  (let ((inc (lambda () (setq counter (+ counter 1)))))
+    (funcall inc)
+    (funcall inc)
+    (funcall inc)
+    counter))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(val, LispValue::expect_fixnum(3));
+    }
+
+    #[test]
+    fn jit_nested_condition_case_with_throw_and_signal() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cc-throw-signal.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(catch 'done
+  (condition-case err
+      (signal 'wrong-type-argument '(listp 5))
+    (wrong-type-argument (throw 'done 'caught-wta))))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "caught-wta");
+    }
+
+    #[test]
+    fn jit_cond_selects_matching_clause() {
+        let artifact = crate::jit_interp::execute_with_jit(
+            "cond-multi.el",
+            r#"
+;;; -*- lexical-binding: t; -*-
+(let ((x 5))
+  (cond ((= x 1) 'one)
+        ((= x 5) 'five)
+        (t 'other)))
+"#,
+            &[],
+        );
+        assert_eq!(artifact.result.diagnostics, Vec::new());
+        let val = artifact.result.value.unwrap();
+        assert_eq!(artifact.runtime.format_value(val), "five");
+    }
 }
