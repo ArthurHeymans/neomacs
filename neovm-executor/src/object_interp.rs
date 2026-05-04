@@ -1239,10 +1239,22 @@ impl Interpreter<'_, '_, '_> {
             "delete" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.remove(args[0], args[1])),
+            "remq" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.delq(args[0], args[1])),
             "remove" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.remove(args[0], args[1])),
+            "copy-tree" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.copy_tree(args[0])),
+            "copy-alist" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.copy_alist(args[0])),
             "vconcat" => self.vconcat(args),
+            "fillarray" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.fillarray(args[0], args[1])),
             "nconc" => self.nconc(args),
             "number-to-string" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_float(args[0]) {
@@ -2556,10 +2568,9 @@ impl Interpreter<'_, '_, '_> {
             let mut result = Vec::new();
             let mut current = start;
             let going_up = step > 0.0;
-            let iter_limit = 1_000_000;
             let mut count = 0;
             loop {
-                if count >= iter_limit
+                if count >= 1_000_000
                     || (going_up && current > end)
                     || (!going_up && current < end)
                 {
@@ -2567,6 +2578,38 @@ impl Interpreter<'_, '_, '_> {
                 }
                 result.push(self.runtime.float(current));
                 current += step;
+                count += 1;
+            }
+            Some(make_list(self.runtime, result.into_iter()))
+        } else if self.runtime.is_bignum(from)
+            || self.runtime.is_bignum(to)
+            || step.is_some_and(|s| self.runtime.is_bignum(s))
+        {
+            let start = self.bignum_arg("number-sequence", from)?;
+            let end = self.bignum_arg("number-sequence", to)?;
+            let step = match step {
+                Some(s) => self.bignum_arg("number-sequence", s)?,
+                None if end >= start => rug::Integer::from(1),
+                None => rug::Integer::from(-1),
+            };
+            if step == 0 {
+                self.error("primitive `number-sequence` step must be non-zero");
+                return None;
+            }
+            let mut result = Vec::new();
+            let mut current = start;
+            let going_up = step > 0;
+            let mut count = 0;
+            loop {
+                if count >= 1_000_000 {
+                    self.error("primitive `number-sequence` too many elements");
+                    return None;
+                }
+                if going_up && current > end || !going_up && current < end {
+                    break;
+                }
+                result.push(self.runtime.bignum(current.clone()));
+                current += &step;
                 count += 1;
             }
             Some(make_list(self.runtime, result.into_iter()))
@@ -3097,6 +3140,61 @@ impl Interpreter<'_, '_, '_> {
         Some(make_list(self.runtime, result.into_iter()))
     }
 
+    fn copy_tree(&mut self, value: LispValue) -> Option<LispValue> {
+        if value.is_nil() || value.is_true() || value.is_fixnum() || self.runtime.is_float(value) {
+            return Some(value);
+        }
+        if !self.runtime.is_cons(value) {
+            return Some(value);
+        }
+        let car = self.runtime.car(value);
+        let car_val = self.runtime_value(car)?;
+        let cdr = self.runtime.cdr(value);
+        let cdr_val = self.runtime_value(cdr)?;
+        let copied_car = self.copy_tree(car_val)?;
+        let copied_cdr = self.copy_tree(cdr_val)?;
+        Some(self.runtime.cons(copied_car, copied_cdr))
+    }
+
+    fn copy_alist(&mut self, list: LispValue) -> Option<LispValue> {
+        let values = self.list_values(list)?;
+        let result: Vec<_> = values
+            .into_iter()
+            .map(|v| {
+                if self.runtime.is_cons(v) {
+                    let car = self.runtime.car(v).ok().unwrap_or(LispValue::NIL);
+                    let cdr = self.runtime.cdr(v).ok().unwrap_or(LispValue::NIL);
+                    self.runtime.cons(car, cdr)
+                } else {
+                    v
+                }
+            })
+            .collect();
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn fillarray(&mut self, array: LispValue, value: LispValue) -> Option<LispValue> {
+        if self.runtime.is_vector(array) {
+            let len = match self.runtime.vector_len(array) {
+                Ok(l) => l,
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            };
+            for i in 0..len {
+                if let Err(e) = self.runtime.vector_aset(array, i, value) {
+                    self.runtime_error(e);
+                    return None;
+                }
+            }
+            Some(array)
+        } else {
+            self.error("primitive `fillarray` expected a vector");
+            None
+        }
+    }
+
     fn vconcat(&mut self, args: &[LispValue]) -> Option<LispValue> {
         let mut elements = Vec::new();
         for arg in args {
@@ -3216,8 +3314,13 @@ impl Interpreter<'_, '_, '_> {
                         self.error("format `%d` requires an argument");
                         return None;
                     };
-                    let value = self.number_arg("format", value)?;
-                    output.push_str(&(value as i64).to_string());
+                    if self.runtime.is_bignum(value) {
+                        let n = self.bignum_arg("format", value)?;
+                        output.push_str(&n.to_string());
+                    } else {
+                        let value = self.number_arg("format", value)?;
+                        output.push_str(&(value as i64).to_string());
+                    }
                 }
                 'f' | 'e' | 'g' => {
                     let Some(value) = args.next() else {
@@ -4322,8 +4425,12 @@ fn is_primitive_name(name: &str) -> bool {
             | "butlast"
             | "delq"
             | "delete"
+            | "remq"
             | "remove"
+            | "copy-tree"
+            | "copy-alist"
             | "vconcat"
+            | "fillarray"
             | "nconc"
             | "number-to-string"
             | "string-to-number"
