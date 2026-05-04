@@ -3683,7 +3683,7 @@ impl Interpreter<'_, '_, '_> {
                         output.push_str(&(value as i64).to_string());
                     }
                 }
-                'f' | 'e' | 'g' => {
+                'f' | 'e' | 'g' | 'E' | 'G' => {
                     let Some(value) = args.next() else {
                         self.error(format!("format `%{spec}` requires an argument"));
                         return None;
@@ -3692,7 +3692,9 @@ impl Interpreter<'_, '_, '_> {
                     let formatted = match spec {
                         'f' => format!("{value}"),
                         'e' => format!("{value:e}"),
+                        'E' => format!("{value:E}"),
                         'g' => format!("{value}"),
+                        'G' => format!("{value}"),
                         _ => unreachable!(),
                     };
                     output.push_str(&formatted);
