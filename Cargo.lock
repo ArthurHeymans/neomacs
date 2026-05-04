@@ -2582,8 +2582,10 @@ dependencies = [
  "cranelift-jit",
  "cranelift-module",
  "criterion 0.5.1",
+ "gmp-mpfr-sys",
  "lasso",
  "neovm-compiler",
+ "rug",
 ]
 
 [[package]]

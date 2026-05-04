@@ -13,6 +13,7 @@ pub struct Runtime {
     functions: Vec<Box<FunctionObject>>,
     lexical_cells: Vec<Box<LexicalCell>>,
     floats: Vec<Box<FloatObj>>,
+    bignums: Vec<Box<BignumObj>>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
@@ -31,6 +32,7 @@ impl Default for Runtime {
             functions: Vec::new(),
             lexical_cells: Vec::new(),
             floats: Vec::new(),
+            bignums: Vec::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: Vec::new(),
@@ -301,7 +303,53 @@ impl Runtime {
     }
 
     pub fn is_number(&self, value: LispValue) -> bool {
-        value.is_fixnum() || self.is_float(value)
+        value.is_fixnum() || self.is_float(value) || self.is_bignum(value)
+    }
+
+    pub fn bignum(&mut self, value: rug::Integer) -> LispValue {
+        let mut obj = Box::new(BignumObj {
+            header: HeapHeader {
+                kind: HeapKind::Bignum,
+            },
+            value,
+        });
+        let addr = (&mut *obj as *mut BignumObj) as usize;
+        self.bignums.push(obj);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn is_bignum(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.bignum_by_addr(addr).is_some())
+    }
+
+    pub fn as_integer(&self, value: LispValue) -> Option<rug::Integer> {
+        if let Some(fixnum) = value.as_fixnum() {
+            return Some(rug::Integer::from(fixnum));
+        }
+        if let Some(addr) = value.heap_addr() {
+            if let Some(obj) = self.bignum_by_addr(addr) {
+                return Some(obj.value.clone());
+            }
+        }
+        None
+    }
+
+    /// Extract the bignum value, returning an error if it's not a bignum.
+    /// Create a clone since the bignum is stored in a Vec and might move.
+    pub fn bignum_data(&self, value: LispValue) -> Result<rug::Integer, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "bignum",
+            value,
+        })?;
+        let obj = self
+            .bignum_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "bignum",
+                value,
+            })?;
+        Ok(obj.value.clone())
     }
 
     pub fn cons_cell_count(&self) -> usize {
@@ -1039,6 +1087,16 @@ impl Runtime {
         None
     }
 
+    fn bignum_by_addr(&self, addr: usize) -> Option<&BignumObj> {
+        for obj in &self.bignums {
+            let obj_addr = (&**obj as *const BignumObj) as usize;
+            if obj_addr == addr && obj.header.kind == HeapKind::Bignum {
+                return Some(obj);
+            }
+        }
+        None
+    }
+
     fn float_by_addr(&self, addr: usize) -> Option<&FloatObj> {
         for obj in &self.floats {
             let obj_addr = (&**obj as *const FloatObj) as usize;
@@ -1405,6 +1463,7 @@ enum HeapKind {
     Function = 6,
     LexicalCell = 7,
     Float = 8,
+    Bignum = 9,
 }
 
 #[repr(C)]
@@ -1470,6 +1529,12 @@ struct LexicalCell {
 struct FloatObj {
     header: HeapHeader,
     value: f64,
+}
+
+#[repr(C, align(8))]
+struct BignumObj {
+    header: HeapHeader,
+    value: rug::Integer,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

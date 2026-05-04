@@ -10,6 +10,8 @@ description = "Execution engines for NeoVM compiler artifacts"
 cranelift-jit = "0.131.0"
 cranelift-module = "0.131.0"
 lasso = "0.7.3"
+rug = { version = "1", default-features = false, features = ["integer", "std"] }
+gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-system-libs"] }
 neovm-compiler = { path = "../neovm-compiler", version = "0.0.1" }
 
 [dev-dependencies]

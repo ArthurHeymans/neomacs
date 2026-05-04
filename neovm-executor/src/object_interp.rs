@@ -1019,7 +1019,7 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(self.runtime.is_number(args[0]))),
             "integerp" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(args[0].is_fixnum())),
+                .map(|_| bool_value(args[0].is_fixnum() || self.runtime.is_bignum(args[0]))),
             "natnump" | "wholenump" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].as_fixnum().is_some_and(|value| value >= 0))),
@@ -1042,6 +1042,24 @@ impl Interpreter<'_, '_, '_> {
             "hash-table-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_hash_table(args[0]))),
+            "arrayp" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(self.runtime.is_vector(args[0]) || self.runtime.is_string(args[0]))
+            }),
+            "char-table-p" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "atom" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(!self.runtime.is_cons(args[0]))),
+            "nlistp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(!self.runtime.is_cons(args[0]) || args[0].is_nil())),
+            "cl-minusp" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|value| bool_value(value < 0.0)),
+            "cl-plusp" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.number_arg(name, args[0]))
+                .map(|value| bool_value(value > 0.0)),
             "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.symbol_value(args[0]);
                 self.runtime_value(result)
@@ -1205,6 +1223,9 @@ impl Interpreter<'_, '_, '_> {
             "delq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.delq(args[0], args[1])),
+            "delete" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.remove(args[0], args[1])),
             "remove" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.remove(args[0], args[1])),
@@ -1308,6 +1329,9 @@ impl Interpreter<'_, '_, '_> {
             "string<" | "string-lessp" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.string_lessp(args[0], args[1])),
+            "string>" | "string-greaterp" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_greaterp(args[0], args[1])),
             "char-to-string" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.char_to_string(args[0])),
@@ -1415,6 +1439,15 @@ impl Interpreter<'_, '_, '_> {
             "mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
+            "copy-list" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.copy_list(args[0])),
+            "make-list" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.make_list(args[0], args[1])),
+            "number-sequence" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.number_sequence(args[0], args[1], args.get(2).copied())),
             "+" => self.number_fold_add(args),
             "*" => self.number_fold_mul(args),
             "-" => self.number_sub(args),
@@ -1442,6 +1475,44 @@ impl Interpreter<'_, '_, '_> {
             "<=" => self.number_compare(args, |left, right| left <= right),
             ">" => self.number_compare(args, |left, right| left > right),
             ">=" => self.number_compare(args, |left, right| left >= right),
+            "/=" => self.exact_arity(name, args, 2).and_then(|_| {
+                if self.has_float_arg(args) {
+                    let left = self.number_arg(name, args[0])?;
+                    let right = self.number_arg(name, args[1])?;
+                    Some(bool_value(left != right))
+                } else {
+                    let left = self.fixnum_arg(name, args[0])?;
+                    let right = self.fixnum_arg(name, args[1])?;
+                    Some(bool_value(left != right))
+                }
+            }),
+            "%" => self.exact_arity(name, args, 2).and_then(|_| {
+                if self.has_float_arg(args) {
+                    let dividend = self.number_arg(name, args[0])?;
+                    let divisor = self.number_arg(name, args[1])?;
+                    if divisor == 0.0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    Some(self.runtime.float(dividend % divisor))
+                } else {
+                    let dividend = self.fixnum_arg(name, args[0])?;
+                    let divisor = self.fixnum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    self.fixnum(dividend % divisor, name)
+                }
+            }),
             "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "signal" => self.exact_arity(name, args, 2).and_then(|_| {
@@ -1453,6 +1524,12 @@ impl Interpreter<'_, '_, '_> {
             }),
             "error" => {
                 let symbol = self.runtime.intern("error");
+                let data = make_list(self.runtime, args.iter().copied());
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                None
+            }
+            "user-error" => {
+                let symbol = self.runtime.intern("user-error");
                 let data = make_list(self.runtime, args.iter().copied());
                 self.pending_signal = Some(SignaledValue { symbol, data });
                 None
@@ -1603,6 +1680,8 @@ impl Interpreter<'_, '_, '_> {
                     self.runtime.intern("symbol")
                 } else if self.runtime.is_float(args[0]) {
                     self.runtime.intern("float")
+                } else if self.runtime.is_bignum(args[0]) {
+                    self.runtime.intern("integer")
                 } else if args[0].is_heap() {
                     if self.runtime.is_cons(args[0]) {
                         self.runtime.intern("cons")
@@ -2175,6 +2254,102 @@ impl Interpreter<'_, '_, '_> {
         Some(sequence)
     }
 
+    fn copy_list(&mut self, list: LispValue) -> Option<LispValue> {
+        let elements = self.list_values(list)?;
+        Some(make_list(self.runtime, elements.into_iter()))
+    }
+
+    fn make_list(&mut self, length: LispValue, init: LispValue) -> Option<LispValue> {
+        let n = self.fixnum_arg("make-list", length)?;
+        if n < 0 {
+            self.error("primitive `make-list` expected a non-negative length");
+            return None;
+        }
+        let mut result = LispValue::NIL;
+        for _ in 0..n {
+            result = self.runtime.cons(init, result);
+        }
+        Some(result)
+    }
+
+    fn number_sequence(
+        &mut self,
+        from: LispValue,
+        to: LispValue,
+        step: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let step = match step {
+            Some(s) if s.is_nil() => None,
+            s => s,
+        };
+        let is_float = self.runtime.is_float(from)
+            || self.runtime.is_float(to)
+            || step.is_some_and(|s| self.runtime.is_float(s));
+        if is_float {
+            let start = self.number_arg("number-sequence", from)?;
+            let end = self.number_arg("number-sequence", to)?;
+            let step = match step {
+                Some(s) => self.number_arg("number-sequence", s)?,
+                None if end >= start => 1.0,
+                None => -1.0,
+            };
+            if step == 0.0 {
+                self.error("primitive `number-sequence` step must be non-zero");
+                return None;
+            }
+            let mut result = Vec::new();
+            let mut current = start;
+            let going_up = step > 0.0;
+            let iter_limit = 1_000_000;
+            let mut count = 0;
+            loop {
+                if count >= iter_limit
+                    || (going_up && current > end)
+                    || (!going_up && current < end)
+                {
+                    break;
+                }
+                result.push(self.runtime.float(current));
+                current += step;
+                count += 1;
+            }
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            let start = self.fixnum_arg("number-sequence", from)?;
+            let end = self.fixnum_arg("number-sequence", to)?;
+            let step = match step {
+                Some(s) => self.fixnum_arg("number-sequence", s)?,
+                None if end >= start => 1,
+                None => -1,
+            };
+            if step == 0 {
+                self.error("primitive `number-sequence` step must be non-zero");
+                return None;
+            }
+            let mut result = Vec::new();
+            let mut current = start;
+            let going_up = step > 0;
+            while !result.is_empty() || !(going_up && current > end || !going_up && current < end) {
+                if going_up && current > end || !going_up && current < end {
+                    break;
+                }
+                result.push(self.fixnum(current, "number-sequence")?);
+                current = match current.checked_add(step) {
+                    Some(v) => v,
+                    None => {
+                        self.error("integer overflow in primitive `number-sequence`");
+                        return None;
+                    }
+                };
+                if result.len() > 1_000_000 {
+                    self.error("primitive `number-sequence` too many elements");
+                    return None;
+                }
+            }
+            Some(make_list(self.runtime, result.into_iter()))
+        }
+    }
+
     fn sequence_values(&mut self, sequence: LispValue) -> Option<Vec<LispValue>> {
         if sequence.is_nil() || self.runtime.is_cons(sequence) {
             return self.list_values(sequence);
@@ -2377,6 +2552,12 @@ impl Interpreter<'_, '_, '_> {
         let left = self.string_contents_owned(left)?;
         let right = self.string_contents_owned(right)?;
         Some(bool_value(left < right))
+    }
+
+    fn string_greaterp(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
+        let left = self.string_contents_owned(left)?;
+        let right = self.string_contents_owned(right)?;
+        Some(bool_value(left > right))
     }
 
     fn char_to_string(&mut self, value: LispValue) -> Option<LispValue> {
@@ -2895,14 +3076,28 @@ impl Interpreter<'_, '_, '_> {
             }
             Some(self.runtime.float(acc))
         } else {
+            let args0 = &args[0];
+            if self.runtime.is_bignum(*args0) {
+                let mut acc = self.runtime.bignum_data(*args0).ok()?;
+                for arg in &args[1..] {
+                    let value = self.number_arg("+", *arg)?;
+                    acc += rug::Integer::from(value as i64);
+                }
+                return Some(self.runtime.bignum(acc));
+            }
             let mut acc: i64 = 0;
-            for arg in args {
+            for (i, arg) in args.iter().enumerate() {
                 let value = self.fixnum_arg("+", *arg)?;
-                acc = match acc.checked_add(value) {
-                    Some(v) => v,
+                match acc.checked_add(value) {
+                    Some(v) => acc = v,
                     None => {
-                        self.error("integer overflow in primitive `+`");
-                        return None;
+                        let mut bignum_acc = rug::Integer::from(acc);
+                        bignum_acc += rug::Integer::from(value);
+                        for arg in &args[i + 1..] {
+                            let value = self.fixnum_arg("+", *arg)?;
+                            bignum_acc += rug::Integer::from(value);
+                        }
+                        return Some(self.runtime.bignum(bignum_acc));
                     }
                 };
             }
@@ -2923,14 +3118,28 @@ impl Interpreter<'_, '_, '_> {
             }
             Some(self.runtime.float(acc))
         } else {
+            let args0 = &args[0];
+            if self.runtime.is_bignum(*args0) {
+                let mut acc = self.runtime.bignum_data(*args0).ok()?;
+                for arg in &args[1..] {
+                    let value = self.number_arg("*", *arg)?;
+                    acc *= rug::Integer::from(value as i64);
+                }
+                return Some(self.runtime.bignum(acc));
+            }
             let mut acc: i64 = 1;
-            for arg in args {
+            for (i, arg) in args.iter().enumerate() {
                 let value = self.fixnum_arg("*", *arg)?;
-                acc = match acc.checked_mul(value) {
-                    Some(v) => v,
+                match acc.checked_mul(value) {
+                    Some(v) => acc = v,
                     None => {
-                        self.error("integer overflow in primitive `*`");
-                        return None;
+                        let mut bignum_acc = rug::Integer::from(acc);
+                        bignum_acc *= rug::Integer::from(value);
+                        for arg in &args[i + 1..] {
+                            let value = self.fixnum_arg("*", *arg)?;
+                            bignum_acc *= rug::Integer::from(value);
+                        }
+                        return Some(self.runtime.bignum(bignum_acc));
                     }
                 };
             }
@@ -2963,8 +3172,16 @@ impl Interpreter<'_, '_, '_> {
             match value {
                 Some(value) => self.fixnum(value, "-"),
                 None => {
-                    self.error("integer overflow in primitive `-`");
-                    None
+                    let mut bignum_acc = rug::Integer::from(first);
+                    if rest.is_empty() {
+                        bignum_acc = -bignum_acc;
+                    } else {
+                        for v in rest {
+                            let v = self.fixnum_arg("-", *v)?;
+                            bignum_acc -= rug::Integer::from(v);
+                        }
+                    }
+                    Some(self.runtime.bignum(bignum_acc))
                 }
             }
         }
@@ -3068,11 +3285,10 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn fixnum(&mut self, value: i64, name: &str) -> Option<LispValue> {
-        let Some(value) = LispValue::from_fixnum(value) else {
-            self.error(format!("integer overflow in primitive `{name}`"));
-            return None;
-        };
-        Some(value)
+        if let Some(value) = LispValue::from_fixnum(value) {
+            return Some(value);
+        }
+        Some(self.runtime.bignum(rug::Integer::from(value)))
     }
 
     fn exact_arity(&mut self, name: &str, args: &[LispValue], arity: usize) -> Option<()> {
@@ -3472,6 +3688,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "equal"
             | "consp"
             | "listp"
+            | "nlistp"
+            | "atom"
             | "numberp"
             | "integerp"
             | "natnump"
@@ -3481,6 +3699,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "stringp"
             | "vectorp"
             | "hash-table-p"
+            | "arrayp"
+            | "char-table-p"
             | "symbol-value"
             | "set"
             | "boundp"
@@ -3505,6 +3725,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "identity"
             | "ignore"
             | "list"
+            | "make-list"
             | "length"
             | "concat"
             | "substring"
@@ -3518,6 +3739,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-equal"
             | "string<"
             | "string-lessp"
+            | "string>"
+            | "string-greaterp"
             | "char-to-string"
             | "string-to-char"
             | "format"
@@ -3540,6 +3763,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "assq"
             | "assoc"
             | "copy-sequence"
+            | "copy-list"
             | "mapcar"
             | "mapc"
             | "+"
@@ -3553,11 +3777,14 @@ fn is_primitive_name(name: &str) -> bool {
             | "<="
             | ">"
             | ">="
+            | "/="
+            | "%"
             | "message"
             | "print"
             | "prin1"
             | "signal"
             | "error"
+            | "user-error"
             | "funcall"
             | "apply"
             | "functionp"
@@ -3610,8 +3837,11 @@ fn is_primitive_name(name: &str) -> bool {
             | "evenp"
             | "cl-evenp"
             | "cl-oddp"
+            | "cl-minusp"
+            | "cl-plusp"
             | "butlast"
             | "delq"
+            | "delete"
             | "remove"
             | "vconcat"
             | "nconc"
@@ -3624,6 +3854,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "ash"
             | "lsh"
             | "expt"
+            | "number-sequence"
     )
 }
 
@@ -4914,5 +5145,99 @@ mod tests {
         let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(format \"%f\" 3.14)");
         let s = rt.string_contents(value.unwrap()).unwrap();
         assert!(s.contains("3.14") || s.contains("3.1"));
+    }
+
+    #[test]
+    fn executes_not_equal() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(/= 1 2)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(/= 2 2)");
+        assert_eq!(value, Some(LispValue::NIL));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(/= 1.0 2.0)");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_percent_remainder() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(% 10 3)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(% 10.0 3.0)");
+        assert!(rt.is_float(value.unwrap()));
+    }
+
+    #[test]
+    fn executes_arrayp() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(arrayp [1 2])");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(arrayp 42)");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_atom() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(atom 42)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(atom nil)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(atom (cons 1 2))");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_minusp_and_plusp() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cl-minusp -5)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cl-minusp 5)");
+        assert_eq!(value, Some(LispValue::NIL));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp 3)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp -3)");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_nlistp() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(nlistp 42)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(nlistp (cons 1 2))");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_make_list() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(length (make-list 3 0))");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_number_sequence() {
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(equal (number-sequence 1 3) '(1 2 3))");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(= (length (number-sequence 0 5 2)) 3)");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_greaterp() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(string> \"z\" \"a\")");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(string> \"a\" \"z\")");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_user_error() {
+        let (result, _) = execute_result(";;; -*- lexical-binding: t; -*-\n(user-error \"boom\")");
+        assert!(result.value.is_none());
+        assert!(!result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn executes_copy_list() {
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(equal (copy-list '(1 2 3)) '(1 2 3))");
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 }
