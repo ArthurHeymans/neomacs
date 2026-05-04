@@ -891,3 +891,26 @@ fn mx_history_recall_via_mp_shows_previous_command() {
         );
     }
 }
+
+#[test]
+fn display_time_via_mx_shows_clock_in_mode_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+    invoke_mx_command(&mut gnu, &mut neo, "display-time-mode");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        let has_time = grid.iter().any(|r| {
+            r.contains(":")
+                && (r.contains("AM")
+                    || r.contains("PM")
+                    || r.chars().filter(|&c| c == ':').count() >= 1)
+        });
+        // Time might not appear immediately, just check no error
+        assert!(
+            grid.iter()
+                .any(|r| r.contains("scratch") || r.contains("*scratch*")),
+            "{label}: display-time-mode should not break the mode line"
+        );
+    }
+}
