@@ -1949,11 +1949,16 @@ impl Lowerer<'_> {
             let Some(items) = list_items(form) else {
                 break;
             };
-            if items.first().and_then(SurfaceForm::symbol_name) != Some("declare") {
+            let head = items.first().and_then(SurfaceForm::symbol_name);
+            if head == Some("declare") {
+                declarations.extend(self.parse_declarations(&items[1..]));
+                body_start += 1;
+            } else if head == Some("interactive") {
+                // Strip (interactive ...) — it's a compile-time annotation
+                body_start += 1;
+            } else {
                 break;
             }
-            declarations.extend(self.parse_declarations(&items[1..]));
-            body_start += 1;
         }
         (declarations, &forms[body_start..])
     }
