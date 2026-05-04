@@ -960,3 +960,23 @@ fn universal_argument_cu_3_cf_moves_forward_three_chars() {
         );
     }
 }
+
+#[test]
+fn negative_argument_via_mminus_reverses_direction() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "abcdefgh");
+    send_both(&mut gnu, &mut neo, "C-e");
+
+    // M-- C-b should be backward-char with negative = forward
+    send_both(&mut gnu, &mut neo, "M-- C-b");
+    send_both_raw(&mut gnu, &mut neo, b"X");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("abcdefghX")),
+            "{label}: M-- C-b should move forward (inserting X at end)"
+        );
+    }
+}
