@@ -1022,7 +1022,20 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_fixnum() || self.runtime.is_bignum(args[0]))),
             "natnump" | "wholenump" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(args[0].as_fixnum().is_some_and(|value| value >= 0))),
+                .map(|_| {
+                    if let Some(v) = args[0].as_fixnum() {
+                        v >= 0
+                    } else if self.runtime.is_bignum(args[0]) {
+                        if let Some(i) = self.runtime.as_integer(args[0]) {
+                            i >= 0
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                })
+                .map(bool_value),
             "zerop" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_float(args[0]) {
                     self.number_arg(name, args[0]).map(|v| bool_value(v == 0.0))
@@ -1055,14 +1068,24 @@ impl Interpreter<'_, '_, '_> {
             "nlistp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(!self.runtime.is_cons(args[0]) || args[0].is_nil())),
-            "cl-minusp" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.number_arg(name, args[0]))
-                .map(|value| bool_value(value < 0.0)),
-            "cl-plusp" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.number_arg(name, args[0]))
-                .map(|value| bool_value(value > 0.0)),
+            "cl-minusp" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(bool_value(val < 0))
+                } else {
+                    self.number_arg(name, args[0])
+                        .map(|value| bool_value(value < 0.0))
+                }
+            }),
+            "cl-plusp" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(bool_value(val > 0))
+                } else {
+                    self.number_arg(name, args[0])
+                        .map(|value| bool_value(value > 0.0))
+                }
+            }),
             "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.symbol_value(args[0]);
                 self.runtime_value(result)
