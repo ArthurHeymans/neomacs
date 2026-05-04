@@ -1026,6 +1026,9 @@ impl Interpreter<'_, '_, '_> {
             "zerop" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_float(args[0]) {
                     self.number_arg(name, args[0]).map(|v| bool_value(v == 0.0))
+                } else if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(bool_value(val == 0))
                 } else {
                     self.fixnum_arg(name, args[0]).map(|v| bool_value(v == 0))
                 }
@@ -1210,12 +1213,22 @@ impl Interpreter<'_, '_, '_> {
                 bool_value(is_keyword)
             }),
             "evenp" | "cl-evenp" => self.exact_arity(name, args, 1).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
-                Some(bool_value(val % 2 == 0))
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(bool_value(val.is_even()))
+                } else {
+                    let val = self.fixnum_arg(name, args[0])?;
+                    Some(bool_value(val % 2 == 0))
+                }
             }),
             "cl-oddp" => self.exact_arity(name, args, 1).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
-                Some(bool_value(val % 2 != 0))
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(bool_value(val.is_odd()))
+                } else {
+                    let val = self.fixnum_arg(name, args[0])?;
+                    Some(bool_value(val % 2 != 0))
+                }
             }),
             "butlast" => self
                 .min_max_arity(name, args, 1, 2)
@@ -1264,43 +1277,84 @@ impl Interpreter<'_, '_, '_> {
                     };
                     return Some(self.fixnum(identity, name));
                 }
-                let init = self.fixnum_arg(name, args[0])?;
-                let op: fn(i64, i64) -> i64 = match name {
-                    "logand" => |a, b| a & b,
-                    "logior" => |a, b| a | b,
-                    "logxor" => |a, b| a ^ b,
-                    _ => unreachable!(),
-                };
-                let mut result = init;
-                for arg in &args[1..] {
-                    let val = self.fixnum_arg(name, *arg)?;
-                    result = op(result, val);
+                if self.has_bignum_arg(args) {
+                    let init = self.bignum_arg(name, args[0])?;
+                    let op: fn(&rug::Integer, &rug::Integer) -> rug::Integer = match name {
+                        "logand" => |a, b| rug::Integer::from(a & b),
+                        "logior" => |a, b| rug::Integer::from(a | b),
+                        "logxor" => |a, b| rug::Integer::from(a ^ b),
+                        _ => unreachable!(),
+                    };
+                    let mut result = init;
+                    for arg in &args[1..] {
+                        let val = self.bignum_arg(name, *arg)?;
+                        result = op(&result, &val);
+                    }
+                    Some(self.runtime.bignum(result))
+                } else {
+                    let init = self.fixnum_arg(name, args[0])?;
+                    let op: fn(i64, i64) -> i64 = match name {
+                        "logand" => |a, b| a & b,
+                        "logior" => |a, b| a | b,
+                        "logxor" => |a, b| a ^ b,
+                        _ => unreachable!(),
+                    };
+                    let mut result = init;
+                    for arg in &args[1..] {
+                        let val = self.fixnum_arg(name, *arg)?;
+                        result = op(result, val);
+                    }
+                    self.fixnum(result, name)
                 }
-                self.fixnum(result, name)
             }
             "lognot" => self.exact_arity(name, args, 1).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
-                self.fixnum(!val, name)
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    Some(self.runtime.bignum(!val))
+                } else {
+                    let val = self.fixnum_arg(name, args[0])?;
+                    self.fixnum(!val, name)
+                }
             }),
             "ash" => self.exact_arity(name, args, 2).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
                 let count = self.fixnum_arg(name, args[1])?;
-                let result = if count >= 0 {
-                    val.wrapping_shl(count as u32)
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    let result = if count >= 0 {
+                        val << (count as u32)
+                    } else {
+                        val >> ((-count) as u32)
+                    };
+                    Some(self.runtime.bignum(result))
                 } else {
-                    val.wrapping_shr((-count) as u32)
-                };
-                self.fixnum(result, name)
+                    let val = self.fixnum_arg(name, args[0])?;
+                    let result = if count >= 0 {
+                        val.wrapping_shl(count as u32)
+                    } else {
+                        val.wrapping_shr((-count) as u32)
+                    };
+                    self.fixnum(result, name)
+                }
             }),
             "lsh" => self.exact_arity(name, args, 2).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
                 let count = self.fixnum_arg(name, args[1])?;
-                let result = if count >= 0 {
-                    val.wrapping_shl(count as u32)
+                if self.runtime.is_bignum(args[0]) {
+                    let val = self.bignum_arg(name, args[0])?;
+                    let result = if count >= 0 {
+                        val << (count as u32)
+                    } else {
+                        val >> ((-count) as u32)
+                    };
+                    Some(self.runtime.bignum(result))
                 } else {
-                    ((val as u64).wrapping_shr((-count) as u32)) as i64
-                };
-                self.fixnum(result, name)
+                    let val = self.fixnum_arg(name, args[0])?;
+                    let result = if count >= 0 {
+                        val.wrapping_shl(count as u32)
+                    } else {
+                        ((val as u64).wrapping_shr((-count) as u32)) as i64
+                    };
+                    self.fixnum(result, name)
+                }
             }),
             "expt" => self.exact_arity(name, args, 2).and_then(|_| {
                 if self.has_float_arg(args) {
@@ -3037,8 +3091,16 @@ impl Interpreter<'_, '_, '_> {
                 return Some(self.runtime.float(value));
             }
         }
-        let n = i64::from_str_radix(contents, radix).unwrap_or(0);
-        self.fixnum(n, "string-to-number")
+        match i64::from_str_radix(contents, radix) {
+            Ok(n) => self.fixnum(n, "string-to-number"),
+            Err(_) => {
+                if let Ok(n) = rug::Integer::from_str_radix(contents, radix as i32) {
+                    Some(self.runtime.bignum(n))
+                } else {
+                    self.fixnum(0, "string-to-number")
+                }
+            }
+        }
     }
 
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
