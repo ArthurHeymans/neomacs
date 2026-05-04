@@ -1,8 +1,6 @@
 //! TUI comparison tests: replace sort.
 
 mod support;
-use neomacs_tui_tests::*;
-use std::fs;
 use std::time::Duration;
 use support::*;
 

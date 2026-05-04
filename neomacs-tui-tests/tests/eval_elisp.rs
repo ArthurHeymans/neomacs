@@ -1,8 +1,6 @@
 //! TUI comparison tests: eval elisp.
 
 mod support;
-use neomacs_tui_tests::*;
-use std::fs;
 use std::time::Duration;
 use support::*;
 

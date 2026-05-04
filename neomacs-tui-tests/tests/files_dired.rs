@@ -3,7 +3,6 @@
 mod support;
 use neomacs_tui_tests::*;
 use std::fs;
-use std::path::PathBuf;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use support::*;

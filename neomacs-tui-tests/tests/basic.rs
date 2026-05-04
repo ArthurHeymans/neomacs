@@ -900,7 +900,7 @@ fn display_time_via_mx_shows_clock_in_mode_line() {
 
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
-        let has_time = grid.iter().any(|r| {
+        let _has_time = grid.iter().any(|r| {
             r.contains(":")
                 && (r.contains("AM")
                     || r.contains("PM")
