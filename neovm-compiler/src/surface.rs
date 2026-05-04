@@ -1,6 +1,6 @@
 use crate::source::Span;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SurfaceForm {
     pub kind: SurfaceKind,
     pub span: Span,
@@ -19,7 +19,7 @@ impl SurfaceForm {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SurfaceKind {
     Atom(SurfaceAtom),
     List(Vec<SurfaceForm>),
@@ -42,6 +42,8 @@ pub enum SurfaceAtom {
     String(String),
     Char(i64),
 }
+
+impl Eq for SurfaceAtom {}
 
 impl SurfaceAtom {
     pub fn symbol(name: impl Into<String>) -> Self {

@@ -1240,6 +1240,14 @@ impl Interpreter<'_, '_, '_> {
                             None
                         }
                     }
+                } else if self.runtime.is_bignum(args[0]) {
+                    match self.runtime.bignum_data(args[0]) {
+                        Ok(value) => Some(self.runtime.string(value.to_string())),
+                        Err(e) => {
+                            self.runtime_error(e);
+                            None
+                        }
+                    }
                 } else {
                     let n = self.fixnum_arg(name, args[0])?;
                     Some(self.runtime.string(n.to_string()))
@@ -1299,6 +1307,23 @@ impl Interpreter<'_, '_, '_> {
                     let base = self.number_arg(name, args[0])?;
                     let exp = self.number_arg(name, args[1])?;
                     Some(self.runtime.float(base.powf(exp)))
+                } else if self.has_bignum_arg(args) {
+                    let base = self.bignum_arg(name, args[0])?;
+                    let exp = self.bignum_arg(name, args[1])?;
+                    if exp < 0 {
+                        if base == 0 {
+                            return Some(LispValue::NIL);
+                        }
+                        return Some(LispValue::NIL);
+                    }
+                    let exp_u32: u32 = exp.to_u32().unwrap_or(u32::MAX);
+                    let mut result = rug::Integer::from(1);
+                    let mut count = 0u32;
+                    while count < exp_u32 {
+                        result *= &base;
+                        count += 1;
+                    }
+                    Some(self.runtime.bignum(result))
                 } else {
                     let base = self.fixnum_arg(name, args[0])?;
                     let exp = self.fixnum_arg(name, args[1])?;
@@ -1472,6 +1497,9 @@ impl Interpreter<'_, '_, '_> {
                 if self.runtime.is_float(args[0]) {
                     let value = self.number_arg(name, args[0])?;
                     Some(self.runtime.float(value + 1.0))
+                } else if self.runtime.is_bignum(args[0]) {
+                    let value = self.bignum_arg(name, args[0])?;
+                    Some(self.runtime.bignum(value + 1))
                 } else {
                     let value = self.fixnum_arg(name, args[0])?;
                     value.checked_add(1).and_then(|v| self.fixnum(v, name))
@@ -1481,6 +1509,9 @@ impl Interpreter<'_, '_, '_> {
                 if self.runtime.is_float(args[0]) {
                     let value = self.number_arg(name, args[0])?;
                     Some(self.runtime.float(value - 1.0))
+                } else if self.runtime.is_bignum(args[0]) {
+                    let value = self.bignum_arg(name, args[0])?;
+                    Some(self.runtime.bignum(value - 1))
                 } else {
                     let value = self.fixnum_arg(name, args[0])?;
                     value.checked_sub(1).and_then(|v| self.fixnum(v, name))
@@ -1529,7 +1560,13 @@ impl Interpreter<'_, '_, '_> {
                     self.fixnum(dividend % divisor, name)
                 }
             }),
-            "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
+            "message" => {
+                if args.is_empty() {
+                    Some(self.runtime.string(String::new()))
+                } else {
+                    self.format_string(args[0], &args[1..])
+                }
+            }
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "signal" => self.exact_arity(name, args, 2).and_then(|_| {
                 self.pending_signal = Some(SignaledValue {
@@ -1540,13 +1577,13 @@ impl Interpreter<'_, '_, '_> {
             }),
             "error" => {
                 let symbol = self.runtime.intern("error");
-                let data = make_list(self.runtime, args.iter().copied());
+                let data = self.format_signal_data(args);
                 self.pending_signal = Some(SignaledValue { symbol, data });
                 None
             }
             "user-error" => {
                 let symbol = self.runtime.intern("user-error");
-                let data = make_list(self.runtime, args.iter().copied());
+                let data = self.format_signal_data(args);
                 self.pending_signal = Some(SignaledValue { symbol, data });
                 None
             }
@@ -1622,6 +1659,18 @@ impl Interpreter<'_, '_, '_> {
                         return None;
                     }
                     Some(self.runtime.float(dividend % divisor))
+                } else if self.has_bignum_arg(args) {
+                    let dividend = self.bignum_arg(name, args[0])?;
+                    let divisor = self.bignum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    Some(self.runtime.bignum(dividend % divisor))
                 } else {
                     let dividend = self.fixnum_arg(name, args[0])?;
                     let divisor = self.fixnum_arg(name, args[1])?;
@@ -1640,6 +1689,9 @@ impl Interpreter<'_, '_, '_> {
                 if self.runtime.is_float(args[0]) {
                     let value = self.number_arg(name, args[0])?;
                     Some(self.runtime.float(value.abs()))
+                } else if self.runtime.is_bignum(args[0]) {
+                    let value = self.bignum_arg(name, args[0])?;
+                    Some(self.runtime.bignum(value.abs()))
                 } else {
                     let value = self.fixnum_arg(name, args[0])?;
                     value.checked_abs().and_then(|v| self.fixnum(v, name))
@@ -1657,6 +1709,13 @@ impl Interpreter<'_, '_, '_> {
                         result = result.max(value);
                     }
                     Some(self.runtime.float(result))
+                } else if self.has_bignum_arg(args) {
+                    let mut result = self.bignum_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.bignum_arg(name, *arg)?;
+                        result = result.max(value);
+                    }
+                    Some(self.runtime.bignum(result))
                 } else {
                     let mut result = self.fixnum_arg(name, args[0])?;
                     for arg in &args[1..] {
@@ -1678,6 +1737,13 @@ impl Interpreter<'_, '_, '_> {
                         result = result.min(value);
                     }
                     Some(self.runtime.float(result))
+                } else if self.has_bignum_arg(args) {
+                    let mut result = self.bignum_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.bignum_arg(name, *arg)?;
+                        result = result.min(value);
+                    }
+                    Some(self.runtime.bignum(result))
                 } else {
                     let mut result = self.fixnum_arg(name, args[0])?;
                     for arg in &args[1..] {
@@ -2940,6 +3006,17 @@ impl Interpreter<'_, '_, '_> {
         Some(self.runtime.format_value(value))
     }
 
+    fn format_signal_data(&mut self, args: &[LispValue]) -> LispValue {
+        if args.is_empty() {
+            return make_list(self.runtime, std::iter::empty());
+        }
+        let formatted = self.format_string(args[0], &args[1..]);
+        match formatted {
+            Some(msg) => make_list(self.runtime, [msg].into_iter()),
+            None => make_list(self.runtime, args.iter().copied()),
+        }
+    }
+
     fn aref(&mut self, sequence: LispValue, index: LispValue) -> Option<LispValue> {
         let index = self.sequence_index("aref", index)?;
         if self.runtime.is_vector(sequence) {
@@ -3263,8 +3340,7 @@ impl Interpreter<'_, '_, '_> {
             self.error("primitive `/` requires at least one argument");
             return None;
         };
-        let is_float = self.has_float_arg(args);
-        if is_float {
+        if self.has_float_arg(args) {
             let first = self.number_arg("/", *first)?;
             let value = rest.iter().try_fold(first, |acc, v| {
                 let v = self.number_arg("/", *v)?;
@@ -3279,6 +3355,21 @@ impl Interpreter<'_, '_, '_> {
                 Some(acc / v)
             })?;
             Some(self.runtime.float(value))
+        } else if self.has_bignum_arg(args) {
+            let first = self.bignum_arg("/", *first)?;
+            let value = rest.iter().try_fold(first, |acc, v| {
+                let v = self.bignum_arg("/", *v)?;
+                if v == 0 {
+                    let symbol = self.runtime.intern("arith-error");
+                    self.pending_signal = Some(SignaledValue {
+                        symbol,
+                        data: LispValue::NIL,
+                    });
+                    return None;
+                }
+                Some(acc / v)
+            })?;
+            Some(self.runtime.bignum(value))
         } else {
             let first = self.fixnum_arg("/", *first)?;
             let value = rest.iter().try_fold(first, |acc, v| {
@@ -3295,7 +3386,22 @@ impl Interpreter<'_, '_, '_> {
             });
             match value {
                 Some(value) => self.fixnum(value, "/"),
-                None => None,
+                None => {
+                    let first = self.bignum_arg("/", args[0])?;
+                    let value = args[1..].iter().try_fold(first, |acc, v| {
+                        let v = self.bignum_arg("/", *v)?;
+                        if v == 0 {
+                            let symbol = self.runtime.intern("arith-error");
+                            self.pending_signal = Some(SignaledValue {
+                                symbol,
+                                data: LispValue::NIL,
+                            });
+                            return None;
+                        }
+                        Some(acc / v)
+                    })?;
+                    Some(self.runtime.bignum(value))
+                }
             }
         }
     }
@@ -3313,6 +3419,22 @@ impl Interpreter<'_, '_, '_> {
             Some(bool_value(
                 values.windows(2).all(|pair| compare(pair[0], pair[1])),
             ))
+        } else if self.has_bignum_arg(args) {
+            let values = args
+                .iter()
+                .map(|value| self.bignum_arg("comparison", *value))
+                .collect::<Option<Vec<rug::Integer>>>()?;
+            Some(bool_value(match args.len() {
+                0 => true,
+                1 => true,
+                _ => values.windows(2).all(|pair| {
+                    let left: f64 = pair[0].to_f64();
+                    let right: f64 = pair[1].to_f64();
+                    // Use f64 for comparison when possible since Integer doesn't
+                    // implement Ord in all configurations
+                    compare(left, right)
+                }),
+            }))
         } else {
             let values = args
                 .iter()
@@ -3353,6 +3475,19 @@ impl Interpreter<'_, '_, '_> {
 
     fn has_float_arg(&self, args: &[LispValue]) -> bool {
         args.iter().any(|v| self.runtime.is_float(*v))
+    }
+
+    fn has_bignum_arg(&self, args: &[LispValue]) -> bool {
+        args.iter().any(|v| self.runtime.is_bignum(*v))
+    }
+
+    fn bignum_arg(&mut self, name: &str, value: LispValue) -> Option<rug::Integer> {
+        self.runtime.as_integer(value).or_else(|| {
+            self.error(format!(
+                "primitive `{name}` expected an integer, got a float or non-number"
+            ));
+            None
+        })
     }
 
     fn fixnum(&mut self, value: i64, name: &str) -> Option<LispValue> {

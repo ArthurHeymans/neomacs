@@ -142,6 +142,7 @@ pub struct LambdaList {
     pub rest: Option<String>,
     pub key: Vec<String>,
     pub aux: Vec<String>,
+    pub destructured: Vec<(String, SurfaceForm)>,
 }
 
 impl LambdaList {
@@ -1822,8 +1823,13 @@ impl Lowerer<'_> {
         let mut section = ParamSection::Required;
         for item in items {
             let Some(name) = item.symbol_name() else {
-                // Destructuring parameter — not yet supported
-                self.error(item.span, "destructuring parameters are not yet supported");
+                let temp = format!("\0destruct.{}", self.fresh_id());
+                params.destructured.push((temp.clone(), item.clone()));
+                match section {
+                    ParamSection::Required => params.required.push(temp),
+                    ParamSection::Optional => params.optional.push(temp),
+                    _ => {}
+                }
                 continue;
             };
             match name {
