@@ -144,6 +144,56 @@ fn lower_defun_to_ssa_function(defun: &HirDefun) -> LowerOutput<SsaFunction> {
             value,
         });
     }
+
+    // &key implicit rest param
+    if !defun.params.key.is_empty() && defun.params.rest.is_none() {
+        let rest_name = defun.params.implicit_rest_name().unwrap_or_default();
+        let rest_value = builder.append_block_param(builder.current_block, Some(rest_name.clone()));
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: rest_name.clone(),
+            value: rest_value,
+        });
+    }
+
+    // Destructured params
+    for (temp_name, pattern) in &defun.params.destructured {
+        lower_destructured_param(&mut builder, temp_name, pattern);
+    }
+
+    // &key extraction
+    if !defun.params.key.is_empty() {
+        let rest_name = defun.params.implicit_rest_name().unwrap_or_default();
+        for key_name in &defun.params.key {
+            let kw_name = format!(":{key_name}");
+            let rest_val =
+                builder.emit_value(SsaInstKind::LexicalGet(rest_name.clone()), Effects::pure());
+            let kw_val = builder.emit_value(
+                SsaInstKind::Const(SsaConst::Symbol(kw_name)),
+                Effects::pure(),
+            );
+            let plist_get = builder.emit_value(
+                SsaInstKind::CallNamed {
+                    name: "plist-get".to_string(),
+                    args: vec![rest_val, kw_val],
+                },
+                Effects::conservative_call(),
+            );
+            builder.emit_no_result(SsaInstKind::BindLexical {
+                name: key_name.clone(),
+                value: plist_get,
+            });
+        }
+    }
+
+    // &aux initialization
+    for aux_name in &defun.params.aux {
+        let nil = builder.emit_value(SsaInstKind::Const(SsaConst::Nil), Effects::pure());
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: aux_name.clone(),
+            value: nil,
+        });
+    }
+
     let value = builder.lower_expr(&defun.body);
     if value.is_some() {
         builder.set_terminator(SsaTerminator::Return(value));
