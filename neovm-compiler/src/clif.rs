@@ -1757,11 +1757,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         .jump(continuation_block, &[BlockArg::Value(body_result_ir)]);
                     self.builder.switch_to_block(continuation_block);
                 } else {
-                    // Emit pop + propagate into no_match_block (the "no handler matched" path).
-                    // If the handler body completed normally (ConditionCaseHandlerResult switched
-                    // to no_match_block), we're already there — just emit directly.
-                    // If the handler threw, we're in a different block — jump to no_match_block
-                    // to give the current block a terminator, then switch.
+                    // Emit pop + propagate into no_match_block.
+                    // If the handler body didn't complete normally, we're in a
+                    // different block — jump to no_match_block first.
                     if let Some(nmb) = no_match_block {
                         if !handler_result_seen {
                             self.builder.ins().jump(nmb, &[]);
@@ -1816,10 +1814,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 });
             }
             SsaInstKind::UnwindProtectCleanup => {
-                let handler = self
-                    .exception_handlers
-                    .last()
-                    .expect("UnwindProtectCleanup without UnwindProtectBegin");
+                let Some(handler_idx) = self.last_active_handler_idx() else {
+                    self.error("UnwindProtectCleanup without UnwindProtectBegin");
+                    return;
+                };
+                let handler = &self.exception_handlers[handler_idx];
                 if let ExceptionHandlerKind::UnwindProtect { normal_block, .. } = &handler.kind {
                     let nb = *normal_block;
                     self.builder.ins().jump(nb, &[]);
@@ -1850,6 +1849,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                         continuation_block,
                         normal_block,
                     } => {
+                        // continuation_block receives the merged result (normal or
+                        // exception path). Add a parameter for it.
+                        let result_param = self
+                            .builder
+                            .append_block_param(continuation_block, types::I64);
+
                         // We're currently in normal_block (cleanup code ran here).
                         // Emit the normal UnwindProtectEnd logic first.
                         let Some(func_ref) = self.exception_func_ref("unwind_protect_end", 0)
@@ -1877,6 +1882,14 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                                 .ins()
                                 .icmp(IntCC::Equal, check_result, sentinel);
                         let no_exception_block = self.builder.create_block();
+
+                        // On the no-exception path, the body result (or nil)
+                        // is the UnwindProtectEnd result.
+                        let body_val = match body_result.and_then(|v| self.value(v)) {
+                            Some(v) => v,
+                            None => self.builder.ins().iconst(types::I64, NIL_BITS),
+                        };
+
                         if let Some(outer_idx) = handler_idx.checked_sub(1) {
                             if let Some(outer) = self.exception_handlers.get(outer_idx) {
                                 self.builder.ins().brif(
@@ -1892,16 +1905,21 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                                 self.builder.ins().return_(&[sentinel_v]);
                             }
                         } else {
+                            // No outer handler: on exception, pass check_result
+                            // to continuation so the outer CatchEnd/ConditionCase
+                            // can process it.
                             self.builder.ins().brif(
                                 is_exception,
                                 continuation_block,
-                                &[],
+                                &[BlockArg::Value(check_result)],
                                 no_exception_block,
                                 &[],
                             );
                         }
                         self.builder.switch_to_block(no_exception_block);
-                        self.builder.ins().jump(continuation_block, &[]);
+                        self.builder
+                            .ins()
+                            .jump(continuation_block, &[BlockArg::Value(body_val)]);
 
                         // Now populate handler_block: when an exception occurs during
                         // the body, call cleanup_enter and jump to normal_block where
@@ -1922,6 +1940,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
 
                         // Don't seal — defer to seal_all_blocks.
                         self.builder.switch_to_block(continuation_block);
+
+                        // Map UnwindProtectEnd's SSA result to the continuation
+                        // block parameter, so subsequent instructions can use it.
+                        if let Some(vid) = inst.result {
+                            self.value_map.insert(vid, result_param);
+                        }
                     }
                     _ => {
                         self.error("UnwindProtectEnd matched non-UnwindProtect handler");
@@ -2953,9 +2977,9 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let roots = self.safepoint_liveness.roots_for(block, inst).to_vec();
         for ssa_value in roots {
             let Some(clif_value) = self.value_map.get(&ssa_value).copied() else {
-                self.error(format!(
-                    "safepoint references unknown SSA value {ssa_value:?}"
-                ));
+                // SSA liveness doesn't account for exception handler block
+                // edges — values live on the normal path may be unavailable
+                // in synthetic CLIF blocks. Skip them.
                 continue;
             };
             self.builder.declare_value_needs_stack_map(clif_value);

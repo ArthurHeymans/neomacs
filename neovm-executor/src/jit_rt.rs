@@ -444,6 +444,9 @@ thread_local! {
 struct JitExceptionState {
     pending_throw: Option<(LispValue, LispValue)>, // (tag, value)
     pending_signal: Option<(LispValue, LispValue)>, // (symbol, data)
+    /// Saved by condition_handler_match when a handler matches, so
+    /// get_signal_data can retrieve it for the var binding.
+    saved_handler_signal: Option<(LispValue, LispValue)>,
     catch_depth: usize,
 }
 
@@ -452,6 +455,7 @@ impl JitExceptionState {
         Self {
             pending_throw: None,
             pending_signal: None,
+            saved_handler_signal: None,
             catch_depth: 0,
         }
     }
@@ -602,8 +606,12 @@ jit_shim!(__neomacs_rt_condition_case_begin(vmctx: i64) -> i64 {
 
 jit_shim!(__neomacs_rt_condition_case_end(vmctx: i64) -> i64 {
     pop_catch();
-    // Clear any pending signal if we reached here normally
+    // Clear any pending signal if we reached here normally,
+    // and clear saved handler signal from a previous match.
     take_pending_signal();
+    JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().saved_handler_signal = None;
+    });
     0
 });
 
@@ -635,13 +643,26 @@ jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pa
             })
             .unwrap_or(false)
     });
+    if matches {
+        // Consume the pending signal and save it for get_signal_data.
+        // This prevents the signal from leaking to subsequent handlers
+        // or to the next condition-case form.
+        let signal = take_pending_signal();
+        JIT_EXCEPTION_STATE.with(|state| {
+            state.borrow_mut().saved_handler_signal = signal;
+        });
+    }
     bool_value(matches).to_abi_i64()
 });
 
 jit_shim!(__neomacs_rt_get_signal_data(vmctx: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
     let rt = &mut *ctx.runtime;
-    match take_pending_signal() {
+    // The signal was saved by condition_handler_match when the handler matched.
+    let signal = JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow_mut().saved_handler_signal.take()
+    });
+    match signal {
         Some((symbol, data)) => {
             let condition = rt.cons(symbol, data);
             condition.to_abi_i64()
@@ -724,6 +745,7 @@ fn dispatch_primitive(
         "null" | "not" => Some(bool_value(args[0].is_nil())),
         "consp" => Some(bool_value(rt.is_cons(args[0]))),
         "listp" => Some(bool_value(args[0].is_nil() || rt.is_cons(args[0]))),
+        "nlistp" => Some(bool_value(!args[0].is_nil() && !rt.is_cons(args[0]))),
         "numberp" => Some(bool_value(rt.is_number(args[0]))),
         "integerp" => Some(bool_value(args[0].is_fixnum())),
         "floatp" => Some(bool_value(rt.is_float(args[0]))),
