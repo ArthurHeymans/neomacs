@@ -914,3 +914,28 @@ fn display_time_via_mx_shows_clock_in_mode_line() {
         );
     }
 }
+
+#[test]
+fn beginning_of_buffer_via_mlessthan_goes_to_start() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "bob-test.txt";
+    let content = "line A\nline B\n";
+
+    open_home_file(&mut gnu, &mut neo, name, content, "C-x C-f");
+    // Move to end, then to beginning
+    send_both(&mut gnu, &mut neo, "M->");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    // Insert at point to verify position
+    send_both_raw(&mut gnu, &mut neo, b"X");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("Xline A")),
+            "{label}: M-< should go to beginning of buffer"
+        );
+    }
+}
