@@ -1456,6 +1456,15 @@ impl Interpreter<'_, '_, '_> {
             "nthcdr" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.nthcdr(args[0], args[1])),
+            "sort" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.sort_seq(args[0], args[1])),
+            "safe-length" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.safe_length(args[0])),
+            "subseq" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.subseq(args[0], args[1], args.get(2).copied())),
             "last" => self
                 .min_arity(name, args, 1)
                 .and_then(|_| self.last(args[0])),
@@ -2216,6 +2225,100 @@ impl Interpreter<'_, '_, '_> {
                 return Some(current);
             }
             current = cdr_val;
+        }
+    }
+
+    fn sort_seq(&mut self, seq: LispValue, predicate: LispValue) -> Option<LispValue> {
+        if self.runtime.is_vector(seq) {
+            let mut elements = match self.runtime.vector_elements(seq) {
+                Ok(e) => e,
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            };
+            elements.sort_by(|a, b| {
+                let result = self.execute_funcall(predicate, &[*a, *b]);
+                match result {
+                    Some(LispValue::NIL) => std::cmp::Ordering::Greater,
+                    _ => std::cmp::Ordering::Less,
+                }
+            });
+            let result = self.runtime.vector(elements);
+            Some(result)
+        } else {
+            let mut values = self.list_values(seq)?;
+            values.sort_by(|a, b| {
+                let result = self.execute_funcall(predicate, &[*a, *b]);
+                match result {
+                    Some(LispValue::NIL) => std::cmp::Ordering::Greater,
+                    _ => std::cmp::Ordering::Less,
+                }
+            });
+            Some(make_list(self.runtime, values.into_iter()))
+        }
+    }
+
+    fn safe_length(&mut self, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut count: i64 = 0;
+        while !current.is_nil() {
+            if !self.runtime.is_cons(current) {
+                return self.fixnum(count, "safe-length");
+            }
+            count += 1;
+            if count > 1_000_000 {
+                return Some(LispValue::NIL);
+            }
+            let cdr = self.runtime.cdr(current);
+            current = self.runtime_value(cdr)?;
+        }
+        self.fixnum(count, "safe-length")
+    }
+
+    fn subseq(
+        &mut self,
+        seq: LispValue,
+        start: LispValue,
+        end: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let start_idx = self.sequence_index("subseq", start)?;
+        let len = if self.runtime.is_string(seq) {
+            self.string_contents_owned(seq)?.len()
+        } else {
+            match self.runtime.vector_elements(seq) {
+                Ok(e) => e.len(),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            }
+        };
+        let end_idx = match end {
+            Some(e) if !e.is_nil() => self.sequence_index("subseq", e)?,
+            _ => len,
+        };
+        if start_idx > len {
+            let symbol = self.runtime.intern("args-out-of-range");
+            let data = make_list(self.runtime, [seq, start].into_iter());
+            self.pending_signal = Some(SignaledValue { symbol, data });
+            return None;
+        }
+        let end_idx = end_idx.min(len);
+        if self.runtime.is_string(seq) {
+            let contents = self.string_contents_owned(seq)?;
+            let slice = &contents[start_idx..end_idx];
+            Some(self.runtime.string(slice.to_string()))
+        } else {
+            let elements = match self.runtime.vector_elements(seq) {
+                Ok(e) => e,
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            };
+            let slice = elements[start_idx..end_idx].to_vec();
+            Some(self.runtime.vector(slice))
         }
     }
 
@@ -3941,6 +4044,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-trim-left"
             | "string-trim-right"
             | "substring-no-properties"
+            | "subseq"
             | "string="
             | "string-equal"
             | "string<"
@@ -3965,8 +4069,13 @@ fn is_primitive_name(name: &str) -> bool {
             | "clrhash"
             | "maphash"
             | "reverse"
+            | "nreverse"
             | "append"
             | "nth"
+            | "nthcdr"
+            | "last"
+            | "safe-length"
+            | "sort"
             | "memq"
             | "member"
             | "assq"
@@ -5447,6 +5556,54 @@ mod tests {
     fn executes_copy_list() {
         let (value, _) =
             execute(";;; -*- lexical-binding: t; -*-\n(equal (copy-list '(1 2 3)) '(1 2 3))");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sort_on_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (sort '(3 1 2) '<) '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sort_on_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (sort [3 1 2] '<) [1 2 3])",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_safe_length_on_list() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(safe-length '(1 2 3))");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_safe_length_on_nil() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(safe-length nil)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_subseq_on_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (subseq \"hello\" 0 3) \"hel\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_subseq_on_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (subseq [10 20 30 40] 1 3) [20 30])",
+        );
         assert_eq!(value, Some(LispValue::TRUE));
     }
 }
