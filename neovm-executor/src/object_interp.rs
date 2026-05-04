@@ -3765,12 +3765,11 @@ impl Interpreter<'_, '_, '_> {
             }
             Some(self.runtime.float(acc))
         } else {
-            let args0 = &args[0];
-            if self.runtime.is_bignum(*args0) {
-                let mut acc = self.runtime.bignum_data(*args0).ok()?;
+            if self.has_bignum_arg(args) {
+                let mut acc = self.bignum_arg("+", args[0])?;
                 for arg in &args[1..] {
-                    let value = self.number_arg("+", *arg)?;
-                    acc += rug::Integer::from(value as i64);
+                    let value = self.bignum_arg("+", *arg)?;
+                    acc += value;
                 }
                 return Some(self.runtime.bignum(acc));
             }
@@ -3807,12 +3806,11 @@ impl Interpreter<'_, '_, '_> {
             }
             Some(self.runtime.float(acc))
         } else {
-            let args0 = &args[0];
-            if self.runtime.is_bignum(*args0) {
-                let mut acc = self.runtime.bignum_data(*args0).ok()?;
+            if self.has_bignum_arg(args) {
+                let mut acc = self.bignum_arg("*", args[0])?;
                 for arg in &args[1..] {
-                    let value = self.number_arg("*", *arg)?;
-                    acc *= rug::Integer::from(value as i64);
+                    let value = self.bignum_arg("*", *arg)?;
+                    acc *= value;
                 }
                 return Some(self.runtime.bignum(acc));
             }
@@ -3850,6 +3848,18 @@ impl Interpreter<'_, '_, '_> {
                 Some(acc - v)
             })?;
             Some(self.runtime.float(value))
+        } else if self.has_bignum_arg(args) {
+            let first_val = self.bignum_arg("-", *first)?;
+            let value = if rest.is_empty() {
+                -first_val
+            } else {
+                first_val
+            };
+            let value = rest.iter().try_fold(value, |acc, v| {
+                let v = self.bignum_arg("-", *v)?;
+                Some(acc - v)
+            })?;
+            Some(self.runtime.bignum(value))
         } else {
             let first = self.fixnum_arg("-", *first)?;
             let value = if rest.is_empty() {
