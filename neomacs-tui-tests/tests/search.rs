@@ -649,3 +649,29 @@ fn isearch_forward_for_word_then_repeat_via_cs_confirm() {
         );
     }
 }
+
+#[test]
+fn highlight_regexp_via_mx_marks_matches() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "highlight-regexp.txt";
+    let initial = "apple banana apple\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    invoke_mx_command(&mut gnu, &mut neo, "highlight-regexp");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"apple\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    // Accept default face
+    send_both(&mut gnu, &mut neo, "RET");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("apple")),
+            "{label}: buffer should still show apple after highlight-regexp"
+        );
+    }
+}
