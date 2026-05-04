@@ -379,6 +379,7 @@ impl Lowerer<'_> {
                 self.lower_progn(form, &items[1..])
             }
             Some("prog1") => self.lower_prog1(form, &items[1..]),
+            Some("prog2") => self.lower_prog2(form, &items[1..]),
             Some("and") => self.lower_and(form, &items[1..]),
             Some("or") => self.lower_or(form, &items[1..]),
             Some("let") => self.lower_let(form, &items[1..], false),
@@ -805,6 +806,56 @@ impl Lowerer<'_> {
                     span: form.span,
                 }),
             },
+            span: form.span,
+        })
+    }
+
+    fn lower_prog2(&mut self, form: &SurfaceForm, body: &[SurfaceForm]) -> Option<HirExpr> {
+        let Some((first, rest)) = body.split_first() else {
+            self.error(form.span, "prog2 requires at least two arguments");
+            return None;
+        };
+        let Some((second, rest)) = rest.split_first() else {
+            self.error(form.span, "prog2 requires at least two arguments");
+            return None;
+        };
+        let first = self.lower_expr(first)?;
+        let second = self.lower_expr(second)?;
+        if rest.is_empty() {
+            return Some(HirExpr {
+                kind: HirExprKind::Progn(vec![first, second]),
+                span: form.span,
+            });
+        }
+        // (prog2 a b rest...) = progn(a, let((temp b)) rest... temp)
+        let temp = format!("\0prog2.{}", self.fresh_id());
+        let mut rest_lowered = self.lower_exprs(rest)?;
+        rest_lowered.push(HirExpr {
+            kind: HirExprKind::LexicalGet(temp.clone()),
+            span: form.span,
+        });
+        Some(HirExpr {
+            kind: HirExprKind::Progn(vec![
+                first,
+                HirExpr {
+                    kind: HirExprKind::Let {
+                        mode: BindingMode::Lexical,
+                        sequential: true,
+                        declarations: Vec::new(),
+                        bindings: vec![HirBinding {
+                            name: temp,
+                            mode: BindingMode::Lexical,
+                            init: second,
+                            span: form.span,
+                        }],
+                        body: Box::new(HirExpr {
+                            kind: HirExprKind::Progn(rest_lowered),
+                            span: form.span,
+                        }),
+                    },
+                    span: form.span,
+                },
+            ]),
             span: form.span,
         })
     }
