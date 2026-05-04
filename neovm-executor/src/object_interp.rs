@@ -1635,10 +1635,31 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
                 .map(|values| make_list(self.runtime, values.iter().rev().copied())),
-            "nreverse" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.list_values(args[0]))
-                .map(|values| make_list(self.runtime, values.iter().rev().copied())),
+            "nreverse" => self.exact_arity(name, args, 1).and_then(|_| {
+                let mut current = args[0];
+                if current.is_nil() {
+                    return Some(LispValue::NIL);
+                }
+                let mut prev = LispValue::NIL;
+                loop {
+                    let cdr = self.runtime.cdr(current);
+                    let next = self.runtime_value(cdr)?;
+                    let result = self.runtime.set_cdr(current, prev);
+                    if result.is_err() {
+                        break;
+                    }
+                    prev = current;
+                    if next.is_nil() {
+                        break;
+                    }
+                    if !self.runtime.is_cons(next) {
+                        self.error("nreverse: improper list");
+                        return None;
+                    }
+                    current = next;
+                }
+                Some(prev)
+            }),
             "append" => self.append(args),
             "nth" => self
                 .exact_arity(name, args, 2)
