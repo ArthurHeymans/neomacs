@@ -2882,7 +2882,18 @@ pub(crate) fn builtin_visited_file_modtime(eval: &mut Context, args: Vec<Value>)
     let sec = buf.modtime_sec;
     let nsec = buf.modtime_nsec;
     match (sec, nsec) {
-        (Some(s), Some(ns)) => Ok(Value::cons(Value::fixnum(s), Value::fixnum(ns as i64))),
+        (Some(s), Some(ns)) => {
+            // GNU returns (HIGH LOW USEC PSEC).
+            let high = s >> 16;
+            let low = s & 0xFFFF;
+            let usec = (ns / 1000) as i64;
+            Ok(Value::list(vec![
+                Value::fixnum(high),
+                Value::fixnum(low),
+                Value::fixnum(usec),
+                Value::fixnum(0),
+            ]))
+        }
         _ => Ok(Value::fixnum(0)),
     }
 }
