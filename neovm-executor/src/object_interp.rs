@@ -2339,13 +2339,10 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
-    fn fixnum_value(&mut self, value: i64, context: &str) -> Option<LispValue> {
+    fn fixnum_value(&mut self, value: i64, _context: &str) -> Option<LispValue> {
         match LispValue::from_fixnum(value) {
             Some(value) => Some(value),
-            None => {
-                self.unsupported(format!("{context} {value} requires bignum support"));
-                None
-            }
+            None => Some(self.runtime.bignum(rug::Integer::from(value))),
         }
     }
 

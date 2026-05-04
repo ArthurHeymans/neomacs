@@ -298,12 +298,8 @@ mod tests {
             &[],
         );
 
-        assert!(artifact.result.value.is_none());
-        assert!(artifact.result.diagnostics.iter().any(|diagnostic| {
-            diagnostic
-                .message
-                .contains("integer constant 3819615433963601919 requires bignum support")
-        }));
+        assert!(artifact.result.value.is_some());
+        assert_eq!(artifact.result.diagnostics, Vec::new());
     }
 
     #[test]
