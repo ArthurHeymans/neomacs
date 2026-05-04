@@ -2072,14 +2072,6 @@ fn cdr_expr_inner(inner: HirExpr, span: Span) -> HirExpr {
     }
 }
 
-fn nth_cdr_expr(accessor: &str, n: usize, span: Span) -> HirExpr {
-    let mut expr = lexical_get_expr(accessor, span);
-    for _ in 0..n {
-        expr = cdr_expr_inner(expr, span);
-    }
-    expr
-}
-
 fn nth_cdr_hir(accessor: HirExpr, n: usize, span: Span) -> HirExpr {
     let mut expr = accessor;
     for _ in 0..n {

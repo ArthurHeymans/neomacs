@@ -1427,6 +1427,23 @@ impl Interpreter<'_, '_, '_> {
                     args.get(4).copied(),
                 )
             }),
+            "string-match" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.string_match(args[0], args[1], args.get(2).copied())),
+            "match-string" => self
+                .min_max_arity(name, args, 0, 2)
+                .and_then(|_| self.match_string_prim(args.get(0).copied(), args.get(1).copied())),
+            "match-beginning" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let group = args.first().and_then(|v| v.as_fixnum()).unwrap_or(0) as usize;
+                Some(self.runtime.match_beginning(group))
+            }),
+            "match-end" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let group = args.first().and_then(|v| v.as_fixnum()).unwrap_or(0) as usize;
+                Some(self.runtime.match_end(group))
+            }),
+            "replace-match" => self
+                .min_max_arity(name, args, 1, 4)
+                .and_then(|_| self.runtime.replace_match(args[0])),
             "char-to-string" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.char_to_string(args[0])),
@@ -2830,6 +2847,67 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn string_match(
+        &mut self,
+        regex: LispValue,
+        string: LispValue,
+        start: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let pattern = self.string_contents_owned(regex)?;
+        let text = self.string_contents_owned(string)?;
+        let text_owned = text.clone();
+        let re = match regex::Regex::new(&pattern) {
+            Ok(re) => re,
+            Err(_) => {
+                let symbol = self.runtime.intern("invalid-regexp");
+                let data = make_list(self.runtime, [regex].into_iter());
+                self.pending_signal = Some(SignaledValue { symbol, data });
+                return None;
+            }
+        };
+        let start_idx = match start {
+            Some(s) if !s.is_nil() => self.sequence_index("string-match", s)?,
+            _ => 0,
+        };
+        if start_idx >= text.len() {
+            self.runtime.clear_match_data();
+            return Some(LispValue::NIL);
+        }
+        let haystack = &text[start_idx..];
+        match re.captures(haystack) {
+            Some(caps) => {
+                let groups: Vec<Option<(usize, usize)>> = caps
+                    .iter()
+                    .map(|cap| cap.map(|m| (start_idx + m.start(), start_idx + m.end())))
+                    .collect();
+                self.runtime.set_match_data(text_owned, groups);
+                self.fixnum(
+                    (start_idx + caps.get(0).unwrap().start()) as i64,
+                    "string-match",
+                )
+            }
+            None => {
+                self.runtime.clear_match_data();
+                Some(LispValue::NIL)
+            }
+        }
+    }
+
+    fn match_string_prim(
+        &mut self,
+        string: Option<LispValue>,
+        group: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let group = group.and_then(|v| v.as_fixnum()).unwrap_or(0) as usize;
+        if let Some(s) = string {
+            if !s.is_nil() {
+                // If string is provided, return the substring
+                return Some(self.runtime.match_string(group));
+            }
+        }
+        Some(self.runtime.match_string(group))
+    }
+
     fn replace_regexp_in_string(
         &mut self,
         regex: LispValue,
@@ -4133,6 +4211,11 @@ fn is_primitive_name(name: &str) -> bool {
             | "string-bytes"
             | "string-match-p"
             | "replace-regexp-in-string"
+            | "string-match"
+            | "match-string"
+            | "match-beginning"
+            | "match-end"
+            | "replace-match"
             | "char-to-string"
             | "string-to-char"
             | "format"
@@ -5732,6 +5815,51 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n\
              (let ((f (lambda (a &aux b) b)))\n\
                (funcall f 7))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_string_match_with_capture() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-match \"h.\" \"hello\")",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_match_string_after_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (string-match \"(h.)\" \"hello\") (match-string 1 \"hello\"))",
+        );
+        assert_ne!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_match_beginning_after_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (string-match \"he\" \"hello\") (match-beginning 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_match_end_after_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (string-match \"he\" \"hello\") (match-end 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_string_match_not_found() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-match \"xyz\" \"hello\")",
         );
         assert_eq!(value, Some(LispValue::NIL));
     }

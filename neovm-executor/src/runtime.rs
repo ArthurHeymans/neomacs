@@ -19,6 +19,13 @@ pub struct Runtime {
     features: Vec<LispValue>,
     nil_plist: LispValue,
     true_plist: LispValue,
+    match_data: Option<MatchData>,
+}
+
+#[derive(Clone)]
+struct MatchData {
+    string: String,
+    groups: Vec<Option<(usize, usize)>>,
 }
 
 impl Default for Runtime {
@@ -38,6 +45,7 @@ impl Default for Runtime {
             features: Vec::new(),
             nil_plist: LispValue::NIL,
             true_plist: LispValue::NIL,
+            match_data: None,
         }
     }
 }
@@ -350,6 +358,84 @@ impl Runtime {
                 value,
             })?;
         Ok(obj.value.clone())
+    }
+
+    pub fn set_match_data(&mut self, string: String, groups: Vec<Option<(usize, usize)>>) {
+        self.match_data = Some(MatchData { string, groups });
+    }
+
+    pub fn clear_match_data(&mut self) {
+        self.match_data = None;
+    }
+
+    pub fn match_beginning(&self, group: usize) -> LispValue {
+        let Some(ref md) = self.match_data else {
+            return LispValue::NIL;
+        };
+        match md.groups.get(group) {
+            Some(Some((start, _))) => LispValue::expect_fixnum(*start as i64),
+            _ => LispValue::NIL,
+        }
+    }
+
+    pub fn match_end(&self, group: usize) -> LispValue {
+        let Some(ref md) = self.match_data else {
+            return LispValue::NIL;
+        };
+        match md.groups.get(group) {
+            Some(Some((_, end))) => LispValue::expect_fixnum(*end as i64),
+            _ => LispValue::NIL,
+        }
+    }
+
+    pub fn match_string(&mut self, group: usize) -> LispValue {
+        let Some(ref md) = self.match_data else {
+            return LispValue::NIL;
+        };
+        match md.groups.get(group) {
+            Some(Some((start, end))) => {
+                let s = md.string[*start..*end].to_string();
+                self.string(s)
+            }
+            _ => LispValue::NIL,
+        }
+    }
+
+    pub fn replace_match(&mut self, replacement: LispValue) -> Option<LispValue> {
+        let rep = match self.string_contents(replacement) {
+            Ok(s) => s.to_string(),
+            Err(_) => return None,
+        };
+        let Some(ref md) = self.match_data else {
+            return Some(self.string(rep));
+        };
+        let mut result = String::new();
+        let mut chars = rep.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                match chars.next() {
+                    Some('&') => {
+                        if let Some(Some((s, e))) = md.groups.first() {
+                            result.push_str(&md.string[*s..*e]);
+                        }
+                    }
+                    Some(d @ '1'..='9') => {
+                        let idx = (d as u32 - '0' as u32) as usize;
+                        if let Some(Some((s, e))) = md.groups.get(idx) {
+                            result.push_str(&md.string[*s..*e]);
+                        }
+                    }
+                    Some(c) => {
+                        result.push('\\');
+                        result.push(c);
+                    }
+                    None => result.push('\\'),
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+        Some(self.string(result))
     }
 
     pub fn cons_cell_count(&self) -> usize {
