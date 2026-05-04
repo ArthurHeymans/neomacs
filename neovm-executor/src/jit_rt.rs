@@ -448,6 +448,9 @@ struct JitExceptionState {
     /// get_signal_data can retrieve it for the var binding.
     saved_handler_signal: Option<(LispValue, LispValue)>,
     catch_depth: usize,
+    /// When set, handler at this depth already matched and consumed a signal.
+    /// Prevents a handler from re-catching errors thrown by its own handler body.
+    handler_matched_depth: Option<usize>,
 }
 
 impl JitExceptionState {
@@ -457,6 +460,7 @@ impl JitExceptionState {
             pending_signal: None,
             saved_handler_signal: None,
             catch_depth: 0,
+            handler_matched_depth: None,
         }
     }
 }
@@ -610,7 +614,9 @@ jit_shim!(__neomacs_rt_condition_case_end(vmctx: i64) -> i64 {
     // and clear saved handler signal from a previous match.
     take_pending_signal();
     JIT_EXCEPTION_STATE.with(|state| {
-        state.borrow_mut().saved_handler_signal = None;
+        let mut s = state.borrow_mut();
+        s.saved_handler_signal = None;
+        s.handler_matched_depth = None;
     });
     0
 });
@@ -625,6 +631,15 @@ jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pa
     let rt = &mut *ctx.runtime;
     let thrown = has_pending_exception();
     if !thrown {
+        return LispValue::NIL.to_abi_i64();
+    }
+    // Prevent re-matching: if a handler at the current catch depth already
+    // consumed a signal, don't let it catch errors from its own handler body.
+    let already_matched = JIT_EXCEPTION_STATE.with(|state| {
+        state.borrow().handler_matched_depth
+            == Some(state.borrow().catch_depth)
+    });
+    if already_matched {
         return LispValue::NIL.to_abi_i64();
     }
     // Check if the signaled symbol matches the pattern
@@ -645,11 +660,12 @@ jit_shim!(__neomacs_rt_condition_handler_match(vmctx: i64, error_symbol: i64, pa
     });
     if matches {
         // Consume the pending signal and save it for get_signal_data.
-        // This prevents the signal from leaking to subsequent handlers
-        // or to the next condition-case form.
+        // Mark this catch depth as having a matched handler to prevent re-entry.
         let signal = take_pending_signal();
         JIT_EXCEPTION_STATE.with(|state| {
-            state.borrow_mut().saved_handler_signal = signal;
+            let mut s = state.borrow_mut();
+            s.saved_handler_signal = signal;
+            s.handler_matched_depth = Some(s.catch_depth);
         });
     }
     bool_value(matches).to_abi_i64()
@@ -1548,8 +1564,9 @@ fn dispatch_primitive(
         // --- Error signaling ---
         "error" => {
             let symbol = rt.intern("error");
-            let msg = args.first().copied().unwrap_or(LispValue::NIL);
-            let data = rt.cons(msg, LispValue::NIL);
+            let fmt_str = args.first().copied().unwrap_or(LispValue::NIL);
+            let formatted = format_string(rt, fmt_str, &args[1..]).unwrap_or(fmt_str);
+            let data = rt.cons(formatted, LispValue::NIL);
             Some(set_pending_signal_and_return_sentinel(symbol, data))
         }
         "signal" => {

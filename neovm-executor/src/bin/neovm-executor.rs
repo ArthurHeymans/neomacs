@@ -1,16 +1,20 @@
 use std::process::ExitCode;
 
+use neovm_compiler::ExpandMode;
 use neovm_executor::{Engine, Executor, render_diagnostics};
 
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    let Some(command) = args.next() else {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() {
         usage();
         return ExitCode::from(2);
-    };
+    }
+
+    let command = args[0].clone();
+    let rest: Vec<String> = args.split_off(1);
 
     match command.as_str() {
-        "run" => run(args.collect()),
+        "run" => run(rest),
         _ => {
             usage();
             ExitCode::from(2)
@@ -20,7 +24,9 @@ fn main() -> ExitCode {
 
 fn run(args: Vec<String>) -> ExitCode {
     let mut engine = Engine::default();
+    let mut expand_mode = ExpandMode::MiniEval;
     let mut positional = Vec::new();
+
     for arg in &args {
         if let Some(value) = arg.strip_prefix("--engine=") {
             engine = match value {
@@ -31,10 +37,26 @@ fn run(args: Vec<String>) -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
+        } else if let Some(value) = arg.strip_prefix("--expand=") {
+            expand_mode = match value {
+                "minieval" => ExpandMode::MiniEval,
+                "emacs" => ExpandMode::Emacs {
+                    emacs_path: "emacs".to_string(),
+                },
+                _ => {
+                    eprintln!("unknown expand mode `{value}` (options: minieval, emacs)");
+                    return ExitCode::from(2);
+                }
+            };
+        } else if let Some(value) = arg.strip_prefix("--emacs=") {
+            expand_mode = ExpandMode::Emacs {
+                emacs_path: value.to_string(),
+            };
         } else {
             positional.push(arg.clone());
         }
     }
+
     let Some(path) = positional.first() else {
         usage();
         return ExitCode::from(2);
@@ -47,7 +69,7 @@ fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let executor = Executor::with_engine(engine);
+    let executor = Executor::with_engine_and_expand(engine, expand_mode);
     let artifact = match executor.execute_file(path, &values) {
         Ok(artifact) => artifact,
         Err(error) => {
@@ -98,5 +120,7 @@ fn parse_i64_args(args: &[String]) -> Result<Vec<i64>, String> {
 }
 
 fn usage() {
-    eprintln!("usage: neovm-executor run [--engine=interpreter|jit] <file.el> [i64-arg ...]");
+    eprintln!(
+        "usage: neovm-executor run [--engine=interpreter|jit] [--expand=minieval|emacs] [--emacs=PATH] <file.el> [i64-arg ...]"
+    );
 }

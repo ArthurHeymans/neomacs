@@ -8,6 +8,13 @@
 //!
 //! Cranelift is the planned native backend. Register IR remains the
 //! Elisp-semantic VM IR; Cranelift lowering is an optional backend layer.
+//!
+//! Two expansion modes are available:
+//!
+//! - **MiniEval** (default): built-in macro evaluator. Handles a subset of
+//!   Elisp macros. Good for bootstrapping and small test files.
+//! - **Emacs**: shells out to GNU Emacs for `macroexpand-all`. Produces
+//!   fully correct expansion. Requires Emacs on `$PATH`.
 
 pub mod ast;
 pub mod builtin_libs;
@@ -16,6 +23,7 @@ pub mod compile_value;
 pub mod diagnostic;
 pub mod effects;
 pub mod expand;
+pub mod expand_emacs;
 pub mod expand_eval;
 pub mod expand_value;
 pub mod hir;
@@ -42,6 +50,15 @@ use ssa::SsaModule;
 use surface::SurfaceForm;
 use syntax::SyntaxTree;
 
+/// Selects how macro expansion is performed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExpandMode {
+    /// Built-in mini-evaluator. Handles a subset of Elisp macros.
+    MiniEval,
+    /// Shell out to GNU Emacs for `macroexpand-all`.
+    Emacs { emacs_path: String },
+}
+
 /// Output from the currently implemented compiler front-end.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompileArtifact {
@@ -62,7 +79,8 @@ impl CompileArtifact {
     }
 }
 
-/// Compile a source string through the implemented front-end stages.
+/// Compile a source string through the implemented front-end stages
+/// using the built-in mini-evaluator for macro expansion.
 ///
 /// This function intentionally does not depend on `neovm-core`; all values and
 /// symbols are compiler-owned representations.
@@ -118,6 +136,88 @@ pub fn compile_source_with_session(
         source,
         syntax: reader_output.syntax,
         surface: expand_output.forms,
+        hir,
+        ssa,
+        regir,
+        diagnostics,
+    }
+}
+
+/// Compile a source string with the chosen expansion mode.
+///
+/// For [`ExpandMode::MiniEval`], this uses the built-in macro evaluator.
+/// For [`ExpandMode::Emacs`], shells out to GNU Emacs for `macroexpand-all`.
+pub fn compile_source_with_expand(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    mode: ExpandMode,
+) -> CompileArtifact {
+    match mode {
+        ExpandMode::MiniEval => compile_source(name, text),
+        ExpandMode::Emacs { emacs_path } => compile_source_with_emacs_path(name, text, &emacs_path),
+    }
+}
+
+/// Compile using Emacs for macro expansion, given an explicit Emacs path.
+fn compile_source_with_emacs_path(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    emacs_path: &str,
+) -> CompileArtifact {
+    let source = SourceFile::new(SourceId::new(0), Some(name.into()), text.into());
+    let lexical_binding = source.lexical_binding;
+
+    let reader_output = reader::read_source(&source);
+
+    let (expanded_forms, mut diagnostics) = match expand_emacs::expand_with_emacs(
+        &source.text,
+        source.name.as_deref().unwrap_or("unknown"),
+        emacs_path,
+    ) {
+        Ok(output) => {
+            let mut diags = reader_output.diagnostics;
+            diags.extend(output.diagnostics);
+            (output.forms, diags)
+        }
+        Err(msg) => {
+            let mut diags = reader_output.diagnostics;
+            diags.push(Diagnostic::error(msg));
+            (vec![], diags)
+        }
+    };
+
+    let mut hir = None;
+    let mut ssa = None;
+    let mut regir = None;
+
+    if !diagnostics.iter().any(Diagnostic::is_error) {
+        let hir_output =
+            hir::lower_expanded_forms(&source, expanded_forms.clone(), lexical_binding);
+        diagnostics.extend(hir_output.diagnostics);
+        diagnostics.extend(verify::verify_hir(&hir_output.module));
+        if !diagnostics.iter().any(Diagnostic::is_error) {
+            let mut ssa_output = lower::hir_to_ssa_module(&hir_output.module);
+            diagnostics.extend(ssa_output.diagnostics);
+            diagnostics.extend(verify::verify_ssa_module(&ssa_output.value));
+            if !diagnostics.iter().any(Diagnostic::is_error) {
+                opt::optimize_ssa_module(&mut ssa_output.value);
+                diagnostics.extend(verify::verify_ssa_module(&ssa_output.value));
+                if !diagnostics.iter().any(Diagnostic::is_error) {
+                    let regir_output = lower::ssa_module_to_regir(&ssa_output.value);
+                    diagnostics.extend(regir_output.diagnostics);
+                    diagnostics.extend(verify::verify_regir_module(&regir_output.value));
+                    regir = Some(regir_output.value);
+                }
+                ssa = Some(ssa_output.value);
+            }
+        }
+        hir = Some(hir_output.module);
+    }
+
+    CompileArtifact {
+        source,
+        syntax: reader_output.syntax,
+        surface: expanded_forms,
         hir,
         ssa,
         regir,

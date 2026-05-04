@@ -1,16 +1,19 @@
 use std::process::ExitCode;
 
-use neovm_compiler::compile_source;
+use neovm_compiler::{ExpandMode, compile_source_with_expand};
 
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    let Some(command) = args.next() else {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() {
         usage();
         return ExitCode::from(2);
-    };
+    }
+
+    let command = args[0].clone();
+    let rest = args.split_off(1);
 
     match command.as_str() {
-        "scan" => scan(args.collect()),
+        "scan" => scan(rest),
         _ => {
             usage();
             ExitCode::from(2)
@@ -20,11 +23,45 @@ fn main() -> ExitCode {
 
 fn usage() {
     eprintln!("usage: neovm-compiler <command> [args...]");
-    eprintln!("  scan <file.el> ...             compile and report macro evaluation gaps");
+    eprintln!();
+    eprintln!("Commands:");
+    eprintln!("  scan [--expand=minieval|emacs] [--emacs=PATH] <file.el> ...");
+    eprintln!("        compile and report macro evaluation gaps");
+}
+
+fn parse_expand_args(args: Vec<String>) -> (ExpandMode, Vec<String>) {
+    let mut expand_mode = ExpandMode::MiniEval;
+    let mut positional = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(value) = args[i].strip_prefix("--expand=") {
+            expand_mode = match value {
+                "minieval" => ExpandMode::MiniEval,
+                "emacs" => ExpandMode::Emacs {
+                    emacs_path: "emacs".to_string(),
+                },
+                _ => {
+                    eprintln!("unknown expand mode '{value}' (options: minieval, emacs)");
+                    std::process::exit(2);
+                }
+            };
+        } else if let Some(value) = args[i].strip_prefix("--emacs=") {
+            expand_mode = ExpandMode::Emacs {
+                emacs_path: value.to_string(),
+            };
+        } else {
+            positional.push(args[i].clone());
+        }
+        i += 1;
+    }
+
+    (expand_mode, positional)
 }
 
 fn scan(args: Vec<String>) -> ExitCode {
-    if args.is_empty() {
+    let (expand_mode, files) = parse_expand_args(args);
+    if files.is_empty() {
         usage();
         return ExitCode::from(2);
     }
@@ -36,7 +73,7 @@ fn scan(args: Vec<String>) -> ExitCode {
     let mut macro_gaps: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
 
-    for path in &args {
+    for path in &files {
         total_files += 1;
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
@@ -61,13 +98,12 @@ fn scan(args: Vec<String>) -> ExitCode {
                 reader_output.diagnostics.len(),
                 reader_output.forms.len()
             );
-            // Don't continue — try expansion too
         } else {
             eprintln!("{}: reader OK (forms: {})", path, reader_output.forms.len());
         }
 
         // Phase 2: expansion + lowering
-        let artifact = compile_source(path, &text);
+        let artifact = compile_source_with_expand(path, &text, expand_mode.clone());
         let has_reader_errors = artifact
             .diagnostics
             .iter()
@@ -96,7 +132,6 @@ fn scan(args: Vec<String>) -> ExitCode {
                     macro_gaps.entry(op_name).or_default().push(path.clone());
                 }
             } else if !has_reader_errors && !has_hir_errors {
-                // Track other errors for non-reader/non-HIR failures
                 let key = diag
                     .message
                     .split_whitespace()

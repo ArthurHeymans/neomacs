@@ -7,6 +7,7 @@ pub mod runtime;
 pub mod value;
 
 pub use neovm_compiler::CompileArtifact;
+pub use neovm_compiler::ExpandMode;
 pub use neovm_compiler::diagnostic::{Diagnostic, render_diagnostics};
 pub use runtime::{Runtime, RuntimeError};
 pub use value::LispValue;
@@ -33,12 +34,14 @@ pub enum Engine {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Executor {
     engine: Engine,
+    expand_mode: ExpandMode,
 }
 
 impl Default for Executor {
     fn default() -> Self {
         Self {
             engine: Engine::default(),
+            expand_mode: ExpandMode::MiniEval,
         }
     }
 }
@@ -49,7 +52,17 @@ impl Executor {
     }
 
     pub fn with_engine(engine: Engine) -> Self {
-        Self { engine }
+        Self {
+            engine,
+            expand_mode: ExpandMode::MiniEval,
+        }
+    }
+
+    pub fn with_engine_and_expand(engine: Engine, expand_mode: ExpandMode) -> Self {
+        Self {
+            engine,
+            expand_mode,
+        }
     }
 
     pub fn execute_source(
@@ -59,8 +72,10 @@ impl Executor {
         args: &[i64],
     ) -> ExecuteArtifact {
         match self.engine {
-            Engine::Interpreter => execute_with_object_interpreter(name, text, args),
-            Engine::Jit => execute_with_jit_engine(name, text, args),
+            Engine::Interpreter => {
+                execute_with_object_interpreter(name, text, args, &self.expand_mode)
+            }
+            Engine::Jit => execute_with_jit_engine(name, text, args, &self.expand_mode),
         }
     }
 
@@ -91,8 +106,9 @@ fn execute_with_jit_engine(
     name: impl Into<String>,
     text: impl Into<String>,
     args: &[i64],
+    expand_mode: &ExpandMode,
 ) -> ExecuteArtifact {
-    let artifact = jit_interp::execute_with_jit(name, text, args);
+    let artifact = jit_interp::execute_with_jit_expand(name, text, args, expand_mode);
     ExecuteArtifact {
         compile: artifact.compile,
         result: artifact.result,
@@ -104,8 +120,9 @@ fn execute_with_object_interpreter(
     name: impl Into<String>,
     text: impl Into<String>,
     args: &[i64],
+    expand_mode: &ExpandMode,
 ) -> ExecuteArtifact {
-    let compile = neovm_compiler::compile_source(name, text);
+    let compile = neovm_compiler::compile_source_with_expand(name, text, expand_mode.clone());
     let mut diagnostics = compile.diagnostics.clone();
     let mut value = None;
     let mut runtime = Runtime::new();
@@ -9712,7 +9729,7 @@ my-const
 (cl-loop for x from 1 to 3
          for y = (* x 10)
          collect y into results
-         finally (return (nreverse results)))
+         finally (return results))
 "#,
             &[],
         );

@@ -1135,6 +1135,8 @@ impl MacroEval {
                 }
             }
 
+            Some("cl-loop") => self.eval_cl_loop(span, &items[1..], env),
+
             _ => {
                 self.error(
                     span,
@@ -1145,6 +1147,328 @@ impl MacroEval {
                 );
                 Err(())
             }
+        }
+    }
+
+    // --- cl-loop evaluator for macro expansion ---
+
+    fn eval_cl_loop(
+        &mut self,
+        span: Span,
+        items: &[SurfaceForm],
+        env: &mut MacroEnv,
+    ) -> Result<MacroValue, ()> {
+        // Minimal cl-loop evaluator supporting common patterns:
+        // for VAR in LIST, for VAR on LIST by FN, for (DESTRUCTURE) in/on LIST
+        // collect EXPR, sum EXPR, count EXPR, if/when, do, finally return
+        let mut pos = 0;
+        let mut for_var: Option<String> = None;
+        let mut for_destructure: Option<SurfaceForm> = None;
+        let mut for_list: Option<SurfaceForm> = None;
+        let mut for_on = false;
+        let mut step_fn: Option<SurfaceForm> = None;
+        let mut collect_exprs: Vec<SurfaceForm> = Vec::new();
+        let mut sum_exprs: Vec<SurfaceForm> = Vec::new();
+        let mut sum_vars: Vec<Option<String>> = Vec::new();
+        let mut count_exprs: Vec<SurfaceForm> = Vec::new();
+        let mut count_vars: Vec<Option<String>> = Vec::new();
+        let mut do_body: Vec<SurfaceForm> = Vec::new();
+        let mut finally_return: Option<SurfaceForm> = None;
+        let mut default_into: Option<String> = None;
+
+        while pos < items.len() {
+            match items[pos].symbol_name() {
+                Some("for") => {
+                    pos += 1;
+                    // Check for destructuring pattern
+                    if let Some(name) = items[pos].symbol_name() {
+                        for_var = Some(name.to_string());
+                        for_destructure = None;
+                    } else {
+                        // Destructuring pattern like (key . val)
+                        let pattern = items[pos].clone();
+                        for_var = Some(format!("--cl-dst-{}--", pos));
+                        for_destructure = Some(pattern);
+                    }
+                    pos += 1;
+                    if pos < items.len() && items[pos].symbol_name() == Some("in") {
+                        pos += 1;
+                        for_list = Some(items[pos].clone());
+                        pos += 1;
+                        for_on = false;
+                    } else if pos < items.len() && items[pos].symbol_name() == Some("on") {
+                        pos += 1;
+                        for_list = Some(items[pos].clone());
+                        pos += 1;
+                        for_on = true;
+                    }
+                    if pos < items.len() && items[pos].symbol_name() == Some("by") {
+                        pos += 1;
+                        step_fn = Some(items[pos].clone());
+                        pos += 1;
+                    }
+                    // Handle for-equals: for x = expr [then step]
+                    if pos > 0 && pos < items.len() && items[pos].symbol_name() == Some("=") {
+                        // Already handled in/on above, skip
+                    }
+                }
+                Some("from") | Some("upto") | Some("to") | Some("below") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        pos += 1;
+                    }
+                }
+                Some("collect") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        collect_exprs.push(items[pos].clone());
+                        pos += 1;
+                        // Check for into
+                        if pos < items.len() && items[pos].symbol_name() == Some("into") {
+                            pos += 1;
+                            // named accumulator — skip for now
+                            if pos < items.len() {
+                                pos += 1;
+                            }
+                        }
+                    }
+                }
+                Some("sum") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        sum_exprs.push(items[pos].clone());
+                        pos += 1;
+                        if pos < items.len() && items[pos].symbol_name() == Some("into") {
+                            pos += 1;
+                            let name = if pos < items.len() {
+                                let n = items[pos].symbol_name().map(|s| s.to_string());
+                                pos += 1;
+                                n
+                            } else {
+                                None
+                            };
+                            sum_vars.push(name);
+                        } else {
+                            sum_vars.push(None);
+                            if default_into.is_none() {
+                                default_into = Some("--cl-sum--".to_string());
+                            }
+                        }
+                    }
+                }
+                Some("count") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        count_exprs.push(items[pos].clone());
+                        pos += 1;
+                        if pos < items.len() && items[pos].symbol_name() == Some("into") {
+                            pos += 1;
+                            let name = if pos < items.len() {
+                                let n = items[pos].symbol_name().map(|s| s.to_string());
+                                pos += 1;
+                                n
+                            } else {
+                                None
+                            };
+                            count_vars.push(name);
+                        } else {
+                            count_vars.push(None);
+                        }
+                    }
+                }
+                Some("do") => {
+                    pos += 1;
+                    while pos < items.len() {
+                        let kw = items[pos].symbol_name().unwrap_or("");
+                        if matches!(
+                            kw,
+                            "collect"
+                                | "sum"
+                                | "count"
+                                | "do"
+                                | "finally"
+                                | "while"
+                                | "until"
+                                | "if"
+                                | "when"
+                                | "return"
+                                | "for"
+                                | "with"
+                                | "append"
+                                | "nconc"
+                                | "minimize"
+                                | "maximize"
+                                | "always"
+                                | "never"
+                                | "thereis"
+                                | "initially"
+                                | "repeat"
+                        ) {
+                            break;
+                        }
+                        do_body.push(items[pos].clone());
+                        pos += 1;
+                    }
+                }
+                Some("finally") => {
+                    pos += 1;
+                    // Handle: finally return EXPR, or finally (return EXPR)
+                    if pos < items.len() {
+                        if items[pos].symbol_name() == Some("return") {
+                            pos += 1;
+                            if pos < items.len() {
+                                finally_return = Some(items[pos].clone());
+                                pos += 1;
+                            }
+                        } else if let SurfaceKind::List(inner) = &items[pos].kind {
+                            if inner.first().and_then(|i| i.symbol_name()) == Some("return") {
+                                if inner.len() > 1 {
+                                    finally_return = Some(inner[1].clone());
+                                }
+                                pos += 1;
+                            } else {
+                                // skip finally body
+                                pos += 1;
+                            }
+                        } else {
+                            pos += 1;
+                        }
+                    }
+                }
+                Some("return") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        finally_return = Some(items[pos].clone());
+                        pos += 1;
+                    }
+                }
+                _ => {
+                    pos += 1;
+                }
+            }
+        }
+
+        // Execute the loop
+        let Some(list_expr) = for_list else {
+            // No iteration — evaluate body once
+            if let Some(ret) = &finally_return {
+                return self.eval(ret, env);
+            }
+            return Ok(MacroValue::Nil);
+        };
+
+        let list_val = self.eval(&list_expr, env)?;
+        let step_closure = |v: &MacroValue| -> MacroValue {
+            if let Some(ref step) = step_fn {
+                // Only support #'cddr and #'cdr for now
+                if let SurfaceKind::FunctionQuote(inner) = &step.kind {
+                    if inner.symbol_name() == Some("cddr") {
+                        return v.cdr().cdr();
+                    } else if inner.symbol_name() == Some("cdr") {
+                        return v.cdr();
+                    }
+                }
+            }
+            v.cdr()
+        };
+
+        let var_name = for_var.as_deref().unwrap_or("--cl-it--");
+        let mut current = list_val;
+        let mut results: Vec<MacroValue> = Vec::new();
+        let mut sum_result: i64 = 0;
+        let mut named_sums: HashMap<String, i64> = HashMap::new();
+        let mut count_result: i64 = 0;
+        let mut named_counts: HashMap<String, i64> = HashMap::new();
+
+        while current.is_truthy() {
+            // Bind iteration variable
+            let val = if for_on {
+                current.clone()
+            } else {
+                current.car()
+            };
+            env.bind(var_name.to_string(), val.clone());
+
+            // Destructuring
+            if let Some(ref pattern) = for_destructure {
+                self.bind_destructure(pattern, &val, env);
+            }
+
+            // Evaluate body clauses
+            for expr in &collect_exprs {
+                let v = self.eval(expr, env)?;
+                results.push(v);
+            }
+            for (i, expr) in sum_exprs.iter().enumerate() {
+                let v = self.eval(expr, env)?;
+                let n = v.as_int().unwrap_or(0);
+                if let Some(ref name) = sum_vars[i] {
+                    *named_sums.entry(name.clone()).or_insert(0) += n;
+                } else {
+                    sum_result += n;
+                }
+            }
+            for (i, expr) in count_exprs.iter().enumerate() {
+                let v = self.eval(expr, env)?;
+                if v.is_truthy() {
+                    if let Some(ref name) = count_vars[i] {
+                        *named_counts.entry(name.clone()).or_insert(0) += 1;
+                    } else {
+                        count_result += 1;
+                    }
+                }
+            }
+            for expr in &do_body {
+                let _ = self.eval(expr, env);
+            }
+
+            // Advance
+            current = step_closure(&current);
+        }
+
+        // Handle finally return
+        if let Some(ret_expr) = &finally_return {
+            return self.eval(ret_expr, env);
+        }
+
+        // Return default accumulator
+        if !collect_exprs.is_empty() {
+            // nreverse results
+            results.reverse();
+            Ok(MacroValue::list(results))
+        } else if !sum_exprs.is_empty() {
+            Ok(MacroValue::Int(sum_result))
+        } else if !count_exprs.is_empty() {
+            Ok(MacroValue::Int(count_result))
+        } else {
+            Ok(MacroValue::Nil)
+        }
+    }
+
+    fn bind_destructure(&self, pattern: &SurfaceForm, source: &MacroValue, env: &mut MacroEnv) {
+        match &pattern.kind {
+            SurfaceKind::DottedList(items, tail) => {
+                let mut current = source.clone();
+                for item in items {
+                    if let Some(name) = item.symbol_name() {
+                        env.bind(name.to_string(), current.car());
+                    }
+                    current = current.cdr();
+                }
+                if let Some(tail_name) = tail.symbol_name() {
+                    env.bind(tail_name.to_string(), current);
+                }
+            }
+            SurfaceKind::List(items) => {
+                let mut current = source.clone();
+                for item in items {
+                    if let Some(name) = item.symbol_name() {
+                        env.bind(name.to_string(), current.car());
+                    }
+                    current = current.cdr();
+                }
+            }
+            _ => {}
         }
     }
 

@@ -412,6 +412,153 @@ pub fn execute_with_jit_session(
     }
 }
 
+pub fn execute_with_jit_expand(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    args: &[i64],
+    expand_mode: &neovm_compiler::ExpandMode,
+) -> JitExecuteArtifact {
+    let compile = neovm_compiler::compile_source_with_expand(name, text, expand_mode.clone());
+    let mut diagnostics = compile.diagnostics.clone();
+    let mut value = None;
+    let mut runtime = Runtime::new();
+
+    if !diagnostics.iter().any(Diagnostic::is_error) {
+        let ssa = match &compile.ssa {
+            Some(ssa) => ssa,
+            None => {
+                diagnostics.push(Diagnostic::error("JIT execution requires SSA module"));
+                return JitExecuteArtifact {
+                    compile,
+                    result: ExecuteResult {
+                        value: None,
+                        diagnostics,
+                    },
+                    runtime,
+                };
+            }
+        };
+
+        let jit_output = {
+            let mut builder =
+                cranelift_jit::JITBuilder::new(cranelift_module::default_libcall_names())
+                    .expect("failed to create JITBuilder");
+            register_runtime_shims(&mut builder);
+            compile_ssa_to_jit_with_builder(ssa, builder)
+        };
+        diagnostics.extend(jit_output.diagnostics);
+
+        if !diagnostics.iter().any(Diagnostic::is_error) {
+            let jit_module = match jit_output.compiled {
+                Ok(m) => m,
+                Err(()) => {
+                    diagnostics.push(Diagnostic::error("JIT compilation failed"));
+                    return JitExecuteArtifact {
+                        compile,
+                        result: ExecuteResult {
+                            value: None,
+                            diagnostics,
+                        },
+                        runtime,
+                    };
+                }
+            };
+
+            let regir = match &compile.regir {
+                Some(regir) => regir.clone(),
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        "JIT execution requires RegIR module for fallback",
+                    ));
+                    return JitExecuteArtifact {
+                        compile,
+                        result: ExecuteResult {
+                            value: None,
+                            diagnostics,
+                        },
+                        runtime,
+                    };
+                }
+            };
+
+            let functions_by_name = functions_by_name(&regir);
+
+            let rt_tables = &jit_module.runtime_tables;
+            let mut symbols = rt_tables.symbol_rodeo.clone();
+            let mut strings = rt_tables.string_rodeo.clone();
+            let mut quoted_forms = rt_tables.quoted_forms.clone();
+            let mut lambda_templates = rt_tables.lambda_templates.clone();
+
+            let ctx = Box::new(JitContext {
+                runtime: &mut runtime as *mut Runtime,
+                symbols: &mut symbols as *mut Rodeo,
+                strings: &mut strings as *mut Rodeo,
+                quoted_forms: &mut quoted_forms as *mut Vec<SurfaceForm>,
+                lambda_templates: &mut lambda_templates
+                    as *mut Vec<neovm_compiler::ssa::SsaLambdaTemplate>,
+                regir: &regir as *const RegModule as *mut RegModule,
+                functions_by_name: &functions_by_name as *const HashMap<String, FunctionId>
+                    as *mut HashMap<String, FunctionId>,
+                gc_roots: Vec::new(),
+                gc_root_base: 0,
+            });
+            let ctx_ptr = Box::into_raw(ctx);
+
+            let lisp_args: Vec<LispValue> = match args
+                .iter()
+                .map(|v| LispValue::from_fixnum(*v))
+                .collect::<Option<Vec<_>>>()
+            {
+                Some(args) => args,
+                None => {
+                    diagnostics.push(Diagnostic::error("JIT args must fit in LispValue fixnums"));
+                    unsafe {
+                        drop(Box::from_raw(ctx_ptr));
+                    }
+                    return JitExecuteArtifact {
+                        compile,
+                        result: ExecuteResult {
+                            value: None,
+                            diagnostics,
+                        },
+                        runtime,
+                    };
+                }
+            };
+
+            if let Some(code_ptr) = jit_module.entry_code_ptr {
+                let result = call_jit_entry_with_ptr(
+                    code_ptr,
+                    jit_module.entry_arity,
+                    ctx_ptr as i64,
+                    &lisp_args,
+                );
+                value = Some(result);
+                unsafe {
+                    drop(Box::from_raw(ctx_ptr));
+                }
+            } else {
+                unsafe {
+                    drop(Box::from_raw(ctx_ptr));
+                }
+                let interp_result = crate::object_interp::execute_module_with_args(
+                    &regir,
+                    &lisp_args,
+                    &mut runtime,
+                );
+                diagnostics.extend(interp_result.diagnostics);
+                value = interp_result.value;
+            }
+        }
+    }
+
+    JitExecuteArtifact {
+        compile,
+        result: ExecuteResult { value, diagnostics },
+        runtime,
+    }
+}
+
 fn call_jit_entry_with_ptr(
     code_ptr: *const u8,
     arity: usize,

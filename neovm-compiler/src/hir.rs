@@ -600,7 +600,16 @@ impl Lowerer<'_> {
     ) -> Option<HirExpr> {
         let (parts, has_splice) = self.lower_quasiquote_list_parts(items, depth, form.span)?;
         if !has_splice {
-            return Some(call_named_expr("vector", parts, form.span));
+            // Each part is a (list ...) segment from flush_quasiquote_segment.
+            // Unwrap to get the individual element exprs for vector.
+            let args: Vec<HirExpr> = parts
+                .into_iter()
+                .flat_map(|p| match p.kind {
+                    HirExprKind::CallNamed { name, args } if name == "list" => args,
+                    _ => vec![p],
+                })
+                .collect();
+            return Some(call_named_expr("vector", args, form.span));
         }
         Some(HirExpr {
             kind: HirExprKind::Apply {

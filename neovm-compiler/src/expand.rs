@@ -2286,13 +2286,39 @@ impl Expander {
                 }
                 LoopClause::Initially { body } => initially_body.extend(body.iter().cloned()),
                 LoopClause::Finally { body } => {
-                    // If finally body contains (throw '--cl-loop-tag-- ...), need catch wrapper
-                    if body.first().map_or(false, |f| {
-                        matches!(&f.kind, SurfaceKind::List(items) if items.first().and_then(|i| i.symbol_name()) == Some("throw"))
-                    }) {
-                        has_return = true;
+                    // Process finally body forms, converting (return expr) to (throw ...)
+                    for f in body {
+                        if let SurfaceKind::List(items) = &f.kind
+                            && items.first().and_then(|i| i.symbol_name()) == Some("return")
+                        {
+                            has_return = true;
+                            let expr = if items.len() > 1 {
+                                items[1].clone()
+                            } else {
+                                nil_form(span)
+                            };
+                            finally_body.push(list_form(
+                                vec![
+                                    symbol_form("throw", span),
+                                    list_form(
+                                        vec![
+                                            symbol_form("quote", span),
+                                            symbol_form("--cl-loop-tag--", span),
+                                        ],
+                                        span,
+                                    ),
+                                    expr,
+                                ],
+                                span,
+                            ));
+                        } else {
+                            if matches!(&f.kind, SurfaceKind::List(items) if items.first().and_then(|i| i.symbol_name()) == Some("throw"))
+                            {
+                                has_return = true;
+                            }
+                            finally_body.push(f.clone());
+                        }
                     }
-                    finally_body.extend(body.iter().cloned());
                 }
                 LoopClause::Return { .. } => {
                     has_return = true;
@@ -2375,7 +2401,13 @@ impl Expander {
             Option<(SurfaceForm, EndDirection)>,
             Option<SurfaceForm>,
         )> = Vec::new(); // var, start, end, step
-        let mut for_in_info: Vec<(String, String, SurfaceForm, Option<SurfaceForm>)> = Vec::new(); // var, list-temp, list-expr, step-fn
+        let mut for_in_info: Vec<(
+            String,
+            String,
+            SurfaceForm,
+            Option<SurfaceForm>,
+            Option<SurfaceForm>,
+        )> = Vec::new(); // var, list-temp, list-expr, step-fn, destructure
         let mut for_on_info: Vec<(String, String, SurfaceForm)> = Vec::new(); // var, list-temp, list-expr
         let mut for_across_info: Vec<(String, String, String)> = Vec::new(); // var, vec-temp, idx-temp
         let mut for_eq_info: Vec<(String, SurfaceForm)> = Vec::new(); // var, expr (no then)
@@ -2396,6 +2428,7 @@ impl Expander {
                     var,
                     list_expr,
                     step_fn,
+                    destructure,
                 } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
                     list_counter += 1;
@@ -2407,7 +2440,13 @@ impl Expander {
                         vec![symbol_form(var, span), nil_form(span)],
                         span,
                     ));
-                    for_in_info.push((var.clone(), list_temp, list_expr.clone(), step_fn.clone()));
+                    for_in_info.push((
+                        var.clone(),
+                        list_temp,
+                        list_expr.clone(),
+                        step_fn.clone(),
+                        destructure.clone(),
+                    ));
                 }
                 LoopClause::ForOn { var, list_expr } => {
                     let list_temp = format!("--cl-list-{}--", list_counter);
@@ -2516,7 +2555,7 @@ impl Expander {
         }
 
         // For-in/for-on: list-temp truthiness
-        for (_, list_temp, _, _) in &for_in_info {
+        for (_, list_temp, _, _, _) in &for_in_info {
             while_tests.push(symbol_form(list_temp, span));
         }
         for (_, list_temp, _) in &for_on_info {
@@ -2573,8 +2612,8 @@ impl Expander {
             ));
         }
 
-        // For-in: setq var (car --list--)
-        for (var, list_temp, _, _) in &for_in_info {
+        // For-in: setq var (car --list--), then destructure if pattern present
+        for (var, list_temp, _, _, destructure) in &for_in_info {
             while_body.push(list_form(
                 vec![
                     symbol_form("setq", span),
@@ -2586,6 +2625,15 @@ impl Expander {
                 ],
                 span,
             ));
+            // Add destructuring bindings for patterns like (key . val)
+            if let Some(pattern) = destructure {
+                Self::emit_destructure_bindings(
+                    &mut while_body,
+                    pattern,
+                    &symbol_form(var, span),
+                    span,
+                );
+            }
         }
 
         // For-on: setq var --list--
@@ -2924,7 +2972,7 @@ impl Expander {
         }
 
         // For-in advance: setq --list-- (step-fn --list--) or (cdr --list--)
-        for (_, list_temp, _, step_fn) in &for_in_info {
+        for (_, list_temp, _, step_fn, _) in &for_in_info {
             let advance_expr = if let Some(step) = step_fn {
                 list_form(
                     vec![
@@ -3114,6 +3162,75 @@ impl Expander {
             )
         } else {
             let_form
+        }
+    }
+
+    /// Emit setq bindings for a destructuring pattern like (key . val) or (a b c).
+    fn emit_destructure_bindings(
+        body: &mut Vec<SurfaceForm>,
+        pattern: &SurfaceForm,
+        source: &SurfaceForm,
+        span: Span,
+    ) {
+        match &pattern.kind {
+            SurfaceKind::DottedList(items, tail) => {
+                // (a b . rest) — a=(car source), b=(cadr source), rest=(cddr source)
+                let mut access = source.clone();
+                for item in items {
+                    if let Some(name) = item.symbol_name() {
+                        body.push(list_form(
+                            vec![
+                                symbol_form("setq", span),
+                                symbol_form(name, span),
+                                list_form(vec![symbol_form("car", span), access.clone()], span),
+                            ],
+                            span,
+                        ));
+                        access = list_form(vec![symbol_form("cdr", span), access], span);
+                    }
+                }
+                if let Some(tail_name) = tail.symbol_name() {
+                    body.push(list_form(
+                        vec![
+                            symbol_form("setq", span),
+                            symbol_form(tail_name, span),
+                            access,
+                        ],
+                        span,
+                    ));
+                }
+            }
+            SurfaceKind::List(items) => {
+                // (a b c) — a=(car source), b=(cadr source), c=(caddr source)
+                let mut access = source.clone();
+                for (i, item) in items.iter().enumerate() {
+                    if let Some(name) = item.symbol_name() {
+                        if i == 0 {
+                            body.push(list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form(name, span),
+                                    list_form(vec![symbol_form("car", span), source.clone()], span),
+                                ],
+                                span,
+                            ));
+                            access =
+                                list_form(vec![symbol_form("cdr", span), source.clone()], span);
+                        } else {
+                            body.push(list_form(
+                                vec![
+                                    symbol_form("setq", span),
+                                    symbol_form(name, span),
+                                    list_form(vec![symbol_form("car", span), access.clone()], span),
+                                ],
+                                span,
+                            ));
+                            access = list_form(vec![symbol_form("cdr", span), access], span);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -3327,7 +3444,7 @@ impl Expander {
         None
     }
 
-    fn parse_loop_clauses(&self, span: Span, items: &[SurfaceForm]) -> Option<Vec<LoopClause>> {
+    fn parse_loop_clauses(&mut self, span: Span, items: &[SurfaceForm]) -> Option<Vec<LoopClause>> {
         let mut clauses = Vec::new();
         let mut pos = 0;
         while pos < items.len() {
@@ -3592,7 +3709,7 @@ impl Expander {
     }
 
     fn parse_for_clause(
-        &self,
+        &mut self,
         span: Span,
         items: &[SurfaceForm],
         pos: &mut usize,
@@ -3600,7 +3717,16 @@ impl Expander {
         if *pos >= items.len() {
             return None;
         }
-        let var = items[*pos].symbol_name()?.to_string();
+        // Check if the variable is a destructuring pattern like (key . val)
+        let (var, destructure_pattern) = if let Some(name) = items[*pos].symbol_name() {
+            (name.to_string(), None)
+        } else {
+            // Destructuring pattern — use a temp var
+            let pattern = items[*pos].clone();
+            let temp = format!("--cl-destructure-{}--", self.pcase_counter);
+            self.pcase_counter += 1;
+            (temp, Some(pattern))
+        };
         *pos += 1;
 
         // Peek at next keyword to determine sub-type
@@ -3705,6 +3831,7 @@ impl Expander {
                     var,
                     list_expr,
                     step_fn,
+                    destructure: destructure_pattern,
                 })
             }
             "on" => {
@@ -3869,6 +3996,7 @@ enum LoopClause {
         var: String,
         list_expr: SurfaceForm,
         step_fn: Option<SurfaceForm>,
+        destructure: Option<SurfaceForm>,
     },
     ForOn {
         var: String,
@@ -4355,8 +4483,7 @@ mod tests {
         assert_eq!(artifact.diagnostics, Vec::new());
         let rendered = format!("{:?}", artifact.surface);
         assert!(rendered.contains("\"defun\""));
-        assert!(rendered.contains("\"destructuring-bind\""));
-        assert!(rendered.contains("&optional"));
+        assert!(rendered.contains("\"--cl-rest--\""));
     }
 
     #[test]

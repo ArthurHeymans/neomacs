@@ -1023,10 +1023,13 @@ impl Interpreter<'_, '_, '_> {
             "natnump" | "wholenump" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].as_fixnum().is_some_and(|value| value >= 0))),
-            "zerop" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.fixnum_arg(name, args[0]))
-                .map(|value| bool_value(value == 0)),
+            "zerop" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_float(args[0]) {
+                    self.number_arg(name, args[0]).map(|v| bool_value(v == 0.0))
+                } else {
+                    self.fixnum_arg(name, args[0]).map(|v| bool_value(v == 0))
+                }
+            }),
             "symbolp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_symbol(args[0]))),
@@ -1208,8 +1211,18 @@ impl Interpreter<'_, '_, '_> {
             "vconcat" => self.vconcat(args),
             "nconc" => self.nconc(args),
             "number-to-string" => self.exact_arity(name, args, 1).and_then(|_| {
-                let n = self.fixnum_arg(name, args[0])?;
-                Some(self.runtime.string(n.to_string()))
+                if self.runtime.is_float(args[0]) {
+                    match self.runtime.float_data(args[0]) {
+                        Ok(value) => Some(self.runtime.string(format!("{value}"))),
+                        Err(e) => {
+                            self.runtime_error(e);
+                            None
+                        }
+                    }
+                } else {
+                    let n = self.fixnum_arg(name, args[0])?;
+                    Some(self.runtime.string(n.to_string()))
+                }
             }),
             "string-to-number" => self
                 .min_max_arity(name, args, 1, 2)
@@ -1261,17 +1274,23 @@ impl Interpreter<'_, '_, '_> {
                 self.fixnum(result, name)
             }),
             "expt" => self.exact_arity(name, args, 2).and_then(|_| {
-                let base = self.fixnum_arg(name, args[0])?;
-                let exp = self.fixnum_arg(name, args[1])?;
-                if exp < 0 {
-                    if base == 0 {
-                        self.error("arithmetic error in `expt`: 0 raised to a negative power");
-                        return None;
+                if self.has_float_arg(args) {
+                    let base = self.number_arg(name, args[0])?;
+                    let exp = self.number_arg(name, args[1])?;
+                    Some(self.runtime.float(base.powf(exp)))
+                } else {
+                    let base = self.fixnum_arg(name, args[0])?;
+                    let exp = self.fixnum_arg(name, args[1])?;
+                    if exp < 0 {
+                        if base == 0 {
+                            self.error("arithmetic error in `expt`: 0 raised to a negative power");
+                            return None;
+                        }
+                        return self.fixnum(0, name);
                     }
-                    return self.fixnum(0, name);
+                    let result = base.pow(exp as u32);
+                    self.fixnum(result, name)
                 }
-                let result = base.pow(exp as u32);
-                self.fixnum(result, name)
             }),
             "list" => Some(make_list(self.runtime, args.iter().copied())),
             "length" => self
@@ -1396,25 +1415,33 @@ impl Interpreter<'_, '_, '_> {
             "mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
-            "+" => self.fixnum_fold(name, args, 0, i64::checked_add),
-            "*" => self.fixnum_fold(name, args, 1, i64::checked_mul),
-            "-" => self.fixnum_sub(args),
-            "/" => self.fixnum_div(args),
-            "1+" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.fixnum_arg(name, args[0]))
-                .and_then(|value| value.checked_add(1))
-                .and_then(|value| self.fixnum(value, name)),
-            "1-" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.fixnum_arg(name, args[0]))
-                .and_then(|value| value.checked_sub(1))
-                .and_then(|value| self.fixnum(value, name)),
-            "=" => self.fixnum_compare(args, |left, right| left == right),
-            "<" => self.fixnum_compare(args, |left, right| left < right),
-            "<=" => self.fixnum_compare(args, |left, right| left <= right),
-            ">" => self.fixnum_compare(args, |left, right| left > right),
-            ">=" => self.fixnum_compare(args, |left, right| left >= right),
+            "+" => self.number_fold_add(args),
+            "*" => self.number_fold_mul(args),
+            "-" => self.number_sub(args),
+            "/" => self.number_div(args),
+            "1+" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_float(args[0]) {
+                    let value = self.number_arg(name, args[0])?;
+                    Some(self.runtime.float(value + 1.0))
+                } else {
+                    let value = self.fixnum_arg(name, args[0])?;
+                    value.checked_add(1).and_then(|v| self.fixnum(v, name))
+                }
+            }),
+            "1-" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_float(args[0]) {
+                    let value = self.number_arg(name, args[0])?;
+                    Some(self.runtime.float(value - 1.0))
+                } else {
+                    let value = self.fixnum_arg(name, args[0])?;
+                    value.checked_sub(1).and_then(|v| self.fixnum(v, name))
+                }
+            }),
+            "=" => self.number_compare(args, |left, right| left == right),
+            "<" => self.number_compare(args, |left, right| left < right),
+            "<=" => self.number_compare(args, |left, right| left <= right),
+            ">" => self.number_compare(args, |left, right| left > right),
+            ">=" => self.number_compare(args, |left, right| left >= right),
             "message" => Some(args.last().copied().unwrap_or(LispValue::NIL)),
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "signal" => self.exact_arity(name, args, 2).and_then(|_| {
@@ -1456,65 +1483,116 @@ impl Interpreter<'_, '_, '_> {
                 )
             }),
             "mod" => self.exact_arity(name, args, 2).and_then(|_| {
-                let dividend = self.fixnum_arg(name, args[0])?;
-                let divisor = self.fixnum_arg(name, args[1])?;
-                if divisor == 0 {
-                    let symbol = self.runtime.intern("arith-error");
-                    self.pending_signal = Some(SignaledValue {
-                        symbol,
-                        data: LispValue::NIL,
-                    });
-                    return None;
-                }
-                let result = dividend % divisor;
-                let result = if result != 0 && (dividend < 0) != (divisor < 0) {
-                    result + divisor
+                if self.has_float_arg(args) {
+                    let dividend = self.number_arg(name, args[0])?;
+                    let divisor = self.number_arg(name, args[1])?;
+                    if divisor == 0.0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    let result = dividend - divisor * (dividend / divisor).floor();
+                    Some(self.runtime.float(result))
                 } else {
-                    result
-                };
-                self.fixnum(result, name)
+                    let dividend = self.fixnum_arg(name, args[0])?;
+                    let divisor = self.fixnum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    let result = dividend % divisor;
+                    let result = if result != 0 && (dividend < 0) != (divisor < 0) {
+                        result + divisor
+                    } else {
+                        result
+                    };
+                    self.fixnum(result, name)
+                }
             }),
             "rem" => self.exact_arity(name, args, 2).and_then(|_| {
-                let dividend = self.fixnum_arg(name, args[0])?;
-                let divisor = self.fixnum_arg(name, args[1])?;
-                if divisor == 0 {
-                    let symbol = self.runtime.intern("arith-error");
-                    self.pending_signal = Some(SignaledValue {
-                        symbol,
-                        data: LispValue::NIL,
-                    });
-                    return None;
+                if self.has_float_arg(args) {
+                    let dividend = self.number_arg(name, args[0])?;
+                    let divisor = self.number_arg(name, args[1])?;
+                    if divisor == 0.0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    Some(self.runtime.float(dividend % divisor))
+                } else {
+                    let dividend = self.fixnum_arg(name, args[0])?;
+                    let divisor = self.fixnum_arg(name, args[1])?;
+                    if divisor == 0 {
+                        let symbol = self.runtime.intern("arith-error");
+                        self.pending_signal = Some(SignaledValue {
+                            symbol,
+                            data: LispValue::NIL,
+                        });
+                        return None;
+                    }
+                    self.fixnum(dividend % divisor, name)
                 }
-                self.fixnum(dividend % divisor, name)
             }),
-            "abs" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.fixnum_arg(name, args[0]))
-                .and_then(|value| value.checked_abs())
-                .and_then(|value| self.fixnum(value, name)),
+            "abs" => self.exact_arity(name, args, 1).and_then(|_| {
+                if self.runtime.is_float(args[0]) {
+                    let value = self.number_arg(name, args[0])?;
+                    Some(self.runtime.float(value.abs()))
+                } else {
+                    let value = self.fixnum_arg(name, args[0])?;
+                    value.checked_abs().and_then(|v| self.fixnum(v, name))
+                }
+            }),
             "max" => {
                 if args.is_empty() {
                     self.error("primitive `max` requires at least one argument");
                     return None;
                 }
-                let mut result = self.fixnum_arg(name, args[0])?;
-                for arg in &args[1..] {
-                    let value = self.fixnum_arg(name, *arg)?;
-                    result = result.max(value);
+                if self.has_float_arg(args) {
+                    let mut result = self.number_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.number_arg(name, *arg)?;
+                        result = result.max(value);
+                    }
+                    Some(self.runtime.float(result))
+                } else {
+                    let mut result = self.fixnum_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.fixnum_arg(name, *arg)?;
+                        result = result.max(value);
+                    }
+                    self.fixnum(result, name)
                 }
-                self.fixnum(result, name)
             }
             "min" => {
                 if args.is_empty() {
                     self.error("primitive `min` requires at least one argument");
                     return None;
                 }
-                let mut result = self.fixnum_arg(name, args[0])?;
-                for arg in &args[1..] {
-                    let value = self.fixnum_arg(name, *arg)?;
-                    result = result.min(value);
+                if self.has_float_arg(args) {
+                    let mut result = self.number_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.number_arg(name, *arg)?;
+                        result = result.min(value);
+                    }
+                    Some(self.runtime.float(result))
+                } else {
+                    let mut result = self.fixnum_arg(name, args[0])?;
+                    for arg in &args[1..] {
+                        let value = self.fixnum_arg(name, *arg)?;
+                        result = result.min(value);
+                    }
+                    self.fixnum(result, name)
                 }
-                self.fixnum(result, name)
             }
             "type-of" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() || args[0].is_true() {
@@ -1523,6 +1601,8 @@ impl Interpreter<'_, '_, '_> {
                     self.runtime.intern("integer")
                 } else if args[0].as_char().is_some() {
                     self.runtime.intern("symbol")
+                } else if self.runtime.is_float(args[0]) {
+                    self.runtime.intern("float")
                 } else if args[0].is_heap() {
                     if self.runtime.is_cons(args[0]) {
                         self.runtime.intern("cons")
@@ -1582,8 +1662,10 @@ impl Interpreter<'_, '_, '_> {
             }),
             "number-or-marker-p" => self
                 .exact_arity(name, args, 1)
-                .map(|_| bool_value(args[0].is_fixnum())),
-            "floatp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+                .map(|_| bool_value(self.runtime.is_number(args[0]))),
+            "floatp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_float(args[0]))),
             "string-or-null-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))),
@@ -1804,10 +1886,7 @@ impl Interpreter<'_, '_, '_> {
                 char::from_u32(code).map(LispValue::from_char)
             }
             SsaConst::String(value) => Some(self.runtime.string(value.clone())),
-            SsaConst::Float(_) => {
-                self.unsupported("float constants require float object support");
-                None
-            }
+            SsaConst::Float(value) => Some(self.runtime.float(*value)),
             SsaConst::Symbol(name) => Some(self.runtime.intern(name)),
             SsaConst::Value(cv) => self.compile_value_to_lisp(cv),
         }
@@ -1823,10 +1902,7 @@ impl Interpreter<'_, '_, '_> {
             CompileValue::Bool(true) => Some(LispValue::TRUE),
             CompileValue::Bool(false) => Some(LispValue::NIL),
             CompileValue::Int(n) => self.fixnum_value(*n, "compile value"),
-            CompileValue::Float(_) => {
-                self.unsupported("float compile values");
-                None
-            }
+            CompileValue::Float(value) => Some(self.runtime.float(*value)),
             CompileValue::Char(c) => {
                 let code: u32 = (*c).try_into().ok()?;
                 char::from_u32(code).map(LispValue::from_char)
@@ -1899,10 +1975,7 @@ impl Interpreter<'_, '_, '_> {
                 char::from_u32(code).map(LispValue::from_char)
             }
             SurfaceAtom::String(value) => Some(self.runtime.string(value.clone())),
-            SurfaceAtom::Float(_) => {
-                self.unsupported("quoted floats require float object support");
-                None
-            }
+            SurfaceAtom::Float(value) => Some(self.runtime.float(*value)),
         }
     }
 
@@ -2529,14 +2602,19 @@ impl Interpreter<'_, '_, '_> {
             }
             None => 10,
         };
-        let contents = contents.trim();
-        let contents = if contents.starts_with('+') {
-            &contents[1..]
+        let trimmed = contents.trim();
+        let contents = if trimmed.starts_with('+') {
+            &trimmed[1..]
         } else {
-            contents
+            trimmed
         };
         if contents.is_empty() {
             return self.fixnum(0, "string-to-number");
+        }
+        if radix == 10 && contents.contains('.') {
+            if let Ok(value) = contents.parse::<f64>() {
+                return Some(self.runtime.float(value));
+            }
         }
         let n = i64::from_str_radix(contents, radix).unwrap_or(0);
         self.fixnum(n, "string-to-number")
@@ -2577,8 +2655,22 @@ impl Interpreter<'_, '_, '_> {
                         self.error("format `%d` requires an argument");
                         return None;
                     };
-                    let value = self.fixnum_arg("format", value)?;
-                    output.push_str(&value.to_string());
+                    let value = self.number_arg("format", value)?;
+                    output.push_str(&(value as i64).to_string());
+                }
+                'f' | 'e' | 'g' => {
+                    let Some(value) = args.next() else {
+                        self.error(format!("format `%{spec}` requires an argument"));
+                        return None;
+                    };
+                    let value = self.number_arg("format", value)?;
+                    let formatted = match spec {
+                        'f' => format!("{value}"),
+                        'e' => format!("{value:e}"),
+                        'g' => format!("{value}"),
+                        _ => unreachable!(),
+                    };
+                    output.push_str(&formatted);
                 }
                 _ => {
                     self.error(format!("unsupported format specifier `%{spec}`"));
@@ -2790,85 +2882,160 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
-    fn fixnum_fold(
-        &mut self,
-        name: &str,
-        args: &[LispValue],
-        initial: i64,
-        op: fn(i64, i64) -> Option<i64>,
-    ) -> Option<LispValue> {
-        let mut acc = initial;
-        for arg in args {
-            let value = self.fixnum_arg(name, *arg)?;
-            acc = match op(acc, value) {
-                Some(value) => value,
-                None => {
-                    self.error(format!("integer overflow in primitive `{name}`"));
-                    return None;
-                }
-            };
+    fn number_fold_add(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.is_empty() {
+            return self.fixnum(0, "+");
         }
-        self.fixnum(acc, name)
+        let is_float = self.has_float_arg(args);
+        if is_float {
+            let mut acc = 0.0f64;
+            for arg in args {
+                let value = self.number_arg("+", *arg)?;
+                acc += value;
+            }
+            Some(self.runtime.float(acc))
+        } else {
+            let mut acc: i64 = 0;
+            for arg in args {
+                let value = self.fixnum_arg("+", *arg)?;
+                acc = match acc.checked_add(value) {
+                    Some(v) => v,
+                    None => {
+                        self.error("integer overflow in primitive `+`");
+                        return None;
+                    }
+                };
+            }
+            self.fixnum(acc, "+")
+        }
     }
 
-    fn fixnum_sub(&mut self, args: &[LispValue]) -> Option<LispValue> {
+    fn number_fold_mul(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.is_empty() {
+            return self.fixnum(1, "*");
+        }
+        let is_float = self.has_float_arg(args);
+        if is_float {
+            let mut acc = 1.0f64;
+            for arg in args {
+                let value = self.number_arg("*", *arg)?;
+                acc *= value;
+            }
+            Some(self.runtime.float(acc))
+        } else {
+            let mut acc: i64 = 1;
+            for arg in args {
+                let value = self.fixnum_arg("*", *arg)?;
+                acc = match acc.checked_mul(value) {
+                    Some(v) => v,
+                    None => {
+                        self.error("integer overflow in primitive `*`");
+                        return None;
+                    }
+                };
+            }
+            self.fixnum(acc, "*")
+        }
+    }
+
+    fn number_sub(&mut self, args: &[LispValue]) -> Option<LispValue> {
         let Some((first, rest)) = args.split_first() else {
             self.error("primitive `-` requires at least one argument");
             return None;
         };
-        let first = self.fixnum_arg("-", *first)?;
-        let value = if rest.is_empty() {
-            first.checked_neg()
+        let is_float = self.has_float_arg(args);
+        if is_float {
+            let first = self.number_arg("-", *first)?;
+            let value = if rest.is_empty() { -first } else { first };
+            let value = rest.iter().try_fold(value, |acc, v| {
+                let v = self.number_arg("-", *v)?;
+                Some(acc - v)
+            })?;
+            Some(self.runtime.float(value))
         } else {
-            rest.iter().try_fold(first, |acc, value| {
-                acc.checked_sub(self.fixnum_arg("-", *value)?)
-            })
-        };
-        match value {
-            Some(value) => self.fixnum(value, "-"),
-            None => {
-                self.error("integer overflow in primitive `-`");
-                None
+            let first = self.fixnum_arg("-", *first)?;
+            let value = if rest.is_empty() {
+                first.checked_neg()
+            } else {
+                rest.iter()
+                    .try_fold(first, |acc, v| acc.checked_sub(self.fixnum_arg("-", *v)?))
+            };
+            match value {
+                Some(value) => self.fixnum(value, "-"),
+                None => {
+                    self.error("integer overflow in primitive `-`");
+                    None
+                }
             }
         }
     }
 
-    fn fixnum_div(&mut self, args: &[LispValue]) -> Option<LispValue> {
+    fn number_div(&mut self, args: &[LispValue]) -> Option<LispValue> {
         let Some((first, rest)) = args.split_first() else {
             self.error("primitive `/` requires at least one argument");
             return None;
         };
-        let first = self.fixnum_arg("/", *first)?;
-        let value = rest.iter().try_fold(first, |acc, value| {
-            let value = self.fixnum_arg("/", *value)?;
-            if value == 0 {
-                let symbol = self.runtime.intern("arith-error");
-                self.pending_signal = Some(SignaledValue {
-                    symbol,
-                    data: LispValue::NIL,
-                });
-                return None;
+        let is_float = self.has_float_arg(args);
+        if is_float {
+            let first = self.number_arg("/", *first)?;
+            let value = rest.iter().try_fold(first, |acc, v| {
+                let v = self.number_arg("/", *v)?;
+                if v == 0.0 {
+                    let symbol = self.runtime.intern("arith-error");
+                    self.pending_signal = Some(SignaledValue {
+                        symbol,
+                        data: LispValue::NIL,
+                    });
+                    return None;
+                }
+                Some(acc / v)
+            })?;
+            Some(self.runtime.float(value))
+        } else {
+            let first = self.fixnum_arg("/", *first)?;
+            let value = rest.iter().try_fold(first, |acc, v| {
+                let v = self.fixnum_arg("/", *v)?;
+                if v == 0 {
+                    let symbol = self.runtime.intern("arith-error");
+                    self.pending_signal = Some(SignaledValue {
+                        symbol,
+                        data: LispValue::NIL,
+                    });
+                    return None;
+                }
+                acc.checked_div(v)
+            });
+            match value {
+                Some(value) => self.fixnum(value, "/"),
+                None => None,
             }
-            acc.checked_div(value)
-        });
-        match value {
-            Some(value) => self.fixnum(value, "/"),
-            None => None,
         }
     }
 
-    fn fixnum_compare(
+    fn number_compare(
         &mut self,
         args: &[LispValue],
-        compare: impl Fn(i64, i64) -> bool,
+        compare: impl Fn(f64, f64) -> bool,
     ) -> Option<LispValue> {
-        let values = args
-            .iter()
-            .map(|value| self.fixnum_arg("comparison", *value))
-            .collect::<Option<Vec<_>>>()?;
-        Some(bool_value(
-            values.windows(2).all(|pair| compare(pair[0], pair[1])),
-        ))
+        if self.has_float_arg(args) {
+            let values = args
+                .iter()
+                .map(|value| self.number_arg("comparison", *value))
+                .collect::<Option<Vec<_>>>()?;
+            Some(bool_value(
+                values.windows(2).all(|pair| compare(pair[0], pair[1])),
+            ))
+        } else {
+            let values = args
+                .iter()
+                .map(|value| self.fixnum_arg("comparison", *value))
+                .collect::<Option<Vec<_>>>()?;
+            Some(bool_value(
+                values
+                    .windows(2)
+                    .all(|pair| compare(pair[0] as f64, pair[1] as f64)),
+            ))
+        }
     }
 
     fn fixnum_arg(&mut self, name: &str, value: LispValue) -> Option<i64> {
@@ -2877,6 +3044,27 @@ impl Interpreter<'_, '_, '_> {
             return None;
         };
         Some(value)
+    }
+
+    fn number_arg(&mut self, name: &str, value: LispValue) -> Option<f64> {
+        if let Some(fixnum) = value.as_fixnum() {
+            return Some(fixnum as f64);
+        }
+        if self.runtime.is_float(value) {
+            match self.runtime.float_data(value) {
+                Ok(f) => return Some(f),
+                Err(e) => {
+                    self.runtime_error(e);
+                    return None;
+                }
+            }
+        }
+        self.error(format!("primitive `{name}` expected a number"));
+        None
+    }
+
+    fn has_float_arg(&self, args: &[LispValue]) -> bool {
+        args.iter().any(|v| self.runtime.is_float(*v))
     }
 
     fn fixnum(&mut self, value: i64, name: &str) -> Option<LispValue> {
@@ -4533,8 +4721,198 @@ mod tests {
     fn executes_substring_no_properties() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-            (string= (substring-no-properties \"hello world\" 0 5) \"hello\")",
+             (string= (substring-no-properties \"hello world\" 0 5) \"hello\")",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_float_constant() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n3.14");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.14).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_floatp() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(floatp 3.14)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(floatp 42)");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_number_or_marker_p_with_float() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(number-or-marker-p 3.14)");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_float_addition() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(+ 1.5 2.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_addition_mixed() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(+ 1 2.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_integer_addition_stays_int() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(+ 1 2)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_float_subtraction() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(- 5.5 2.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_negation() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(- 3.14)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f + 3.14).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_multiplication() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(* 2.0 3.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 7.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_division() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(/ 7.0 2.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_1_plus_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(1+ 2.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_1_minus_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(1- 5.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 4.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_comparison() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(< 1.5 2.5)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(> 3.5 2.5)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(= 2.5 2.5)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(<= 2.0 2.0)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(>= 3.0 2.0)");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_mixed_comparison() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(< 1 2.5)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(> 3.5 2)");
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_type_of_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(type-of 3.14)");
+        assert_eq!(rt.symbol_name(value.unwrap()).unwrap(), "float");
+    }
+
+    #[test]
+    fn executes_number_to_string_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(number-to-string 3.14)");
+        let s = rt.string_contents(value.unwrap()).unwrap();
+        assert!(s.starts_with("3.14") || s.starts_with("3.1"));
+    }
+
+    #[test]
+    fn executes_string_to_number_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(string-to-number \"3.14\")");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.14).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_abs() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(abs -3.5)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_max_min() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(max 1 3.5 2)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 3.5).abs() < 1e-10);
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(min 1 3.5 2)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_mod_rem() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(mod 5.5 3.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 2.5).abs() < 1e-10);
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(rem 5.5 3.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 2.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_float_expt() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(expt 2.0 3.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 8.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_zerop_float() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(zerop 0.0)");
+        assert_eq!(value, Some(LispValue::TRUE));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(zerop 1.0)");
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_format_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(format \"%f\" 3.14)");
+        let s = rt.string_contents(value.unwrap()).unwrap();
+        assert!(s.contains("3.14") || s.contains("3.1"));
     }
 }
