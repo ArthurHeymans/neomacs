@@ -1862,7 +1862,21 @@ pub(crate) fn eval_lisp_source_file_in_context(
 ) -> Result<Value, EvalError> {
     let macroexpand_fn = get_eager_macroexpand_fn(eval);
     let path = load_path_buf(found);
-    streaming_readevalloop_lisp_source(eval, &path, found, content, macroexpand_fn)
+    // Set the #$ reader macro thread-local so that files loaded via
+    // load-with-code-conversion → eval-buffer (the normal .el load
+    // path) can use #$ to reference the file being loaded.  The
+    // direct .elc path sets this in with_load_context; this path
+    // must do it here since it enters the reader directly.
+    let old_reader_file = super::value_reader::get_reader_load_file_name_public();
+    let load_file_value = Value::heap_string(found.clone());
+    let roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(load_file_value);
+    super::value_reader::set_reader_load_file_name(Some(load_file_value));
+    let result =
+        streaming_readevalloop_lisp_source(eval, &path, found, content, macroexpand_fn);
+    super::value_reader::set_reader_load_file_name(old_reader_file);
+    eval.restore_specpdl_roots(roots);
+    result
 }
 
 /// Skip the `;ELC` magic header in a byte-compiled Elisp file.
