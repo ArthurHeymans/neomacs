@@ -1234,3 +1234,35 @@ fn apropos_command_includes_key_binding_for_find_file() {
         );
     }
 }
+
+#[test]
+fn recent_keys_includes_command_after_self_insert() {
+    let (mut gnu, mut neo) = boot_pair("");
+    // Type X, then check recent-keys via M-:
+    send_both_raw(&mut gnu, &mut neo, b"X");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "M-:");
+    let p = |g: &[String]| g.iter().any(|r| r.contains("Eval:"));
+    gnu.read_until(Duration::from_secs(6), p);
+    neo.read_until(Duration::from_secs(8), p);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    // Short expression
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"(length (recent-keys 'include-cmds))\r");
+    }
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        // Look for any number in the output
+        let has_output = grid
+            .iter()
+            .any(|r| r.split_whitespace().any(|w| w.parse::<i32>().is_ok()));
+        assert!(
+            has_output,
+            "{label}: M-: eval should produce a numeric result"
+        );
+    }
+}
