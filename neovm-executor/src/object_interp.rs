@@ -6494,4 +6494,31 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
+
+    #[test]
+    fn executes_provide_and_featurep() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (provide 'test-feat) (featurep 'test-feat))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_require_with_provided_feature() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (provide 'already-here) (require 'already-here))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_file_exists_p() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (file-exists-p \"Cargo.toml\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
