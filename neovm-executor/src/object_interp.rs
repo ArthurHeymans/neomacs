@@ -1187,6 +1187,9 @@ impl Interpreter<'_, '_, '_> {
             "read" => self
                 .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.read_from_string(args[0])),
+            "eval" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.eval_form(args[0])),
             "intern" => self.exact_arity(name, args, 1).and_then(|_| {
                 let name = match self.runtime.string_contents(args[0]) {
                     Ok(name) => name.to_string(),
@@ -3548,6 +3551,26 @@ impl Interpreter<'_, '_, '_> {
         Some(macro_value_to_lisp(&mv, self.runtime))
     }
 
+    fn eval_form(&mut self, form: LispValue) -> Option<LispValue> {
+        let text = self.runtime.format_value(form);
+        let source = neovm_compiler::source::SourceFile::new(
+            neovm_compiler::source::SourceId::new(0),
+            Some("<eval>".into()),
+            text,
+        );
+        let artifact = neovm_compiler::compile_source("<eval>", source.text.clone());
+        if !artifact.diagnostics.is_empty() {
+            self.diagnostics.extend(artifact.diagnostics);
+            return None;
+        }
+        let Some(regir) = artifact.regir else {
+            return Some(LispValue::NIL);
+        };
+        let result = execute_module_with_args(&regir, &[], self.runtime);
+        self.diagnostics.extend(result.diagnostics);
+        result.value
+    }
+
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
         let format = self.string_contents_owned(format)?;
         let mut output = String::new();
@@ -4613,6 +4636,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "fset"
             | "defalias"
             | "read"
+            | "eval"
             | "intern"
             | "symbol-name"
             | "not"
@@ -6374,7 +6398,7 @@ mod tests {
 
     #[test]
     fn executes_read_symbol() {
-        let (value, _rt) = execute(";;; -*- lexical-binding: t; -*-\n(read \"hello\")");
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(read \"hello\")");
         assert!(rt.is_symbol(value.unwrap()));
     }
 
@@ -6385,5 +6409,14 @@ mod tests {
              (car (read \"(1 2 3)\"))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_eval_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (eval '(+ 1 2))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 }
