@@ -125,3 +125,24 @@ fn electric_return_newline_and_indent_in_lisp_buffer() {
         2,
     );
 }
+
+#[test]
+fn delete_char_via_cd_removes_character_after_point() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "delete-char.txt";
+    let initial = "abcdef\n";
+    let expected = "bcdef\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-a");
+    send_both(&mut gnu, &mut neo, "C-d");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    save_current_file_and_assert_contents(
+        "delete-char-via-C-d",
+        &mut gnu,
+        &mut neo,
+        name,
+        expected,
+    );
+}
