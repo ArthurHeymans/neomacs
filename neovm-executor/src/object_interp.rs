@@ -3401,6 +3401,50 @@ impl Interpreter<'_, '_, '_> {
                     };
                     output.push_str(&formatted);
                 }
+                'x' | 'X' => {
+                    let Some(value) = args.next() else {
+                        self.error(format!("format `%{spec}` requires an argument"));
+                        return None;
+                    };
+                    if self.runtime.is_bignum(value) {
+                        let n = self.bignum_arg("format", value)?;
+                        let s = format!("{n:x}");
+                        if spec == 'X' {
+                            output.push_str(&s.to_uppercase());
+                        } else {
+                            output.push_str(&s);
+                        }
+                    } else {
+                        let value = self.number_arg("format", value)?;
+                        let s = format!("{:x}", value as i64);
+                        if spec == 'X' {
+                            output.push_str(&s.to_uppercase());
+                        } else {
+                            output.push_str(&s);
+                        }
+                    }
+                }
+                'o' => {
+                    let Some(value) = args.next() else {
+                        self.error("format `%o` requires an argument");
+                        return None;
+                    };
+                    if self.runtime.is_bignum(value) {
+                        let n = self.bignum_arg("format", value)?;
+                        output.push_str(&format!("{n:o}"));
+                    } else {
+                        let value = self.number_arg("format", value)?;
+                        output.push_str(&format!("{:o}", value as i64));
+                    }
+                }
+                'c' => {
+                    let Some(value) = args.next() else {
+                        self.error("format `%c` requires an argument");
+                        return None;
+                    };
+                    let ch = self.char_arg("format", value)?;
+                    output.push(ch);
+                }
                 _ => {
                     self.error(format!("unsupported format specifier `%{spec}`"));
                     return None;
