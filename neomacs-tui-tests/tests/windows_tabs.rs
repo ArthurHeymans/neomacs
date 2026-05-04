@@ -692,3 +692,34 @@ fn window_point_independence_after_split_and_cursor_moves() {
         3,
     );
 }
+
+#[test]
+fn split_window_and_switch_via_cx_o_shows_other_buffer() {
+    let (mut gnu, mut neo) = boot_pair("");
+    // Open a file so we have something to see in both windows
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "win-split.txt",
+        "split test content\n",
+        "C-x C-f",
+    );
+
+    // Split window: C-x 2
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "2");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    // Switch to other window: C-x o
+    send_both(&mut gnu, &mut neo, "C-x");
+    send_both(&mut gnu, &mut neo, "o");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("split test content")),
+            "{label}: after C-x 2 C-x o, should show file content"
+        );
+    }
+}
