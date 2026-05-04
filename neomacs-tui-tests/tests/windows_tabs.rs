@@ -723,3 +723,28 @@ fn split_window_and_switch_via_cx_o_shows_other_buffer() {
         );
     }
 }
+
+#[test]
+fn delete_other_windows_via_cx_1_leaves_single_window() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "del-other.txt",
+        "only window\n",
+        "C-x C-f",
+    );
+    // Split then delete other
+    send_both(&mut gnu, &mut neo, "C-x 2");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    send_both(&mut gnu, &mut neo, "C-x 1");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("only window")),
+            "{label}: C-x 2 C-x 1 should leave single window with content"
+        );
+    }
+}
