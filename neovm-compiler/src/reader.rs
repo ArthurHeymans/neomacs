@@ -1121,10 +1121,6 @@ mod tests {
     #[test]
     fn reads_hex_and_octal_char_escapes() {
         let output = read(r"?\x41 ?\101 ?\x4e ?\116");
-        eprintln!("DEBUG diagnostics: {:?}", output.diagnostics);
-        for (i, form) in output.forms.iter().enumerate() {
-            eprintln!("DEBUG form[{}]: {:?}", i, form.kind);
-        }
         assert_eq!(output.diagnostics, Vec::new());
         let values = output
             .forms
