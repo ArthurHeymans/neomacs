@@ -231,7 +231,7 @@ impl TuiSession {
         self.pty
             .resize(pty_process::Size::new(rows, cols))
             .expect("resize pty");
-        self.parser.set_size(rows, cols);
+        self.parser.screen_mut().set_size(rows, cols);
     }
 
     /// Send an Emacs key description (e.g. `"C-x"`, `"M-x"`, `"RET"`).
