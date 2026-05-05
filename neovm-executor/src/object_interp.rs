@@ -888,6 +888,20 @@ impl Interpreter<'_, '_, '_> {
                     if name == "lambda" {
                         return self.execute_lambda_list(callee, args);
                     }
+                    if name == "autoload" || name == "macro" {
+                        self.execute_autoload(callee, args)?;
+                        // Retry: the file loaded by autoload should have
+                        // replaced the symbol function. Re-lookup and call.
+                        if self.runtime.is_symbol(callee) {
+                            match self.runtime.symbol_function(callee) {
+                                Ok(Some(f)) if f != callee => {
+                                    return self.execute_funcall_with_depth(f, args, depth - 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                        return None;
+                    }
                 }
             }
         }
@@ -2165,6 +2179,11 @@ impl Interpreter<'_, '_, '_> {
             "load" => self
                 .min_max_arity(name, args, 1, 5)
                 .and_then(|_| self.load_file(args[0])),
+            "add-load-path" => self.exact_arity(name, args, 1).and_then(|_| {
+                let path = self.string_contents_owned(args[0])?;
+                self.runtime.add_load_path(path);
+                Some(LispValue::TRUE)
+            }),
             _ => return None,
         };
         Some(value)
@@ -2240,8 +2259,13 @@ impl Interpreter<'_, '_, '_> {
                 return None;
             }
         };
-        let path = format!("{}.el", feat_name);
-        if std::path::Path::new(&path).exists() {
+        let path = self
+            .runtime
+            .resolve_load_file(&feat_name)
+            .unwrap_or_else(|| format!("{feat_name}.el"));
+        if std::path::Path::new(&path).exists()
+            || self.runtime.resolve_load_file(&feat_name).is_some()
+        {
             let file_val = self.runtime.string(path);
             return self.load_file(file_val);
         }
@@ -3640,6 +3664,22 @@ impl Interpreter<'_, '_, '_> {
         self.eval_form(form)
     }
 
+    fn execute_autoload(
+        &mut self,
+        autoload_obj: LispValue,
+        args: &[LispValue],
+    ) -> Option<LispValue> {
+        // autoload object: (autoload FILE DOCSTRING INTERACTIVE TYPE...)
+        let file_list = self.runtime.cdr(autoload_obj).ok()?;
+        let file_val = self.runtime.car(file_list).ok()?;
+        // Load the file — this registers the real function
+        self.load_file(file_val)?;
+        // The loaded file should have replaced the symbol function.
+        // The original callee was obtained via symbol_function lookup.
+        // Return None so the caller retries with the now-loaded function.
+        None
+    }
+
     fn eval_form(&mut self, form: LispValue) -> Option<LispValue> {
         let text = self.runtime.format_value(form);
         let source = neovm_compiler::source::SourceFile::new(
@@ -3671,7 +3711,15 @@ impl Interpreter<'_, '_, '_> {
 
     fn load_file(&mut self, file: LispValue) -> Option<LispValue> {
         let path = self.string_contents_owned(file)?;
-        let contents = match std::fs::read_to_string(&path) {
+        // Resolve via load-path, try cwd directly first
+        let resolved = if std::path::Path::new(&path).exists() {
+            path.clone()
+        } else if let Some(p) = self.runtime.resolve_load_file(&path) {
+            p
+        } else {
+            path.clone()
+        };
+        let contents = match std::fs::read_to_string(&resolved) {
             Ok(c) => c,
             Err(e) => {
                 let msg = format!("cannot open load file: {e}");
@@ -3685,13 +3733,31 @@ impl Interpreter<'_, '_, '_> {
                 return None;
             }
         };
-        let artifact = neovm_compiler::compile_source(&path, contents);
+        let artifact = neovm_compiler::compile_source(&resolved, contents);
         if !artifact.diagnostics.is_empty() {
             self.diagnostics.extend(artifact.diagnostics);
             return None;
         }
+
+        // Register defuns as persistent FunctionObjects
+        if let Some(ref hir) = artifact.hir {
+            for item in &hir.items {
+                if let neovm_compiler::hir::HirItem::Defun(defun) = item {
+                    let template = neovm_compiler::ssa::SsaLambdaTemplate {
+                        params: defun.params.clone(),
+                        captures: vec![],
+                        declarations: defun.declarations.clone(),
+                        body: Box::new(defun.body.clone()),
+                    };
+                    let function = self.runtime.function(template, vec![]);
+                    let symbol = self.runtime.intern(&defun.name);
+                    let _ = self.runtime.set_symbol_function(symbol, function);
+                }
+            }
+        }
+
         let Some(regir) = artifact.regir else {
-            return Some(LispValue::NIL);
+            return Some(LispValue::TRUE);
         };
         let result = execute_module_with_args(&regir, &[], self.runtime);
         self.diagnostics.extend(result.diagnostics);
@@ -4894,6 +4960,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "file-exists-p"
             | "file-readable-p"
             | "load"
+            | "add-load-path"
             | "prog1"
             | "make-symbol"
             | "intern-soft"

@@ -20,6 +20,7 @@ pub struct Runtime {
     nil_plist: LispValue,
     true_plist: LispValue,
     match_data: Option<MatchData>,
+    load_path: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -46,6 +47,7 @@ impl Default for Runtime {
             nil_plist: LispValue::NIL,
             true_plist: LispValue::NIL,
             match_data: None,
+            load_path: Vec::new(),
         }
     }
 }
@@ -633,6 +635,30 @@ impl Runtime {
     pub fn featurep(&self, feature: LispValue) -> Result<bool, RuntimeError> {
         self.expect_symbol(feature)?;
         Ok(self.features.contains(&feature))
+    }
+
+    pub fn add_load_path(&mut self, path: String) {
+        if !self.load_path.contains(&path) {
+            self.load_path.push(path);
+        }
+    }
+
+    pub fn resolve_load_file(&self, name: &str) -> Option<String> {
+        for dir in &self.load_path {
+            let path = format!("{dir}/{name}.el");
+            if std::path::Path::new(&path).exists() {
+                return Some(path);
+            }
+            let path = format!("{dir}/{name}.elc");
+            if std::path::Path::new(&path).exists() {
+                return Some(path);
+            }
+        }
+        let path = format!("{name}.el");
+        if std::path::Path::new(&path).exists() {
+            return Some(path);
+        }
+        None
     }
 
     pub fn symbol_property(
