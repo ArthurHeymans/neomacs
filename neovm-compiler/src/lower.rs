@@ -1028,7 +1028,10 @@ struct SsaBuilder {
     mutable_lexicals: IndexSet<String>,
     cell_lexicals: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
+    depth: usize,
 }
+
+const MAX_SSA_DEPTH: usize = 200;
 
 impl SsaBuilder {
     fn new(name: Option<String>) -> Self {
@@ -1050,10 +1053,24 @@ impl SsaBuilder {
             mutable_lexicals: IndexSet::new(),
             cell_lexicals: IndexSet::new(),
             diagnostics: Vec::new(),
+            depth: 0,
         }
     }
 
     fn lower_expr(&mut self, expr: &HirExpr) -> Option<ValueId> {
+        self.depth += 1;
+        if self.depth > MAX_SSA_DEPTH {
+            self.diagnostics
+                .push(Diagnostic::error("SSA expression nesting depth exceeded"));
+            self.depth -= 1;
+            return None;
+        }
+        let result = self.lower_expr_inner(expr);
+        self.depth -= 1;
+        result
+    }
+
+    fn lower_expr_inner(&mut self, expr: &HirExpr) -> Option<ValueId> {
         match &expr.kind {
             HirExprKind::Const(value) => {
                 let value = match value {

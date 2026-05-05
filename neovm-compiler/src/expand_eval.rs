@@ -58,7 +58,7 @@ pub struct MacroEval {
     depth: usize,
 }
 
-const MAX_EVAL_DEPTH: usize = 100;
+const MAX_EVAL_DEPTH: usize = 5;
 
 impl MacroEval {
     pub fn new() -> Self {
@@ -2404,6 +2404,9 @@ impl MacroEval {
         env: &mut MacroEnv,
         depth: usize,
     ) -> Result<MacroValue, ()> {
+        if depth > 10 {
+            return Err(());
+        }
         match &form.kind {
             SurfaceKind::Comma(inner) => {
                 if depth == 1 {

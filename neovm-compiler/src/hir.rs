@@ -244,6 +244,7 @@ pub fn lower_expanded_forms(
         declared_special: IndexSet::new(),
         diagnostics: Vec::new(),
         temp_counter: 0,
+        depth: 0,
     };
     let mut items = Vec::new();
     for form in forms {
@@ -270,7 +271,10 @@ struct Lowerer<'a> {
     declared_special: IndexSet<String>,
     diagnostics: Vec<Diagnostic>,
     temp_counter: usize,
+    depth: usize,
 }
+
+const MAX_LOWER_DEPTH: usize = 200;
 
 impl Lowerer<'_> {
     fn lower_item(&mut self, form: &SurfaceForm) -> Option<HirItem> {
@@ -329,6 +333,18 @@ impl Lowerer<'_> {
     }
 
     fn lower_expr(&mut self, form: &SurfaceForm) -> Option<HirExpr> {
+        self.depth += 1;
+        if self.depth > MAX_LOWER_DEPTH {
+            self.error(form.span, "expression nesting depth exceeded");
+            self.depth -= 1;
+            return None;
+        }
+        let result = self.lower_expr_inner(form);
+        self.depth -= 1;
+        result
+    }
+
+    fn lower_expr_inner(&mut self, form: &SurfaceForm) -> Option<HirExpr> {
         match &form.kind {
             SurfaceKind::Atom(atom) => Some(self.lower_atom(atom, form.span)),
             SurfaceKind::Quote(inner) => Some(HirExpr {
