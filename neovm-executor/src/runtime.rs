@@ -766,6 +766,16 @@ impl Runtime {
             .ok_or_else(|| RuntimeError::InvalidStringData("string is not valid UTF-8".to_string()))
     }
 
+    /// Get string contents as an owned String, handling Emacs extended UTF-8.
+    /// Raw bytes 0x80..=0x9F are mapped to Unicode U+0080..U+009F.
+    pub fn string_contents_emacs(&self, string: LispValue) -> Result<String, RuntimeError> {
+        let data = &self.expect_string(string)?.data;
+        if let Some(s) = data.as_str() {
+            return Ok(s.to_string());
+        }
+        Ok(data.to_utf8_string())
+    }
+
     pub fn string_data(&self, string: LispValue) -> Result<&LispStringData, RuntimeError> {
         Ok(&self.expect_string(string)?.data)
     }
@@ -1385,6 +1395,48 @@ pub struct LispStringData {
     data: Vec<u8>,
 }
 
+/// Count characters in Emacs extended UTF-8 byte sequence.
+/// Bytes 0x80..=0x9F count as single eight-bit characters.
+/// Bytes 0xA0..=0xBF are continuation bytes (only after lead bytes).
+/// Lead bytes follow standard UTF-8: C0-DF (1 cont), E0-EF (2 cont), F0-F7 (3 cont).
+fn count_emacs_utf8_chars(bytes: &[u8]) -> usize {
+    let mut count = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            0x00..=0x7F => {
+                count += 1;
+                i += 1;
+            }
+            0x80..=0x9F => {
+                // Raw eight-bit character (Emacs extended UTF-8)
+                count += 1;
+                i += 1;
+            }
+            0xC0..=0xDF => {
+                count += 1;
+                i += 2; // skip continuation byte
+            }
+            0xE0..=0xEF => {
+                count += 1;
+                i += 3; // skip 2 continuation bytes
+            }
+            0xF0..=0xF7 => {
+                count += 1;
+                i += 4; // skip 3 continuation bytes
+            }
+            _ => {
+                // Continuation byte (0xA0-0xBF) or invalid (0xF8-0xFF)
+                // appearing alone — count as single character
+                count += 1;
+                i += 1;
+            }
+        }
+    }
+    count
+}
+
 impl LispStringData {
     pub const SIZE_BYTE_UNIBYTE: isize = -1;
     pub const SIZE_BYTE_RODATA: isize = -2;
@@ -1410,12 +1462,36 @@ impl LispStringData {
     }
 
     pub fn make_string(value: &str) -> Self {
+        let nchars = count_emacs_utf8_chars(value.as_bytes());
         let nbytes = value.len();
-        let nchars = value.chars().count();
         if nbytes == nchars {
             Self::make_unibyte(value.as_bytes().to_vec())
         } else {
             Self::make_multibyte(value.as_bytes().to_vec(), nchars)
+        }
+    }
+
+    /// Create from raw Emacs extended UTF-8 bytes.
+    /// Bytes in 0x80..=0x9F are counted as single eight-bit characters.
+    pub fn from_emacs_utf8(bytes: Vec<u8>) -> Self {
+        let nchars = count_emacs_utf8_chars(&bytes);
+        let nbytes = bytes.len();
+        if nbytes == nchars {
+            Self::make_unibyte(bytes)
+        } else {
+            Self::make_multibyte(bytes, nchars)
+        }
+    }
+
+    /// Create a multibyte string from standard UTF-8 bytes.
+    /// Uses standard Rust char counting since bytes are valid UTF-8.
+    pub fn from_utf8(value: &str) -> Self {
+        let bytes = value.as_bytes().to_vec();
+        let nchars = value.chars().count();
+        if bytes.len() == nchars {
+            Self::make_unibyte(bytes)
+        } else {
+            Self::make_multibyte(bytes, nchars)
         }
     }
 
@@ -1503,6 +1579,54 @@ impl LispStringData {
 
     pub fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(self.sdata()).ok()
+    }
+
+    /// Convert Emacs extended UTF-8 bytes to a Rust String.
+    /// Raw bytes 0x80..=0x9F are mapped to Unicode characters
+    /// U+0080..U+009F (Latin-1 Supplement).
+    pub fn to_utf8_string(&self) -> String {
+        let bytes = self.sdata();
+        let mut result = String::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            match b {
+                0x00..=0x7F => {
+                    result.push(b as char);
+                    i += 1;
+                }
+                0x80..=0x9F => {
+                    // Eight-bit character: map to U+0080..U+009F
+                    result.push(char::from_u32(0x80 + (b - 0x80) as u32).unwrap_or('\u{FFFD}'));
+                    i += 1;
+                }
+                0xC0..=0xDF if i + 1 < bytes.len() => {
+                    // 2-byte UTF-8 sequence
+                    if let Ok(s) = std::str::from_utf8(&bytes[i..i + 2]) {
+                        result.push_str(s);
+                    }
+                    i += 2;
+                }
+                0xE0..=0xEF if i + 2 < bytes.len() => {
+                    if let Ok(s) = std::str::from_utf8(&bytes[i..i + 3]) {
+                        result.push_str(s);
+                    }
+                    i += 3;
+                }
+                0xF0..=0xF7 if i + 3 < bytes.len() => {
+                    if let Ok(s) = std::str::from_utf8(&bytes[i..i + 4]) {
+                        result.push_str(s);
+                    }
+                    i += 4;
+                }
+                _ => {
+                    // Continuation byte or invalid — replace
+                    result.push('\u{FFFD}');
+                    i += 1;
+                }
+            }
+        }
+        result
     }
 
     fn format_debug(&self) -> String {
