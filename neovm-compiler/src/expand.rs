@@ -25,6 +25,7 @@ pub struct CompilerSession {
     loaded_features: HashSet<String>,
     loading_stack: Vec<String>,
     builtin_libraries: HashMap<String, &'static str>,
+    load_paths: Vec<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -36,6 +37,7 @@ impl CompilerSession {
             loaded_features: HashSet::new(),
             loading_stack: Vec::new(),
             builtin_libraries: HashMap::new(),
+            load_paths: vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()],
             diagnostics: Vec::new(),
         };
         session.register_builtin("cl-lib", crate::builtin_libs::CL_LIB_SOURCE);
@@ -126,20 +128,37 @@ impl CompilerSession {
         let source_text = match self.builtin_libraries.get(feature) {
             Some(src) => src.to_string(),
             None => {
-                self.diagnostics.push(Diagnostic::error(format!(
-                    "cannot find source for required feature '{}'",
-                    feature
-                )));
-                self.loading_stack.pop();
-                return;
+                let mut found = None;
+                for dir in &self.load_paths {
+                    let path = format!("{dir}/{feature}.el");
+                    if let Ok(text) = std::fs::read_to_string(&path) {
+                        found = Some((path, text));
+                        break;
+                    }
+                }
+                if found.is_none() {
+                    let path = format!("{feature}.el");
+                    if let Ok(text) = std::fs::read_to_string(&path) {
+                        found = Some((path, text));
+                    }
+                }
+                match found {
+                    Some((_, text)) => text,
+                    None => {
+                        self.diagnostics.push(Diagnostic::error(format!(
+                            "cannot find source for required feature '{}'",
+                            feature
+                        )));
+                        self.loading_stack.pop();
+                        return;
+                    }
+                }
             }
         };
 
-        let source = crate::source::SourceFile::new(
-            SourceId::new(0),
-            Some(format!("{}.el", feature)),
-            source_text,
-        );
+        let source_name = format!("{feature}.el");
+        let source =
+            crate::source::SourceFile::new(SourceId::new(0), Some(source_name), source_text);
         let reader_output = crate::reader::read_source(&source);
         self.diagnostics.extend(reader_output.diagnostics);
 
