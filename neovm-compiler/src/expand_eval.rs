@@ -279,6 +279,7 @@ impl MacroEval {
             Some("=") => {
                 self.eval_numeric_cmp(span, &items[1..], env, |a, b| a == b, |a, b| a == b)
             }
+            Some("/=") => self.eval_ne(span, &items[1..], env),
             Some("<") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a < b, |a, b| a < b),
             Some(">") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a > b, |a, b| a > b),
             Some("<=") => {
@@ -2103,6 +2104,55 @@ impl MacroEval {
                 Err(())
             }
         }
+    }
+
+    fn eval_ne(
+        &mut self,
+        span: Span,
+        args: &[SurfaceForm],
+        env: &mut MacroEnv,
+    ) -> Result<MacroValue, ()> {
+        if args.len() != 2 {
+            self.error(span, "/= requires exactly 2 arguments");
+            return Err(());
+        }
+        let a = self.eval(&args[0], env)?;
+        let b = self.eval(&args[1], env)?;
+        let has_float = matches!(&a, MacroValue::Float(..)) || matches!(&b, MacroValue::Float(..));
+        if has_float {
+            let af = match &a {
+                MacroValue::Int(n) => *n as f64,
+                MacroValue::Float(n) => *n,
+                _ => {
+                    self.error(span, "arithmetic requires number arguments");
+                    return Err(());
+                }
+            };
+            let bf = match &b {
+                MacroValue::Int(n) => *n as f64,
+                MacroValue::Float(n) => *n,
+                _ => {
+                    self.error(span, "arithmetic requires number arguments");
+                    return Err(());
+                }
+            };
+            return Ok(MacroValue::from_bool(af != bf));
+        }
+        let ai = match a {
+            MacroValue::Int(n) => n,
+            _ => {
+                self.error(span, "arithmetic requires integer arguments");
+                return Err(());
+            }
+        };
+        let bi = match b {
+            MacroValue::Int(n) => n,
+            _ => {
+                self.error(span, "arithmetic requires integer arguments");
+                return Err(());
+            }
+        };
+        Ok(MacroValue::from_bool(ai != bi))
     }
 
     fn eval_numeric_cmp(
