@@ -55,17 +55,33 @@ impl MacroEnv {
 
 pub struct MacroEval {
     diagnostics: Vec<Diagnostic>,
+    depth: usize,
 }
+
+const MAX_EVAL_DEPTH: usize = 100;
 
 impl MacroEval {
     pub fn new() -> Self {
         Self {
             diagnostics: Vec::new(),
+            depth: 0,
         }
     }
 
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    fn inc_depth(&mut self) -> Result<(), ()> {
+        self.depth += 1;
+        if self.depth > MAX_EVAL_DEPTH {
+            return Err(());
+        }
+        Ok(())
+    }
+
+    fn dec_depth(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     pub fn eval_progn(
@@ -81,6 +97,13 @@ impl MacroEval {
     }
 
     pub fn eval(&mut self, form: &SurfaceForm, env: &mut MacroEnv) -> Result<MacroValue, ()> {
+        self.inc_depth()?;
+        let result = self.eval_inner(form, env);
+        self.dec_depth();
+        result
+    }
+
+    fn eval_inner(&mut self, form: &SurfaceForm, env: &mut MacroEnv) -> Result<MacroValue, ()> {
         match &form.kind {
             SurfaceKind::Atom(atom) => Ok(self.eval_atom(atom, env)),
             SurfaceKind::List(items) => {

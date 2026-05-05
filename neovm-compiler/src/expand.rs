@@ -64,7 +64,7 @@ impl CompilerSession {
 
     /// Expand top-level forms from a source file, processing `require`
     /// forms eagerly to import macros from required features.
-    pub fn expand_file_forms(&mut self, forms: Vec<SurfaceForm>) -> ExpandOutput {
+    pub fn expand_file_forms(&mut self, mut forms: Vec<SurfaceForm>) -> ExpandOutput {
         let mut expander = Expander {
             macros: std::mem::take(&mut self.macros),
             symbol_macros: std::mem::take(&mut self.symbol_macros),
@@ -73,7 +73,12 @@ impl CompilerSession {
         };
 
         let mut expanded_forms = Vec::new();
-        for form in forms {
+        // Use an index-based loop so we can append forms for expansion
+        // (from require'd files) without recursing the call stack.
+        let mut idx = 0;
+        while idx < forms.len() {
+            let form = forms[idx].clone();
+            idx += 1;
             // Handle top-level (require 'feature)
             if let Some(feature) = extract_require_feature(&form) {
                 // Move macros back to session for recursive load
@@ -81,7 +86,11 @@ impl CompilerSession {
                 self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
 
                 if !self.is_loaded(&feature) {
-                    self.load_feature(&feature, form.span);
+                    // Load the feature and prepend its forms for expansion
+                    if let Some(mut new_forms) = self.load_feature_forms(&feature, form.span) {
+                        // Insert at current position so they're expanded next
+                        forms.splice(idx..idx, new_forms);
+                    }
                 }
 
                 // Move updated macros back into expander
@@ -120,23 +129,20 @@ impl CompilerSession {
         }
     }
 
-    fn load_feature(&mut self, feature: &str, span: Span) {
-        if self.loaded_features.contains(feature) {
-            return;
-        }
+    fn load_feature_forms(&mut self, feature: &str, span: Span) -> Option<Vec<SurfaceForm>> {
         if self.loading_stack.len() > 50 {
             self.diagnostics.push(Diagnostic::error(format!(
                 "require depth limit exceeded loading '{}'",
                 feature
             )));
-            return;
+            return None;
         }
         if self.loading_stack.contains(&feature.to_string()) {
             self.diagnostics.push(Diagnostic::error(format!(
                 "circular require dependency on '{}'",
                 feature
             )));
-            return;
+            return None;
         }
 
         self.loading_stack.push(feature.to_string());
@@ -144,20 +150,7 @@ impl CompilerSession {
         let source_text = match self.builtin_libraries.get(feature) {
             Some(src) => src.to_string(),
             None => {
-                let mut found = None;
-                for dir in &self.load_paths {
-                    let path = format!("{dir}/{feature}.el");
-                    if let Ok(text) = std::fs::read_to_string(&path) {
-                        found = Some((path, text));
-                        break;
-                    }
-                }
-                if found.is_none() {
-                    let path = format!("{feature}.el");
-                    if let Ok(text) = std::fs::read_to_string(&path) {
-                        found = Some((path, text));
-                    }
-                }
+                let found = self.resolve_load_file(feature);
                 match found {
                     Some((_, text)) => text,
                     None => {
@@ -166,7 +159,7 @@ impl CompilerSession {
                             feature
                         )));
                         self.loading_stack.pop();
-                        return;
+                        return None;
                     }
                 }
             }
@@ -178,13 +171,28 @@ impl CompilerSession {
         let reader_output = crate::reader::read_source(&source);
         self.diagnostics.extend(reader_output.diagnostics);
 
-        if !self.diagnostics.iter().any(Diagnostic::is_error) {
-            // Recursively expand — macros auto-register in session
-            self.expand_file_forms(reader_output.forms);
-        }
-
         self.loading_stack.pop();
         self.loaded_features.insert(feature.to_string());
+
+        if !self.diagnostics.iter().any(Diagnostic::is_error) {
+            Some(reader_output.forms)
+        } else {
+            None
+        }
+    }
+
+    fn resolve_load_file(&self, feature: &str) -> Option<(String, String)> {
+        for dir in &self.load_paths {
+            let path = format!("{dir}/{feature}.el");
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                return Some((path, text));
+            }
+        }
+        let path = format!("{feature}.el");
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            return Some((path, text));
+        }
+        None
     }
 }
 
