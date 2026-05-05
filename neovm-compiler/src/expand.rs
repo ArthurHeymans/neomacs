@@ -64,7 +64,7 @@ impl CompilerSession {
 
     /// Expand top-level forms from a source file, processing `require`
     /// forms eagerly to import macros from required features.
-    pub fn expand_file_forms(&mut self, mut forms: Vec<SurfaceForm>) -> ExpandOutput {
+    pub fn expand_file_forms(&mut self, forms: Vec<SurfaceForm>) -> ExpandOutput {
         let mut expander = Expander {
             macros: std::mem::take(&mut self.macros),
             symbol_macros: std::mem::take(&mut self.symbol_macros),
@@ -73,12 +73,7 @@ impl CompilerSession {
         };
 
         let mut expanded_forms = Vec::new();
-        // Use an index-based loop so we can append forms for expansion
-        // (from require'd files) without recursing the call stack.
-        let mut idx = 0;
-        while idx < forms.len() {
-            let form = forms[idx].clone();
-            idx += 1;
+        for form in forms {
             // Handle top-level (require 'feature)
             if let Some(feature) = extract_require_feature(&form) {
                 // Move macros back to session for recursive load
@@ -86,14 +81,33 @@ impl CompilerSession {
                 self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
 
                 if !self.is_loaded(&feature) {
-                    // Load the feature and prepend its forms for expansion
-                    if let Some(mut new_forms) = self.load_feature_forms(&feature, form.span) {
-                        // Insert at current position so they're expanded next
-                        forms.splice(idx..idx, new_forms);
+                    if let Some(new_forms) = self.load_feature_forms(&feature, form.span) {
+                        // Move macros back into expander so the required
+                        // forms are expanded with the current macro set,
+                        // including any newly-defined macros from this file.
+                        expander.macros = std::mem::take(&mut self.macros);
+                        expander.symbol_macros = std::mem::take(&mut self.symbol_macros);
+                        // Expand each required-form inline — no splice,
+                        // no recursive expand_file_forms call.
+                        for rf in new_forms {
+                            if let Some(pf) = extract_provide_feature(&rf) {
+                                self.mark_loaded(&pf);
+                                expanded_forms.push(rf);
+                            } else if let Some(defalias_form) =
+                                expander.register_top_level_macro(&rf)
+                            {
+                                expanded_forms.push(defalias_form);
+                            } else {
+                                expanded_forms.push(expander.expand_form(rf));
+                            }
+                        }
+                        // Move macros back to session so they persist
+                        self.macros = std::mem::take(&mut expander.macros);
+                        self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
                     }
                 }
 
-                // Move updated macros back into expander
+                // Move session macros back into expander for remaining forms
                 expander.macros = std::mem::take(&mut self.macros);
                 expander.symbol_macros = std::mem::take(&mut self.symbol_macros);
                 expander
