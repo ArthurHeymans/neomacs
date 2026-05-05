@@ -379,23 +379,29 @@ impl Expander {
                 span,
             );
         };
+        // Check for semantic forms FIRST — these are handled by HIR, not macros.
+        // This must precede the macro lookup so runtime macros (like `defun` from
+        // byte-run.el) don't shadow the semantic lowering.
+        match head {
+            "quote" | "function" => return SurfaceForm::new(SurfaceKind::List(items), span),
+            "defun" | "defmacro" | "defvar" | "defconst" | "defsubst" | "defcustom"
+            | "defgroup" | "defface" | "defclass" | "defmethod" | "defgeneric" => {
+                return SurfaceForm::new(
+                    SurfaceKind::List(
+                        items
+                            .into_iter()
+                            .map(|item| self.expand_form(item))
+                            .collect(),
+                    ),
+                    span,
+                );
+            }
+            _ => {}
+        }
         if let Some(def) = self.macros.get(head).cloned() {
             return self.expand_macro_call(span, items, def);
         }
         match head {
-            "quote" | "function" => SurfaceForm::new(SurfaceKind::List(items), span),
-            // Semantic forms — expand sub-forms but don't invoke runtime macros.
-            // The HIR lowerer handles the semantic lowering.
-            "defun" | "defmacro" | "defvar" | "defconst" | "defsubst" | "defcustom"
-            | "defgroup" | "defface" | "defclass" | "defmethod" | "defgeneric" => SurfaceForm::new(
-                SurfaceKind::List(
-                    items
-                        .into_iter()
-                        .map(|item| self.expand_form(item))
-                        .collect(),
-                ),
-                span,
-            ),
             "push" => self.expand_push(span, items),
             "pop" => self.expand_pop(span, items),
             "setf" => self.expand_setf(span, items),

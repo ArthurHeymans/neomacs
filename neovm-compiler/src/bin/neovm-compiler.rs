@@ -72,11 +72,6 @@ fn scan(args: Vec<String>) -> ExitCode {
         return ExitCode::from(2);
     }
 
-    let mut session = neovm_compiler::expand::CompilerSession::new();
-    for p in load_paths {
-        session.add_load_path(p);
-    }
-
     let mut total_files = 0usize;
     let mut ok_files = 0usize;
     let mut reader_errors = 0usize;
@@ -113,12 +108,17 @@ fn scan(args: Vec<String>) -> ExitCode {
             eprintln!("{}: reader OK (forms: {})", path, reader_output.forms.len());
         }
 
-        // Phase 2: expansion + lowering
+        // Phase 2: expansion + lowering (per-file fresh session to prevent
+        // cumulative state exhaustion from large transitive require chains)
+        let mut file_session = neovm_compiler::expand::CompilerSession::new();
+        for lp in &load_paths {
+            file_session.add_load_path((*lp).clone());
+        }
         let artifact = neovm_compiler::compile_source_with_expand_and_session(
             path,
             &text,
             expand_mode.clone(),
-            &mut session,
+            &mut file_session,
         );
         let has_reader_errors = artifact
             .diagnostics
