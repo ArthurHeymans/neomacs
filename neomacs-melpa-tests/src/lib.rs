@@ -57,6 +57,13 @@ const DASH_EL: &str = r#";;; dash.el --- A modern list library for Emacs.  -*- l
 
 ;; Package-Requires: ((emacs "24.1"))
 
+(defun -map (fn list)
+  "Apply FN to each element of LIST and return a list of the results."
+  (let (result)
+    (dolist (item list)
+      (push (funcall fn item) result))
+    (nreverse result)))
+
 (provide 'dash)
 ;;; dash.el ends here
 "#;
@@ -80,6 +87,37 @@ const S_AUTOLOADS: &str = r#";;; s-autoloads.el --- automatically extracted auto
 ;; no-update-autoloads: t
 ;; End:
 ;;; s-autoloads.el ends here
+"#;
+
+const S_EL: &str = r#";;; s.el --- The long-lost Emacs string manipulation library.  -*- lexical-binding: t -*-
+
+(defun s-trim-left (s)
+  "Remove whitespace at the beginning of S."
+  (if (string-match "\\`[ \t\n\r]+" s)
+      (replace-match "" t t s)
+    s))
+
+(defun s-trim-right (s)
+  "Remove whitespace at the end of S."
+  (if (string-match "[ \t\n\r]+\\'" s)
+      (replace-match "" t t s)
+    s))
+
+(defun s-split (separator s &optional omit-nulls)
+  "Split S into a list on SEPARATOR."
+  (let ((len (length separator))
+        (start 0)
+        result)
+    (while (string-match (regexp-quote separator) s start)
+      (unless (and omit-nulls (= start (match-beginning 0)))
+        (push (substring s start (match-beginning 0)) result))
+      (setq start (match-end 0)))
+    (unless (and omit-nulls (= start (length s)))
+      (push (substring s start) result))
+    (nreverse result)))
+
+(provide 's)
+;;; s.el ends here
 "#;
 
 const S_PKG: &str = r#"(define-package "s" "20220902.1511" "The long-lost Emacs string manipulation library." '((emacs "24.1")))
@@ -148,7 +186,34 @@ const HYDRA_AUTOLOADS: &str = r#";;; hydra-autoloads.el --- automatically extrac
 ;;; hydra-autoloads.el ends here
 "#;
 
+const HYDRA_EL: &str = r#";;; hydra.el --- Make bindings that stick around.  -*- lexical-binding: t -*-
+
+(defmacro defhydra (name &optional body &rest heads)
+  "Create a hydra named NAME with HEADS."
+  (declare (indent defun))
+  `(defun ,(intern (format "%s/body" name)) ()
+     ,(format "Call the body of hydra %s." name)
+     (message "hydra: %s" ',name)))
+
+(provide 'hydra)
+;;; hydra.el ends here
+"#;
+
 const HYDRA_PKG: &str = r#"(define-package "hydra" "20220910.1206" "Make bindings that stick around." '((emacs "24.4") (lv "20200507.1518")))
+"#;
+
+const LV_EL: &str = r#";;; lv.el --- Other echo area.  -*- lexical-binding: t -*-
+
+(defun lv-message (format-string &rest args)
+  "Display a non-intrusive message in the echo area."
+  (apply 'message format-string args))
+
+(defun lv-delete-window ()
+  "Delete the lv window if it exists."
+  nil)
+
+(provide 'lv)
+;;; lv.el ends here
 "#;
 
 const LV_AUTOLOADS: &str = r#";;; lv-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
@@ -218,7 +283,11 @@ pub fn famous_packages() -> Vec<MelpaFixture> {
             name: "s",
             version: "20220902.1511",
             deps: &[],
-            files: &[("s-pkg.el", S_PKG), ("s-autoloads.el", S_AUTOLOADS)],
+            files: &[
+                ("s-pkg.el", S_PKG),
+                ("s-autoloads.el", S_AUTOLOADS),
+                ("s.el", S_EL),
+            ],
             requires: &[],
         },
         MelpaFixture {
@@ -245,7 +314,11 @@ pub fn famous_packages() -> Vec<MelpaFixture> {
             name: "lv",
             version: "20200507.1518",
             deps: &[],
-            files: &[("lv-pkg.el", LV_PKG), ("lv-autoloads.el", LV_AUTOLOADS)],
+            files: &[
+                ("lv-pkg.el", LV_PKG),
+                ("lv-autoloads.el", LV_AUTOLOADS),
+                ("lv.el", LV_EL),
+            ],
             requires: &[],
         },
         MelpaFixture {
@@ -255,6 +328,7 @@ pub fn famous_packages() -> Vec<MelpaFixture> {
             files: &[
                 ("hydra-pkg.el", HYDRA_PKG),
                 ("hydra-autoloads.el", HYDRA_AUTOLOADS),
+                ("hydra.el", HYDRA_EL),
             ],
             requires: &[],
         },
