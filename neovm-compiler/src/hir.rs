@@ -1510,12 +1510,21 @@ impl Lowerer<'_> {
             ]),
             span: form.span,
         };
-        Some(HirExpr {
+        let init_if = HirExpr {
             kind: HirExprKind::If {
                 test: Box::new(boundp),
                 then_expr: Box::new(quoted_name),
                 else_expr: Box::new(set_then_return),
             },
+            span: form.span,
+        };
+        // Preserve full defcustom form as quoted metadata for runtime
+        let metadata = HirExpr {
+            kind: HirExprKind::Quote(Box::new(form.clone())),
+            span: form.span,
+        };
+        Some(HirExpr {
+            kind: HirExprKind::Progn(vec![init_if, metadata]),
             span: form.span,
         })
     }
@@ -2444,7 +2453,7 @@ mod tests {
         };
         assert!(matches!(exprs[0].kind, HirExprKind::Const(_)));
         assert!(matches!(exprs[1].kind, HirExprKind::Quote(_)));
-        assert!(matches!(exprs[2].kind, HirExprKind::If { .. }));
+        assert!(matches!(exprs[2].kind, HirExprKind::Progn(_)));
     }
 
     #[test]
