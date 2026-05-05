@@ -599,7 +599,7 @@ impl Expander {
                         .collect();
                     SurfaceForm::new(SurfaceKind::List(expanded_items), form.span)
                 }
-                _ => self.expand_form(form),
+                _ => form,
             }
         }
     }
