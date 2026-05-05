@@ -1938,40 +1938,6 @@ impl Interpreter<'_, '_, '_> {
                                 .is_some_and(|name| self.is_callable_name(&name))),
                 )
             }),
-            "mod" => self.exact_arity(name, args, 2).and_then(|_| {
-                if self.has_float_arg(args) {
-                    let dividend = self.number_arg(name, args[0])?;
-                    let divisor = self.number_arg(name, args[1])?;
-                    if divisor == 0.0 {
-                        let symbol = self.runtime.intern("arith-error");
-                        self.pending_signal = Some(SignaledValue {
-                            symbol,
-                            data: LispValue::NIL,
-                        });
-                        return None;
-                    }
-                    let result = dividend - divisor * (dividend / divisor).floor();
-                    Some(self.runtime.float(result))
-                } else {
-                    let dividend = self.fixnum_arg(name, args[0])?;
-                    let divisor = self.fixnum_arg(name, args[1])?;
-                    if divisor == 0 {
-                        let symbol = self.runtime.intern("arith-error");
-                        self.pending_signal = Some(SignaledValue {
-                            symbol,
-                            data: LispValue::NIL,
-                        });
-                        return None;
-                    }
-                    let result = dividend % divisor;
-                    let result = if result != 0 && (dividend < 0) != (divisor < 0) {
-                        result + divisor
-                    } else {
-                        result
-                    };
-                    self.fixnum(result, name)
-                }
-            }),
             "rem" => self.exact_arity(name, args, 2).and_then(|_| {
                 if self.has_float_arg(args) {
                     let dividend = self.number_arg(name, args[0])?;
