@@ -1588,7 +1588,7 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.string_match(args[0], args[1], args.get(2).copied())),
             "match-string" => self
                 .min_max_arity(name, args, 0, 2)
-                .and_then(|_| self.match_string_prim(args.get(0).copied(), args.get(1).copied())),
+                .and_then(|_| self.match_string_prim(args.get(1).copied(), args.first().copied())),
             "match-beginning" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let group = args.first().and_then(|v| v.as_fixnum()).unwrap_or(0) as usize;
                 Some(self.runtime.match_beginning(group))
