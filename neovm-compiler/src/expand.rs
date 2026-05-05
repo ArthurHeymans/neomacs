@@ -115,6 +115,16 @@ impl CompilerSession {
     }
 
     fn load_feature(&mut self, feature: &str, span: Span) {
+        if self.loaded_features.contains(feature) {
+            return;
+        }
+        if self.loading_stack.len() > 50 {
+            self.diagnostics.push(Diagnostic::error(format!(
+                "require depth limit exceeded loading '{}'",
+                feature
+            )));
+            return;
+        }
         if self.loading_stack.contains(&feature.to_string()) {
             self.diagnostics.push(Diagnostic::error(format!(
                 "circular require dependency on '{}'",
