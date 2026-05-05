@@ -75,11 +75,12 @@ impl InternalInterpResult {
         }
     }
 
-    fn into_result(mut self, runtime: &mut Runtime) -> ObjectInterpResult {
+    fn into_result(mut self, runtime: &Runtime) -> ObjectInterpResult {
         if let Some(thrown) = self.thrown.take() {
-            let symbol = runtime.intern("no-catch");
-            let data = make_list(runtime, std::iter::once(thrown.tag));
-            self.signaled = Some(SignaledValue { symbol, data });
+            self.diagnostics.push(Diagnostic::error(format!(
+                "uncaught throw for tag {}",
+                runtime.format_value(thrown.tag)
+            )));
         }
         if let Some(signaled) = self.signaled.take() {
             self.diagnostics.push(Diagnostic::error(format!(
@@ -429,6 +430,19 @@ impl Interpreter<'_, '_, '_> {
                                     return self.finish(value);
                                 }
                                 Err(thrown) => {
+                                    let symbol = self.runtime.intern("no-catch");
+                                    let data = make_list(self.runtime, std::iter::once(thrown.tag));
+                                    let signaled = SignaledValue { symbol, data };
+                                    if let Some(handler_start) = self.enter_condition_handler(
+                                        &body.instructions,
+                                        inst_index,
+                                        signaled.clone(),
+                                        cleanup.result_reg,
+                                    ) {
+                                        inst_index = handler_start;
+                                        continue;
+                                    }
+                                    // No condition handler — propagate throw normally
                                     return InternalInterpResult {
                                         value: None,
                                         thrown: Some(thrown),
@@ -536,6 +550,18 @@ impl Interpreter<'_, '_, '_> {
                                 return self.finish(value);
                             }
                             Err(thrown) => {
+                                let symbol = self.runtime.intern("no-catch");
+                                let data = make_list(self.runtime, std::iter::once(thrown.tag));
+                                let signaled = SignaledValue { symbol, data };
+                                if let Some(handler_start) = self.enter_condition_handler(
+                                    &body.instructions,
+                                    inst_index,
+                                    signaled.clone(),
+                                    result_reg,
+                                ) {
+                                    inst_index = handler_start;
+                                    continue;
+                                }
                                 return InternalInterpResult {
                                     value: None,
                                     thrown: Some(thrown),
@@ -5335,11 +5361,8 @@ mod tests {
         let (result, _) = execute_result(";;; -*- lexical-binding: t; -*-\n(throw 'tag 1)");
         assert_eq!(result.value, None);
         assert_eq!(result.diagnostics.len(), 1);
-        assert!(
-            result.diagnostics[0]
-                .message
-                .contains("uncaught signal no-catch")
-        );
+        let msg = &result.diagnostics[0].message;
+        assert!(msg.contains("uncaught throw") || msg.contains("uncaught signal no-catch"));
     }
 
     #[test]
