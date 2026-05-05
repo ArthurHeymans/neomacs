@@ -4275,7 +4275,7 @@ impl Interpreter<'_, '_, '_> {
         })
     }
 
-    fn fixnum(&mut self, value: i64, name: &str) -> Option<LispValue> {
+    fn fixnum(&mut self, value: i64, _name: &str) -> Option<LispValue> {
         if let Some(value) = LispValue::from_fixnum(value) {
             return Some(value);
         }
