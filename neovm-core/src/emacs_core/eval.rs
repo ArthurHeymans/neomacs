@@ -5293,10 +5293,15 @@ impl Context {
                 self.active_minibuffer_window
             );
 
+            // GNU `keyboard.c:1500-1506` records the command pseudo-event
+            // before `pre-command-hook`, so `recent-keys 'include-cmds` can
+            // describe the command currently being run.
+            self.record_recent_command(remapped);
+
             // Run pre-command-hook via safe-run-hooks so a broken
             // hook function is removed instead of re-firing on every
-            // command. Finding 7 — GNU `keyboard.c:1361`
-            // (`safe_run_hooks (Qpre_command_hook)`).
+            // command. Finding 7 — GNU `keyboard.c:1510`
+            // (`safe_run_hooks_maybe_narrowed (Qpre_command_hook, ...)`).
             self.safe_run_hook_if_bound("pre-command-hook")?;
 
             // GNU `keyboard.c:1530-1534` adds undo boundaries here, after
@@ -5307,13 +5312,9 @@ impl Context {
                 let _ = self.apply(Value::symbol("undo-auto--add-boundary"), vec![]);
             }
 
-            // Execute the command. GNU keyboard.c dispatches through
-            // `command-execute` from the loop, so we do the same here
-            // instead of bypassing the Lisp-side wrapper. That keeps
-            // disabled-command handling and related command-execute
-            // behavior aligned with GNU for real keyboard invocations.
-            self.record_recent_command(remapped);
-            let exec_result = self.dispatch_command_in_loop(binding);
+            // Execute the remapped command, matching GNU's
+            // `calln (Qcommand_execute, Vthis_command)`.
+            let exec_result = self.dispatch_command_in_loop(remapped);
 
             // Keep the selected window's point and current buffer/runtime view
             // aligned before post-command work and redisplay observe state.

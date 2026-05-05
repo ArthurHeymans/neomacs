@@ -1173,6 +1173,77 @@ fn layout_frame_rust_emits_buffer_tab_as_stretch_glyph() {
 }
 
 #[test]
+fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    {
+        let buf = eval
+            .buffer_manager_mut()
+            .get_mut(right_buf_id)
+            .expect("right buffer");
+        buf.insert("C-f\t;; forward-char");
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-tab-split", 800, 160, left_buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+        )
+        .expect("split window");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let window_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == right_window.0)
+        .expect("right window matrix");
+    let text_row = window_entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+    let text = text_row.glyphs[1]
+        .iter()
+        .flat_map(|glyph| match &glyph.glyph_type {
+            GlyphType::Char { ch } => std::iter::repeat_n(*ch, 1).collect::<Vec<_>>(),
+            GlyphType::Stretch { width_cols } => {
+                std::iter::repeat_n(' ', usize::from(*width_cols)).collect::<Vec<_>>()
+            }
+            _ => Vec::new(),
+        })
+        .collect::<String>();
+
+    assert!(
+        text.contains("C-f     ;; forward-char"),
+        "right-window tab should expand relative to the right window text area, got {text:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
     let mut eval = Context::new();
     let buf_id = eval

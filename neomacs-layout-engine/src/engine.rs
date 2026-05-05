@@ -3886,40 +3886,45 @@ impl LayoutEngine {
                 //   int tab_width = it->tab_width * font->space_width;
                 //   int next_tab_x = ((1 + x + tab_width - 1) / tab_width) * tab_width;
                 //   it->pixel_width = next_tab_x - x0;
-                // Do the same here — use pixel x, not column col, so per-char
-                // pixel widths don't cause column↔pixel drift.
+                // Do the same here with the iterator's text-area-relative
+                // pixel position.  `x` is frame-absolute in this layout
+                // engine, while GNU's `it->current_x` is relative to the
+                // displayed row/window text area.  Using frame-absolute x
+                // makes tabs in right-hand split windows jump to frame-global
+                // tab stops and pushes following text out of the window.
                 let x_before_tab = x;
                 let pixel_tab_width = params.tab_width as f32 * face_space_w;
+                let tab_x = (x - content_x).max(0.0);
                 let next_tab_x = if !params.tab_stop_list.is_empty() {
                     // Custom tab stops in pixels
                     params
                         .tab_stop_list
                         .iter()
                         .map(|&stop| stop as f32 * face_space_w)
-                        .find(|&stop_px| stop_px > x)
+                        .find(|&stop_px| stop_px > tab_x)
                         .unwrap_or_else(|| {
                             let last = *params.tab_stop_list.last().unwrap() as f32 * face_space_w;
-                            if x >= last && pixel_tab_width > 0.0 {
-                                last + ((x - last) / pixel_tab_width).floor() * pixel_tab_width
+                            if tab_x >= last && pixel_tab_width > 0.0 {
+                                last + ((tab_x - last) / pixel_tab_width).floor() * pixel_tab_width
                                     + pixel_tab_width
                             } else {
                                 last
                             }
                         })
                 } else if pixel_tab_width > 0.0 {
-                    ((x / pixel_tab_width).floor() + 1.0) * pixel_tab_width
+                    ((tab_x / pixel_tab_width).floor() + 1.0) * pixel_tab_width
                 } else {
-                    x + face_space_w
+                    tab_x + face_space_w
                 };
                 // Ensure tab advances at least one space width (GNU: next_tab_x - x >= font->space_width)
-                let next_tab_x = if next_tab_x - x < face_space_w {
+                let next_tab_x = if next_tab_x - tab_x < face_space_w {
                     next_tab_x + pixel_tab_width
                 } else {
                     next_tab_x
                 };
-                let advance = (next_tab_x - x).max(face_space_w);
+                let advance = (next_tab_x - tab_x).max(face_space_w);
                 // col tracks column position on the fixed grid (multiples of
-                // face_space_w).  Recompute from the absolute tab-stop pixel
+                // face_space_w).  Recompute from the row-relative tab-stop pixel
                 // so per-character width drift before the tab is absorbed.
                 let next_tab_col = (next_tab_x / face_space_w.max(1.0)).round() as usize;
                 if cursor_info.is_none() && params.point == charpos {
