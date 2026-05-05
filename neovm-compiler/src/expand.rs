@@ -376,6 +376,18 @@ impl Expander {
         }
         match head {
             "quote" | "function" => SurfaceForm::new(SurfaceKind::List(items), span),
+            // Semantic forms — expand sub-forms but don't invoke runtime macros.
+            // The HIR lowerer handles the semantic lowering.
+            "defun" | "defmacro" | "defvar" | "defconst" | "defsubst" | "defcustom"
+            | "defgroup" | "defface" | "defclass" | "defmethod" | "defgeneric" => SurfaceForm::new(
+                SurfaceKind::List(
+                    items
+                        .into_iter()
+                        .map(|item| self.expand_form(item))
+                        .collect(),
+                ),
+                span,
+            ),
             "push" => self.expand_push(span, items),
             "pop" => self.expand_pop(span, items),
             "setf" => self.expand_setf(span, items),
