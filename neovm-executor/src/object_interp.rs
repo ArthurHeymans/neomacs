@@ -1727,6 +1727,12 @@ impl Interpreter<'_, '_, '_> {
             "assoc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.assoc(args[0], args[1], true)),
+            "rassq" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.rassoc(args[0], args[1], false)),
+            "rassoc" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.rassoc(args[0], args[1], true)),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -2686,6 +2692,35 @@ impl Interpreter<'_, '_, '_> {
                     self.runtime.equal(entry_key, key)
                 } else {
                     entry_key == key
+                };
+                if matched {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn rassoc(&mut self, value: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper alist, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let entry_val = self.runtime.cdr(entry).ok()?;
+                let matched = if use_equal {
+                    self.runtime.equal(entry_val, value)
+                } else {
+                    entry_val == value
                 };
                 if matched {
                     return Some(entry);
@@ -4764,6 +4799,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "member"
             | "assq"
             | "assoc"
+            | "rassq"
+            | "rassoc"
             | "copy-sequence"
             | "copy-list"
             | "mapcar"
