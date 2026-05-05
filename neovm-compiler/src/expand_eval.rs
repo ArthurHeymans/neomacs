@@ -106,7 +106,8 @@ impl MacroEval {
             SurfaceKind::DottedList(_, _)
             | SurfaceKind::Vector(_)
             | SurfaceKind::HashList(_)
-            | SurfaceKind::Record(..) => Ok(surface_to_value(form)),
+            | SurfaceKind::Record(..)
+            | SurfaceKind::CharTable(_) => Ok(surface_to_value(form)),
         }
     }
 
@@ -2585,6 +2586,7 @@ fn form_references_bindings(form: &SurfaceForm, names: &[String]) -> bool {
             form_references_bindings(type_name, names)
                 || items.iter().any(|f| form_references_bindings(f, names))
         }
+        SurfaceKind::CharTable(items) => items.iter().any(|f| form_references_bindings(f, names)),
     }
 }
 

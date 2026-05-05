@@ -337,12 +337,13 @@ impl Lowerer<'_> {
             }),
             SurfaceKind::FunctionQuote(inner) => self.lower_function_quote(form, inner),
             SurfaceKind::List(items) => self.lower_list(form, items),
-            SurfaceKind::Vector(_) | SurfaceKind::HashList(_) | SurfaceKind::Record(..) => {
-                Some(HirExpr {
-                    kind: HirExprKind::Quote(Box::new(form.clone())),
-                    span: form.span,
-                })
-            }
+            SurfaceKind::Vector(_)
+            | SurfaceKind::HashList(_)
+            | SurfaceKind::Record(..)
+            | SurfaceKind::CharTable(_) => Some(HirExpr {
+                kind: HirExprKind::Quote(Box::new(form.clone())),
+                span: form.span,
+            }),
             SurfaceKind::DottedList(items, tail) => self.lower_dotted_list(form, items, tail),
             SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
             SurfaceKind::Comma(inner) => {
@@ -561,9 +562,10 @@ impl Lowerer<'_> {
                 self.lower_quasiquote_dotted_list(form, items, tail, depth)
             }
             SurfaceKind::Vector(items) => self.lower_quasiquote_vector(form, items, depth),
-            SurfaceKind::HashList(_) | SurfaceKind::Record(..) | SurfaceKind::Atom(_) => {
-                Some(quote_form_expr(form.clone(), form.span))
-            }
+            SurfaceKind::HashList(_)
+            | SurfaceKind::Record(..)
+            | SurfaceKind::CharTable(_)
+            | SurfaceKind::Atom(_) => Some(quote_form_expr(form.clone(), form.span)),
         }
     }
 

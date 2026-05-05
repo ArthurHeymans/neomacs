@@ -25,6 +25,8 @@ pub enum SyntaxKind {
     RBracket,
     HashLParen,
     HashSLParen,
+    HashCaret,
+    CharTable,
     Dot,
     Prefix,
     Symbol,

@@ -2500,6 +2500,13 @@ impl Interpreter<'_, '_, '_> {
                 }
                 Some(make_list(self.runtime, all))
             }
+            SurfaceKind::CharTable(items) => {
+                let values = items
+                    .iter()
+                    .map(|item| self.quote_value(item))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(make_list(self.runtime, values))
+            }
             SurfaceKind::DottedList(items, tail) => {
                 let mut result = self.quote_value(tail)?;
                 for item in items.iter().rev() {

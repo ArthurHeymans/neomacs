@@ -2266,6 +2266,11 @@ fn surface_form_to_lisp(rt: &mut Runtime, form: &SurfaceForm) -> LispValue {
             all.extend(items.iter().map(|f| surface_form_to_lisp(rt, f)));
             make_list(rt, all)
         }
+        SurfaceKind::CharTable(items) => {
+            let elements: Vec<LispValue> =
+                items.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
+            make_list(rt, elements)
+        }
         SurfaceKind::DottedList(items, tail) => {
             let mut result = surface_form_to_lisp(rt, tail);
             for item in items.iter().rev() {

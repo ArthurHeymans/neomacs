@@ -40,6 +40,8 @@ enum TokenKind {
     HashLParen,
     #[token("#s(")]
     HashSLParen,
+    #[token("#^")]
+    HashCaret,
     #[token("#'")]
     FunctionQuote,
     #[token("'")]
@@ -77,6 +79,7 @@ impl TokenKind {
             Self::RBracket => SyntaxKind::RBracket,
             Self::HashLParen => SyntaxKind::HashLParen,
             Self::HashSLParen => SyntaxKind::HashSLParen,
+            Self::HashCaret => SyntaxKind::HashCaret,
             Self::FunctionQuote | Self::Quote | Self::Backquote | Self::Comma | Self::CommaAt => {
                 SyntaxKind::Prefix
             }
@@ -707,6 +710,7 @@ impl Parser<'_> {
             TokenKind::Backquote => self.parse_prefixed(token.span, SyntaxKind::Backquote),
             TokenKind::Comma => self.parse_prefixed(token.span, SyntaxKind::Comma),
             TokenKind::CommaAt => self.parse_prefixed(token.span, SyntaxKind::CommaAt),
+            TokenKind::HashCaret => self.parse_char_table(token.span),
             TokenKind::RParen | TokenKind::RBracket => {
                 self.error(token.span, "unexpected closing delimiter");
                 false
@@ -867,6 +871,52 @@ impl Parser<'_> {
         }
     }
 
+    fn parse_char_table(&mut self, start_span: Span) -> bool {
+        // #^[...] or #^^[...] — char-table or sub-char-table
+        // The HashCaret token is consumed. Check for optional second ^.
+        self.bump_trivia();
+        let mut is_sub = false;
+        if let Some(tok) = self.peek()
+            && matches!(&tok.kind, TokenKind::HashCaret)
+        {
+            is_sub = true;
+            self.bump(); // consume second #^
+        }
+        self.bump_trivia();
+        let Some(tok) = self.peek().cloned() else {
+            self.error(start_span, "expected '[' after #^");
+            return false;
+        };
+        if !matches!(tok.kind, TokenKind::LBracket) {
+            self.error(tok.span, "expected '[' after #^");
+            return false;
+        }
+        self.builder.start_node(SyntaxKind::CharTable.into());
+        self.bump(); // consume #^
+        if is_sub { /* second #^ already consumed */ }
+        self.bump(); // consume [
+        loop {
+            self.bump_trivia();
+            let Some(token) = self.peek().cloned() else {
+                self.error(start_span, "unterminated #^[...] char-table form");
+                self.builder.finish_node();
+                return false;
+            };
+            if matches!(token.kind, TokenKind::RBracket) {
+                self.bump();
+                self.builder.finish_node();
+                return true;
+            }
+            if !self.parse_form() {
+                if self.is_eof() {
+                    self.builder.finish_node();
+                    return false;
+                }
+                self.bump();
+            }
+        }
+    }
+
     fn bump_trivia(&mut self) {
         while self.peek().is_some_and(|token| token.kind.is_trivia()) {
             self.bump();
@@ -939,6 +989,7 @@ impl SurfaceExtractor<'_> {
             SyntaxKind::List => self.extract_list(node),
             SyntaxKind::HashList => self.extract_hash_list(node),
             SyntaxKind::Record => self.extract_record(node),
+            SyntaxKind::CharTable => self.extract_char_table(node),
             SyntaxKind::Vector => self.extract_vector(node),
             SyntaxKind::Quote
             | SyntaxKind::FunctionQuote
@@ -954,6 +1005,8 @@ impl SurfaceExtractor<'_> {
             | SyntaxKind::RBracket
             | SyntaxKind::HashLParen
             | SyntaxKind::HashSLParen
+            | SyntaxKind::HashCaret
+            | SyntaxKind::CharTable
             | SyntaxKind::Dot
             | SyntaxKind::Prefix
             | SyntaxKind::Symbol
@@ -1057,6 +1110,24 @@ impl SurfaceExtractor<'_> {
                 span,
             ))
         }
+    }
+
+    fn extract_char_table(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
+        let mut items = Vec::new();
+        for element in significant_children(node) {
+            match element.kind() {
+                SyntaxKind::HashCaret | SyntaxKind::LBracket | SyntaxKind::RBracket => {}
+                _ => {
+                    if let Some(form) = self.extract_form_element(element) {
+                        items.push(form);
+                    }
+                }
+            }
+        }
+        Some(SurfaceForm::new(
+            SurfaceKind::CharTable(items),
+            node_span(self.source, node),
+        ))
     }
 
     fn extract_vector(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {

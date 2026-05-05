@@ -25,6 +25,7 @@ pub enum SurfaceKind {
     List(Vec<SurfaceForm>),
     HashList(Vec<SurfaceForm>),
     Record(Box<SurfaceForm>, Vec<SurfaceForm>),
+    CharTable(Vec<SurfaceForm>),
     DottedList(Vec<SurfaceForm>, Box<SurfaceForm>),
     Vector(Vec<SurfaceForm>),
     Quote(Box<SurfaceForm>),

@@ -150,6 +150,12 @@ fn dump_surface_form(form: &SurfaceForm, indent: usize, out: &mut String) {
                 dump_surface_form(item, indent + 1, out);
             }
         }
+        SurfaceKind::CharTable(items) => {
+            let _ = writeln!(out, "{pad}char-table");
+            for item in items {
+                dump_surface_form(item, indent + 1, out);
+            }
+        }
         SurfaceKind::DottedList(items, tail) => {
             let _ = writeln!(out, "{pad}dotted-list");
             for item in items {
