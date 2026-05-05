@@ -2464,15 +2464,32 @@ impl MacroEval {
 
     fn call_function(
         &mut self,
-        _span: Span,
+        span: Span,
         func_val: &MacroValue,
         args: &[MacroValue],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {
-        // Try named function lookup
+        // Direct symbol: look up named function
         if let MacroValue::Symbol(name) = func_val {
             if let Some(func) = env.lookup_function(name).cloned() {
                 return self.call_macro_function(&func, args, env);
+            }
+            // Handle built-in predicates that mapcar/mapc/remove-if use
+            return self.call_builtin_predicate(span, name, args);
+        }
+        // (function name) — function-quoted symbol: extract the name
+        if let MacroValue::Cons(pair) = func_val {
+            if let MacroValue::Symbol(ref fn_sym) = pair.car {
+                if fn_sym == "function" {
+                    if let MacroValue::Cons(rest) = &pair.cdr {
+                        if let MacroValue::Symbol(ref name) = rest.car {
+                            if let Some(func) = env.lookup_function(name).cloned() {
+                                return self.call_macro_function(&func, args, env);
+                            }
+                            return self.call_builtin_predicate(span, name, args);
+                        }
+                    }
+                }
             }
         }
         // Try lambda value
@@ -2485,6 +2502,35 @@ impl MacroEval {
         }
         // Unknown function — return nil
         Ok(MacroValue::Nil)
+    }
+
+    fn call_builtin_predicate(
+        &mut self,
+        span: Span,
+        name: &str,
+        args: &[MacroValue],
+    ) -> Result<MacroValue, ()> {
+        if args.is_empty() {
+            return Ok(MacroValue::Nil);
+        }
+        match name {
+            "symbolp" => Ok(MacroValue::from_bool(args[0].is_symbol())),
+            "listp" => Ok(MacroValue::from_bool(args[0].is_list())),
+            "consp" => Ok(MacroValue::from_bool(args[0].is_cons())),
+            "stringp" => Ok(MacroValue::from_bool(args[0].is_string())),
+            "numberp" => Ok(MacroValue::from_bool(
+                args[0].is_int() || matches!(args[0], MacroValue::Float(..)),
+            )),
+            "integerp" => Ok(MacroValue::from_bool(args[0].is_int())),
+            "floatp" => Ok(MacroValue::from_bool(matches!(
+                args[0],
+                MacroValue::Float(..)
+            ))),
+            "null" | "not" => Ok(MacroValue::from_bool(args[0].is_nil())),
+            "atom" => Ok(MacroValue::from_bool(!args[0].is_cons())),
+            "identity" => Ok(args[0].clone()),
+            _ => Ok(MacroValue::Nil),
+        }
     }
 
     fn call_macro_function(
