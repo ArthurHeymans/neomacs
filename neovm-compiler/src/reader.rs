@@ -249,6 +249,22 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
         // Case 6: #x, #o, #b numeric literals.
         // These are lexed as Symbol("#x1f") etc. Convert to Int/Float.
         if let TokenKind::Symbol(ref name) = tok.kind {
+            // Case 5b: #:foo — uninterned symbol. Each occurrence gets a
+            // unique name to ensure eq semantics (two reads of #:foo
+            // are never the same symbol).
+            if name.starts_with("#:") && name.len() > 2 {
+                use std::sync::atomic::{AtomicU64, Ordering};
+                static COUNTER: AtomicU64 = AtomicU64::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let unique = format!("{name}-{n}");
+                tokens.push(Token {
+                    kind: TokenKind::Symbol(unique.clone()),
+                    span: tok.span,
+                    text: unique,
+                });
+                i += 1;
+                continue;
+            }
             if let Some(value) = try_parse_hash_number(name) {
                 tokens.push(Token {
                     kind: TokenKind::Int(value),
@@ -1476,6 +1492,31 @@ mod tests {
                 assert_eq!(items.len(), 4);
             }
             other => panic!("expected Record, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reads_uninterned_symbols() {
+        let output = read("#:foo #:foo");
+        assert!(
+            output.diagnostics.is_empty(),
+            "diagnostics: {:?}",
+            output.diagnostics
+        );
+        assert_eq!(output.forms.len(), 2, "forms: {:?}", output.forms);
+        match (&output.forms[0].kind, &output.forms[1].kind) {
+            (
+                SurfaceKind::Atom(SurfaceAtom::Symbol(a)),
+                SurfaceKind::Atom(SurfaceAtom::Symbol(b)),
+            ) => {
+                assert_ne!(a, b, "uninterned symbols should be unique");
+                assert!(a.starts_with("#:foo-"));
+                assert!(b.starts_with("#:foo-"));
+            }
+            _ => panic!(
+                "expected two symbols, got {:?} {:?}",
+                output.forms[0], output.forms[1]
+            ),
         }
     }
 }
