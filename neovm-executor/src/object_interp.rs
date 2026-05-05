@@ -1291,14 +1291,9 @@ impl Interpreter<'_, '_, '_> {
                     };
                 bool_value(is_keyword)
             }),
-            "subrp" => self.exact_arity(name, args, 1).map(|_| {
-                if self.runtime.is_symbol(args[0]) {
-                    if let Ok(n) = self.runtime.symbol_name(args[0]) {
-                        return bool_value(is_primitive_name(&n));
-                    }
-                }
-                bool_value(false)
-            }),
+            "subrp" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_function(args[0]))),
             "compiled-function-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_function(args[0]))),
