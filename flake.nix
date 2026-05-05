@@ -204,7 +204,10 @@
             ];
 
             buildInputs = commonBuildInputsFor pkgs
-              ++ lib.optionals isLinux (with pkgs; [ gcc ]);
+              ++ lib.optionals isLinux (with pkgs; [
+                gcc
+                xwininfo
+              ]);
 
             # pkg-config paths for dev headers
             PKG_CONFIG_PATH = pkgs.lib.makeSearchPath "lib/pkgconfig" (with pkgs; [
