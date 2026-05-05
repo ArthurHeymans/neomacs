@@ -20,6 +20,7 @@ lasso = "0.7.3"
 logos = "0.16.1"
 num_enum = "0.7.6"
 rowan = "0.16.1"
+unicode_names2 = "2.0.0"
 
 [dev-dependencies]
 insta = "1.47.2"

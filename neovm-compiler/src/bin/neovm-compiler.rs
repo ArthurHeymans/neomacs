@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use neovm_compiler::{ExpandMode, compile_source_with_expand};
+use neovm_compiler::ExpandMode;
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -29,8 +29,9 @@ fn usage() {
     eprintln!("        compile and report macro evaluation gaps");
 }
 
-fn parse_expand_args(args: Vec<String>) -> (ExpandMode, Vec<String>) {
+fn parse_expand_args(args: Vec<String>) -> (ExpandMode, Vec<String>, Vec<String>) {
     let mut expand_mode = ExpandMode::MiniEval;
+    let mut load_paths = vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()];
     let mut positional = Vec::new();
 
     let mut i = 0;
@@ -50,20 +51,30 @@ fn parse_expand_args(args: Vec<String>) -> (ExpandMode, Vec<String>) {
             expand_mode = ExpandMode::Emacs {
                 emacs_path: value.to_string(),
             };
+        } else if args[i] == "--load-path" && i + 1 < args.len() {
+            load_paths.push(args[i + 1].clone());
+            i += 1;
+        } else if let Some(value) = args[i].strip_prefix("--load-path=") {
+            load_paths.push(value.to_string());
         } else {
             positional.push(args[i].clone());
         }
         i += 1;
     }
 
-    (expand_mode, positional)
+    (expand_mode, positional, load_paths)
 }
 
 fn scan(args: Vec<String>) -> ExitCode {
-    let (expand_mode, files) = parse_expand_args(args);
+    let (expand_mode, files, load_paths) = parse_expand_args(args);
     if files.is_empty() {
         usage();
         return ExitCode::from(2);
+    }
+
+    let mut session = neovm_compiler::expand::CompilerSession::new();
+    for p in load_paths {
+        session.add_load_path(p);
     }
 
     let mut total_files = 0usize;
@@ -103,7 +114,12 @@ fn scan(args: Vec<String>) -> ExitCode {
         }
 
         // Phase 2: expansion + lowering
-        let artifact = compile_source_with_expand(path, &text, expand_mode.clone());
+        let artifact = neovm_compiler::compile_source_with_expand_and_session(
+            path,
+            &text,
+            expand_mode.clone(),
+            &mut session,
+        );
         let has_reader_errors = artifact
             .diagnostics
             .iter()

@@ -9,6 +9,7 @@ description = "Oracle-backed Elisp parity tests for NeoVM"
 
 [dependencies]
 neovm-core = { workspace = true }
+neovm-executor = { workspace = true }
 libc.workspace = true
 proptest.workspace = true
 tempfile.workspace = true

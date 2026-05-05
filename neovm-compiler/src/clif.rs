@@ -2075,13 +2075,16 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                 let is_nil = self.builder.ins().icmp_imm(IntCC::Equal, *value, NIL_BITS);
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_nil))
             }
-            "eq" | "eql" => {
+            "eq" => {
                 if args.len() != 2 {
                     return PrimitiveCallLowering::Unknown;
                 }
+                // Raw pointer identity — two LispValue u64 values are eq iff same bits
                 let is_eq = self.builder.ins().icmp(IntCC::Equal, args[0], args[1]);
                 PrimitiveCallLowering::Value(self.bool_to_lisp_value(is_eq))
             }
+            // eql needs value comparison for floats/bignums — route to runtime
+            "eql" => PrimitiveCallLowering::Unknown,
             // Always use runtime for integerp: fixnum-only check misses bignums
             "integerp" => PrimitiveCallLowering::Unknown,
             // Route arithmetic through runtime: inline path has no overflow/bignum checks

@@ -136,6 +136,12 @@ fn dump_surface_form(form: &SurfaceForm, indent: usize, out: &mut String) {
                 dump_surface_form(item, indent + 1, out);
             }
         }
+        SurfaceKind::HashList(items) => {
+            let _ = writeln!(out, "{pad}hash-list");
+            for item in items {
+                dump_surface_form(item, indent + 1, out);
+            }
+        }
         SurfaceKind::DottedList(items, tail) => {
             let _ = writeln!(out, "{pad}dotted-list");
             for item in items {

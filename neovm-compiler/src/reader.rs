@@ -453,6 +453,67 @@ fn decode_escapes(body: &str) -> String {
                 'e' => out.push('\x1b'),
                 '"' => out.push('"'),
                 '\\' => out.push('\\'),
+                'C' | 'M' | 'S' => {
+                    let mut control = escaped == 'C';
+                    let mut meta = escaped == 'M';
+                    let mut shift = escaped == 'S';
+                    loop {
+                        if !matches!(chars.clone().next(), Some('-')) {
+                            // No dash → treat modifier as literal, fall through to other
+                            out.push(escaped);
+                            break;
+                        }
+                        chars.next(); // consume '-'
+                        let Some(next) = chars.clone().next() else {
+                            out.push(escaped);
+                            out.push('-');
+                            break;
+                        };
+                        match next {
+                            'C' => {
+                                chars.next();
+                                control = true;
+                            }
+                            'M' => {
+                                chars.next();
+                                meta = true;
+                            }
+                            'S' => {
+                                chars.next();
+                                shift = true;
+                            }
+                            '\\' => {
+                                chars.next(); // consume '\\'
+                                if let Some(ec) = chars.next() {
+                                    if matches!(ec, 'C' | 'M' | 'S') {
+                                        // Chained modifier: \C-\M-x, \M-\S-a, etc.
+                                        match ec {
+                                            'C' => control = true,
+                                            'M' => meta = true,
+                                            'S' => shift = true,
+                                            _ => unreachable!(),
+                                        }
+                                        // Continue loop to read next modifier or target
+                                    } else {
+                                        let c = decode_char_escape(ec);
+                                        out.push(apply_modifiers(c, control, meta, shift));
+                                        break;
+                                    }
+                                } else {
+                                    out.push(escaped);
+                                    out.push('-');
+                                    out.push('\\');
+                                    break;
+                                }
+                            }
+                            other => {
+                                chars.next();
+                                out.push(apply_modifiers(other, control, meta, shift));
+                                break;
+                            }
+                        }
+                    }
+                }
                 'x' => {
                     let hex: String = chars.by_ref().take(2).collect();
                     if let Ok(code) = u32::from_str_radix(&hex, 16) {
@@ -494,6 +555,40 @@ fn decode_escapes(body: &str) -> String {
                         out.push_str(&format!("\\{octal}"));
                     }
                 }
+                'd' => {
+                    let mut decimal = String::new();
+                    for _ in 0..3 {
+                        if let Some(d) = chars.clone().next().filter(|c| c.is_ascii_digit()) {
+                            decimal.push(d);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if let Ok(code) = u32::from_str_radix(&decimal, 10) {
+                        if let Some(c) = char::from_u32(code) {
+                            out.push(c);
+                        } else {
+                            out.push_str(&format!("\\d{decimal}"));
+                        }
+                    } else {
+                        out.push_str(&format!("\\d{decimal}"));
+                    }
+                }
+                'N' => {
+                    if matches!(chars.clone().next(), Some('{')) {
+                        chars.next(); // consume '{'
+                        let name: String = chars.by_ref().take_while(|c| *c != '}').collect();
+                        // Look up by Unicode character name
+                        if let Some(c) = unicode_names2::character(&name) {
+                            out.push(c);
+                        } else {
+                            out.push_str(&format!("\\N{{{name}}}"));
+                        }
+                    } else {
+                        out.push('N');
+                    }
+                }
                 other => out.push(other),
             }
         } else {
@@ -501,6 +596,42 @@ fn decode_escapes(body: &str) -> String {
         }
     }
     out
+}
+
+fn decode_char_escape(c: char) -> char {
+    match c {
+        'a' => '\x07',
+        'b' => '\x08',
+        'f' => '\x0c',
+        'n' => '\n',
+        'r' => '\r',
+        's' => ' ',
+        't' => '\t',
+        'v' => '\x0b',
+        'e' => '\x1b',
+        '"' => '"',
+        '\\' => '\\',
+        _ => c,
+    }
+}
+
+fn apply_modifiers(c: char, control: bool, meta: bool, shift: bool) -> char {
+    let mut code = c as u32;
+    if shift {
+        code = c.to_ascii_uppercase() as u32;
+    }
+    if control {
+        code = match code {
+            63 => 127,
+            64..=95 => code - 64,
+            97..=122 => code - 96,
+            _ => code,
+        };
+    }
+    if meta {
+        code |= 0x80;
+    }
+    char::from_u32(code).unwrap_or(c)
 }
 
 struct Parser<'a> {
@@ -657,9 +788,9 @@ impl Parser<'_> {
     }
 
     fn parse_invalid_hash_list(&mut self, start_span: Span) -> bool {
-        // Parse #(...) as a list — Emacs uses this for string-with-text-properties
-        // and byte-code objects. We treat the contents as a normal list.
-        self.builder.start_node(SyntaxKind::List.into());
+        // Parse #(...) as a hash-list — Emacs uses this for byte-code objects
+        // and string-with-text-properties.
+        self.builder.start_node(SyntaxKind::HashList.into());
         self.bump(); // consume #(
         loop {
             self.bump_trivia();
@@ -753,6 +884,7 @@ impl SurfaceExtractor<'_> {
     fn extract_form(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
         match node.kind() {
             SyntaxKind::List => self.extract_list(node),
+            SyntaxKind::HashList => self.extract_hash_list(node),
             SyntaxKind::Vector => self.extract_vector(node),
             SyntaxKind::Quote
             | SyntaxKind::FunctionQuote
@@ -830,6 +962,22 @@ impl SurfaceExtractor<'_> {
         } else {
             Some(SurfaceForm::new(SurfaceKind::List(items), span))
         }
+    }
+
+    fn extract_hash_list(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
+        let mut items = Vec::new();
+        for element in significant_children(node) {
+            match element.kind() {
+                SyntaxKind::LParen | SyntaxKind::RParen | SyntaxKind::HashLParen => {}
+                _ => {
+                    if let Some(form) = self.extract_form_element(element) {
+                        items.push(form);
+                    }
+                }
+            }
+        }
+        let span = node_span(self.source, node);
+        Some(SurfaceForm::new(SurfaceKind::HashList(items), span))
     }
 
     fn extract_vector(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
@@ -1223,5 +1371,31 @@ mod tests {
             output.forms[0].kind,
             SurfaceKind::Atom(SurfaceAtom::String("hello".into()))
         );
+    }
+
+    #[test]
+    fn control_meta_escape_in_string() {
+        // Test decode_escapes directly to verify the escape logic
+        assert_eq!(decode_escapes("\\C-g"), "\x07");
+    }
+
+    #[test]
+    fn meta_escape_in_string() {
+        assert_eq!(decode_escapes("\\M-a"), "\u{00e1}");
+    }
+
+    #[test]
+    fn combined_control_meta_escape_in_string() {
+        assert_eq!(decode_escapes("\\C-\\M-g"), "\u{0087}");
+    }
+
+    #[test]
+    fn decimal_escape_in_string() {
+        assert_eq!(decode_escapes("\\d065"), "A");
+    }
+
+    #[test]
+    fn unicode_name_escape_in_string() {
+        assert_eq!(decode_escapes("\\N{EXCLAMATION MARK}"), "!");
     }
 }

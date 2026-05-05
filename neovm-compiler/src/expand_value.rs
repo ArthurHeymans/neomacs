@@ -63,27 +63,46 @@ impl MacroValue {
         matches!(self, MacroValue::Int(_))
     }
 
-    /// Emacs `eq` — pointer identity for composite types, value equality for atoms.
+    /// Emacs `eq` — pointer identity for all types.
+    /// For immediate/interned types (Nil, Int, Symbol), value equality is identity.
+    /// For heap-allocated types (Float, String), distinct objects are never eq
+    /// even with identical values. Cons and Vector use Rc pointer identity.
     pub fn eq(&self, other: &MacroValue) -> bool {
         match (self, other) {
             (MacroValue::Nil, MacroValue::Nil) => true,
             (MacroValue::Int(a), MacroValue::Int(b)) => a == b,
-            (MacroValue::Float(a), MacroValue::Float(b)) => a == b,
+            (MacroValue::Float(..), MacroValue::Float(..)) => false,
             (MacroValue::Symbol(a), MacroValue::Symbol(b)) => a == b,
-            (MacroValue::String(a), MacroValue::String(b)) => a == b,
+            (MacroValue::String(..), MacroValue::String(..)) => false,
             (MacroValue::Cons(a), MacroValue::Cons(b)) => Rc::ptr_eq(a, b),
             (MacroValue::Vector(a), MacroValue::Vector(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
 
+    /// Emacs `eql` — like eq, except numbers are compared by value.
+    pub fn eql(&self, other: &MacroValue) -> bool {
+        match (self, other) {
+            (MacroValue::Float(a), MacroValue::Float(b)) => {
+                if *a == 0.0 && *b == 0.0 {
+                    a.to_bits() == b.to_bits()
+                } else {
+                    a == b
+                }
+            }
+            _ => self.eq(other),
+        }
+    }
+
     /// Emacs `equal` — deep recursive structural comparison.
     pub fn equal(&self, other: &MacroValue) -> bool {
-        // Fast path: same Rc identity (handles Cons/Vector, plus atoms via value equality).
+        // Fast path: same identity (handles Cons/Vector Rc, atoms).
         if self.eq(other) {
             return true;
         }
         match (self, other) {
+            (MacroValue::Float(a), MacroValue::Float(b)) => a == b,
+            (MacroValue::String(a), MacroValue::String(b)) => a == b,
             (MacroValue::Cons(a), MacroValue::Cons(b)) => {
                 a.car.equal(&b.car) && a.cdr.equal(&b.cdr)
             }
@@ -317,6 +336,9 @@ pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
         }
         SurfaceKind::Vector(items) => {
             MacroValue::Vector(Rc::new(items.iter().map(surface_to_value).collect()))
+        }
+        SurfaceKind::HashList(items) => {
+            MacroValue::list(items.iter().map(surface_to_value).collect())
         }
         SurfaceKind::Quote(inner) => MacroValue::list(vec![
             MacroValue::Symbol("quote".into()),

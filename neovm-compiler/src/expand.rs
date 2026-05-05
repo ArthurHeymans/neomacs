@@ -56,6 +56,12 @@ impl CompilerSession {
         self.loaded_features.insert(feature.to_string());
     }
 
+    pub fn add_load_path(&mut self, path: String) {
+        if !self.load_paths.contains(&path) {
+            self.load_paths.push(path);
+        }
+    }
+
     /// Expand top-level forms from a source file, processing `require`
     /// forms eagerly to import macros from required features.
     pub fn expand_file_forms(&mut self, forms: Vec<SurfaceForm>) -> ExpandOutput {
@@ -304,7 +310,7 @@ impl Expander {
                                 stack.push(Work::Expand(item));
                             }
                         }
-                        SurfaceKind::Vector(_) => {
+                        SurfaceKind::Vector(_) | SurfaceKind::HashList(_) => {
                             results.push(form);
                         }
                         SurfaceKind::Quote(_)
@@ -877,7 +883,9 @@ impl Expander {
                 self.expand_form(expanded)
             }
             "elt" if place_items.len() == 3 => {
-                // Same as nth — use nthcdr+setcar pattern
+                // Same as nth — use nthcdr+setcar pattern.
+                // NOTE: the place form is (elt INDEX SEQUENCE) — index first
+                // (non-standard Emacs order), matching the codebase convention.
                 let temp = symbol_form("--setf-val--", span);
                 let expanded = list_form(
                     vec![

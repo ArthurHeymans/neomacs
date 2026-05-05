@@ -152,9 +152,24 @@ pub fn compile_source_with_expand(
     text: impl Into<String>,
     mode: ExpandMode,
 ) -> CompileArtifact {
+    let mut session = expand::CompilerSession::new();
+    compile_source_with_expand_and_session(name, text, mode, &mut session)
+}
+
+/// Compile with expand mode and a pre-configured session (load paths, etc.).
+pub fn compile_source_with_expand_and_session(
+    name: impl Into<String>,
+    text: impl Into<String>,
+    mode: ExpandMode,
+    session: &mut expand::CompilerSession,
+) -> CompileArtifact {
     match mode {
-        ExpandMode::MiniEval => compile_source(name, text),
-        ExpandMode::Emacs { emacs_path } => compile_source_with_emacs_path(name, text, &emacs_path),
+        ExpandMode::MiniEval => compile_source_with_session(name, text, session),
+        ExpandMode::Emacs { emacs_path } => {
+            // Emacs expand doesn't use CompilerSession — it shells out
+            let _ = session;
+            compile_source_with_emacs_path(name, text, &emacs_path)
+        }
     }
 }
 

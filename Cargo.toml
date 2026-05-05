@@ -34,6 +34,7 @@ repository = "https://github.com/eval-exec/neomacs"
 neovm-core = { path = "neovm-core", version = "0.0.2", default-features = false }
 neovm-gc = { path = "neovm-gc", version = "0.0.2" }
 neovm-host-abi = { path = "neovm-host-abi", version = "0.0.2" }
+neovm-executor = { path = "neovm-executor", version = "0.0.2" }
 neovm-oracle-tests = { path = "neovm-oracle-tests", version = "0.0.2" }
 neomacs-display-runtime = { path = "neomacs-display-runtime", version = "0.0.2", default-features = false }
 neomacs-display-protocol = { path = "neomacs-display-protocol", version = "0.0.2", default-features = false }

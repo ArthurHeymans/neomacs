@@ -2256,7 +2256,7 @@ fn surface_form_to_lisp(rt: &mut Runtime, form: &SurfaceForm) -> LispValue {
                 char::from_u32(*v as u32).map_or(LispValue::NIL, LispValue::from_char)
             }
         },
-        SurfaceKind::List(forms) => {
+        SurfaceKind::List(forms) | SurfaceKind::HashList(forms) => {
             let elements: Vec<LispValue> =
                 forms.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
             make_list(rt, elements)

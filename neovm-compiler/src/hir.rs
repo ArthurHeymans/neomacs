@@ -337,7 +337,7 @@ impl Lowerer<'_> {
             }),
             SurfaceKind::FunctionQuote(inner) => self.lower_function_quote(form, inner),
             SurfaceKind::List(items) => self.lower_list(form, items),
-            SurfaceKind::Vector(_) => Some(HirExpr {
+            SurfaceKind::Vector(_) | SurfaceKind::HashList(_) => Some(HirExpr {
                 kind: HirExprKind::Quote(Box::new(form.clone())),
                 span: form.span,
             }),
@@ -559,7 +559,9 @@ impl Lowerer<'_> {
                 self.lower_quasiquote_dotted_list(form, items, tail, depth)
             }
             SurfaceKind::Vector(items) => self.lower_quasiquote_vector(form, items, depth),
-            SurfaceKind::Atom(_) => Some(quote_form_expr(form.clone(), form.span)),
+            SurfaceKind::HashList(_) | SurfaceKind::Atom(_) => {
+                Some(quote_form_expr(form.clone(), form.span))
+            }
         }
     }
 
@@ -1954,6 +1956,20 @@ impl Lowerer<'_> {
         let mut declarations = Vec::new();
         let mut body_start = 0;
         for form in forms {
+            // Skip a leading docstring before declarations, as Emacs allows
+            // (defun f () "doc" (declare ...) (interactive ...) body).
+            // A string is only a docstring if it is followed by declare/interactive
+            // or another body form — a lone string is a return value.
+            if body_start == 0 {
+                if let SurfaceKind::Atom(SurfaceAtom::String(_)) = &form.kind {
+                    // Only treat as docstring if there is more content after it
+                    if forms.len() > 1 {
+                        body_start += 1;
+                        continue;
+                    }
+                    break;
+                }
+            }
             let Some(items) = list_items(form) else {
                 break;
             };
@@ -1962,7 +1978,6 @@ impl Lowerer<'_> {
                 declarations.extend(self.parse_declarations(&items[1..]));
                 body_start += 1;
             } else if head == Some("interactive") {
-                // Strip (interactive ...) — it's a compile-time annotation
                 body_start += 1;
             } else {
                 break;

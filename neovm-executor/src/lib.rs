@@ -35,6 +35,7 @@ pub enum Engine {
 pub struct Executor {
     engine: Engine,
     expand_mode: ExpandMode,
+    load_paths: Vec<String>,
 }
 
 impl Default for Executor {
@@ -42,6 +43,7 @@ impl Default for Executor {
         Self {
             engine: Engine::default(),
             expand_mode: ExpandMode::MiniEval,
+            load_paths: vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()],
         }
     }
 }
@@ -55,6 +57,7 @@ impl Executor {
         Self {
             engine,
             expand_mode: ExpandMode::MiniEval,
+            load_paths: vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()],
         }
     }
 
@@ -62,6 +65,13 @@ impl Executor {
         Self {
             engine,
             expand_mode,
+            load_paths: vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()],
+        }
+    }
+
+    pub fn add_load_path(&mut self, path: String) {
+        if !self.load_paths.contains(&path) {
+            self.load_paths.push(path);
         }
     }
 
@@ -72,10 +82,16 @@ impl Executor {
         args: &[i64],
     ) -> ExecuteArtifact {
         match self.engine {
-            Engine::Interpreter => {
-                execute_with_object_interpreter(name, text, args, &self.expand_mode)
+            Engine::Interpreter => execute_with_object_interpreter(
+                name,
+                text,
+                args,
+                &self.expand_mode,
+                &self.load_paths,
+            ),
+            Engine::Jit => {
+                execute_with_jit_engine(name, text, args, &self.expand_mode, &self.load_paths)
             }
-            Engine::Jit => execute_with_jit_engine(name, text, args, &self.expand_mode),
         }
     }
 
@@ -107,6 +123,7 @@ fn execute_with_jit_engine(
     text: impl Into<String>,
     args: &[i64],
     expand_mode: &ExpandMode,
+    _load_paths: &[String],
 ) -> ExecuteArtifact {
     let artifact = jit_interp::execute_with_jit_expand(name, text, args, expand_mode);
     ExecuteArtifact {
@@ -121,8 +138,18 @@ fn execute_with_object_interpreter(
     text: impl Into<String>,
     args: &[i64],
     expand_mode: &ExpandMode,
+    load_paths: &[String],
 ) -> ExecuteArtifact {
-    let compile = neovm_compiler::compile_source_with_expand(name, text, expand_mode.clone());
+    let mut session = neovm_compiler::expand::CompilerSession::new();
+    for path in load_paths {
+        session.add_load_path(path.clone());
+    }
+    let compile = neovm_compiler::compile_source_with_expand_and_session(
+        name,
+        text,
+        expand_mode.clone(),
+        &mut session,
+    );
     let mut diagnostics = compile.diagnostics.clone();
     let mut value = None;
     let mut runtime = Runtime::new();

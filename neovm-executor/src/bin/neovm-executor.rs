@@ -69,7 +69,13 @@ fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let executor = Executor::with_engine_and_expand(engine, expand_mode);
+    let mut executor = Executor::with_engine_and_expand(engine, expand_mode);
+    // Parse --load-path flags from positional args (they appear as separate tokens)
+    for arg in &args {
+        if arg == "--load-path" {
+            // Already consumed, handled in positional filtering
+        }
+    }
     let artifact = match executor.execute_file(path, &values) {
         Ok(artifact) => artifact,
         Err(error) => {

@@ -1064,9 +1064,34 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.set_cdr(args[0], args[1]);
                 self.runtime_value(result)
             }),
-            "eq" | "eql" => self
-                .exact_arity(name, args, 2)
-                .map(|_| bool_value(args[0] == args[1])),
+            "eq" => self.exact_arity(name, args, 2).map(|_| {
+                // Emacs eq is pointer identity: same object in memory.
+                // LispValue derives PartialEq (raw u64 comparison) so == is correct
+                // for eq — unlike neovm-core's TaggedValue which falls back to equal_value.
+                bool_value(args[0] == args[1])
+            }),
+            "eql" => self.exact_arity(name, args, 2).map(|_| {
+                // Emacs eql is like eq, except numbers are compared by value
+                // and zero vs negative zero are distinguished.
+                if args[0] == args[1] {
+                    return bool_value(true);
+                }
+                if self.runtime.is_float(args[0]) && self.runtime.is_float(args[1]) {
+                    let a = self.runtime.float_data(args[0]).unwrap_or(0.0);
+                    let b = self.runtime.float_data(args[1]).unwrap_or(0.0);
+                    // eql distinguishes 0.0 from -0.0 (unlike Rust's f64::eq).
+                    if a == 0.0 && b == 0.0 {
+                        return bool_value(a.to_bits() == b.to_bits());
+                    }
+                    return bool_value(a == b);
+                }
+                if self.runtime.is_bignum(args[0]) && self.runtime.is_bignum(args[1]) {
+                    let a = self.runtime.bignum_data(args[0]).unwrap_or_default();
+                    let b = self.runtime.bignum_data(args[1]).unwrap_or_default();
+                    return bool_value(a == b);
+                }
+                bool_value(false)
+            }),
             "equal" => self
                 .exact_arity(name, args, 2)
                 .map(|_| bool_value(self.runtime.equal(args[0], args[1]))),
@@ -2463,7 +2488,7 @@ impl Interpreter<'_, '_, '_> {
     fn quote_value(&mut self, form: &SurfaceForm) -> Option<LispValue> {
         match &form.kind {
             SurfaceKind::Atom(atom) => self.quote_atom(atom),
-            SurfaceKind::List(items) => {
+            SurfaceKind::List(items) | SurfaceKind::HashList(items) => {
                 let values = items
                     .iter()
                     .map(|item| self.quote_value(item))

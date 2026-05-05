@@ -461,12 +461,13 @@ impl WorkerRuntime {
             let mut eval = evaluator.lock().expect("elisp evaluator mutex poisoned");
             eval.setup_thread_locals();
 
-            let forms = emacs_core::value_reader::read_all(source).map_err(|err| {
-                TaskError::Failed(Signal {
-                    symbol: "invalid-read-syntax".to_string(),
-                    data: Some(err.message),
-                })
-            })?;
+            let forms =
+                emacs_core::value_reader::read_all(source, eval.obarray()).map_err(|err| {
+                    TaskError::Failed(Signal {
+                        symbol: "invalid-read-syntax".to_string(),
+                        data: Some(err.message),
+                    })
+                })?;
 
             let mut last = LispValue::default();
             for form in forms {

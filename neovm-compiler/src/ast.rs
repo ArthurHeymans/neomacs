@@ -29,6 +29,7 @@ macro_rules! ast_node {
 
 ast_node!(Root, SyntaxKind::Root);
 ast_node!(List, SyntaxKind::List);
+ast_node!(HashList, SyntaxKind::HashList);
 ast_node!(Vector, SyntaxKind::Vector);
 ast_node!(
     PrefixForm,
@@ -47,6 +48,12 @@ impl Root {
 }
 
 impl List {
+    pub fn elements(&self) -> impl Iterator<Item = SyntaxElement> + '_ {
+        significant_children(self.syntax())
+    }
+}
+
+impl HashList {
     pub fn elements(&self) -> impl Iterator<Item = SyntaxElement> + '_ {
         significant_children(self.syntax())
     }

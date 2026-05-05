@@ -42,12 +42,10 @@ impl CompileValue {
             (CompileValue::Nil, CompileValue::Nil) => true,
             (CompileValue::Bool(a), CompileValue::Bool(b)) => a == b,
             (CompileValue::Int(a), CompileValue::Int(b)) => a == b,
-            (CompileValue::Float(a), CompileValue::Float(b)) => a.to_bits() == b.to_bits(),
+            (CompileValue::Float(..), CompileValue::Float(..)) => false,
             (CompileValue::Char(a), CompileValue::Char(b)) => a == b,
             (CompileValue::Symbol(a), CompileValue::Symbol(b)) => a == b,
-            (CompileValue::String(a), CompileValue::String(b)) => a == b,
-            // Cons and Vector: use pointer identity (raw address comparison).
-            // Since Box/Vec are unique, self == other only if they are the same allocation.
+            (CompileValue::String(..), CompileValue::String(..)) => false,
             (CompileValue::Cons { .. }, CompileValue::Cons { .. }) => std::ptr::eq(self, other),
             (CompileValue::Vector(_), CompileValue::Vector(_)) => std::ptr::eq(self, other),
             _ => false,
@@ -60,6 +58,8 @@ impl CompileValue {
             return true;
         }
         match (self, other) {
+            (CompileValue::Float(a), CompileValue::Float(b)) => a == b,
+            (CompileValue::String(a), CompileValue::String(b)) => a == b,
             (
                 CompileValue::Cons {
                     car: a_car,
@@ -193,7 +193,7 @@ impl CompileValue {
             CompileValue::Bool(true) => MacroValue::Symbol("t".into()),
             CompileValue::Bool(false) => MacroValue::Nil,
             CompileValue::Int(n) => MacroValue::Int(*n),
-            CompileValue::Float(f) => MacroValue::Int(*f as i64),
+            CompileValue::Float(f) => MacroValue::Float(*f),
             CompileValue::Char(c) => MacroValue::Int(*c),
             CompileValue::Symbol(s) => MacroValue::Symbol(s.clone()),
             CompileValue::String(s) => MacroValue::String(s.clone()),

@@ -103,7 +103,9 @@ impl MacroEval {
                 );
                 Err(())
             }
-            SurfaceKind::DottedList(_, _) | SurfaceKind::Vector(_) => Ok(surface_to_value(form)),
+            SurfaceKind::DottedList(_, _) | SurfaceKind::Vector(_) | SurfaceKind::HashList(_) => {
+                Ok(surface_to_value(form))
+            }
         }
     }
 
@@ -243,22 +245,43 @@ impl MacroEval {
                 MacroValue::from_bool(v.is_string())
             }),
             Some("numberp") => self.eval_unary(span, "numberp", &items[1..], env, |v| {
-                MacroValue::from_bool(v.is_int())
+                MacroValue::from_bool(v.is_int() || matches!(v, MacroValue::Float(..)))
             }),
-            Some("eq") | Some("eql") => {
-                self.eval_binary_pred(span, &items[1..], env, |a, b| a.eq(b))
-            }
+            Some("eq") => self.eval_binary_pred(span, &items[1..], env, |a, b| a.eq(b)),
+            Some("eql") => self.eval_binary_pred(span, &items[1..], env, |a, b| a.eql(b)),
             Some("equal") => self.eval_binary_pred(span, &items[1..], env, |a, b| a.equal(b)),
 
-            Some("+") => self.eval_fold(span, &items[1..], env, 0i64, |a, b| a.wrapping_add(b)),
+            Some("+") => self.eval_arithmetic(
+                span,
+                &items[1..],
+                env,
+                0i64,
+                0.0,
+                |a, b| a.wrapping_add(b),
+                |a, b| a + b,
+            ),
             Some("-") => self.eval_sub(span, &items[1..], env),
-            Some("*") => self.eval_fold(span, &items[1..], env, 1i64, |a, b| a.wrapping_mul(b)),
+            Some("*") => self.eval_arithmetic(
+                span,
+                &items[1..],
+                env,
+                1i64,
+                1.0,
+                |a, b| a.wrapping_mul(b),
+                |a, b| a * b,
+            ),
 
-            Some("=") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a == b),
-            Some("<") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a < b),
-            Some(">") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a > b),
-            Some("<=") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a <= b),
-            Some(">=") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a >= b),
+            Some("=") => {
+                self.eval_numeric_cmp(span, &items[1..], env, |a, b| a == b, |a, b| a == b)
+            }
+            Some("<") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a < b, |a, b| a < b),
+            Some(">") => self.eval_numeric_cmp(span, &items[1..], env, |a, b| a > b, |a, b| a > b),
+            Some("<=") => {
+                self.eval_numeric_cmp(span, &items[1..], env, |a, b| a <= b, |a, b| a <= b)
+            }
+            Some(">=") => {
+                self.eval_numeric_cmp(span, &items[1..], env, |a, b| a >= b, |a, b| a >= b)
+            }
 
             Some("symbol-name") => self.eval_unary(span, "symbol-name", &items[1..], env, |v| {
                 v.as_symbol_name()
@@ -1802,24 +1825,47 @@ impl MacroEval {
         Ok(MacroValue::Int(len as i64))
     }
 
-    fn eval_fold(
+    fn eval_arithmetic(
         &mut self,
         span: Span,
         args: &[SurfaceForm],
         env: &mut MacroEnv,
-        init: i64,
-        f: impl Fn(i64, i64) -> i64,
+        init_i: i64,
+        init_f: f64,
+        op_i: impl Fn(i64, i64) -> i64,
+        op_f: impl Fn(f64, f64) -> f64,
     ) -> Result<MacroValue, ()> {
-        let mut result = init;
-        for arg in args {
-            let val = self.eval(arg, env)?;
-            match val {
-                MacroValue::Int(n) => result = f(result, n),
+        let values: Vec<MacroValue> = args
+            .iter()
+            .map(|arg| self.eval(arg, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Float contagion: if any arg is a float, use float arithmetic
+        let has_float = values.iter().any(|v| matches!(v, MacroValue::Float(..)));
+        if has_float {
+            let mut result = init_f;
+            for val in &values {
+                let n = match val {
+                    MacroValue::Int(n) => *n as f64,
+                    MacroValue::Float(n) => *n,
+                    _ => {
+                        self.error(span, "arithmetic requires number arguments");
+                        return Err(());
+                    }
+                };
+                result = op_f(result, n);
+            }
+            return Ok(MacroValue::Float(result));
+        }
+        let mut result = init_i;
+        for val in &values {
+            let n = match val {
+                MacroValue::Int(n) => *n,
                 _ => {
                     self.error(span, "arithmetic requires integer arguments");
                     return Err(());
                 }
-            }
+            };
+            result = op_i(result, n);
         }
         Ok(MacroValue::Int(result))
     }
@@ -1833,33 +1879,71 @@ impl MacroEval {
         if args.is_empty() {
             return Ok(MacroValue::Int(0));
         }
-        if args.len() == 1 {
-            let val = self.eval(&args[0], env)?;
-            match val {
-                MacroValue::Int(n) => return Ok(MacroValue::Int(-n)),
+        let values: Vec<MacroValue> = args
+            .iter()
+            .map(|arg| self.eval(arg, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_float = values.iter().any(|v| matches!(v, MacroValue::Float(..)));
+        if has_float {
+            if values.len() == 1 {
+                let n = match &values[0] {
+                    MacroValue::Int(n) => -(*n as f64),
+                    MacroValue::Float(n) => -n,
+                    _ => {
+                        self.error(span, "arithmetic requires number arguments");
+                        return Err(());
+                    }
+                };
+                return Ok(MacroValue::Float(n));
+            }
+            let mut result = match &values[0] {
+                MacroValue::Int(n) => *n as f64,
+                MacroValue::Float(n) => *n,
+                _ => {
+                    self.error(span, "arithmetic requires number arguments");
+                    return Err(());
+                }
+            };
+            for val in &values[1..] {
+                let n = match val {
+                    MacroValue::Int(n) => *n as f64,
+                    MacroValue::Float(n) => *n,
+                    _ => {
+                        self.error(span, "arithmetic requires number arguments");
+                        return Err(());
+                    }
+                };
+                result -= n;
+            }
+            return Ok(MacroValue::Float(result));
+        }
+        // Integer path
+        if values.len() == 1 {
+            let n = match &values[0] {
+                MacroValue::Int(n) => -n,
                 _ => {
                     self.error(span, "arithmetic requires integer arguments");
                     return Err(());
                 }
-            }
+            };
+            return Ok(MacroValue::Int(n));
         }
-        let first = self.eval(&args[0], env)?;
-        let mut result = match first {
-            MacroValue::Int(n) => n,
+        let mut result = match &values[0] {
+            MacroValue::Int(n) => *n,
             _ => {
                 self.error(span, "arithmetic requires integer arguments");
                 return Err(());
             }
         };
-        for arg in &args[1..] {
-            let val = self.eval(arg, env)?;
-            match val {
-                MacroValue::Int(n) => result = result.wrapping_sub(n),
+        for val in &values[1..] {
+            let n = match val {
+                MacroValue::Int(n) => *n,
                 _ => {
                     self.error(span, "arithmetic requires integer arguments");
                     return Err(());
                 }
-            }
+            };
+            result = result.wrapping_sub(n);
         }
         Ok(MacroValue::Int(result))
     }
@@ -1869,24 +1953,58 @@ impl MacroEval {
         span: Span,
         args: &[SurfaceForm],
         env: &mut MacroEnv,
-        pred: impl Fn(i64, i64) -> bool,
+        pred_i: impl Fn(i64, i64) -> bool,
+        pred_f: impl Fn(f64, f64) -> bool,
     ) -> Result<MacroValue, ()> {
         if args.len() < 2 {
             self.error(span, "comparison requires at least two arguments");
             return Err(());
         }
-        let first = self.eval(&args[0], env)?;
-        let first_int = match first {
-            MacroValue::Int(n) => n,
-            _ => 0,
-        };
-        for arg in &args[1..] {
-            let val = self.eval(arg, env)?;
-            let n = match val {
-                MacroValue::Int(n) => n,
-                _ => 0,
+        let values: Vec<MacroValue> = args
+            .iter()
+            .map(|arg| self.eval(arg, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_float = values.iter().any(|v| matches!(v, MacroValue::Float(..)));
+        if has_float {
+            let first = match &values[0] {
+                MacroValue::Int(n) => *n as f64,
+                MacroValue::Float(n) => *n,
+                _ => {
+                    self.error(span, "comparison requires number arguments");
+                    return Err(());
+                }
             };
-            if !pred(first_int, n) {
+            for val in &values[1..] {
+                let n = match val {
+                    MacroValue::Int(n) => *n as f64,
+                    MacroValue::Float(n) => *n,
+                    _ => {
+                        self.error(span, "comparison requires number arguments");
+                        return Err(());
+                    }
+                };
+                if !pred_f(first, n) {
+                    return Ok(MacroValue::Nil);
+                }
+            }
+            return Ok(MacroValue::Symbol("t".into()));
+        }
+        let first = match &values[0] {
+            MacroValue::Int(n) => *n,
+            _ => {
+                self.error(span, "comparison requires integer arguments");
+                return Err(());
+            }
+        };
+        for val in &values[1..] {
+            let n = match val {
+                MacroValue::Int(n) => *n,
+                _ => {
+                    self.error(span, "comparison requires integer arguments");
+                    return Err(());
+                }
+            };
+            if !pred_i(first, n) {
                 return Ok(MacroValue::Nil);
             }
         }
@@ -1904,8 +2022,11 @@ impl MacroEval {
             let val = self.eval(arg, env)?;
             match val {
                 MacroValue::String(s) => result.push_str(&s),
-                MacroValue::Int(n) => result.push_str(&n.to_string()),
-                MacroValue::Symbol(s) => result.push_str(&s),
+                MacroValue::Int(n) => {
+                    if let Some(c) = u32::try_from(n).ok().and_then(char::from_u32) {
+                        result.push(c);
+                    }
+                }
                 MacroValue::Nil => {}
                 _ => {}
             }
@@ -1935,9 +2056,9 @@ impl MacroEval {
         let from_idx = match from {
             MacroValue::Int(n) => {
                 if n < 0 {
-                    (s_text.len() as i64 + n) as usize
+                    s_text.len().saturating_sub((-n) as usize)
                 } else {
-                    n as usize
+                    (n as usize).min(s_text.len())
                 }
             }
             _ => {
@@ -1950,9 +2071,9 @@ impl MacroEval {
             match to {
                 MacroValue::Int(n) => {
                     if n < 0 {
-                        (s_text.len() as i64 + n) as usize
+                        s_text.len().saturating_sub((-n) as usize)
                     } else {
-                        n as usize
+                        (n as usize).min(s_text.len())
                     }
                 }
                 _ => {
@@ -1963,7 +2084,9 @@ impl MacroEval {
         } else {
             s_text.len()
         };
-        Ok(MacroValue::String(s_text[from_idx..to_idx].into()))
+        Ok(MacroValue::String(
+            s_text[from_idx.min(to_idx)..to_idx].to_string(),
+        ))
     }
 
     fn eval_format(
@@ -1993,7 +2116,8 @@ impl MacroEval {
         let mut chars = fmt_text.chars().peekable();
         while let Some(c) = chars.next() {
             if c == '%' {
-                match chars.next() {
+                let spec = chars.next();
+                match spec {
                     Some('s') | Some('S') => {
                         if arg_idx < format_args.len() {
                             result.push_str(&format_value_as_string(&format_args[arg_idx]));
@@ -2004,6 +2128,43 @@ impl MacroEval {
                         if arg_idx < format_args.len() {
                             result
                                 .push_str(&format_args[arg_idx].as_int().unwrap_or(0).to_string());
+                            arg_idx += 1;
+                        }
+                    }
+                    Some('c') => {
+                        if arg_idx < format_args.len() {
+                            let n = format_args[arg_idx].as_int().unwrap_or(0);
+                            if let Some(c) = u32::try_from(n).ok().and_then(char::from_u32) {
+                                result.push(c);
+                            }
+                            arg_idx += 1;
+                        }
+                    }
+                    Some('e') | Some('E') | Some('f') | Some('g') | Some('G') => {
+                        if arg_idx < format_args.len() {
+                            let val = &format_args[arg_idx];
+                            if let MacroValue::Float(f) = val {
+                                result.push_str(&format!("{f}"));
+                            } else {
+                                result.push_str(&val.as_int().unwrap_or(0).to_string());
+                                result.push_str(".0");
+                            }
+                            arg_idx += 1;
+                        }
+                    }
+                    Some(spec @ 'x') | Some(spec @ 'X') | Some(spec @ 'o') => {
+                        if arg_idx < format_args.len() {
+                            let n = format_args[arg_idx].as_int().unwrap_or(0);
+                            if n == 0 {
+                                result.push('0');
+                            } else {
+                                match spec {
+                                    'o' => result.push_str(&format!("{n:o}")),
+                                    'x' => result.push_str(&format!("{n:x}")),
+                                    'X' => result.push_str(&format!("{n:X}")),
+                                    _ => {}
+                                }
+                            }
                             arg_idx += 1;
                         }
                     }
@@ -2261,7 +2422,9 @@ fn form_references_bindings(form: &SurfaceForm, names: &[String]) -> bool {
         SurfaceKind::Quote(f) | SurfaceKind::FunctionQuote(f) => form_references_bindings(f, names),
         SurfaceKind::Backquote(f) => form_references_bindings(f, names),
         SurfaceKind::Comma(f) | SurfaceKind::CommaAt(f) => form_references_bindings(f, names),
-        SurfaceKind::Vector(items) => items.iter().any(|f| form_references_bindings(f, names)),
+        SurfaceKind::Vector(items) | SurfaceKind::HashList(items) => {
+            items.iter().any(|f| form_references_bindings(f, names))
+        }
     }
 }
 

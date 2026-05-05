@@ -8,6 +8,7 @@ use rowan::{GreenNode, Language, SyntaxKind as RowanSyntaxKind};
 pub enum SyntaxKind {
     Root,
     List,
+    HashList,
     Vector,
     DottedList,
     Quote,

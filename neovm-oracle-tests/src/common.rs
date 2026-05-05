@@ -420,8 +420,36 @@ pub(crate) fn run_oracle_eval_with_bootstrap(form: &str) -> Result<String, Strin
 /// Use it for core-language parity only.  Features that GNU Emacs exposes
 /// from dumped startup state (for example `backquote`) must use
 /// `run_neovm_eval_with_bootstrap`.
+///
+/// Set `NEOVM_USE_COMPILER=1` to route evaluation through the neovm-compiler
+/// pipeline instead of the neovm-core evaluator.
 pub(crate) fn run_neovm_eval(form: &str) -> Result<String, String> {
+    if std::env::var("NEOVM_USE_COMPILER").is_ok() {
+        return run_neovm_compiler_eval(form);
+    }
     run_neovm_eval_with_load(form, &[])
+}
+
+/// Evaluate a form through the neovm-compiler + object interpreter pipeline.
+fn run_neovm_compiler_eval(form: &str) -> Result<String, String> {
+    let source = format!(";;; -*- lexical-binding: t; -*-\n{form}");
+    let artifact = neovm_executor::execute_source("oracle.el", &source, &[]);
+    if !artifact.result.diagnostics.is_empty() {
+        return Ok(format!(
+            "ERR ({})",
+            artifact
+                .result
+                .diagnostics
+                .iter()
+                .map(|d| d.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    match artifact.result.value {
+        Some(v) => Ok(format!("OK {}", artifact.runtime.format_value(v))),
+        None => Ok("OK nil".to_string()),
+    }
 }
 
 fn run_neovm_eval_in_temp_buffer(
@@ -722,7 +750,12 @@ fn normalize_neovm_oracle_value(value: Value) -> Value {
         neovm_core::emacs_core::eval::push_scratch_gc_root(out);
         out
     } else if value.is_vector() {
-        let items = value.as_vector_data().cloned().unwrap_or_default();
+        let items: Vec<Value> = value
+            .as_vector_data()
+            .into_iter()
+            .flat_map(|s| s)
+            .cloned()
+            .collect();
         let mut normalized = Vec::with_capacity(items.len());
         for item in items {
             let item = normalize_neovm_oracle_value(item);
