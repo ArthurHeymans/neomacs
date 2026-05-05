@@ -855,6 +855,17 @@ impl Interpreter<'_, '_, '_> {
         if self.runtime.is_function(callee) {
             return self.execute_function_object(callee, args);
         }
+        // Handle lambda lists: (lambda (args) body...)
+        if self.runtime.is_cons(callee) {
+            let car = self.runtime.car(callee);
+            if let Ok(car) = car {
+                if let Ok(name) = self.runtime.symbol_name(car) {
+                    if name == "lambda" {
+                        return self.execute_lambda_list(callee, args);
+                    }
+                }
+            }
+        }
         let name = match self.runtime.symbol_name(callee) {
             Ok(name) => name,
             Err(error) => {
@@ -1190,6 +1201,9 @@ impl Interpreter<'_, '_, '_> {
             "eval" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.eval_form(args[0])),
+            "defun" => self
+                .min_arity(name, args, 3)
+                .and_then(|_| self.defun_runtime(args)),
             "intern" => self.exact_arity(name, args, 1).and_then(|_| {
                 let name = match self.runtime.string_contents(args[0]) {
                     Ok(name) => name.to_string(),
@@ -3592,6 +3606,19 @@ impl Interpreter<'_, '_, '_> {
         Some(macro_value_to_lisp(&mv, self.runtime))
     }
 
+    fn execute_lambda_list(
+        &mut self,
+        lambda_list: LispValue,
+        args: &[LispValue],
+    ) -> Option<LispValue> {
+        // Construct (funcall 'lambda-list arg1 arg2...) and eval it
+        let funcall_sym = self.runtime.intern("funcall");
+        let mut funcall_parts = vec![funcall_sym, lambda_list];
+        funcall_parts.extend(args.iter().copied());
+        let form = make_list(self.runtime, funcall_parts.into_iter());
+        self.eval_form(form)
+    }
+
     fn eval_form(&mut self, form: LispValue) -> Option<LispValue> {
         let text = self.runtime.format_value(form);
         let source = neovm_compiler::source::SourceFile::new(
@@ -3610,6 +3637,15 @@ impl Interpreter<'_, '_, '_> {
         let result = execute_module_with_args(&regir, &[], self.runtime);
         self.diagnostics.extend(result.diagnostics);
         result.value
+    }
+
+    fn defun_runtime(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let name = args[0];
+        let lambda_sym = self.runtime.intern("lambda");
+        let body_progn = make_list(self.runtime, args[2..].iter().copied());
+        let lambda = make_list(self.runtime, [lambda_sym, args[1], body_progn].into_iter());
+        let result = self.runtime.set_symbol_function(name, lambda);
+        self.runtime_value(result).map(|_| name)
     }
 
     fn load_file(&mut self, file: LispValue) -> Option<LispValue> {
@@ -4709,6 +4745,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "defalias"
             | "read"
             | "eval"
+            | "defun"
             | "intern"
             | "symbol-name"
             | "not"
@@ -6520,5 +6557,14 @@ mod tests {
              (file-exists-p \"Cargo.toml\")",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_runtime_defun() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defalias 'my-add (lambda (a b) (+ a b))) (my-add 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
     }
 }

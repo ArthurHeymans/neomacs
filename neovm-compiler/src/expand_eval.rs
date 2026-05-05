@@ -1138,14 +1138,10 @@ impl MacroEval {
             Some("cl-loop") => self.eval_cl_loop(span, &items[1..], env),
 
             _ => {
-                self.error(
-                    span,
-                    format!(
-                        "cannot evaluate '{}' at macro expansion time",
-                        head.unwrap_or("?")
-                    ),
-                );
-                Err(())
+                // Pass through: unknown function calls are handled by the
+                // compiler at HIR level, not the macro expander.
+                let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
+                Ok(surface_to_value(&form))
             }
         }
     }
@@ -2418,8 +2414,10 @@ mod tests {
 
     #[test]
     fn reports_unknown_function() {
+        // Unknown function calls now pass through to the compiler
+        // instead of erroring at macro expansion time
         let result = parse_and_eval("(some-unknown-fn 1)");
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
