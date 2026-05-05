@@ -2176,19 +2176,13 @@ impl MacroEval {
             let first = match &values[0] {
                 MacroValue::Int(n) => *n as f64,
                 MacroValue::Float(n) => *n,
-                _ => {
-                    self.error(span, "comparison requires number arguments");
-                    return Err(());
-                }
+                _ => return Err(()),
             };
             for val in &values[1..] {
                 let n = match val {
                     MacroValue::Int(n) => *n as f64,
                     MacroValue::Float(n) => *n,
-                    _ => {
-                        self.error(span, "comparison requires number arguments");
-                        return Err(());
-                    }
+                    _ => return Err(()),
                 };
                 if !pred_f(first, n) {
                     return Ok(MacroValue::Nil);
@@ -2198,18 +2192,12 @@ impl MacroEval {
         }
         let first = match &values[0] {
             MacroValue::Int(n) => *n,
-            _ => {
-                self.error(span, "comparison requires integer arguments");
-                return Err(());
-            }
+            _ => return Err(()),
         };
         for val in &values[1..] {
             let n = match val {
                 MacroValue::Int(n) => *n,
-                _ => {
-                    self.error(span, "comparison requires integer arguments");
-                    return Err(());
-                }
+                _ => return Err(()),
             };
             if !pred_i(first, n) {
                 return Ok(MacroValue::Nil);
