@@ -1598,7 +1598,7 @@ impl Interpreter<'_, '_, '_> {
             }),
             "replace-match" => self
                 .min_max_arity(name, args, 1, 4)
-                .and_then(|_| self.runtime.replace_match(args[0])),
+                .and_then(|_| self.runtime.replace_match(args[0], args.get(3).copied())),
             "char-to-string" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.char_to_string(args[0])),

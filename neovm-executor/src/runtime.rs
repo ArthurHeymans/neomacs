@@ -401,7 +401,11 @@ impl Runtime {
         }
     }
 
-    pub fn replace_match(&mut self, replacement: LispValue) -> Option<LispValue> {
+    pub fn replace_match(
+        &mut self,
+        replacement: LispValue,
+        string: Option<LispValue>,
+    ) -> Option<LispValue> {
         let rep = match self.string_contents(replacement) {
             Ok(s) => s.to_string(),
             Err(_) => return None,
@@ -409,33 +413,51 @@ impl Runtime {
         let Some(ref md) = self.match_data else {
             return Some(self.string(rep));
         };
-        let mut result = String::new();
+        // Build replacement text with backreferences expanded
+        let mut repl_text = String::new();
         let mut chars = rep.chars().peekable();
         while let Some(ch) = chars.next() {
             if ch == '\\' {
                 match chars.next() {
                     Some('&') => {
                         if let Some(Some((s, e))) = md.groups.first() {
-                            result.push_str(&md.string[*s..*e]);
+                            repl_text.push_str(&md.string[*s..*e]);
                         }
                     }
                     Some(d @ '1'..='9') => {
                         let idx = (d as u32 - '0' as u32) as usize;
                         if let Some(Some((s, e))) = md.groups.get(idx) {
-                            result.push_str(&md.string[*s..*e]);
+                            repl_text.push_str(&md.string[*s..*e]);
                         }
                     }
                     Some(c) => {
-                        result.push('\\');
-                        result.push(c);
+                        repl_text.push('\\');
+                        repl_text.push(c);
                     }
-                    None => result.push('\\'),
+                    None => repl_text.push('\\'),
                 }
             } else {
-                result.push(ch);
+                repl_text.push(ch);
             }
         }
-        Some(self.string(result))
+        // If STRING is provided, replace the match in it
+        if let Some(s) = string {
+            if !s.is_nil() {
+                let contents = match self.string_contents(s) {
+                    Ok(c) => c.to_string(),
+                    Err(_) => return Some(self.string(repl_text)),
+                };
+                if let Some(Some((start, end))) = md.groups.first() {
+                    let mut modified =
+                        String::with_capacity(contents.len() - (end - start) + repl_text.len());
+                    modified.push_str(&contents[..*start]);
+                    modified.push_str(&repl_text);
+                    modified.push_str(&contents[*end..]);
+                    return Some(self.string(modified));
+                }
+            }
+        }
+        Some(self.string(repl_text))
     }
 
     pub fn cons_cell_count(&self) -> usize {
