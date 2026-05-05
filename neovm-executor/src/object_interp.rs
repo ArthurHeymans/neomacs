@@ -75,12 +75,11 @@ impl InternalInterpResult {
         }
     }
 
-    fn into_result(mut self, runtime: &Runtime) -> ObjectInterpResult {
+    fn into_result(mut self, runtime: &mut Runtime) -> ObjectInterpResult {
         if let Some(thrown) = self.thrown.take() {
-            self.diagnostics.push(Diagnostic::error(format!(
-                "uncaught throw for tag {}",
-                runtime.format_value(thrown.tag)
-            )));
+            let symbol = runtime.intern("no-catch");
+            let data = make_list(runtime, std::iter::once(thrown.tag));
+            self.signaled = Some(SignaledValue { symbol, data });
         }
         if let Some(signaled) = self.signaled.take() {
             self.diagnostics.push(Diagnostic::error(format!(
@@ -5302,7 +5301,7 @@ mod tests {
         assert!(
             result.diagnostics[0]
                 .message
-                .contains("uncaught throw for tag tag")
+                .contains("uncaught signal no-catch")
         );
     }
 
