@@ -337,10 +337,12 @@ impl Lowerer<'_> {
             }),
             SurfaceKind::FunctionQuote(inner) => self.lower_function_quote(form, inner),
             SurfaceKind::List(items) => self.lower_list(form, items),
-            SurfaceKind::Vector(_) | SurfaceKind::HashList(_) => Some(HirExpr {
-                kind: HirExprKind::Quote(Box::new(form.clone())),
-                span: form.span,
-            }),
+            SurfaceKind::Vector(_) | SurfaceKind::HashList(_) | SurfaceKind::Record(..) => {
+                Some(HirExpr {
+                    kind: HirExprKind::Quote(Box::new(form.clone())),
+                    span: form.span,
+                })
+            }
             SurfaceKind::DottedList(items, tail) => self.lower_dotted_list(form, items, tail),
             SurfaceKind::Backquote(inner) => self.lower_quasiquote(form, inner),
             SurfaceKind::Comma(inner) => {
@@ -559,7 +561,7 @@ impl Lowerer<'_> {
                 self.lower_quasiquote_dotted_list(form, items, tail, depth)
             }
             SurfaceKind::Vector(items) => self.lower_quasiquote_vector(form, items, depth),
-            SurfaceKind::HashList(_) | SurfaceKind::Atom(_) => {
+            SurfaceKind::HashList(_) | SurfaceKind::Record(..) | SurfaceKind::Atom(_) => {
                 Some(quote_form_expr(form.clone(), form.span))
             }
         }
@@ -1874,6 +1876,13 @@ impl Lowerer<'_> {
                     continue;
                 }
                 _ if name.starts_with('&') => {
+                    // &allow-other-keys is silently accepted in function
+                    // lambda lists (no-op). &environment and &whole are
+                    // only valid in macro lambda lists, which are handled
+                    // by the expander, not the HIR lowerer.
+                    if name == "&allow-other-keys" {
+                        continue;
+                    }
                     self.error(item.span, "lambda-list keyword is not supported yet");
                     return None;
                 }

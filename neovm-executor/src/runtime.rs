@@ -1161,6 +1161,37 @@ impl Runtime {
         None
     }
 
+    pub fn string_set_char(
+        &mut self,
+        string: LispValue,
+        index: usize,
+        ch: char,
+    ) -> Result<(), RuntimeError> {
+        let addr = string.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "string",
+            value: string,
+        })?;
+        for s in &mut self.strings {
+            let s_addr = (&**s as *const LispString) as usize;
+            if s_addr == addr {
+                let bytes = &mut s.data.data;
+                if ch as u32 <= 0x7F {
+                    if index < bytes.len() && bytes[index] <= 0x7F {
+                        bytes[index] = ch as u8;
+                        return Ok(());
+                    }
+                }
+                return Err(RuntimeError::InvalidStringData(
+                    "aset: string mutation only supports ASCII replacement".to_string(),
+                ));
+            }
+        }
+        Err(RuntimeError::WrongTypeArgument {
+            expected: "string",
+            value: string,
+        })
+    }
+
     fn vector_by_addr(&self, addr: usize) -> Option<&VectorObject> {
         for vector in &self.vectors {
             let vector_addr = (&**vector as *const VectorObject) as usize;
@@ -1327,7 +1358,124 @@ impl Runtime {
     }
 
     pub fn format_value(&self, value: LispValue) -> String {
-        self.format_value_with_depth(value, 64)
+        let mut seen = std::collections::HashSet::new();
+        self.format_value_cycle_safe(value, 64, &mut seen)
+    }
+
+    fn format_value_cycle_safe(
+        &self,
+        value: LispValue,
+        depth: usize,
+        seen: &mut std::collections::HashSet<usize>,
+    ) -> String {
+        if depth == 0 {
+            return "#<max-depth>".to_string();
+        }
+        if !self.is_cons(value) {
+            return self.format_atom_value_inner(value, depth, seen);
+        }
+        if let Some(addr) = value.heap_addr() {
+            if seen.contains(&addr) {
+                return "#<cycle>".to_string();
+            }
+            seen.insert(addr);
+            let result = self.format_cons_list(value, depth, seen);
+            seen.remove(&addr);
+            return result;
+        }
+        self.format_cons_list(value, depth, seen)
+    }
+
+    fn format_cons_list(
+        &self,
+        value: LispValue,
+        depth: usize,
+        seen: &mut std::collections::HashSet<usize>,
+    ) -> String {
+        let mut parts = Vec::new();
+        let mut current = value;
+        loop {
+            let Some(addr) = current.heap_addr() else {
+                parts.push(".".to_string());
+                parts.push(self.format_atom_value_inner(current, depth, seen));
+                break;
+            };
+            let Some(cell) = self.cons_by_addr(addr) else {
+                parts.push(".".to_string());
+                parts.push(self.format_atom_value_inner(current, depth, seen));
+                break;
+            };
+            parts.push(self.format_value_cycle_safe(cell.car, depth - 1, seen));
+            current = cell.cdr;
+            if current.is_nil() {
+                break;
+            }
+            if !self.is_cons(current) {
+                parts.push(".".to_string());
+                parts.push(self.format_value_cycle_safe(current, depth - 1, seen));
+                break;
+            }
+        }
+        format!("({})", parts.join(" "))
+    }
+
+    fn format_atom_value_inner(
+        &self,
+        value: LispValue,
+        depth: usize,
+        seen: &mut std::collections::HashSet<usize>,
+    ) -> String {
+        if let Ok(name) = self.symbol_name(value)
+            && self.is_symbol(value)
+        {
+            return name;
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(string) = self.string_by_addr(addr)
+        {
+            return string.data.format_debug();
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(vector) = self.vector_by_addr(addr)
+        {
+            if seen.contains(&addr) {
+                return "#<cycle>".to_string();
+            }
+            seen.insert(addr);
+            let elements = vector
+                .elements
+                .iter()
+                .map(|v| self.format_value_cycle_safe(*v, depth - 1, seen))
+                .collect::<Vec<_>>();
+            seen.remove(&addr);
+            return format!("[{}]", elements.join(" "));
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(float) = self.float_by_addr(addr)
+        {
+            return format!("{}", float.value);
+        }
+        if let Some(addr) = value.heap_addr()
+            && let Some(bignum) = self.bignum_by_addr(addr)
+        {
+            return format!("{}", bignum.value);
+        }
+        if let Some(addr) = value.heap_addr() {
+            return format!("#<object 0x{addr:x}>");
+        }
+        if let Some(n) = value.as_fixnum() {
+            return n.to_string();
+        }
+        if value.is_nil() {
+            return "nil".to_string();
+        }
+        if value.is_true() {
+            return "t".to_string();
+        }
+        if let Some(c) = value.as_char() {
+            return format!("?{}", c.escape_debug());
+        }
+        "#<unknown>".to_string()
     }
 
     fn format_value_with_depth(&self, value: LispValue, depth: usize) -> String {

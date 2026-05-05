@@ -310,7 +310,9 @@ impl Expander {
                                 stack.push(Work::Expand(item));
                             }
                         }
-                        SurfaceKind::Vector(_) | SurfaceKind::HashList(_) => {
+                        SurfaceKind::Vector(_)
+                        | SurfaceKind::HashList(_)
+                        | SurfaceKind::Record(..) => {
                             results.push(form);
                         }
                         SurfaceKind::Quote(_)
@@ -883,33 +885,70 @@ impl Expander {
                 self.expand_form(expanded)
             }
             "elt" if place_items.len() == 3 => {
-                // Same as nth — use nthcdr+setcar pattern.
                 // NOTE: the place form is (elt INDEX SEQUENCE) — index first
                 // (non-standard Emacs order), matching the codebase convention.
-                let temp = symbol_form("--setf-val--", span);
+                // Emit type-dispatch: arrayp→aset, nil→nthcdr+setcar.
+                let temp_v = symbol_form("--setf-val--", span);
+                let temp_s = symbol_form("--setf-seq--", span);
+                let temp_n = symbol_form("--setf-idx--", span);
+                let seq_val = place_items[2].clone();
+                let idx_val = place_items[1].clone();
                 let expanded = list_form(
                     vec![
                         symbol_form("let", span),
                         list_form(
-                            vec![list_form(vec![temp.clone(), value.clone()], span)],
+                            vec![
+                                list_form(vec![temp_s.clone(), seq_val], span),
+                                list_form(vec![temp_n.clone(), idx_val], span),
+                                list_form(vec![temp_v.clone(), value.clone()], span),
+                            ],
                             span,
                         ),
                         list_form(
                             vec![
-                                symbol_form("setcar", span),
+                                symbol_form("if", span),
+                                list_form(vec![symbol_form("arrayp", span), temp_s.clone()], span),
                                 list_form(
                                     vec![
-                                        symbol_form("nthcdr", span),
-                                        place_items[1].clone(),
-                                        place_items[2].clone(),
+                                        symbol_form("progn", span),
+                                        list_form(
+                                            vec![
+                                                symbol_form("aset", span),
+                                                temp_s.clone(),
+                                                temp_n.clone(),
+                                                temp_v.clone(),
+                                            ],
+                                            span,
+                                        ),
+                                        temp_v.clone(),
                                     ],
                                     span,
                                 ),
-                                temp.clone(),
+                                list_form(
+                                    vec![
+                                        symbol_form("progn", span),
+                                        list_form(
+                                            vec![
+                                                symbol_form("setcar", span),
+                                                list_form(
+                                                    vec![
+                                                        symbol_form("nthcdr", span),
+                                                        temp_n.clone(),
+                                                        temp_s.clone(),
+                                                    ],
+                                                    span,
+                                                ),
+                                                temp_v.clone(),
+                                            ],
+                                            span,
+                                        ),
+                                        temp_v.clone(),
+                                    ],
+                                    span,
+                                ),
                             ],
                             span,
                         ),
-                        temp,
                     ],
                     span,
                 );

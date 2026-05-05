@@ -81,15 +81,11 @@ impl MacroValue {
     }
 
     /// Emacs `eql` — like eq, except numbers are compared by value.
+    /// Floats use bitwise comparison (same_float), matching Emacs:
+    /// (eql 0.0 -0.0) → nil, (eql NaN NaN) → t if same bit pattern.
     pub fn eql(&self, other: &MacroValue) -> bool {
         match (self, other) {
-            (MacroValue::Float(a), MacroValue::Float(b)) => {
-                if *a == 0.0 && *b == 0.0 {
-                    a.to_bits() == b.to_bits()
-                } else {
-                    a == b
-                }
-            }
+            (MacroValue::Float(a), MacroValue::Float(b)) => a.to_bits() == b.to_bits(),
             _ => self.eq(other),
         }
     }
@@ -339,6 +335,11 @@ pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
         }
         SurfaceKind::HashList(items) => {
             MacroValue::list(items.iter().map(surface_to_value).collect())
+        }
+        SurfaceKind::Record(type_name, items) => {
+            let mut all = vec![surface_to_value(type_name)];
+            all.extend(items.iter().map(surface_to_value));
+            MacroValue::list(all)
         }
         SurfaceKind::Quote(inner) => MacroValue::list(vec![
             MacroValue::Symbol("quote".into()),

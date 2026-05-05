@@ -38,6 +38,8 @@ enum TokenKind {
     RBracket,
     #[token("#(")]
     HashLParen,
+    #[token("#s(")]
+    HashSLParen,
     #[token("#'")]
     FunctionQuote,
     #[token("'")]
@@ -74,6 +76,7 @@ impl TokenKind {
             Self::LBracket => SyntaxKind::LBracket,
             Self::RBracket => SyntaxKind::RBracket,
             Self::HashLParen => SyntaxKind::HashLParen,
+            Self::HashSLParen => SyntaxKind::HashSLParen,
             Self::FunctionQuote | Self::Quote | Self::Backquote | Self::Comma | Self::CommaAt => {
                 SyntaxKind::Prefix
             }
@@ -682,6 +685,7 @@ impl Parser<'_> {
             TokenKind::LParen => self.parse_list(token.span),
             TokenKind::LBracket => self.parse_vector(token.span),
             TokenKind::HashLParen => self.parse_invalid_hash_list(token.span),
+            TokenKind::HashSLParen => self.parse_record(token.span),
             TokenKind::Quote => self.parse_prefixed(token.span, SyntaxKind::Quote),
             TokenKind::FunctionQuote => self.parse_prefixed(token.span, SyntaxKind::FunctionQuote),
             TokenKind::Backquote => self.parse_prefixed(token.span, SyntaxKind::Backquote),
@@ -814,6 +818,39 @@ impl Parser<'_> {
         }
     }
 
+    fn parse_record(&mut self, start_span: Span) -> bool {
+        self.builder.start_node(SyntaxKind::Record.into());
+        self.bump(); // consume #s(
+        // Read type name
+        self.bump_trivia();
+        if !self.parse_form() {
+            self.error(start_span, "expected record type name after #s(");
+            self.builder.finish_node();
+            return false;
+        }
+        // Read remaining contents until )
+        loop {
+            self.bump_trivia();
+            let Some(token) = self.peek().cloned() else {
+                self.error(start_span, "unterminated #s(...) record form");
+                self.builder.finish_node();
+                return false;
+            };
+            if matches!(token.kind, TokenKind::RParen) {
+                self.bump();
+                self.builder.finish_node();
+                return true;
+            }
+            if !self.parse_form() {
+                if self.is_eof() {
+                    self.builder.finish_node();
+                    return false;
+                }
+                self.bump();
+            }
+        }
+    }
+
     fn bump_trivia(&mut self) {
         while self.peek().is_some_and(|token| token.kind.is_trivia()) {
             self.bump();
@@ -885,6 +922,7 @@ impl SurfaceExtractor<'_> {
         match node.kind() {
             SyntaxKind::List => self.extract_list(node),
             SyntaxKind::HashList => self.extract_hash_list(node),
+            SyntaxKind::Record => self.extract_record(node),
             SyntaxKind::Vector => self.extract_vector(node),
             SyntaxKind::Quote
             | SyntaxKind::FunctionQuote
@@ -899,6 +937,7 @@ impl SurfaceExtractor<'_> {
             | SyntaxKind::LBracket
             | SyntaxKind::RBracket
             | SyntaxKind::HashLParen
+            | SyntaxKind::HashSLParen
             | SyntaxKind::Dot
             | SyntaxKind::Prefix
             | SyntaxKind::Symbol
@@ -978,6 +1017,30 @@ impl SurfaceExtractor<'_> {
         }
         let span = node_span(self.source, node);
         Some(SurfaceForm::new(SurfaceKind::HashList(items), span))
+    }
+
+    fn extract_record(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
+        let mut items = Vec::new();
+        for element in significant_children(node) {
+            match element.kind() {
+                SyntaxKind::HashSLParen | SyntaxKind::RParen => {}
+                _ => {
+                    if let Some(form) = self.extract_form_element(element) {
+                        items.push(form);
+                    }
+                }
+            }
+        }
+        let span = node_span(self.source, node);
+        if items.is_empty() {
+            Some(SurfaceForm::new(SurfaceKind::HashList(Vec::new()), span))
+        } else {
+            let type_name = Box::new(items.remove(0));
+            Some(SurfaceForm::new(
+                SurfaceKind::Record(type_name, items),
+                span,
+            ))
+        }
     }
 
     fn extract_vector(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
@@ -1397,5 +1460,22 @@ mod tests {
     #[test]
     fn unicode_name_escape_in_string() {
         assert_eq!(decode_escapes("\\N{EXCLAMATION MARK}"), "!");
+    }
+
+    #[test]
+    fn reads_record_syntax() {
+        let output = read("#s(hash-table :a 1 :b 2)");
+        assert_eq!(output.diagnostics, Vec::new());
+        assert_eq!(output.forms.len(), 1);
+        match &output.forms[0].kind {
+            SurfaceKind::Record(type_name, items) => {
+                assert_eq!(
+                    type_name.kind,
+                    SurfaceKind::Atom(SurfaceAtom::Symbol("hash-table".into()))
+                );
+                assert_eq!(items.len(), 4);
+            }
+            other => panic!("expected Record, got {other:?}"),
+        }
     }
 }

@@ -1079,11 +1079,9 @@ impl Interpreter<'_, '_, '_> {
                 if self.runtime.is_float(args[0]) && self.runtime.is_float(args[1]) {
                     let a = self.runtime.float_data(args[0]).unwrap_or(0.0);
                     let b = self.runtime.float_data(args[1]).unwrap_or(0.0);
-                    // eql distinguishes 0.0 from -0.0 (unlike Rust's f64::eq).
-                    if a == 0.0 && b == 0.0 {
-                        return bool_value(a.to_bits() == b.to_bits());
-                    }
-                    return bool_value(a == b);
+                    // Emacs same_float: word-level XOR of IEEE 754 bits.
+                    // (eql 0.0 -0.0) → nil, (eql NaN NaN) → t if same bit pattern.
+                    return bool_value(a.to_bits() == b.to_bits());
                 }
                 if self.runtime.is_bignum(args[0]) && self.runtime.is_bignum(args[1]) {
                     let a = self.runtime.bignum_data(args[0]).unwrap_or_default();
@@ -2494,6 +2492,13 @@ impl Interpreter<'_, '_, '_> {
                     .map(|item| self.quote_value(item))
                     .collect::<Option<Vec<_>>>()?;
                 Some(make_list(self.runtime, values))
+            }
+            SurfaceKind::Record(type_name, items) => {
+                let mut all = vec![self.quote_value(type_name)?];
+                for item in items {
+                    all.push(self.quote_value(item)?);
+                }
+                Some(make_list(self.runtime, all))
             }
             SurfaceKind::DottedList(items, tail) => {
                 let mut result = self.quote_value(tail)?;
@@ -3960,25 +3965,14 @@ impl Interpreter<'_, '_, '_> {
             return self.runtime_value(result);
         }
         if self.runtime.is_string(sequence) {
-            let contents = self.string_contents_owned(sequence)?;
             let ch = self.char_arg("aset", value)?;
-            let mut chars: Vec<char> = contents.chars().collect();
-            if index >= chars.len() {
-                let symbol = self.runtime.intern("args-out-of-range");
-                let data = make_list(
-                    self.runtime,
-                    [
-                        sequence,
-                        LispValue::from_fixnum(index as i64).unwrap_or(LispValue::NIL),
-                    ]
-                    .into_iter(),
-                );
-                self.pending_signal = Some(SignaledValue { symbol, data });
-                return None;
+            match self.runtime.string_set_char(sequence, index, ch) {
+                Ok(()) => return Some(value),
+                Err(e) => {
+                    self.error(format!("aset: {e:?}"));
+                    return None;
+                }
             }
-            chars[index] = ch;
-            let new_string: String = chars.into_iter().collect();
-            return Some(self.runtime.string(new_string));
         }
         self.error(format!(
             "primitive `aset` expected a vector, got {}",
