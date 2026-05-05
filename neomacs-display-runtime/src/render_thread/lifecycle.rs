@@ -253,6 +253,19 @@ impl RenderApp {
         // Request redraw when we have new frame data, cursor blink toggled,
         // or webkit/video content changed
         if self.frame_dirty || has_active_content {
+            if let Some(ref renderer) = self.renderer {
+                tracing::debug!(
+                    frame_dirty = self.frame_dirty,
+                    has_active_content,
+                    renderer_needs_continuous_redraw = renderer.needs_continuous_redraw,
+                    renderer_has_animated_borders = renderer.has_animated_borders,
+                    cursor_animating = self.cursor.animating,
+                    cursor_size_animating = self.cursor.size_animating,
+                    idle_dim_active = self.idle_dim_active,
+                    transitions_active = self.transitions.has_active(),
+                    "requesting redraw"
+                );
+            }
             if let Some(ref window) = self.window {
                 window.request_redraw();
             }

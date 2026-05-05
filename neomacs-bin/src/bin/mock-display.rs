@@ -210,9 +210,6 @@ fn run_gui(demo: &str) {
                 }
             }
         }
-        for s in scene.iter() {
-            let _ = emacs_comms.frame_tx.try_send(s.clone());
-        }
     }
 }
 
@@ -817,8 +814,6 @@ fn build_faces() -> HashMap<u32, Face> {
         box_face.box_line_width = 2;
         box_face.box_corner_radius = 8;
         box_face.box_color = Some(Color::new(1.0, 0.84, 0.0, 1.0));
-        box_face.box_border_style = 1;
-        box_face.box_border_speed = 0.5;
         f.insert(8, box_face);
     }
 
