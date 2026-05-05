@@ -10090,4 +10090,106 @@ my-const
         let val = artifact.result.value.unwrap();
         assert_eq!(artifact.runtime.format_value(val), "(t nil)");
     }
+
+    #[test]
+    fn integration_emacs_parity() {
+        if std::env::var("NEOVM_SKIP_EMACS_PARITY").is_ok() {
+            return;
+        }
+        let emacs = std::env::var("NEOVM_EMACS_PATH")
+            .unwrap_or_else(|_| "/home/exec/.local/bin/emacs".to_string());
+        let forms = [
+            ("(+ 1 2)", "3"),
+            ("(* 3 4)", "12"),
+            ("(cons 1 2)", "(1 . 2)"),
+            ("(car (cons 1 2))", "1"),
+            ("(cdr (cons 1 2))", "2"),
+            ("(list 1 2 3)", "(1 2 3)"),
+            ("(if t 1 2)", "1"),
+            ("(if nil 1 2)", "2"),
+            ("(progn 1 2 3)", "3"),
+            ("(let ((x 1)) x)", "1"),
+            ("(eq 'a 'a)", "t"),
+            ("(equal 1 1)", "t"),
+            ("(not nil)", "t"),
+            ("(and t t)", "t"),
+            ("(or nil t)", "t"),
+            ("(1+ 5)", "6"),
+            ("(1- 5)", "4"),
+            ("(max 1 5 2)", "5"),
+            ("(abs -5)", "5"),
+            ("(mod 7 3)", "1"),
+            ("(logand 7 3)", "3"),
+            ("(ash 1 3)", "8"),
+            ("(zerop 0)", "t"),
+            ("(floatp 3.14)", "t"),
+            ("(integerp 42)", "t"),
+            ("(symbolp 'foo)", "t"),
+            ("(stringp \"hello\")", "t"),
+            ("(consp (cons 1 2))", "t"),
+            ("(functionp 'car)", "t"),
+            ("(fboundp 'car)", "t"),
+            ("(string= \"abc\" \"abc\")", "t"),
+            ("(string< \"a\" \"b\")", "t"),
+            ("(concat \"a\" \"b\")", "\"ab\""),
+            ("(nth 1 (list 10 20 30))", "20"),
+            ("(length (list 1 2 3))", "3"),
+            ("(member 2 (list 1 2 3))", "(2 3)"),
+            ("(assq 'b '((a . 1) (b . 2)))", "(b . 2)"),
+            ("(rassq 2 '((a . 1) (b . 2)))", "(b . 2)"),
+            ("(rassoc 2 '((a . 1) (b . 2)))", "(b . 2)"),
+            ("(plist-get '(:a 1 :b 2) :b)", "2"),
+            ("(keywordp :foo)", "t"),
+            ("(car-safe nil)", "nil"),
+            ("(cdr-safe nil)", "nil"),
+            ("(identity 42)", "42"),
+            ("(ignore 1 2 3)", "nil"),
+            ("(prog1 1 2 3)", "1"),
+            ("(prog2 1 2 3)", "2"),
+            ("(list 'a 'b 'c)", "(a b c)"),
+            ("(cadr '(1 2 3))", "2"),
+            ("(cddr '(1 2 3))", "(3)"),
+            ("(zerop 1)", "nil"),
+            ("(subrp 'car)", "nil"),
+            ("(keywordp 'foo)", "nil"),
+            ("(floatp 42)", "nil"),
+            ("(floatp 3.14)", "t"),
+            ("(integerp 3.14)", "nil"),
+            ("(stringp 42)", "nil"),
+            ("(expt 2 10)", "1024"),
+            ("(logior 1 2)", "3"),
+            ("(logand -1 255)", "255"),
+            ("(eval '(+ 1 2))", "3"),
+            ("(read \"(1 2 3)\")", "(1 2 3)"),
+            ("(reverse (list 1 2 3))", "(3 2 1)"),
+            ("(let ((v [10 20 30])) (aref v 1))", "20"),
+            ("(elt [10 20 30] 1)", "20"),
+            ("(subseq [10 20 30 40] 1 3)", "[20 30]"),
+            ("(subseq \"hello\" 1 3)", "\"el\""),
+            ("(copy-sequence '(1 2 3))", "(1 2 3)"),
+            ("(copy-sequence [1 2 3])", "[1 2 3]"),
+            ("(length [1 2 3])", "3"),
+            ("(length \"abc\")", "3"),
+        ];
+        for (form, expected) in &forms {
+            let source = format!(";;; -*- lexical-binding: t; -*-\n{form}");
+            let artifact = execute_source("parity.el", &source, &[]);
+            let neovm_result = match artifact.result.value {
+                Some(v) => artifact.runtime.format_value(v),
+                None => "nil".to_string(),
+            };
+            // Normalize float formatting: "4" and "4.0" are the same
+            let norm = |s: &str| -> String {
+                if let Ok(f) = s.parse::<f64>() {
+                    return format!("{}", f);
+                }
+                s.to_string()
+            };
+            if norm(&neovm_result) != norm(expected) {
+                panic!(
+                    "parity failure for {form}:\n  neovm: {neovm_result}\n  expected: {expected}"
+                );
+            }
+        }
+    }
 }
