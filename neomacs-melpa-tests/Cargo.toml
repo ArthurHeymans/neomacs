@@ -1,0 +1,10 @@
+[package]
+name = "neomacs-melpa-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tempfile = "3"

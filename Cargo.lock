@@ -2437,6 +2437,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "neomacs-melpa-tests"
+version = "0.0.2"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "neomacs-renderer-wgpu"
 version = "0.0.2"
 dependencies = [
