@@ -1371,3 +1371,41 @@ fn state_markers_survive_gc_without_lisp_references() {
          freed, leaving BufferStateMarkers with a dangling pointer."
     );
 }
+
+#[test]
+fn buffer_mark_marker_survives_gc_without_lisp_reference() {
+    // GNU stores the mark as `BVAR (buffer, mark)`, so `mark_buffer`
+    // roots it with the rest of the buffer object.  Neomacs mirrors that
+    // with Buffer::mark_marker_ptr; the raw pointer must be traced even
+    // when no Lisp variable currently holds `(mark-marker)`.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.current_buffer_id().expect("scratch buffer");
+    let _ = eval.buffers.insert_into_buffer(buffer_id, "alpha\nbeta\n");
+    let _ = eval.buffers.set_buffer_mark(buffer_id, 1);
+
+    let mark_ptr = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer present")
+        .mark_marker_ptr;
+    assert!(!mark_ptr.is_null(), "mark marker should be materialized");
+
+    eval.gc_collect_exact();
+
+    let mark = crate::emacs_core::marker::builtin_mark_marker(&mut eval, vec![])
+        .expect("mark-marker should return a live marker after GC");
+    assert!(mark.is_marker(), "mark-marker remains a marker after GC");
+    let position =
+        crate::emacs_core::marker::marker_position_as_int_with_buffers(&eval.buffers, &mark)
+            .expect("marker-position should accept the buffer mark after GC");
+    assert_eq!(position, 2);
+
+    unsafe {
+        assert_eq!(
+            (*mark_ptr).data.buffer,
+            Some(buffer_id),
+            "raw buffer mark pointer still refers to its buffer"
+        );
+    }
+}

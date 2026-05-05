@@ -4269,6 +4269,19 @@ impl GcTrace for BufferManager {
             roots.push(buffer.local_var_alist);
             // `local_map` (buffer's keymap) must also be rooted.
             roots.push(buffer.keymap);
+            // GNU stores the buffer mark in `BVAR (buffer, mark)`, so
+            // `mark_vectorlike (&buffer->header)` in `mark_buffer` roots it
+            // with the rest of the buffer's Lisp slots.  Neomacs stores the
+            // same live marker as a raw pointer in Buffer; synthesize the
+            // tagged Value here so GC does not reclaim it while the buffer
+            // remains live.
+            unsafe {
+                if !buffer.mark_marker_ptr.is_null() {
+                    roots.push(Value::from_veclike_ptr(
+                        buffer.mark_marker_ptr as *const crate::tagged::header::VecLikeHeader,
+                    ));
+                }
+            }
             // T8 C-1: the noncurrent PT/BEGV/ZV markers stashed in
             // `state_markers` are referenced only by raw pointers and
             // the intrusive marker chain. Neither is a GC root on its
