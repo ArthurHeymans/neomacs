@@ -3513,8 +3513,16 @@ impl Interpreter<'_, '_, '_> {
                 }
             }
             Some(array)
+        } else if self.runtime.is_string(array) {
+            let ch = self.char_arg("fillarray", value)?;
+            let contents = self.string_contents_owned(array)?;
+            let len = contents.chars().count();
+            let filled: String = std::iter::repeat(ch).take(len).collect();
+            let result = self.runtime.string(filled);
+            self.runtime_value(Ok(result))?;
+            Some(result)
         } else {
-            self.error("primitive `fillarray` expected a vector");
+            self.error("primitive `fillarray` expected a vector or string");
             None
         }
     }
