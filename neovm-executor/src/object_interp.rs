@@ -4409,6 +4409,11 @@ impl Interpreter<'_, '_, '_> {
                 }
             }
         }
+        if self.runtime.is_bignum(value) {
+            if let Some(n) = self.runtime.as_integer(value) {
+                return Some(n.to_f64());
+            }
+        }
         self.error(format!("primitive `{name}` expected a number"));
         None
     }
