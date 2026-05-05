@@ -335,6 +335,7 @@ impl Lowerer<'_> {
     fn lower_expr(&mut self, form: &SurfaceForm) -> Option<HirExpr> {
         self.depth += 1;
         if self.depth > MAX_LOWER_DEPTH {
+            eprintln!("HIR depth exceeded: {}", self.depth);
             self.error(form.span, "expression nesting depth exceeded");
             self.depth -= 1;
             return None;

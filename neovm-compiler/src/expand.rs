@@ -556,8 +556,7 @@ impl Expander {
         let mut form = match self.invoke_macro(&def, &items[1..]) {
             Some(expanded) => expanded,
             None => {
-                // Expansion failed. Return the original form without further
-                // expansion attempts so we don't loop on failing macros.
+                // Expansion failed. Return original form.
                 return SurfaceForm::new(SurfaceKind::List(items), span);
             }
         };
@@ -582,16 +581,27 @@ impl Expander {
             form = match self.invoke_macro(&next_def, &expansion_items[1..]) {
                 Some(expanded) => expanded,
                 None => {
-                    // Expansion failed. Stop re-expanding to avoid infinite loops.
                     form = SurfaceForm::new(SurfaceKind::List(expansion_items), expansion_span);
                     break;
                 }
             };
         }
 
-        // Tree-expand sub-forms (but don't recurse back into expand_macro_call
-        // for this form — only for nested sub-forms).
-        self.expand_form(form)
+        // Tree-expand sub-forms without re-invoking the top-level macro.
+        // We manually decompose the form instead of calling expand_form
+        // to avoid the macro lookup loop.
+        {
+            match form.kind {
+                SurfaceKind::List(items) => {
+                    let expanded_items: Vec<SurfaceForm> = items
+                        .into_iter()
+                        .map(|item| self.expand_form(item))
+                        .collect();
+                    SurfaceForm::new(SurfaceKind::List(expanded_items), form.span)
+                }
+                _ => self.expand_form(form),
+            }
+        }
     }
 
     fn invoke_macro(&mut self, def: &MacroDef, args: &[SurfaceForm]) -> Option<SurfaceForm> {

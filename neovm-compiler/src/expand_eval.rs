@@ -58,7 +58,7 @@ pub struct MacroEval {
     depth: usize,
 }
 
-const MAX_EVAL_DEPTH: usize = 5;
+const MAX_EVAL_DEPTH: usize = 10;
 
 impl MacroEval {
     pub fn new() -> Self {
