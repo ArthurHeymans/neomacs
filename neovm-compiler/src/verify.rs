@@ -241,8 +241,12 @@ impl SsaVerifier<'_> {
         } else {
             self.error("SSA function has no entry block");
         }
+        let reachable = self.compute_reachable();
         let dominators = compute_dominators(self.function);
         for (block_id, block) in self.function.blocks.iter() {
+            if !reachable.contains(&block_id) {
+                continue;
+            }
             for (index, param) in block.params.iter().copied().enumerate() {
                 self.check_value(param);
                 match &self.function.values[param].kind {
@@ -267,6 +271,26 @@ impl SsaVerifier<'_> {
             }
             self.verify_terminator(block_id, &block.terminator, &dominators);
         }
+    }
+
+    fn compute_reachable(&self) -> HashSet<BlockId> {
+        let mut reachable = HashSet::new();
+        let mut stack = Vec::new();
+        if let Some(entry) = self.function.entry {
+            reachable.insert(entry);
+            stack.push(entry);
+        }
+        while let Some(block) = stack.pop() {
+            let Some(body) = self.function.blocks.get(block) else {
+                continue;
+            };
+            for succ in terminator_successors(&body.terminator) {
+                if reachable.insert(succ) {
+                    stack.push(succ);
+                }
+            }
+        }
+        reachable
     }
 
     fn verify_inst(
