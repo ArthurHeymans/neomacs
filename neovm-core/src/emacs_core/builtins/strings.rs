@@ -1188,11 +1188,7 @@ fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
                 s
             } else {
                 // Use %f style with appropriate decimals
-                let decimal_places = if exp_val >= 0 {
-                    p.saturating_sub(exp_val as usize + 1)
-                } else {
-                    p
-                };
+                let decimal_places = (p as i32 - exp_val - 1).max(0) as usize;
                 let mut s = format!("{:.prec$}", f, prec = decimal_places);
                 // Strip trailing zeros after decimal point
                 if s.contains('.') {

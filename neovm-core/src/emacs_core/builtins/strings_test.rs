@@ -119,3 +119,22 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
         Some(&Value::symbol("bold"))
     );
 }
+
+#[test]
+fn format_percent_g_uses_gnu_fixed_precision_for_negative_exponents() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = builtin_format_wrapper_strict_slice(
+        &mut ctx,
+        &[
+            Value::string("%.2g %.2g %.2g"),
+            Value::make_float(0.00042),
+            Value::make_float(0.0042),
+            Value::make_float(42.0),
+        ],
+    )
+    .expect("format should evaluate");
+
+    assert_eq!(result.as_utf8_str(), Some("0.00042 0.0042 42"));
+}
