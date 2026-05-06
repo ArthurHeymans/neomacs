@@ -1140,6 +1140,20 @@ fn version_lessp_numeric_segments() {
     assert!(r.is_truthy());
 }
 
+#[test]
+fn version_lessp_leading_zero_runs_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let equal_numeric =
+        builtin_string_version_lessp(vec![Value::string("1"), Value::string("001")])
+            .expect("string-version-lessp should evaluate");
+    assert!(equal_numeric.is_nil());
+
+    let reverse_equal_numeric =
+        builtin_string_version_lessp(vec![Value::string("001"), Value::string("1")])
+            .expect("string-version-lessp should evaluate");
+    assert!(reverse_equal_numeric.is_nil());
+}
+
 // ---- string-collate-lessp ----
 
 #[test]

@@ -1204,10 +1204,6 @@ pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
 }
 
 /// (string-version-lessp S1 S2) -- version-aware string comparison.
-///
-/// Compares strings character by character, but when both strings have a
-/// run of digits at the same position, the digit runs are compared as
-/// integers (so "foo2" < "foo10").
 pub(crate) fn builtin_string_version_lessp(args: Vec<Value>) -> EvalResult {
     expect_args("string-version-lessp", &args, 2)?;
     // Symbols are allowed; their print names are used instead (like official Emacs).
@@ -1222,42 +1218,144 @@ pub(crate) fn builtin_string_version_lessp(args: Vec<Value>) -> EvalResult {
         require_string("string-version-lessp", &args[1])?
     };
 
-    let c1: Vec<char> = s1.chars().collect();
-    let c2: Vec<char> = s2.chars().collect();
+    Ok(Value::bool_val(
+        filenvercmp(s1.as_bytes(), s2.as_bytes()) < 0,
+    ))
+}
 
+fn file_prefixlen(s: &[u8]) -> usize {
+    let n = s.len();
+    let mut prefixlen = 0;
     let mut i = 0;
-    let mut j = 0;
+    loop {
+        if i == n {
+            return prefixlen;
+        }
 
-    while i < c1.len() && j < c2.len() {
-        if c1[i].is_ascii_digit() && c2[j].is_ascii_digit() {
-            // Extract numeric runs and compare as integers
-            let mut n1: u64 = 0;
-            while i < c1.len() && c1[i].is_ascii_digit() {
-                n1 = n1
-                    .saturating_mul(10)
-                    .saturating_add(c1[i] as u64 - '0' as u64);
+        i += 1;
+        prefixlen = i;
+        while i + 1 < n && s[i] == b'.' && (s[i + 1].is_ascii_alphabetic() || s[i + 1] == b'~') {
+            i += 2;
+            while i < n && (s[i].is_ascii_alphanumeric() || s[i] == b'~') {
                 i += 1;
             }
-            let mut n2: u64 = 0;
-            while j < c2.len() && c2[j].is_ascii_digit() {
-                n2 = n2
-                    .saturating_mul(10)
-                    .saturating_add(c2[j] as u64 - '0' as u64);
-                j += 1;
-            }
-            if n1 != n2 {
-                return Ok(Value::bool_val(n1 < n2));
-            }
-        } else {
-            if c1[i] != c2[j] {
-                return Ok(Value::bool_val(c1[i] < c2[j]));
-            }
-            i += 1;
-            j += 1;
         }
     }
+}
 
-    Ok(Value::bool_val(c1.len() < c2.len()))
+fn version_order(s: &[u8], pos: usize, len: usize) -> i32 {
+    if pos == len {
+        return -1;
+    }
+
+    let c = s[pos];
+    if c.is_ascii_digit() {
+        0
+    } else if c.is_ascii_alphabetic() {
+        c as i32
+    } else if c == b'~' {
+        -2
+    } else {
+        c as i32 + u8::MAX as i32 + 1
+    }
+}
+
+fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
+    let s1_len = s1.len();
+    let s2_len = s2.len();
+    let mut s1_pos = 0;
+    let mut s2_pos = 0;
+
+    while s1_pos < s1_len || s2_pos < s2_len {
+        let mut first_diff = 0;
+        while (s1_pos < s1_len && !s1[s1_pos].is_ascii_digit())
+            || (s2_pos < s2_len && !s2[s2_pos].is_ascii_digit())
+        {
+            let s1_c = version_order(s1, s1_pos, s1_len);
+            let s2_c = version_order(s2, s2_pos, s2_len);
+            if s1_c != s2_c {
+                return s1_c - s2_c;
+            }
+            s1_pos += 1;
+            s2_pos += 1;
+        }
+
+        while s1_pos < s1_len && s1[s1_pos] == b'0' {
+            s1_pos += 1;
+        }
+        while s2_pos < s2_len && s2[s2_pos] == b'0' {
+            s2_pos += 1;
+        }
+
+        while s1_pos < s1_len
+            && s2_pos < s2_len
+            && s1[s1_pos].is_ascii_digit()
+            && s2[s2_pos].is_ascii_digit()
+        {
+            if first_diff == 0 {
+                first_diff = s1[s1_pos] as i32 - s2[s2_pos] as i32;
+            }
+            s1_pos += 1;
+            s2_pos += 1;
+        }
+
+        if s1_pos < s1_len && s1[s1_pos].is_ascii_digit() {
+            return 1;
+        }
+        if s2_pos < s2_len && s2[s2_pos].is_ascii_digit() {
+            return -1;
+        }
+        if first_diff != 0 {
+            return first_diff;
+        }
+    }
+    0
+}
+
+fn filenvercmp(a: &[u8], b: &[u8]) -> i32 {
+    if a.is_empty() {
+        return if b.is_empty() { 0 } else { -1 };
+    }
+    if b.is_empty() {
+        return 1;
+    }
+
+    if a[0] == b'.' {
+        if b[0] != b'.' {
+            return -1;
+        }
+
+        let adot = a.len() == 1;
+        let bdot = b.len() == 1;
+        if adot {
+            return if bdot { 0 } else { -1 };
+        }
+        if bdot {
+            return 1;
+        }
+
+        let adotdot = a.get(1) == Some(&b'.') && a.len() == 2;
+        let bdotdot = b.get(1) == Some(&b'.') && b.len() == 2;
+        if adotdot {
+            return if bdotdot { 0 } else { -1 };
+        }
+        if bdotdot {
+            return 1;
+        }
+    } else if b[0] == b'.' {
+        return 1;
+    }
+
+    let aprefixlen = file_prefixlen(a);
+    let bprefixlen = file_prefixlen(b);
+    let one_pass_only = aprefixlen == a.len() && bprefixlen == b.len();
+    let result = verrevcmp(&a[..aprefixlen], &b[..bprefixlen]);
+
+    if result != 0 || one_pass_only {
+        result
+    } else {
+        verrevcmp(a, b)
+    }
 }
 
 /// (string-collate-lessp S1 S2 &optional LOCALE IGNORE-CASE)
