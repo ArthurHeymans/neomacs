@@ -2478,6 +2478,10 @@ pub(crate) fn re_match(
         // restore whichever saved best is better than the final
         // candidate (regex-emacs.c:4323-4344).
         if pc >= bytecode.len() {
+            if d > stop {
+                try_fail!('main_loop);
+                continue 'main_loop;
+            }
             if posix_longest && d < stop {
                 let better_than_best = !best_regs_set || d > best_match_end;
                 if !fail_stack.is_empty() {
@@ -2527,6 +2531,10 @@ pub(crate) fn re_match(
                 // regex-emacs.c:2685). In POSIX mode the trailing
                 // `Succeed` is NOT emitted, so the matcher instead
                 // falls through to the end-of-bytecode check above.
+                if d > stop {
+                    try_fail!('main_loop);
+                    continue 'main_loop;
+                }
                 break 'main_loop;
             }
 
@@ -3570,7 +3578,7 @@ pub(crate) fn re_search(
                             continue;
                         }
                     }
-                    if let Some(result) = re_match(pattern, text, pos, text_len, syntax, point) {
+                    if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
                         return Some((pos, result.1));
                     }
                     pos += 1;
@@ -3588,7 +3596,7 @@ pub(crate) fn re_search(
                         pos += 1;
                         continue;
                     }
-                    if let Some(result) = re_match(pattern, text, pos, text_len, syntax, point) {
+                    if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
                         return Some((pos, result.1));
                     }
                     pos += 1;
@@ -3603,7 +3611,7 @@ pub(crate) fn re_search(
                     pos += 1;
                     continue;
                 }
-                if let Some(result) = re_match(pattern, text, pos, text_len, syntax, point) {
+                if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
                     return Some((pos, result.1));
                 }
                 pos += 1;

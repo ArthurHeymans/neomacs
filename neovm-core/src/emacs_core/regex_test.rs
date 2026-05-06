@@ -1667,6 +1667,35 @@ fn re_search_backward_finds_nullable_match_at_point() {
 }
 
 #[test]
+fn re_search_backward_log_line_loop_progresses() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = make_test_buffer(
+        "[09:01:00] INFO: Server started\n[09:02:15] INFO: Connection from 10.0.0.1\n[09:03:30] WARN: High memory usage detected",
+    );
+    buf.goto_byte(buf.text.len());
+    let mut md = None;
+    let pattern = "\\[\\([0-9:]+\\)\\] \\(INFO\\|WARN\\|ERROR\\): \\(.*\\)$";
+    let mut positions = Vec::new();
+
+    for _ in 0..4 {
+        let Some(pos) = re_search_backward(&mut buf, pattern, None, true, false, &mut md).unwrap()
+        else {
+            break;
+        };
+        positions.push((pos, md.as_ref().and_then(|data| data.groups[0])));
+    }
+
+    assert_eq!(
+        positions,
+        vec![
+            (74, Some((74, 117))),
+            (32, Some((32, 73))),
+            (0, Some((0, 31)))
+        ]
+    );
+}
+
+#[test]
 fn re_search_forward_finds_nullable_match_at_buffer_end() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("abc");
