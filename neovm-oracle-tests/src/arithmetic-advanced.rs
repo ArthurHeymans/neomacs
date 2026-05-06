@@ -169,8 +169,7 @@ fn oracle_prop_arith_adv_ash_power_of_two() {
                           (cons (= (ash 1 n) (expt 2 n))
                                 results)))
                   (nreverse results))";
-    let (o, n) = eval_oracle_and_neovm(form);
-    assert_ok_eq("(t t t t t t t t t t)", &o, &n);
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 // ---------------------------------------------------------------------------

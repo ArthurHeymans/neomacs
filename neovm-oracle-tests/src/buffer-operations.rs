@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::assert_oracle_parity_with_bootstrap;
 
 // ---------------------------------------------------------------------------
 // bobp / eobp / bolp / eolp
@@ -17,8 +17,7 @@ fn oracle_prop_bobp_eobp() {
 
     let form = r#"(with-temp-buffer
                     (list (bobp) (eobp)))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
-    assert_ok_eq("(t t)", &o, &n);
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 #[test]
