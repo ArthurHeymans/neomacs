@@ -3920,6 +3920,7 @@ fn expt_abs_and_rounding_promote_to_bignum() {
     assert_eq!(eval_one("(expt 0 0)"), "OK 1");
     // Negative exponent → float.
     assert_eq!(eval_one("(expt 2 -2)"), "OK 0.25");
+    assert_eq!(eval_one("(float (expt 20 20))"), "OK 1.048576e+26");
 
     // (abs most-negative-fixnum) — used to signal overflow-error.
     assert_eq!(

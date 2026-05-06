@@ -1041,6 +1041,9 @@ pub(crate) fn builtin_float(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Fixnum(n) => Ok(Value::make_float(n as f64)),
         ValueKind::Float => Ok(args[0]),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(Value::make_float(args[0].as_bignum().unwrap().to_f64()))
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), args[0]],
@@ -1053,6 +1056,7 @@ fn value_to_f64(_name: &str, v: &Value) -> Result<f64, Flow> {
     match v.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(v.xfloat()),
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(v.as_bignum().unwrap().to_f64()),
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *v],
