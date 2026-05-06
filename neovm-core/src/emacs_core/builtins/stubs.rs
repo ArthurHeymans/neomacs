@@ -1069,33 +1069,53 @@ pub(crate) fn builtin_describe_vector(
             vec![Value::symbol("vector-or-char-table-p"), args[0]],
         ));
     }
-    let formatter = args.get(1).copied().unwrap_or(Value::NIL);
-    let mut out = String::new();
+    let formatter = args
+        .get(1)
+        .copied()
+        .filter(|value| !value.is_nil())
+        .unwrap_or_else(|| Value::symbol("princ"));
 
     if is_char_table {
+        let mut first = true;
         for (key, value) in describe_vector_char_table_entries(&args[0])? {
-            let described = describe_vector_apply_formatter(eval, formatter, value)?;
-            out.push_str(&format!(
-                "\n{:<15} {:<7} which means: {}",
-                describe_vector_key_name(key),
-                describe_syntax_raw_value(value),
-                describe_syntax_value_text(described)
-            ));
-        }
-        if !out.is_empty() {
-            out.push('\n');
+            describe_vector_insert_entry(eval, formatter, key, value, &mut first)?;
         }
     } else if let Some(items) = args[0].as_vector_data() {
+        let mut first = true;
         for (index, value) in items.iter().enumerate() {
-            let described = describe_vector_apply_formatter(eval, formatter, *value)?;
-            out.push_str(&format!("{index:<15} {described}\n"));
+            if value.is_nil() {
+                continue;
+            }
+            let key = Value::fixnum(index as i64);
+            describe_vector_insert_entry(eval, formatter, key, *value, &mut first)?;
         }
     }
 
-    if !out.is_empty() {
-        super::buffers::builtin_insert(eval, vec![Value::string(out)])?;
+    Ok(Value::NIL)
+}
+
+fn describe_vector_insert_entry(
+    eval: &mut crate::emacs_core::eval::Context,
+    formatter: Value,
+    key: Value,
+    value: Value,
+    first: &mut bool,
+) -> EvalResult {
+    if *first {
+        super::buffers::builtin_insert(eval, vec![Value::string("\n")])?;
+        *first = false;
     }
 
+    let key_text = describe_vector_key_name(key);
+    super::buffers::builtin_insert(eval, vec![Value::string(&key_text)])?;
+
+    // GNU keymap.c:describe_vector_princ indents to column 16 with minimum
+    // one separating column before calling the element describer.
+    let key_width = key_text.chars().count();
+    let spaces = if key_width < 16 { 16 - key_width } else { 1 };
+    super::buffers::builtin_insert(eval, vec![Value::string(" ".repeat(spaces))])?;
+    eval.apply(formatter, vec![value])?;
+    super::buffers::builtin_insert(eval, vec![Value::string("\n")])?;
     Ok(Value::NIL)
 }
 
@@ -1145,18 +1165,6 @@ fn describe_vector_char_table_entries(table: &Value) -> Result<Vec<(Value, Value
     Ok(runs)
 }
 
-fn describe_vector_apply_formatter(
-    eval: &mut crate::emacs_core::eval::Context,
-    formatter: Value,
-    value: Value,
-) -> EvalResult {
-    if formatter.is_nil() {
-        Ok(value)
-    } else {
-        eval.apply(formatter, vec![value])
-    }
-}
-
 fn describe_vector_key_name(key: Value) -> String {
     if key.is_cons() {
         let start = key.cons_car().as_fixnum().unwrap_or(0);
@@ -1198,70 +1206,6 @@ fn describe_vector_char_name(code: i64) -> String {
             .map(|ch| ch.to_string())
             .unwrap_or_else(|| code.to_string()),
     }
-}
-
-fn describe_syntax_raw_value(value: Value) -> String {
-    let Some(class_code) = describe_syntax_class_code(value) else {
-        return format!("{value}");
-    };
-    let class = crate::emacs_core::syntax::SyntaxClass::from_code(class_code)
-        .map(|class| class.to_char())
-        .unwrap_or('?');
-    let matching = if value.is_cons() {
-        let cdr = value.cons_cdr();
-        if cdr.is_fixnum() {
-            char::from_u32(cdr.as_fixnum().unwrap() as u32)
-                .map(|ch| ch.to_string())
-                .unwrap_or_default()
-        } else if cdr.is_cons() && cdr.cons_car().is_fixnum() {
-            char::from_u32(cdr.cons_car().as_fixnum().unwrap() as u32)
-                .map(|ch| ch.to_string())
-                .unwrap_or_default()
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
-    format!("{class}{matching}")
-}
-
-fn describe_syntax_value_text(value: Value) -> String {
-    let Some(class_code) = describe_syntax_class_code(value) else {
-        return format!("{value}");
-    };
-    match crate::emacs_core::syntax::SyntaxClass::from_code(class_code) {
-        Some(crate::emacs_core::syntax::SyntaxClass::Whitespace) => "whitespace".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Punctuation) => "punctuation".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Word) => "word".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Symbol) => "symbol".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Open) => "open".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Close) => "close".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Quote) => "prefix".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::StringDelim) => "string".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Math) => "math".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Escape) => "escape".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::CharQuote) => "character quote".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::Comment) => "comment".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::EndComment) => "endcomment".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::InheritStd) => "inherit".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::CommentFence) => "comment fence".to_string(),
-        Some(crate::emacs_core::syntax::SyntaxClass::StringFence) => "string fence".to_string(),
-        None => format!("{value}"),
-    }
-}
-
-fn describe_syntax_class_code(value: Value) -> Option<i64> {
-    if value.is_fixnum() {
-        return value.as_fixnum();
-    }
-    if value.is_cons() {
-        let car = value.cons_car();
-        if car.is_fixnum() {
-            return car.as_fixnum();
-        }
-    }
-    None
 }
 
 pub(crate) fn builtin_frame_set_was_invisible(args: Vec<Value>) -> EvalResult {
