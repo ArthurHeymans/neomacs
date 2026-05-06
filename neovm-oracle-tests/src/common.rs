@@ -126,22 +126,6 @@ fn oracle_emacs_path() -> String {
     if let Ok(path) = std::env::var("NEOVM_FORCE_ORACLE_PATH") {
         return path;
     }
-    // Try well-known locations for the GNU Emacs binary relative
-    // to the project checkout (github.com/eval-exec/neomacs-main).
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(project_root) = manifest.parent() {
-        // Walk up to github.com/ and look for emacs-mirror/emacs/src/emacs
-        let mut dir = project_root.to_path_buf();
-        for _ in 0..4 {
-            let candidate = dir.join("emacs-mirror/emacs/src/emacs");
-            if candidate.exists() {
-                return candidate.to_string_lossy().into_owned();
-            }
-            if !dir.pop() {
-                break;
-            }
-        }
-    }
     // Fall back to PATH
     "emacs".to_string()
 }
