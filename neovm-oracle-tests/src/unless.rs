@@ -4,16 +4,16 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm_with_bootstrap};
 
 #[test]
 fn oracle_prop_unless_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_t, neovm_t) = eval_oracle_and_neovm("(unless t 7)");
+    let (oracle_t, neovm_t) = eval_oracle_and_neovm_with_bootstrap("(unless t 7)");
     assert_ok_eq("nil", &oracle_t, &neovm_t);
 
-    let (oracle_nil, neovm_nil) = eval_oracle_and_neovm("(unless nil 7)");
+    let (oracle_nil, neovm_nil) = eval_oracle_and_neovm_with_bootstrap("(unless nil 7)");
     assert_ok_eq("7", &oracle_nil, &neovm_nil);
 }
 
@@ -30,7 +30,7 @@ proptest! {
         let cond_form = if cond { "t" } else { "nil" };
         let form = format!("(unless {} {})", cond_form, a);
         let expected = if cond { "nil".to_string() } else { a.to_string() };
-        let (oracle, neovm) = eval_oracle_and_neovm(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
         assert_ok_eq(expected.as_str(), &oracle, &neovm);
     }
 }
