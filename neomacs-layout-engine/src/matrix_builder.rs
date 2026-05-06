@@ -379,6 +379,16 @@ impl GlyphMatrixBuilder {
     }
 
     pub fn push_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+        self.push_char_with_pixel_width(ch, face_id, charpos, 0.0);
+    }
+
+    pub fn push_char_with_pixel_width(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize];
@@ -393,13 +403,23 @@ impl GlyphMatrixBuilder {
                     // composition path).
                     return;
                 }
-                area.push(Glyph::char(ch, face_id, charpos));
+                area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
                 matrix.rows[self.current_row].displays_text = true;
             }
         }
     }
 
     pub fn push_wide_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+        self.push_wide_char_with_pixel_width(ch, face_id, charpos, 0.0);
+    }
+
+    pub fn push_wide_char_with_pixel_width(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 let row = &mut matrix.rows[self.current_row];
@@ -411,6 +431,11 @@ impl GlyphMatrixBuilder {
                 }
                 let mut glyph = Glyph::char(ch, face_id, charpos);
                 glyph.wide = true;
+                glyph.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+                    pixel_width
+                } else {
+                    0.0
+                };
                 area.push(glyph);
                 area.push(Glyph::padding_for(face_id, charpos));
                 row.displays_text = true;
@@ -436,6 +461,7 @@ impl GlyphMatrixBuilder {
                     charpos,
                     bidi_level: 0,
                     wide: false,
+                    pixel_width: 0.0,
                     padding: false,
                 };
                 matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);

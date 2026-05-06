@@ -40,6 +40,17 @@ fn row_hash_differs_for_different_faces() {
 }
 
 #[test]
+fn row_hash_differs_for_different_pixel_widths() {
+    let mut row_a = GlyphRow::new(GlyphRowRole::Text);
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_pixel_width(8.0));
+
+    let mut row_b = GlyphRow::new(GlyphRowRole::Text);
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_pixel_width(13.0));
+
+    assert_ne!(row_a.compute_hash(), row_b.compute_hash());
+}
+
+#[test]
 fn identical_rows_have_same_hash() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
     row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 5, 100));
@@ -598,6 +609,52 @@ fn materialize_padding_glyphs_are_skipped() {
             assert_eq!(*x, 16.0);
         }
         other => panic!("expected Char, got {:?}", other),
+    }
+}
+
+#[test]
+fn materialize_uses_realized_pixel_width_for_text_positions() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.faces.insert(0, Face::new(0));
+
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize]
+        .push(Glyph::char('N', 0, 0).with_pixel_width(13.0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize]
+        .push(Glyph::char('E', 0, 1).with_pixel_width(12.0));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    assert_eq!(buf.glyphs.len(), 2);
+    match (&buf.glyphs[0], &buf.glyphs[1]) {
+        (
+            FrameGlyph::Char {
+                char: first,
+                x: first_x,
+                width: first_width,
+                ..
+            },
+            FrameGlyph::Char {
+                char: second,
+                x: second_x,
+                width: second_width,
+                ..
+            },
+        ) => {
+            assert_eq!((*first, *second), ('N', 'E'));
+            assert_eq!(*first_x, 0.0);
+            assert_eq!(*first_width, 13.0);
+            assert_eq!(*second_x, 13.0);
+            assert_eq!(*second_width, 12.0);
+        }
+        other => panic!("expected two chars, got {:?}", other),
     }
 }
 

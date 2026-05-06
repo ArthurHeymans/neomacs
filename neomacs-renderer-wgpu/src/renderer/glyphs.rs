@@ -9,7 +9,8 @@ use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowCursorVisual,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
+    WindowCursorVisual,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
@@ -19,6 +20,10 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 use wgpu::util::DeviceExt;
+
+const CHAR_OVERLAP_MIN_AXIS: f32 = 0.5;
+const CHAR_OVERLAP_MIN_AREA: f32 = 1.0;
+const CHAR_OVERLAP_LOG_LIMIT: usize = 32;
 
 /// Draw effect vertices produced by a pure effect function.
 macro_rules! draw_effect {
@@ -79,6 +84,149 @@ macro_rules! draw_stateful {
             $rp.draw(0..verts.len() as u32, 0..1);
         }
     }};
+}
+
+#[derive(Debug, Clone)]
+struct RenderedCharBounds {
+    glyph_index: usize,
+    window_id: i64,
+    row_role: GlyphRowRole,
+    slot_id: DisplaySlotId,
+    label: String,
+    face_id: u32,
+    font_size: f32,
+    cell_x: f32,
+    cell_y: f32,
+    cell_w: f32,
+    cell_h: f32,
+    glyph_x: f32,
+    glyph_y: f32,
+    glyph_w: f32,
+    glyph_h: f32,
+}
+
+impl RenderedCharBounds {
+    fn right(&self) -> f32 {
+        self.glyph_x + self.glyph_w
+    }
+
+    fn bottom(&self) -> f32 {
+        self.glyph_y + self.glyph_h
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CharOverlap {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+fn char_overlap(a: &RenderedCharBounds, b: &RenderedCharBounds) -> Option<CharOverlap> {
+    let x0 = a.glyph_x.max(b.glyph_x);
+    let y0 = a.glyph_y.max(b.glyph_y);
+    let x1 = a.right().min(b.right());
+    let y1 = a.bottom().min(b.bottom());
+    let width = x1 - x0;
+    let height = y1 - y0;
+    if width <= CHAR_OVERLAP_MIN_AXIS
+        || height <= CHAR_OVERLAP_MIN_AXIS
+        || width * height <= CHAR_OVERLAP_MIN_AREA
+    {
+        return None;
+    }
+    Some(CharOverlap {
+        x: x0,
+        y: y0,
+        width,
+        height,
+    })
+}
+
+fn log_rendered_char_overlaps(
+    frame_id: u64,
+    pass_name: &str,
+    chars: &[RenderedCharBounds],
+) -> usize {
+    let mut sorted: Vec<&RenderedCharBounds> = chars.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.glyph_x
+            .total_cmp(&b.glyph_x)
+            .then(a.glyph_y.total_cmp(&b.glyph_y))
+            .then(a.glyph_index.cmp(&b.glyph_index))
+    });
+
+    let mut total = 0usize;
+    for (i, a) in sorted.iter().enumerate() {
+        for b in sorted.iter().skip(i + 1) {
+            if b.glyph_x >= a.right() {
+                break;
+            }
+            let Some(overlap) = char_overlap(a, b) else {
+                continue;
+            };
+            total += 1;
+            if total <= CHAR_OVERLAP_LOG_LIMIT {
+                tracing::error!(
+                    "char_overlap frame_id={} pass={} overlap=({:.1},{:.1},{:.1}x{:.1}) \
+                     a[glyph={} window={} role={:?} slot=({}, {}) label={:?} face={} font={:.1} \
+                     cell=({:.1},{:.1},{:.1}x{:.1}) bitmap=({:.1},{:.1},{:.1}x{:.1})] \
+                     b[glyph={} window={} role={:?} slot=({}, {}) label={:?} face={} font={:.1} \
+                     cell=({:.1},{:.1},{:.1}x{:.1}) bitmap=({:.1},{:.1},{:.1}x{:.1})]",
+                    frame_id,
+                    pass_name,
+                    overlap.x,
+                    overlap.y,
+                    overlap.width,
+                    overlap.height,
+                    a.glyph_index,
+                    a.window_id,
+                    a.row_role,
+                    a.slot_id.row,
+                    a.slot_id.col,
+                    a.label,
+                    a.face_id,
+                    a.font_size,
+                    a.cell_x,
+                    a.cell_y,
+                    a.cell_w,
+                    a.cell_h,
+                    a.glyph_x,
+                    a.glyph_y,
+                    a.glyph_w,
+                    a.glyph_h,
+                    b.glyph_index,
+                    b.window_id,
+                    b.row_role,
+                    b.slot_id.row,
+                    b.slot_id.col,
+                    b.label,
+                    b.face_id,
+                    b.font_size,
+                    b.cell_x,
+                    b.cell_y,
+                    b.cell_w,
+                    b.cell_h,
+                    b.glyph_x,
+                    b.glyph_y,
+                    b.glyph_w,
+                    b.glyph_h,
+                );
+            }
+        }
+    }
+
+    if total > CHAR_OVERLAP_LOG_LIMIT {
+        tracing::error!(
+            "char_overlap frame_id={} pass={} total_overlaps={} suppressed={}",
+            frame_id,
+            pass_name,
+            total,
+            total - CHAR_OVERLAP_LOG_LIMIT
+        );
+    }
+    total
 }
 
 fn lerp_color(a: Color, b: Color, t: f32) -> Color {
@@ -1776,6 +1924,7 @@ impl WgpuRenderer {
                 let mut composed_subpixel_data: Vec<(ComposedGlyphKey, [SubpixelGlyphVertex; 6])> =
                     Vec::new();
                 let mut composed_color_data: Vec<(ComposedGlyphKey, [GlyphVertex; 6])> = Vec::new();
+                let mut rendered_char_bounds: Vec<RenderedCharBounds> = Vec::new();
                 let enable_subpixel = glyph_atlas.subpixel_enabled();
                 if trace_face_debug_enabled() {
                     tracing::info!(
@@ -1785,8 +1934,10 @@ impl WgpuRenderer {
                     );
                 }
 
-                for glyph in &frame_glyphs.glyphs {
+                for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
                     if let FrameGlyph::Char {
+                        window_id,
+                        slot_id,
                         char,
                         composed,
                         x,
@@ -1912,6 +2063,29 @@ impl WgpuRenderer {
                                 } else {
                                     (glyph_y, glyph_h, 0.0, 1.0)
                                 };
+
+                            if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
+                                rendered_char_bounds.push(RenderedCharBounds {
+                                    glyph_index,
+                                    window_id: *window_id,
+                                    row_role: *row_role,
+                                    slot_id: *slot_id,
+                                    label: composed
+                                        .as_deref()
+                                        .map(str::to_owned)
+                                        .unwrap_or_else(|| char.to_string()),
+                                    face_id: *face_id,
+                                    font_size: *font_size,
+                                    cell_x: *x,
+                                    cell_y: *y,
+                                    cell_w: *width,
+                                    cell_h: *height,
+                                    glyph_x,
+                                    glyph_y,
+                                    glyph_w,
+                                    glyph_h,
+                                });
+                            }
 
                             // Determine effective foreground color.
                             // For the character under a filled box cursor, swap to
@@ -2161,6 +2335,12 @@ impl WgpuRenderer {
                         }
                     }
                 }
+
+                log_rendered_char_overlaps(
+                    frame_glyphs.frame_id,
+                    if want_overlay { "overlay" } else { "text" },
+                    &rendered_char_bounds,
+                );
 
                 tracing::trace!(
                     "render_frame_glyphs: role={:?} {} mask glyphs, {} color glyphs",

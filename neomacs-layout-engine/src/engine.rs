@@ -3077,12 +3077,7 @@ impl LayoutEngine {
                             }
                             let dot_start_x = x;
                             let dot_start_col = col;
-                            self.matrix_builder.push_char(
-                                '.',
-                                current_face_id.saturating_sub(1),
-                                charpos.max(0) as usize,
-                            );
-                            x += char_pixel_advance(
+                            let dot_advance = char_pixel_advance(
                                 &mut self.ascii_width_cache,
                                 &mut self.font_metrics,
                                 '.',
@@ -3094,6 +3089,13 @@ impl LayoutEngine {
                                 current_font_weight,
                                 current_font_italic,
                             );
+                            self.matrix_builder.push_char_with_pixel_width(
+                                '.',
+                                current_face_id.saturating_sub(1),
+                                charpos.max(0) as usize,
+                                dot_advance,
+                            );
+                            x += dot_advance;
                             col += 1;
                             output_emitter.emit_synthetic_text_span(
                                 evaluator,
@@ -3339,16 +3341,18 @@ impl LayoutEngine {
                                     break;
                                 }
                                 if rch_is_wide {
-                                    self.matrix_builder.push_wide_char(
+                                    self.matrix_builder.push_wide_char_with_pixel_width(
                                         rch,
                                         current_face_id.saturating_sub(1),
                                         charpos as usize,
+                                        rch_advance,
                                     );
                                 } else {
-                                    self.matrix_builder.push_char(
+                                    self.matrix_builder.push_char_with_pixel_width(
                                         rch,
                                         current_face_id.saturating_sub(1),
                                         charpos as usize,
+                                        rch_advance,
                                     );
                                 }
                                 x += rch_advance;
@@ -4660,30 +4664,34 @@ impl LayoutEngine {
             if let Some((prefix, suffix)) = control_display {
                 self.run_buf.push(prefix, face_char_w);
                 self.run_buf.push(suffix, face_char_w);
-                self.matrix_builder.push_char(
+                self.matrix_builder.push_char_with_pixel_width(
                     prefix,
                     current_face_id.saturating_sub(1),
                     charpos as usize,
+                    face_char_w,
                 );
-                self.matrix_builder.push_char(
+                self.matrix_builder.push_char_with_pixel_width(
                     suffix,
                     current_face_id.saturating_sub(1),
                     charpos as usize,
+                    face_char_w,
                 );
             } else {
                 self.run_buf.push(ch, advance);
                 // Record character into GlyphMatrix builder
                 if char_cols == 2 {
-                    self.matrix_builder.push_wide_char(
+                    self.matrix_builder.push_wide_char_with_pixel_width(
                         ch,
                         current_face_id.saturating_sub(1),
                         charpos as usize,
+                        advance,
                     );
                 } else {
-                    self.matrix_builder.push_char(
+                    self.matrix_builder.push_char_with_pixel_width(
                         ch,
                         current_face_id.saturating_sub(1),
                         charpos as usize,
+                        advance,
                     );
                 }
             }

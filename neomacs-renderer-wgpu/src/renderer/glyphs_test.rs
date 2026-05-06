@@ -1,4 +1,7 @@
-use super::{cursor_render_rect, frame_default_glyph_metrics, window_cursor_visual_matches_phys};
+use super::{
+    RenderedCharBounds, char_overlap, cursor_render_rect, frame_default_glyph_metrics,
+    window_cursor_visual_matches_phys,
+};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
     WindowCursorVisual,
@@ -118,4 +121,50 @@ fn frame_default_glyph_metrics_fall_back_to_sane_values() {
     let (font_size, line_height) = frame_default_glyph_metrics(&frame);
     assert_eq!(font_size, 14.0);
     assert!((line_height - 16.8).abs() < 0.001);
+}
+
+fn char_bounds(label: &str, x: f32, y: f32, width: f32, height: f32) -> RenderedCharBounds {
+    RenderedCharBounds {
+        glyph_index: 0,
+        window_id: 1,
+        row_role: GlyphRowRole::Text,
+        slot_id: DisplaySlotId {
+            window_id: 1,
+            row: 0,
+            col: 0,
+        },
+        label: label.to_string(),
+        face_id: 0,
+        font_size: 14.0,
+        cell_x: x,
+        cell_y: y,
+        cell_w: width,
+        cell_h: height,
+        glyph_x: x,
+        glyph_y: y,
+        glyph_w: width,
+        glyph_h: height,
+    }
+}
+
+#[test]
+fn char_overlap_detects_intersecting_rendered_bitmaps() {
+    let a = char_bounds("A", 0.0, 0.0, 10.0, 12.0);
+    let b = char_bounds("B", 9.0, 4.0, 10.0, 12.0);
+
+    let overlap = char_overlap(&a, &b).expect("overlap");
+    assert_eq!(overlap.x, 9.0);
+    assert_eq!(overlap.y, 4.0);
+    assert_eq!(overlap.width, 1.0);
+    assert_eq!(overlap.height, 8.0);
+}
+
+#[test]
+fn char_overlap_ignores_touching_edges_and_subpixel_noise() {
+    let a = char_bounds("A", 0.0, 0.0, 10.0, 12.0);
+    let touching = char_bounds("B", 10.0, 0.0, 10.0, 12.0);
+    let tiny = char_bounds("C", 9.75, 0.0, 10.0, 12.0);
+
+    assert!(char_overlap(&a, &touching).is_none());
+    assert!(char_overlap(&a, &tiny).is_none());
 }

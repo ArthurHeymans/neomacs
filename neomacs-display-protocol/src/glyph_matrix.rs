@@ -3,9 +3,10 @@
 //! These types match the architecture of GNU Emacs's `dispextern.h`:
 //! `struct glyph`, `struct glyph_row`, `struct glyph_matrix`.
 //!
-//! The glyph matrix is character-grid native — no pixel coordinates.
-//! Both TTY and GUI backends read from this representation.
-//! TTY outputs directly; GUI converts to pixel positions on the render thread.
+//! The glyph matrix is character-grid native for terminal output, but also
+//! carries each glyph's realized pixel width.  GNU's `struct glyph` stores
+//! `pixel_width`; GUI backends must use that rather than reconstructing every
+//! glyph as one frame column.
 
 use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_glyphs::{
@@ -58,6 +59,11 @@ pub struct Glyph {
     pub bidi_level: u8,
     /// True for double-width characters (CJK, etc.).
     pub wide: bool,
+    /// Realized glyph advance in pixels.
+    ///
+    /// `0.0` means "not explicitly measured"; materialization falls back to
+    /// character-grid width.  TTY backends ignore this field.
+    pub pixel_width: f32,
     /// Padding glyph — second cell of a wide character.
     pub padding: bool,
 }
@@ -71,6 +77,7 @@ impl Glyph {
             charpos,
             bidi_level: 0,
             wide: false,
+            pixel_width: 0.0,
             padding: false,
         }
     }
@@ -83,6 +90,7 @@ impl Glyph {
             charpos: 0,
             bidi_level: 0,
             wide: false,
+            pixel_width: 0.0,
             padding: false,
         }
     }
@@ -95,8 +103,19 @@ impl Glyph {
             charpos,
             bidi_level: 0,
             wide: false,
+            pixel_width: 0.0,
             padding: true,
         }
+    }
+
+    /// Return a copy with explicit GUI pixel advance.
+    pub fn with_pixel_width(mut self, pixel_width: f32) -> Self {
+        self.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+            pixel_width
+        } else {
+            0.0
+        };
+        self
     }
 }
 
@@ -200,6 +219,8 @@ impl GlyphRow {
                 hash ^= ch_val;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.face_id as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.pixel_width.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
@@ -1042,13 +1063,30 @@ impl FrameDisplayState {
         let row_role = glyph_row.role;
         let clip_rect = Some(pixel_bounds);
         let mut col = 0usize;
+        let mut x_cursor = win_x;
 
         for area_idx in 0..3 {
             for glyph in &glyph_row.glyphs[area_idx] {
                 if glyph.padding {
                     continue;
                 }
-                let x = win_x + col as f32 * char_w;
+                let fallback_width = match &glyph.glyph_type {
+                    GlyphType::Stretch { width_cols } => *width_cols as f32 * char_w,
+                    GlyphType::Image { .. } | GlyphType::Glyphless { .. } => char_w,
+                    GlyphType::Char { .. } | GlyphType::Composite { .. } => {
+                        if glyph.wide {
+                            char_w * 2.0
+                        } else {
+                            char_w
+                        }
+                    }
+                };
+                let glyph_width = if glyph.pixel_width > 0.0 {
+                    glyph.pixel_width
+                } else {
+                    fallback_width
+                };
+                let x = x_cursor;
                 let slot_id = DisplaySlotId {
                     window_id,
                     row: row_index,
@@ -1058,7 +1096,6 @@ impl FrameDisplayState {
                 match &glyph.glyph_type {
                     GlyphType::Char { ch } => {
                         let face_data = self.resolve_face_for_materialize(glyph.face_id);
-                        let glyph_width = if glyph.wide { char_w * 2.0 } else { char_w };
                         let row_ascent = if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
                         } else if face_data.font_ascent > 0.0 {
@@ -1119,7 +1156,7 @@ impl FrameDisplayState {
                             x,
                             y,
                             baseline: y + row_ascent,
-                            width: char_w,
+                            width: glyph_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
                                 face_data.font_ascent.min(row_height)
@@ -1141,9 +1178,8 @@ impl FrameDisplayState {
                             overstrike: face_data.overstrike,
                         });
                     }
-                    GlyphType::Stretch { width_cols } => {
+                    GlyphType::Stretch { .. } => {
                         let face_data = self.resolve_face_for_materialize(glyph.face_id);
-                        let stretch_w = *width_cols as f32 * char_w;
                         buf.glyphs.push(FrameGlyph::Stretch {
                             window_id,
                             row_role,
@@ -1152,7 +1188,7 @@ impl FrameDisplayState {
                             bidi_level: glyph.bidi_level,
                             x,
                             y,
-                            width: stretch_w,
+                            width: glyph_width,
                             height: row_height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
@@ -1169,7 +1205,7 @@ impl FrameDisplayState {
                             image_id: *image_id as u32,
                             x,
                             y,
-                            width: char_w,
+                            width: glyph_width,
                             height: row_height,
                         });
                     }
@@ -1193,7 +1229,7 @@ impl FrameDisplayState {
                             x,
                             y,
                             baseline: y + row_ascent,
-                            width: char_w,
+                            width: glyph_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
                                 face_data.font_ascent.min(row_height)
@@ -1226,10 +1262,11 @@ impl FrameDisplayState {
                         }
                     }
                 };
+                x_cursor += glyph_width;
             }
         }
 
-        let final_x = win_x + col as f32 * char_w;
+        let final_x = x_cursor;
         let right_edge = win_x + win_w;
         if final_x < right_edge && col > 0 && row_role.is_chrome() {
             let last_face_id = glyph_row
