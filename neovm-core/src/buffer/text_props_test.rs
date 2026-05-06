@@ -69,6 +69,28 @@ fn get_property_outside_any_interval() {
 // -----------------------------------------------------------------------
 
 #[test]
+fn overlapping_put_fills_uncovered_gaps() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(2, 7, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(0, 4, Value::symbol("custom-prop"), Value::symbol("value1"));
+
+    assert_eq!(
+        table.get_property(0, Value::symbol("custom-prop")),
+        Some(&Value::symbol("value1"))
+    );
+    assert_eq!(
+        table.get_property(3, Value::symbol("custom-prop")),
+        Some(&Value::symbol("value1"))
+    );
+    assert!(table.get_property(0, Value::symbol("face")).is_none());
+    assert_eq!(
+        table.get_property(3, Value::symbol("face")),
+        Some(&Value::symbol("bold"))
+    );
+}
+
+#[test]
 fn overlapping_put_splits_intervals() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();

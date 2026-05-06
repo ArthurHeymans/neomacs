@@ -412,53 +412,33 @@ impl TextPropertyTable {
         self.split_at(start);
         self.split_at(end);
 
-        // Collect affected keys
         let affected: Vec<usize> = self.intervals.range(start..end).map(|(k, _)| *k).collect();
-
-        if affected.is_empty() {
-            // No properties yet — insert a new interval
-            let mut node = IntervalNode::default(start, end);
-            plist_put_replace(&mut node.plist, name, value);
-            node.refresh_cache();
-            self.intervals.insert(start, node);
-            self.merge_adjacent_after_mutation(start, end);
-            return true;
-        }
-
         let mut changed = false;
-        for key in &affected {
-            if let Some(node) = self.intervals.get_mut(key) {
+        let mut cursor = start;
+
+        for key in affected {
+            if cursor < key {
+                let mut node = IntervalNode::default(cursor, key);
+                plist_put_replace(&mut node.plist, name, value);
+                node.refresh_cache();
+                self.intervals.insert(cursor, node);
+                changed = true;
+            }
+            if let Some(node) = self.intervals.get_mut(&key) {
                 if plist_put_replace(&mut node.plist, name, value) {
                     node.refresh_cache();
                     changed = true;
                 }
+                cursor = node.end.min(end);
             }
         }
 
-        // Extend coverage: if the range [start, end) extends beyond the
-        // last affected interval, insert default intervals for the gap.
-        // Then modify those defaults too.
-        let last_end = affected
-            .iter()
-            .filter_map(|k| self.intervals.get(k).map(|n| n.end))
-            .max();
-        let covered_end = last_end.unwrap_or(start);
-        if covered_end < end {
-            let ext_node = IntervalNode::default(covered_end, end);
-            self.intervals.insert(covered_end, ext_node);
-            let ext_keys: Vec<usize> = self
-                .intervals
-                .range(covered_end..end)
-                .map(|(k, _)| *k)
-                .collect();
-            for key in &ext_keys {
-                if let Some(node) = self.intervals.get_mut(key) {
-                    if plist_put_replace(&mut node.plist, name, value) {
-                        node.refresh_cache();
-                        changed = true;
-                    }
-                }
-            }
+        if cursor < end {
+            let mut node = IntervalNode::default(cursor, end);
+            plist_put_replace(&mut node.plist, name, value);
+            node.refresh_cache();
+            self.intervals.insert(cursor, node);
+            changed = true;
         }
 
         if changed {
