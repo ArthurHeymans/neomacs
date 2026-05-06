@@ -2271,6 +2271,8 @@ fn surface_form_to_lisp(rt: &mut Runtime, form: &SurfaceForm) -> LispValue {
                 items.iter().map(|f| surface_form_to_lisp(rt, f)).collect();
             make_list(rt, elements)
         }
+        SurfaceKind::Labeled(_, form) => surface_form_to_lisp(rt, form),
+        SurfaceKind::Ref(_) => LispValue::NIL,
         SurfaceKind::DottedList(items, tail) => {
             let mut result = surface_form_to_lisp(rt, tail);
             for item in items.iter().rev() {

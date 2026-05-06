@@ -42,6 +42,8 @@ enum TokenKind {
     HashSLParen,
     #[token("#^")]
     HashCaret,
+    Labeled(usize),
+    Ref(usize),
     #[token("#'")]
     FunctionQuote,
     #[token("'")]
@@ -80,6 +82,8 @@ impl TokenKind {
             Self::HashLParen => SyntaxKind::HashLParen,
             Self::HashSLParen => SyntaxKind::HashSLParen,
             Self::HashCaret => SyntaxKind::HashCaret,
+            Self::Labeled(_) => SyntaxKind::HashLabel,
+            Self::Ref(_) => SyntaxKind::HashRef,
             Self::FunctionQuote | Self::Quote | Self::Backquote | Self::Comma | Self::CommaAt => {
                 SyntaxKind::Prefix
             }
@@ -268,6 +272,34 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                 i += 1;
                 continue;
             }
+            // Case 5c: #N= — label the following form for cyclic reference.
+            if let Some((n, rest)) = try_parse_label(name) {
+                tokens.push(Token {
+                    kind: TokenKind::Labeled(n),
+                    span: tok.span,
+                    text: format!("#{n}="),
+                });
+                // The rest after = is the labeled form symbol
+                if !rest.is_empty() {
+                    tokens.push(Token {
+                        kind: TokenKind::Symbol(rest.to_string()),
+                        span: tok.span,
+                        text: rest.to_string(),
+                    });
+                }
+                i += 1;
+                continue;
+            }
+            // Case 5d: #N# — reference to a previously labeled form.
+            if let Some(n) = try_parse_ref(name) {
+                tokens.push(Token {
+                    kind: TokenKind::Ref(n),
+                    span: tok.span,
+                    text: name.clone(),
+                });
+                i += 1;
+                continue;
+            }
             if let Some(value) = try_parse_hash_number(name) {
                 tokens.push(Token {
                     kind: TokenKind::Int(value),
@@ -436,6 +468,26 @@ fn parse_int(lexer: &mut logos::Lexer<'_, TokenKind>) -> Option<i64> {
 }
 
 /// Try to parse #x (hex), #o (octal), #b (binary) numeric literals.
+fn try_parse_label(name: &str) -> Option<(usize, &str)> {
+    let rest = name.strip_prefix('#')?;
+    let eq_pos = rest.find('=')?;
+    let digits = &rest[..eq_pos];
+    let after = &rest[eq_pos + 1..];
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some((digits.parse().ok()?, after))
+}
+
+fn try_parse_ref(name: &str) -> Option<usize> {
+    let rest = name.strip_prefix('#')?;
+    let digits = rest.strip_suffix('#')?;
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
 fn try_parse_hash_number(name: &str) -> Option<i64> {
     let rest = name.strip_prefix('#')?;
     let (prefix, digits) =
@@ -711,6 +763,10 @@ impl Parser<'_> {
             TokenKind::Comma => self.parse_prefixed(token.span, SyntaxKind::Comma),
             TokenKind::CommaAt => self.parse_prefixed(token.span, SyntaxKind::CommaAt),
             TokenKind::HashCaret => self.parse_char_table(token.span),
+            TokenKind::Labeled(_) | TokenKind::Ref(_) => {
+                self.bump();
+                true
+            }
             TokenKind::RParen | TokenKind::RBracket => {
                 self.error(token.span, "unexpected closing delimiter");
                 false
@@ -965,6 +1021,8 @@ fn extract_surface_forms(source: &SourceFile, syntax: &SyntaxTree) -> SurfaceExt
     let mut extractor = SurfaceExtractor {
         source,
         diagnostics: Vec::new(),
+        pending_label: None,
+        label_map: std::collections::HashMap::new(),
     };
     let root = syntax.root();
     let root = Root::cast(root).expect("reader always produces a root node");
@@ -981,6 +1039,8 @@ fn extract_surface_forms(source: &SourceFile, syntax: &SyntaxTree) -> SurfaceExt
 struct SurfaceExtractor<'a> {
     source: &'a SourceFile,
     diagnostics: Vec<Diagnostic>,
+    pending_label: Option<usize>,
+    label_map: std::collections::HashMap<usize, SurfaceForm>,
 }
 
 impl SurfaceExtractor<'_> {
@@ -1006,6 +1066,8 @@ impl SurfaceExtractor<'_> {
             | SyntaxKind::HashLParen
             | SyntaxKind::HashSLParen
             | SyntaxKind::HashCaret
+            | SyntaxKind::HashLabel
+            | SyntaxKind::HashRef
             | SyntaxKind::CharTable
             | SyntaxKind::Dot
             | SyntaxKind::Prefix
@@ -1026,10 +1088,27 @@ impl SurfaceExtractor<'_> {
         &mut self,
         element: rowan::NodeOrToken<SyntaxNode, crate::syntax::SyntaxToken>,
     ) -> Option<SurfaceForm> {
-        match element {
+        let form = match element {
             rowan::NodeOrToken::Node(node) => self.extract_form(&node),
             rowan::NodeOrToken::Token(token) => self.extract_atom_token(&token),
+        };
+        // Wrap with pending label if one was set before this form.
+        // Note: extract_atom_token may return None for HashLabel, setting
+        // pending_label. We defer wrapping to the NEXT call which will have
+        // the actual form. If the label set pending_label but form is None,
+        // that's expected — the label is consumed and the next form will
+        // be wrapped (by the next call to extract_form_element).
+        if form.is_some() {
+            if let Some(n) = self.pending_label.take() {
+                if let Some(f) = form {
+                    let span = f.span;
+                    let labeled = SurfaceForm::new(SurfaceKind::Labeled(n, Box::new(f)), span);
+                    self.label_map.insert(n, labeled.clone());
+                    return Some(labeled);
+                }
+            }
         }
+        form
     }
 
     fn extract_list(&mut self, node: &SyntaxNode) -> Option<SurfaceForm> {
@@ -1168,7 +1247,25 @@ impl SurfaceExtractor<'_> {
 
     fn extract_atom_token(&mut self, token: &crate::syntax::SyntaxToken) -> Option<SurfaceForm> {
         let text = token.text();
-        let atom = match token.kind() {
+        let kind = token.kind();
+        if kind == SyntaxKind::HashLabel {
+            // #N= — set pending label for the next form
+            if let Some((n, _)) = try_parse_label(text) {
+                self.pending_label = Some(n);
+            }
+            return None;
+        }
+        if kind == SyntaxKind::HashRef {
+            // #N# — reference
+            if let Some(n) = try_parse_ref(text) {
+                return Some(SurfaceForm::new(
+                    SurfaceKind::Ref(n),
+                    token_span(self.source, token),
+                ));
+            }
+            return None;
+        }
+        let atom = match kind {
             SyntaxKind::Symbol => SurfaceAtom::symbol(text),
             SyntaxKind::Int => {
                 // Text may be a #x/#o/#b literal that doesn't parse directly.
@@ -1588,6 +1685,24 @@ mod tests {
                 "expected two symbols, got {:?} {:?}",
                 output.forms[0], output.forms[1]
             ),
+        }
+    }
+
+    #[test]
+    fn reads_circular_refs() {
+        let output = read("'(#1=a #1#)");
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        assert_eq!(output.forms.len(), 1);
+        if let SurfaceKind::Quote(inner) = &output.forms[0].kind {
+            if let SurfaceKind::List(items) = &inner.kind {
+                assert_eq!(items.len(), 2);
+                assert!(matches!(items[0].kind, SurfaceKind::Labeled(1, _)));
+                assert!(matches!(items[1].kind, SurfaceKind::Ref(1)));
+            } else {
+                panic!("expected list, got {:?}", inner);
+            }
+        } else {
+            panic!("expected quote, got {:?}", output.forms[0]);
         }
     }
 }

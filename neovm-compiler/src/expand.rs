@@ -335,7 +335,9 @@ impl Expander {
                         SurfaceKind::Vector(_)
                         | SurfaceKind::HashList(_)
                         | SurfaceKind::Record(..)
-                        | SurfaceKind::CharTable(_) => {
+                        | SurfaceKind::CharTable(_)
+                        | SurfaceKind::Labeled(..)
+                        | SurfaceKind::Ref(_) => {
                             results.push(form);
                         }
                         SurfaceKind::Quote(_)

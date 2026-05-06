@@ -344,6 +344,8 @@ pub fn surface_to_value(form: &SurfaceForm) -> MacroValue {
         SurfaceKind::CharTable(items) => {
             MacroValue::list(items.iter().map(surface_to_value).collect())
         }
+        SurfaceKind::Labeled(_, form) => surface_to_value(form),
+        SurfaceKind::Ref(n) => MacroValue::Symbol(format!("#{n}#")),
         SurfaceKind::Quote(inner) => MacroValue::list(vec![
             MacroValue::Symbol("quote".into()),
             surface_to_value(inner),

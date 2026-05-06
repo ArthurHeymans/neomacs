@@ -2507,6 +2507,8 @@ impl Interpreter<'_, '_, '_> {
                     .collect::<Option<Vec<_>>>()?;
                 Some(make_list(self.runtime, values))
             }
+            SurfaceKind::Labeled(_, form) => self.quote_value(form),
+            SurfaceKind::Ref(_) => Some(LispValue::NIL),
             SurfaceKind::DottedList(items, tail) => {
                 let mut result = self.quote_value(tail)?;
                 for item in items.iter().rev() {

@@ -26,6 +26,8 @@ pub enum SyntaxKind {
     HashLParen,
     HashSLParen,
     HashCaret,
+    HashLabel,
+    HashRef,
     CharTable,
     Dot,
     Prefix,

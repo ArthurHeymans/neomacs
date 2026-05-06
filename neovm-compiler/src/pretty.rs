@@ -156,6 +156,13 @@ fn dump_surface_form(form: &SurfaceForm, indent: usize, out: &mut String) {
                 dump_surface_form(item, indent + 1, out);
             }
         }
+        SurfaceKind::Labeled(n, form) => {
+            let _ = writeln!(out, "{pad}labeled #{n}=");
+            dump_surface_form(form, indent + 1, out);
+        }
+        SurfaceKind::Ref(n) => {
+            let _ = writeln!(out, "{pad}ref #{n}#");
+        }
         SurfaceKind::DottedList(items, tail) => {
             let _ = writeln!(out, "{pad}dotted-list");
             for item in items {

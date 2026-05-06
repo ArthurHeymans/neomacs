@@ -357,7 +357,9 @@ impl Lowerer<'_> {
             SurfaceKind::Vector(_)
             | SurfaceKind::HashList(_)
             | SurfaceKind::Record(..)
-            | SurfaceKind::CharTable(_) => Some(HirExpr {
+            | SurfaceKind::CharTable(_)
+            | SurfaceKind::Labeled(..)
+            | SurfaceKind::Ref(_) => Some(HirExpr {
                 kind: HirExprKind::Quote(Box::new(form.clone())),
                 span: form.span,
             }),
@@ -582,6 +584,8 @@ impl Lowerer<'_> {
             SurfaceKind::HashList(_)
             | SurfaceKind::Record(..)
             | SurfaceKind::CharTable(_)
+            | SurfaceKind::Labeled(..)
+            | SurfaceKind::Ref(_)
             | SurfaceKind::Atom(_) => Some(quote_form_expr(form.clone(), form.span)),
         }
     }
