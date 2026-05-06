@@ -81,7 +81,7 @@ fn ensure_neovm_mem_limit() -> Result<(), String> {
 pub(crate) const ORACLE_PROP_CASES: u32 = 10;
 
 pub(crate) fn oracle_prop_enabled() -> bool {
-    std::env::var_os("NEOVM_FORCE_ORACLE_PATH").is_some()
+    true
 }
 
 fn oracle_timing_enabled() -> bool {
