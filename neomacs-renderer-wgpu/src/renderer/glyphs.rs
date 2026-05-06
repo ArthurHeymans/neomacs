@@ -229,6 +229,126 @@ fn log_rendered_char_overlaps(
     total
 }
 
+fn cursor_glyph_slot_rect(
+    frame_glyphs: &FrameGlyphBuffer,
+    cursor: &PhysCursor,
+) -> (f32, f32, f32, f32) {
+    let mut x = cursor.x;
+    let y = cursor.y;
+    let mut width = cursor.width.max(1.0);
+    let height = cursor.height.max(1.0);
+
+    if let Some(slot) = frame_glyphs.slot_glyph(cursor.slot_id) {
+        match slot {
+            FrameGlyph::Char {
+                x: slot_x,
+                width: slot_width,
+                ..
+            } => {
+                x = *slot_x;
+                if !matches!(cursor.style, CursorStyle::Bar(_)) {
+                    width = slot_width.max(1.0);
+                }
+            }
+            FrameGlyph::Stretch { x: slot_x, .. } => {
+                x = *slot_x;
+                // GNU clamps stretch cursor width when x-stretch-cursor is nil.
+                // Layout has already resolved that policy into PhysCursor::width.
+            }
+            FrameGlyph::Image {
+                x: slot_x,
+                y: slot_y,
+                width: slot_width,
+                height: slot_height,
+                ..
+            }
+            | FrameGlyph::Video {
+                x: slot_x,
+                y: slot_y,
+                width: slot_width,
+                height: slot_height,
+                ..
+            }
+            | FrameGlyph::WebKit {
+                x: slot_x,
+                y: slot_y,
+                width: slot_width,
+                height: slot_height,
+                ..
+            } => {
+                return (*slot_x, *slot_y, slot_width.max(1.0), slot_height.max(1.0));
+            }
+            _ => {}
+        }
+    }
+
+    if matches!(
+        cursor.style,
+        CursorStyle::Bar(_) | CursorStyle::Hbar(_) | CursorStyle::Hollow
+    ) && let Some(slot) = frame_glyphs.slot_glyph(cursor.slot_id)
+        && slot.bidi_level().is_some_and(|level| level & 1 != 0)
+    {
+        let slot_width = match slot {
+            FrameGlyph::Char { width, .. } | FrameGlyph::Stretch { width, .. } => *width,
+            _ => width,
+        };
+        if slot_width > width {
+            x += slot_width - width;
+        }
+    }
+
+    (x, y, width, height)
+}
+
+fn log_cursor_glyph_alignment(
+    frame_id: u64,
+    pass_name: &str,
+    frame_glyphs: &FrameGlyphBuffer,
+    chars: &[RenderedCharBounds],
+) {
+    let Some(cursor) = frame_glyphs.phys_cursor.as_ref() else {
+        return;
+    };
+    let Some(glyph) = chars.iter().find(|bounds| bounds.slot_id == cursor.slot_id) else {
+        return;
+    };
+    let (cx, cy, cw, ch) = cursor_glyph_slot_rect(frame_glyphs, cursor);
+    let cr = cx + cw;
+    let cb = cy + ch;
+    let gr = glyph.right();
+    let gb = glyph.bottom();
+    let tol = 1.0_f32;
+
+    if glyph.glyph_x < cx - tol || glyph.glyph_y < cy - tol || gr > cr + tol || gb > cb + tol {
+        tracing::error!(
+            "cursor_glyph_mismatch frame_id={} pass={} cursor_slot=({}, {}) style={:?} \
+             cursor=({:.1},{:.1},{:.1}x{:.1}) \
+             cell=({:.1},{:.1},{:.1}x{:.1}) \
+             bitmap=({:.1},{:.1},{:.1}x{:.1}) label={:?} face={} font={:.1}",
+            frame_id,
+            pass_name,
+            cursor.slot_id.row,
+            cursor.slot_id.col,
+            cursor.style,
+            cx,
+            cy,
+            cw,
+            ch,
+            glyph.cell_x,
+            glyph.cell_y,
+            glyph.cell_w,
+            glyph.cell_h,
+            glyph.glyph_x,
+            glyph.glyph_y,
+            glyph.glyph_w,
+            glyph.glyph_h,
+            glyph.label,
+            glyph.face_id,
+            glyph.font_size,
+        );
+    }
+}
+
 fn lerp_color(a: Color, b: Color, t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
     Color::new(
@@ -370,27 +490,7 @@ fn cursor_render_rect(
     frame_glyphs: &FrameGlyphBuffer,
     cursor: &PhysCursor,
 ) -> (f32, f32, f32, f32) {
-    let mut x = cursor.x;
-    let y = cursor.y;
-    let width = cursor.width;
-    let height = cursor.height;
-
-    if matches!(
-        cursor.style,
-        CursorStyle::Bar(_) | CursorStyle::Hbar(_) | CursorStyle::Hollow
-    ) && let Some(slot) = frame_glyphs.slot_glyph(cursor.slot_id)
-        && slot.bidi_level().is_some_and(|level| level & 1 != 0)
-    {
-        let slot_width = match slot {
-            FrameGlyph::Char { width, .. } | FrameGlyph::Stretch { width, .. } => *width,
-            _ => width,
-        };
-        if slot_width > width {
-            x += slot_width - width;
-        }
-    }
-
-    (x, y, width, height)
+    cursor_glyph_slot_rect(frame_glyphs, cursor)
 }
 
 fn window_cursor_visual_matches_phys(
@@ -2339,6 +2439,12 @@ impl WgpuRenderer {
                 log_rendered_char_overlaps(
                     frame_glyphs.frame_id,
                     if want_overlay { "overlay" } else { "text" },
+                    &rendered_char_bounds,
+                );
+                log_cursor_glyph_alignment(
+                    frame_glyphs.frame_id,
+                    if want_overlay { "overlay" } else { "text" },
+                    frame_glyphs,
                     &rendered_char_bounds,
                 );
 

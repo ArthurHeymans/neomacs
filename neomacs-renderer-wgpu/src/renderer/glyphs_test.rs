@@ -71,7 +71,10 @@ fn filled_box_cursor_keeps_slot_origin_in_rtl_runs() {
     }
 
     let cursor = make_cursor(slot_id, 50.0, 60.0, 8.0, CursorStyle::FilledBox);
-    assert_eq!(cursor_render_rect(&frame, &cursor), (50.0, 60.0, 8.0, 16.0));
+    assert_eq!(
+        cursor_render_rect(&frame, &cursor),
+        (50.0, 60.0, 12.0, 16.0)
+    );
 }
 
 #[test]
