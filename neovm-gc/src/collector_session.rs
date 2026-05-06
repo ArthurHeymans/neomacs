@@ -457,8 +457,8 @@ pub(crate) fn finish_major_mark(
     // Drain any work the ephemeron pass discovered so transitive
     // children of newly-discovered objects are also marked before
     // the session transitions to reclaim.
-    let (post_ephemeron_steps, post_ephemeron_rounds) =
-        tracer.drain_parallel_until_empty(state.plan.worker_count.max(1), state.plan.mark_slice_budget);
+    let (post_ephemeron_steps, post_ephemeron_rounds) = tracer
+        .drain_parallel_until_empty(state.plan.worker_count.max(1), state.plan.mark_slice_budget);
     state.mark_steps = state.mark_steps.saturating_add(post_ephemeron_steps);
     state.mark_rounds = state.mark_rounds.saturating_add(post_ephemeron_rounds);
     state.worklist = tracer.into_worklist();

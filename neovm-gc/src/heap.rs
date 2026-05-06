@@ -1365,8 +1365,7 @@ impl HeapCore {
     /// `ObjectStore`'s shard locks are not held elsewhere — a
     /// positive sign that we truly have exclusive access.
     unsafe fn objects_mut_unchecked(&mut self) -> &mut ObjectStore {
-        let ptr: *mut ObjectStore =
-            std::sync::Arc::as_ptr(&self.objects) as *mut ObjectStore;
+        let ptr: *mut ObjectStore = std::sync::Arc::as_ptr(&self.objects) as *mut ObjectStore;
         debug_assert!(
             !ptr.is_null(),
             "objects_mut_unchecked: ObjectStore Arc pointer is null"
