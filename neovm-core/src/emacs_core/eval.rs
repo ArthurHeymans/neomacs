@@ -8701,8 +8701,10 @@ impl Context {
                 *value = v;
             }
         }
-        self.unbind_to(root_slot);
-        result
+        match self.unbind_to_result(root_slot) {
+            Ok(()) => result,
+            Err(flow) => Err(flow),
+        }
     }
 
     fn sf_condition_case_value(&mut self, tail: Value) -> EvalResult {
@@ -11532,6 +11534,10 @@ impl Context {
     /// Restore all specpdl bindings back to `count`.
     /// Matches GNU Emacs's unbind_to() in eval.c.
     pub(crate) fn unbind_to(&mut self, count: usize) {
+        let _ = self.unbind_to_result(count);
+    }
+
+    pub(crate) fn unbind_to_result(&mut self, count: usize) -> Result<(), Flow> {
         // Mirrors GNU `unbind_to` in `eval.c:3907-3930`: suppress a
         // pending quit during cleanup so `unwind-protect` cleanup forms
         // run to completion, then restore the pending state on exit if
@@ -11665,14 +11671,15 @@ impl Context {
                     // Entry already popped — re-entrant errors won't re-unwind.
                     let saved_lexenv = self.lexenv;
                     self.lexenv = lexenv;
-                    if cleanup.is_cons() || cleanup.is_nil() {
+                    let cleanup_result = if cleanup.is_cons() || cleanup.is_nil() {
                         // Interpreter path: list of forms
-                        let _ = self.sf_progn_value(cleanup);
+                        self.sf_progn_value(cleanup)
                     } else {
                         // VM path: callable (bytecode function)
-                        let _ = self.apply(cleanup, vec![]);
-                    }
+                        self.apply(cleanup, vec![])
+                    };
                     self.lexenv = saved_lexenv;
+                    cleanup_result?;
                 }
                 SpecBinding::SaveExcursion {
                     buffer_id,
@@ -11698,6 +11705,7 @@ impl Context {
         if !quitf.is_nil() && self.quit_flag_value().is_nil() {
             self.set_quit_flag_value(quitf);
         }
+        Ok(())
     }
 }
 

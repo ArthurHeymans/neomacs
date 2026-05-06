@@ -5887,6 +5887,35 @@ fn funcall_named_symbol_propagates_inner_invalid_function_payload() {
 }
 
 #[test]
+fn unwind_protect_cleanup_signal_overrides_body_result() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(condition-case err
+                 (unwind-protect 'ok (car 1))
+               (wrong-type-argument (car err)))"
+        ),
+        "OK wrong-type-argument"
+    );
+}
+
+#[test]
+fn unwind_protect_cleanup_signal_overrides_throw() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(condition-case err
+                 (catch 'neomacs--cleanup-tag
+                   (unwind-protect
+                       (throw 'neomacs--cleanup-tag 'ok)
+                     (car 1)))
+               (wrong-type-argument (car err)))"
+        ),
+        "OK wrong-type-argument"
+    );
+}
+
+#[test]
 fn fmakunbound_masks_builtin_special_and_evaluator_callable_fallbacks() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
