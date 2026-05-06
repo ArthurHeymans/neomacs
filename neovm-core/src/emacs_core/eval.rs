@@ -2029,53 +2029,18 @@ fn prepend_lexical_binding_in_specpdl_rooted_env(
     }
 }
 
-/// Build a `(MIN . MAX)` cons cell representing the arity of a lambda/closure,
-/// matching the format GNU Emacs uses in `wrong-number-of-arguments` errors.
-/// `MAX` is the symbol `many` when the function accepts `&rest`.
-fn lambda_arity_cons(params: &LambdaParams) -> Value {
-    let min_val = Value::fixnum(params.min_arity() as i64);
-    let max_val = match params.max_arity() {
-        Some(n) => Value::fixnum(n as i64),
-        None => Value::symbol("many"),
-    };
-    Value::cons(min_val, max_val)
-}
-
 fn begin_lambda_call_in_state(
     obarray: &mut Obarray,
     specpdl: &mut Vec<SpecBinding>,
     lexenv: &mut Value,
-    params: &LambdaParams,
+    fun: Value,
+    arglist: Value,
     env: Option<Value>,
     args: &[Value],
 ) -> Result<ActiveLambdaCallState, Flow> {
-    if args.len() < params.min_arity() {
-        let arity_val = lambda_arity_cons(params);
-        return Err(signal(
-            "wrong-number-of-arguments",
-            vec![arity_val, Value::fixnum(args.len() as i64)],
-        ));
-    }
-    if let Some(max) = params.max_arity()
-        && args.len() > max
-    {
-        let arity_val = lambda_arity_cons(params);
-        return Err(signal(
-            "wrong-number-of-arguments",
-            vec![arity_val, Value::fixnum(args.len() as i64)],
-        ));
-    }
-
     let specpdl_count = specpdl.len();
 
     if let Some(env) = env {
-        // Debug: detect malformed env (bare t instead of list (t))
-        if env.is_t() {
-            tracing::error!(
-                "Lambda called with env=t (should be (t))! params={:?}",
-                params
-            );
-        }
         let old = std::mem::replace(lexenv, env);
         // Mirrors GNU funcall_lambda:
         //   specbind(Qinternal_interpreter_environment, lexenv);
@@ -2083,67 +2048,27 @@ fn begin_lambda_call_in_state(
 
         let env_root_index = specpdl.len();
         specpdl.push(SpecBinding::GcRoot { value: env });
-
-        let mut arg_idx = 0;
-        for param in &params.required {
-            prepend_lexical_binding_in_specpdl_rooted_env(
-                lexenv,
-                specpdl,
-                env_root_index,
-                *param,
-                args[arg_idx],
-            );
-            arg_idx += 1;
-        }
-        for param in &params.optional {
-            if arg_idx < args.len() {
-                prepend_lexical_binding_in_specpdl_rooted_env(
-                    lexenv,
-                    specpdl,
-                    env_root_index,
-                    *param,
-                    args[arg_idx],
-                );
-                arg_idx += 1;
-            } else {
-                prepend_lexical_binding_in_specpdl_rooted_env(
-                    lexenv,
-                    specpdl,
-                    env_root_index,
-                    *param,
-                    Value::NIL,
-                );
-            }
-        }
-        if let Some(rest_name) = params.rest {
-            let rest_value = Value::list_from_slice(&args[arg_idx..]);
-            prepend_lexical_binding_in_specpdl_rooted_env(
-                lexenv,
-                specpdl,
-                env_root_index,
-                rest_name,
-                rest_value,
-            );
-        }
+        bind_lambda_args_from_arglist(
+            obarray,
+            specpdl,
+            lexenv,
+            Some(env_root_index),
+            specpdl_count,
+            fun,
+            arglist,
+            args,
+        )?;
     } else {
-        // Dynamic binding: use specbind to write directly to obarray.
-        let mut arg_idx = 0;
-        for param in &params.required {
-            specbind_in_state(obarray, specpdl, *param, args[arg_idx]);
-            arg_idx += 1;
-        }
-        for param in &params.optional {
-            if arg_idx < args.len() {
-                specbind_in_state(obarray, specpdl, *param, args[arg_idx]);
-                arg_idx += 1;
-            } else {
-                specbind_in_state(obarray, specpdl, *param, Value::NIL);
-            }
-        }
-        if let Some(rest_name) = params.rest {
-            let rest_value = Value::list_from_slice(&args[arg_idx..]);
-            specbind_in_state(obarray, specpdl, rest_name, rest_value);
-        }
+        bind_lambda_args_from_arglist(
+            obarray,
+            specpdl,
+            lexenv,
+            None,
+            specpdl_count,
+            fun,
+            arglist,
+            args,
+        )?;
     }
 
     // GNU never writes `lexical-binding` during lambda/closure calls.
@@ -2152,6 +2077,121 @@ fn begin_lambda_call_in_state(
     // via lexical_binding() -> !self.lexenv.is_nil().
 
     Ok(ActiveLambdaCallState { specpdl_count })
+}
+
+fn bare_lambda_arg_symbol_id(value: Value) -> Option<SymId> {
+    let value = if value.is_symbol_with_pos() {
+        value.as_symbol_with_pos_sym().unwrap()
+    } else {
+        value
+    };
+    if value.is_nil() {
+        Some(intern("nil"))
+    } else {
+        value.as_symbol_id()
+    }
+}
+
+fn unwind_lambda_bindings_after_error(
+    obarray: &mut Obarray,
+    specpdl: &mut Vec<SpecBinding>,
+    lexenv: &mut Value,
+    specpdl_count: usize,
+) {
+    finish_lambda_call_in_state(
+        obarray,
+        specpdl,
+        lexenv,
+        ActiveLambdaCallState { specpdl_count },
+    );
+}
+
+fn bind_lambda_args_from_arglist(
+    obarray: &mut Obarray,
+    specpdl: &mut Vec<SpecBinding>,
+    lexenv: &mut Value,
+    env_root_index: Option<usize>,
+    specpdl_count: usize,
+    fun: Value,
+    arglist: Value,
+    args: &[Value],
+) -> Result<(), Flow> {
+    let optional_sym = intern("&optional");
+    let rest_sym = intern("&rest");
+    let mut syms_left = arglist;
+    let mut arg_index = 0;
+    let mut optional = false;
+    let mut rest = false;
+    let mut previous_rest = false;
+
+    while syms_left.is_cons() {
+        let next = syms_left.cons_car();
+        syms_left = syms_left.cons_cdr();
+        let Some(next_id) = bare_lambda_arg_symbol_id(next) else {
+            unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+            return Err(signal("invalid-function", vec![fun]));
+        };
+
+        if next_id == rest_sym {
+            if rest || previous_rest {
+                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+                return Err(signal("invalid-function", vec![fun]));
+            }
+            rest = true;
+            previous_rest = true;
+        } else if next_id == optional_sym {
+            if optional || rest || previous_rest {
+                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+                return Err(signal("invalid-function", vec![fun]));
+            }
+            optional = true;
+        } else {
+            let arg = if rest {
+                let rest_value = Value::list_from_slice(&args[arg_index..]);
+                arg_index = args.len();
+                rest_value
+            } else if arg_index < args.len() {
+                let arg = args[arg_index];
+                arg_index += 1;
+                arg
+            } else if !optional {
+                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+                return Err(signal(
+                    "wrong-number-of-arguments",
+                    vec![fun, Value::fixnum(args.len() as i64)],
+                ));
+            } else {
+                Value::NIL
+            };
+
+            if let Some(env_root_index) = env_root_index {
+                prepend_lexical_binding_in_specpdl_rooted_env(
+                    lexenv,
+                    specpdl,
+                    env_root_index,
+                    next_id,
+                    arg,
+                );
+            } else {
+                specbind_in_state(obarray, specpdl, next_id, arg);
+            }
+            previous_rest = false;
+        }
+    }
+
+    if !syms_left.is_nil() || previous_rest {
+        unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+        return Err(signal("invalid-function", vec![fun]));
+    }
+    if arg_index < args.len() {
+        unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
+        return Err(signal(
+            "wrong-number-of-arguments",
+            vec![fun, Value::fixnum(args.len() as i64)],
+        ));
+    }
+
+    Ok(())
 }
 
 fn finish_lambda_call_in_state(
@@ -6617,7 +6657,8 @@ impl Context {
 
     pub(crate) fn begin_lambda_call(
         &mut self,
-        params: &LambdaParams,
+        fun: Value,
+        arglist: Value,
         env: Option<Value>,
         args: &[Value],
     ) -> Result<ActiveLambdaCallState, Flow> {
@@ -6625,7 +6666,8 @@ impl Context {
             &mut self.obarray,
             &mut self.specpdl,
             &mut self.lexenv,
-            params,
+            fun,
+            arglist,
             env,
             args,
         )
@@ -10793,7 +10835,10 @@ impl Context {
     }
 
     fn apply_lambda(&mut self, func_value: Value, args: LispArgVec) -> EvalResult {
-        let Some(params) = func_value.closure_params() else {
+        if func_value.closure_params().is_none() {
+            return Err(signal("invalid-function", vec![func_value]));
+        }
+        let Some(arglist) = func_value.closure_slot(CLOSURE_ARGLIST) else {
             return Err(signal("invalid-function", vec![func_value]));
         };
         let Some(body) = func_value.closure_body_value() else {
@@ -10806,7 +10851,7 @@ impl Context {
         let root_count = self.specpdl.len();
         self.specpdl.push(SpecBinding::GcRoot { value: func_value });
 
-        let call_state = match self.begin_lambda_call(params, env, &args) {
+        let call_state = match self.begin_lambda_call(func_value, arglist, env, &args) {
             Ok(state) => state,
             Err(err) => {
                 self.unbind_to(root_count);
