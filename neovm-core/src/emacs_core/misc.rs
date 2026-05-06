@@ -237,56 +237,42 @@ pub(crate) fn builtin_string_repeat(args: Vec<Value>) -> EvalResult {
     Ok(Value::string(s.repeat(count as usize)))
 }
 
-/// `(safe-length LIST)` -- return the length of LIST, returning 0 for
-/// non-lists and stopping at circular references (up to a limit).
+/// `(safe-length LIST)` -- return the length of LIST without signaling.
 pub(crate) fn builtin_safe_length(args: Vec<Value>) -> EvalResult {
     expect_args("safe-length", &args, 1)?;
-    let list = &args[0];
-    if list.is_nil() {
-        return Ok(Value::fixnum(0));
-    }
-    if !list.is_cons() {
-        return Ok(Value::fixnum(0));
-    }
-
-    // GNU uses FOR_EACH_TAIL_SAFE which implements Brent's cycle
-    // detection (teleporting tortoise). This matches the exact count
-    // GNU returns for circular lists.
-    let mut tortoise = *list;
-    let mut hare = *list;
+    let mut tail = args[0];
     let mut length: i64 = 0;
-    let mut power: i64 = 1;
-    let mut step: i64 = 0;
+    let mut tortoise = tail;
+    let mut max: i64 = 2;
+    let mut n: i64 = 0;
+    let mut q: u16 = 2;
 
-    loop {
-        match hare.kind() {
-            ValueKind::Cons => {
-                let pair_car = hare.cons_car();
-                let pair_cdr = hare.cons_cdr();
-                hare = pair_cdr;
-                length += 1;
-                step += 1;
+    while tail.is_cons() {
+        length += 1;
+        tail = tail.cons_cdr();
+
+        q = q.wrapping_sub(1);
+        let check_cycle = if q != 0 {
+            true
+        } else {
+            n -= 1;
+            if n > 0 {
+                true
+            } else {
+                max <<= 1;
+                n = max >> u16::BITS;
+                q = max as u16;
+                tortoise = tail;
+                false
             }
-            _ => return Ok(Value::fixnum(length)),
-        }
+        };
 
-        // Brent's: check if hare caught up to tortoise
-        if hare.is_cons() && tortoise.is_cons() && eq_value(&hare, &tortoise) {
-            return Ok(Value::fixnum(length));
-        }
-
-        // Teleport tortoise: when step count reaches power, move
-        // tortoise to hare's position and double the power.
-        if step == power {
-            tortoise = hare;
-            power *= 2;
-            step = 0;
-        }
-
-        if length > 10_000_000 {
-            return Ok(Value::fixnum(length));
+        if check_cycle && eq_value(&tail, &tortoise) {
+            break;
         }
     }
+
+    Ok(Value::fixnum(length))
 }
 
 /// `(subst-char-in-string FROMCHAR TOCHAR STRING &optional INPLACE)` --

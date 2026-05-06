@@ -231,6 +231,34 @@ fn safe_length_non_list() {
     assert!(eq_value(&result, &Value::fixnum(0)));
 }
 
+#[test]
+fn safe_length_circular_lists_match_gnu_detection_count() {
+    crate::test_utils::init_test_tracing();
+
+    let one = Value::cons(Value::symbol("a"), Value::NIL);
+    one.set_cdr(one);
+    let result = builtin_safe_length(vec![one]).unwrap();
+    assert!(eq_value(&result, &Value::fixnum(1)));
+
+    let three = Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]);
+    let tail = three.cons_cdr().cons_cdr();
+    tail.set_cdr(three);
+    let result = builtin_safe_length(vec![three]).unwrap();
+    assert!(eq_value(&result, &Value::fixnum(5)));
+
+    let offset = Value::list(vec![
+        Value::fixnum(1),
+        Value::fixnum(2),
+        Value::fixnum(3),
+        Value::fixnum(4),
+    ]);
+    let cycle_start = offset.cons_cdr();
+    let offset_tail = cycle_start.cons_cdr().cons_cdr();
+    offset_tail.set_cdr(cycle_start);
+    let result = builtin_safe_length(vec![offset]).unwrap();
+    assert!(eq_value(&result, &Value::fixnum(5)));
+}
+
 // ----- subst-char-in-string -----
 
 #[test]
