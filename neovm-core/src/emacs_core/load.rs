@@ -3528,6 +3528,7 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
 
     sync_runtime_interpreted_closure_filter(eval);
     clear_transient_runtime_features(eval);
+    eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
     eval.clear_top_level_eval_state();
 
     Ok(())
@@ -3684,8 +3685,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         // let explicit temacs-style flows seed the real GNU value here.
         set_loadup_dump_mode(&mut eval, dump_mode);
         eval.set_variable("purify-flag", Value::NIL);
-        // NeoVM counts depth more aggressively than GNU (see eval.rs comment).
-        eval.set_variable("max-lisp-eval-depth", Value::fixnum(2400));
+        eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
         eval.set_variable("inhibit-load-charset-map", Value::T);
         // data-directory: directory of machine-independent data files (etc/)
         let etc_dir = project_root.join("etc");

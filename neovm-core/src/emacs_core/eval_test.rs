@@ -6414,11 +6414,17 @@ fn excessive_recursion_detected() {
 #[test]
 fn excessive_recursion_reports_overflow_depth_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
-    // After the specbind refactor the recursion depth at overflow changed
-    // from 1601 to 2401 because dynamic binding frames no longer count
-    // toward the nesting depth.
     let results = eval_all("(defalias 'inf #'(lambda () (inf)))\n(inf)");
-    assert_eq!(results[1], "ERR (excessive-lisp-nesting (2401))");
+    assert_eq!(results[1], "ERR (excessive-lisp-nesting (1601))");
+}
+
+#[test]
+fn max_lisp_eval_depth_binding_updates_overflow_limit() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one("(let ((max-lisp-eval-depth 100)) (defalias 'inf #'(lambda () (inf))) (inf))"),
+        "ERR (excessive-lisp-nesting (101))"
+    );
 }
 
 #[test]

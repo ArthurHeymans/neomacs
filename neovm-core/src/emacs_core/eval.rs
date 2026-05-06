@@ -1005,6 +1005,7 @@ cached_symbol_id!(lambda_symbol, "lambda");
 cached_symbol_id!(closure_symbol, "closure");
 cached_symbol_id!(declare_symbol, "declare");
 cached_symbol_id!(macro_symbol, "macro");
+cached_symbol_id!(max_lisp_eval_depth_symbol, "max-lisp-eval-depth");
 cached_symbol_id!(byte_code_literal_symbol, "byte-code-literal");
 cached_symbol_id!(byte_code_symbol, "byte-code");
 cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
@@ -3827,12 +3828,7 @@ impl Context {
 
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);
-        // GNU Emacs defaults to 1600 but only increments lisp_eval_depth in
-        // eval_sub() and Ffuncall(). NeoVM increments depth for every
-        // sub-expression including primitive calls (get, fboundp, etc.), so
-        // the same Elisp code uses ~5x more depth units. Use 10000 to match
-        // effective GNU depth capacity.
-        obarray.set_symbol_value("max-lisp-eval-depth", Value::fixnum(2400));
+        obarray.set_symbol_value("max-lisp-eval-depth", Value::fixnum(1600));
         obarray.set_symbol_value("max-specpdl-size", Value::fixnum(1800));
         obarray.set_symbol_value("inhibit-load-charset-map", Value::NIL);
 
@@ -4291,7 +4287,7 @@ impl Context {
             last_redisplay_signature: None,
             depth: 0,
             eval_counter: 0,
-            max_depth: 2400, // Matches GNU Emacs default (max-lisp-eval-depth)
+            max_depth: 1600,
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
@@ -4450,7 +4446,7 @@ impl Context {
             last_redisplay_signature: None,
             depth: 0,
             eval_counter: 0,
-            max_depth: 2400,
+            max_depth: 1600,
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
@@ -6421,6 +6417,10 @@ impl Context {
             self.symbols_with_pos_enabled = value.is_truthy();
         } else if sym_id == self.print_symbols_bare_symbol {
             self.print_symbols_bare = value.is_truthy();
+        } else if sym_id == max_lisp_eval_depth_symbol()
+            && let Some(depth) = value.as_fixnum()
+        {
+            self.max_depth = depth.max(100) as usize;
         }
     }
 
