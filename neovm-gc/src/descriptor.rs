@@ -16,7 +16,16 @@ pub struct GcErased(NonNull<ObjectHeader>);
 unsafe impl Send for GcErased {}
 unsafe impl Sync for GcErased {}
 
-/// Stable identity key for one managed-object header.
+/// Identity key for one managed-object header, derived from its
+/// current address.
+///
+/// An `ObjectKey` is valid for the duration of one allocation
+/// cycle between consecutive GC pause boundaries.  It is NOT
+/// stable across nursery evacuation or old-gen compaction: when
+/// the collector moves an object, its `ObjectHeader` address
+/// changes and therefore its `ObjectKey` changes.  Consumers
+/// that need long-lived identity must rely on the forwarding
+/// infrastructure or a separate VM-level identifier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct ObjectKey(usize);
 

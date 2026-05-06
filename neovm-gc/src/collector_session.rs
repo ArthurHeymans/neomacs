@@ -414,17 +414,26 @@ pub(crate) fn complete_drained_major_mark_round(
 
     let mut tracer = MarkTracer::with_worklist(objects, Default::default());
     let (ephemeron_steps, ephemeron_rounds) = trace_ephemerons(&mut tracer, &plan);
+    // Drain any work the ephemeron pass discovered so transitive
+    // children of newly-discovered objects are also marked.
     if plan.kind == CollectionKind::Major {
+        let (mark_steps, mark_rounds) =
+            tracer.drain_parallel_until_empty(plan.worker_count.max(1), plan.mark_slice_budget);
         let reclaim_prepare_start = Instant::now();
         let prepared_reclaim = prepare_major_reclaim(&plan);
         collector.complete_active_major_reclaim_prep(
-            ephemeron_steps,
-            ephemeron_rounds,
+            ephemeron_steps.saturating_add(mark_steps),
+            ephemeron_rounds.saturating_add(mark_rounds),
             reclaim_prepare_start.elapsed(),
             Some(prepared_reclaim),
         )
     } else {
-        collector.complete_active_major_remark(ephemeron_steps, ephemeron_rounds)
+        let (mark_steps, mark_rounds) =
+            tracer.drain_parallel_until_empty(plan.worker_count.max(1), plan.mark_slice_budget);
+        collector.complete_active_major_remark(
+            ephemeron_steps.saturating_add(mark_steps),
+            ephemeron_rounds.saturating_add(mark_rounds),
+        )
     }
 }
 
@@ -445,6 +454,13 @@ pub(crate) fn finish_major_mark(
     let (ephemeron_steps, ephemeron_rounds) = trace_ephemerons(&mut tracer, &state.plan);
     state.mark_steps = state.mark_steps.saturating_add(ephemeron_steps);
     state.mark_rounds = state.mark_rounds.saturating_add(ephemeron_rounds);
+    // Drain any work the ephemeron pass discovered so transitive
+    // children of newly-discovered objects are also marked before
+    // the session transitions to reclaim.
+    let (post_ephemeron_steps, post_ephemeron_rounds) =
+        tracer.drain_parallel_until_empty(state.plan.worker_count.max(1), state.plan.mark_slice_budget);
+    state.mark_steps = state.mark_steps.saturating_add(post_ephemeron_steps);
+    state.mark_rounds = state.mark_rounds.saturating_add(post_ephemeron_rounds);
     state.worklist = tracer.into_worklist();
     state.mark_elapsed_nanos = saturating_duration_nanos(state.mark_started_at.elapsed());
     state.ephemerons_processed = true;

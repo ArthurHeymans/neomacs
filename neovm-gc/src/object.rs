@@ -5,7 +5,8 @@ use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering};
 use std::alloc::{alloc, dealloc};
 
 use crate::descriptor::{
-    EphemeronVisitor, GcErased, ObjectKey, Relocator, Trace, TypeDesc, TypeFlags, WeakProcessor,
+    EphemeronVisitor, GcErased, LayoutKind, ObjectKey, Relocator, Trace, TypeDesc, TypeFlags,
+    WeakProcessor,
 };
 use crate::heap::AllocError;
 
@@ -787,13 +788,30 @@ impl ObjectRecord {
         layout: Layout,
         space: SpaceKind,
     ) {
+        let desc = self.header().desc();
         let total_size = self.total_size();
         let header = base.cast::<ObjectHeader>();
+        // For variable-size and inline-array layouts the payload
+        // size stored in the source header may differ from the
+        // actual byte count; call the descriptor's `size` callback
+        // to obtain the authoritative payload size.
+        let payload_size = if matches!(
+            desc.layout_kind,
+            LayoutKind::Variable | LayoutKind::InlineArray
+        ) {
+            let payload_ptr = self.payload_ptr();
+            // SAFETY: the callback receives a valid pointer into
+            // the source object's payload.  The descriptor was
+            // registered by the VM for this type.
+            unsafe { (desc.size)(payload_ptr.as_ptr()) }
+        } else {
+            self.header().payload_size
+        };
         unsafe {
             header.as_ptr().write(ObjectHeader {
-                desc: self.header().desc(),
+                desc,
                 total_size,
-                payload_size: self.header().payload_size,
+                payload_size,
                 payload_offset: self.header().payload_offset,
                 space: AtomicU8::new(space as u8),
                 generation: AtomicU8::new(space.initial_generation() as u8),
@@ -807,7 +825,7 @@ impl ObjectRecord {
         let src = self.payload_ptr();
         let dst = unsafe { ObjectHeader::payload_ptr(header) };
         unsafe {
-            core::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_ptr(), self.header().payload_size);
+            core::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_ptr(), payload_size);
         }
     }
 }

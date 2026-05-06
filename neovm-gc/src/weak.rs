@@ -144,47 +144,29 @@ pub struct WeakMapToken(pub u64);
 
 /// Interior-mutable ephemeron slot.
 ///
-/// Key and value are written through a single [`AtomicPtr`] to a
-/// shared heap-allocated pair so that a concurrent reader always
-/// observes a consistent (key, value) tuple, never a torn
-/// old-key + new-value or new-key + old-value combination.
-///
-/// `process` is called by the collector during stop-the-world
-/// phases (safepoint write lock held), so the read-modify-write
-/// cycle cannot race with a concurrent mutator `set`.  This
-/// invariant must be preserved by any future architectural change.
+/// Key and value are stored in two independent [`AtomicPtr`] slots.
+/// A concurrent `set` on the pair and a concurrent `visit` / `process`
+/// on the pair SHOULD NOT overlap: `visit` and `process` are called
+/// during stop-the-world collection phases (safepoint write lock held)
+/// and `set` runs under the mutator safepoint read lock, so the two
+/// never interleave under the current safepoint discipline.  If this
+/// architecture ever allows concurrent reads and writes, the
+/// reader would need a seqlock or a single-`AtomicPtr`-to-heap-pair
+/// to avoid observing a torn (old_key, new_value) or
+/// (new_key, old_value) combination.
 pub struct Ephemeron<K: ?Sized, V: ?Sized> {
-    slot: AtomicPtr<EphemeronPair>,
+    key: AtomicPtr<ObjectHeader>,
+    value: AtomicPtr<ObjectHeader>,
     _key_marker: PhantomData<fn() -> K>,
     _value_marker: PhantomData<fn() -> V>,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct EphemeronPair {
-    key: *mut ObjectHeader,
-    value: *mut ObjectHeader,
-}
-
-impl EphemeronPair {
-    fn new(key: *mut ObjectHeader, value: *mut ObjectHeader) -> *mut Self {
-        Box::into_raw(Box::new(Self { key, value }))
-    }
 }
 
 impl<K: ?Sized, V: ?Sized> Ephemeron<K, V> {
     /// Create a new ephemeron entry.
     pub fn new(key: Weak<K>, value: Weak<V>) -> Self {
-        let raw_key = match key.target() {
-            Some(t) => t.erase().as_raw(),
-            None => core::ptr::null_mut(),
-        };
-        let raw_val = match value.target() {
-            Some(t) => t.erase().as_raw(),
-            None => core::ptr::null_mut(),
-        };
         Self {
-            slot: AtomicPtr::new(EphemeronPair::new(raw_key, raw_val)),
+            key: AtomicPtr::new(Self::raw_value(key)),
+            value: AtomicPtr::new(Self::raw_value(value)),
             _key_marker: PhantomData,
             _value_marker: PhantomData,
         }
@@ -197,32 +179,20 @@ impl<K: ?Sized, V: ?Sized> Ephemeron<K, V> {
 
     /// Return the current ephemeron key when still known.
     pub fn key(&self) -> Option<Gc<K>> {
-        let pair = self.load_pair();
-        unsafe { GcErased::from_raw(pair.key).map(|value| Gc::from_erased(value)) }
+        let raw = self.key.load(Ordering::Acquire);
+        unsafe { GcErased::from_raw(raw).map(|value| Gc::from_erased(value)) }
     }
 
     /// Return the current ephemeron value when still known.
     pub fn value(&self) -> Option<Gc<V>> {
-        let pair = self.load_pair();
-        unsafe { GcErased::from_raw(pair.value).map(|value| Gc::from_erased(value)) }
+        let raw = self.value.load(Ordering::Acquire);
+        unsafe { GcErased::from_raw(raw).map(|value| Gc::from_erased(value)) }
     }
 
-    /// Overwrite the current ephemeron pair with a single atomic store.
+    /// Overwrite the current ephemeron pair.
     pub fn set(&self, key: Weak<K>, value: Weak<V>) {
-        let raw_key = match key.target() {
-            Some(t) => t.erase().as_raw(),
-            None => core::ptr::null_mut(),
-        };
-        let raw_val = match value.target() {
-            Some(t) => t.erase().as_raw(),
-            None => core::ptr::null_mut(),
-        };
-        let new = EphemeronPair::new(raw_key, raw_val);
-        let old = self.slot.swap(new, Ordering::AcqRel);
-        // SAFETY: old was allocated by Self::new / Self::set; unique owner.
-        if !old.is_null() {
-            unsafe { drop(Box::from_raw(old)) };
-        }
+        self.key.store(Self::raw_value(key), Ordering::Release);
+        self.value.store(Self::raw_value(value), Ordering::Release);
     }
 
     /// Clear the current ephemeron pair.
@@ -232,28 +202,26 @@ impl<K: ?Sized, V: ?Sized> Ephemeron<K, V> {
 
     /// Visit the current ephemeron pair during fixpoint tracing.
     pub fn visit(&self, visitor: &mut dyn EphemeronVisitor) {
-        let pair = self.load_pair();
-        let key = unsafe { GcErased::from_raw(pair.key) };
-        let value = unsafe { GcErased::from_raw(pair.value) };
-        if let (Some(key), Some(value)) = (key, value) {
-            visitor.visit_ephemeron(key, value);
+        if let (Some(key), Some(value)) = (self.key(), self.value()) {
+            visitor.visit_ephemeron(key.erase(), value.erase());
         }
     }
 
-    /// Process the current ephemeron pair against the collector liveness view.
+    /// Process the current ephemeron pair against the collector
+    /// liveness view.
+    ///
+    /// Called during STW; the read-modify-write cycle is safe
+    /// under the safepoint protocol (see struct-level docs).
     pub fn process(&self, processor: &mut dyn WeakProcessor) {
-        let pair = self.load_pair();
-        let key = unsafe { GcErased::from_raw(pair.key) };
-        let value = unsafe { GcErased::from_raw(pair.value) };
-        let (Some(key), Some(value)) = (key, value) else {
+        let (Some(key), Some(value)) = (self.key(), self.value()) else {
             self.clear();
             return;
         };
-        let Some(remapped_key) = processor.remap_or_drop(key) else {
+        let Some(remapped_key) = processor.remap_or_drop(key.erase()) else {
             self.clear();
             return;
         };
-        let Some(remapped_value) = processor.remap_or_drop(value) else {
+        let Some(remapped_value) = processor.remap_or_drop(value.erase()) else {
             self.clear();
             return;
         };
@@ -263,28 +231,10 @@ impl<K: ?Sized, V: ?Sized> Ephemeron<K, V> {
         );
     }
 
-    fn load_pair(&self) -> EphemeronPair {
-        let ptr = self.slot.load(Ordering::Acquire);
-        if ptr.is_null() {
-            EphemeronPair {
-                key: core::ptr::null_mut(),
-                value: core::ptr::null_mut(),
-            }
-        } else {
-            // SAFETY: ptr was allocated by EphemeronPair::new and is
-            // published through a Release store.  The AtomicPtr ensures
-            // the reader sees a fully initialised pair.
-            unsafe { *ptr }
-        }
-    }
-}
-
-impl<K: ?Sized, V: ?Sized> Drop for Ephemeron<K, V> {
-    fn drop(&mut self) {
-        let ptr = self.slot.load(Ordering::Relaxed);
-        if !ptr.is_null() {
-            // SAFETY: ptr was allocated by EphemeronPair::new; unique owner at drop time.
-            unsafe { drop(Box::from_raw(ptr)) };
+    fn raw_value<T: ?Sized>(value: Weak<T>) -> *mut ObjectHeader {
+        match value.target() {
+            Some(target) => target.erase().as_raw(),
+            None => core::ptr::null_mut(),
         }
     }
 }
@@ -297,10 +247,9 @@ impl<K: ?Sized, V: ?Sized> Default for Ephemeron<K, V> {
 
 impl<K: ?Sized, V: ?Sized> fmt::Debug for Ephemeron<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let pair = self.load_pair();
         f.debug_struct("Ephemeron")
-            .field("has_key", &!pair.key.is_null())
-            .field("has_value", &!pair.value.is_null())
+            .field("has_key", &self.key().is_some())
+            .field("has_value", &self.value().is_some())
             .finish()
     }
 }

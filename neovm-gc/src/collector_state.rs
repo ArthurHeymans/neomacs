@@ -60,13 +60,18 @@ pub(crate) struct CollectorStateHandle {
 }
 
 impl CollectorStateHandle {
-    pub(crate) fn lock(&self) -> MutexGuard<'_, CollectorState> {
+    // Not pub(crate): callers that need to mutate collector state
+    // MUST go through [`Self::with_state`] or [`Self::try_with_state`]
+    // so the lock-free atomic mirrors are refreshed after every
+    // mutation.  Read-only queries that use `.lock()` inside this
+    // module are fine because they don't mutate.
+    fn lock(&self) -> MutexGuard<'_, CollectorState> {
         self.state
             .lock()
             .expect("collector state should not be poisoned")
     }
 
-    pub(crate) fn try_lock(&self) -> TryLockResult<MutexGuard<'_, CollectorState>> {
+    fn try_lock(&self) -> TryLockResult<MutexGuard<'_, CollectorState>> {
         self.state.try_lock()
     }
 

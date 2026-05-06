@@ -117,15 +117,17 @@ impl CardTable {
 
     /// Mark the card containing `addr` as dirty. No-op if `addr` is
     /// outside the covered range. This is the write-barrier fast path.
+    ///
+    /// Uses `Release` ordering so the mutator's slot write that
+    /// created the old-to-young edge cannot be reordered after this
+    /// store.  `clear_all` is invoked during stop-the-world (no
+    /// concurrent mutator) and therefore may use `Relaxed`.
     #[inline]
     pub(crate) fn record_write(&self, addr: usize) {
         let Some(index) = self.card_index_of(addr) else {
             return;
         };
-        // Relaxed is sufficient: the barrier only needs to make the
-        // dirty bit visible by the next stop-the-world remark, which
-        // already contains a full memory fence.
-        self.cards[index].store(CARD_DIRTY, Ordering::Relaxed);
+        self.cards[index].store(CARD_DIRTY, Ordering::Release);
     }
 
     /// Check whether the card containing `addr` is dirty. Returns
