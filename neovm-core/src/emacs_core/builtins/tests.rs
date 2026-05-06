@@ -10884,6 +10884,34 @@ fn make_string_matches_emacs_ascii_boundary() {
 }
 
 #[test]
+fn string_matches_emacs_ascii_boundary() {
+    crate::test_utils::init_test_tracing();
+    let ascii = dispatch_builtin_pure(
+        "string",
+        vec![
+            Value::fixnum('a' as i64),
+            Value::fixnum('b' as i64),
+            Value::fixnum('c' as i64),
+        ],
+    )
+    .expect("string should resolve")
+    .expect("ascii string should evaluate");
+    let non_ascii = dispatch_builtin_pure("string", vec![Value::fixnum(0xE9)])
+        .expect("string should resolve")
+        .expect("non-ASCII string should evaluate");
+
+    let ascii_multibyte = dispatch_builtin_pure("multibyte-string-p", vec![ascii])
+        .expect("multibyte-string-p should resolve")
+        .expect("ascii multibyte-string-p should evaluate");
+    let non_ascii_multibyte = dispatch_builtin_pure("multibyte-string-p", vec![non_ascii])
+        .expect("multibyte-string-p should resolve")
+        .expect("non-ASCII multibyte-string-p should evaluate");
+
+    assert_eq!(ascii_multibyte, Value::NIL);
+    assert_eq!(non_ascii_multibyte, Value::T);
+}
+
+#[test]
 fn text_char_description_nonunicode_char_code_bounds_match_oracle() {
     crate::test_utils::init_test_tracing();
     // Non-Unicode chars produce strings with lossy UTF-8 rendering

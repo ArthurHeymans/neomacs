@@ -1632,6 +1632,7 @@ pub(crate) fn builtin_string(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
     use crate::emacs_core::emacs_char;
     let mut result = Vec::new();
+    let mut nbytes = 0usize;
     for arg in args {
         match arg.kind() {
             ValueKind::Fixnum(c) => {
@@ -1646,6 +1647,7 @@ pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
                 }
                 let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
                 let len = emacs_char::char_string(c as u32, &mut buf);
+                nbytes += len;
                 result.extend_from_slice(&buf[..len]);
             }
             _other => {
@@ -1656,9 +1658,15 @@ pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
             }
         }
     }
-    Ok(Value::heap_string(
-        crate::heap_types::LispString::from_emacs_bytes(result),
-    ))
+    if nbytes == args.len() {
+        Ok(Value::heap_string(
+            crate::heap_types::LispString::from_unibyte(result),
+        ))
+    } else {
+        Ok(Value::heap_string(
+            crate::heap_types::LispString::from_emacs_bytes(result),
+        ))
+    }
 }
 
 /// `(unibyte-string &rest BYTES)` -> unibyte storage string.

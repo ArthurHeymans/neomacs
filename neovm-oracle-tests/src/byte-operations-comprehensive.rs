@@ -50,7 +50,7 @@ fn oracle_prop_byte_ops_multibyte_string_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(list
-  ;; Regular string literal is multibyte
+  ;; ASCII string literal is unibyte
   (multibyte-string-p "hello")
   ;; Empty string
   (multibyte-string-p "")
@@ -58,11 +58,11 @@ fn oracle_prop_byte_ops_multibyte_string_p() {
   (multibyte-string-p "\u00e9")
   ;; Unibyte string via unibyte-string
   (multibyte-string-p (unibyte-string 65 66 67))
-  ;; String with only ASCII is still multibyte if created as multibyte
+  ;; `string` returns unibyte when every char is one byte
   (multibyte-string-p (string ?a ?b ?c))
-  ;; make-string with multibyte char
+  ;; make-string returns unibyte for ASCII unless MULTIBYTE is non-nil
   (multibyte-string-p (make-string 3 ?a))
-  ;; concat of multibyte strings
+  ;; concat preserves unibyte when both operands are unibyte
   (multibyte-string-p (concat "abc" "def"))
   ;; Non-string arguments
   (condition-case err (multibyte-string-p 42)
@@ -268,7 +268,7 @@ fn oracle_prop_byte_ops_encoding_edge_cases() {
   ;; make-string with unibyte flag
   (let ((s (make-string 5 ?x)))
     (list (multibyte-string-p s) (length s) (string-bytes s)))
-  ;; string function creates multibyte
+  ;; string returns unibyte when every char is one byte
   (let ((s (string ?a ?b ?c)))
     (list (multibyte-string-p s) (length s)))
   ;; Comparison between unibyte and multibyte ASCII
