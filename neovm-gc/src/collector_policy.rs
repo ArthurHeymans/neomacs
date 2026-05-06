@@ -140,6 +140,12 @@ pub(crate) fn allocation_pressure_plan(
         {
             Some(plan_for(CollectionKind::Minor))
         }
+        SpaceKind::Old
+            if stats.old.live_bytes.saturating_add(bytes)
+                > nursery_config.semispace_bytes.saturating_mul(4) =>
+        {
+            Some(plan_for(CollectionKind::Major))
+        }
         SpaceKind::Pinned
             if stats.pinned.live_bytes.saturating_add(bytes) > pinned_config.reserved_bytes =>
         {
@@ -150,11 +156,10 @@ pub(crate) fn allocation_pressure_plan(
         {
             Some(plan_for(CollectionKind::Full))
         }
-        SpaceKind::Old
-        | SpaceKind::Pinned
-        | SpaceKind::Large
-        | SpaceKind::Nursery
-        | SpaceKind::Immortal => None,
+        // All other cases (including Pinned/Large below their
+        // thresholds, Immortal, and unknown space kinds) do not
+        // create immediate allocation pressure.
+        _ => None,
     }
 }
 

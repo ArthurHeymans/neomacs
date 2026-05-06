@@ -171,6 +171,20 @@ impl RuntimeState {
         1
     }
 
+    /// Run all queued finalizers.
+    ///
+    /// # Safety
+    ///
+    /// The caller MUST guarantee that no finalizer body can call
+    /// back into this `RuntimeState` before this call returns. A
+    /// re-entrant drain would observe `self.pending_finalizers`
+    /// already empty (drained by `core::mem::take`) and run
+    /// nothing, but it could also double-exclusive-borrow `&mut
+    /// self` if called from a finalizer running inside a `&mut
+    /// RuntimeState` method on the same call stack.
+    /// Prefer the handle-side
+    /// [`RuntimeStateHandle::drain_pending_finalizers`] which
+    /// copies the queue out before running user code.
     pub(crate) fn drain_pending_finalizers(&mut self) -> u64 {
         let mut ran = 0u64;
         for pending in core::mem::take(&mut self.pending_finalizers) {

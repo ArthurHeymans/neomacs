@@ -1789,6 +1789,10 @@ impl HeapCore {
         let old_config = self.config.old;
         let nursery_config = self.config.nursery;
         let mut flat = self.take_flat_store();
+        // SAFETY: `f` is a collector callback that must not panic.
+        // If it does, the flat store is leaked (lost).  This is a
+        // known limitation tracked as M8 in the audit; the caller
+        // is responsible for ensuring `f` does not unwind.
         let result = f(
             &mut flat,
             &mut self.old_gen,
