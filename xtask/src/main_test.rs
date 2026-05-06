@@ -1212,6 +1212,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
+        no_byte_compile: false,
     };
     let paths = PipelinePaths {
         lisp_root: lisp.clone(),

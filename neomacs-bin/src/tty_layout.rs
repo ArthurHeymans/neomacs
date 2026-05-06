@@ -24,7 +24,7 @@ thread_local! {
 
 // ── Layout helpers ────────────────────────────────────────────────────────
 
-fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
+pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
     evaluator
         .frame_manager()
         .selected_frame()

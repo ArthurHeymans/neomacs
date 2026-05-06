@@ -18,7 +18,7 @@ pub fn detect_tty_type() -> Option<String> {
     std::env::var("TERM").ok().filter(|value| !value.is_empty())
 }
 
-fn default_controlling_tty_name() -> &'static str {
+pub(crate) fn default_controlling_tty_name() -> &'static str {
     #[cfg(windows)]
     {
         "CONOUT$"

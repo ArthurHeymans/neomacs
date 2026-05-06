@@ -1,14 +1,19 @@
+use super::tty_frontend::TtyTerminalHost;
+use super::tty_init::{default_controlling_tty_name, should_enable_live_tty_io};
+use super::tty_layout::{
+    LAYOUT_ENGINE, current_layout_frame_id,
+    install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
+};
 use super::{
     BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FrontendKind,
-    LAYOUT_ENGINE, PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
-    TtyTerminalHost, adopt_existing_primary_gui_frame, bootstrap_buffers,
-    bootstrap_default_font_name, bootstrap_display_config, bootstrap_frame_metrics,
-    classify_early_cli_action, configure_gnu_startup_state, current_layout_frame_id,
-    default_controlling_tty_name, face_height_to_pixels, maybe_install_tty_redisplay_callback,
-    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
-    render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
-    run_gnu_startup, runtime_mode_from_program_name, should_enable_live_tty_io, startup_dimensions,
-    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
+    PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
+    adopt_existing_primary_gui_frame, bootstrap_buffers, bootstrap_default_font_name,
+    bootstrap_display_config, bootstrap_frame_metrics, classify_early_cli_action,
+    configure_gnu_startup_state, face_height_to_pixels, parse_startup_options, publish_gui_frame,
+    raw_loadup_command_line, raw_loadup_startup_surface, render_fingerprint_text, render_help_text,
+    render_startup_image_error, render_version_text, run_gnu_startup,
+    runtime_mode_from_program_name, startup_dimensions, sync_live_gui_frame_titles,
+    sync_selected_gui_chrome_state,
 };
 use neomacs_display_runtime::thread_comm::RenderCommand;
 use neovm_core::emacs_core::Context;
