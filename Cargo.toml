@@ -152,6 +152,13 @@ tempfile = "3.27.0"
 lto = true
 codegen-units = 1
 debug = true
+split-debuginfo = "unpacked"
+strip = "debuginfo"
+
+[profile.production]
+lto = true
+codegen-units = 1
+debug = true
 split-debuginfo = "packed"
 strip = "debuginfo"
 
