@@ -3,7 +3,7 @@ use crate::barrier::{BarrierEvent, BarrierKind};
 use crate::descriptor::{GcErased, Trace, TypeDesc};
 use crate::edge::EdgeCell;
 use crate::heap::{AllocError, Heap};
-use crate::object::SpaceKind;
+use crate::object::{ObjectMemoryKind, SpaceKind};
 use crate::plan::{
     BackgroundCollectionStatus, CollectionKind, CollectionPlan, MajorMarkProgress,
     RuntimeWorkStatus,
@@ -49,6 +49,23 @@ struct CachedAllocProfile {
     payload_offset: usize,
     space: SpaceKind,
     header_template: crate::object::ObjectHeaderTemplate,
+}
+
+/// Result of the space-specific allocation path inside
+/// [`alloc_typed_scoped`].  Nursery allocations carry a
+/// header + metadata for the nursery commit path; non-nursery
+/// allocations produce a finished [`ObjectRecord`].
+enum AllocationSlot {
+    Nursery {
+        header: NonNull<crate::object::ObjectHeader>,
+        layout_align_shift: u8,
+        memory_kind: ObjectMemoryKind,
+        total_size: usize,
+    },
+    Record {
+        record: crate::object::ObjectRecord,
+        old_reserved_bytes: usize,
+    },
 }
 
 /// Per-mutator local state.
@@ -361,7 +378,152 @@ impl<'heap> Mutator<'heap> {
     pub fn heap(&self) -> &Heap {
         self.heap
     }
+}
 
+/// --- Allocation helpers for each space kind ---
+
+fn alloc_nursery_slot<T: Trace + 'static>(
+    local: &mut MutatorLocal,
+    heap: &Heap,
+    alloc_profile: &CachedAllocProfile,
+    value: &mut Option<T>,
+) -> Result<AllocationSlot, AllocError> {
+    let layout = alloc_profile.layout;
+    let payload_offset = alloc_profile.payload_offset;
+    let total_size = layout.size();
+    let nursery_generation = local.nursery_generation();
+
+    // Fast path: bump within this mutator's TLAB slab.
+    if let Some(base) = local
+        .tlab
+        .as_mut()
+        .and_then(|tlab| tlab.try_alloc(nursery_generation, layout))
+    {
+        let (header, layout_align_shift) = unsafe {
+            crate::object::ObjectRecord::allocate_in_arena_raw_with_template::<T>(
+                alloc_profile.header_template,
+                base,
+                layout,
+                payload_offset,
+                value.take().expect("allocation value should be present"),
+            )
+        };
+        return Ok(AllocationSlot::Nursery {
+            header,
+            layout_align_shift,
+            memory_kind: ObjectMemoryKind::Arena,
+            total_size,
+        });
+    }
+
+    // TLAB miss: refill from shared nursery or bump shared cursor.
+    let tlab_bytes = local.nursery_tlab_bytes();
+    let mut core = heap.write_core();
+    let base = crate::runtime::try_bump_nursery_tlab_or_refill(
+        &mut local.tlab,
+        core.nursery_mut(),
+        layout,
+        tlab_bytes,
+    )
+    .or_else(|| core.nursery_mut().try_alloc(layout));
+
+    match base {
+        Some(base) => {
+            let (header, layout_align_shift) = unsafe {
+                crate::object::ObjectRecord::allocate_in_arena_raw_with_template::<T>(
+                    alloc_profile.header_template,
+                    base,
+                    layout,
+                    payload_offset,
+                    value.take().expect("allocation value should be present"),
+                )
+            };
+            Ok(AllocationSlot::Nursery {
+                header,
+                layout_align_shift,
+                memory_kind: ObjectMemoryKind::Arena,
+                total_size,
+            })
+        }
+        None => {
+            let (header, layout_align_shift) =
+                crate::object::ObjectRecord::allocate_owned_raw_with_template(
+                    alloc_profile.header_template,
+                    layout,
+                    payload_offset,
+                    value.take().expect("allocation value should be present"),
+                )?;
+            Ok(AllocationSlot::Nursery {
+                header,
+                layout_align_shift,
+                memory_kind: ObjectMemoryKind::Owned,
+                total_size,
+            })
+        }
+    }
+}
+
+fn alloc_old_slot<T: Trace + 'static>(
+    heap: &Heap,
+    alloc_profile: &CachedAllocProfile,
+    value: &mut Option<T>,
+) -> Result<AllocationSlot, AllocError> {
+    let layout = alloc_profile.layout;
+    let payload_offset = alloc_profile.payload_offset;
+    let mut core = heap.write_core();
+    match core
+        .old_gen_mut()
+        .try_alloc_in_block_with_reserved(heap.old_allocation_config(), layout)
+    {
+        Some((placement, base, reserved_bytes)) => {
+            let mut record = unsafe {
+                crate::object::ObjectRecord::allocate_in_arena::<T>(
+                    alloc_profile.desc,
+                    alloc_profile.space,
+                    base,
+                    layout,
+                    payload_offset,
+                    value.take().expect("allocation value should be present"),
+                )
+            };
+            record.set_old_block_placement(placement);
+            Ok(AllocationSlot::Record {
+                record,
+                old_reserved_bytes: reserved_bytes,
+            })
+        }
+        None => {
+            let old_reserved_bytes = core.old_gen().reserved_bytes();
+            let record = crate::object::ObjectRecord::allocate(
+                alloc_profile.desc,
+                alloc_profile.space,
+                value.take().expect("allocation value should be present"),
+            )?;
+            Ok(AllocationSlot::Record {
+                record,
+                old_reserved_bytes,
+            })
+        }
+    }
+}
+
+fn alloc_direct_slot(
+    desc: &'static crate::descriptor::TypeDesc,
+    alloc_profile: &CachedAllocProfile,
+    value: &mut Option<impl Trace + 'static>,
+) -> Result<AllocationSlot, AllocError> {
+    let record = crate::object::ObjectRecord::allocate(
+        desc,
+        alloc_profile.space,
+        value.take().expect("allocation value should be present"),
+    )?;
+    Ok(AllocationSlot::Record {
+        record,
+        old_reserved_bytes: 0,
+    })
+}
+
+impl<'heap> Mutator<'heap> {
     fn alloc_typed_scoped<'scope, 'handle_heap, T: Trace + 'static>(
         &mut self,
         scope: &mut HandleScope<'scope, 'handle_heap>,
@@ -375,7 +537,56 @@ impl<'heap> Mutator<'heap> {
         if local.prepared_full_reclaim_active() {
             return Err(AllocError::CollectionInProgress);
         }
-        let alloc_profile = match local.cached_alloc_profile::<T>() {
+        let alloc_profile = Self::resolve_alloc_profile::<T>(local, heap)?;
+        let mut value = Some(value);
+        let desc = alloc_profile.desc;
+
+        let slot = match alloc_profile.space {
+            SpaceKind::Nursery => alloc_nursery_slot(local, heap, &alloc_profile, &mut value)?,
+            SpaceKind::Old => alloc_old_slot(heap, &alloc_profile, &mut value)?,
+            _ => alloc_direct_slot(desc, &alloc_profile, &mut value)?,
+        };
+
+        let (publish_local, alloc_counter_local) = local.publish_and_alloc_counter_local_mut();
+        let commit = match slot {
+            AllocationSlot::Nursery {
+                header,
+                layout_align_shift,
+                memory_kind,
+                total_size,
+            } => heap.commit_allocated_header_shared_prepared_nursery(
+                header,
+                layout_align_shift,
+                memory_kind,
+                total_size,
+                publish_local,
+                alloc_counter_local,
+            )?,
+            AllocationSlot::Record {
+                record,
+                old_reserved_bytes,
+            } => heap.commit_allocated_record_shared(
+                record,
+                old_reserved_bytes,
+                publish_local,
+                alloc_counter_local,
+                true,
+            )?,
+        };
+        if commit.plans_dirty {
+            heap.mark_collector_plans_dirty_if_needed(
+                local.collector_plans_refresh_epoch_seen_mut(),
+            );
+        }
+        let gc = unsafe { Gc::from_erased(commit.gc) };
+        Ok(scope.root(gc))
+    }
+
+    fn resolve_alloc_profile<T: Trace + 'static>(
+        local: &mut MutatorLocal,
+        heap: &Heap,
+    ) -> Result<CachedAllocProfile, AllocError> {
+        Ok(match local.cached_alloc_profile::<T>() {
             Some(profile) => profile,
             None => {
                 let snapshot = heap.allocation_snapshot::<T>(None)?;
@@ -397,157 +608,7 @@ impl<'heap> Mutator<'heap> {
                 local.remember_alloc_profile(profile);
                 profile
             }
-        };
-        let desc = alloc_profile.desc;
-        let space = alloc_profile.space;
-        let mut value = Some(value);
-        let mut old_reserved_bytes = 0usize;
-        let mut nursery_allocation = None;
-
-        let record = match space {
-            crate::object::SpaceKind::Nursery => {
-                let layout = alloc_profile.layout;
-                let payload_offset = alloc_profile.payload_offset;
-                let total_size = layout.size();
-                let nursery_generation = local.nursery_generation();
-                match local
-                    .tlab
-                    .as_mut()
-                    .and_then(|tlab| tlab.try_alloc(nursery_generation, layout))
-                {
-                    Some(base) => unsafe {
-                        let (header, layout_align_shift) =
-                            crate::object::ObjectRecord::allocate_in_arena_raw_with_template::<T>(
-                                alloc_profile.header_template,
-                                base,
-                                layout,
-                                payload_offset,
-                                value.take().expect("allocation value should be present"),
-                            );
-                        nursery_allocation = Some((
-                            header,
-                            layout_align_shift,
-                            crate::object::ObjectMemoryKind::Arena,
-                            total_size,
-                        ));
-                        None
-                    },
-                    None => {
-                        let tlab_bytes = local.nursery_tlab_bytes();
-                        let mut core = heap.write_core();
-                        let base = crate::runtime::try_bump_nursery_tlab_or_refill(
-                            &mut local.tlab,
-                            core.nursery_mut(),
-                            layout,
-                            tlab_bytes,
-                        )
-                        .or_else(|| core.nursery_mut().try_alloc(layout));
-                        match base {
-                            Some(base) => unsafe {
-                                let (header, layout_align_shift) =
-                                    crate::object::ObjectRecord::allocate_in_arena_raw_with_template::<T>(
-                                        alloc_profile.header_template,
-                                        base,
-                                        layout,
-                                        payload_offset,
-                                        value.take().expect("allocation value should be present"),
-                                    );
-                                nursery_allocation = Some((
-                                    header,
-                                    layout_align_shift,
-                                    crate::object::ObjectMemoryKind::Arena,
-                                    total_size,
-                                ));
-                                None
-                            },
-                            None => {
-                                let (header, layout_align_shift) =
-                                    crate::object::ObjectRecord::allocate_owned_raw_with_template(
-                                        alloc_profile.header_template,
-                                        layout,
-                                        payload_offset,
-                                        value.take().expect("allocation value should be present"),
-                                    )?;
-                                nursery_allocation = Some((
-                                    header,
-                                    layout_align_shift,
-                                    crate::object::ObjectMemoryKind::Owned,
-                                    total_size,
-                                ));
-                                None
-                            }
-                        }
-                    }
-                }
-            }
-            crate::object::SpaceKind::Old => {
-                let layout = alloc_profile.layout;
-                let payload_offset = alloc_profile.payload_offset;
-                let mut core = heap.write_core();
-                Some(
-                    match core
-                        .old_gen_mut()
-                        .try_alloc_in_block_with_reserved(heap.old_allocation_config(), layout)
-                    {
-                        Some((placement, base, reserved_bytes)) => {
-                            old_reserved_bytes = reserved_bytes;
-                            let mut record = unsafe {
-                                crate::object::ObjectRecord::allocate_in_arena::<T>(
-                                    desc,
-                                    space,
-                                    base,
-                                    layout,
-                                    payload_offset,
-                                    value.take().expect("allocation value should be present"),
-                                )
-                            };
-                            record.set_old_block_placement(placement);
-                            record
-                        }
-                        None => {
-                            old_reserved_bytes = core.old_gen().reserved_bytes();
-                            crate::object::ObjectRecord::allocate(
-                                desc,
-                                space,
-                                value.take().expect("allocation value should be present"),
-                            )?
-                        }
-                    },
-                )
-            }
-            _ => Some(crate::object::ObjectRecord::allocate(
-                desc,
-                space,
-                value.take().expect("allocation value should be present"),
-            )?),
-        };
-
-        let (publish_local, alloc_counter_local) = local.publish_and_alloc_counter_local_mut();
-        let commit = match nursery_allocation {
-            Some((header, layout_align_shift, memory_kind, total_size)) => heap
-                .commit_allocated_header_shared_prepared_nursery(
-                    header,
-                    layout_align_shift,
-                    memory_kind,
-                    total_size,
-                    publish_local,
-                    alloc_counter_local,
-                )?,
-            None => heap.commit_allocated_record_shared(
-                record.expect("non-nursery allocations should produce a record"),
-                old_reserved_bytes,
-                publish_local,
-                alloc_counter_local,
-                true,
-            )?,
-        };
-        if commit.plans_dirty {
-            heap.mark_collector_plans_dirty_if_needed(
-                local.collector_plans_refresh_epoch_seen_mut(),
-            );
-        }
-        let gc = unsafe { Gc::from_erased(commit.gc) };
-        Ok(scope.root(gc))
+        })
     }
 
     /// Allocate one managed object.
