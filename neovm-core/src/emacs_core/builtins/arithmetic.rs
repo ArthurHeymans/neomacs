@@ -823,7 +823,7 @@ fn arithcompare(
     eval: &super::super::eval::Context,
     a: &Value,
     b: &Value,
-) -> Result<std::cmp::Ordering, Flow> {
+) -> Result<Option<std::cmp::Ordering>, Flow> {
     use std::cmp::Ordering;
 
     // Float on either side: if the other side is a bignum we still
@@ -833,24 +833,21 @@ fn arithcompare(
         if let Some(big) = a.as_bignum() {
             let f = expect_number_or_marker_f64_eval(eval, b)?;
             if f.is_nan() {
-                return Ok(Ordering::Equal); // arithcompare with NaN returns Cmp_NONE; treated as != by callers below
+                return Ok(None);
             }
-            return Ok(big.partial_cmp(&f).unwrap_or(Ordering::Equal));
+            return Ok(big.partial_cmp(&f));
         }
         if let Some(big) = b.as_bignum() {
             let f = expect_number_or_marker_f64_eval(eval, a)?;
             if f.is_nan() {
-                return Ok(Ordering::Equal);
+                return Ok(None);
             }
             // Reverse since we asked big.cmp(f).
-            return Ok(big
-                .partial_cmp(&f)
-                .map(|o| o.reverse())
-                .unwrap_or(Ordering::Equal));
+            return Ok(big.partial_cmp(&f).map(|o| o.reverse()));
         }
         let af = expect_number_or_marker_f64_eval(eval, a)?;
         let bf = expect_number_or_marker_f64_eval(eval, b)?;
-        return Ok(af.partial_cmp(&bf).unwrap_or(Ordering::Equal));
+        return Ok(af.partial_cmp(&bf));
     }
 
     // Both operands are integer-or-marker. Stay on i64 if neither is
@@ -858,7 +855,7 @@ fn arithcompare(
     if !a.is_bignum() && !b.is_bignum() {
         let ai = expect_integer_or_marker_after_number_check_eval(eval, a)?;
         let bi = expect_integer_or_marker_after_number_check_eval(eval, b)?;
-        return Ok(ai.cmp(&bi));
+        return Ok(Some(ai.cmp(&bi)));
     }
 
     // Bignum-aware integer compare.
@@ -888,11 +885,14 @@ fn arithcompare(
             ));
         }
     };
-    Ok(ai.cmp(&bi))
+    Ok(Some(ai.cmp(&bi)))
 }
 
-fn cmp_passes(ord: std::cmp::Ordering, op: NumCmp) -> bool {
+fn cmp_passes(ord: Option<std::cmp::Ordering>, op: NumCmp) -> bool {
     use std::cmp::Ordering;
+    let Some(ord) = ord else {
+        return op == NumCmp::Ne;
+    };
     match op {
         NumCmp::Lt => ord == Ordering::Less,
         NumCmp::Le => ord != Ordering::Greater,
@@ -926,7 +926,7 @@ fn arithcompare_chain_or_fast_fixnum_pair(
         && let (ValueKind::Fixnum(left), ValueKind::Fixnum(right)) =
             (args[0].kind(), args[1].kind())
     {
-        return Ok(Value::bool_val(cmp_passes(left.cmp(&right), op)));
+        return Ok(Value::bool_val(cmp_passes(Some(left.cmp(&right)), op)));
     }
     arithcompare_chain(eval, args, op)
 }

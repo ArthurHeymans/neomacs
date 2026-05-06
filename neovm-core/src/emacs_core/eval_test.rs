@@ -3972,6 +3972,12 @@ fn comparisons_are_exact_for_bignums() {
     // Bignum vs float — exact even for bignums outside f64 range.
     assert_eq!(eval_one("(< 1.5 (ash 1 100))"), "OK t");
     assert_eq!(eval_one("(> (ash 1 100) 1e30)"), "OK t");
+    assert_eq!(
+        eval_one(
+            "(list (= 0.0e+NaN 0.0e+NaN) (/= 0.0e+NaN 0.0e+NaN) (< 0.0e+NaN 1) (<= 0.0e+NaN 1) (> 0.0e+NaN 1) (>= 0.0e+NaN 1))"
+        ),
+        "OK (nil t nil nil nil nil)"
+    );
     // Chained.
     assert_eq!(eval_one("(< 1 (ash 1 60) (ash 1 100) (ash 1 200))"), "OK t");
 }
