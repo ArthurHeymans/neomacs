@@ -6437,6 +6437,24 @@ fn lambda_can_call_symbol_function_subr_as_first_class_value() {
 }
 
 #[test]
+fn non_lambda_cons_function_position_is_not_evaluated() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one("((symbol-function '+) 4 7)"),
+        "ERR (invalid-function ((symbol-function '+)))"
+    );
+}
+
+#[test]
+fn quoted_closure_list_is_not_callable() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one("(funcall '(closure nil (x) (+ x 1)) 2)"),
+        "ERR (invalid-function ((closure nil (x) (+ x 1))))"
+    );
+}
+
+#[test]
 fn lexical_binding_closure() {
     crate::test_utils::init_test_tracing();
     // With lexical binding, closures capture the lexical environment

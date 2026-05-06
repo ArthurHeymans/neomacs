@@ -7050,9 +7050,15 @@ impl Context {
                 }
             }
         } else if original_fun.is_cons() {
-            // Car is a list — could be (lambda ...) form
-            // Evaluate it to get the function
-            self.eval_sub(original_fun)?
+            // GNU eval_sub runs non-symbol function position through
+            // Ffunction: literal (lambda ...) becomes an interpreted
+            // closure, but every other cons is only quoted and then
+            // validated by the normal function dispatcher below.
+            if cons_head_symbol_id(&original_fun) == Some(lambda_symbol()) {
+                self.instantiate_callable_cons_form(original_fun)?
+            } else {
+                original_fun
+            }
         } else {
             return Err(signal("invalid-function", vec![original_fun]));
         };
@@ -7652,7 +7658,7 @@ impl Context {
                 super::autoload::is_autoload_value(function)
                     || matches!(
                         cons_head_symbol_id(function),
-                        Some(id) if is_lambda_like_symbol_id(id) || id == macro_symbol()
+                        Some(id) if id == lambda_symbol() || id == macro_symbol()
                     )
             }
             ValueKind::Symbol(id) => {
@@ -10078,10 +10084,7 @@ impl Context {
                         "wrong-type-argument",
                         vec![Value::symbol("symbolp"), function],
                     ))
-                } else if matches!(
-                    cons_head_symbol_id(&function),
-                    Some(id) if is_lambda_like_symbol_id(id)
-                ) {
+                } else if cons_head_symbol_id(&function) == Some(lambda_symbol()) {
                     match self.instantiate_callable_cons_form(function) {
                         Ok(callable) => self.apply(callable, args),
                         Err(_) => Err(signal("invalid-function", vec![function])),
