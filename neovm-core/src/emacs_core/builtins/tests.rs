@@ -4983,12 +4983,15 @@ fn pure_dispatch_map_placeholders_match_compat_contracts() {
         "map-charset-chars",
         vec![Value::NIL, Value::symbol("unicode"), Value::NIL],
     )
-    .expect("builtin map-charset-chars should resolve")
-    .expect("builtin map-charset-chars should evaluate");
-    assert!(map_charset_chars.is_nil());
+    .expect("builtin map-charset-chars should resolve");
+    match map_charset_chars {
+        Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "void-function"),
+        other => {
+            panic!("map-charset-chars with nil callback should signal void-function: {other:?}")
+        }
+    }
 
-    // map-keymap and map-keymap-internal are eval-backed (need callback evaluation).
-    // They correctly return None from pure dispatch.
+    // These correctly return None from pure dispatch.
     assert!(
         dispatch_builtin_pure(
             "map-keymap",

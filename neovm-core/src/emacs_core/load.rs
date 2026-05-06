@@ -120,8 +120,9 @@ fn bootstrap_prefers_ldefs_boot() -> bool {
 ///
 /// For `?<extended>` character literals, we replace the extended bytes
 /// with `?\x<HEX>` escape syntax that the parser already supports.
-/// All other extended byte sequences (outside `?` context) are replaced
-/// with U+FFFD, matching lossy UTF-8 behaviour.
+/// Invalid high bytes are preserved with the reader's byte8 private-use
+/// markers, since generated GNU tables store compressed byte data directly
+/// inside `.el` string literals.
 pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
     fn push_extended_char_or_escape(out: &mut String, code: u32) {
         if out.ends_with('?') {
@@ -233,8 +234,8 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
             i += 6;
             continue;
         }
-        // Invalid byte — replacement character.
-        out.push('\u{FFFD}');
+        // Invalid byte: keep it available to the Lisp reader as a raw byte.
+        out.push(char::from_u32(0xE000 + b as u32).expect("byte8 private-use marker"));
         i += 1;
     }
     out

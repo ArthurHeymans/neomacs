@@ -563,6 +563,319 @@ fn get_unicode_property_internal_uncompresses_run_length_blocks() {
 }
 
 #[test]
+fn unicode_property_run_length_decoder_treats_raw_byte_counts_as_bytes() {
+    crate::test_utils::init_test_tracing();
+    let compressed = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        2, 2, 0xC0, 0x83, 1,
+    ]));
+    let mut depth2_slots = vec![Value::fixnum(2), Value::fixnum(0), compressed];
+    depth2_slots.extend(std::iter::repeat_n(Value::NIL, 31));
+    let depth2 = make_sub_char_table_from_external_slots(&depth2_slots).unwrap();
+    let mut depth1_slots = vec![Value::fixnum(1), Value::fixnum(0), depth2];
+    depth1_slots.extend(std::iter::repeat_n(Value::NIL, 15));
+    let depth1 = make_sub_char_table_from_external_slots(&depth1_slots).unwrap();
+    let mut slots = vec![
+        Value::NIL,
+        Value::NIL,
+        Value::symbol("char-code-property-table"),
+        Value::fixnum(26),
+        depth1,
+    ];
+    slots.extend(std::iter::repeat_n(Value::NIL, 63));
+    slots.extend([
+        Value::symbol("general-category"),
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::vector(vec![
+            Value::NIL,
+            Value::symbol("Lu"),
+            Value::symbol("Ll"),
+            Value::symbol("Lt"),
+            Value::symbol("Lm"),
+            Value::symbol("Lo"),
+            Value::symbol("Mn"),
+            Value::symbol("Mc"),
+            Value::symbol("Me"),
+            Value::symbol("Nd"),
+            Value::symbol("Nl"),
+            Value::symbol("No"),
+            Value::symbol("Pc"),
+            Value::symbol("Pd"),
+            Value::symbol("Ps"),
+            Value::symbol("Pe"),
+            Value::symbol("Pi"),
+            Value::symbol("Pf"),
+            Value::symbol("Po"),
+            Value::symbol("Sm"),
+            Value::symbol("Sc"),
+            Value::symbol("Sk"),
+            Value::symbol("So"),
+            Value::symbol("Zs"),
+            Value::symbol("Zl"),
+            Value::symbol("Zp"),
+            Value::symbol("Cc"),
+            Value::symbol("Cf"),
+            Value::symbol("Cs"),
+            Value::symbol("Co"),
+            Value::symbol("Cn"),
+        ]),
+    ]);
+    let table = make_char_table_from_external_slots(&slots).unwrap();
+
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(0)]).unwrap(),
+        Value::symbol("Cc")
+    );
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(3)]).unwrap(),
+        Value::symbol("Lu")
+    );
+}
+
+#[test]
+fn unicode_property_ascii_general_category_prefix_decodes_uppercase_letters() {
+    crate::test_utils::init_test_tracing();
+    let compressed = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        2, 26, 0xC0, 0xA0, 23, 18, 0xC0, 0x83, 20, 18, 0xC0, 0x83, 14, 15, 18, 19, 18, 13, 18, 18,
+        9, 0xC0, 0x8A, 18, 18, 19, 0xC0, 0x83, 18, 18, 1, 0xC0, 0x9A,
+    ]));
+    let mut depth2_slots = vec![Value::fixnum(2), Value::fixnum(0), compressed];
+    depth2_slots.extend(std::iter::repeat_n(Value::NIL, 31));
+    let depth2 = make_sub_char_table_from_external_slots(&depth2_slots).unwrap();
+    let mut depth1_slots = vec![Value::fixnum(1), Value::fixnum(0), depth2];
+    depth1_slots.extend(std::iter::repeat_n(Value::NIL, 15));
+    let depth1 = make_sub_char_table_from_external_slots(&depth1_slots).unwrap();
+    let mut slots = vec![
+        Value::NIL,
+        Value::NIL,
+        Value::symbol("char-code-property-table"),
+        Value::fixnum(26),
+        depth1,
+    ];
+    slots.extend(std::iter::repeat_n(Value::NIL, 63));
+    slots.extend([
+        Value::symbol("general-category"),
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::vector(vec![
+            Value::NIL,
+            Value::symbol("Lu"),
+            Value::symbol("Ll"),
+            Value::symbol("Lt"),
+            Value::symbol("Lm"),
+            Value::symbol("Lo"),
+            Value::symbol("Mn"),
+            Value::symbol("Mc"),
+            Value::symbol("Me"),
+            Value::symbol("Nd"),
+            Value::symbol("Nl"),
+            Value::symbol("No"),
+            Value::symbol("Pc"),
+            Value::symbol("Pd"),
+            Value::symbol("Ps"),
+            Value::symbol("Pe"),
+            Value::symbol("Pi"),
+            Value::symbol("Pf"),
+            Value::symbol("Po"),
+            Value::symbol("Sm"),
+            Value::symbol("Sc"),
+            Value::symbol("Sk"),
+            Value::symbol("So"),
+            Value::symbol("Zs"),
+            Value::symbol("Zl"),
+            Value::symbol("Zp"),
+            Value::symbol("Cc"),
+            Value::symbol("Cf"),
+            Value::symbol("Cs"),
+            Value::symbol("Co"),
+            Value::symbol("Cn"),
+        ]),
+    ]);
+    let table = make_char_table_from_external_slots(&slots).unwrap();
+
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(64)]).unwrap(),
+        Value::symbol("Po")
+    );
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(65)]).unwrap(),
+        Value::symbol("Lu")
+    );
+}
+
+#[test]
+fn unicode_property_literal_loaded_from_el_source_preserves_raw_compression_bytes() {
+    crate::test_utils::init_test_tracing();
+    let compressed = [
+        2, 26, 0xC0, 0xA0, 23, 18, 0xC0, 0x83, 20, 18, 0xC0, 0x83, 14, 15, 18, 19, 18, 13, 18, 18,
+        9, 0xC0, 0x8A, 18, 18, 19, 0xC0, 0x83, 18, 18, 1, 0xC0, 0x9A,
+    ];
+    let mut source = br#"#^[30 nil char-code-property-table 26 #^^[1 0 #^^[2 0 ""#.to_vec();
+    source.extend_from_slice(&compressed);
+    source.extend_from_slice(br#"" "#);
+    source.extend(
+        std::iter::repeat_n(b"nil ".as_slice(), 31)
+            .flatten()
+            .copied(),
+    );
+    source.extend_from_slice(br#"] "#);
+    source.extend(
+        std::iter::repeat_n(b"nil ".as_slice(), 15)
+            .flatten()
+            .copied(),
+    );
+    source.extend_from_slice(br#"] "#);
+    source.extend(
+        std::iter::repeat_n(b"nil ".as_slice(), 63)
+            .flatten()
+            .copied(),
+    );
+    source.extend_from_slice(
+        b"general-category 0 nil nil [nil Lu Ll Lt Lm Lo Mn Mc Me Nd Nl No Pc Pd Ps Pe Pi Pf Po Sm Sc Sk So Zs Zl Zp Cc Cf Cs Co Cn]]",
+    );
+
+    let decoded = crate::emacs_core::load::decode_emacs_utf8(&source);
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &decoded,
+        true,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("reader should preserve raw byte strings in .el source");
+    assert_eq!(forms.len(), 1);
+    let table = forms[0];
+
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(64)]).unwrap(),
+        Value::symbol("Po")
+    );
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(65)]).unwrap(),
+        Value::symbol("Lu")
+    );
+}
+
+fn find_char_table(value: Value) -> Option<Value> {
+    if crate::emacs_core::chartable::is_char_table(&value) {
+        return Some(value);
+    }
+    if let Some(items) = value.as_vector_data() {
+        for item in items {
+            if let Some(table) = find_char_table(*item) {
+                return Some(table);
+            }
+        }
+        return None;
+    }
+    if value.is_cons() {
+        let mut current = value;
+        while current.is_cons() {
+            if let Some(table) = find_char_table(current.cons_car()) {
+                return Some(table);
+            }
+            current = current.cons_cdr();
+        }
+        if !current.is_nil() {
+            return find_char_table(current);
+        }
+    }
+    None
+}
+
+fn run_key_from_map_key(key: Value) -> (i64, i64) {
+    match key.kind() {
+        ValueKind::Fixnum(ch) => (ch, ch),
+        ValueKind::Cons => (
+            key.cons_car().as_fixnum().unwrap_or(-1),
+            key.cons_cdr().as_fixnum().unwrap_or(-1),
+        ),
+        _ => (-1, -1),
+    }
+}
+
+#[test]
+fn unicode_property_table_read_from_generated_uni_category_decodes_ascii() {
+    crate::test_utils::init_test_tracing();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .join("lisp/international/uni-category.el");
+    let bytes = std::fs::read(&path).expect("read generated Unicode category table");
+    let decoded = crate::emacs_core::load::decode_emacs_utf8(&bytes);
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &decoded,
+        true,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("reader should parse generated Unicode category table");
+    let table = forms
+        .into_iter()
+        .find_map(find_char_table)
+        .expect("generated file should contain a char-table literal");
+
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(64)]).unwrap(),
+        Value::symbol("Po")
+    );
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(65)]).unwrap(),
+        Value::symbol("Lu")
+    );
+}
+
+#[test]
+fn unicode_property_table_read_from_generated_uni_bidi_maps_decoded_symbols() {
+    crate::test_utils::init_test_tracing();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .join("lisp/international/uni-bidi.el");
+    let bytes = std::fs::read(&path).expect("read generated Unicode bidi table");
+    let decoded = crate::emacs_core::load::decode_emacs_utf8(&bytes);
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &decoded,
+        true,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("reader should parse generated Unicode bidi table");
+    let table = forms
+        .into_iter()
+        .find_map(find_char_table)
+        .expect("generated file should contain a char-table literal");
+
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum(65)]).unwrap(),
+        Value::symbol("L")
+    );
+    let mut has_l_for_a = false;
+    let mut first_mappings = Vec::new();
+    for_each_char_table_mapping(&table, |key, value| {
+        if first_mappings.len() < 16 {
+            first_mappings.push((run_key_from_map_key(key), value));
+        }
+        if match key.kind() {
+            ValueKind::Fixnum(ch) => ch == 65 && value == Value::symbol("L"),
+            ValueKind::Cons => {
+                key.cons_car().as_fixnum().is_some_and(|min| min <= 65)
+                    && key.cons_cdr().as_fixnum().is_some_and(|max| max >= 65)
+                    && value == Value::symbol("L")
+            }
+            _ => false,
+        } {
+            has_l_for_a = true;
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert!(
+        has_l_for_a,
+        "map-char-table entries should expose decoded Unicode property values; first mappings: {:?}",
+        first_mappings
+    );
+}
+
+#[test]
 fn format_percent_s_prints_unicode_property_table_as_gnu_char_table() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

@@ -691,6 +691,33 @@ pub(crate) fn charset_target_ranges(name: &str) -> Option<Vec<(u32, u32)>> {
     })
 }
 
+pub(crate) fn map_charset_char_ranges(
+    name: &str,
+    from_code: Option<i64>,
+    to_code: Option<i64>,
+) -> Option<Vec<(u32, u32)>> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        let name = lookup_interned(name)?;
+        let info = reg.charsets.get(&name)?;
+        let from = from_code
+            .map(|code| code.max(info.min_code))
+            .unwrap_or(info.min_code);
+        let to = to_code
+            .map(|code| code.min(info.max_code))
+            .unwrap_or(info.max_code);
+        if from > to {
+            return Some(Vec::new());
+        }
+
+        let values: Vec<u32> = (from..=to)
+            .filter_map(|code| reg.decode_char(name, code))
+            .filter_map(|ch| u32::try_from(ch).ok())
+            .collect();
+        Some(coalesce_u32_ranges(values).unwrap_or_default())
+    })
+}
+
 pub(crate) fn charset_exists(name: &str) -> bool {
     CHARSET_REGISTRY.with(|slot| slot.borrow().contains(name))
 }

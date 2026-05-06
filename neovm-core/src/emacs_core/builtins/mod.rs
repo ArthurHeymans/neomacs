@@ -4959,7 +4959,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-describe-syntax-value",
-        |_ctx, args| builtin_internal_describe_syntax_value(args),
+        builtin_internal_describe_syntax_value,
         1,
         Some(1),
     );
@@ -5219,12 +5219,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         4,
         Some(4),
     );
-    ctx.defsubr(
-        "map-charset-chars",
-        |_ctx, args| builtin_map_charset_chars(args),
-        2,
-        Some(5),
-    );
+    ctx.defsubr("map-charset-chars", builtin_map_charset_chars, 2, Some(5));
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(

@@ -1840,8 +1840,38 @@ pub(crate) fn builtin_re_describe_compiled(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_map_charset_chars(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_map_charset_chars(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("map-charset-chars", &args, 2, 5)?;
+    let charset = args[1].as_symbol_name().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("charsetp"), args[1]],
+        )
+    })?;
+    let from_code = match args.get(3).copied().filter(|v| !v.is_nil()) {
+        Some(value) => Some(expect_wholenump(&value)?),
+        None => None,
+    };
+    let to_code = match args.get(4).copied().filter(|v| !v.is_nil()) {
+        Some(value) => Some(expect_wholenump(&value)?),
+        None => None,
+    };
+    let ranges = crate::emacs_core::charset::map_charset_char_ranges(&charset, from_code, to_code)
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("charsetp"), args[1]],
+            )
+        })?;
+    let function = args[0];
+    let arg = args.get(2).copied().unwrap_or(Value::NIL);
+    for (from, to) in ranges {
+        let range = Value::cons(Value::fixnum(i64::from(from)), Value::fixnum(i64::from(to)));
+        eval.funcall_general(function, vec![range, arg])?;
+    }
     Ok(Value::NIL)
 }
 
@@ -3893,9 +3923,138 @@ pub(crate) fn builtin_internal_complete_buffer(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_internal_describe_syntax_value(args: Vec<Value>) -> EvalResult {
+fn syntax_description_word(class: crate::emacs_core::syntax::SyntaxClass) -> &'static str {
+    match class {
+        crate::emacs_core::syntax::SyntaxClass::Whitespace => "whitespace",
+        crate::emacs_core::syntax::SyntaxClass::Punctuation => "punctuation",
+        crate::emacs_core::syntax::SyntaxClass::Word => "word",
+        crate::emacs_core::syntax::SyntaxClass::Symbol => "symbol",
+        crate::emacs_core::syntax::SyntaxClass::Open => "open",
+        crate::emacs_core::syntax::SyntaxClass::Close => "close",
+        crate::emacs_core::syntax::SyntaxClass::Quote => "prefix",
+        crate::emacs_core::syntax::SyntaxClass::StringDelim => "string",
+        crate::emacs_core::syntax::SyntaxClass::Math => "math",
+        crate::emacs_core::syntax::SyntaxClass::Escape => "escape",
+        crate::emacs_core::syntax::SyntaxClass::CharQuote => "charquote",
+        crate::emacs_core::syntax::SyntaxClass::Comment => "comment",
+        crate::emacs_core::syntax::SyntaxClass::EndComment => "endcomment",
+        crate::emacs_core::syntax::SyntaxClass::InheritStd => "inherit",
+        crate::emacs_core::syntax::SyntaxClass::CommentFence => "comment fence",
+        crate::emacs_core::syntax::SyntaxClass::StringFence => "string fence",
+    }
+}
+
+fn syntax_descriptor_parts(value: Value) -> Option<(i64, Value)> {
+    if !value.is_cons() {
+        return None;
+    }
+    let first = value.cons_car();
+    match first.kind() {
+        ValueKind::Fixnum(code) => {
+            let matching = value.cons_cdr();
+            if matching.is_nil()
+                || matching
+                    .as_fixnum()
+                    .and_then(super::character_code_to_rust_char)
+                    .is_some()
+            {
+                Some((code, matching))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn builtin_internal_describe_syntax_value(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("internal-describe-syntax-value", &args, 1)?;
-    Ok(args[0])
+    let syntax = args[0];
+    let text = if syntax.is_nil() {
+        "default".to_string()
+    } else if super::chartable::builtin_char_table_p(vec![syntax])?.is_truthy() {
+        "deeper char-table ...".to_string()
+    } else if let Some((syntax_code, matching)) = syntax_descriptor_parts(syntax) {
+        let Some(class) = crate::emacs_core::syntax::SyntaxClass::from_code(syntax_code) else {
+            super::buffers::builtin_insert(eval, vec![Value::string("invalid")])?;
+            return Ok(syntax);
+        };
+        let flags = crate::emacs_core::syntax::SyntaxFlags::new(((syntax_code >> 16) & 0xff) as u8);
+        let mut out = String::new();
+        out.push(class.to_char());
+        if matching.is_nil() {
+            out.push(' ');
+        } else if let Some(ch) = matching.as_fixnum().and_then(|n| char::from_u32(n as u32)) {
+            out.push(ch);
+        } else {
+            super::buffers::builtin_insert(eval, vec![Value::string("invalid")])?;
+            return Ok(syntax);
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_FIRST) {
+            out.push('1');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_SECOND) {
+            out.push('2');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_END_FIRST) {
+            out.push('3');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_END_SECOND) {
+            out.push('4');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::PREFIX) {
+            out.push('p');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_STYLE_B) {
+            out.push('b');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_STYLE_C) {
+            out.push('c');
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_NESTABLE) {
+            out.push('n');
+        }
+        out.push_str("\twhich means: ");
+        out.push_str(syntax_description_word(class));
+        if !matching.is_nil() {
+            if let Some(ch) = matching.as_fixnum().and_then(|n| char::from_u32(n as u32)) {
+                out.push_str(", matches ");
+                out.push(ch);
+            }
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_FIRST) {
+            out.push_str(",\n\t  is the first character of a comment-start sequence");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_SECOND) {
+            out.push_str(",\n\t  is the second character of a comment-start sequence");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_END_FIRST) {
+            out.push_str(",\n\t  is the first character of a comment-end sequence");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_END_SECOND) {
+            out.push_str(",\n\t  is the second character of a comment-end sequence");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_STYLE_B) {
+            out.push_str(" (comment style b)");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_STYLE_C) {
+            out.push_str(" (comment style c)");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_NESTABLE) {
+            out.push_str(" (nestable)");
+        }
+        if flags.contains(crate::emacs_core::syntax::SyntaxFlags::PREFIX) {
+            out.push_str(",\n\t  is a prefix character for `backward-prefix-chars'");
+        }
+        out
+    } else {
+        "invalid".to_string()
+    };
+    super::buffers::builtin_insert(eval, vec![Value::string(text)])?;
+    Ok(syntax)
 }
 
 pub(crate) fn builtin_internal_event_symbol_parse_modifiers(args: Vec<Value>) -> EvalResult {

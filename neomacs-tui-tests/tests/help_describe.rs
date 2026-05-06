@@ -2,7 +2,7 @@
 
 mod support;
 use neomacs_tui_tests::*;
-use std::time::Duration;
+use std::{fs, time::Duration};
 use support::*;
 
 // ── Local helpers ───────────────────────────────────────────
@@ -44,6 +44,34 @@ fn assert_describe_mode_help_content(label: &str, gnu: &TuiSession, neo: &TuiSes
             );
         }
     }
+}
+
+fn dump_named_buffer_to_home_file(
+    gnu: &mut TuiSession,
+    neo: &mut TuiSession,
+    buffer_name: &str,
+    file_name: &str,
+) {
+    let home_file_name = format!("~/{file_name}");
+    let expression = format!(
+        r#"(with-current-buffer {buffer_name:?} (write-region (point-min) (point-max) {home_file_name:?} nil 'silent))"#
+    );
+    eval_expression(gnu, neo, &expression);
+
+    let gnu_path = gnu.home_dir().join(file_name);
+    let neo_path = neo.home_dir().join(file_name);
+    for _ in 0..20 {
+        read_both(gnu, neo, Duration::from_millis(300));
+        if gnu_path.exists() && neo_path.exists() {
+            return;
+        }
+    }
+
+    panic!(
+        "timed out waiting for {buffer_name:?} dumps at {} and {}",
+        gnu_path.display(),
+        neo_path.display()
+    );
 }
 
 // ── Tests ──────────────────────────────────────────────────
@@ -882,20 +910,26 @@ fn view_lossage_via_ch_l_shows_recent_keys_and_commands() {
 }
 
 #[test]
-fn describe_char_via_cu_cx_equals_shows_character_details() {
+fn describe_char_on_ascii_character_matches_gnu_help_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
-    // Insert a character to describe
-    send_both(&mut gnu, &mut neo, "ATA");
 
-    // Move point back to the 'A'
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "describe-char-ascii.txt",
+        "ASCII target\n",
+        "C-x C-f",
+    );
+
     send_both(&mut gnu, &mut neo, "C-a");
+    invoke_mx_command(&mut gnu, &mut neo, "describe-char");
 
-    // C-u C-x = runs describe-char
-    send_both(&mut gnu, &mut neo, "C-u");
-    send_both(&mut gnu, &mut neo, "C-x");
-    send_both(&mut gnu, &mut neo, "=");
-
-    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("*Help*"));
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Help*"))
+            && grid
+                .iter()
+                .any(|row| row.contains("LATIN CAPITAL LETTER A"))
+    };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
@@ -905,13 +939,25 @@ fn describe_char_via_cu_cx_equals_shows_character_details() {
         assert!(
             grid.iter()
                 .any(|row| row.contains("character") || row.contains("LATIN")),
-            "{label} describe-char should show character info"
+            "{label} describe-char should show character info\n{}",
+            grid.join("\n")
         );
         assert!(
             grid.iter().any(|row| row.contains("*Help*")),
-            "{label} describe-char should open a Help buffer"
+            "{label} describe-char should open a Help buffer\n{}",
+            grid.join("\n")
         );
     }
+
+    dump_named_buffer_to_home_file(&mut gnu, &mut neo, "*Help*", "describe-char-ascii-help.txt");
+    let gnu_help = fs::read_to_string(gnu.home_dir().join("describe-char-ascii-help.txt"))
+        .expect("read GNU describe-char help dump");
+    let neo_help = fs::read_to_string(neo.home_dir().join("describe-char-ascii-help.txt"))
+        .expect("read Neomacs describe-char help dump");
+    assert_eq!(
+        gnu_help, neo_help,
+        "describe-char help buffer for ASCII character should match GNU exactly"
+    );
 }
 
 #[test]

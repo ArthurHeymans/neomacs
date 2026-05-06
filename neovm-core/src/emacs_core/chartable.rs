@@ -41,6 +41,7 @@ const CT_LOGICAL_LENGTH: i64 = 0x3F_FFFF;
 const MAX_CHAR: i64 = 0x3F_FFFF;
 const CT_ASCII_CACHE_LEN: usize = 128;
 const CT_ASCII_CACHE_MAGIC: i64 = -7_000_001;
+const CT_ASCII_CACHE_PREPARED_MAGIC: i64 = -7_000_002;
 
 const GNU_CHAR_TABLE_STANDARD_SLOTS: usize = 4 + GNU_CHAR_TABLE_CONTENT_BLOCKS_USIZE;
 const GNU_CHAR_TABLE_CONTENT_BLOCKS_USIZE: usize = 64;
@@ -215,11 +216,21 @@ fn ct_ascii_cache_range(vec: &[Value]) -> Option<std::ops::Range<usize>> {
     let start = ct_ascii_cache_start(vec);
     let values_start = start + 1;
     let values_end = values_start + CT_ASCII_CACHE_LEN;
-    if vec.len() >= values_end && vec[start].as_fixnum() == Some(CT_ASCII_CACHE_MAGIC) {
+    if vec.len() >= values_end
+        && matches!(
+            vec[start].as_fixnum(),
+            Some(CT_ASCII_CACHE_MAGIC | CT_ASCII_CACHE_PREPARED_MAGIC)
+        )
+    {
         Some(values_start..values_end)
     } else {
         None
     }
+}
+
+fn ct_ascii_cache_magic(vec: &[Value]) -> Option<i64> {
+    let start = ct_ascii_cache_start(vec);
+    vec.get(start).and_then(|value| value.as_fixnum())
 }
 
 pub(crate) fn char_table_ascii_cache_range(vec: &[Value]) -> Option<std::ops::Range<usize>> {
@@ -243,6 +254,28 @@ fn ct_update_ascii_cache(vec: &mut [Value], min: i64, max: i64, value: Value) {
     for ch in start..=end {
         vec[range.start + ch] = value;
     }
+}
+
+fn prepare_uniprop_ascii_cache(table: &Value) {
+    let Some(original) = table.as_vector_data() else {
+        return;
+    };
+    if !is_char_code_property_vec(original) {
+        return;
+    }
+    if ct_ascii_cache_magic(original) == Some(CT_ASCII_CACHE_PREPARED_MAGIC) {
+        return;
+    }
+    let Some(cache_range) = ct_ascii_cache_range(original) else {
+        return;
+    };
+
+    let mut vec = original.clone();
+    for ch in 0..CT_ASCII_CACHE_LEN {
+        vec[cache_range.start + ch] = ct_get_char(&vec, ch as i64, true).unwrap_or(Value::NIL);
+    }
+    vec[cache_range.start - 1] = Value::fixnum(CT_ASCII_CACHE_PREPARED_MAGIC);
+    let _ = table.replace_vector_data(vec);
 }
 
 fn is_sub_char_table_literal(v: &Value) -> bool {
@@ -334,8 +367,56 @@ fn is_char_code_property_vec(vec: &[Value]) -> bool {
 }
 
 fn uniprop_compressed_string(value: Value) -> Option<Vec<u32>> {
+    fn decode_byte8_pairs(codes: impl IntoIterator<Item = u32>) -> Vec<u32> {
+        let raw = codes.into_iter().collect::<Vec<_>>();
+        let mut decoded = Vec::with_capacity(raw.len());
+        let mut pos = 0;
+        while pos < raw.len() {
+            if matches!(raw[pos], 0xC0 | 0xC1)
+                && pos + 1 < raw.len()
+                && (raw[pos + 1] & 0xC0) == 0x80
+            {
+                let byte = if raw[pos] == 0xC0 {
+                    raw[pos + 1]
+                } else {
+                    raw[pos + 1].saturating_add(0x40)
+                };
+                decoded.push(byte);
+                pos += 2;
+                continue;
+            }
+            decoded.push(raw[pos]);
+            pos += 1;
+        }
+        decoded
+    }
+
     let string = value.as_lisp_string()?;
-    let codes = crate::emacs_core::builtins::lisp_string_char_codes(string);
+    if string.is_multibyte() {
+        let codes = decode_byte8_pairs(
+            crate::emacs_core::builtins::lisp_string_char_codes(string)
+                .into_iter()
+                .map(|code| {
+                    crate::emacs_core::emacs_char::char_to_byte_safe(code)
+                        .map(u32::from)
+                        .unwrap_or(code)
+                }),
+        );
+        return matches!(codes.first(), Some(1 | 2)).then_some(codes);
+    }
+
+    let bytes = string.as_bytes();
+    let mut raw_codes = Vec::with_capacity(string.schars());
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let code = crate::emacs_core::emacs_char::string_char_advance(bytes, &mut pos);
+        raw_codes.push(
+            crate::emacs_core::emacs_char::char_to_byte_safe(code)
+                .map(u32::from)
+                .unwrap_or(code),
+        );
+    }
+    let codes = decode_byte8_pairs(raw_codes);
     matches!(codes.first(), Some(1 | 2)).then_some(codes)
 }
 
@@ -544,16 +625,20 @@ pub(crate) fn make_char_table_from_external_slots(items: &[Value]) -> Result<Val
         );
     }
 
-    // GNU keeps an ASCII cache slot that takes precedence for 0..127.  Append it
-    // after the content blocks so the existing "last assignment wins" lookup
-    // model observes the same precedence.
-    flatten_char_table_slot(
-        &mut vec,
-        items[GNU_CHAR_TABLE_ASCII_SLOT],
-        0,
-        128,
-        is_uniprop,
-    );
+    // GNU keeps an ASCII cache slot that takes precedence for ordinary
+    // char-tables.  Unicode property tables are different: `uniprop_table`
+    // recomputes their ASCII cache from the decompressed contents before
+    // returning the table, so the stale readable-literal ASCII slot must not
+    // overwrite the decompressed ASCII values.
+    if !is_uniprop {
+        flatten_char_table_slot(
+            &mut vec,
+            items[GNU_CHAR_TABLE_ASCII_SLOT],
+            0,
+            128,
+            is_uniprop,
+        );
+    }
 
     Ok(Value::vector(vec))
 }
@@ -700,6 +785,9 @@ fn ct_set_char(vec: &mut Vec<Value>, ch: i64, value: Value) {
 /// The range is stored as a `Cons(min . max)` key.
 fn ct_set_range(vec: &mut Vec<Value>, min: i64, max: i64, value: Value) {
     ct_update_ascii_cache(vec, min, max, value);
+    // Store an internal range key, not the caller's cons.  GNU's char-table
+    // storage records bounds; Lisp-visible range conses from `map-char-table`
+    // are reusable mutable objects.
     vec.push(Value::cons(Value::fixnum(min), Value::fixnum(max)));
     vec.push(value);
 }
@@ -762,6 +850,11 @@ fn ct_lookup_ascii_cached(table: &Value, ch: i64) -> Option<Value> {
     let mut current = *table;
     loop {
         let vec_ref = current.as_vector_data()?;
+        if is_char_code_property_vec(vec_ref)
+            && ct_ascii_cache_magic(vec_ref) == Some(CT_ASCII_CACHE_MAGIC)
+        {
+            return None;
+        }
         let Some(cache_range) = ct_ascii_cache_range(vec_ref) else {
             return None;
         };
@@ -1578,7 +1671,9 @@ pub(crate) fn builtin_unicode_property_table_internal(
         }
     }
 
-    Ok(cell.cons_cdr())
+    let table = cell.cons_cdr();
+    prepare_uniprop_ascii_cache(&table);
+    Ok(table)
 }
 
 fn expect_character(value: &Value) -> Result<i64, Flow> {
