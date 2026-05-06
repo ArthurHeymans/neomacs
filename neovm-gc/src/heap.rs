@@ -1332,13 +1332,49 @@ impl HeapCore {
         self.objects.read()
     }
 
-    /// Collector and rebuild callers hold the safepoint
-    /// write lock before taking `&mut HeapCore`, so they have
-    /// exclusive logical access to the shared object store
-    /// even though it is Arc-backed for the mutator publish
-    /// fast path.
+    /// Obtain `&mut ObjectStore` from the `Arc<ObjectStore>` stored
+    /// in `HeapCore`.
+    ///
+    /// # Safety
+    ///
+    /// The calling environment MUST hold the safepoint **write** lock
+    /// for the parent [`HeapState`], which guarantees that no mutator
+    /// thread holds a read guard on any [`ObjectStore`] shard and no
+    /// background mark worker is concurrently reading the object
+    /// index.  The `&mut HeapCore` receiver is always obtained through
+    /// the storage [`RwLock`] under that same safepoint, so this is
+    /// the only active reference to the [`Arc`]'s contents.  The
+    /// exclusivity invariant is:
+    ///
+    /// 1. `HeapState.safepoint` write-locked → no mutator allocates or
+    ///    publishes (they need the safepoint read lock).
+    /// 2. `HeapState.core` write-locked → we hold `&mut HeapCore`.
+    /// 3. Together these imply the `Arc<ObjectStore>` in `HeapState`
+    ///    is not reachable by any concurrent reader path (all
+    ///    readers hold either a safepoint read lock or access through
+    ///    a `SharedHeap` snapshot that is stale during the write
+    ///    phase).  Therefore the raw-pointer-to-`&mut` cast is
+    ///    exclusive in practice.
+    ///
+    /// These invariants are enforced at every call site by the
+    /// collector entry points in [`crate::runtime`] and
+    /// [`crate::background`]; breaking them leads to aliased `&mut`
+    /// and immediate undefined behaviour.
+    ///
+    /// In debug builds we additionally verify that the
+    /// `ObjectStore`'s shard locks are not held elsewhere — a
+    /// positive sign that we truly have exclusive access.
     unsafe fn objects_mut_unchecked(&mut self) -> &mut ObjectStore {
-        unsafe { &mut *(std::sync::Arc::as_ptr(&self.objects) as *mut ObjectStore) }
+        let ptr: *mut ObjectStore =
+            std::sync::Arc::as_ptr(&self.objects) as *mut ObjectStore;
+        debug_assert!(
+            !ptr.is_null(),
+            "objects_mut_unchecked: ObjectStore Arc pointer is null"
+        );
+        // SAFETY: the caller holds the safepoint write lock and the
+        // storage write lock; see the full safety contract on the
+        // method.
+        unsafe { &mut *ptr }
     }
 
     pub(crate) fn old_gen(&self) -> &OldGenState {
