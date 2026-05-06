@@ -72,6 +72,56 @@ fn scan(args: Vec<String>) -> ExitCode {
         return ExitCode::from(2);
     }
 
+    // Process large batches via separate processes to avoid
+    // cumulative memory pressure from jemalloc retaining freed
+    // allocations across many compilations.
+    const MAX_PER_PROCESS: usize = 5;
+    if files.len() > MAX_PER_PROCESS {
+        let expand_str = match &expand_mode {
+            ExpandMode::MiniEval => "minieval".to_string(),
+            ExpandMode::Emacs { emacs_path } => format!("emacs:{emacs_path}"),
+        };
+        return scan_in_subprocesses(&expand_str, files, load_paths);
+    }
+
+    scan_single_process(expand_mode, files, load_paths)
+}
+
+fn scan_in_subprocesses(expand_str: &str, files: Vec<String>, load_paths: Vec<String>) -> ExitCode {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("cannot find compiler binary: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    for chunk in files.chunks(30) {
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.arg("scan").arg(format!("--expand={expand_str}"));
+        for lp in &load_paths {
+            cmd.arg("--load-path").arg(lp);
+        }
+        cmd.args(chunk);
+        match cmd.status() {
+            Ok(status) => {
+                if !status.success() {
+                    return ExitCode::from(status.code().unwrap_or(1) as u8);
+                }
+            }
+            Err(e) => {
+                eprintln!("failed to spawn subprocess: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn scan_single_process(
+    expand_mode: ExpandMode,
+    files: Vec<String>,
+    load_paths: Vec<String>,
+) -> ExitCode {
     let mut total_files = 0usize;
     let mut ok_files = 0usize;
     let mut reader_errors = 0usize;
