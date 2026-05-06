@@ -580,6 +580,10 @@ pub(crate) fn run_neovm_eval_with_bootstrap_and_load(
             .map_err(|e| format!("failed to load '{}': {e:?}", path.display()))?;
     }
 
+    // Match oracle's `(eval form t)`: load files with their normal file
+    // lexical mode, then evaluate the caller's form with an explicit lexical
+    // environment.
+    eval.set_lexical_binding(true);
     ensure_nonempty_form(form)?;
 
     let result = run_neovm_eval_in_temp_buffer(&mut eval, form)?;
@@ -610,6 +614,8 @@ pub(crate) fn run_neovm_eval_with_bootstrap_and_load_raw(
             .map_err(|e| format!("failed to load '{}': {e:?}", path.display()))?;
     }
 
+    // Match oracle's `(eval form t)` after any requested runtime loads.
+    eval.set_lexical_binding(true);
     ensure_nonempty_form(form)?;
 
     let result = run_neovm_eval_in_temp_buffer(&mut eval, form)?;
@@ -648,6 +654,9 @@ pub(crate) fn run_neovm_eval_with_bootstrap(form: &str) -> Result<String, String
         );
     }
 
+    // GNU side evaluates the submitted source as `(eval FORM t)`.  Reassert
+    // that same top-level lexical environment after runtime startup cleanup.
+    eval.set_lexical_binding(true);
     ensure_nonempty_form(form)?;
 
     neovm_core::emacs_core::perf_trace::reset_hotpath_stats();
