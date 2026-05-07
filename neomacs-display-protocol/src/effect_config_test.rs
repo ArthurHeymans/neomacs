@@ -253,7 +253,7 @@ fn cursor_candle_flame_defaults() {
 #[test]
 fn cursor_color_cycle_defaults() {
     let c = CursorColorCycleConfig::default();
-    assert_eq!(c.enabled, false);
+    assert_eq!(c.enabled, true);
     assert_eq!(c.speed, 0.5);
     assert_eq!(c.saturation, 0.8);
     assert_eq!(c.lightness, 0.6);
@@ -2066,9 +2066,10 @@ fn all_opacity_defaults_are_in_zero_to_one() {
 }
 
 #[test]
-fn all_enabled_fields_default_to_false() {
+fn default_enabled_fields_match_product_defaults() {
     let ec = EffectsConfig::default();
-    // Exhaustive check of every config that has an `enabled` field
+    assert!(ec.cursor_color_cycle.enabled);
+    // Exhaustive check of every other config that has an `enabled` field.
     let enabled_flags: Vec<bool> = vec![
         ec.accent_strip.enabled,
         ec.argyle_pattern.enabled,
@@ -2090,7 +2091,6 @@ fn all_enabled_fields_default_to_false() {
         ec.cursor_aurora_borealis.enabled,
         ec.cursor_bubble.enabled,
         ec.cursor_candle_flame.enabled,
-        ec.cursor_color_cycle.enabled,
         ec.cursor_comet.enabled,
         ec.cursor_compass.enabled,
         ec.cursor_compass_needle.enabled,

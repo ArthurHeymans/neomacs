@@ -253,7 +253,7 @@ effect_config!(
 effect_config!(
     /// Configuration for the cursor color cycle effect.
     CursorColorCycleConfig {
-        enabled: bool = false,
+        enabled: bool = true,
         speed: f32 = 0.5,
         saturation: f32 = 0.8,
         lightness: f32 = 0.6,
