@@ -138,6 +138,12 @@ impl WgpuRenderer {
         self.video_cache.load_file(path)
     }
 
+    /// Load video from file path with a pre-allocated ID.
+    #[cfg(feature = "video")]
+    pub fn load_video_file_with_id(&mut self, id: u32, path: &str) {
+        self.video_cache.load_file_with_id(id, path);
+    }
+
     /// Get video dimensions
     #[cfg(feature = "video")]
     pub fn get_video_size(&self, id: u32) -> Option<(u32, u32)> {

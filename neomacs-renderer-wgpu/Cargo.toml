@@ -9,7 +9,8 @@ description = "WGPU text renderer primitives for Neomacs"
 
 [features]
 default = []
-video = ["gstreamer", "gstreamer-video", "gstreamer-app", "gstreamer-allocators"]
+video = ["gstreamer", "gstreamer-video", "gstreamer-app"]
+video-dmabuf = ["video", "gstreamer-allocators"]
 wpe-webkit = []
 
 [dependencies]

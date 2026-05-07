@@ -351,12 +351,8 @@ impl RenderApp {
                 tracing::info!("Loading video {}: {}", id, path);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    let video_id = renderer.load_video_file(&path);
-                    tracing::info!(
-                        "Video loaded with id {} (requested id was {})",
-                        video_id,
-                        id
-                    );
+                    renderer.load_video_file_with_id(id, &path);
+                    tracing::info!("Video loaded with requested id {}", id);
                 }
                 Ok(())
             }

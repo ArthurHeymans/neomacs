@@ -14,7 +14,7 @@ use std::thread;
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 use gstreamer_allocators as gst_allocators;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
@@ -216,7 +216,13 @@ impl VideoCache {
     pub fn load_file(&mut self, path: &str) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
+        self.load_file_with_id(id, path);
+        id
+    }
 
+    /// Load a video file with a pre-allocated ID.
+    pub fn load_file_with_id(&mut self, id: u32, path: &str) {
+        self.next_id = self.next_id.max(id.saturating_add(1));
         // Create placeholder entry
         let loop_count = Arc::new(AtomicI32::new(0));
         self.videos.insert(
@@ -242,7 +248,6 @@ impl VideoCache {
         });
 
         tracing::info!("VideoCache: queued video {} for loading: {}", id, path);
-        id
     }
 
     /// Get video state
@@ -604,7 +609,7 @@ impl VideoCache {
     /// Supports multiple memory types:
     /// - DmaBufMemory: Direct DMA-BUF allocator
     /// - FdMemory: Generic fd-backed memory (includes VA-API memory)
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
     fn try_extract_dmabuf(
         buffer: &gst::BufferRef,
         info: &gst_video::VideoInfo,
@@ -703,7 +708,7 @@ impl VideoCache {
     }
 
     /// Try to export VA-API surface as DMA-BUF
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
     fn try_export_va_surface(
         buffer: &gst::BufferRef,
         memory: &gst::Memory,

@@ -301,15 +301,15 @@ impl DmaBufBuffer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Option<wgpu::Texture> {
-        #[cfg(not(feature = "video"))]
+        #[cfg(not(any(feature = "video-dmabuf", feature = "wpe-webkit")))]
         let _ = (device, queue, self.num_planes);
 
-        #[cfg(feature = "video")]
+        #[cfg(any(feature = "video-dmabuf", feature = "wpe-webkit"))]
         let n = self.num_planes as usize;
 
         // Build import params with all planes — the Vulkan driver query
         // determines the correct plane count for the modifier.
-        #[cfg(feature = "video")]
+        #[cfg(any(feature = "video-dmabuf", feature = "wpe-webkit"))]
         {
             use crate::vulkan_dmabuf::{DmaBufImportParams, import_dmabuf};
             let params = DmaBufImportParams {

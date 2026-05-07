@@ -39,6 +39,20 @@
 (defvar neomacs-video--players (make-hash-table :test 'eq)
   "Hash table mapping video IDs to their metadata.")
 
+(defvar neomacs-video--next-handle 1
+  "Next Lisp-side video handle.")
+
+(defun neomacs-video--source-keyword-and-value (file)
+  "Return the display source keyword/value pair for FILE."
+  (if (string-match-p "^[a-z]+://" file)
+      (list :uri file)
+    (list :file (expand-file-name file))))
+
+(defun neomacs-video--allocate-handle ()
+  "Allocate a Lisp-side video handle."
+  (prog1 neomacs-video--next-handle
+    (setq neomacs-video--next-handle (1+ neomacs-video--next-handle))))
+
 (defun neomacs-video-play-file (file)
   "Play video FILE in a new player.
 Returns the video ID on success, nil on failure."
@@ -46,7 +60,7 @@ Returns the video ID on success, nil on failure."
   (let* ((uri (if (string-match-p "^[a-z]+://" file)
                   file
                 (concat "file://" (expand-file-name file))))
-         (video-id (neomacs-video-load uri)))
+         (video-id (neomacs-video-insert uri nil nil nil t)))
     (when video-id
       (puthash video-id `(:uri ,uri :state playing) neomacs-video--players)
       (neomacs-video-play video-id)
@@ -84,30 +98,21 @@ positive N means loop N additional times.
 AUTOPLAY if non-nil starts playback automatically.
 Returns the video ID on success.  Point is left after the video."
   (interactive "fVideo file: ")
-  (let* ((uri (if (string-match-p "^[a-z]+://" file)
-                  file
-                (concat "file://" (expand-file-name file))))
-         (video-id (neomacs-video-load uri))
+  (let* ((source (neomacs-video--source-keyword-and-value file))
+         (video-id (neomacs-video--allocate-handle))
          (w (or width 640))
          (h (or height 360)))
-    (when video-id
-      (puthash video-id `(:uri ,uri :state stopped :width ,w :height ,h)
-               neomacs-video--players)
-      ;; Insert a placeholder with video display property
-      ;; The display engine will render this as a VIDEO_GLYPH
-      (let ((start (point)))
-        (insert " ")
-        (put-text-property start (point) 'display
-                           `(video :id ,video-id :width ,w :height ,h
-                                   ,@(when loop-count (list :loop-count loop-count))
-                                   ,@(when autoplay (list :autoplay t))))
-        (put-text-property start (point) 'neomacs-video-id video-id))
-      ;; If autoplay, also start playback immediately
-      ;; (the display property autoplay handles re-renders; this handles first time)
-      (when autoplay (neomacs-video-play video-id))
-      ;; Point is now AFTER the video, so subsequent inserts go after it
-      (message "Inserted video %d" video-id)
-      video-id)))
+    (puthash video-id `(:source ,source :state stopped :width ,w :height ,h)
+             neomacs-video--players)
+    (let ((start (point)))
+      (insert " ")
+      (put-text-property start (point) 'display
+                         `(video ,@source :width ,w :height ,h
+                                 ,@(when loop-count (list :loop-count loop-count))
+                                 ,@(when autoplay (list :autoplay t))))
+      (put-text-property start (point) 'neomacs-video-id video-id))
+    (message "Inserted video %d" video-id)
+    video-id))
 
 (defun neomacs-video-insert-loop (file &optional width height)
   "Insert video FILE with infinite looping and autoplay.

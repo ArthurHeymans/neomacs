@@ -1301,6 +1301,22 @@ pub struct ResolvedImage {
     pub dimensions_known: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum VideoResolveSource {
+    File(crate::heap_types::LispString),
+    Uri(crate::heap_types::LispString),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct VideoResolveRequest {
+    pub source: VideoResolveSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedVideo {
+    pub video_id: u32,
+}
+
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
@@ -1353,6 +1369,12 @@ pub trait DisplayHost {
         &self,
         _request: ImageResolveRequest,
     ) -> Result<Option<ResolvedImage>, String> {
+        Ok(None)
+    }
+    fn request_video(
+        &self,
+        _request: VideoResolveRequest,
+    ) -> Result<Option<ResolvedVideo>, String> {
         Ok(None)
     }
     fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {

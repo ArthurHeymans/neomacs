@@ -76,8 +76,12 @@ video = [
     "gstreamer",
     "gstreamer-video",
     "gstreamer-app",
-    "gstreamer-allocators",
     "neomacs-renderer-wgpu/video",
+]
+video-dmabuf = [
+    "video",
+    "gstreamer-allocators",
+    "neomacs-renderer-wgpu/video-dmabuf",
 ]
 # WPE WebKit integration
 wpe-webkit = [

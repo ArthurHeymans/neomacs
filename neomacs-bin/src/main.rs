@@ -41,6 +41,7 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ImageResolveRequest,
     ImageResolveSource, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedImage,
+    ResolvedVideo, VideoResolveRequest, VideoResolveSource,
 };
 use neovm_core::emacs_core::load::LoadupDumpMode;
 use neovm_core::emacs_core::load::LoadupStartupSurface;
@@ -741,6 +742,7 @@ struct PrimaryWindowDisplayHost {
     primary_window_size: SharedPrimaryWindowSize,
     image_dimensions: SharedImageDimensions,
     resolved_images: Mutex<HashMap<ImageResolveRequest, ResolvedImage>>,
+    resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -753,9 +755,15 @@ type SharedPrimaryWindowSize = Arc<Mutex<PrimaryWindowSize>>;
 
 const HOST_IMAGE_ID_START: u32 = 0x4000_0000;
 static HOST_IMAGE_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_IMAGE_ID_START);
+const HOST_VIDEO_ID_START: u32 = 0x5000_0000;
+static HOST_VIDEO_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_VIDEO_ID_START);
 
 fn next_host_image_id() -> u32 {
     HOST_IMAGE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+}
+
+fn next_host_video_id() -> u32 {
+    HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
 fn wait_for_image_dimensions(
@@ -1240,6 +1248,41 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }
         Ok(Some(resolved))
     }
+
+    fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
+        {
+            let cache = match self.resolved_videos.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(video) = cache.get(&request).cloned() {
+                return Ok(Some(video));
+            }
+        }
+
+        let video_id = next_host_video_id();
+        let path = match &request.source {
+            VideoResolveSource::File(path) | VideoResolveSource::Uri(path) => {
+                path.as_utf8_str().unwrap_or_default().to_owned()
+            }
+        };
+        self.send_render_command(
+            RenderCommand::VideoCreate { id: video_id, path },
+            "failed to queue video create",
+        )?;
+
+        let resolved = ResolvedVideo { video_id };
+        match self.resolved_videos.lock() {
+            Ok(mut cache) => {
+                cache.insert(request, resolved.clone());
+            }
+            Err(poisoned) => {
+                let mut cache = poisoned.into_inner();
+                cache.insert(request, resolved.clone());
+            }
+        }
+        Ok(Some(resolved))
+    }
 }
 
 fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
@@ -1671,6 +1714,7 @@ fn run_gui_evaluator_worker(
         primary_window_size: Arc::clone(&primary_window_size),
         image_dimensions: Arc::clone(&gui_image_dimensions),
         resolved_images: Mutex::new(HashMap::new()),
+        resolved_videos: Mutex::new(HashMap::new()),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

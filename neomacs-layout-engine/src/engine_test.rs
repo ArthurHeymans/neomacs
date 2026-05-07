@@ -4,7 +4,8 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
+    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
+    VideoResolveRequest,
 };
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
@@ -69,6 +70,7 @@ fn test_window_params() -> WindowParams {
 #[derive(Default)]
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
+    video_requests: Arc<Mutex<Vec<VideoResolveRequest>>>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -98,6 +100,14 @@ impl DisplayHost for RecordingImageDisplayHost {
             height: 24,
             dimensions_known: true,
         }))
+    }
+
+    fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
+        self.video_requests
+            .lock()
+            .expect("video requests lock")
+            .push(request);
+        Ok(Some(ResolvedVideo { video_id: 88 }))
     }
 }
 
@@ -929,6 +939,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::clone(&requests),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -978,6 +989,65 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].max_width, 32);
     assert_eq!(requests[0].max_height, 24);
+}
+
+#[test]
+fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
+    let mut eval = Context::new();
+    let video_requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        video_requests: Arc::clone(&video_requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aVb");
+        buf.goto_byte(1);
+        buf.text.text_props_put_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("video"),
+                Value::keyword("file"),
+                Value::string("/tmp/neomacs-inline-video.mp4"),
+                Value::keyword("width"),
+                Value::fixnum(80),
+                Value::keyword("height"),
+                Value::fixnum(45),
+                Value::keyword("autoplay"),
+                Value::T,
+                Value::keyword("loop"),
+                Value::T,
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-inline-video", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let video = state.videos.first().expect("inline video glyph");
+    assert_eq!(video.video_id, 88);
+    assert_eq!(video.width, 80.0);
+    assert_eq!(video.height, 45.0);
+    assert_eq!(video.loop_count, -1);
+    assert!(video.autoplay);
+
+    let requests = video_requests.lock().expect("video requests lock");
+    assert_eq!(requests.len(), 1);
 }
 
 #[test]

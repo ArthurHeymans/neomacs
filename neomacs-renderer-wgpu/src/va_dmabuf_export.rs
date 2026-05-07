@@ -3,14 +3,14 @@
 //! This module extracts DMA-BUF file descriptors from GStreamer VA memory
 //! using libva's vaExportSurfaceHandle() via GStreamer VA library bindings.
 
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 use std::os::unix::io::RawFd;
 
 /// DMA-BUF export parameters from VA surface.
 ///
 /// Owns the exported file descriptors — Drop closes any that are still >= 0.
 /// NOT Clone: each fd must have exactly one owner.
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 #[derive(Debug)]
 pub struct VaDmaBufExport {
     /// DMA-BUF file descriptors (up to 4 objects, -1 = unused/taken)
@@ -33,7 +33,7 @@ pub struct VaDmaBufExport {
     pub height: u32,
 }
 
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 impl Drop for VaDmaBufExport {
     fn drop(&mut self) {
         for i in 0..self.num_objects.min(4) as usize {
@@ -48,7 +48,7 @@ impl Drop for VaDmaBufExport {
 }
 
 /// FFI bindings to GStreamer VA plugin and libva
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 mod ffi {
     use libc::{c_int, c_uint, c_void};
     use std::os::unix::io::RawFd;
@@ -128,7 +128,7 @@ mod ffi {
 }
 
 /// Try to export a GStreamer buffer's VA surface as DMA-BUF
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 pub fn try_export_va_dmabuf(
     buffer: &gstreamer::BufferRef,
     va_display_ptr: *mut std::ffi::c_void,
@@ -213,7 +213,7 @@ pub fn try_export_va_dmabuf(
 }
 
 /// Get VA display pointer from GStreamer allocator
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 pub fn get_va_display_from_allocator(
     allocator: &gstreamer::Allocator,
 ) -> Option<*mut std::ffi::c_void> {
@@ -242,7 +242,7 @@ pub fn get_va_display_from_allocator(
 }
 
 /// Get VA display from GStreamer memory
-#[cfg(all(target_os = "linux", feature = "video"))]
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 pub fn get_va_display_from_memory(memory: &gstreamer::Memory) -> Option<*mut std::ffi::c_void> {
     let allocator = memory.allocator()?;
     get_va_display_from_allocator(&allocator)
