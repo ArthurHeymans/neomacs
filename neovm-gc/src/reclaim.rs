@@ -120,7 +120,7 @@ pub(crate) fn compact_sparse_old_blocks(
     // object slice and pick sparse candidates.
     let live_by_block = compute_per_block_live_bytes(objects, old_gen.block_count());
     let candidates =
-        find_sparse_old_block_candidates(&live_by_block, old_gen.blocks(), density_threshold);
+        find_sparse_old_block_candidates(&live_by_block, &old_gen.blocks(), density_threshold);
     if candidates.is_empty() {
         return ForwardingMap::default();
     }

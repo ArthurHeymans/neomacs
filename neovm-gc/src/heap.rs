@@ -1683,7 +1683,7 @@ impl HeapCore {
         }
         let mut total_used = 0usize;
         let mut total_live = 0usize;
-        for block in blocks {
+        for block in blocks.iter() {
             total_used = total_used.saturating_add(block.used_bytes());
             total_live = total_live.saturating_add(block.live_bytes());
         }

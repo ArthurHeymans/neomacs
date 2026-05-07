@@ -10686,12 +10686,12 @@ fn object_start_index_records_first_object_in_each_card() {
     let guard = mutator.heap().read_core();
     let old_gen = guard.old_gen();
     assert!(old_gen.block_count() >= 1, "expected at least one block");
-    for block in old_gen.blocks() {
+    for block in old_gen.blocks().iter() {
         let card_size = block.card_table().card_size();
-        let starts = block.object_starts();
+        let card_count = block.card_table().card_count();
         let mut populated = 0usize;
-        for (card_idx, slot) in starts.iter().enumerate() {
-            let Some(offset) = *slot else {
+        for card_idx in 0..card_count {
+            let Some(offset) = block.object_start_for_card(card_idx) else {
                 continue;
             };
             populated += 1;
@@ -10749,7 +10749,7 @@ fn object_start_index_skips_subsequent_objects_in_same_card() {
     // Card 0 covers offsets [0, 512). With line_bytes=64, the first
     // four allocations land at offsets 0, 64, 128, 192 — all inside
     // card 0. The recorded entry must be the smallest of those offsets.
-    assert_eq!(block.object_starts()[0], Some(0));
+    assert_eq!(block.object_start_for_card(0), Some(0));
 }
 
 #[test]
@@ -10792,44 +10792,34 @@ fn object_start_index_rebuilds_after_sweep() {
     }
 
     // Snapshot the populated card indices before the GC.
-    let starts_before: Vec<Vec<(usize, u32)>> = mutator
-        .heap()
-        .read_core()
-        .old_gen()
-        .blocks()
-        .iter()
-        .map(|block| {
-            block
-                .object_starts()
-                .iter()
-                .enumerate()
-                .filter_map(|(i, slot)| slot.map(|off| (i, off)))
+    let starts_before: Vec<Vec<(usize, u32)>> = {
+        let guard = mutator.heap().read_core();
+        let old_gen = guard.old_gen();
+        old_gen.blocks().iter().map(|block| {
+            let card_count = block.card_table().card_count();
+            (0..card_count)
+                .filter_map(|i| block.object_start_for_card(i).map(|off| (i, off)))
                 .collect()
-        })
-        .collect();
+        }).collect()
+    };
 
     mutator
         .collect(CollectionKind::Minor)
         .expect("minor collect");
 
-    // After the rebuild, every block must still have a non-empty index
-    // (its survivors are the same set we allocated). Cross-check that
-    // each populated entry remains a valid offset for the new layout.
+    // After the rebuild, every block must still have a non-empty index.
     let guard = mutator.heap().read_core();
     let old_gen = guard.old_gen();
     for (block, before_entries) in old_gen.blocks().iter().zip(starts_before.iter()) {
         let card_size = block.card_table().card_size();
-        let starts = block.object_starts();
-        for (card_idx, slot) in starts.iter().enumerate() {
-            if let Some(offset) = *slot {
+        let card_count = block.card_table().card_count();
+        let mut after_count = 0usize;
+        for card_idx in 0..card_count {
+            if let Some(offset) = block.object_start_for_card(card_idx) {
                 assert_eq!(offset as usize / card_size, card_idx);
+                after_count += 1;
             }
         }
-        // The survivor set is identical to what we allocated, so the
-        // post-sweep index should populate the same number of cards as
-        // before (or more, since duplicate entries collapse). At minimum
-        // the rebuild must not LOSE entries.
-        let after_count = starts.iter().filter(|s| s.is_some()).count();
         assert!(
             after_count >= before_entries.len(),
             "post-sweep object_starts shrank: before={} after={}",

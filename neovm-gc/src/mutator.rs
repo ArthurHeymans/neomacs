@@ -474,9 +474,12 @@ fn alloc_old_slot<T: Trace + 'static>(
 ) -> Result<AllocationSlot, AllocError> {
     let layout = alloc_profile.layout;
     let payload_offset = alloc_profile.payload_offset;
-    let mut core = heap.write_core();
+    // Takes only a HeapCore read lock — OldGenState uses an internal
+    // Mutex for block-pool operations so the allocation hot path
+    // avoids serialising on the HeapCore write lock.
+    let core = heap.read_core();
     match core
-        .old_gen_mut()
+        .old_gen()
         .try_alloc_in_block_with_reserved(heap.old_allocation_config(), layout)
     {
         Some((placement, base, reserved_bytes)) => {

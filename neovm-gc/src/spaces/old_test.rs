@@ -133,20 +133,16 @@ fn find_sparse_old_block_candidates_picks_low_density_blocks() {
     let live_by_block = vec![640usize, 64usize];
     // Threshold 0.30: block 0 density = 640/1024 = 0.625 (not
     // candidate); block 1 density = 64/1024 = 0.0625 (candidate).
-    let candidates = find_sparse_old_block_candidates(&live_by_block, old_gen.blocks(), 0.30);
+    let candidates = find_sparse_old_block_candidates(&live_by_block, &old_gen.blocks(), 0.30);
     assert_eq!(candidates, vec![1]);
 
-    // Threshold 0.8 includes both. The result is sorted by
-    // ASCENDING density so block 1 (density 0.0625) precedes
-    // block 0 (density 0.625) -- step 22 sorts candidates so
-    // the most-wasted blocks evacuate first.
-    let candidates = find_sparse_old_block_candidates(&live_by_block, old_gen.blocks(), 0.80);
+    let candidates = find_sparse_old_block_candidates(&live_by_block, &old_gen.blocks(), 0.80);
     assert_eq!(candidates, vec![1, 0]);
 
     // Empty blocks are skipped even with a permissive threshold.
     let live_by_block_with_empty = vec![0usize, 64usize];
     let candidates =
-        find_sparse_old_block_candidates(&live_by_block_with_empty, old_gen.blocks(), 1.0);
+        find_sparse_old_block_candidates(&live_by_block_with_empty, &old_gen.blocks(), 1.0);
     assert_eq!(candidates, vec![1]);
 }
 
@@ -1426,7 +1422,7 @@ fn sweep_marks_only_surviving_lines() {
     let _ = heap.collect(CollectionKind::Full).expect("full collection");
     let guard = heap.read_core();
     let old_gen = guard.old_gen();
-    for block in old_gen.blocks() {
+    for block in old_gen.blocks().iter() {
         for line in 0..block.line_count() {
             assert!(
                 !block.is_line_marked(line),

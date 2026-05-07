@@ -367,7 +367,7 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
         header_index.insert(header_addr, object_index);
     }
 
-    for block in old_gen.blocks() {
+    for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
         let dirty = card_table.dirty_card_indices();
         if dirty.is_empty() {
@@ -377,9 +377,8 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
         let block_base = block.base_ptr() as usize;
         let block_len = block.capacity_bytes();
         let line_bytes = block.line_bytes().max(1);
-        let object_starts = block.object_starts();
         for card_index in dirty {
-            let Some(start_offset) = object_starts.get(card_index).copied().flatten() else {
+            let Some(start_offset) = block.object_start_for_card(card_index) else {
                 continue;
             };
             let card_end_offset = ((card_index + 1) * card_size).min(block_len);
@@ -429,7 +428,7 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
         header_index.insert(header_addr, locator);
     }
 
-    for block in old_gen.blocks() {
+    for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
         let dirty = card_table.dirty_card_indices();
         if dirty.is_empty() {
@@ -439,9 +438,8 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
         let block_base = block.base_ptr() as usize;
         let block_len = block.capacity_bytes();
         let line_bytes = block.line_bytes().max(1);
-        let object_starts = block.object_starts();
         for card_index in dirty {
-            let Some(start_offset) = object_starts.get(card_index).copied().flatten() else {
+            let Some(start_offset) = block.object_start_for_card(card_index) else {
                 continue;
             };
             let card_end_offset = ((card_index + 1) * card_size).min(block_len);
