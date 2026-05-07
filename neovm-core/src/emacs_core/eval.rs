@@ -3841,6 +3841,7 @@ impl Context {
                 Value::symbol("data-directory"),
             ]),
         );
+        obarray.set_symbol_value("image-types", super::image::supported_image_types_value());
         obarray.set_symbol_value("image-scaling-factor", Value::make_float(1.0));
 
         // User init / startup (C DEFVAR in official Emacs)

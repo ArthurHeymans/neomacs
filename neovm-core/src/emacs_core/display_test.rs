@@ -3,6 +3,7 @@ use crate::emacs_core::dispnew::pure::{
     builtin_internal_show_cursor, builtin_internal_show_cursor_p, builtin_open_termscript,
     builtin_redraw_frame, builtin_send_string_to_terminal, reset_dispnew_thread_locals,
 };
+use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::terminal::pure::{
     builtin_controlling_tty_p, builtin_frame_terminal, builtin_resume_tty,
@@ -14,6 +15,18 @@ use crate::emacs_core::terminal::pure::{
 use crate::emacs_core::value::ValueKind;
 use std::fs;
 use std::path::PathBuf;
+
+struct ImageCapableDisplayHost;
+
+impl DisplayHost for ImageCapableDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+}
 
 fn clear_terminal_parameters() {
     reset_terminal_thread_locals();
@@ -3057,6 +3070,11 @@ fn display_images_p_shapes_and_errors() {
         builtin_display_images_p(&mut eval, vec![Value::NIL])
             .unwrap()
             .is_nil()
+    );
+    eval.set_display_host(Box::new(ImageCapableDisplayHost));
+    assert_eq!(
+        builtin_display_images_p(&mut eval, vec![]).unwrap(),
+        Value::T
     );
 
     match builtin_display_images_p(&mut eval, vec![Value::fixnum(1)]) {

@@ -1030,7 +1030,10 @@ pub(crate) fn builtin_help_describe_vector(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_init_image_library(args: Vec<Value>) -> EvalResult {
     expect_args("init-image-library", &args, 1)?;
-    Ok(Value::NIL)
+    let available = args[0]
+        .as_symbol_name()
+        .is_some_and(super::super::image::is_supported_image_type);
+    Ok(Value::bool_val(available))
 }
 
 pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {

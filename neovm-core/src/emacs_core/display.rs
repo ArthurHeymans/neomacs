@@ -962,7 +962,7 @@ pub(crate) fn builtin_display_images_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_optional_display_designator_eval(eval, "display-images-p", &args)?;
-    Ok(Value::NIL)
+    Ok(Value::bool_val(eval.display_host.is_some()))
 }
 
 /// Context-aware variant of `display-supports-face-attributes-p`.

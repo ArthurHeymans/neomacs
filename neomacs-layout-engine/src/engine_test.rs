@@ -942,9 +942,9 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
                 Value::symbol("png"),
                 Value::keyword("file"),
                 Value::string("/tmp/neomacs-inline-image.png"),
-                Value::keyword("width"),
+                Value::keyword("max-width"),
                 Value::fixnum(32),
-                Value::keyword("height"),
+                Value::keyword("max-height"),
                 Value::fixnum(24),
             ]),
         );

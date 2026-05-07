@@ -15,6 +15,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
+use crate::emacs_core::eval::{Context, ImageResolveRequest, ImageResolveSource};
 use crate::window::FRAME_ID_BASE;
 
 // ---------------------------------------------------------------------------
@@ -130,11 +131,25 @@ fn plist_get(plist: &Value, key: &Value) -> Value {
 }
 
 /// Check whether a symbol name represents a supported image type.
-fn is_supported_image_type(name: &str) -> bool {
+pub(crate) fn is_supported_image_type(name: &str) -> bool {
     matches!(
         name,
-        "png" | "jpeg" | "gif" | "svg" | "webp" | "xpm" | "xbm" | "pbm" | "tiff" | "bmp"
+        "png" | "jpeg" | "gif" | "svg" | "webp" | "xpm" | "xbm" | "pbm" | "tiff"
     )
+}
+
+pub(crate) fn supported_image_types_value() -> Value {
+    Value::list(vec![
+        Value::symbol("svg"),
+        Value::symbol("webp"),
+        Value::symbol("png"),
+        Value::symbol("gif"),
+        Value::symbol("tiff"),
+        Value::symbol("jpeg"),
+        Value::symbol("xpm"),
+        Value::symbol("xbm"),
+        Value::symbol("pbm"),
+    ])
 }
 
 fn normalize_image_type_name(name: &str) -> Option<&'static str> {
@@ -159,6 +174,59 @@ fn normalize_image_type_name(name: &str) -> Option<&'static str> {
 fn infer_image_type_from_filename(path: &str) -> Option<&'static str> {
     let ext = path.rsplit('.').next()?;
     normalize_image_type_name(ext)
+}
+
+fn parse_image_dimension(value: Value) -> Option<u32> {
+    match value.kind() {
+        ValueKind::Fixnum(_) => Some(value.as_int()?.max(0) as u32),
+        ValueKind::Float => Some(value.as_float()?.max(0.0).round() as u32),
+        _ => None,
+    }
+}
+
+fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> {
+    let items = list_to_vec(spec)?;
+    if items.first()?.as_symbol_name() != Some("image") {
+        return None;
+    }
+
+    let mut source = None;
+    let mut max_width = 0u32;
+    let mut max_height = 0u32;
+
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        let value = items[i + 1];
+        match normalized_keyword_name(&items[i]) {
+            Some("file") => {
+                source = value
+                    .as_lisp_string()
+                    .cloned()
+                    .map(ImageResolveSource::File);
+            }
+            Some("data") => {
+                source = value
+                    .as_lisp_string()
+                    .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
+            }
+            Some("width") | Some("max-width") => {
+                max_width = parse_image_dimension(value).unwrap_or(max_width);
+            }
+            Some("height") | Some("max-height") => {
+                max_height = parse_image_dimension(value).unwrap_or(max_height);
+            }
+            _ => {}
+        }
+        i += 2;
+    }
+
+    Some(ImageResolveRequest {
+        source: source?,
+        max_width,
+        max_height,
+        fg_color: 0,
+        bg_color: 0,
+    })
 }
 
 /// Validate that a value looks like an image spec.
@@ -352,6 +420,46 @@ pub(crate) fn builtin_image_size(args: Vec<Value>) -> EvalResult {
     Err(signal(
         "error",
         vec![Value::string("Window system frame should be used")],
+    ))
+}
+
+pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_min_args("image-size", &args, 1)?;
+    expect_max_args("image-size", &args, 3)?;
+
+    if !is_image_spec(&args[0]) {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    }
+
+    let Some(display_host) = eval.display_host.as_ref() else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    };
+    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    };
+
+    let resolved = display_host
+        .resolve_image(request)
+        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    let Some(image) = resolved else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    };
+
+    Ok(Value::cons(
+        Value::fixnum(image.width as i64),
+        Value::fixnum(image.height as i64),
     ))
 }
 

@@ -812,10 +812,10 @@ fn parse_display_image_layout(prop_val: &Value) -> Option<DisplayImageLayout> {
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
             }
-            Some(":width") => {
+            Some(":width") | Some(":max-width") => {
                 max_width = parse_image_dimension(value).unwrap_or(max_width);
             }
-            Some(":height") => {
+            Some(":height") | Some(":max-height") => {
                 max_height = parse_image_dimension(value).unwrap_or(max_height);
             }
             Some(":scale") => {

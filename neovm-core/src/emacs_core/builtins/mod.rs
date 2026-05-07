@@ -8763,11 +8763,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- Image --
-    ctx.defsubr(
-        "image-size",
-        |_ctx, args| super::image::builtin_image_size(args),
-        1,
-        Some(3),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "image-size",
+            super::image::builtin_image_size_in_context,
+            1,
+            Some(3),
+        ),
     );
     ctx.defsubr(
         "image-mask-p",

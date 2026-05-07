@@ -1,4 +1,35 @@
 use super::*;
+use crate::emacs_core::eval::{
+    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
+};
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct RecordingImageDisplayHost {
+    requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
+}
+
+impl DisplayHost for RecordingImageDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        self.requests
+            .lock()
+            .expect("image requests lock")
+            .push(request);
+        Ok(Some(ResolvedImage {
+            image_id: 9,
+            width: 40,
+            height: 30,
+        }))
+    }
+}
 
 // -----------------------------------------------------------------------
 // image-type-available-p
@@ -56,6 +87,14 @@ fn type_available_neomacs() {
 fn type_available_jpg_alias_is_nil() {
     crate::test_utils::init_test_tracing();
     let result = builtin_image_type_available_p(vec![Value::symbol("jpg")]);
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_nil());
+}
+
+#[test]
+fn type_available_bmp_matches_gnu_linux_nil() {
+    crate::test_utils::init_test_tracing();
+    let result = builtin_image_type_available_p(vec![Value::symbol("bmp")]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
@@ -902,6 +941,31 @@ fn round_trip_create_then_type() {
 }
 
 #[test]
+fn image_types_bootstrap_list_matches_gnu_linux_order() {
+    crate::test_utils::init_test_tracing();
+    let eval = crate::emacs_core::Context::new();
+    let image_types = eval
+        .obarray()
+        .symbol_value("image-types")
+        .copied()
+        .expect("image-types should be bound");
+    assert_eq!(
+        image_types,
+        Value::list(vec![
+            Value::symbol("svg"),
+            Value::symbol("webp"),
+            Value::symbol("png"),
+            Value::symbol("gif"),
+            Value::symbol("tiff"),
+            Value::symbol("jpeg"),
+            Value::symbol("xpm"),
+            Value::symbol("xbm"),
+            Value::symbol("pbm"),
+        ])
+    );
+}
+
+#[test]
 fn round_trip_create_then_size() {
     crate::test_utils::init_test_tracing();
     // In batch, image-size requires a window-system frame.
@@ -910,4 +974,34 @@ fn round_trip_create_then_size() {
 
     let result = builtin_image_size(vec![spec, Value::T]);
     assert!(result.is_err());
+}
+
+#[test]
+fn image_size_uses_display_host_resolution_in_gui_context() {
+    crate::test_utils::init_test_tracing();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = crate::emacs_core::Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::clone(&requests),
+    }));
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/tmp/neomacs-image-size.png"),
+        Value::keyword("max-width"),
+        Value::fixnum(40),
+        Value::keyword("max-height"),
+        Value::fixnum(30),
+    ]);
+
+    let result = builtin_image_size_in_context(&mut eval, vec![spec, Value::T]).unwrap();
+    assert_eq!(result.cons_car(), Value::fixnum(40));
+    assert_eq!(result.cons_cdr(), Value::fixnum(30));
+
+    let requests = requests.lock().expect("image requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].max_width, 40);
+    assert_eq!(requests[0].max_height, 30);
 }

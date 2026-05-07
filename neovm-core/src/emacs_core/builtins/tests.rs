@@ -9150,7 +9150,17 @@ fn dispatch_builtin_pure_handles_gpm_help_and_init_image_placeholders() {
     let init = dispatch_builtin_pure("init-image-library", vec![Value::symbol("png")])
         .expect("init-image-library should resolve")
         .expect("init-image-library should evaluate");
-    assert_eq!(init, Value::NIL);
+    assert_eq!(init, Value::T);
+
+    let unknown = dispatch_builtin_pure("init-image-library", vec![Value::symbol("neomacs")])
+        .expect("init-image-library should resolve")
+        .expect("init-image-library should evaluate");
+    assert_eq!(unknown, Value::NIL);
+
+    let bmp = dispatch_builtin_pure("init-image-library", vec![Value::symbol("bmp")])
+        .expect("init-image-library should resolve")
+        .expect("init-image-library should evaluate");
+    assert_eq!(bmp, Value::NIL);
 }
 
 #[test]
