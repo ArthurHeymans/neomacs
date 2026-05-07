@@ -199,6 +199,14 @@ fn frame_parameter_int(frame: &Frame, name: &str, default: i64) -> i64 {
 /// Build `FrameParams` from a neovm-core `Frame`, reading default face
 /// colors from the face table.
 pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FrameParams {
+    fn face_fg_pixel(face_table: &FaceTable, name: &str, fallback: u32) -> u32 {
+        face_table
+            .resolve(name)
+            .foreground
+            .map(|c| (c.r as u32) << 16 | (c.g as u32) << 8 | c.b as u32)
+            .unwrap_or(fallback)
+    }
+
     // Read default face background from face table
     let default_face = face_table.get("default");
     let bg = default_face
@@ -221,11 +229,19 @@ pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FramePa
         font_pixel_size: frame.font_pixel_size,
         background: bg,
         vertical_border_fg: fg,
-        right_divider_width: 0,
-        bottom_divider_width: 0,
-        divider_fg: fg,
-        divider_first_fg: fg,
-        divider_last_fg: fg,
+        right_divider_width: frame
+            .parameter("right-divider-width")
+            .and_then(|v| v.as_int())
+            .unwrap_or(0)
+            .max(0) as i32,
+        bottom_divider_width: frame
+            .parameter("bottom-divider-width")
+            .and_then(|v| v.as_int())
+            .unwrap_or(0)
+            .max(0) as i32,
+        divider_fg: face_fg_pixel(face_table, "window-divider", fg),
+        divider_first_fg: face_fg_pixel(face_table, "window-divider-first-pixel", fg),
+        divider_last_fg: face_fg_pixel(face_table, "window-divider-last-pixel", fg),
     }
 }
 

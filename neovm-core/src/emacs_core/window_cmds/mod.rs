@@ -23,11 +23,10 @@ pub(crate) use super::builtins::symbols::{
     builtin_set_window_new_pixel, builtin_set_window_new_total,
 };
 pub(crate) use super::builtins::{
-    builtin_combine_windows, builtin_uncombine_window, builtin_window_bottom_divider_width,
-    builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel,
-    builtin_window_new_total, builtin_window_old_body_pixel_height,
-    builtin_window_old_body_pixel_width, builtin_window_old_pixel_height,
-    builtin_window_old_pixel_width, builtin_window_right_divider_width,
+    builtin_combine_windows, builtin_uncombine_window, builtin_window_lines_pixel_dimensions,
+    builtin_window_new_normal, builtin_window_new_pixel, builtin_window_new_total,
+    builtin_window_old_body_pixel_height, builtin_window_old_body_pixel_width,
+    builtin_window_old_pixel_height, builtin_window_old_pixel_width,
 };
 pub(crate) use super::builtins::{
     builtin_coordinates_in_window_p, builtin_current_window_configuration,
@@ -376,6 +375,26 @@ fn resolve_window_id_in_state(
     arg: Option<&Value>,
 ) -> Result<(FrameId, WindowId), Flow> {
     resolve_window_id_with_pred_in_state(frames, buffers, arg, "window-live-p")
+}
+
+fn frame_divider_width(frame: &crate::window::Frame, parameter: &str) -> i64 {
+    frame
+        .parameter(parameter)
+        .and_then(|value| value.as_int())
+        .unwrap_or(0)
+        .max(0)
+}
+
+fn window_is_rightmost(frame: &crate::window::Frame, window_id: WindowId) -> bool {
+    frame
+        .find_window(window_id)
+        .is_none_or(|window| window.bounds().x + window.bounds().width >= frame.width as f32 - 1.0)
+}
+
+fn window_is_bottommost(frame: &crate::window::Frame, window_id: WindowId) -> bool {
+    frame.find_window(window_id).is_none_or(|window| {
+        window.bounds().y + window.bounds().height >= frame.height as f32 - 1.0
+    })
 }
 
 /// Resolve an optional window designator that may be stale (window object).
@@ -6850,6 +6869,77 @@ pub(crate) fn builtin_frame_parameters(
     }
     Ok(Value::list(pairs))
 }
+
+pub(crate) fn builtin_frame_bottom_divider_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-bottom-divider-width", &args, 1)?;
+    let fid =
+        resolve_frame_id_in_state(&mut eval.frames, &mut eval.buffers, args.first(), "framep")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    Ok(Value::fixnum(frame_divider_width(
+        frame,
+        "bottom-divider-width",
+    )))
+}
+
+pub(crate) fn builtin_frame_right_divider_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-right-divider-width", &args, 1)?;
+    let fid =
+        resolve_frame_id_in_state(&mut eval.frames, &mut eval.buffers, args.first(), "framep")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    Ok(Value::fixnum(frame_divider_width(
+        frame,
+        "right-divider-width",
+    )))
+}
+
+pub(crate) fn builtin_window_bottom_divider_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("window-bottom-divider-width", &args, 1)?;
+    let (fid, wid) = resolve_window_id_with_pred(eval, args.first(), "window-live-p")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    let width = if window_is_bottommost(frame, wid) {
+        0
+    } else {
+        frame_divider_width(frame, "bottom-divider-width")
+    };
+    Ok(Value::fixnum(width))
+}
+
+pub(crate) fn builtin_window_right_divider_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("window-right-divider-width", &args, 1)?;
+    let (fid, wid) = resolve_window_id_with_pred(eval, args.first(), "window-live-p")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    let width = if window_is_rightmost(frame, wid) {
+        0
+    } else {
+        frame_divider_width(frame, "right-divider-width")
+    };
+    Ok(Value::fixnum(width))
+}
+
 /// `(modify-frame-parameters FRAME ALIST)` -> nil.
 pub(crate) fn builtin_modify_frame_parameters(
     eval: &mut super::eval::Context,

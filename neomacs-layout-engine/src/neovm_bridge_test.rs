@@ -78,6 +78,27 @@ fn test_frame_params_from_neovm() {
 }
 
 #[test]
+fn frame_params_from_neovm_reads_window_divider_parameters() {
+    let _runtime = neovm_core::emacs_core::Context::new();
+
+    let mut buf_mgr = BufferManager::new();
+    let buf_id = buf_mgr.create_buffer("*scratch*");
+    let mut frame_mgr = FrameManager::new();
+    let fid = frame_mgr.create_frame("test", 1024, 768, buf_id);
+    {
+        let frame = frame_mgr.get_mut(fid).unwrap();
+        frame.set_parameter(Value::symbol("right-divider-width"), Value::fixnum(6));
+        frame.set_parameter(Value::symbol("bottom-divider-width"), Value::fixnum(4));
+    }
+    let frame = frame_mgr.get(fid).unwrap();
+
+    let face_table = FaceTable::new();
+    let fp = frame_params_from_neovm(frame, &face_table);
+    assert_eq!(fp.right_divider_width, 6);
+    assert_eq!(fp.bottom_divider_width, 4);
+}
+
+#[test]
 fn chrome_face_pixel_height_uses_ceil_for_fractional_metrics() {
     let mut face = ResolvedFace::default();
     face.font_line_height = 17.2;

@@ -4089,6 +4089,36 @@ fn modify_frame_parameters_icon_name_tracks_frame_field() {
 }
 
 #[test]
+fn divider_width_builtins_read_frame_parameters_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(modify-frame-parameters
+           (selected-frame)
+           '((right-divider-width . 6) (bottom-divider-width . 4)))
+         (list (frame-right-divider-width)
+               (frame-bottom-divider-width)
+               (cdr (assq 'right-divider-width (frame-parameters)))
+               (cdr (assq 'bottom-divider-width (frame-parameters))))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK (6 4 6 4)");
+}
+
+#[test]
+fn window_right_divider_width_only_applies_to_non_rightmost_windows() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(modify-frame-parameters (selected-frame) '((right-divider-width . 6)))
+         (let ((left (selected-window))
+               (right (split-window-internal (selected-window) nil 'right nil)))
+           (list (window-right-divider-width left)
+                 (window-right-divider-width right)))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK (6 0)");
+}
+
+#[test]
 fn modify_frame_parameters_width_height_preserve_pixel_dimensions() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

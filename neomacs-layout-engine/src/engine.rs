@@ -1607,6 +1607,58 @@ impl LayoutEngine {
         }
     }
 
+    fn push_window_divider_rects(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        vertical: bool,
+        frame_params: &FrameParams,
+    ) {
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+
+        let inner = Color::from_pixel(frame_params.divider_fg);
+        if (if vertical { width } else { height }) < 3.0 {
+            self.matrix_builder
+                .push_border(window_id, x, y, width, height, inner);
+            return;
+        }
+
+        let first = Color::from_pixel(frame_params.divider_first_fg);
+        let last = Color::from_pixel(frame_params.divider_last_fg);
+        if vertical {
+            self.matrix_builder
+                .push_border(window_id, x, y, 1.0, height, first);
+            self.matrix_builder.push_border(
+                window_id,
+                x + 1.0,
+                y,
+                (width - 2.0).max(0.0),
+                height,
+                inner,
+            );
+            self.matrix_builder
+                .push_border(window_id, x + width - 1.0, y, 1.0, height, last);
+        } else {
+            self.matrix_builder
+                .push_border(window_id, x, y, width, 1.0, first);
+            self.matrix_builder.push_border(
+                window_id,
+                x,
+                y + 1.0,
+                width,
+                (height - 2.0).max(0.0),
+                inner,
+            );
+            self.matrix_builder
+                .push_border(window_id, x, y + height - 1.0, width, 1.0, last);
+        }
+    }
+
     fn find_window_cursor_y_in_builder(
         builder: &crate::matrix_builder::GlyphMatrixBuilder,
         info: &WindowInfo,
@@ -2008,15 +2060,23 @@ impl LayoutEngine {
                 // Draw window dividers
                 if frame_params.right_divider_width > 0 && !is_rightmost {
                     let dw = frame_params.right_divider_width as f32;
-                    let _x0 = right_edge - dw;
-                    let _y0 = params.bounds.y;
-                    let _h = params.bounds.height
+                    let x0 = right_edge - dw;
+                    let y0 = params.bounds.y;
+                    let h = params.bounds.height
                         - if frame_params.bottom_divider_width > 0 && !is_bottommost {
                             frame_params.bottom_divider_width as f32
                         } else {
                             0.0
                         };
-                    let _mid_fg = Color::from_pixel(frame_params.divider_fg);
+                    self.push_window_divider_rects(
+                        params.window_id,
+                        x0,
+                        y0,
+                        dw,
+                        h.max(0.0),
+                        true,
+                        &frame_params,
+                    );
                 } else if !is_rightmost {
                     // TTY / GUI-without-divider vertical border.
                     //
@@ -2055,10 +2115,23 @@ impl LayoutEngine {
 
                 if frame_params.bottom_divider_width > 0 && !is_bottommost {
                     let dw = frame_params.bottom_divider_width as f32;
-                    let _x0 = params.bounds.x;
-                    let _y0 = bottom_edge - dw;
-                    let _w = params.bounds.width;
-                    let _mid_fg = Color::from_pixel(frame_params.divider_fg);
+                    let x0 = params.bounds.x;
+                    let y0 = bottom_edge - dw;
+                    let w = params.bounds.width
+                        - if frame_params.right_divider_width > 0 && !is_rightmost {
+                            frame_params.right_divider_width as f32
+                        } else {
+                            0.0
+                        };
+                    self.push_window_divider_rects(
+                        params.window_id,
+                        x0,
+                        y0,
+                        w.max(0.0),
+                        dw,
+                        false,
+                        &frame_params,
+                    );
                 }
             }
 

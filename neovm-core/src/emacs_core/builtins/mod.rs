@@ -4944,7 +4944,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-bottom-divider-width",
-        |_ctx, args| builtin_frame_bottom_divider_width(args),
+        super::window_cmds::builtin_frame_bottom_divider_width,
         0,
         Some(1),
     );
@@ -4998,7 +4998,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-right-divider-width",
-        |_ctx, args| builtin_frame_right_divider_width(args),
+        super::window_cmds::builtin_frame_right_divider_width,
         0,
         Some(1),
     );
@@ -6110,7 +6110,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "window-bottom-divider-width",
-        |_ctx, args| super::window_cmds::builtin_window_bottom_divider_width(args),
+        super::window_cmds::builtin_window_bottom_divider_width,
         0,
         Some(1),
     );
@@ -6168,9 +6168,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "window-right-divider-width",
-        |_ctx, args| super::window_cmds::builtin_window_right_divider_width(args),
+        super::window_cmds::builtin_window_right_divider_width,
         0,
-        None,
+        Some(1),
     );
     ctx.defsubr(
         "window-scroll-bar-height",

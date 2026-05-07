@@ -1323,6 +1323,89 @@ fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
 }
 
 #[test]
+fn layout_frame_rust_emits_pixel_window_divider_geometry() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-divider-split", 800, 160, left_buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_parameter(Value::symbol("right-divider-width"), Value::fixnum(6));
+    }
+    eval.frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+        )
+        .expect("split window");
+    let left_bounds = {
+        let frame = eval.frame_manager().get(frame_id).expect("frame");
+        *frame
+            .find_window(selected_window)
+            .expect("left window")
+            .bounds()
+    };
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let divider_borders: Vec<_> = state
+        .borders
+        .iter()
+        .filter(|border| {
+            border.window_id == selected_window.0 as i64
+                && (border.x - (left_bounds.x + left_bounds.width - 6.0)).abs() <= 6.0
+        })
+        .collect();
+
+    assert_eq!(
+        divider_borders.len(),
+        3,
+        "a six-pixel right divider should be split into first/inner/last rectangles"
+    );
+    assert!(
+        divider_borders.iter().any(|border| border.width == 1.0),
+        "divider should include one-pixel edge rectangles"
+    );
+    assert!(
+        divider_borders.iter().any(|border| border.width == 4.0),
+        "divider should include a four-pixel inner rectangle"
+    );
+
+    let left_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("left window matrix");
+    assert!(
+        left_entry.matrix.rows.iter().all(|row| {
+            row.glyphs[1]
+                .last()
+                .is_none_or(|glyph| !matches!(glyph.glyph_type, GlyphType::Char { ch: '|' }))
+        }),
+        "real pixel window dividers must not be represented as vertical-border text glyphs"
+    );
+}
+
+#[test]
 fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
     let mut eval = Context::new();
     let buf_id = eval
