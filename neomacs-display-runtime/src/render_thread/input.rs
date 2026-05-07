@@ -76,6 +76,17 @@ impl RenderApp {
         }
     }
 
+    /// Return whether a `KeyboardInput` event should use its committed-text
+    /// payload before falling back to its logical key.
+    ///
+    /// GNU's GUI backends classify physical function keys like Backspace from
+    /// their keysyms first. Some window systems also attach control text such
+    /// as `\b` to that same key event; using the text first would turn
+    /// Backspace into `C-h` and bypass GNU's `[backspace] -> DEL` translation.
+    pub(super) fn should_use_committed_text(logical_key: &Key) -> bool {
+        matches!(logical_key, Key::Character(_))
+    }
+
     /// Extract a single control-character keysym from committed text.
     ///
     /// Some backends report `Ctrl+n` / `Ctrl+p` style input as a control-text

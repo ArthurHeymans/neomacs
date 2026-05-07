@@ -554,6 +554,23 @@ fn keysym_raw_tty_delete_is_del_char() {
 }
 
 #[test]
+fn keysym_gui_backspace_is_function_key_not_c_h() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event(XK_BACKSPACE, 0).unwrap();
+    assert_eq!(event.key, Key::Named(NamedKey::Backspace));
+    assert_eq!(event.to_emacs_event_value(), Value::symbol("backspace"));
+}
+
+#[test]
+fn keysym_raw_control_h_stays_help_char() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event(0x08, 0).unwrap();
+    assert_eq!(event.key, Key::Char('h'));
+    assert!(event.modifiers.ctrl);
+    assert_eq!(event.to_emacs_event_value(), Value::fixnum(8));
+}
+
+#[test]
 fn keysym_ctrl_x_from_printable_with_modifier() {
     crate::test_utils::init_test_tracing();
     // Ctrl+x when winit gives keysym 0x78 ('x') with ctrl modifier

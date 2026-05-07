@@ -145,8 +145,8 @@ fn test_write_sgr_inverse() {
 fn test_write_sgr_custom_colors() {
     let mut buf = Vec::new();
     let attrs = ansi::CellAttrs {
-        fg: (128, 64, 32),
-        bg: (10, 20, 30),
+        fg: Some((128, 64, 32)),
+        bg: Some((10, 20, 30)),
         ..Default::default()
     };
     ansi::write_sgr(&mut buf, &attrs);
@@ -172,8 +172,8 @@ fn test_write_sgr_underline_color() {
 fn test_write_sgr_all_attributes() {
     let mut buf = Vec::new();
     let attrs = ansi::CellAttrs {
-        fg: (200, 100, 50),
-        bg: (10, 20, 30),
+        fg: Some((200, 100, 50)),
+        bg: Some((10, 20, 30)),
         bold: true,
         italic: true,
         underline: 1,
@@ -247,7 +247,7 @@ fn test_grid_get_set() {
         text: "A".to_string(),
         width: 1,
         attrs: ansi::CellAttrs {
-            fg: (255, 0, 0),
+            fg: Some((255, 0, 0)),
             ..Default::default()
         },
     };
@@ -273,7 +273,7 @@ fn test_grid_clear() {
             text: "X".to_string(),
             width: 1,
             attrs: ansi::CellAttrs {
-                fg: (255, 0, 0),
+                fg: Some((255, 0, 0)),
                 ..Default::default()
             },
         },
@@ -325,8 +325,8 @@ fn test_diff_single_cell_change() {
             text: "X".to_string(),
             width: 1,
             attrs: ansi::CellAttrs {
-                fg: (255, 0, 0),
-                bg: (0, 0, 0),
+                fg: Some((255, 0, 0)),
+                bg: Some((0, 0, 0)),
                 ..Default::default()
             },
         },
@@ -351,8 +351,8 @@ fn test_diff_consecutive_changes_no_redundant_goto() {
     let mut next = TtyGrid::new(10, 5);
 
     let attrs = ansi::CellAttrs {
-        fg: (0, 255, 0),
-        bg: (0, 0, 0),
+        fg: Some((0, 255, 0)),
+        bg: Some((0, 0, 0)),
         ..Default::default()
     };
 
@@ -431,8 +431,8 @@ fn test_diff_attrs_change_emits_new_sgr() {
             text: "A".to_string(),
             width: 1,
             attrs: ansi::CellAttrs {
-                fg: (255, 0, 0),
-                bg: (0, 0, 0),
+                fg: Some((255, 0, 0)),
+                bg: Some((0, 0, 0)),
                 bold: true,
                 ..Default::default()
             },
@@ -445,8 +445,8 @@ fn test_diff_attrs_change_emits_new_sgr() {
             text: "B".to_string(),
             width: 1,
             attrs: ansi::CellAttrs {
-                fg: (0, 255, 0),
-                bg: (0, 0, 0),
+                fg: Some((0, 255, 0)),
+                bg: Some((0, 0, 0)),
                 italic: true,
                 ..Default::default()
             },
@@ -469,8 +469,8 @@ fn test_diff_same_attrs_no_redundant_sgr() {
     let mut next = TtyGrid::new(10, 5);
 
     let attrs = ansi::CellAttrs {
-        fg: (255, 255, 0),
-        bg: (0, 0, 0),
+        fg: Some((255, 255, 0)),
+        bg: Some((0, 0, 0)),
         bold: true,
         ..Default::default()
     };
@@ -583,7 +583,7 @@ fn test_rasterize_empty_frame() {
     // All cells should be spaces with black bg
     for cell in &grid.cells {
         assert_eq!(cell.text, " ");
-        assert_eq!(cell.attrs.bg, (0, 0, 0));
+        assert_eq!(cell.attrs.bg, Some((0, 0, 0)));
     }
 }
 
@@ -604,7 +604,7 @@ fn test_rasterize_char_glyph() {
     rasterize_frame_glyphs(&frame, &mut grid, (0, 0, 0));
 
     assert_eq!(grid.get(0, 0).unwrap().text, "H");
-    assert_eq!(grid.get(0, 0).unwrap().attrs.fg, (255, 0, 0));
+    assert_eq!(grid.get(0, 0).unwrap().attrs.fg, Some((255, 0, 0)));
     assert!(grid.get(0, 0).unwrap().attrs.bold);
 
     assert_eq!(grid.get(1, 0).unwrap().text, "i");
@@ -625,10 +625,10 @@ fn test_rasterize_stretch_glyph() {
 
     // Row 1 should have blue background
     for col in 0..10 {
-        assert_eq!(grid.get(col, 1).unwrap().attrs.bg, (0, 0, 255));
+        assert_eq!(grid.get(col, 1).unwrap().attrs.bg, Some((0, 0, 255)));
     }
     // Row 0 should still be black
-    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, (0, 0, 0));
+    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, Some((0, 0, 0)));
 }
 
 #[test]
@@ -690,7 +690,7 @@ fn test_rasterize_cursor_box() {
 
     // Cell at col 2, row 0 should have inverse bg (cursor color)
     let cell = grid.get(2, 0).unwrap();
-    assert_eq!(cell.attrs.bg, (255, 255, 255)); // cursor color as bg
+    assert_eq!(cell.attrs.bg, Some((255, 255, 255))); // cursor color as bg
 }
 
 #[test]
@@ -726,7 +726,7 @@ fn test_rasterize_background_glyph() {
         for col in 0..10 {
             assert_eq!(
                 grid.get(col, row).unwrap().attrs.bg,
-                expected_bg,
+                Some(expected_bg),
                 "Wrong bg at col={}, row={}",
                 col,
                 row
@@ -943,8 +943,8 @@ fn test_cell_attrs_equality() {
 #[test]
 fn test_cell_attrs_default_values() {
     let attrs = ansi::CellAttrs::default();
-    assert_eq!(attrs.fg, (255, 255, 255));
-    assert_eq!(attrs.bg, (0, 0, 0));
+    assert_eq!(attrs.fg, Some((255, 255, 255)));
+    assert_eq!(attrs.bg, Some((0, 0, 0)));
     assert!(!attrs.bold);
     assert!(!attrs.italic);
     assert_eq!(attrs.underline, 0);
@@ -1018,7 +1018,7 @@ fn test_build_output_diff_mode() {
             text: "Q".to_string(),
             width: 1,
             attrs: ansi::CellAttrs {
-                fg: (0, 128, 255),
+                fg: Some((0, 128, 255)),
                 ..Default::default()
             },
         },
@@ -1135,10 +1135,10 @@ fn test_rasterize_frame_glyphs_prefers_phys_cursor_visual() {
     let mut grid = TtyGrid::new(4, 2);
     rasterize_frame_glyphs(&frame, &mut grid, (0, 0, 0));
 
-    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, (0, 0, 0));
+    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, Some((0, 0, 0)));
     assert!(grid.get(0, 0).unwrap().attrs.inverse);
-    assert_eq!(grid.get(1, 0).unwrap().attrs.bg, (255, 0, 0));
-    assert_eq!(grid.get(1, 0).unwrap().attrs.fg, (0, 0, 0));
+    assert_eq!(grid.get(1, 0).unwrap().attrs.bg, Some((255, 0, 0)));
+    assert_eq!(grid.get(1, 0).unwrap().attrs.fg, Some((0, 0, 0)));
 }
 
 #[test]
@@ -1187,8 +1187,8 @@ fn test_rasterize_preserves_nonselected_hollow_cursor_visual() {
     rasterize_frame_glyphs(&frame, &mut grid, (0, 0, 0));
 
     assert!(grid.get(0, 0).unwrap().attrs.inverse);
-    assert_eq!(grid.get(1, 0).unwrap().attrs.bg, (255, 0, 0));
-    assert_eq!(grid.get(1, 0).unwrap().attrs.fg, (0, 0, 0));
+    assert_eq!(grid.get(1, 0).unwrap().attrs.bg, Some((255, 0, 0)));
+    assert_eq!(grid.get(1, 0).unwrap().attrs.fg, Some((0, 0, 0)));
 }
 
 #[test]

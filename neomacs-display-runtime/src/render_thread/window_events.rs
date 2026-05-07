@@ -190,7 +190,9 @@ impl RenderApp {
                     );
                 } else {
                     let mut handled_via_text = false;
-                    if state == ElementState::Pressed {
+                    if state == ElementState::Pressed
+                        && Self::should_use_committed_text(&logical_key)
+                    {
                         if let Some(ref txt) = text {
                             let s = txt.as_str();
                             if let Some(control_keysym) = Self::translate_control_text(s) {

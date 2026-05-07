@@ -323,6 +323,19 @@ fn translate_committed_text_ignores_control_only_text() {
 }
 
 #[test]
+fn named_backspace_does_not_use_control_text_path() {
+    assert!(!RenderApp::should_use_committed_text(&Key::Named(
+        NamedKey::Backspace
+    )));
+    assert!(!RenderApp::should_use_committed_text(&Key::Named(
+        NamedKey::Delete
+    )));
+    assert!(RenderApp::should_use_committed_text(&Key::Character(
+        "x".into()
+    )));
+}
+
+#[test]
 fn translate_committed_text_skips_command_modified_input() {
     assert_eq!(
         RenderApp::translate_committed_text("x", NEOMACS_META_MASK),
