@@ -565,6 +565,35 @@ impl CodingSystemManager {
             info.charset_list = vec![intern("ascii"), intern("big5-hkscs")];
             mgr.register(info);
         }
+        for (name, eol) in [
+            ("chinese-gbk", EolType::Undecided),
+            ("chinese-gbk-unix", EolType::Unix),
+            ("chinese-gbk-dos", EolType::Dos),
+            ("chinese-gbk-mac", EolType::Mac),
+        ] {
+            let mut info = CodingSystemInfo::new(name, "charset", 'c', eol);
+            info.ascii_compatible_p = true;
+            info.charset_list = vec![intern("ascii"), intern("chinese-gbk")];
+            mgr.register(info);
+        }
+        for (name, eol) in [
+            ("chinese-gb18030", EolType::Undecided),
+            ("chinese-gb18030-unix", EolType::Unix),
+            ("chinese-gb18030-dos", EolType::Dos),
+            ("chinese-gb18030-mac", EolType::Mac),
+        ] {
+            let mut info = CodingSystemInfo::new(name, "charset", 'c', eol);
+            info.ascii_compatible_p = true;
+            info.charset_list = vec![
+                intern("ascii"),
+                intern("gb18030-2-byte"),
+                intern("gb18030-4-byte-bmp"),
+                intern("gb18030-4-byte-smp"),
+                intern("gb18030-4-byte-ext-1"),
+                intern("gb18030-4-byte-ext-2"),
+            ];
+            mgr.register(info);
+        }
 
         // Common aliases
         mgr.add_alias("mule-utf-8", "utf-8");
@@ -588,6 +617,10 @@ impl CodingSystemManager {
         mgr.add_alias("cp950", "chinese-big5");
         mgr.add_alias("big5-hkscs", "chinese-big5-hkscs");
         mgr.add_alias("cn-big5-hkscs", "chinese-big5-hkscs");
+        mgr.add_alias("gbk", "chinese-gbk");
+        mgr.add_alias("cp936", "chinese-gbk");
+        mgr.add_alias("windows-936", "chinese-gbk");
+        mgr.add_alias("gb18030", "chinese-gb18030");
 
         // Default priority list
         mgr.priority = vec![
@@ -2024,44 +2057,6 @@ fn strip_eol_suffix(name: &str) -> &str {
     name
 }
 
-fn allows_derived_eol_variant(base: &str) -> bool {
-    matches!(
-        base,
-        "utf-8"
-            | "mule-utf-8"
-            | "latin-1"
-            | "iso-8859-1"
-            | "iso-latin-1"
-            | "latin-5"
-            | "iso-8859-9"
-            | "iso-latin-5"
-            | "latin-0"
-            | "latin-9"
-            | "iso-8859-15"
-            | "iso-latin-9"
-            | "ascii"
-            | "us-ascii"
-            | "cn-gb-2312"
-            | "euc-china"
-            | "euc-cn"
-            | "cn-gb"
-            | "gb2312"
-            | "chinese-iso-8bit"
-            | "big5"
-            | "cn-big5"
-            | "cp950"
-            | "chinese-big5"
-            | "big5-hkscs"
-            | "cn-big5-hkscs"
-            | "chinese-big5-hkscs"
-            | "raw-text"
-            | "undecided"
-            | "utf-8-auto"
-            | "prefer-utf-8"
-            | "utf-8-emacs"
-    )
-}
-
 fn normalize_coding_name_for_lookup(name: &str) -> &str {
     if name == "nil" { "no-conversion" } else { name }
 }
@@ -2076,6 +2071,8 @@ fn display_base_name(base: &str) -> &str {
         }
         "big5" | "cn-big5" | "cp950" | "chinese-big5" => "chinese-big5",
         "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => "chinese-big5-hkscs",
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" => "chinese-gbk",
+        "gb18030" | "chinese-gb18030" => "chinese-gb18030",
         "ascii" | "us-ascii" => "us-ascii",
         "binary" | "no-conversion" | "nil" => "no-conversion",
         "emacs-internal" | "utf-8-emacs" => "utf-8-emacs",
@@ -2094,6 +2091,9 @@ fn coding_type_for_base(base: &str) -> Option<&'static str> {
             Some("iso-2022")
         }
         "big5" | "cn-big5" | "cp950" | "chinese-big5" => Some("big5"),
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" | "gb18030" | "chinese-gb18030" => {
+            Some("charset")
+        }
         "raw-text" | "binary" | "no-conversion" => Some("raw-text"),
         "undecided" | "prefer-utf-8" => Some("undecided"),
         _ => None,
@@ -2113,6 +2113,9 @@ fn default_mnemonic_for_base(base: &str) -> Option<i64> {
         }
         "big5" | "cn-big5" | "cp950" | "chinese-big5" | "big5-hkscs" | "cn-big5-hkscs"
         | "chinese-big5-hkscs" => Some('B' as i64),
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" | "gb18030" | "chinese-gb18030" => {
+            Some('c' as i64)
+        }
         "ascii" | "us-ascii" | "undecided" | "prefer-utf-8" => Some('-' as i64),
         "raw-text" => Some('t' as i64),
         "binary" | "no-conversion" => Some('=' as i64),
@@ -2130,6 +2133,8 @@ fn properties_bucket_base(base: &str) -> &str {
         }
         "big5" | "cn-big5" | "cp950" | "chinese-big5" => "chinese-big5",
         "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => "chinese-big5-hkscs",
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" => "chinese-gbk",
+        "gb18030" | "chinese-gb18030" => "chinese-gb18030",
         "ascii" | "us-ascii" => "us-ascii",
         "binary" | "no-conversion" | "nil" => "no-conversion",
         "emacs-internal" | "utf-8-emacs" => "utf-8-emacs",
@@ -2148,6 +2153,8 @@ fn eol_vector_base(base: &str) -> &str {
         }
         "big5" | "cn-big5" | "cp950" | "chinese-big5" => "chinese-big5",
         "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => "chinese-big5-hkscs",
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" => "chinese-gbk",
+        "gb18030" | "chinese-gb18030" => "chinese-gb18030",
         "ascii" | "us-ascii" => "us-ascii",
         "mule-utf-8" => "utf-8",
         "emacs-internal" | "utf-8-emacs" => "utf-8-emacs",
@@ -2176,6 +2183,8 @@ fn derive_coding_for_eol(base: &str, eol: i64) -> Option<String> {
         "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => {
             format!("chinese-big5-hkscs{suffix}")
         }
+        "gbk" | "cp936" | "windows-936" | "chinese-gbk" => format!("chinese-gbk{suffix}"),
+        "gb18030" | "chinese-gb18030" => format!("chinese-gb18030{suffix}"),
         "mule-utf-8" | "utf-8" => format!("utf-8{suffix}"),
         "utf-8-auto" => format!("utf-8-auto{suffix}"),
         "prefer-utf-8" => format!("prefer-utf-8{suffix}"),
@@ -2209,17 +2218,19 @@ fn derive_coding_for_eol(base: &str, eol: i64) -> Option<String> {
 
 fn resolve_runtime_name(mgr: &CodingSystemManager, name: &str) -> Option<String> {
     let normalized = normalize_coding_name_for_lookup(name);
-    if mgr.resolve(normalized).is_some() {
-        return Some(normalized.to_string());
+    if let Some(canonical) = mgr.resolve(normalized) {
+        return Some(resolve_sym(canonical).to_string());
     }
 
     let eol = EolType::from_suffix(normalized)?;
     let base = strip_eol_suffix(normalized);
-    if !allows_derived_eol_variant(base) {
-        return None;
-    }
     let canonical_base = mgr.resolve(base)?;
-    derive_coding_for_eol(resolve_sym(canonical_base), eol.to_int()).map(|_| normalized.to_string())
+    let derived = derive_coding_for_eol(resolve_sym(canonical_base), eol.to_int())?;
+    if derived.ends_with(eol.suffix()) {
+        Some(derived)
+    } else {
+        None
+    }
 }
 
 fn canonical_runtime_name(mgr: &CodingSystemManager, name: &str) -> Option<String> {

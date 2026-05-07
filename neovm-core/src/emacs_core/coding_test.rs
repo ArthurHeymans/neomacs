@@ -170,7 +170,7 @@ fn canonical_name_for_detected_eol_matches_gnu_alias_resolution() {
     assert_eq!(
         m.canonical_name_for_detected_eol("cn-gb-2312-unix", "-dos")
             .as_deref(),
-        Some("cn-gb-2312-unix")
+        Some("chinese-iso-8bit-unix")
     );
 }
 
@@ -655,6 +655,22 @@ fn eol_type_latin_alias_uses_iso_latin_display_variants() {
 }
 
 #[test]
+fn eol_type_gbk_alias_uses_chinese_gbk_display_variants() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let result = builtin_coding_system_eol_type(&m, vec![Value::symbol("gbk")]).unwrap();
+    if result.is_vector() {
+        let locked = result.as_vector_data().unwrap().clone();
+        assert_eq!(locked.len(), 3);
+        assert_eq!(locked[0], Value::symbol("chinese-gbk-unix"));
+        assert_eq!(locked[1], Value::symbol("chinese-gbk-dos"));
+        assert_eq!(locked[2], Value::symbol("chinese-gbk-mac"));
+    } else {
+        panic!("expected vector for undecided gbk eol-type");
+    }
+}
+
+#[test]
 fn eol_type_nil_maps_to_no_conversion() {
     crate::test_utils::init_test_tracing();
     let m = mgr();
@@ -757,6 +773,30 @@ fn change_eol_strips_existing_suffix() {
     )
     .unwrap();
     assert!(result.is_symbol_named("utf-8-unix"));
+}
+
+#[test]
+fn change_eol_gbk_alias_returns_canonical_chinese_gbk_variant() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let result = builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("gbk"), Value::symbol("unix")],
+    )
+    .unwrap();
+    assert_eq!(result, Value::symbol("chinese-gbk-unix"));
+}
+
+#[test]
+fn change_eol_gbk_alias_variant_to_nil_returns_canonical_base() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let result = builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("gbk-unix"), Value::NIL],
+    )
+    .unwrap();
+    assert_eq!(result, Value::symbol("chinese-gbk"));
 }
 
 // ----- coding-system-change-text-conversion -----
@@ -1291,6 +1331,10 @@ fn check_coding_system_accepts_supported_derived_variants() {
     assert_eq!(
         builtin_check_coding_system(&m, vec![Value::symbol("prefer-utf-8-unix")]).unwrap(),
         Value::symbol("prefer-utf-8-unix")
+    );
+    assert_eq!(
+        builtin_check_coding_system(&m, vec![Value::symbol("gbk-unix")]).unwrap(),
+        Value::symbol("gbk-unix")
     );
 }
 

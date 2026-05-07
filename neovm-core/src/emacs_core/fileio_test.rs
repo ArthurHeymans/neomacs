@@ -3340,7 +3340,7 @@ fn decode_insert_file_contents_accepts_chinese_gb2312_coding() {
     .expect("decode GB2312 file bytes");
 
     assert_eq!(decoded.text().as_utf8_str(), Some("一\r\n"));
-    assert_eq!(decoded.coding, "cn-gb-2312-unix");
+    assert_eq!(decoded.coding, "chinese-iso-8bit-unix");
 }
 
 #[test]
