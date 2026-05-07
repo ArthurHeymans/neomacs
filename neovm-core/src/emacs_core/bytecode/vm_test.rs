@@ -8058,6 +8058,37 @@ fn vm_bytecode_wrong_arity_matches_gnu_entry_check() {
 }
 
 #[test]
+fn vm_bytecode_rest_wrong_arity_reports_nonrest_descriptor_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut func = ByteCodeFunction::new(
+        crate::emacs_core::bytecode::decode::parse_arglist_descriptor(2 | (2 << 8) | 128),
+    );
+    func.constants = vec![Value::NIL];
+    func.ops = vec![Op::Constant(0), Op::Return];
+    func.max_stack = 1;
+
+    let mut eval = Context::new_minimal_vm_harness();
+    let mut vm = new_vm(&mut eval);
+
+    let err = vm
+        .execute(&func, vec![Value::fixnum(1)])
+        .expect_err("bytecode arity must report descriptor nonrest, not func-arity max");
+    match map_flow(err) {
+        EvalError::Signal { symbol, data, .. } => {
+            assert_eq!(resolve_sym(symbol), "wrong-number-of-arguments");
+            assert_eq!(
+                data,
+                vec![
+                    Value::cons(Value::fixnum(2), Value::fixnum(2)),
+                    Value::fixnum(1)
+                ]
+            );
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
 fn vm_string_compare_type_errors_match_oracle() {
     crate::test_utils::init_test_tracing();
     with_vm_eval("(string= \"ab\" 1)", false, |result| match result {

@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 
 use super::common::{
     ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_with_bootstrap,
 };
 use super::progn_ast::arb_progn_form;
 
@@ -87,7 +88,7 @@ fn oracle_prop_progn_with_macro_expanding_to_progn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-inc2 (sym) (list 'progn (list 'setq sym (list '+ sym 1)) (list 'setq sym (list '+ sym 1)) sym)) (unwind-protect (let ((x 0)) (neovm--pg-inc2 x)) (fmakunbound 'neovm--pg-inc2)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("2", &oracle, &neovm);
 }
 
@@ -108,7 +109,7 @@ fn oracle_prop_progn_multiple_macro_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-inner (sym n) (list 'setq sym (list '+ sym n))) (defmacro neovm--pg-outer (sym a b) (list 'progn (list 'neovm--pg-inner sym a) (list 'neovm--pg-inner sym b) sym)) (unwind-protect (let ((x 1)) (neovm--pg-outer x 4 7)) (fmakunbound 'neovm--pg-inner) (fmakunbound 'neovm--pg-outer)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("12", &oracle, &neovm);
 }
 
@@ -117,7 +118,7 @@ fn oracle_prop_progn_macroexpand_shape_from_builder_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-build (&rest body) (cons 'progn body)) (unwind-protect (macroexpand '(neovm--pg-build 1 (funcall + 2 3) 4)) (fmakunbound 'neovm--pg-build)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(progn 1 (funcall + 2 3) 4)", &oracle, &neovm);
 }
 
@@ -126,7 +127,7 @@ fn oracle_prop_progn_nested_progn_inside_macro_then_funcalls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-wrap (&rest body) (cons 'progn body)) (defmacro neovm--pg-inc (sym) (list 'setq sym (list '+ sym 1))) (unwind-protect (let ((x 0)) (neovm--pg-wrap (neovm--pg-inc x) (neovm--pg-inc x) (list x (funcall (lambda (z) (+ z 10)) x)))) (fmakunbound 'neovm--pg-wrap) (fmakunbound 'neovm--pg-inc)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(2 12)", &oracle, &neovm);
 }
 
@@ -171,7 +172,7 @@ fn oracle_prop_progn_macro_and_defun_multiple_funcall_flow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-call3 (fn arg) (list 'progn (list 'funcall fn arg) (list 'funcall fn arg) (list 'funcall fn arg))) (defun neovm--pg-bump-cell (cell) (setcar cell (1+ (car cell))) (car cell)) (unwind-protect (let ((cell (list 0))) (list (neovm--pg-call3 'neovm--pg-bump-cell cell) (car cell))) (fmakunbound 'neovm--pg-call3) (fmakunbound 'neovm--pg-bump-cell)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(3 3)", &oracle, &neovm);
 }
 
@@ -180,7 +181,7 @@ fn oracle_prop_progn_macroexpand_nested_progn_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defmacro neovm--pg-nested-shape (a b) (list 'progn a (list 'progn b))) (unwind-protect (macroexpand '(neovm--pg-nested-shape (setq x 1) (setq x 2))) (fmakunbound 'neovm--pg-nested-shape)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(progn (setq x 1) (progn (setq x 2)))", &oracle, &neovm);
 }
 
@@ -277,7 +278,7 @@ proptest! {
             initial, add_a, add_b
         );
         let expected = (initial + add_a + add_b).to_string();
-        let (oracle, neovm) = eval_oracle_and_neovm(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
         assert_ok_eq(expected.as_str(), &oracle, &neovm);
     }
 

@@ -309,12 +309,14 @@ impl<'a> Vm<'a> {
         // wrong-number-of-arguments immediately instead of nil-padding missing
         // required args.
         if !(n_required <= nargs && (has_rest || nargs <= nonrest)) {
-            let max_val = if has_rest {
-                Value::symbol("many")
-            } else {
-                Value::fixnum(nonrest as i64)
-            };
-            let arity = Value::cons(Value::fixnum(n_required as i64), max_val);
+            // GNU bytecode.c signals the raw bytecode descriptor pair
+            // (mandatory . nonrest), even when the descriptor has the &rest
+            // bit set.  This differs intentionally from func-arity, which
+            // reports `many` for the same bytecode function.
+            let arity = Value::cons(
+                Value::fixnum(n_required as i64),
+                Value::fixnum(nonrest as i64),
+            );
             self.ctx.bc_buf.truncate(frame_base);
             self.ctx.bc_frames.pop();
             return Err(signal(

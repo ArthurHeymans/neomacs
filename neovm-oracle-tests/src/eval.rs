@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use super::common::{
     ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity_with_bootstrap,
-    eval_oracle_and_neovm,
+    eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap,
 };
 
 fn oracle_eval_proptest_failure_path() -> &'static str {
@@ -103,7 +103,8 @@ fn oracle_prop_eval_lexenv_captured_by_lambda() {
 fn oracle_prop_eval_macro_expansion_with_lexenv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = eval_oracle_and_neovm("(eval '(when x y) '((x . t) (y . 9)))");
+    let (oracle, neovm) =
+        eval_oracle_and_neovm_with_bootstrap("(eval '(when x y) '((x . t) (y . 9)))");
     assert_ok_eq("9", &oracle, &neovm);
 }
 

@@ -2,7 +2,9 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm_with_bootstrap,
+};
 
 #[test]
 fn oracle_prop_dolist_basic() {
@@ -12,7 +14,7 @@ fn oracle_prop_dolist_basic() {
                   (dolist (x '(1 2 3 4 5))
                     (setq sum (+ sum x)))
                   sum)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("15", &o, &n);
 }
 
@@ -24,7 +26,7 @@ fn oracle_prop_dolist_empty() {
                   (dolist (x nil)
                     (setq count (1+ count)))
                   count)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("0", &o, &n);
 }
 
@@ -35,7 +37,7 @@ fn oracle_prop_dolist_with_result() {
     let form = "(let ((sum 0))
                   (dolist (x '(10 20 30) sum)
                     (setq sum (+ sum x))))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("60", &o, &n);
 }
 
@@ -47,7 +49,7 @@ fn oracle_prop_dolist_collect_reversed() {
                   (dolist (x '(a b c d))
                     (setq result (cons x result)))
                   result)";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(d c b a)", &o, &n);
 }
 
@@ -61,7 +63,7 @@ fn oracle_prop_dolist_filter_pattern() {
                     (when (= 0 (% x 2))
                       (setq evens (cons x evens))))
                   (nreverse evens))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(2 4 6 8)", &o, &n);
 }
 
@@ -74,7 +76,7 @@ fn oracle_prop_dolist_map_pattern() {
                   (dolist (x '(1 2 3 4 5))
                     (setq result (cons (* x x) result)))
                   (nreverse result))";
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(1 4 9 16 25)", &o, &n);
 }
 
@@ -110,6 +112,6 @@ fn oracle_prop_dolist_with_condition_case() {
 fn oracle_prop_dolist_returns_nil_by_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = eval_oracle_and_neovm("(dolist (x '(1 2 3)))");
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap("(dolist (x '(1 2 3)))");
     assert_ok_eq("nil", &o, &n);
 }
