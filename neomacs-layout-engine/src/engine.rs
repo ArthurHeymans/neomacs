@@ -3455,7 +3455,7 @@ impl LayoutEngine {
                             evaluator
                                 .display_host
                                 .as_ref()
-                                .and_then(|host| host.resolve_image(spec.request).ok().flatten())
+                                .and_then(|host| host.request_image(spec.request).ok().flatten())
                                 .map(|resolved| (spec.scale, resolved))
                         });
 

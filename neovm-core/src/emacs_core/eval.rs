@@ -1298,6 +1298,7 @@ pub struct ResolvedImage {
     pub image_id: u32,
     pub width: u32,
     pub height: u32,
+    pub dimensions_known: bool,
 }
 
 pub trait DisplayHost {
@@ -1343,6 +1344,12 @@ pub trait DisplayHost {
         Ok(None)
     }
     fn resolve_image(
+        &self,
+        _request: ImageResolveRequest,
+    ) -> Result<Option<ResolvedImage>, String> {
+        Ok(None)
+    }
+    fn request_image(
         &self,
         _request: ImageResolveRequest,
     ) -> Result<Option<ResolvedImage>, String> {

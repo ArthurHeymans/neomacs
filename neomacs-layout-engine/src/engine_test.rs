@@ -80,7 +80,14 @@ impl DisplayHost for RecordingImageDisplayHost {
         Ok(())
     }
 
-    fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+    fn resolve_image(
+        &self,
+        _request: ImageResolveRequest,
+    ) -> Result<Option<ResolvedImage>, String> {
+        panic!("layout must use nonblocking request_image");
+    }
+
+    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
         self.requests
             .lock()
             .expect("requests lock")
@@ -89,6 +96,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             image_id: 77,
             width: 32,
             height: 24,
+            dimensions_known: true,
         }))
     }
 }

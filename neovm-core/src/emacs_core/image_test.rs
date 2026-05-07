@@ -27,6 +27,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             image_id: 9,
             width: 40,
             height: 30,
+            dimensions_known: true,
         }))
     }
 }

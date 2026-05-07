@@ -20,6 +20,7 @@ use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::error::EvalError;
+use neovm_core::emacs_core::eval::{ImageResolveRequest, ImageResolveSource};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
     LoadupDumpMode, create_bootstrap_evaluator_cached_with_features,
@@ -616,6 +617,73 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     )));
     assert!(host.primary_window_adopted);
     assert_eq!(host.primary_frame_id, Some(FrameId(0x100000001)));
+}
+
+#[test]
+fn primary_display_host_request_image_queues_without_waiting_for_render_thread() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let image_dimensions = Arc::new((
+        Mutex::new(std::collections::HashMap::new()),
+        std::sync::Condvar::new(),
+    ));
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::clone(&image_dimensions),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+    };
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("repo root");
+    let image_path = repo_root.join("test/data/image/blank-100x200.png");
+    let request = ImageResolveRequest {
+        source: ImageResolveSource::File(LispString::from_utf8(
+            image_path.to_str().expect("utf8 path"),
+        )),
+        max_width: 50,
+        max_height: 50,
+        fg_color: 0,
+        bg_color: 0,
+    };
+
+    let started = Instant::now();
+    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request.clone())
+        .expect("request image")
+        .expect("image handle");
+
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "request_image should not wait for render-thread dimensions"
+    );
+    assert_eq!(image.width, 50);
+    assert_eq!(image.height, 50);
+    assert!(!image.dimensions_known);
+    assert!(matches!(
+        cmd_rx.try_recv().expect("queued image load"),
+        RenderCommand::ImageLoadFile {
+            max_width: 50,
+            max_height: 50,
+            ..
+        }
+    ));
+
+    let (lock, cvar) = &*image_dimensions;
+    lock.lock()
+        .expect("image dimensions lock")
+        .insert(image.image_id, (25, 50));
+    cvar.notify_all();
+
+    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request)
+        .expect("request cached image")
+        .expect("image handle");
+    assert_eq!(image.width, 25);
+    assert_eq!(image.height, 50);
+    assert!(image.dimensions_known);
 }
 
 #[test]

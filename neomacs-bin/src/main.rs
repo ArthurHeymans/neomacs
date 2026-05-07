@@ -1130,14 +1130,66 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
-        let cache = match self.resolved_images.lock() {
-            Ok(cache) => cache,
-            Err(poisoned) => poisoned.into_inner(),
+        let image = match self.request_image(request.clone())? {
+            Some(image) if image.dimensions_known => return Ok(Some(image)),
+            Some(image) => image,
+            None => return Ok(None),
         };
-        if let Some(image) = cache.get(&request) {
-            return Ok(Some(image.clone()));
+
+        let Some((width, height)) = wait_for_image_dimensions(
+            &self.image_dimensions,
+            image.image_id,
+            Duration::from_secs(1),
+        ) else {
+            return Ok(None);
+        };
+
+        let resolved = ResolvedImage {
+            image_id: image.image_id,
+            width,
+            height,
+            dimensions_known: true,
+        };
+        match self.resolved_images.lock() {
+            Ok(mut cache) => {
+                cache.insert(request, resolved.clone());
+            }
+            Err(poisoned) => {
+                let mut cache = poisoned.into_inner();
+                cache.insert(request, resolved.clone());
+            }
         }
-        drop(cache);
+        Ok(Some(resolved))
+    }
+
+    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        {
+            let mut cache = match self.resolved_images.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(image) = cache.get(&request).cloned() {
+                if image.dimensions_known {
+                    return Ok(Some(image));
+                }
+                let (lock, _) = &*self.image_dimensions;
+                let dims = match lock.lock() {
+                    Ok(dims) => dims.get(&image.image_id).copied(),
+                    Err(poisoned) => poisoned.into_inner().get(&image.image_id).copied(),
+                };
+                if let Some((width, height)) = dims {
+                    let updated = ResolvedImage {
+                        image_id: image.image_id,
+                        width,
+                        height,
+                        dimensions_known: true,
+                    };
+                    cache.insert(request, updated.clone());
+                    return Ok(Some(updated));
+                }
+                return Ok(Some(image));
+            }
+        }
 
         let image_id = next_host_image_id();
         match &request.source {
@@ -1169,16 +1221,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         }
 
-        let Some((width, height)) =
-            wait_for_image_dimensions(&self.image_dimensions, image_id, Duration::from_secs(1))
-        else {
-            return Ok(None);
-        };
+        let (width, height) = placeholder_image_dimensions(&request);
 
         let resolved = ResolvedImage {
             image_id,
             width,
             height,
+            dimensions_known: false,
         };
         match self.resolved_images.lock() {
             Ok(mut cache) => {
@@ -1190,6 +1239,15 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         }
         Ok(Some(resolved))
+    }
+}
+
+fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
+    match (request.max_width.max(1), request.max_height.max(1)) {
+        (width, height) if request.max_width > 0 && request.max_height > 0 => (width, height),
+        (width, _) if request.max_width > 0 => (width, width),
+        (_, height) if request.max_height > 0 => (height, height),
+        _ => (1, 1),
     }
 }
 
