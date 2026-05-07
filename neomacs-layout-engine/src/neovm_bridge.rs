@@ -227,8 +227,9 @@ pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FramePa
         char_width: frame.char_width,
         char_height: frame.char_height,
         font_pixel_size: frame.font_pixel_size,
+        window_system: frame.effective_window_system().is_some(),
         background: bg,
-        vertical_border_fg: fg,
+        vertical_border_fg: face_fg_pixel(face_table, "vertical-border", fg),
         right_divider_width: frame
             .parameter("right-divider-width")
             .and_then(|v| v.as_int())

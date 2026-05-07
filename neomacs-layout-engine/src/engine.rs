@@ -1979,6 +1979,11 @@ impl LayoutEngine {
             if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                 frame.begin_display_output_pass();
             }
+            let main_area_bottom = window_params_list
+                .iter()
+                .filter(|params| !params.is_minibuffer)
+                .map(|params| params.bounds.y + params.bounds.height)
+                .fold(0.0_f32, f32::max);
 
             for params in &window_params_list {
                 tracing::debug!(
@@ -2042,9 +2047,11 @@ impl LayoutEngine {
                 let right_edge = params.bounds.x + params.bounds.width;
                 let bottom_edge = params.bounds.y + params.bounds.height;
                 let is_rightmost = right_edge >= frame_params.width - 1.0;
-                let is_bottommost = bottom_edge >= frame_params.height - 1.0;
-                let reserve_right_border_col =
-                    frame_params.right_divider_width == 0 && !is_rightmost;
+                let is_bottommost = params.is_minibuffer || bottom_edge >= main_area_bottom - 1.0;
+                let reserve_right_border_col = !frame_params.window_system
+                    && frame_params.right_divider_width == 0
+                    && !is_rightmost
+                    && !params.is_minibuffer;
 
                 // Simplified layout for this window (no face resolution, no overlays)
                 self.layout_window_rust(
@@ -2058,7 +2065,7 @@ impl LayoutEngine {
                 );
 
                 // Draw window dividers
-                if frame_params.right_divider_width > 0 && !is_rightmost {
+                if !params.is_minibuffer && frame_params.right_divider_width > 0 && !is_rightmost {
                     let dw = frame_params.right_divider_width as f32;
                     let x0 = right_edge - dw;
                     let y0 = params.bounds.y;
@@ -2077,43 +2084,37 @@ impl LayoutEngine {
                         true,
                         &frame_params,
                     );
-                } else if !is_rightmost {
-                    // TTY / GUI-without-divider vertical border.
-                    //
-                    // Mirrors GNU `src/dispnew.c:2568-2697`
-                    // (`build_frame_matrix_from_leaf_window`) which,
-                    // for every non-rightmost window, overwrites the
-                    // LAST glyph of each enabled row with a `|`
-                    // character in the `vertical-border` face before
-                    // the frame matrix is written to the terminal:
-                    //
-                    //   if (!WINDOW_RIGHTMOST_P (w))
-                    //     SET_GLYPH_FROM_CHAR (right_border_glyph, '|');
-                    //   ...
-                    //   if (GLYPH_FACE (right_border_glyph) <= 0)
-                    //     SET_GLYPH_FACE (right_border_glyph,
-                    //                     VERTICAL_BORDER_FACE_ID);
-                    //
-                    // Without this patch two horizontally-split
-                    // windows in `neomacs -nw` rendered with no
-                    // visible divider between them; the user could
-                    // not tell where one window ended and the next
-                    // began. The `vertical-border` face on TTY
-                    // inherits from `mode-line-inactive` per
-                    // `lisp/faces.el::vertical-border`.
-                    let border_face = face_resolver.resolve_named_face("vertical-border");
-                    let border_face_id = border_face.face_id;
-                    let realized_face = crate::display_status_line::StatusLineFace::from_resolved(
-                        border_face_id,
-                        &border_face,
-                    );
-                    self.matrix_builder
-                        .insert_face(border_face_id, realized_face.render_face());
-                    self.matrix_builder
-                        .overwrite_last_window_right_border('|', border_face_id);
+                } else if !params.is_minibuffer && !is_rightmost {
+                    if frame_params.window_system {
+                        // GNU GUI draws a one-pixel vertical border when
+                        // `right-divider-width' is zero.  The literal `|'
+                        // replacement belongs to terminal frame matrices.
+                        self.matrix_builder.push_border(
+                            params.window_id,
+                            right_edge - 1.0,
+                            params.bounds.y,
+                            1.0,
+                            params.bounds.height.max(0.0),
+                            Color::from_pixel(frame_params.vertical_border_fg),
+                        );
+                    } else {
+                        // Mirrors GNU `src/dispnew.c::build_frame_matrix_from_leaf_window`.
+                        let border_face = face_resolver.resolve_named_face("vertical-border");
+                        let border_face_id = border_face.face_id;
+                        let realized_face =
+                            crate::display_status_line::StatusLineFace::from_resolved(
+                                border_face_id,
+                                &border_face,
+                            );
+                        self.matrix_builder
+                            .insert_face(border_face_id, realized_face.render_face());
+                        self.matrix_builder
+                            .overwrite_last_window_right_border('|', border_face_id);
+                    }
                 }
 
-                if frame_params.bottom_divider_width > 0 && !is_bottommost {
+                if !params.is_minibuffer && frame_params.bottom_divider_width > 0 && !is_bottommost
+                {
                     let dw = frame_params.bottom_divider_width as f32;
                     let x0 = params.bounds.x;
                     let y0 = bottom_edge - dw;

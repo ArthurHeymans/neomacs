@@ -266,6 +266,8 @@ pub struct FrameParams {
     pub char_height: f32,
     /// Font pixel size
     pub font_pixel_size: f32,
+    /// Whether this frame is backed by a window-system display.
+    pub window_system: bool,
     /// Frame background color (sRGB pixel)
     pub background: u32,
     /// Vertical border face foreground color (sRGB pixel)

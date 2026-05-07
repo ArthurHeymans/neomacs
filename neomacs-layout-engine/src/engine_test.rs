@@ -1406,6 +1406,113 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
 }
 
 #[test]
+fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-gui-border-split", 800, 160, left_buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    eval.frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+        )
+        .expect("split window");
+    let left_bounds = {
+        let frame = eval.frame_manager().get(frame_id).expect("frame");
+        *frame
+            .find_window(selected_window)
+            .expect("left window")
+            .bounds()
+    };
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    assert!(
+        state.borders.iter().any(|border| {
+            border.window_id == selected_window.0 as i64
+                && (border.x - (left_bounds.x + left_bounds.width - 1.0)).abs() < 0.01
+                && border.width == 1.0
+        }),
+        "GNU GUI draws a one-pixel vertical border when window-divider-mode is off"
+    );
+
+    let left_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("left window matrix");
+    assert!(
+        left_entry.matrix.rows.iter().all(|row| {
+            row.glyphs[1]
+                .last()
+                .is_none_or(|glyph| !matches!(glyph.glyph_type, GlyphType::Char { ch: '|' }))
+        }),
+        "GUI vertical borders must not be represented as terminal `|' glyphs"
+    );
+}
+
+#[test]
+fn layout_frame_rust_bottom_divider_does_not_separate_root_from_minibuffer() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-minibuffer-divider", 800, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_parameter(Value::symbol("bottom-divider-width"), Value::fixnum(6));
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    assert!(
+        state
+            .borders
+            .iter()
+            .all(|border| border.window_id != selected_window.0 as i64 || border.height != 6.0),
+        "GNU does not draw a bottom window divider between a bottommost root window and the minibuffer"
+    );
+}
+
+#[test]
 fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
     let mut eval = Context::new();
     let buf_id = eval
