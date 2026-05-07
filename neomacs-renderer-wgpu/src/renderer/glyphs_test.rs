@@ -147,6 +147,8 @@ fn char_bounds(label: &str, x: f32, y: f32, width: f32, height: f32) -> Rendered
         glyph_y: y,
         glyph_w: width,
         glyph_h: height,
+        left_overhang: 0.0,
+        right_overhang: 0.0,
     }
 }
 
@@ -160,6 +162,7 @@ fn char_overlap_detects_intersecting_rendered_bitmaps() {
     assert_eq!(overlap.y, 4.0);
     assert_eq!(overlap.width, 1.0);
     assert_eq!(overlap.height, 8.0);
+    assert!(!overlap.expected_by_overhang);
 }
 
 #[test]
@@ -170,4 +173,17 @@ fn char_overlap_ignores_touching_edges_and_subpixel_noise() {
 
     assert!(char_overlap(&a, &touching).is_none());
     assert!(char_overlap(&a, &tiny).is_none());
+}
+
+#[test]
+fn char_overlap_classifies_font_overhang_separately() {
+    let mut f = char_bounds("f", 0.0, 0.0, 9.0, 12.0);
+    f.glyph_w = 11.0;
+    f.right_overhang = 2.0;
+    let next = char_bounds("a", 9.0, 0.0, 12.0, 12.0);
+
+    let overlap = char_overlap(&f, &next).expect("overhang overlap");
+    assert_eq!(overlap.x, 9.0);
+    assert_eq!(overlap.width, 2.0);
+    assert!(overlap.expected_by_overhang);
 }

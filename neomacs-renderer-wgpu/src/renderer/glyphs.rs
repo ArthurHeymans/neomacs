@@ -1,6 +1,6 @@
 //! Glyphs methods for WgpuRenderer.
 
-use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas};
+use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas, glyph_font_identity};
 use super::super::vertex::{
     GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms,
 };
@@ -103,6 +103,8 @@ struct RenderedCharBounds {
     glyph_y: f32,
     glyph_w: f32,
     glyph_h: f32,
+    left_overhang: f32,
+    right_overhang: f32,
 }
 
 impl RenderedCharBounds {
@@ -121,6 +123,7 @@ struct CharOverlap {
     y: f32,
     width: f32,
     height: f32,
+    expected_by_overhang: bool,
 }
 
 fn char_overlap(a: &RenderedCharBounds, b: &RenderedCharBounds) -> Option<CharOverlap> {
@@ -136,12 +139,40 @@ fn char_overlap(a: &RenderedCharBounds, b: &RenderedCharBounds) -> Option<CharOv
     {
         return None;
     }
+    let expected_by_overhang = overlap_is_expected_by_overhang(a, b, x0, x1);
     Some(CharOverlap {
         x: x0,
         y: y0,
         width,
         height,
+        expected_by_overhang,
     })
+}
+
+fn overlap_is_expected_by_overhang(
+    a: &RenderedCharBounds,
+    b: &RenderedCharBounds,
+    overlap_left: f32,
+    overlap_right: f32,
+) -> bool {
+    let a_cell_right = a.cell_x + a.cell_w;
+    let b_cell_right = b.cell_x + b.cell_w;
+
+    let a_explains = a.right_overhang > CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= a_cell_right - CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= a.right() + CHAR_OVERLAP_MIN_AXIS;
+    let b_explains = b.left_overhang > CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= b.cell_x + CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= b.glyph_x - CHAR_OVERLAP_MIN_AXIS;
+
+    let b_right_explains = b.right_overhang > CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= b_cell_right - CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= b.right() + CHAR_OVERLAP_MIN_AXIS;
+    let a_left_explains = a.left_overhang > CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= a.cell_x + CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= a.glyph_x - CHAR_OVERLAP_MIN_AXIS;
+
+    a_explains || b_explains || b_right_explains || a_left_explains
 }
 
 fn log_rendered_char_overlaps(
@@ -157,7 +188,8 @@ fn log_rendered_char_overlaps(
             .then(a.glyph_index.cmp(&b.glyph_index))
     });
 
-    let mut total = 0usize;
+    let mut unexpected_total = 0usize;
+    let mut overhang_total = 0usize;
     for (i, a) in sorted.iter().enumerate() {
         for b in sorted.iter().skip(i + 1) {
             if b.glyph_x >= a.right() {
@@ -166,8 +198,51 @@ fn log_rendered_char_overlaps(
             let Some(overlap) = char_overlap(a, b) else {
                 continue;
             };
-            total += 1;
-            if total <= CHAR_OVERLAP_LOG_LIMIT {
+            if overlap.expected_by_overhang {
+                overhang_total += 1;
+                tracing::debug!(
+                    "char_overhang frame_id={} pass={} overlap=({:.1},{:.1},{:.1}x{:.1}) \
+                     a[glyph={} label={:?} face={} cell=({:.1},{:.1},{:.1}x{:.1}) \
+                     bitmap=({:.1},{:.1},{:.1}x{:.1}) overhang=({:.1},{:.1})] \
+                     b[glyph={} label={:?} face={} cell=({:.1},{:.1},{:.1}x{:.1}) \
+                     bitmap=({:.1},{:.1},{:.1}x{:.1}) overhang=({:.1},{:.1})]",
+                    frame_id,
+                    pass_name,
+                    overlap.x,
+                    overlap.y,
+                    overlap.width,
+                    overlap.height,
+                    a.glyph_index,
+                    a.label,
+                    a.face_id,
+                    a.cell_x,
+                    a.cell_y,
+                    a.cell_w,
+                    a.cell_h,
+                    a.glyph_x,
+                    a.glyph_y,
+                    a.glyph_w,
+                    a.glyph_h,
+                    a.left_overhang,
+                    a.right_overhang,
+                    b.glyph_index,
+                    b.label,
+                    b.face_id,
+                    b.cell_x,
+                    b.cell_y,
+                    b.cell_w,
+                    b.cell_h,
+                    b.glyph_x,
+                    b.glyph_y,
+                    b.glyph_w,
+                    b.glyph_h,
+                    b.left_overhang,
+                    b.right_overhang,
+                );
+                continue;
+            }
+            unexpected_total += 1;
+            if unexpected_total <= CHAR_OVERLAP_LOG_LIMIT {
                 tracing::error!(
                     "char_overlap frame_id={} pass={} overlap=({:.1},{:.1},{:.1}x{:.1}) \
                      a[glyph={} window={} role={:?} slot=({}, {}) label={:?} face={} font={:.1} \
@@ -217,16 +292,24 @@ fn log_rendered_char_overlaps(
         }
     }
 
-    if total > CHAR_OVERLAP_LOG_LIMIT {
+    if unexpected_total > CHAR_OVERLAP_LOG_LIMIT {
         tracing::error!(
             "char_overlap frame_id={} pass={} total_overlaps={} suppressed={}",
             frame_id,
             pass_name,
-            total,
-            total - CHAR_OVERLAP_LOG_LIMIT
+            unexpected_total,
+            unexpected_total - CHAR_OVERLAP_LOG_LIMIT
         );
     }
-    total
+    if overhang_total > 0 {
+        tracing::debug!(
+            "char_overhang frame_id={} pass={} total_overhang_overlaps={}",
+            frame_id,
+            pass_name,
+            overhang_total
+        );
+    }
+    unexpected_total
 }
 
 fn cursor_glyph_slot_rect(
@@ -2076,6 +2159,7 @@ impl WgpuRenderer {
                         let phys_y = baseline_y * sf;
                         let (x_int, x_bin) = SubpixelBin::new(phys_x);
                         let (y_int, y_bin) = SubpixelBin::new(phys_y);
+                        let font_identity = glyph_font_identity(face);
 
                         // Look up or create the glyph texture
                         let cached_opt = if let Some(text) = composed {
@@ -2097,6 +2181,7 @@ impl WgpuRenderer {
                                 charcode: *char as u32,
                                 face_id: *face_id,
                                 font_size_bits: font_size.to_bits(),
+                                font_identity,
                                 x_bin,
                                 y_bin,
                             };
@@ -2165,6 +2250,8 @@ impl WgpuRenderer {
                                 };
 
                             if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
+                                let cell_right = *x + *width;
+                                let glyph_right = glyph_x + glyph_w;
                                 rendered_char_bounds.push(RenderedCharBounds {
                                     glyph_index,
                                     window_id: *window_id,
@@ -2184,6 +2271,8 @@ impl WgpuRenderer {
                                     glyph_y,
                                     glyph_w,
                                     glyph_h,
+                                    left_overhang: (*x - glyph_x).max(0.0),
+                                    right_overhang: (glyph_right - cell_right).max(0.0),
                                 });
                             }
 
@@ -2388,6 +2477,7 @@ impl WgpuRenderer {
                                     text: text.clone(),
                                     face_id: *face_id,
                                     font_size_bits: font_size.to_bits(),
+                                    font_identity,
                                     x_bin,
                                     y_bin,
                                 };
@@ -2412,6 +2502,7 @@ impl WgpuRenderer {
                                     charcode: *char as u32,
                                     face_id: *face_id,
                                     font_size_bits: font_size.to_bits(),
+                                    font_identity,
                                     x_bin,
                                     y_bin,
                                 };

@@ -2,7 +2,8 @@
 //!
 //! Caches rasterized glyphs as individual wgpu textures with bind groups.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
 
 use cosmic_text::{
     Attrs, Buffer, CacheKeyFlags, Family, FontSystem, Metrics, Style, SubpixelBin, Weight,
@@ -24,6 +25,13 @@ pub struct GlyphKey {
     /// Font size in pixels (for text-scale-increase support)
     /// Using u32 bits of f32 for hashing
     pub font_size_bits: u32,
+    /// Realized font identity.
+    ///
+    /// Renderer glyph caches live across redisplay frames, while frame face IDs
+    /// can be reused for different realized fonts after face remapping changes.
+    /// GNU's redisplay keeps realized face metrics and drawing font coupled; this
+    /// key keeps Neomacs' persistent atlas coupled to the same font identity.
+    pub font_identity: u64,
     /// Subpixel X bin (fractional physical-pixel offset baked into rasterization)
     pub x_bin: SubpixelBin,
     /// Subpixel Y bin (fractional physical-pixel offset baked into rasterization)
@@ -40,10 +48,26 @@ pub struct ComposedGlyphKey {
     pub face_id: u32,
     /// Font size in pixels (using u32 bits of f32 for hashing)
     pub font_size_bits: u32,
+    /// Realized font identity; see [`GlyphKey::font_identity`].
+    pub font_identity: u64,
     /// Subpixel X bin (fractional physical-pixel offset baked into rasterization)
     pub x_bin: SubpixelBin,
     /// Subpixel Y bin (fractional physical-pixel offset baked into rasterization)
     pub y_bin: SubpixelBin,
+}
+
+pub fn glyph_font_identity(face: Option<&Face>) -> u64 {
+    let Some(face) = face else {
+        return 0;
+    };
+
+    let mut hasher = DefaultHasher::new();
+    face.font_family.hash(&mut hasher);
+    face.font_file_path.hash(&mut hasher);
+    face.font_weight.hash(&mut hasher);
+    face.font_size.to_bits().hash(&mut hasher);
+    face.attributes.bits().hash(&mut hasher);
+    hasher.finish()
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -494,6 +518,7 @@ impl WgpuGlyphAtlas {
             text: text.into(),
             face_id,
             font_size_bits,
+            font_identity: glyph_font_identity(face),
             x_bin,
             y_bin,
         };

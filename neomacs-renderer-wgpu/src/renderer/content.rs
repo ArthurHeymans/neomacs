@@ -8,7 +8,7 @@
 //! Background, Border, Cursor (all styles with animation), ScrollBar (with rounded
 //! thumbs), Image, Video, WebKit.
 
-use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas};
+use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas, glyph_font_identity};
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
@@ -466,6 +466,7 @@ impl WgpuRenderer {
                 let phys_y = baseline_y * sf;
                 let (x_int, x_bin) = SubpixelBin::new(phys_x);
                 let (y_int, y_bin) = SubpixelBin::new(phys_y);
+                let font_identity = glyph_font_identity(face);
 
                 let cached_opt = if let Some(text) = composed {
                     glyph_atlas.get_or_create_composed(
@@ -484,6 +485,7 @@ impl WgpuRenderer {
                         charcode: *ch as u32,
                         face_id: *face_id,
                         font_size_bits: font_size.to_bits(),
+                        font_identity,
                         x_bin,
                         y_bin,
                     };
@@ -636,6 +638,7 @@ impl WgpuRenderer {
                             text: text.clone(),
                             face_id: *face_id,
                             font_size_bits: font_size.to_bits(),
+                            font_identity,
                             x_bin,
                             y_bin,
                         };
@@ -660,6 +663,7 @@ impl WgpuRenderer {
                             charcode: *ch as u32,
                             face_id: *face_id,
                             font_size_bits: font_size.to_bits(),
+                            font_identity,
                             x_bin,
                             y_bin,
                         };

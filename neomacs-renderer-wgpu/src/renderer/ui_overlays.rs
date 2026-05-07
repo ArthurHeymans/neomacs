@@ -1,6 +1,6 @@
 //! UI overlay rendering methods for WgpuRenderer.
 
-use super::super::glyph_atlas::{GlyphKey, WgpuGlyphAtlas};
+use super::super::glyph_atlas::{GlyphKey, WgpuGlyphAtlas, glyph_font_identity};
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, Uniforms};
 use super::TitleFadeEntry;
 use super::WgpuRenderer;
@@ -226,6 +226,7 @@ impl WgpuRenderer {
                             charcode: ch as u32,
                             face_id: 0,
                             font_size_bits,
+                            font_identity: glyph_font_identity(None),
                             x_bin: SubpixelBin::Zero,
                             y_bin: SubpixelBin::Zero,
                         };
@@ -259,6 +260,7 @@ impl WgpuRenderer {
                         charcode: ch as u32,
                         face_id: 0,
                         font_size_bits,
+                        font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
@@ -274,6 +276,7 @@ impl WgpuRenderer {
                             charcode: ch as u32,
                             face_id: 0,
                             font_size_bits,
+                            font_identity: glyph_font_identity(None),
                             x_bin: SubpixelBin::Zero,
                             y_bin: SubpixelBin::Zero,
                         };
@@ -293,6 +296,7 @@ impl WgpuRenderer {
                         charcode: '\u{25B8}' as u32,
                         face_id: 0,
                         font_size_bits,
+                        font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
@@ -529,6 +533,7 @@ impl WgpuRenderer {
                     charcode: ch as u32,
                     face_id: 0,
                     font_size_bits,
+                    font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
@@ -786,6 +791,7 @@ impl WgpuRenderer {
                     charcode: ch as u32,
                     face_id: 0,
                     font_size_bits,
+                    font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
@@ -992,6 +998,7 @@ impl WgpuRenderer {
                 charcode: ch as u32,
                 face_id: 0,
                 font_size_bits,
+                font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
@@ -1023,6 +1030,7 @@ impl WgpuRenderer {
             charcode: 0x2500,
             face_id: 0,
             font_size_bits,
+            font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
@@ -1035,6 +1043,7 @@ impl WgpuRenderer {
             charcode: 0x25A1,
             face_id: 0,
             font_size_bits,
+            font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
@@ -1047,6 +1056,7 @@ impl WgpuRenderer {
             charcode: 0x00D7,
             face_id: 0,
             font_size_bits,
+            font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
@@ -1294,6 +1304,7 @@ impl WgpuRenderer {
                 charcode: ch as u32,
                 face_id: 0,
                 font_size_bits,
+                font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
@@ -1539,6 +1550,7 @@ impl WgpuRenderer {
                         charcode: ch as u32,
                         face_id: 0,
                         font_size_bits,
+                        font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
@@ -1566,6 +1578,7 @@ impl WgpuRenderer {
                         charcode: ch as u32,
                         face_id: 0,
                         font_size_bits,
+                        font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
@@ -1623,6 +1636,7 @@ impl WgpuRenderer {
                         charcode: ch as u32,
                         face_id: 0,
                         font_size_bits,
+                        font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
@@ -1744,6 +1758,7 @@ impl WgpuRenderer {
                 charcode: ch as u32,
                 face_id: 0,
                 font_size_bits,
+                font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
@@ -1888,6 +1903,7 @@ impl WgpuRenderer {
                     charcode: ch as u32,
                     face_id: 0,
                     font_size_bits,
+                    font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
@@ -2115,6 +2131,7 @@ impl WgpuRenderer {
                     charcode: ch as u32,
                     face_id: 0,
                     font_size_bits,
+                    font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
