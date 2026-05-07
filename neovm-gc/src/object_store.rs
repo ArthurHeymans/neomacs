@@ -1,3 +1,4 @@
+use std::fmt;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
@@ -422,6 +423,31 @@ pub(crate) struct ObjectStore {
     shards: Box<[ObjectShard]>,
     remembered: RememberedSetState,
     generation: AtomicU64,
+    /// Cached result of the last `read()` call, keyed on
+    /// `generation`.  When the generation matches the
+    /// cache, `read()` skips the O(n) rebuild of the
+    /// object index and candidate lists.
+    cached_read: parking_lot::Mutex<Option<CachedRead>>,
+}
+
+#[derive(Clone)]
+struct CachedRead {
+    generation: u64,
+    index: Arc<ObjectIndex>,
+    all_locators: Arc<[ObjectLocator]>,
+    finalizable_candidates: Arc<[ObjectKey]>,
+    weak_candidates: Arc<[ObjectKey]>,
+    ephemeron_candidates: Arc<[ObjectKey]>,
+    object_count: usize,
+}
+
+impl fmt::Debug for CachedRead {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CachedRead")
+            .field("generation", &self.generation)
+            .field("object_count", &self.object_count)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for ObjectStore {
@@ -434,6 +460,7 @@ impl Default for ObjectStore {
             shards: shards.into_boxed_slice(),
             remembered: RememberedSetState::default(),
             generation: AtomicU64::new(0),
+            cached_read: parking_lot::Mutex::new(None),
         }
     }
 }
@@ -441,11 +468,17 @@ impl Default for ObjectStore {
 impl ObjectStore {
     #[inline]
     fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
+        self.generation.load(Ordering::Relaxed)
     }
 
+    /// Bump the generation counter so the next `read()`
+    /// invalidates any cached index and rebuilds from scratch.
     fn bump_generation(&self) {
-        self.generation.fetch_add(1, Ordering::AcqRel);
+        self.generation.fetch_add(1, Ordering::Relaxed);
+        // The mutation that triggered this bump (publish or
+        // flat-store restore) has already released its write,
+        // so the generation bump just needs to be visible to
+        // the next reader — relaxed is sufficient.
     }
 
     fn reserve_publish_chunk(&self, shard_index: usize) -> ObjectPublishReservation {
@@ -515,17 +548,19 @@ impl ObjectStore {
     }
 
     pub(crate) fn read(&self) -> ObjectStoreReadGuard<'_> {
-        let mut chunk_guards = Vec::with_capacity(self.shards.len());
-        let mut shard_raws = Vec::with_capacity(self.shards.len());
+        // Acquire shard read locks — these are always needed
+        // to prevent concurrent mutations during the guard's
+        // lifetime.
+        let mut chunk_guards = Vec::with_capacity(OBJECT_STORE_SHARDS);
+        let mut shard_raws = Vec::with_capacity(OBJECT_STORE_SHARDS);
         let mut object_count = 0usize;
 
         for shard in self.shards.iter() {
             let chunk_guard = shard.chunks.read();
             let mut chunk_raws = Vec::with_capacity(chunk_guard.len());
             for chunk in chunk_guard.iter() {
-                let raw = chunk.read_raw();
-                object_count = object_count.saturating_add(raw.published_len);
-                chunk_raws.push(raw);
+                object_count = object_count.saturating_add(chunk.published_len());
+                chunk_raws.push(chunk.read_raw());
             }
             shard_raws.push(ObjectShardReadRaw {
                 chunks: Arc::from(chunk_raws),
@@ -533,6 +568,30 @@ impl ObjectStore {
             chunk_guards.push(chunk_guard);
         }
 
+        // Try the cached index.  If the generation matches,
+        // we can reuse the cached `index`, `all_locators`,
+        // and candidate lists without an O(n) rebuild.
+        let current_gen = self.generation();
+        {
+            let mut cache = self.cached_read.lock();
+            if let Some(ref cached) = *cache {
+                if cached.generation == current_gen {
+                    return ObjectStoreReadGuard {
+                        _chunk_guards: chunk_guards,
+                        shards_raw: Arc::from(shard_raws),
+                        index: Arc::clone(&cached.index),
+                        all_locators: Arc::clone(&cached.all_locators),
+                        finalizable_candidates: Arc::clone(&cached.finalizable_candidates),
+                        weak_candidates: Arc::clone(&cached.weak_candidates),
+                        ephemeron_candidates: Arc::clone(&cached.ephemeron_candidates),
+                        object_count: cached.object_count,
+                        remembered: &self.remembered,
+                    };
+                }
+            }
+        }
+
+        // Cache miss or stale — rebuild from scratch.
         let mut object_index =
             ObjectIndex::with_capacity_and_hasher(object_count, ObjectKeyBuildHasher);
         let mut all_locators = Vec::with_capacity(object_count);
@@ -563,17 +622,28 @@ impl ObjectStore {
             }
         }
 
-        ObjectStoreReadGuard {
-            _chunk_guards: chunk_guards,
-            shards_raw: Arc::from(shard_raws),
+        let cached = CachedRead {
+            generation: current_gen,
             index: Arc::new(object_index),
             all_locators: Arc::from(all_locators),
             finalizable_candidates: Arc::from(finalizable_candidates),
             weak_candidates: Arc::from(weak_candidates),
             ephemeron_candidates: Arc::from(ephemeron_candidates),
             object_count,
+        };
+        let guard = ObjectStoreReadGuard {
+            _chunk_guards: chunk_guards,
+            shards_raw: Arc::from(shard_raws),
+            index: Arc::clone(&cached.index),
+            all_locators: Arc::clone(&cached.all_locators),
+            finalizable_candidates: Arc::clone(&cached.finalizable_candidates),
+            weak_candidates: Arc::clone(&cached.weak_candidates),
+            ephemeron_candidates: Arc::clone(&cached.ephemeron_candidates),
+            object_count,
             remembered: &self.remembered,
-        }
+        };
+        *self.cached_read.lock() = Some(cached);
+        guard
     }
 
     pub(crate) fn remember_owner_shared(&self, owner_key: ObjectKey) {
@@ -607,7 +677,9 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved(reservation, shard_index, record)
+        let locator = Self::publish_reserved(reservation, shard_index, record);
+        self.bump_generation();
+        locator
     }
 
     pub(crate) fn publish_shared_prepared(
@@ -627,7 +699,9 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved(reservation, shard_index, record)
+        let locator = Self::publish_reserved(reservation, shard_index, record);
+        self.bump_generation();
+        locator
     }
 
     pub(crate) fn publish_shared_prepared_without_old_block(
@@ -649,16 +723,19 @@ impl ObjectStore {
             *reservation = self.reserve_publish_chunk(shard_index);
         }
         let reservation = unsafe { publish_local.reservation_mut_unchecked(shard_index) };
-        Self::publish_reserved_without_old_block(
+        let locator = Self::publish_reserved_without_old_block(
             reservation,
             shard_index,
             header,
             layout_align_shift,
             memory_kind,
-        )
+        );
+        self.bump_generation();
+        locator
     }
 
     pub(crate) fn take_flat(&mut self) -> FlatObjectStore {
+        self.bump_generation();
         let mut objects = Vec::new();
         let mut remembered = std::mem::take(&mut self.remembered);
         for shard in self.shards.iter_mut() {

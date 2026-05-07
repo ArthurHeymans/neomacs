@@ -670,17 +670,27 @@ impl OldGenState {
     }
 
     /// Find the index of the block whose backing buffer contains `addr`.
-    /// Naive linear scan over the block pool — fine for the small block
-    /// counts the GC currently holds. The minor write barrier consults
-    /// this on every old-to-young edge mutation, so a future optimization
-    /// could replace this with an interval-tree or sorted-base lookup.
+    ///
+    /// Uses binary search over the block pool, which is maintained in
+    /// address order: blocks are only ever appended (`push`) or filtered
+    /// (`retain`, which preserves relative order), so their base
+    /// addresses are monotonically non-decreasing.
     pub(crate) fn find_block_for_addr(&self, addr: usize) -> Option<usize> {
-        for (index, block) in self.blocks.iter().enumerate() {
-            if block.contains_addr(addr) {
-                return Some(index);
-            }
-        }
-        None
+        let idx = self
+            .blocks
+            .binary_search_by(|block| {
+                let base = block.base_ptr() as usize;
+                let end = base.saturating_add(block.buffer.len());
+                if addr < base {
+                    std::cmp::Ordering::Greater
+                } else if addr >= end {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .ok()?;
+        Some(idx)
     }
 
     /// Mark the card containing `owner_addr` as dirty if
