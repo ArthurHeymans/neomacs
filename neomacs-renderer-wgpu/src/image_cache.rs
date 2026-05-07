@@ -586,7 +586,7 @@ impl ImageCache {
         let reader = BufReader::new(file);
 
         // Use image crate's dimension reader (reads header only)
-        if let Ok(dims) = image::io::Reader::new(reader)
+        if let Ok(dims) = image::ImageReader::new(reader)
             .with_guessed_format()
             .ok()?
             .into_dimensions()
@@ -605,7 +605,7 @@ impl ImageCache {
     /// Query image data dimensions (fast - reads header only)
     pub fn query_data_dimensions(data: &[u8]) -> Option<ImageDimensions> {
         let cursor = std::io::Cursor::new(data);
-        if let Ok(dims) = image::io::Reader::new(BufReader::new(cursor))
+        if let Ok(dims) = image::ImageReader::new(BufReader::new(cursor))
             .with_guessed_format()
             .ok()?
             .into_dimensions()
