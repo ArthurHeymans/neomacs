@@ -81,3 +81,65 @@ fn org_tab_local_cycle_folds_and_reveals_subtree() {
             && grid.iter().any(|row| row.contains("child body"))
     });
 }
+
+#[test]
+fn org_babel_python_source_block_inserts_output_results() {
+    assert!(
+        std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_ok(),
+        "org-babel python TUI test requires python3 in PATH"
+    );
+
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "org-babel-python-hello.org";
+    let initial =
+        "#+begin_src python :results output :python python3\nprint(\"hello world\")\n#+end_src\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (require 'ob-python) (setq-local org-confirm-babel-evaluate nil))",
+    );
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
+        grid.iter().any(|row| row.contains("nil"))
+    });
+
+    send_both(&mut gnu, &mut neo, "C-c C-c");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(20), |grid| {
+        grid.iter().any(|row| row.contains("#+RESULTS:"))
+            && grid.iter().any(|row| row.contains("hello world"))
+    });
+
+    if !grid_contains(&gnu, "#+RESULTS:") || !grid_contains(&neo, "#+RESULTS:") {
+        dump_pair_grids("org-babel-python-hello", &gnu, &neo);
+    }
+
+    for session in [&gnu, &neo] {
+        assert!(
+            grid_contains(session, "#+RESULTS:"),
+            "{} should insert an Org Babel results drawer",
+            session.name
+        );
+        assert!(
+            grid_contains(session, "hello world"),
+            "{} should display python stdout in the results",
+            session.name
+        );
+    }
+
+    save_current_file_and_assert_contents(
+        "org-babel-python-hello",
+        &mut gnu,
+        &mut neo,
+        name,
+        "#+begin_src python :results output :python python3\n\
+print(\"hello world\")\n\
+#+end_src\n\
+\n\
+#+RESULTS:\n\
+: hello world\n",
+    );
+}
