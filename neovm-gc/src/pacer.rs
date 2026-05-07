@@ -453,12 +453,15 @@ fn compute_target_growth(
     growth_ratio: f64,
     min_trigger_bytes: usize,
 ) -> usize {
-    let scaled = (live_bytes_after as f64) * growth_ratio;
-    let scaled = if scaled.is_finite() && scaled >= 0.0 {
-        scaled as usize
-    } else {
-        0
-    };
+    // Use u128 arithmetic to avoid f64 precision loss above
+    // ~9 PB (f64's 53-bit mantissa limit).  Scale the ratio by
+    // 2^20 then divide after multiplication.
+    const SCALE: u128 = 1 << 20;
+    let ratio_scaled = ((growth_ratio * SCALE as f64) as u128).max(1);
+    let scaled = (live_bytes_after as u128)
+        .saturating_mul(ratio_scaled)
+        .saturating_div(SCALE);
+    let scaled = scaled.min(usize::MAX as u128) as usize;
     scaled.max(min_trigger_bytes)
 }
 
