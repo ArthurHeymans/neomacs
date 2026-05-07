@@ -2,7 +2,9 @@
 //!
 //! GNU behavior here is driven by `lisp/org/org.el`,
 //! `lisp/org/org-cycle.el`, `lisp/org/org-keys.el`, and
-//! `lisp/org/org-list.el`.
+//! `lisp/org/org-list.el`.  Table behavior is driven by
+//! `lisp/org/org-table.el`; `C-c C-c` reaches it through
+//! `org-ctrl-c-ctrl-c`.
 
 mod support;
 
@@ -80,6 +82,68 @@ fn org_tab_local_cycle_folds_and_reveals_subtree() {
             && grid.iter().any(|row| row.contains("** Child"))
             && grid.iter().any(|row| row.contains("child body"))
     });
+}
+
+#[test]
+fn org_table_ctrl_c_ctrl_c_aligns_columns() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "org-table-align-probe.org";
+    let initial = "| Name | Qty |\n| apple | 2 |\n| banana | 10 |\n";
+    let expected = "| Name   | Qty |\n| apple  |   2 |\n| banana |  10 |\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "C-f C-f C-c C-c");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
+        grid.iter().any(|row| row.contains("| Name   | Qty |"))
+            && grid.iter().any(|row| row.contains("| banana |  10 |"))
+    });
+
+    if !grid_contains(&gnu, "| banana |  10 |") || !grid_contains(&neo, "| banana |  10 |") {
+        dump_pair_grids("org-table-align", &gnu, &neo);
+    }
+
+    save_current_file_and_assert_contents("org-table-align", &mut gnu, &mut neo, name, expected);
+}
+
+#[test]
+fn org_table_tblfm_ctrl_c_ctrl_c_recalculates_sum() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "org-table-formula-probe.org";
+    let initial = "| item | value |\n\
+|------+-------|\n\
+| a | 2 |\n\
+| b | 3 |\n\
+|------+-------|\n\
+| total |  |\n\
+#+TBLFM: @>$2=vsum(@2..@-1)\n";
+    let expected = "| item  | value |\n\
+|-------+-------|\n\
+| a     |     2 |\n\
+| b     |     3 |\n\
+|-------+-------|\n\
+| total |     5 |\n\
+#+TBLFM: @>$2=vsum(@2..@-1)\n";
+
+    open_home_file(&mut gnu, &mut neo, name, initial, "C-x C-f");
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (goto-char (point-min)) (search-forward \"TBLFM\") nil)",
+    );
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
+        grid.iter().any(|row| row.contains("nil"))
+    });
+
+    send_both(&mut gnu, &mut neo, "C-c C-c");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(12), |grid| {
+        grid.iter().any(|row| row.contains("| total |     5 |"))
+    });
+
+    if !grid_contains(&gnu, "| total |     5 |") || !grid_contains(&neo, "| total |     5 |") {
+        dump_pair_grids("org-table-tblfm", &gnu, &neo);
+    }
+
+    save_current_file_and_assert_contents("org-table-tblfm", &mut gnu, &mut neo, name, expected);
 }
 
 #[test]
