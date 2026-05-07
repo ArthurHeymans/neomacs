@@ -1879,7 +1879,12 @@ impl Buffer {
 
     /// Return the range `[start, end)` as a Lisp value string.
     pub fn buffer_substring_value(&self, start: usize, end: usize) -> Value {
-        Value::heap_string(self.buffer_substring_lisp_string(start, end))
+        let value = Value::heap_string(self.buffer_substring_lisp_string(start, end));
+        let props = self.text.text_props_slice(start, end);
+        if !props.is_empty() {
+            crate::emacs_core::value::set_string_text_properties_table_for_value(value, props);
+        }
+        value
     }
 
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.

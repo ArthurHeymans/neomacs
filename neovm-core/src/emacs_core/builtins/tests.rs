@@ -7242,6 +7242,33 @@ fn delete_region_normalizes_reversed_bounds() {
 }
 
 #[test]
+fn delete_and_extract_region_preserves_buffer_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    builtin_insert(&mut eval, vec![Value::string("AAABBBCCC")]).expect("insert should succeed");
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    let _ = buf
+        .text
+        .text_props_put_property(3, 6, Value::symbol("face"), Value::symbol("italic"));
+
+    let extracted =
+        builtin_delete_and_extract_region(&mut eval, vec![Value::fixnum(4), Value::fixnum(7)])
+            .expect("delete-and-extract-region should succeed");
+
+    assert_eq!(extracted.as_utf8_str(), Some("BBB"));
+    let props = crate::emacs_core::value::get_string_text_properties_table_for_value(extracted)
+        .expect("extracted string should keep text properties");
+    let intervals = props.intervals_snapshot();
+    assert_eq!(intervals.len(), 1);
+    assert_eq!(intervals[0].start, 0);
+    assert_eq!(intervals[0].end, 3);
+    assert_eq!(
+        intervals[0].properties.get(&Value::symbol("face")),
+        Some(&Value::symbol("italic"))
+    );
+}
+
+#[test]
 fn string_match_start_handles_nil_and_negative_offsets() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
