@@ -93,6 +93,7 @@
         weston
         xdg-dbus-proxy
         libx11
+        libxpm
         libxcursor
         libxrandr
         libxi
@@ -294,6 +295,7 @@
                 # Display libs dynamically loaded by winit
                 wayland
                 libx11
+                libxpm
                 libxcursor
                 libxrandr
                 libxi
