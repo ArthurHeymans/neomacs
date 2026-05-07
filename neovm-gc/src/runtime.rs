@@ -80,7 +80,7 @@ impl CollectorLocal<'_> {
 /// how much from-space capacity each refill reserves.
 pub(crate) fn try_bump_nursery_tlab_or_refill(
     tlab_slot: &mut Option<crate::spaces::nursery_arena::NurseryTlab>,
-    nursery: &mut crate::spaces::nursery_arena::NurseryState,
+    nursery: &crate::spaces::nursery_arena::NurseryState,
     layout: core::alloc::Layout,
     tlab_bytes: usize,
 ) -> Option<core::ptr::NonNull<u8>> {
@@ -344,14 +344,11 @@ impl<'heap> CollectorRuntime<'heap> {
         layout: core::alloc::Layout,
     ) -> Option<core::ptr::NonNull<u8>> {
         let tlab_bytes = self.heap.config().nursery.tlab_bytes;
-        // Split borrow: self.local and self.heap are disjoint
-        // fields of CollectorRuntime, so we can mutably
-        // reference both at the same time.
         let local: &mut crate::mutator::MutatorLocal = self.local.get_mut();
         let tlab = &mut local.tlab;
-        let heap: &mut HeapCore = &mut *self.heap;
-        try_bump_nursery_tlab_or_refill(tlab, heap.nursery_mut(), layout, tlab_bytes)
-            .or_else(|| heap.nursery_mut().try_alloc(layout))
+        let heap: &HeapCore = &*self.heap;
+        try_bump_nursery_tlab_or_refill(tlab, heap.nursery(), layout, tlab_bytes)
+            .or_else(|| heap.nursery().try_alloc(layout))
     }
 
     /// Allocate a typed managed object through this

@@ -12,6 +12,7 @@
 
 use core::alloc::Layout;
 use core::ptr::NonNull;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// A single bump-pointer nursery arena.
 ///
@@ -19,17 +20,26 @@ use core::ptr::NonNull;
 /// raw pointer into the buffer. Memory lifetime is managed at the
 /// arena level: individual allocations are never freed; the arena is
 /// reset in bulk at the end of a minor GC cycle.
+///
+/// The cursor is an `AtomicUsize` so that `try_alloc` can run
+/// under `&self` (shared reference). This lets the TLAB refill
+/// path bump the shared from-space cursor without taking the
+/// `HeapCore` write lock — multiple mutators can refill
+/// concurrently, contending only on the atomic CAS loop.
 #[derive(Debug)]
 pub(crate) struct NurseryArena {
     buffer: Box<[u8]>,
-    cursor: usize,
+    cursor: AtomicUsize,
 }
 
 impl NurseryArena {
     /// Create an arena reserving `capacity_bytes` of bump-allocatable space.
     pub(crate) fn new(capacity_bytes: usize) -> Self {
         let buffer: Box<[u8]> = vec![0u8; capacity_bytes].into_boxed_slice();
-        Self { buffer, cursor: 0 }
+        Self {
+            buffer,
+            cursor: AtomicUsize::new(0),
+        }
     }
 
     /// Capacity in bytes.
@@ -41,13 +51,15 @@ impl NurseryArena {
     /// Bytes consumed so far.
     #[allow(dead_code)]
     pub(crate) fn used_bytes(&self) -> usize {
-        self.cursor
+        self.cursor.load(Ordering::Relaxed)
     }
 
     /// Bytes still available for bump allocation.
     #[allow(dead_code)]
     pub(crate) fn free_bytes(&self) -> usize {
-        self.buffer.len().saturating_sub(self.cursor)
+        self.buffer
+            .len()
+            .saturating_sub(self.cursor.load(Ordering::Relaxed))
     }
 
     /// Base address of the backing buffer.
@@ -59,8 +71,11 @@ impl NurseryArena {
     /// Reset the cursor to zero. Any prior allocations become invalid
     /// immediately — callers are responsible for draining every
     /// `ObjectRecord` backed by this arena before calling `reset`.
+    ///
+    /// Takes `&mut self` because reset must be exclusive: it is only
+    /// called during stop-the-world GC when no mutator is allocating.
     pub(crate) fn reset(&mut self) {
-        self.cursor = 0;
+        *self.cursor.get_mut() = 0;
     }
 
     /// Attempt to allocate a region matching `layout` from this arena.
@@ -69,25 +84,39 @@ impl NurseryArena {
     /// at least `layout.size()` bytes aligned to `layout.align()`.
     /// Returns `None` if the arena cannot satisfy the request.
     ///
+    /// Takes `&self` — the cursor is an atomic, so multiple threads can
+    /// bump-allocate concurrently without taking a lock. On contention
+    /// the CAS loop retries.
+    ///
     /// Safety/ownership: the returned pointer is valid for the lifetime
     /// of the arena (until `reset` is called). The caller must not free
     /// the memory with `dealloc` — the arena owns it.
-    pub(crate) fn try_alloc(&mut self, layout: Layout) -> Option<NonNull<u8>> {
+    pub(crate) fn try_alloc(&self, layout: Layout) -> Option<NonNull<u8>> {
         let size = layout.size();
         let align = layout.align().max(1);
-
         let buffer_base = self.buffer.as_ptr() as usize;
-        let current = buffer_base.checked_add(self.cursor)?;
-        let aligned = align_up(current, align)?;
-        let padding = aligned.checked_sub(buffer_base)?;
-        let end = padding.checked_add(size)?;
-        if end > self.buffer.len() {
-            return None;
+        let buffer_len = self.buffer.len();
+        let mut current = self.cursor.load(Ordering::Acquire);
+        loop {
+            let current_addr = buffer_base.checked_add(current)?;
+            let aligned = align_up(current_addr, align)?;
+            let offset = aligned.checked_sub(buffer_base)?;
+            let end = offset.checked_add(size)?;
+            if end > buffer_len {
+                return None;
+            }
+            match self.cursor.compare_exchange_weak(
+                current,
+                end,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    return NonNull::new(aligned as *mut u8);
+                }
+                Err(actual) => current = actual,
+            }
         }
-
-        let ptr = aligned as *mut u8;
-        self.cursor = end;
-        NonNull::new(ptr)
     }
 
     /// Returns true if `ptr` points inside this arena's backing buffer.
@@ -356,8 +385,11 @@ impl NurseryState {
     /// will ask for. Callers should pass a slab size that is
     /// large enough to amortize the reservation cost against
     /// many subsequent TLAB bumps (e.g. a few kilobytes).
+    ///
+    /// Takes `&self` — the underlying arena cursor is atomic so
+    /// multiple mutators can reserve TLABs concurrently.
     #[allow(dead_code)]
-    pub(crate) fn reserve_tlab(&mut self, size: usize) -> Option<NurseryTlab> {
+    pub(crate) fn reserve_tlab(&self, size: usize) -> Option<NurseryTlab> {
         if size == 0 {
             return None;
         }
@@ -398,11 +430,13 @@ impl NurseryState {
     }
 
     /// Allocate one nursery object out of the from-space.
-    pub(crate) fn try_alloc(&mut self, layout: Layout) -> Option<NonNull<u8>> {
+    /// Takes `&self` — the underlying arena cursor is atomic.
+    pub(crate) fn try_alloc(&self, layout: Layout) -> Option<NonNull<u8>> {
         self.from_space.try_alloc(layout)
     }
 
     /// Allocate one survivor copy into the to-space during minor GC.
+    /// Takes `&mut self` — only called during stop-the-world GC.
     pub(crate) fn try_alloc_in_to_space(&mut self, layout: Layout) -> Option<NonNull<u8>> {
         self.to_space.try_alloc(layout)
     }
@@ -441,7 +475,7 @@ impl NurseryState {
         // Resetting the cursor here is defensive: callers always invoke
         // this on an empty to-space, but pinning to zero makes the
         // partitioning logic correct regardless.
-        self.to_space.cursor = 0;
+        *self.to_space.cursor.get_mut() = 0;
         let total = self.to_space.buffer.len();
         let base_addr = self.to_space.buffer.as_ptr() as *mut u8;
 
@@ -497,7 +531,7 @@ impl NurseryState {
         if max_end > self.to_space.buffer.len() {
             max_end = self.to_space.buffer.len();
         }
-        self.to_space.cursor = max_end;
+        *self.to_space.cursor.get_mut() = max_end;
     }
 
     /// Returns true if `ptr` points into the from-space backing buffer.

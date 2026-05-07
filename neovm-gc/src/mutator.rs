@@ -417,15 +417,19 @@ fn alloc_nursery_slot<T: Trace + 'static>(
     }
 
     // TLAB miss: refill from shared nursery or bump shared cursor.
+    // Takes only a HeapCore read lock — the nursery arena cursor is
+    // atomic, so the shared-cursor bump and TLAB reservation are
+    // lock-free (CAS loop).  This avoids serialising on the HeapCore
+    // write lock, which is the main multi-mutator bottleneck.
     let tlab_bytes = local.nursery_tlab_bytes();
-    let mut core = heap.write_core();
+    let core = heap.read_core();
     let base = crate::runtime::try_bump_nursery_tlab_or_refill(
         &mut local.tlab,
-        core.nursery_mut(),
+        core.nursery(),
         layout,
         tlab_bytes,
     )
-    .or_else(|| core.nursery_mut().try_alloc(layout));
+    .or_else(|| core.nursery().try_alloc(layout));
 
     match base {
         Some(base) => {
