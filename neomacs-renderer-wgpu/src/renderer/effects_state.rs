@@ -87,26 +87,6 @@ impl WgpuRenderer {
         self.cursor_wake_started = Some(now);
     }
 
-    /// Get current cursor wake scale factor (1.0 = no scaling)
-    pub(super) fn cursor_wake_factor(&self) -> f32 {
-        if !self.effects.cursor_wake.enabled {
-            return 1.0;
-        }
-        if let Some(started) = self.cursor_wake_started {
-            let elapsed = started.elapsed().as_millis() as f32;
-            let duration = self.effects.cursor_wake.duration_ms as f32;
-            if elapsed >= duration {
-                return 1.0;
-            }
-            let t = elapsed / duration;
-            // Ease-out: scale starts large and settles to 1.0
-            let ease = t * (2.0 - t); // quadratic ease-out
-            1.0 + (self.effects.cursor_wake.scale - 1.0) * (1.0 - ease)
-        } else {
-            1.0
-        }
-    }
-
     /// Trigger edge snap indicator
     pub fn trigger_edge_snap(
         &mut self,

@@ -133,6 +133,7 @@ fn test_window_params_from_neovm_internal_returns_none() {
         false,
         false,
         Value::T,
+        Value::NIL,
     );
     assert!(result.is_none(), "Internal windows should return None");
 }
@@ -178,6 +179,7 @@ fn window_params_from_neovm_uses_default_header_line_and_tab_line_values() {
         true,
         false,
         Value::T,
+        Value::NIL,
     )
     .expect("leaf window params");
 
@@ -244,6 +246,7 @@ fn test_window_params_nonselected_reads_window_point() {
         false, // is_selected
         false,
         Value::T,
+        Value::NIL,
     )
     .expect("window params");
 

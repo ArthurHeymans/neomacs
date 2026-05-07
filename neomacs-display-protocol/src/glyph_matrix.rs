@@ -8,6 +8,7 @@
 //! `pixel_width`; GUI backends must use that rather than reconstructing every
 //! glyph as one frame column.
 
+use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, GlyphRowRole,
@@ -494,6 +495,8 @@ pub struct FrameDisplayState {
     pub borders: Vec<BorderItem>,
     /// Cursor entries.
     pub cursors: Vec<CursorItem>,
+    /// Per-window cursor effect profiles.
+    pub cursor_effects_by_window: HashMap<i32, EffectsConfig>,
     /// Inline images (non-grid, pixel-positioned).
     pub images: Vec<ImageItem>,
     /// Inline videos.
@@ -617,6 +620,7 @@ impl FrameDisplayState {
             backgrounds: Vec::new(),
             borders: Vec::new(),
             cursors: Vec::new(),
+            cursor_effects_by_window: HashMap::new(),
             images: Vec::new(),
             videos: Vec::new(),
             webkits: Vec::new(),
@@ -653,6 +657,7 @@ impl FrameDisplayState {
         state.faces = buf.faces.clone();
         state.window_infos = buf.window_infos.clone();
         state.phys_cursor = buf.phys_cursor.clone();
+        state.cursor_effects_by_window = buf.cursor_effects_by_window.clone();
         state.stipple_patterns = buf.stipple_patterns.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
@@ -907,6 +912,7 @@ impl FrameDisplayState {
                 color: cursor.color,
             });
         }
+        buf.cursor_effects_by_window = self.cursor_effects_by_window.clone();
 
         // --- Materialize standalone images ---
         for img in &self.images {

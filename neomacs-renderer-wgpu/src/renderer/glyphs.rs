@@ -7,6 +7,7 @@ use super::super::vertex::{
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
@@ -762,12 +763,31 @@ fn log_face_debug_summary(
 }
 
 impl WgpuRenderer {
+    fn cursor_wake_factor_for(&self, effects: &EffectsConfig) -> f32 {
+        if !effects.cursor_wake.enabled {
+            return 1.0;
+        }
+        if let Some(started) = self.cursor_wake_started {
+            let elapsed = started.elapsed().as_millis() as f32;
+            let duration = effects.cursor_wake.duration_ms as f32;
+            if elapsed >= duration {
+                return 1.0;
+            }
+            let t = elapsed / duration;
+            let ease = t * (2.0 - t);
+            1.0 + (effects.cursor_wake.scale - 1.0) * (1.0 - ease)
+        } else {
+            1.0
+        }
+    }
+
     fn emit_cursor_visual(
         &mut self,
         window_id: i32,
         static_rect: (f32, f32, f32, f32),
         style: CursorStyle,
         color: &Color,
+        effects: &EffectsConfig,
         cursor_visible: bool,
         animated_cursor: &Option<AnimatedCursor>,
         cursor_bg_vertices: &mut Vec<RectVertex>,
@@ -775,13 +795,13 @@ impl WgpuRenderer {
         cursor_vertices: &mut Vec<RectVertex>,
     ) {
         let cycle_color;
-        let effective_color = if self.effects.cursor_color_cycle.enabled && !style.is_hollow() {
+        let effective_color = if effects.cursor_color_cycle.enabled && !style.is_hollow() {
             let elapsed = self.cursor_color_cycle_start.elapsed().as_secs_f32();
-            let hue = (elapsed * self.effects.cursor_color_cycle.speed) % 1.0;
+            let hue = (elapsed * effects.cursor_color_cycle.speed) % 1.0;
             cycle_color = Self::hsl_to_color(
                 hue,
-                self.effects.cursor_color_cycle.saturation,
-                self.effects.cursor_color_cycle.lightness,
+                effects.cursor_color_cycle.saturation,
+                effects.cursor_color_cycle.lightness,
             );
             self.needs_continuous_redraw = true;
             &cycle_color
@@ -802,7 +822,7 @@ impl WgpuRenderer {
             effective_color
         };
 
-        let wake = self.cursor_wake_factor();
+        let wake = self.cursor_wake_factor_for(effects);
         let wake_active = wake != 1.0 && !style.is_hollow();
         if wake_active {
             self.needs_continuous_redraw = true;
@@ -1937,11 +1957,16 @@ impl WgpuRenderer {
             {
                 continue;
             }
+            let cursor_effects = frame_glyphs
+                .window_cursor_effects(cursor.window_id)
+                .unwrap_or(&self.effects)
+                .clone();
             self.emit_cursor_visual(
                 cursor.window_id,
                 (cursor.x, cursor.y, cursor.width, cursor.height),
                 cursor.style,
                 &cursor.color,
+                &cursor_effects,
                 cursor_visible,
                 &animated_cursor,
                 &mut cursor_bg_vertices,
@@ -1951,11 +1976,16 @@ impl WgpuRenderer {
         }
 
         if let Some(cursor) = frame_glyphs.phys_cursor.as_ref() {
+            let cursor_effects = frame_glyphs
+                .window_cursor_effects(cursor.window_id)
+                .unwrap_or(&self.effects)
+                .clone();
             self.emit_cursor_visual(
                 cursor.window_id,
                 cursor_render_rect(frame_glyphs, cursor),
                 cursor.style,
                 &cursor.color,
+                &cursor_effects,
                 cursor_visible,
                 &animated_cursor,
                 &mut cursor_bg_vertices,
@@ -2003,7 +2033,10 @@ impl WgpuRenderer {
             // Build shared effect context for all effect functions.
             // Clone effect config into a local so we can mutably borrow `self`
             // while effect functions still read configuration.
-            let effects_for_ctx = self.effects.clone();
+            let effects_for_ctx = frame_glyphs
+                .phys_cursor_effects()
+                .unwrap_or(&self.effects)
+                .clone();
             let ctx = super::effect_common::EffectCtx {
                 effects: &effects_for_ctx,
                 frame_glyphs,

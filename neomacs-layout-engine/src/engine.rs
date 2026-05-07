@@ -2319,6 +2319,10 @@ impl LayoutEngine {
         let buffer_z_byte = buffer.zv_byte;
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
+        if let Some(effects) = params.cursor_effects.clone() {
+            self.matrix_builder
+                .set_window_cursor_effects(params.window_id as i32, effects);
+        }
 
         let char_w = params.char_width;
         let char_h = params.char_height;

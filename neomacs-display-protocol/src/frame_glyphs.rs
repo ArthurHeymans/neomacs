@@ -4,6 +4,7 @@
 //! Emacs's current_matrix and rebuilds this buffer from scratch. No
 //! incremental overlap tracking is needed.
 
+use crate::effect_config::EffectsConfig;
 use crate::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{Color, Rect};
@@ -650,6 +651,14 @@ pub struct FrameGlyphBuffer {
     /// Decorative per-window cursor visuals emitted by layout.
     pub window_cursors: Vec<WindowCursorVisual>,
 
+    /// Per-window cursor effect profiles emitted by layout.
+    ///
+    /// Fancy Neomacs cursor effects are an extension layered on top of GNU's
+    /// `cursor-type` semantics. The key is the owning window id; renderers use
+    /// this profile for that window's cursor and fall back to their global
+    /// `EffectsConfig` when the window has no profile.
+    pub cursor_effects_by_window: HashMap<i32, EffectsConfig>,
+
     /// Frame-level tab bar metadata for hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
 
@@ -778,6 +787,7 @@ impl FrameGlyphBuffer {
             effect_hints: Vec::with_capacity(16),
             phys_cursor: None,
             window_cursors: Vec::with_capacity(8),
+            cursor_effects_by_window: HashMap::new(),
             tab_bar: None,
             current_face_id: 0,
             current_fg: Color::WHITE,
@@ -1264,6 +1274,23 @@ impl FrameGlyphBuffer {
             style,
             color,
         });
+    }
+
+    /// Set the cursor effect profile for one window.
+    pub fn set_window_cursor_effects(&mut self, window_id: i32, effects: EffectsConfig) {
+        self.cursor_effects_by_window.insert(window_id, effects);
+    }
+
+    /// Return the cursor effect profile for one window, if layout supplied one.
+    pub fn window_cursor_effects(&self, window_id: i32) -> Option<&EffectsConfig> {
+        self.cursor_effects_by_window.get(&window_id)
+    }
+
+    /// Return the active physical cursor's effect profile, if any.
+    pub fn phys_cursor_effects(&self) -> Option<&EffectsConfig> {
+        self.phys_cursor
+            .as_ref()
+            .and_then(|cursor| self.window_cursor_effects(cursor.window_id))
     }
 
     /// Add per-window metadata for animation detection

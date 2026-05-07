@@ -4114,6 +4114,7 @@ impl Context {
 
             // Cursor
             defvar_per_buffer!("cursor-type", Value::T);
+            defvar_per_buffer!("neomacs-cursor-effect", Value::NIL);
             defvar_per_buffer!("cursor-in-non-selected-windows", Value::T);
 
             // Marks

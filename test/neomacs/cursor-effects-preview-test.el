@@ -251,12 +251,16 @@
              (neomacs-set-cursor-pendulum t))))
   "Cursor effects to preview.")
 
+(defconst cursor-effects-preview--cursor-types
+  '(box hollow bar (bar . 3) hbar (hbar . 3))
+  "Cursor shapes to combine with preview effects.")
+
+(defvar cursor-effects-preview--windows nil)
+(defvar cursor-effects-preview--gallery-timer nil)
+
 (defvar cursor-effects-preview-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "q") #'cursor-effects-preview-quit)
-    (define-key map (kbd "n") #'cursor-effects-preview-next)
-    (define-key map (kbd "p") #'cursor-effects-preview-previous)
-    (define-key map (kbd "SPC") #'cursor-effects-preview-toggle-pause)
     map))
 
 (define-derived-mode cursor-effects-preview-mode special-mode "Cursor-Effects"
@@ -264,136 +268,77 @@
   (setq-local cursor-type 'box)
   (setq-local truncate-lines t))
 
-(defun cursor-effects-preview--call (form)
-  (let ((fn (car form))
-        (args (cdr form)))
-    (if (fboundp fn)
-        (condition-case err
-            (apply fn args)
-          (error
-           (message "Cursor effect call failed: %S -> %S" form err)))
-      (message "Cursor effect setter is not available: %S" fn))))
+(defun cursor-effects-preview--buffer-name (index effect)
+  (format "*Cursor Effect %02d %s*" index (plist-get effect :name)))
 
-(defun cursor-effects-preview--disable-all ()
-  (dolist (fn cursor-effects-preview--all-setters)
-    (when (fboundp fn)
-      (ignore-errors (funcall fn nil)))))
-
-(defun cursor-effects-preview--set-overlays ()
-  (dolist (overlay cursor-effects-preview--effect-overlays)
-    (delete-overlay overlay))
-  (setq cursor-effects-preview--effect-overlays nil)
-  (save-excursion
-    (goto-char (point-min))
-    (dotimes (i (length cursor-effects-preview--effects))
-      (when (search-forward (format "%2d. " (1+ i)) nil t)
-        (let ((overlay (make-overlay (line-beginning-position) (line-end-position))))
-          (overlay-put overlay 'face
-                       (if (= i cursor-effects-preview--index)
-                           'highlight
-                         'default))
-          (push overlay cursor-effects-preview--effect-overlays))))
-    (setq cursor-effects-preview--effect-overlays
-          (nreverse cursor-effects-preview--effect-overlays))))
-
-(defun cursor-effects-preview--apply-current ()
-  (let* ((effect (nth cursor-effects-preview--index cursor-effects-preview--effects))
-         (name (plist-get effect :name)))
-    (cursor-effects-preview--disable-all)
-    (dolist (form (plist-get effect :forms))
-      (cursor-effects-preview--call form))
-    (cursor-effects-preview--set-overlays)
-    (message "Cursor effect preview: %s (%d/%d)"
-             name
-             (1+ cursor-effects-preview--index)
-             (length cursor-effects-preview--effects))))
-
-(defun cursor-effects-preview-next ()
-  "Advance to the next cursor effect."
-  (interactive)
-  (setq cursor-effects-preview--index
-        (mod (1+ cursor-effects-preview--index)
-             (length cursor-effects-preview--effects)))
-  (cursor-effects-preview--apply-current))
-
-(defun cursor-effects-preview-previous ()
-  "Go back to the previous cursor effect."
-  (interactive)
-  (setq cursor-effects-preview--index
-        (mod (1- cursor-effects-preview--index)
-             (length cursor-effects-preview--effects)))
-  (cursor-effects-preview--apply-current))
-
-(defun cursor-effects-preview-toggle-pause ()
-  "Toggle automatic effect cycling."
-  (interactive)
-  (setq cursor-effects-preview--paused (not cursor-effects-preview--paused))
-  (message "Cursor effect preview %s"
-           (if cursor-effects-preview--paused "paused" "running")))
-
-(defun cursor-effects-preview--advance-timer ()
-  (unless cursor-effects-preview--paused
-    (cursor-effects-preview-next)))
-
-(defun cursor-effects-preview--move-timer ()
-  (when (and cursor-effects-preview--positions
-             (eq major-mode 'cursor-effects-preview-mode))
-    (let ((pos (nth cursor-effects-preview--position-index
-                    cursor-effects-preview--positions)))
-      (when (integer-or-marker-p pos)
-        (goto-char pos)
-        (setq cursor-effects-preview--position-index
-              (mod (1+ cursor-effects-preview--position-index)
-                   (length cursor-effects-preview--positions)))))))
-
-(defun cursor-effects-preview--collect-positions (start end)
-  (let (positions)
-    (save-excursion
-      (goto-char start)
-      (while (< (point) end)
-        (unless (or (eolp) (looking-at-p "[ \t]"))
-          (push (point) positions))
-        (forward-char 1)))
-    (nreverse positions)))
-
-(defun cursor-effects-preview--insert-buffer ()
-  (let ((inhibit-read-only t)
-        preview-start
-        preview-end)
+(defun cursor-effects-preview--insert-gallery-buffer (index effect shape)
+  (let ((inhibit-read-only t))
     (erase-buffer)
-    (insert "Neomacs Cursor Effects Preview\n")
-    (insert "\n")
-    (insert "Keys: n next, p previous, SPC pause, q quit.\n")
-    (insert "The point moves continuously so motion-triggered effects are visible.\n")
-    (insert "\n")
-    (insert "Preview path:\n")
-    (setq preview-start (point))
-    (dotimes (i 12)
-      (insert
-       (format "  row_%02d: abcdefghijklmnopqrstuvwxyz 0123456789 () [] {} <> +-*/ = %s\n"
-               i
-               (make-string (+ 8 (mod i 9)) ?x))))
-    (setq preview-end (point))
-    (insert "\n")
-    (insert "Effects:\n")
-    (cl-loop for effect in cursor-effects-preview--effects
-             for i from 1
-             do (insert (format "%2d. %s\n" i (plist-get effect :name))))
-    (setq cursor-effects-preview--positions
-          (cursor-effects-preview--collect-positions preview-start preview-end))
-    (setq cursor-effects-preview--position-index 0)
-    (goto-char (or (car cursor-effects-preview--positions) preview-start))))
+    (insert (format "%02d  %s\n" index (plist-get effect :name)))
+    (insert (format "%S\n\n" shape))
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n")
+    (insert "abcdefghijklmnopqrstuvwxyz\n")
+    (insert "0123456789 () [] {} <> +-*/=\n")
+    (goto-char (point-min))
+    (forward-line 3)
+    (forward-char (mod index 18))))
+
+(defun cursor-effects-preview--make-buffer (index effect shape)
+  (let ((buffer (get-buffer-create
+                 (cursor-effects-preview--buffer-name index effect))))
+    (with-current-buffer buffer
+      (cursor-effects-preview-mode)
+      (setq-local cursor-type shape)
+      (setq-local cursor-in-non-selected-windows shape)
+      (setq-local neomacs-cursor-effect (plist-get effect :forms))
+      (cursor-effects-preview--insert-gallery-buffer index effect shape))
+    buffer))
+
+(defun cursor-effects-preview--split-grid (buffers)
+  (delete-other-windows)
+  (let ((windows (list (selected-window))))
+    (while (< (length windows) (length buffers))
+      (let* ((window (car (sort (copy-sequence windows)
+                                (lambda (a b)
+                                  (> (* (window-pixel-width a)
+                                        (window-pixel-height a))
+                                     (* (window-pixel-width b)
+                                        (window-pixel-height b)))))))
+             (new-window (if (> (window-pixel-width window)
+                                (* 1.35 (window-pixel-height window)))
+                             (split-window window nil 'right)
+                           (split-window window nil 'below))))
+        (push new-window windows)))
+    (setq windows (sort windows
+                        (lambda (a b)
+                          (let ((ea (window-pixel-edges a))
+                                (eb (window-pixel-edges b)))
+                            (or (< (cadr ea) (cadr eb))
+                                (and (= (cadr ea) (cadr eb))
+                                     (< (car ea) (car eb))))))))
+    (cl-loop for window in windows
+             for buffer in buffers
+             do (set-window-buffer window buffer)
+             do (with-current-buffer buffer
+                  (set-window-point window (point))
+                  (set-window-parameter
+                   window 'neomacs-cursor-effect neomacs-cursor-effect)))
+    windows))
+
+(defun cursor-effects-preview--pulse-selection ()
+  (when cursor-effects-preview--windows
+    (setq cursor-effects-preview--index
+          (mod (1+ cursor-effects-preview--index)
+               (length cursor-effects-preview--windows)))
+    (select-window (nth cursor-effects-preview--index
+                        cursor-effects-preview--windows))))
 
 (defun cursor-effects-preview-stop ()
   "Stop timers and disable all cursor effects used by the preview."
   (interactive)
-  (when (timerp cursor-effects-preview--effect-timer)
-    (cancel-timer cursor-effects-preview--effect-timer))
-  (when (timerp cursor-effects-preview--move-timer)
-    (cancel-timer cursor-effects-preview--move-timer))
-  (setq cursor-effects-preview--effect-timer nil)
-  (setq cursor-effects-preview--move-timer nil)
-  (cursor-effects-preview--disable-all))
+  (when (timerp cursor-effects-preview--gallery-timer)
+    (cancel-timer cursor-effects-preview--gallery-timer))
+  (setq cursor-effects-preview--gallery-timer nil))
 
 (defun cursor-effects-preview-quit ()
   "Quit the cursor effects preview."
@@ -405,22 +350,23 @@
   "Start the Neomacs cursor effects preview."
   (interactive)
   (cursor-effects-preview-stop)
-  (switch-to-buffer (get-buffer-create "*Cursor Effects Preview*"))
-  (cursor-effects-preview-mode)
-  (cursor-effects-preview--insert-buffer)
-  (add-hook 'kill-buffer-hook #'cursor-effects-preview-stop nil t)
   (when (fboundp 'blink-cursor-mode)
     (blink-cursor-mode -1))
+  (let ((buffers nil))
+    (cl-loop for effect in cursor-effects-preview--effects
+             for index from 1
+             for shape = (nth (mod (1- index)
+                                    (length cursor-effects-preview--cursor-types))
+                              cursor-effects-preview--cursor-types)
+             do (push (cursor-effects-preview--make-buffer index effect shape)
+                      buffers))
+    (setq cursor-effects-preview--windows
+          (cursor-effects-preview--split-grid (nreverse buffers))))
   (setq cursor-effects-preview--index 0)
-  (setq cursor-effects-preview--paused nil)
-  (cursor-effects-preview--apply-current)
-  (setq cursor-effects-preview--move-timer
-        (run-at-time 0 cursor-effects-preview-move-seconds
-                     #'cursor-effects-preview--move-timer))
-  (setq cursor-effects-preview--effect-timer
+  (setq cursor-effects-preview--gallery-timer
         (run-at-time cursor-effects-preview-effect-seconds
                      cursor-effects-preview-effect-seconds
-                     #'cursor-effects-preview--advance-timer)))
+                     #'cursor-effects-preview--pulse-selection)))
 
 (cursor-effects-preview-start)
 

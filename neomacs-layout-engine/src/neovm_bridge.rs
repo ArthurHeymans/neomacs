@@ -21,6 +21,8 @@ use neovm_core::window::{Frame, FrameId, Window};
 
 use super::types::{FrameParams, WindowParams};
 use crate::fontconfig::face_height_to_pixels;
+use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::types::Rect;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -490,6 +492,87 @@ fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
         .unwrap_or_else(|| default_cursor_color_pixel(face_table))
 }
 
+fn disabled_cursor_effects_profile() -> EffectsConfig {
+    let mut effects = EffectsConfig::default();
+    effects.cursor_color_cycle.enabled = false;
+    effects
+}
+
+fn cursor_effect_arg_from_lisp(value: Value) -> Option<CursorEffectArg> {
+    if value.is_nil() {
+        Some(CursorEffectArg::Nil)
+    } else if value.bits() == Value::T.bits() {
+        Some(CursorEffectArg::Bool(true))
+    } else if let Some(text) = value.as_utf8_str() {
+        Some(CursorEffectArg::String(text.to_owned()))
+    } else {
+        value.as_number_f64().map(CursorEffectArg::Number)
+    }
+}
+
+fn cursor_effect_name_from_symbol(value: Value) -> Option<String> {
+    let name = value.as_symbol_name()?;
+    Some(
+        name.strip_prefix("neomacs-set-cursor-")
+            .unwrap_or(name)
+            .to_owned(),
+    )
+}
+
+fn apply_cursor_effect_form(effects: &mut EffectsConfig, form: Value) -> bool {
+    if form.is_nil() {
+        return false;
+    }
+    let values = if form.is_cons() {
+        let Some(values) = list_to_vec(&form) else {
+            return false;
+        };
+        values
+    } else {
+        vec![form]
+    };
+    let Some((head, args)) = values.split_first() else {
+        return false;
+    };
+    let Some(name) = cursor_effect_name_from_symbol(*head) else {
+        return false;
+    };
+    let Some(args) = args
+        .iter()
+        .copied()
+        .map(cursor_effect_arg_from_lisp)
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    CursorEffectCommand::new(name, args).apply_to(effects);
+    true
+}
+
+fn parse_cursor_effect_profile(value: Value) -> Option<EffectsConfig> {
+    if value.is_nil() {
+        return None;
+    }
+    let mut effects = disabled_cursor_effects_profile();
+    if value.is_cons() {
+        let forms = list_to_vec(&value)?;
+        let is_single_command = forms
+            .first()
+            .is_some_and(|head| cursor_effect_name_from_symbol(*head).is_some());
+        if is_single_command {
+            apply_cursor_effect_form(&mut effects, value).then_some(effects)
+        } else {
+            let mut any = false;
+            for form in forms {
+                any |= apply_cursor_effect_form(&mut effects, form);
+            }
+            any.then_some(effects)
+        }
+    } else {
+        apply_cursor_effect_form(&mut effects, value).then_some(effects)
+    }
+}
+
 fn effective_cursor_spec(
     frame: &Frame,
     buffer: &Buffer,
@@ -555,6 +638,7 @@ pub fn window_params_from_neovm(
     is_selected: bool,
     is_minibuffer: bool,
     window_cursor_type: Value,
+    window_cursor_effect: Value,
 ) -> Option<WindowParams> {
     // Only leaf windows can be laid out.
     let (
@@ -688,6 +772,9 @@ pub fn window_params_from_neovm(
         bar_width: 1,
     });
     let cursor_color = frame_cursor_color_pixel(frame, face_table);
+    let cursor_effects = parse_cursor_effect_profile(window_cursor_effect).or_else(|| {
+        buffer_local_value(buffer, "neomacs-cursor-effect").and_then(parse_cursor_effect_profile)
+    });
     let x_stretch_cursor = global_bool(obarray, "x-stretch-cursor");
 
     // Header-line: show if header-line-format is non-nil
@@ -784,6 +871,7 @@ pub fn window_params_from_neovm(
         cursor_bar_width: cursor_spec.bar_width,
         x_stretch_cursor,
         cursor_color,
+        cursor_effects,
         left_fringe_width: left_fringe,
         right_fringe_width: right_fringe,
         indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") {
@@ -847,6 +935,10 @@ pub fn collect_layout_params(
         };
         let is_selected = frame_is_selected && frame.selected_window == *win_id;
         let window_cursor_type = evaluator.frame_manager().window_cursor_type(*win_id);
+        let window_cursor_effect = evaluator
+            .frame_manager()
+            .window_parameter(*win_id, &Value::symbol("neomacs-cursor-effect"))
+            .unwrap_or(Value::NIL);
         if let Some(wp) = window_params_from_neovm(
             window,
             buffer,
@@ -857,6 +949,7 @@ pub fn collect_layout_params(
             is_selected,
             false,
             window_cursor_type,
+            window_cursor_effect,
         ) {
             tracing::debug!(
                 "layout window cursor: win={} selected={} minibuffer=false kind={:?} width={} color=#{:06x} window-cursor-type={:?}",
@@ -889,6 +982,10 @@ pub fn collect_layout_params(
         if let Some(buffer) = buffer {
             let is_selected = frame_is_selected && frame.selected_window == mini_leaf.id();
             let window_cursor_type = evaluator.frame_manager().window_cursor_type(mini_leaf.id());
+            let window_cursor_effect = evaluator
+                .frame_manager()
+                .window_parameter(mini_leaf.id(), &Value::symbol("neomacs-cursor-effect"))
+                .unwrap_or(Value::NIL);
             if let Some(wp) = window_params_from_neovm(
                 mini_leaf,
                 buffer,
@@ -899,6 +996,7 @@ pub fn collect_layout_params(
                 is_selected,
                 true,
                 window_cursor_type,
+                window_cursor_effect,
             ) {
                 tracing::debug!(
                     "layout window cursor: win={} selected={} minibuffer=true kind={:?} width={} color=#{:06x} window-cursor-type={:?}",

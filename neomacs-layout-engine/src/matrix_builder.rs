@@ -7,6 +7,7 @@
 //! output contract.
 
 use crate::bidi::{self, BidiDir};
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, StipplePattern, WindowEffectHint,
@@ -80,6 +81,7 @@ pub struct GlyphMatrixBuilder {
     webkits: Vec<WebKitItem>,
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
+    cursor_effects_by_window: HashMap<i32, EffectsConfig>,
     faces: HashMap<u32, Face>,
     stipple_patterns: HashMap<i32, StipplePattern>,
     window_infos: Vec<WindowInfo>,
@@ -216,6 +218,7 @@ impl GlyphMatrixBuilder {
             webkits: Vec::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
+            cursor_effects_by_window: HashMap::new(),
             faces: HashMap::new(),
             stipple_patterns: HashMap::new(),
             window_infos: Vec::new(),
@@ -252,6 +255,7 @@ impl GlyphMatrixBuilder {
         self.webkits.clear();
         self.scroll_bars.clear();
         self.phys_cursor = None;
+        self.cursor_effects_by_window.clear();
         self.faces.clear();
         self.stipple_patterns.clear();
         self.window_infos.clear();
@@ -682,6 +686,10 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
+    pub fn set_window_cursor_effects(&mut self, window_id: i32, effects: EffectsConfig) {
+        self.cursor_effects_by_window.insert(window_id, effects);
+    }
+
     pub fn set_faces(&mut self, faces: HashMap<u32, Face>) {
         self.faces = faces;
     }
@@ -980,6 +988,7 @@ impl GlyphMatrixBuilder {
         state.webkits = self.webkits;
         state.scroll_bars = self.scroll_bars;
         state.phys_cursor = self.phys_cursor;
+        state.cursor_effects_by_window = self.cursor_effects_by_window;
         state.faces = self.faces;
         state.stipple_patterns = self.stipple_patterns;
         state.window_infos = self.window_infos;

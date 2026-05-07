@@ -46,6 +46,7 @@ fn test_window_params() -> WindowParams {
         cursor_bar_width: 2,
         x_stretch_cursor: false,
         cursor_color: 0xFFFFFF,
+        cursor_effects: None,
         left_fringe_width: 0.0,
         right_fringe_width: 0.0,
         indicate_empty_lines: 0,

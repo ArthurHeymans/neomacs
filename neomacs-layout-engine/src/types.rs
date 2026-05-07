@@ -204,6 +204,8 @@ pub struct WindowParams {
     pub x_stretch_cursor: bool,
     /// Cursor color in sRGB pixel format.
     pub cursor_color: u32,
+    /// Neomacs-specific cursor effect profile for this window.
+    pub cursor_effects: Option<neomacs_display_protocol::effect_config::EffectsConfig>,
 
     /// Fringe widths in pixels
     pub left_fringe_width: f32,
