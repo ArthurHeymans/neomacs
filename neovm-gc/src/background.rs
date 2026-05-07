@@ -892,16 +892,6 @@ impl Deref for SharedHeapGuard<'_> {
     type Target = Heap;
 
     fn deref(&self) -> &Self::Target {
-        // The Heap interior is now wrapped in
-        // `Arc<RwLock<HeapCore>>`, so any access through
-        // `&Heap` may mutate the heap (via the inner write
-        // lock). Set the dirty bit on every deref so the
-        // drop hook captures and publishes a fresh snapshot
-        // even when callers never went through `deref_mut`.
-        // This is the cost of moving from
-        // `Heap::mutator(&mut self)` to
-        // `Heap::mutator(&self)`.
-        self.dirty.set(true);
         self.guard
             .as_deref()
             .expect("shared heap guard should hold heap lock")
@@ -919,22 +909,24 @@ impl DerefMut for SharedHeapGuard<'_> {
 
 impl Drop for SharedHeapGuard<'_> {
     fn drop(&mut self) {
-        if !self.dirty.get() {
+        let heap = self
+            .guard
+            .as_deref()
+            .expect("shared heap guard should hold heap lock");
+        // Only publish a new snapshot if something actually
+        // mutated the heap core through this guard.  Pure
+        // readers (stats(), pacer_stats(), etc.) skip the
+        // snapshot+capture work.
+        let was_dirty = self.dirty.get();
+        let core_was_written = heap.took_core_writes();
+        if !was_dirty && !core_was_written {
             return;
         }
-        let (next_snapshot, next_runtime_snapshot) = {
-            let heap = self
-                .guard
-                .as_deref()
-                .expect("shared heap guard should hold heap lock");
-            heap.ensure_collector_plans_current();
-            (
-                SharedHeapSnapshot::capture(heap),
-                SharedRuntimeSnapshot::capture(heap),
-            )
-        };
-        // Release the heap mutex before touching shared snapshot locks so readers do not extend
-        // the main heap lock window.
+        heap.ensure_collector_plans_current();
+        let next_snapshot = SharedHeapSnapshot::capture(heap);
+        let next_runtime_snapshot = SharedRuntimeSnapshot::capture(heap);
+        // Release the heap mutex before touching shared snapshot
+        // locks so readers do not extend the main heap lock window.
         self.guard.take();
         let _ = self
             .runtime

@@ -141,6 +141,12 @@ struct HeapState {
     nursery_generation: std::sync::atomic::AtomicU64,
     collector_plans_dirty: std::sync::atomic::AtomicBool,
     collector_plans_refresh_epoch: std::sync::atomic::AtomicU64,
+    /// Set to `true` whenever `write_core()` is called (i.e. the
+    /// heap storage lock was taken for mutation).  [`SharedHeapGuard`]
+    /// reads and clears this flag in its `Drop` to avoid publishing
+    /// a full snapshot when the guard was used only for read-only
+    /// observation.
+    core_mutated: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -195,6 +201,7 @@ impl Heap {
                 nursery_generation: std::sync::atomic::AtomicU64::new(nursery_generation),
                 collector_plans_dirty: std::sync::atomic::AtomicBool::new(false),
                 collector_plans_refresh_epoch: std::sync::atomic::AtomicU64::new(0),
+                core_mutated: std::sync::atomic::AtomicBool::new(false),
             }),
         }
     }
@@ -237,7 +244,22 @@ impl Heap {
     /// safepoint guard first.
     #[inline]
     pub(crate) fn write_core(&self) -> std::sync::RwLockWriteGuard<'_, HeapCore> {
+        self.state
+            .core_mutated
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         self.state.core.write().expect("heap core lock poisoned")
+    }
+
+    /// Acquire a read guard on the underlying `HeapCore`.
+    /// Used by read-only heap accessors and by tests that
+    /// Whether any `write_core()` call occurred on this heap
+    /// since the last snapshot publish.  Used by
+    /// [`SharedHeapGuard`] to skip unnecessary snapshot
+    /// work after read-only guards.
+    pub(crate) fn took_core_writes(&self) -> bool {
+        self.state
+            .core_mutated
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Acquire a read guard on the underlying `HeapCore`.
