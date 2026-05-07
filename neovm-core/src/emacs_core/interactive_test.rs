@@ -2049,6 +2049,19 @@ fn lookup_key_accepts_legacy_menu_symbol_case_and_spaces() {
 }
 
 #[test]
+fn lookup_key_matches_parameterized_mouse_event_on_event_type() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let ((m (make-sparse-keymap)))
+                 (define-key m [mouse-movement] 'move)
+                 (lookup-key m (vector (list 'mouse-movement (list 1 2)))))"#
+        ),
+        "OK move"
+    );
+}
+
+#[test]
 fn define_key_sequence_preserves_gnu_prefix_symbol_bindings() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

@@ -91,23 +91,34 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                     // nil and t can appear as events in vectors
                     ValueKind::Nil => events.push(Value::symbol("nil")),
                     ValueKind::T => events.push(Value::symbol("t")),
-                    // Event modifier list: (control meta ?a) etc.
+                    // GNU only treats a cons vector element as a Lucid-style
+                    // event type list when every element is an integer or a
+                    // symbol.  Real mouse events are lists like
+                    // (mouse-movement POSITION), where POSITION is itself a
+                    // list; those remain parameterized events and key lookup
+                    // matches on their car.
                     ValueKind::Cons => {
-                        match super::kbd::key_events_from_designator(&Value::vector(vec![*item])) {
-                            Ok(ke) => {
-                                for e in &ke {
-                                    events.push(key_event_to_emacs_event(e));
+                        if lucid_event_type_list_p(item) {
+                            match super::kbd::key_events_from_designator(&Value::vector(vec![
+                                *item,
+                            ])) {
+                                Ok(ke) => {
+                                    for e in &ke {
+                                        events.push(key_event_to_emacs_event(e));
+                                    }
+                                }
+                                Err(super::kbd::KeyDesignatorError::Parse(msg)) => {
+                                    return Err(signal("error", vec![Value::string(msg)]));
+                                }
+                                Err(super::kbd::KeyDesignatorError::WrongType(other)) => {
+                                    return Err(signal(
+                                        "wrong-type-argument",
+                                        vec![Value::symbol("arrayp"), other],
+                                    ));
                                 }
                             }
-                            Err(super::kbd::KeyDesignatorError::Parse(msg)) => {
-                                return Err(signal("error", vec![Value::string(msg)]));
-                            }
-                            Err(super::kbd::KeyDesignatorError::WrongType(other)) => {
-                                return Err(signal(
-                                    "wrong-type-argument",
-                                    vec![Value::symbol("arrayp"), other],
-                                ));
-                            }
+                        } else {
+                            events.push(*item);
                         }
                     }
                     other => {
@@ -126,6 +137,31 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
             Ok(key_events.iter().map(key_event_to_emacs_event).collect())
         }
     }
+}
+
+fn lucid_event_type_list_p(value: &Value) -> bool {
+    if !value.is_cons() {
+        return false;
+    }
+    match value.cons_car().as_symbol_name() {
+        Some("help-echo" | "vertical-line" | "mode-line" | "tab-line" | "header-line") => {
+            return false;
+        }
+        _ => {}
+    }
+
+    let mut cursor = *value;
+    while cursor.is_cons() {
+        let elt = cursor.cons_car();
+        if !matches!(
+            elt.kind(),
+            ValueKind::Fixnum(_) | ValueKind::Symbol(_) | ValueKind::Nil | ValueKind::T
+        ) {
+            return false;
+        }
+        cursor = cursor.cons_cdr();
+    }
+    cursor.is_nil()
 }
 
 /// Parse a key description from a Value (must be a string or vector).
