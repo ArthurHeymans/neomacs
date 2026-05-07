@@ -1093,6 +1093,14 @@ impl FrameDisplayState {
                     fallback_width
                 };
                 let x = x_cursor;
+                let right_edge = win_x + win_w;
+                if x >= right_edge {
+                    break;
+                }
+                let materialized_width = glyph_width.min(right_edge - x).max(0.0);
+                if materialized_width <= 0.0 {
+                    break;
+                }
                 let slot_id = DisplaySlotId {
                     window_id,
                     row: row_index,
@@ -1120,7 +1128,7 @@ impl FrameDisplayState {
                             x,
                             y,
                             baseline: y + row_ascent,
-                            width: glyph_width,
+                            width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
                                 face_data.font_ascent.min(row_height)
@@ -1162,7 +1170,7 @@ impl FrameDisplayState {
                             x,
                             y,
                             baseline: y + row_ascent,
-                            width: glyph_width,
+                            width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
                                 face_data.font_ascent.min(row_height)
@@ -1194,7 +1202,7 @@ impl FrameDisplayState {
                             bidi_level: glyph.bidi_level,
                             x,
                             y,
-                            width: glyph_width,
+                            width: materialized_width,
                             height: row_height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
@@ -1211,7 +1219,7 @@ impl FrameDisplayState {
                             image_id: *image_id as u32,
                             x,
                             y,
-                            width: glyph_width,
+                            width: materialized_width,
                             height: row_height,
                         });
                     }
@@ -1235,7 +1243,7 @@ impl FrameDisplayState {
                             x,
                             y,
                             baseline: y + row_ascent,
-                            width: glyph_width,
+                            width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
                                 face_data.font_ascent.min(row_height)
@@ -1272,7 +1280,7 @@ impl FrameDisplayState {
             }
         }
 
-        let final_x = x_cursor;
+        let final_x = x_cursor.min(win_x + win_w);
         let right_edge = win_x + win_w;
         if final_x < right_edge && col > 0 && row_role.is_chrome() {
             let last_face_id = glyph_row

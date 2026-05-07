@@ -659,6 +659,52 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
 }
 
 #[test]
+fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
+    let mut state = FrameDisplayState::new(6, 1, 8.0, 16.0);
+    state.faces.insert(0, Face::new(0));
+
+    let mut matrix = GlyphMatrix::new(1, 3);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].role = GlyphRowRole::ModeLine;
+    matrix.rows[0].mode_line = true;
+    for (idx, ch) in "abcdef".chars().enumerate() {
+        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, idx));
+    }
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    let chars: Vec<(char, f32, f32)> = buf
+        .glyphs
+        .iter()
+        .filter_map(|glyph| match glyph {
+            FrameGlyph::Char {
+                char: ch, x, width, ..
+            } => Some((*ch, *x, *width)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        chars,
+        vec![('a', 0.0, 8.0), ('b', 8.0, 8.0), ('c', 16.0, 8.0)]
+    );
+    assert!(
+        buf.glyphs.iter().all(|glyph| match glyph {
+            FrameGlyph::Char { x, width, .. } | FrameGlyph::Stretch { x, width, .. } =>
+                *x + *width <= 24.0,
+            _ => true,
+        }),
+        "materialized row glyphs must stay inside their owning window"
+    );
+}
+
+#[test]
 fn materialize_stretch_glyph() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.faces.insert(0, Face::new(0));
