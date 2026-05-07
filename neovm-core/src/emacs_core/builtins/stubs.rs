@@ -313,6 +313,342 @@ pub(crate) fn builtin_neomacs_set_cursor_blink(
     Ok(Value::NIL)
 }
 
+fn cursor_effect_arg(value: &Value) -> Result<crate::emacs_core::eval::CursorEffectArg, Flow> {
+    if value.is_nil() {
+        return Ok(crate::emacs_core::eval::CursorEffectArg::Nil);
+    }
+    if *value == Value::symbol("t") {
+        return Ok(crate::emacs_core::eval::CursorEffectArg::Bool(true));
+    }
+    if let Some(text) = value.as_utf8_str() {
+        return Ok(crate::emacs_core::eval::CursorEffectArg::String(
+            text.to_owned(),
+        ));
+    }
+    Ok(crate::emacs_core::eval::CursorEffectArg::Number(
+        expect_number(value)?,
+    ))
+}
+
+pub(crate) fn builtin_neomacs_set_cursor_animation(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_range_args("neomacs-set-cursor-animation", &args, 1, 2)?;
+    let enabled = !args[0].is_nil();
+    let speed = match args.get(1) {
+        Some(value) if !value.is_nil() => (expect_number(value)? as f32 / 100.0).max(0.001),
+        _ => 2.4,
+    };
+    if let Some(host) = eval.display_host.as_mut() {
+        host.set_cursor_animation(enabled, speed)
+            .map_err(|message| {
+                signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "neomacs-set-cursor-animation: {message}"
+                    ))],
+                )
+            })?;
+    }
+    Ok(Value::NIL)
+}
+
+fn builtin_neomacs_set_cursor_effect(
+    eval: &mut crate::emacs_core::eval::Context,
+    subr_name: &str,
+    effect_name: &str,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_range_args(subr_name, &args, 1, 6)?;
+    let effect_args = args
+        .iter()
+        .map(cursor_effect_arg)
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(host) = eval.display_host.as_mut() {
+        host.set_cursor_effect(effect_name, effect_args)
+            .map_err(|message| {
+                signal(
+                    "error",
+                    vec![Value::string(format!("{subr_name}: {message}"))],
+                )
+            })?;
+    }
+    Ok(Value::NIL)
+}
+
+macro_rules! cursor_effect_builtin {
+    ($fn_name:ident, $subr_name:literal, $effect_name:literal) => {
+        pub(crate) fn $fn_name(
+            eval: &mut crate::emacs_core::eval::Context,
+            args: Vec<Value>,
+        ) -> EvalResult {
+            builtin_neomacs_set_cursor_effect(eval, $subr_name, $effect_name, args)
+        }
+    };
+}
+
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_glow,
+    "neomacs-set-cursor-glow",
+    "glow"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_pulse,
+    "neomacs-set-cursor-pulse",
+    "pulse"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_color_cycle,
+    "neomacs-set-cursor-color-cycle",
+    "color-cycle"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_shadow,
+    "neomacs-set-cursor-shadow",
+    "shadow"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_wake,
+    "neomacs-set-cursor-wake",
+    "wake"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_error_pulse,
+    "neomacs-set-cursor-error-pulse",
+    "error-pulse"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_crosshair,
+    "neomacs-set-cursor-crosshair",
+    "crosshair"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_magnetism,
+    "neomacs-set-cursor-magnetism",
+    "magnetism"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_comet,
+    "neomacs-set-cursor-comet",
+    "comet"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_spotlight,
+    "neomacs-set-cursor-spotlight",
+    "spotlight"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_particles,
+    "neomacs-set-cursor-particles",
+    "particles"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_trail_fade,
+    "neomacs-set-cursor-trail-fade",
+    "trail-fade"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_size_transition,
+    "neomacs-set-cursor-size-transition",
+    "size-transition"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_elastic_snap,
+    "neomacs-set-cursor-elastic-snap",
+    "elastic-snap"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_ghost,
+    "neomacs-set-cursor-ghost",
+    "ghost"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_ripple_wave,
+    "neomacs-set-cursor-ripple-wave",
+    "ripple-wave"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_lighthouse,
+    "neomacs-set-cursor-lighthouse",
+    "lighthouse"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_sonar_ping,
+    "neomacs-set-cursor-sonar-ping",
+    "sonar-ping"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_orbit_particles,
+    "neomacs-set-cursor-orbit-particles",
+    "orbit-particles"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_heartbeat,
+    "neomacs-set-cursor-heartbeat",
+    "heartbeat"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_metronome,
+    "neomacs-set-cursor-metronome",
+    "metronome"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_radar,
+    "neomacs-set-cursor-radar",
+    "radar"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_ripple_ring,
+    "neomacs-set-cursor-ripple-ring",
+    "ripple-ring"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_scope,
+    "neomacs-set-cursor-scope",
+    "scope"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_shockwave,
+    "neomacs-set-cursor-shockwave",
+    "shockwave"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_gravity_well,
+    "neomacs-set-cursor-gravity-well",
+    "gravity-well"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_water_drop,
+    "neomacs-set-cursor-water-drop",
+    "water-drop"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_pixel_dust,
+    "neomacs-set-cursor-pixel-dust",
+    "pixel-dust"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_candle_flame,
+    "neomacs-set-cursor-candle-flame",
+    "candle-flame"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_moth_flame,
+    "neomacs-set-cursor-moth-flame",
+    "moth-flame"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_sparkler,
+    "neomacs-set-cursor-sparkler",
+    "sparkler"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_plasma_ball,
+    "neomacs-set-cursor-plasma-ball",
+    "plasma-ball"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_quill_pen,
+    "neomacs-set-cursor-quill-pen",
+    "quill-pen"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_aurora_borealis,
+    "neomacs-set-cursor-aurora-borealis",
+    "aurora-borealis"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_feather,
+    "neomacs-set-cursor-feather",
+    "feather"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_stardust,
+    "neomacs-set-cursor-stardust",
+    "stardust"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_compass_needle,
+    "neomacs-set-cursor-compass-needle",
+    "compass-needle"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_galaxy,
+    "neomacs-set-cursor-galaxy",
+    "galaxy"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_prism,
+    "neomacs-set-cursor-prism",
+    "prism"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_moth,
+    "neomacs-set-cursor-moth",
+    "moth"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_flame,
+    "neomacs-set-cursor-flame",
+    "flame"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_crystal,
+    "neomacs-set-cursor-crystal",
+    "crystal"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_lightning,
+    "neomacs-set-cursor-lightning",
+    "lightning"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_snowflake,
+    "neomacs-set-cursor-snowflake",
+    "snowflake"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_firework,
+    "neomacs-set-cursor-firework",
+    "firework"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_tornado,
+    "neomacs-set-cursor-tornado",
+    "tornado"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_portal,
+    "neomacs-set-cursor-portal",
+    "portal"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_bubble,
+    "neomacs-set-cursor-bubble",
+    "bubble"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_sparkle_burst,
+    "neomacs-set-cursor-sparkle-burst",
+    "sparkle-burst"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_compass,
+    "neomacs-set-cursor-compass",
+    "compass"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_dna_helix,
+    "neomacs-set-cursor-dna-helix",
+    "dna-helix"
+);
+cursor_effect_builtin!(
+    builtin_neomacs_set_cursor_pendulum,
+    "neomacs-set-cursor-pendulum",
+    "pendulum"
+);
+
 pub(crate) fn builtin_neomacs_display_monitor_attributes_list(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,

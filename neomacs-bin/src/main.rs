@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo,
     build_render_event_loop, run_render_loop_current_thread,
@@ -51,7 +52,7 @@ use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
     configure_terminal_runtime, reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
-use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest};
+use neovm_core::emacs_core::{Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest};
 use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameId, Window};
@@ -871,6 +872,29 @@ impl PrimaryWindowDisplayHost {
     }
 }
 
+fn render_cursor_effect_arg(arg: CursorEffectArg) -> RenderCursorEffectArg {
+    match arg {
+        CursorEffectArg::Nil => RenderCursorEffectArg::Nil,
+        CursorEffectArg::Bool(value) => RenderCursorEffectArg::Bool(value),
+        CursorEffectArg::Number(value) => RenderCursorEffectArg::Number(value),
+        CursorEffectArg::String(value) => RenderCursorEffectArg::String(value),
+    }
+}
+
+fn cursor_effect_enabled(args: &[CursorEffectArg]) -> bool {
+    !matches!(
+        args.first(),
+        None | Some(CursorEffectArg::Nil) | Some(CursorEffectArg::Bool(false))
+    )
+}
+
+fn cursor_effect_u32(args: &[CursorEffectArg], index: usize, default: u32) -> u32 {
+    match args.get(index) {
+        Some(CursorEffectArg::Number(value)) => value.round().max(0.0) as u32,
+        _ => default,
+    }
+}
+
 impl DisplayHost for PrimaryWindowDisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         let title_string = request.title.as_utf8_str().unwrap_or("Neomacs").to_owned();
@@ -1023,6 +1047,36 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 interval_ms,
             },
             "failed to set cursor blink",
+        )
+    }
+
+    fn set_cursor_animation(&mut self, enabled: bool, speed: f32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::SetCursorAnimation { enabled, speed },
+            "failed to set cursor animation",
+        )
+    }
+
+    fn set_cursor_effect(&mut self, name: &str, args: Vec<CursorEffectArg>) -> Result<(), String> {
+        if name == "size-transition" {
+            let enabled = cursor_effect_enabled(&args);
+            let duration_ms = cursor_effect_u32(&args, 1, 150);
+            return self.send_render_command(
+                RenderCommand::SetCursorSizeTransition {
+                    enabled,
+                    duration_ms,
+                },
+                "failed to set cursor size transition",
+            );
+        }
+
+        let command = CursorEffectCommand::new(
+            name,
+            args.into_iter().map(render_cursor_effect_arg).collect(),
+        );
+        self.send_render_command(
+            RenderCommand::SetCursorEffect(command),
+            "failed to set cursor effect",
         )
     }
 

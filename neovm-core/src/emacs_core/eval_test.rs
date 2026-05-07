@@ -405,6 +405,8 @@ impl DisplayHost for RecordingDisplayHost {
 
 struct CursorBlinkRecordingDisplayHost {
     calls: Rc<RefCell<Vec<(bool, u32)>>>,
+    animation_calls: Rc<RefCell<Vec<(bool, f32)>>>,
+    effect_calls: Rc<RefCell<Vec<(String, Vec<CursorEffectArg>)>>>,
 }
 
 impl DisplayHost for CursorBlinkRecordingDisplayHost {
@@ -418,6 +420,16 @@ impl DisplayHost for CursorBlinkRecordingDisplayHost {
 
     fn set_cursor_blink(&mut self, enabled: bool, interval_ms: u32) -> Result<(), String> {
         self.calls.borrow_mut().push((enabled, interval_ms));
+        Ok(())
+    }
+
+    fn set_cursor_animation(&mut self, enabled: bool, speed: f32) -> Result<(), String> {
+        self.animation_calls.borrow_mut().push((enabled, speed));
+        Ok(())
+    }
+
+    fn set_cursor_effect(&mut self, name: &str, args: Vec<CursorEffectArg>) -> Result<(), String> {
+        self.effect_calls.borrow_mut().push((name.to_owned(), args));
         Ok(())
     }
 }
@@ -436,14 +448,52 @@ fn neomacs_set_cursor_blink_forwards_to_display_host() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let calls = Rc::new(RefCell::new(Vec::new()));
+    let animation_calls = Rc::new(RefCell::new(Vec::new()));
+    let effect_calls = Rc::new(RefCell::new(Vec::new()));
     ev.set_display_host(Box::new(CursorBlinkRecordingDisplayHost {
         calls: Rc::clone(&calls),
+        animation_calls,
+        effect_calls,
     }));
 
     ev.eval_str("(neomacs-set-cursor-blink nil 0.25)")
         .expect("set cursor blink should evaluate");
 
     assert_eq!(*calls.borrow(), vec![(false, 250)]);
+}
+
+#[test]
+fn neomacs_cursor_effect_setters_forward_to_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    let animation_calls = Rc::new(RefCell::new(Vec::new()));
+    let effect_calls = Rc::new(RefCell::new(Vec::new()));
+    ev.set_display_host(Box::new(CursorBlinkRecordingDisplayHost {
+        calls,
+        animation_calls: Rc::clone(&animation_calls),
+        effect_calls: Rc::clone(&effect_calls),
+    }));
+
+    ev.eval_str(
+        r##"(progn
+              (neomacs-set-cursor-animation t 240)
+              (neomacs-set-cursor-glow t "#66CCFF" 48))"##,
+    )
+    .expect("cursor effect setters should evaluate");
+
+    assert_eq!(*animation_calls.borrow(), vec![(true, 2.4)]);
+    assert_eq!(
+        *effect_calls.borrow(),
+        vec![(
+            "glow".to_owned(),
+            vec![
+                CursorEffectArg::Bool(true),
+                CursorEffectArg::String("#66CCFF".to_owned()),
+                CursorEffectArg::Number(48.0),
+            ],
+        )]
+    );
 }
 
 #[test]

@@ -16,7 +16,8 @@ pub type WakeupFd = RawHandle;
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 pub use neomacs_display_protocol::{
-    EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarItem, TransitionPolicy,
+    CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarItem,
+    TransitionPolicy,
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
@@ -476,6 +477,8 @@ pub enum RenderCommand {
     /// Update visual effect configuration.
     /// The closure modifies the shared EffectsConfig in-place.
     UpdateEffect(EffectUpdater),
+    /// Update a named cursor effect configuration.
+    SetCursorEffect(CursorEffectCommand),
     /// Toggle scroll indicators and focus ring
     SetScrollIndicators {
         enabled: bool,

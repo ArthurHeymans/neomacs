@@ -1,5 +1,6 @@
 //! Shared protocol types between layout, renderer, and runtime crates.
 
+pub mod cursor_effect_command;
 pub mod effect_config;
 pub mod face;
 pub mod frame_glyphs;
@@ -13,6 +14,7 @@ pub mod ui_types;
 pub use glyph_matrix::*;
 pub mod tty_rif;
 
+pub use cursor_effect_command::*;
 pub use effect_config::*;
 pub use face::*;
 pub use frame_glyphs::*;

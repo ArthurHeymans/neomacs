@@ -1317,6 +1317,14 @@ pub struct ResolvedVideo {
     pub video_id: u32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum CursorEffectArg {
+    Nil,
+    Bool(bool),
+    Number(f64),
+    String(String),
+}
+
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
@@ -1378,6 +1386,16 @@ pub trait DisplayHost {
         Ok(None)
     }
     fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {
+        Ok(())
+    }
+    fn set_cursor_animation(&mut self, _enabled: bool, _speed: f32) -> Result<(), String> {
+        Ok(())
+    }
+    fn set_cursor_effect(
+        &mut self,
+        _name: &str,
+        _args: Vec<CursorEffectArg>,
+    ) -> Result<(), String> {
         Ok(())
     }
 }

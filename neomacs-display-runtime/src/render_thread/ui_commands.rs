@@ -248,6 +248,14 @@ impl RenderApp {
                 self.frame_dirty = true;
                 Ok(())
             }
+            RenderCommand::SetCursorEffect(command) => {
+                command.apply_to(&mut self.effects);
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.effects = self.effects.clone();
+                }
+                self.frame_dirty = true;
+                Ok(())
+            }
             RenderCommand::SetScrollIndicators { enabled } => {
                 self.scroll_indicators_enabled = enabled;
                 self.frame_dirty = true;
