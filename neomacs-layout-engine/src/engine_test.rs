@@ -865,6 +865,66 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
 }
 
 #[test]
+fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abc");
+        let visual_cursor = Value::list(vec![
+            Value::keyword(":position"),
+            Value::fixnum(2),
+            Value::keyword(":cursor-type"),
+            Value::cons(Value::symbol("hbar"), Value::fixnum(3)),
+            Value::keyword(":color"),
+            Value::string("#00ff00"),
+        ]);
+        buf.set_buffer_local("neomacs-visual-cursors", Value::list(vec![visual_cursor]));
+        buf.goto_byte(0);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-visual-hbar-display-point-box",
+        320,
+        120,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let b_point = snapshot.point_for_buffer_pos(2).expect("b point");
+    let visual = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id < 0)
+        .expect("visual cursor");
+
+    assert_eq!(visual.width.round() as i64, b_point.width);
+    assert_eq!(
+        visual.height.round() as i64,
+        b_point.height,
+        "hbar visual cursor stores the full glyph box; renderer draws the bar from style"
+    );
+}
+
+#[test]
 fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     let mut eval = Context::new();
     let buf_id = eval

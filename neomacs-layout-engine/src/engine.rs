@@ -78,6 +78,23 @@ struct ResolvedCursorGeometry {
     cursor_fg: Color,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CursorGeometrySource {
+    x: f32,
+    y: f32,
+    slot_width: f32,
+    face_height: f32,
+    face_ascent: f32,
+    row_height: f32,
+    row_ascent: f32,
+    default_line_height: f32,
+    row: usize,
+    col: usize,
+    stretch_like: bool,
+    ends_at_visible_eob: bool,
+    cursor_fg: Color,
+}
+
 fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
     match style {
         CursorStyle::FilledBox => WindowCursorKind::FilledBox,
@@ -479,6 +496,49 @@ fn resolve_cursor_vertical_metrics(
     let minimum_height = default_line_height.max(1.0).min(row_height);
     let height = (ascent + glyph_descent).max(minimum_height).min(row_height);
     (y, height, ascent.min(height))
+}
+
+fn resolve_cursor_geometry(
+    style: CursorStyle,
+    source: CursorGeometrySource,
+    x_stretch_cursor: bool,
+    fallback_char_width: f32,
+    color: Color,
+) -> ResolvedCursorGeometry {
+    let actual_slot_width = match style {
+        CursorStyle::Bar(width) => width.max(1.0),
+        CursorStyle::Hbar(_) | CursorStyle::FilledBox | CursorStyle::Hollow => {
+            source.slot_width.max(1.0)
+        }
+    };
+    let width = if source.stretch_like && !x_stretch_cursor && !matches!(style, CursorStyle::Bar(_))
+    {
+        fallback_char_width.max(1.0)
+    } else {
+        actual_slot_width
+    };
+    let (y, height, ascent) = resolve_cursor_vertical_metrics(
+        source.y,
+        source.face_height,
+        source.face_ascent,
+        source.row_height,
+        source.row_ascent,
+        source.default_line_height,
+        source.ends_at_visible_eob,
+    );
+
+    ResolvedCursorGeometry {
+        x: source.x,
+        y,
+        width,
+        height,
+        ascent,
+        row: source.row,
+        col: source.col,
+        style,
+        color,
+        cursor_fg: source.cursor_fg,
+    }
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -1112,23 +1172,26 @@ fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
     CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
 }
 
-fn visual_cursor_rect_from_point(
-    style: CursorStyle,
+fn visual_cursor_source_from_point(
     point: &DisplayPointSnapshot,
     text_area_left: f32,
     window_top: f32,
-) -> (f32, f32, f32, f32) {
-    let point_x = text_area_left + point.x as f32;
-    let point_y = window_top + point.y as f32;
-    let point_w = (point.width as f32).max(1.0);
+) -> CursorGeometrySource {
     let point_h = (point.height as f32).max(1.0);
-    match style {
-        CursorStyle::Bar(width) => (point_x, point_y, width.max(1.0), point_h),
-        CursorStyle::Hbar(height) => {
-            let h = height.max(1.0).min(point_h);
-            (point_x, point_y + point_h - h, point_w, h)
-        }
-        CursorStyle::FilledBox | CursorStyle::Hollow => (point_x, point_y, point_w, point_h),
+    CursorGeometrySource {
+        x: text_area_left + point.x as f32,
+        y: window_top + point.y as f32,
+        slot_width: (point.width as f32).max(1.0),
+        face_height: point_h,
+        face_ascent: point_h,
+        row_height: point_h,
+        row_ascent: point_h,
+        default_line_height: point_h,
+        row: point.row.max(0) as usize,
+        col: point.col.max(0) as usize,
+        stretch_like: false,
+        ends_at_visible_eob: false,
+        cursor_fg: Color::BLACK,
     }
 }
 
@@ -5420,36 +5483,28 @@ impl LayoutEngine {
                         )
                         .max(1.0)
                     };
-                    let actual_cursor_w = computed_slot_width;
-                    let cursor_w = if cursor.stretch_like
-                        && !params.x_stretch_cursor
-                        && !matches!(style, CursorStyle::Bar(_))
-                    {
-                        char_w.max(1.0)
-                    } else {
-                        actual_cursor_w
-                    };
-                    let (cursor_y, cursor_h, cursor_ascent) = resolve_cursor_vertical_metrics(
-                        cursor.y,
-                        cursor.face_h,
-                        cursor.face_ascent,
-                        row_metric.height,
-                        row_metric.ascent,
-                        char_h,
-                        point_is_visible_eob,
-                    );
-                    let resolved_cursor = ResolvedCursorGeometry {
+                    let source = CursorGeometrySource {
                         x: cursor.x,
-                        y: cursor_y,
-                        width: cursor_w,
-                        height: cursor_h,
-                        ascent: cursor_ascent,
+                        y: cursor.y,
+                        slot_width: computed_slot_width,
+                        face_height: cursor.face_h,
+                        face_ascent: cursor.face_ascent,
+                        row_height: row_metric.height,
+                        row_ascent: row_metric.ascent,
+                        default_line_height: char_h,
                         row: text_matrix_row_base + cursor.matrix_row,
                         col: cursor.col,
-                        style,
-                        color: Color::from_pixel(params.cursor_color),
+                        stretch_like: cursor.stretch_like,
+                        ends_at_visible_eob: point_is_visible_eob,
                         cursor_fg: cursor.bg,
                     };
+                    let resolved_cursor = resolve_cursor_geometry(
+                        style,
+                        source,
+                        params.x_stretch_cursor,
+                        char_w,
+                        Color::from_pixel(params.cursor_color),
+                    );
                     if resolved_cursor.y >= text_y
                         && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
                     {
@@ -5555,9 +5610,17 @@ impl LayoutEngine {
             else {
                 continue;
             };
-            let (x, y, width, height) =
-                visual_cursor_rect_from_point(style, point, text_area_left, window_top);
-            if y < text_y || y + height > text_y + text_height {
+            let source = visual_cursor_source_from_point(point, text_area_left, window_top);
+            let resolved_cursor = resolve_cursor_geometry(
+                style,
+                source,
+                params.x_stretch_cursor,
+                char_w,
+                Color::from_pixel(spec.color),
+            );
+            if resolved_cursor.y < text_y
+                || resolved_cursor.y + resolved_cursor.height > text_y + text_height
+            {
                 continue;
             }
             if let Some(effects) = spec.effects.clone() {
@@ -5568,15 +5631,15 @@ impl LayoutEngine {
                 spec.id,
                 DisplaySlotId {
                     window_id: spec.id as i64,
-                    row: point.row.max(0) as u32,
-                    col: point.col.max(0) as u16,
+                    row: resolved_cursor.row as u32,
+                    col: resolved_cursor.col as u16,
                 },
-                x,
-                y,
-                width,
-                height,
-                style,
-                Color::from_pixel(spec.color),
+                resolved_cursor.x,
+                resolved_cursor.y,
+                resolved_cursor.width,
+                resolved_cursor.height,
+                resolved_cursor.style,
+                resolved_cursor.color,
             );
         }
 
