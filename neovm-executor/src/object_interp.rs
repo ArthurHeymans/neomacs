@@ -7946,6 +7946,30 @@ mod tests {
     }
 
     #[test]
+    fn executes_if_then_else() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(if t 42 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_if_no_else() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(if nil 42)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_let_star_sequential() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let* ((x 1) (y (+ x 2))) y)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_dotimes_loop() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
