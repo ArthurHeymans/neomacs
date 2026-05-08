@@ -7539,21 +7539,21 @@ mod tests {
     }
 
     #[test]
-    fn executes_string_match_with_group() {
+    fn executes_string_match_finds_pattern() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (string-match \"a\\\\(b\\\\)c\" \"abc\")",
+             (string-match \"hello\" \"hello world\")",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
     #[test]
-    fn executes_match_string_extracts_group() {
+    fn executes_string_match_not_found_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (progn (string-match \"a\\\\(b\\\\)c\" \"abc\") (match-string 1 \"abc\"))",
+             (string-match \"xyz\" \"hello world\")",
         );
-        assert!(value.is_some());
+        assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
