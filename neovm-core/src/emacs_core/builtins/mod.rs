@@ -4950,7 +4950,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-child-frame-border-width",
-        |_ctx, args| builtin_frame_child_frame_border_width(args),
+        super::window_cmds::builtin_frame_child_frame_border_width,
         0,
         Some(1),
     );
@@ -4974,7 +4974,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-internal-border-width",
-        |_ctx, args| builtin_frame_internal_border_width(args),
+        super::window_cmds::builtin_frame_internal_border_width,
         0,
         Some(1),
     );

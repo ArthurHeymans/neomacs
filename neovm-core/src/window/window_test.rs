@@ -43,6 +43,52 @@ fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer(
 }
 
 #[test]
+fn internal_border_width_insets_root_and_minibuffer_geometry() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 100, 80, BufferId(1));
+
+    {
+        let frame = mgr.get_mut(fid).expect("frame");
+        frame.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        frame.sync_window_area_bounds();
+    }
+
+    let frame = mgr.get(fid).expect("frame");
+    assert_eq!(*frame.root_window.bounds(), Rect::new(4.0, 4.0, 92.0, 56.0));
+    assert_eq!(
+        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
+        Rect::new(4.0, 60.0, 92.0, 16.0)
+    );
+}
+
+#[test]
+fn child_frame_border_width_acts_as_child_internal_border() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let parent_id = mgr.create_frame("parent", 100, 80, BufferId(1));
+    let child_id = mgr.create_frame("child", 40, 30, BufferId(1));
+    let parent_minibuffer = mgr
+        .get(parent_id)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("parent minibuffer");
+
+    {
+        let child = mgr.get_mut(child_id).expect("child frame");
+        child.parent_frame = Value::make_frame(parent_id.0);
+        child.minibuffer_window = Some(parent_minibuffer);
+        child.minibuffer_leaf = None;
+        child.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        child.set_parameter(Value::symbol("child-frame-border-width"), Value::fixnum(2));
+        child.sync_window_area_bounds();
+    }
+
+    let child = mgr.get(child_id).expect("child frame");
+    assert_eq!(child.internal_border_width(), 2);
+    assert_eq!(*child.root_window.bounds(), Rect::new(2.0, 2.0, 36.0, 26.0));
+}
+
+#[test]
 fn render_frame_tree_returns_root_relative_bottom_to_top_nodes() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

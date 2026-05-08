@@ -1702,6 +1702,29 @@ impl Frame {
         self.parameter(key).and_then(|v| v.as_int())
     }
 
+    fn nonnegative_frame_parameter_int(&self, key: &str) -> Option<i64> {
+        self.frame_parameter_int(key).map(|value| value.max(0))
+    }
+
+    pub fn child_frame_border_width_raw(&self) -> Option<i64> {
+        self.nonnegative_frame_parameter_int("child-frame-border-width")
+    }
+
+    pub fn internal_border_width(&self) -> i64 {
+        if self.parent_frame.as_frame_id().is_some()
+            && let Some(width) = self.child_frame_border_width_raw()
+        {
+            return width;
+        }
+        self.nonnegative_frame_parameter_int("internal-border-width")
+            .unwrap_or(0)
+    }
+
+    pub fn frame_child_frame_border_width(&self) -> i64 {
+        self.child_frame_border_width_raw()
+            .unwrap_or_else(|| self.internal_border_width())
+    }
+
     pub fn parameter(&self, key: &str) -> Option<Value> {
         self.parameters.get(&Value::symbol(key)).copied()
     }
@@ -1854,14 +1877,24 @@ impl Frame {
         let frame_w = self.width as f32;
         let frame_h = self.height as f32;
         let chrome_top = self.chrome_top_height().min(frame_h);
+        let border = self.internal_border_width().max(0) as f32;
+        let horizontal_border = border.min(frame_w / 2.0);
+        let available_height = (frame_h - chrome_top).max(0.0);
+        let vertical_border = border.min(available_height / 2.0);
+        let content_height = (available_height - 2.0 * vertical_border).max(0.0);
         let minibuffer_height = self
             .minibuffer_leaf
             .as_ref()
             .map(|mini| mini.bounds().height.max(0.0))
             .unwrap_or(0.0)
-            .min((frame_h - chrome_top).max(0.0));
-        let root_height = (frame_h - chrome_top - minibuffer_height).max(0.0);
-        Rect::new(0.0, chrome_top, frame_w, root_height)
+            .min(content_height);
+        let root_height = (content_height - minibuffer_height).max(0.0);
+        Rect::new(
+            horizontal_border,
+            chrome_top + vertical_border,
+            (frame_w - 2.0 * horizontal_border).max(0.0),
+            root_height,
+        )
     }
 
     pub fn sync_window_area_bounds(&mut self) {

@@ -1937,6 +1937,10 @@ impl LayoutEngine {
                     frame.top_pos as f32,
                     frame.z_order,
                     frame.undecorated,
+                    frame.internal_border_width() as f32,
+                    Color::BLACK,
+                    1.0,
+                    frame.no_accept_focus,
                 );
             }
             self.matrix_builder
@@ -6122,7 +6126,18 @@ impl LayoutEngine {
         let font_metrics = self.font_metrics.as_mut();
         let mut builder = GlyphMatrixBuilder::new();
 
-        builder.set_frame_identity(content.frame_id, 0, 0.0, 0.0, 0, false);
+        builder.set_frame_identity(
+            content.frame_id,
+            0,
+            0.0,
+            0.0,
+            0,
+            false,
+            0.0,
+            Color::BLACK,
+            1.0,
+            false,
+        );
         builder.set_background_color(content.background);
 
         let mut face_map = std::collections::HashMap::new();
@@ -6313,6 +6328,10 @@ impl LayoutEngine {
                 cf.parent_y,
                 cf.z_order,
                 true,
+                0.0,
+                Color::BLACK,
+                1.0,
+                false,
             );
             cb.set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
             let mut cfm = std::collections::HashMap::new();

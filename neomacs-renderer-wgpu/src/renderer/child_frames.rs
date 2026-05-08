@@ -86,10 +86,10 @@ impl WgpuRenderer {
 
                 if shadow_enabled && shadow_layers > 0 {
                     let mut shadow_verts: Vec<RectVertex> = Vec::new();
-                    let total_w = frame_w + 2.0 * bw;
-                    let total_h = frame_h + 2.0 * bw;
-                    let sx = offset_x - bw;
-                    let sy = offset_y - bw;
+                    let total_w = frame_w;
+                    let total_h = frame_h;
+                    let sx = offset_x;
+                    let sy = offset_y;
                     for layer in (1..=shadow_layers).rev() {
                         let off = layer as f32 * shadow_offset;
                         let alpha =
@@ -206,10 +206,10 @@ impl WgpuRenderer {
                 let effective_bw = if bw > 0.0 { bw } else { 1.0 };
                 self.add_rounded_rect(
                     &mut border_verts,
-                    offset_x - effective_bw,
-                    offset_y - effective_bw,
-                    frame_w + 2.0 * effective_bw,
-                    frame_h + 2.0 * effective_bw,
+                    offset_x,
+                    offset_y,
+                    frame_w,
+                    frame_h,
                     effective_bw,
                     corner_radius,
                     &bc,

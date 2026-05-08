@@ -95,6 +95,10 @@ pub struct GlyphMatrixBuilder {
     parent_y: f32,
     z_order: i32,
     undecorated: bool,
+    border_width: f32,
+    border_color: Color,
+    background_alpha: f32,
+    no_accept_focus: bool,
 }
 
 #[derive(Clone)]
@@ -237,6 +241,15 @@ impl GlyphMatrixBuilder {
             parent_y: 0.0,
             z_order: 0,
             undecorated: false,
+            border_width: 0.0,
+            border_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            background_alpha: 1.0,
+            no_accept_focus: false,
         }
     }
 
@@ -274,6 +287,15 @@ impl GlyphMatrixBuilder {
         self.parent_y = 0.0;
         self.z_order = 0;
         self.undecorated = false;
+        self.border_width = 0.0;
+        self.border_color = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
+        self.background_alpha = 1.0;
+        self.no_accept_focus = false;
     }
 
     pub fn begin_window(
@@ -770,6 +792,10 @@ impl GlyphMatrixBuilder {
         parent_y: f32,
         z_order: i32,
         undecorated: bool,
+        border_width: f32,
+        border_color: Color,
+        background_alpha: f32,
+        no_accept_focus: bool,
     ) {
         self.frame_id = frame_id;
         self.parent_id = parent_id;
@@ -777,6 +803,10 @@ impl GlyphMatrixBuilder {
         self.parent_y = parent_y;
         self.z_order = z_order;
         self.undecorated = undecorated;
+        self.border_width = border_width;
+        self.border_color = border_color;
+        self.background_alpha = background_alpha;
+        self.no_accept_focus = no_accept_focus;
     }
 
     /// Begin a new status-line row in the currently open window.
@@ -1002,6 +1032,10 @@ impl GlyphMatrixBuilder {
         state.parent_y = self.parent_y;
         state.z_order = self.z_order;
         state.undecorated = self.undecorated;
+        state.border_width = self.border_width;
+        state.border_color = self.border_color;
+        state.background_alpha = self.background_alpha;
+        state.no_accept_focus = self.no_accept_focus;
         state
     }
 

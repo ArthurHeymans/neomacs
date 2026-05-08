@@ -6254,6 +6254,7 @@ fn make_frame_plain(
             frame.sync_tab_bar_height_from_parameters();
             frame.sync_menu_bar_height_from_parameters();
             frame.sync_tool_bar_height_from_parameters();
+            frame.sync_window_area_bounds();
             tracing::debug!(
                 "make_frame_plain: created tty child frame {:?} parent={:?} pos={}x{} size={}x{}",
                 fid,
@@ -6306,6 +6307,8 @@ struct ParsedGuiFrameParams {
     left: Option<i64>,
     top: Option<i64>,
     minibuffer: Option<Value>,
+    internal_border_width: Option<i64>,
+    child_frame_border_width: Option<i64>,
     undecorated: bool,
     no_accept_focus: bool,
     unsplittable: bool,
@@ -6398,6 +6401,8 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
             "left" => parsed.left = pair_cdr.as_int(),
             "top" => parsed.top = pair_cdr.as_int(),
             "minibuffer" => parsed.minibuffer = Some(pair_cdr),
+            "internal-border-width" => parsed.internal_border_width = pair_cdr.as_int(),
+            "child-frame-border-width" => parsed.child_frame_border_width = pair_cdr.as_int(),
             "undecorated" => parsed.undecorated = pair_cdr.is_truthy(),
             "no-accept-focus" => parsed.no_accept_focus = pair_cdr.is_truthy(),
             "unsplittable" => parsed.unsplittable = pair_cdr.is_truthy(),
@@ -6405,6 +6410,19 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
         }
     }
     parsed
+}
+
+fn parsed_effective_internal_border_width(
+    parsed: &ParsedGuiFrameParams,
+    is_child_frame: bool,
+) -> u32 {
+    if is_child_frame && let Some(width) = parsed.child_frame_border_width {
+        return width.max(0) as u32;
+    }
+    parsed
+        .internal_border_width
+        .map(|width| width.max(0) as u32)
+        .unwrap_or(0)
 }
 
 fn current_gui_frame_metrics(eval: &super::eval::Context) -> GuiFrameMetrics {
@@ -6515,9 +6533,12 @@ pub(crate) fn x_create_frame_impl(
         .as_ref()
         .is_some_and(|host| host.opening_gui_frame_pending());
     let is_child_frame = parent_id.is_some();
+    let internal_border_width = parsed_effective_internal_border_width(&parsed, is_child_frame);
     let width_px = parsed
         .width_columns
-        .map(|cols| ((cols as f32 * metrics.char_width).round().max(1.0)) as u32)
+        .map(|cols| {
+            ((cols as f32 * metrics.char_width).round().max(1.0)) as u32 + 2 * internal_border_width
+        })
         .unwrap_or_else(|| {
             if is_child_frame {
                 metrics.width_px
@@ -6529,6 +6550,7 @@ pub(crate) fn x_create_frame_impl(
         ((lines as f32 * metrics.char_height)
             .round()
             .max(metrics.char_height)) as u32
+            + 2 * internal_border_width
     });
     let height_px = text_height_px.map(|text| text).unwrap_or_else(|| {
         if is_child_frame {
@@ -6634,6 +6656,7 @@ pub(crate) fn x_create_frame_impl(
         frame.sync_tab_bar_height_from_parameters();
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
+        frame.sync_window_area_bounds();
     }
     if !is_child_frame && let Some(host) = display_host.as_mut() {
         let geometry_hints = frames
@@ -7010,6 +7033,34 @@ pub(crate) fn builtin_frame_bottom_divider_width(
         frame,
         "bottom-divider-width",
     )))
+}
+
+pub(crate) fn builtin_frame_child_frame_border_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-child-frame-border-width", &args, 1)?;
+    let fid =
+        resolve_frame_id_in_state(&mut eval.frames, &mut eval.buffers, args.first(), "framep")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    Ok(Value::fixnum(frame.frame_child_frame_border_width()))
+}
+
+pub(crate) fn builtin_frame_internal_border_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-internal-border-width", &args, 1)?;
+    let fid =
+        resolve_frame_id_in_state(&mut eval.frames, &mut eval.buffers, args.first(), "framep")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    Ok(Value::fixnum(frame.internal_border_width()))
 }
 
 pub(crate) fn builtin_frame_right_divider_width(

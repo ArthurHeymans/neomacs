@@ -487,6 +487,10 @@ pub struct FrameDisplayState {
     pub parent_y: f32,
     pub z_order: i32,
     pub undecorated: bool,
+    pub border_width: f32,
+    pub border_color: Color,
+    pub background_alpha: f32,
+    pub no_accept_focus: bool,
     pub window_infos: Vec<WindowInfo>,
     pub transition_hints: Vec<WindowTransitionHint>,
     /// Window background rectangles.
@@ -615,6 +619,15 @@ impl FrameDisplayState {
             parent_y: 0.0,
             z_order: 0,
             undecorated: false,
+            border_width: 0.0,
+            border_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            background_alpha: 1.0,
+            no_accept_focus: false,
             window_infos: Vec::new(),
             transition_hints: Vec::new(),
             backgrounds: Vec::new(),
@@ -654,6 +667,10 @@ impl FrameDisplayState {
         state.parent_y = buf.parent_y;
         state.z_order = buf.z_order;
         state.undecorated = buf.undecorated;
+        state.border_width = buf.border_width;
+        state.border_color = buf.border_color;
+        state.background_alpha = buf.background_alpha;
+        state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
         state.window_infos = buf.window_infos.clone();
         state.phys_cursor = buf.phys_cursor.clone();
@@ -823,6 +840,10 @@ impl FrameDisplayState {
         buf.parent_y = self.parent_y;
         buf.z_order = self.z_order;
         buf.undecorated = self.undecorated;
+        buf.border_width = self.border_width;
+        buf.border_color = self.border_color;
+        buf.background_alpha = self.background_alpha;
+        buf.no_accept_focus = self.no_accept_focus;
 
         // Copy faces
         for (id, face) in &self.faces {

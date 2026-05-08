@@ -4265,6 +4265,20 @@ fn divider_width_builtins_read_frame_parameters_like_gnu() {
 }
 
 #[test]
+fn frame_border_width_builtins_read_effective_gnu_values() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(modify-frame-parameters
+           (selected-frame)
+           '((internal-border-width . 4) (child-frame-border-width . 2)))
+         (list (frame-internal-border-width)
+               (frame-child-frame-border-width))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK (4 2)");
+}
+
+#[test]
 fn window_right_divider_width_only_applies_to_non_rightmost_windows() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
