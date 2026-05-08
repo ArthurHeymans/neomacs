@@ -1616,6 +1616,40 @@ fn buffer_local_variable_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn default_local_variable_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"deflocal:%S\" (let ((orig (default-value 'fill-column))) (unwind-protect (with-temp-buffer (setq-default fill-column 71) (setq-local fill-column 33) (list fill-column (default-value 'fill-column) (progn (kill-local-variable 'fill-column) fill-column))) (setq-default fill-column orig))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("deflocal:") && row.contains("(33 71 71)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: default and local variable behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "default_local_variable_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hook_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
