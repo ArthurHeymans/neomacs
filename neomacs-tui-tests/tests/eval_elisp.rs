@@ -1056,6 +1056,42 @@ fn sequence_mutation_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn copy_tree_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"copy:%S\" (let* ((inner (list 1)) (tree (list inner (vector inner))) (copy (copy-tree tree t))) (setcar inner 9) (list tree copy (eq (car tree) (car copy)) (eq (aref (cadr tree) 0) (aref (cadr copy) 0)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("copy:")
+                && row.contains("((9)")
+                && row.contains("((1)")
+                && row.contains("nil nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: copy-tree list/vector deep-copy behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "copy_tree_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn property_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
