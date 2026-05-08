@@ -1633,17 +1633,17 @@ impl Interpreter<'_, '_, '_> {
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.substring(args[0], args[1], args.get(2).copied())),
             "string=" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.string_bytes_equal(args[0], args[1])),
+                .min_arity(name, args, 1)
+                .and_then(|_| self.string_bytes_equal_multi(args)),
             "string-equal" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.string_case_insensitive_equal(args[0], args[1])),
+                .min_arity(name, args, 1)
+                .and_then(|_| self.string_case_insensitive_equal_multi(args)),
             "string<" | "string-lessp" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.string_lessp(args[0], args[1])),
+                .min_arity(name, args, 2)
+                .and_then(|_| self.string_lessp_multi(args)),
             "string>" | "string-greaterp" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.string_greaterp(args[0], args[1])),
+                .min_arity(name, args, 2)
+                .and_then(|_| self.string_greaterp_multi(args)),
             "string-bytes" => self.exact_arity(name, args, 1).and_then(|_| {
                 let contents = self.string_contents_owned(args[0])?;
                 self.fixnum(contents.len() as i64, name)
@@ -3542,6 +3542,36 @@ impl Interpreter<'_, '_, '_> {
         let left = self.string_contents_owned(left)?;
         let right = self.string_contents_owned(right)?;
         Some(bool_value(left > right))
+    }
+
+    fn string_bytes_equal_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.len() <= 1 { return Some(LispValue::TRUE); }
+        let first = self.string_contents_owned(args[0])?;
+        Some(bool_value(args[1..].iter().all(|a| {
+            self.string_contents_owned(*a).ok().as_deref() == Some(first.as_str())
+        })))
+    }
+
+    fn string_case_insensitive_equal_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.len() <= 1 { return Some(LispValue::TRUE); }
+        let first = self.string_contents_owned(args[0])?.to_lowercase();
+        Some(bool_value(args[1..].iter().all(|a| {
+            self.string_contents_owned(*a).ok().map(|s| s.to_lowercase()).as_deref() == Some(first.as_str())
+        })))
+    }
+
+    fn string_lessp_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let vals: Vec<String> = args.iter()
+            .map(|v| self.string_contents_owned(*v))
+            .collect::<Option<Vec<_>>>()?;
+        Some(bool_value(vals.windows(2).all(|w| w[0] < w[1])))
+    }
+
+    fn string_greaterp_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        let vals: Vec<String> = args.iter()
+            .map(|v| self.string_contents_owned(*v))
+            .collect::<Option<Vec<_>>>()?;
+        Some(bool_value(vals.windows(2).all(|w| w[0] > w[1])))
     }
 
     fn string_match_p(
