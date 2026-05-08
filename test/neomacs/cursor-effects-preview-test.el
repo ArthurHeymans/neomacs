@@ -262,7 +262,7 @@
   "Cursor effects to preview.")
 
 (defconst cursor-effects-preview--cursor-types
-  '(bar)
+  '((bar . 8))
   "Cursor shapes to combine with preview effects.")
 
 (defvar cursor-effects-preview--windows nil)
@@ -276,7 +276,7 @@
 
 (define-derived-mode cursor-effects-preview-mode special-mode "Cursor-Effects"
   "Major mode for the Neomacs cursor effects preview."
-  (setq-local cursor-type 'box)
+  (setq-local cursor-type '(bar . 8))
   (setq-local truncate-lines t)
   (setq-local mode-line-format nil)
   (setq-local header-line-format nil)
@@ -286,21 +286,17 @@
   (format "*Cursor Effect %02d %s*" index (plist-get effect :name)))
 
 (defun cursor-effects-preview--grid-shape (count)
-  (let* ((columns 9)
-         (rows (ceiling (/ (float count) columns))))
-    (cons rows columns)))
+  (cons 7 8))
 
 (defun cursor-effects-preview--insert-gallery-buffer (index effect shape)
   (let ((inhibit-read-only t))
     (erase-buffer)
     (insert (format "%02d  %s\n" index (plist-get effect :name)))
     (insert (format "%S\n\n" shape))
-    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n")
-    (insert "abcdefghijklmnopqrstuvwxyz\n")
-    (insert "0123456789 () [] {} <> +-*/=\n")
+    (insert "||||||||||||||||||||||||\n")
     (goto-char (point-min))
     (forward-line 3)
-    (forward-char (mod index 18))))
+    (forward-char (mod index 20))))
 
 (defun cursor-effects-preview--make-buffer (index effect shape)
   (let ((buffer (get-buffer-create
@@ -327,7 +323,7 @@
 (defun cursor-effects-preview--maximize-frame ()
   (setq frame-resize-pixelwise t)
   (setq window-resize-pixelwise t)
-  (setq window-combination-resize t)
+  (setq window-combination-resize nil)
   (setq window-min-height 1)
   (setq window-min-width 1)
   (set-frame-parameter nil 'fullscreen 'maximized)
@@ -348,22 +344,36 @@
                      (< (car ea) (car eb))))))))
 
 (defun cursor-effects-preview--split-one (window side target-count)
-  (condition-case nil
+  (condition-case err
       (split-window window nil side)
     (error
-     (error "Cursor effects preview needs %d windows; current frame %dx%d is too small"
+     (error "Cursor effects preview needs %d windows; split %S failed for window %S (%dx%d px) in frame %dx%d: %S"
             target-count
+            side
+            window
+            (window-size window t t)
+            (window-size window nil t)
             (frame-pixel-width)
-            (frame-pixel-height)))))
+            (frame-pixel-height)
+            err))))
+
+(defun cursor-effects-preview--largest-window (windows side)
+  (let ((horizontal (eq side 'right)))
+    (car (sort (copy-sequence windows)
+               (lambda (a b)
+                 (> (window-size a horizontal t)
+                    (window-size b horizontal t)))))))
 
 (defun cursor-effects-preview--split-evenly (window count side target-count)
   (let ((windows (list window))
         (tail window))
     (dotimes (_ (1- count))
-      (setq tail (cursor-effects-preview--split-one tail side target-count))
-      (push tail windows))
-    (balance-windows)
-    (cursor-effects-preview--sort-windows windows)))
+      (push (cursor-effects-preview--split-one tail side target-count)
+            windows)
+      (balance-windows)
+      (setq windows (cursor-effects-preview--sort-windows windows))
+      (setq tail (cursor-effects-preview--largest-window windows side)))
+    windows))
 
 (defun cursor-effects-preview--split-grid (buffers)
   (delete-other-windows)
@@ -373,7 +383,7 @@
          (target-count (* rows columns))
          (placeholders nil)
          (all-buffers buffers)
-         (row-windows nil)
+         (column-windows nil)
          (windows nil))
     (dotimes (index (- target-count (length buffers)))
       (push (cursor-effects-preview--make-placeholder-buffer (1+ index))
@@ -381,15 +391,15 @@
     (setq placeholders (nreverse placeholders))
     (setq cursor-effects-preview--placeholder-buffers placeholders)
     (setq all-buffers (append buffers placeholders))
-    (setq row-windows
+    (setq column-windows
           (cursor-effects-preview--split-evenly
-           (selected-window) rows 'below target-count))
+           (selected-window) columns 'right target-count))
     (setq windows
           (apply #'append
-                 (mapcar (lambda (row-window)
+                 (mapcar (lambda (column-window)
                            (cursor-effects-preview--split-evenly
-                            row-window columns 'right target-count))
-                         row-windows)))
+                            column-window rows 'below target-count))
+                         column-windows)))
     (balance-windows)
     (setq windows
           (cursor-effects-preview--sort-windows
