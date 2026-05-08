@@ -7637,7 +7637,8 @@ mod tests {
     // Note: defmacro cross-form expansion within a single progn
     // needs multi-pass compiler support. Macros defined via require
     // (e.g. cl-lib) work correctly.
-
+    // Note: defun with (interactive) has a HIR registration bug where
+    // the function isn't added to the symbol table for cross-form calls.
 
     #[test]
     fn executes_cl_loop_numeric_for() {
