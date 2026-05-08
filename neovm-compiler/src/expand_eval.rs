@@ -1279,6 +1279,7 @@ impl MacroEval {
         let mut thereis_cond: Option<SurfaceForm> = None;
         let mut repeat_count: Option<i64> = None;
         let mut with_vars: Vec<(String, Option<SurfaceForm>)> = Vec::new();
+        let mut initially_body: Vec<SurfaceForm> = Vec::new();
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1463,6 +1464,18 @@ impl MacroEval {
                         pos += 1;
                     }
                 }
+                Some("initially") => {
+                    pos += 1;
+                    while pos < items.len() {
+                        let kw = items[pos].symbol_name().unwrap_or("");
+                        if matches!(kw, "collect" | "sum" | "count" | "do" | "finally"
+                            | "while" | "until" | "if" | "when" | "return"
+                            | "for" | "with" | "always" | "never" | "thereis"
+                            | "initially" | "repeat" | "append" | "nconc") { break; }
+                        initially_body.push(items[pos].clone());
+                        pos += 1;
+                    }
+                }
                 Some("finally") => {
                     pos += 1;
                     // Handle: finally return EXPR, or finally (return EXPR)
@@ -1524,6 +1537,11 @@ impl MacroEval {
             }
             v.cdr()
         };
+
+        // Execute `initially` body before entering the loop
+        for expr in &initially_body {
+            let _ = self.eval(expr, env);
+        }
 
         // Initialize `with` variables before entering the loop
         for (name, init) in &with_vars {
