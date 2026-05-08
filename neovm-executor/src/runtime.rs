@@ -2394,6 +2394,24 @@ unsafe impl neovm_gc::Trace for AtomObj {
     fn relocate(&self, _relocator: &mut dyn neovm_gc::Relocator) {}
 }
 
+// SAFETY: AgentObj has no GC-managed edges (inner state is Arc<Mutex<>>).
+unsafe impl neovm_gc::Trace for AgentObj {
+    fn trace(&self, _tracer: &mut dyn neovm_gc::Tracer) {}
+    fn relocate(&self, _relocator: &mut dyn neovm_gc::Relocator) {}
+}
+
+// SAFETY: MutexObj has no GC-managed edges (inner is parking_lot::Mutex<()>).
+unsafe impl neovm_gc::Trace for MutexObj {
+    fn trace(&self, _tracer: &mut dyn neovm_gc::Tracer) {}
+    fn relocate(&self, _relocator: &mut dyn neovm_gc::Relocator) {}
+}
+
+// SAFETY: CondvarObj has no GC-managed edges (inner is parking_lot::Condvar).
+unsafe impl neovm_gc::Trace for CondvarObj {
+    fn trace(&self, _tracer: &mut dyn neovm_gc::Tracer) {}
+    fn relocate(&self, _relocator: &mut dyn neovm_gc::Relocator) {}
+}
+
 /// Clojure-style agent: an asynchronous, serialized mutable cell.
 /// Actions are queued via `send` and executed in order by the agent
 /// thread pool.  The Mutex protects both value and action queue.
