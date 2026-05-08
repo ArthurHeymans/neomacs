@@ -2262,6 +2262,89 @@ impl Interpreter<'_, '_, '_> {
                 ))
             }),
 
+            // --- Atom primitives ---
+            "make-atom" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
+                Some(self.runtime.make_atom(args[0]))
+            }),
+            "atom-deref" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.atom_deref(args[0]).ok()
+            }),
+            "atom-reset!" => self.exact_arity(name, args, 2).and_then(|_| {
+                self.runtime.atom_reset(args[0], args[1]).ok()
+            }),
+            "atom-compare-and-set!" => self.exact_arity(name, args, 3).and_then(|_| {
+                self.runtime
+                    .atom_compare_and_set(args[0], args[1], args[2])
+                    .ok()
+                    .map(|success| bool_value(success))
+            }),
+            "atom-swap!" => self.min_max_arity(name, args, 2, usize::MAX).and_then(|_| {
+                let func = args[1];
+                let extra_args = &args[2..];
+                let mut iterations = 0;
+                loop {
+                    let current = self.runtime.atom_read_for_swap(args[0]).ok()?;
+                    let mut call_args = vec![current];
+                    call_args.extend_from_slice(extra_args);
+                    let new_val = self.execute_funcall(func, &call_args)?;
+                    match self.runtime.atom_cas(args[0], current, new_val) {
+                        Ok((val, true)) => return Some(val),
+                        Ok((_, false)) => {
+                            iterations += 1;
+                            if iterations > 1000 {
+                                return None; // prevent infinite CAS loop
+                            }
+                            continue;
+                        }
+                        Err(_) => return None,
+                    }
+                }
+            }),
+
+            // --- Agent primitives ---
+            "make-agent" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
+                Some(self.runtime.make_agent(args[0]))
+            }),
+            "agent-deref" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.agent_deref(args[0]).ok()
+            }),
+            "send" | "send-off" => self.min_max_arity(name, args, 2, usize::MAX).and_then(|_| {
+                let via_pool = name == "send-off";
+                self.runtime
+                    .agent_send(args[0], args[1], &args[2..], via_pool)
+                    .ok()
+            }),
+            "agent-await" => self.exact_arity(name, args, 1).and_then(|_| {
+                let agent = args[0];
+                while let Ok(Some(action)) = self.runtime.agent_pop_action(agent) {
+                    let current = self.runtime.agent_deref(agent).unwrap_or(LispValue::NIL);
+                    let mut call_args = vec![current];
+                    call_args.extend_from_slice(&action.args);
+                    match self.execute_funcall(action.func, &call_args) {
+                        Some(new_val) => {
+                            let _ = self.runtime.agent_update(agent, new_val, None);
+                        }
+                        None => {
+                            // funcall failed — store error and stop draining
+                            let _ = self.runtime.agent_update(
+                                agent,
+                                LispValue::NIL,
+                                Some(LispValue::NIL),
+                            );
+                            break;
+                        }
+                    }
+                }
+                self.runtime.agent_deref(agent).ok()
+            }),
+            "agent-error" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.agent_error(args[0]).ok().flatten()
+            }),
+            "restart-agent" => self.exact_arity(name, args, 2).and_then(|_| {
+                let _ = self.runtime.agent_update(args[0], args[1], None);
+                Some(LispValue::NIL)
+            }),
+
             _ => return None,
         };
         Some(value)
@@ -6809,5 +6892,84 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
         assert_eq!(runtime.scheduler.thread_count(), 2);
+    }
+
+    // --- Atom tests ---
+
+    #[test]
+    fn atom_create_and_deref() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 42))) (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn atom_reset_changes_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 1))) (atom-reset! a 99) (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn atom_compare_and_set_succeeds() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 10))) (atom-compare-and-set! a 10 20) (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(20)));
+    }
+
+    #[test]
+    fn atom_compare_and_set_fails_on_wrong_old() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 10))) (atom-compare-and-set! a 999 20))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn atom_swap_applies_function() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 5))) (atom-swap! a (lambda (x) (* x 2))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    // --- Agent tests ---
+
+    #[test]
+    fn agent_create_and_deref() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ag (make-agent 10))) (agent-deref ag))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn agent_send_and_await() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ag (make-agent 0)))\
+               (send ag (lambda (x) (+ x 1)))\
+               (send ag (lambda (x) (+ x 2)))\
+               (agent-await ag))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn agent_initial_value_preserved() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ag (make-agent 7))) (agent-deref ag))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7)));
     }
 }

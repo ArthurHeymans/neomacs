@@ -21,6 +21,8 @@ pub struct Runtime {
     lexical_cells: Vec<Box<LexicalCell>>,
     floats: Vec<Box<FloatObj>>,
     bignums: Vec<Box<BignumObj>>,
+    atoms: Vec<Box<AtomObj>>,
+    agents: Vec<Box<AgentObj>>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
@@ -52,6 +54,8 @@ impl Default for Runtime {
             lexical_cells: Vec::new(),
             floats: Vec::new(),
             bignums: Vec::new(),
+            atoms: Vec::new(),
+            agents: Vec::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: Vec::new(),
@@ -371,6 +375,249 @@ impl Runtime {
                 value,
             })?;
         Ok(obj.value.clone())
+    }
+
+    // --- Atoms ---
+
+    pub fn make_atom(&mut self, value: LispValue) -> LispValue {
+        let val_u64 = value.to_abi_i64() as u64;
+        let mut boxed = Box::new(AtomObj {
+            header: HeapHeader {
+                kind: HeapKind::Atom,
+            },
+            value: std::sync::atomic::AtomicU64::new(val_u64),
+        });
+        let addr = (&mut *boxed as *mut AtomObj) as usize;
+        self.atoms.push(boxed);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn is_atom(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.atom_by_addr(addr).is_some())
+    }
+
+    /// Read the current value of an atom (lock-free).
+    pub fn atom_deref(&self, atom: LispValue) -> Result<LispValue, RuntimeError> {
+        let obj = self.atom_obj(atom)?;
+        let raw = obj.value.load(std::sync::atomic::Ordering::Relaxed);
+        Ok(LispValue::from_abi_i64(raw as i64))
+    }
+
+    /// Atomically set the atom to `new_value`. Returns the new value.
+    pub fn atom_reset(&self, atom: LispValue, new_value: LispValue) -> Result<LispValue, RuntimeError> {
+        let obj = self.atom_obj(atom)?;
+        obj.value
+            .store(new_value.to_abi_i64() as u64, std::sync::atomic::Ordering::Relaxed);
+        Ok(new_value)
+    }
+
+    /// Low-level CAS loop step for atom-swap!.  Reads current value,
+    /// returns it to the caller so the interpreter can compute the new
+    /// value.  The caller must call `atom_cas` with the result.
+    pub fn atom_read_for_swap(&self, atom: LispValue) -> Result<LispValue, RuntimeError> {
+        let obj = self.atom_obj(atom)?;
+        let raw = obj.value.load(std::sync::atomic::Ordering::Acquire);
+        Ok(LispValue::from_abi_i64(raw as i64))
+    }
+
+    /// Try to CAS the atom from `expected` to `new_value`.  Returns the
+    /// actual value after the attempt (which equals `new_value` on success).
+    pub fn atom_cas(
+        &self,
+        atom: LispValue,
+        expected: LispValue,
+        new_value: LispValue,
+    ) -> Result<(LispValue, bool), RuntimeError> {
+        let obj = self.atom_obj(atom)?;
+        let expected_raw = expected.to_abi_i64() as u64;
+        let new_raw = new_value.to_abi_i64() as u64;
+        match obj.value.compare_exchange(
+            expected_raw,
+            new_raw,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        ) {
+            Ok(_) => Ok((new_value, true)),
+            Err(actual) => Ok((LispValue::from_abi_i64(actual as i64), false)),
+        }
+    }
+
+    /// Compare-and-set: if atom's current value equals `old`, set to `new`.
+    /// Returns t on success, nil on failure.
+    pub fn atom_compare_and_set(
+        &self,
+        atom: LispValue,
+        old: LispValue,
+        new: LispValue,
+    ) -> Result<bool, RuntimeError> {
+        let obj = self.atom_obj(atom)?;
+        let old_raw = old.to_abi_i64() as u64;
+        let new_raw = new.to_abi_i64() as u64;
+        Ok(obj
+            .value
+            .compare_exchange(
+                old_raw,
+                new_raw,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
+            .is_ok())
+    }
+
+    // --- Agents ---
+
+    pub fn make_agent(&mut self, value: LispValue) -> LispValue {
+        let inner = std::sync::Arc::new(std::sync::Mutex::new(AgentInner {
+            value,
+            queue: Vec::new(),
+            error: None,
+        }));
+        let mut boxed = Box::new(AgentObj {
+            header: HeapHeader {
+                kind: HeapKind::Agent,
+            },
+            inner,
+        });
+        let addr = (&mut *boxed as *mut AgentObj) as usize;
+        self.agents.push(boxed);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn is_agent(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.agent_by_addr(addr).is_some())
+    }
+
+    /// Read the current agent value (non-blocking, may be stale).
+    pub fn agent_deref(&self, agent: LispValue) -> Result<LispValue, RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        Ok(inner.value)
+    }
+
+    /// Queue an action on the agent. Returns the agent.
+    pub fn agent_send(
+        &self,
+        agent: LispValue,
+        func: LispValue,
+        args: &[LispValue],
+        via_pool: bool,
+    ) -> Result<LispValue, RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        inner.queue.push(AgentAction {
+            func,
+            args: args.to_vec(),
+            via_pool,
+        });
+        Ok(agent)
+    }
+
+    /// Pop the next pending action for this agent.  Returns `None` if
+    /// the queue is empty.  The caller (interpreter) executes the action
+    /// and calls `agent_update` with the result.
+    pub fn agent_pop_action(&self, agent: LispValue) -> Result<Option<AgentAction>, RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        if inner.queue.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(inner.queue.remove(0)))
+    }
+
+    /// Update the agent's value after executing an action.  On error,
+    /// the agent's error field is set.
+    pub fn agent_update(
+        &self,
+        agent: LispValue,
+        new_value: LispValue,
+        error: Option<LispValue>,
+    ) -> Result<(), RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        if let Some(err) = error {
+            inner.error = Some(err);
+        } else {
+            inner.value = new_value;
+        }
+        Ok(())
+    }
+
+    pub fn agent_has_actions(&self, agent: LispValue) -> Result<bool, RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        Ok(!inner.queue.is_empty())
+    }
+
+    pub fn agent_error(&self, agent: LispValue) -> Result<Option<LispValue>, RuntimeError> {
+        let obj = self.agent_obj(agent)?;
+        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
+            expected: "agent (not poisoned)",
+            value: agent,
+        })?;
+        Ok(inner.error)
+    }
+
+    // --- Atom/Agent helpers ---
+
+    fn atom_obj(&self, atom: LispValue) -> Result<&AtomObj, RuntimeError> {
+        let addr = atom.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "atom",
+            value: atom,
+        })?;
+        self.atom_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "atom",
+                value: atom,
+            })
+    }
+
+    fn atom_by_addr(&self, addr: usize) -> Option<&AtomObj> {
+        for obj in &self.atoms {
+            if (&**obj as *const AtomObj) as usize == addr {
+                return Some(obj);
+            }
+        }
+        None
+    }
+
+    fn agent_obj(&self, agent: LispValue) -> Result<&AgentObj, RuntimeError> {
+        let addr = agent.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "agent",
+            value: agent,
+        })?;
+        self.agent_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "agent",
+                value: agent,
+            })
+    }
+
+    fn agent_by_addr(&self, addr: usize) -> Option<&AgentObj> {
+        for obj in &self.agents {
+            if (&**obj as *const AgentObj) as usize == addr {
+                return Some(obj);
+            }
+        }
+        None
     }
 
     pub fn set_match_data(&mut self, string: String, groups: Vec<Option<(usize, usize)>>) {
@@ -1893,6 +2140,8 @@ enum HeapKind {
     LexicalCell = 7,
     Float = 8,
     Bignum = 9,
+    Atom = 10,
+    Agent = 11,
 }
 
 #[repr(C)]
@@ -1964,6 +2213,35 @@ struct FloatObj {
 struct BignumObj {
     header: HeapHeader,
     value: rug::Integer,
+}
+
+/// Clojure-style atom: a lock-free CAS-based mutable cell.
+/// The value is an AtomicU64 storing a tagged LispValue.
+#[repr(C, align(8))]
+struct AtomObj {
+    header: HeapHeader,
+    value: std::sync::atomic::AtomicU64,
+}
+
+/// Clojure-style agent: an asynchronous, serialized mutable cell.
+/// Actions are queued via `send` and executed in order by the agent
+/// thread pool.  The Mutex protects both value and action queue.
+struct AgentObj {
+    header: HeapHeader,
+    inner: std::sync::Arc<std::sync::Mutex<AgentInner>>,
+}
+
+struct AgentInner {
+    value: LispValue,
+    queue: Vec<AgentAction>,
+    error: Option<LispValue>,
+}
+
+#[derive(Clone)]
+pub(crate) struct AgentAction {
+    pub(crate) func: LispValue,
+    pub(crate) args: Vec<LispValue>,
+    pub(crate) via_pool: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -195,9 +195,18 @@ impl MacroEval {
             Some("while") => self.eval_while(span, &items[1..], env),
 
             // Thread primitives — passed through to the HIR compiler.
-            // The expander treats these as ordinary function calls.
             Some("make-thread") | Some("thread-yield") | Some("thread-join")
             | Some("thread-signal") | Some("current-thread") | Some("thread-alive-p") => {
+                let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
+                Ok(surface_to_value(&form))
+            }
+
+            // Atom and Agent primitives — passed through to HIR.
+            Some("make-atom") | Some("atom-swap!") | Some("atom-reset!")
+            | Some("atom-deref") | Some("atom-compare-and-set!")
+            | Some("make-agent") | Some("send") | Some("send-off")
+            | Some("agent-await") | Some("agent-deref") | Some("agent-error")
+            | Some("restart-agent") => {
                 let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
                 Ok(surface_to_value(&form))
             }
