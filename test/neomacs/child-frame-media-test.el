@@ -124,7 +124,7 @@
                        (let ((p (expand-file-name "~/Videos/test.mp4")))
                          (and (file-exists-p p) p))))
          (f-img (cfm-test--make-child "img" 30 30 55 18))
-         (f-vid (cfm-test--make-child "vid" 480 30 55 18)))
+         (f-vid (cfm-test--make-child "vid" 480 320 55 18)))
     ;; Image child frame
     (with-selected-frame f-img
       (insert (propertize "Image\n" 'face '(:foreground "gold" :weight bold)))
