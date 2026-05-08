@@ -1275,6 +1275,34 @@ fn hash_table_key_test_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn marker_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"marker:%S\" (with-temp-buffer (insert \"ab\") (goto-char 2) (let ((left (point-marker)) (right (copy-marker (point) t))) (insert \"X\") (let ((before (list (buffer-string) (marker-position left) (marker-insertion-type left) (marker-position right) (marker-insertion-type right) (bufferp (marker-buffer left))))) (set-marker left nil) (append before (list (marker-position left) (marker-buffer left)))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("marker:") && row.contains("aXb") && row.contains("2 nil 3 t t nil nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: marker functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("marker_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
