@@ -7616,6 +7616,15 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn executes_cl_loop_while_breaks_early() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 1 to 10 while (< i 4) sum i)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6))); // 1+2+3
+    }
+
     fn executes_cl_loop_sum() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
