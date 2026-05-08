@@ -2134,14 +2134,15 @@ impl Interpreter<'_, '_, '_> {
                 let hash = h.finish();
                 Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
             }),
-            "logior" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+            "logior" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
+                if args.is_empty() { return LispValue::expect_fixnum(0); }
                 args[1..].iter().fold(args[0], |a, b| {
                     let av = a.as_fixnum().unwrap_or(0);
                     let bv = b.as_fixnum().unwrap_or(0);
                     LispValue::expect_fixnum(av | bv)
                 })
             }),
-            "logand" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+            "logand" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
                 if args.is_empty() { return LispValue::expect_fixnum(-1); }
                 args[1..].iter().fold(args[0], |a, b| {
                     let av = a.as_fixnum().unwrap_or(0);
@@ -2149,7 +2150,8 @@ impl Interpreter<'_, '_, '_> {
                     LispValue::expect_fixnum(av & bv)
                 })
             }),
-            "logxor" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+            "logxor" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
+                if args.is_empty() { return LispValue::expect_fixnum(0); }
                 args[1..].iter().fold(args[0], |a, b| {
                     let av = a.as_fixnum().unwrap_or(0);
                     let bv = b.as_fixnum().unwrap_or(0);
@@ -7956,6 +7958,22 @@ mod tests {
     // cl-return/return-from now correctly expand to throw. The cl-loop
     // expander doesn't yet wrap named blocks in catch (needed for
     // cl-return-from to work inside loops).
+
+    #[test]
+    fn executes_logand_no_args_returns_neg_one() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(logand)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(-1)));
+    }
+
+    #[test]
+    fn executes_logior_no_args_returns_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(logior)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
 
     #[test]
     fn executes_require_feature_marks_provided() {
