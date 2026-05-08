@@ -1883,6 +1883,42 @@ fn define_error_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn read_from_string_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"readstr:%S\" (list (read-from-string \"(a . b) tail\") (read-from-string \"\\\"a\\\\\\\"b\\\"x\") (condition-case e (read-from-string \"(\") (end-of-file (car e)) (error (car e)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("readstr:")
+                && row.contains("((a . b) . 7)")
+                && row.contains(". 6)")
+                && row.contains("end-of-file")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: read-from-string object, index, and error behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "read_from_string_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn match_data_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
