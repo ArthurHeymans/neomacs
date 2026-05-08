@@ -2057,6 +2057,40 @@ fn circular_read_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn radix_reader_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"radix:%S\" (list (read \"#b1010\") (read \"#o12\") (read \"#xA\") (read \"#36rZ\") (condition-case e (read \"#2r2\") (invalid-read-syntax (car e)) (error (car e)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("radix:") && row.contains("(10 10 10 35 invalid-read-syntax)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: radix reader syntax should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "radix_reader_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn provide_eval_after_load_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
