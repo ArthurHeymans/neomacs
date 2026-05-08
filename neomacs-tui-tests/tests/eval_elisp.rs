@@ -240,6 +240,85 @@ fn execute_extended_command_minibuffer_del_deletes_previous_character() {
 }
 
 #[test]
+fn execute_extended_command_minibuffer_multiple_del_keyhits() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "M-x");
+    let mx_prompt = |grid: &[String]| grid.iter().any(|row| row.contains("M-x"));
+    gnu.read_until(Duration::from_secs(6), mx_prompt);
+    neo.read_until(Duration::from_secs(8), mx_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"forward-charXYZ");
+    }
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL RET");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"Z");
+    }
+
+    let inserted = |grid: &[String]| grid.iter().any(|row| row.trim_end() == "Z");
+    gnu.read_until(Duration::from_secs(6), inserted);
+    neo.read_until(Duration::from_secs(8), inserted);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            inserted(&grid),
+            "{label} should run corrected forward-char after three terminal DEL keyhits in M-x\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "execute_extended_command_minibuffer_multiple_del_keyhits",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
+fn execute_extended_command_empty_minibuffer_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "M-x");
+    let mx_prompt = |grid: &[String]| grid.iter().any(|row| row.contains("M-x"));
+    gnu.read_until(Duration::from_secs(6), mx_prompt);
+    neo.read_until(Duration::from_secs(8), mx_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("M-x"))
+            && !grid.iter().any(|row| row.contains("No match"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty M-x prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "execute_extended_command_empty_minibuffer_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn trace_function_background_writes_trace_output_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
 
