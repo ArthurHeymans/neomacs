@@ -1743,6 +1743,40 @@ fn buffer_modified_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn case_fold_search_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"casefold:%S\" (with-temp-buffer (insert \"Abc\") (goto-char 1) (let ((case-fold-search t)) (list (search-forward \"abc\" nil t) (progn (goto-char 1) (let ((case-fold-search nil)) (search-forward \"abc\" nil t)))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("casefold:") && row.contains("(4 nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: case-fold-search behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "case_fold_search_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
