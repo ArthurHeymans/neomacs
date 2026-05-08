@@ -1645,6 +1645,42 @@ fn text_property_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_equality_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"tpeq:%S\" (let ((s (copy-sequence \"abcd\"))) (put-text-property 1 3 'face 'bold s) (list (substring s 1 3) (text-properties-at 0 (substring s 1 3)) (equal s (substring-no-properties s)) (equal-including-properties s (substring-no-properties s)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("tpeq:")
+                && row.contains("bc")
+                && row.contains("face bold")
+                && row.contains("t nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property equality should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_equality_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_removal_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
