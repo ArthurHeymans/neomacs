@@ -7703,6 +7703,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_max_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (max 3 1 4 1 5 9)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
+    fn executes_min_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (min 3 1 4 1 5 9)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
     fn executes_cl_loop_append_collects_lists() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
