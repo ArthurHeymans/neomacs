@@ -7954,6 +7954,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_require_feature_marks_provided() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (provide 'test-mod) (require 'test-mod) (featurep 'test-mod))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cons_with_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(car (cons 42 nil))",
