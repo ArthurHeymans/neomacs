@@ -1811,10 +1811,10 @@ impl HeapCore {
         let old_config = self.config.old;
         let nursery_config = self.config.nursery;
         let mut flat = self.take_flat_store();
-        // SAFETY: `f` is a collector callback that must not panic.
-        // If it does, the flat store is leaked (lost).  This is a
-        // known limitation tracked as M8 in the audit; the caller
-        // is responsible for ensuring `f` does not unwind.
+        let mut guard = FlatStoreRestore {
+            heap: self as *mut HeapCore,
+            flat: None,
+        };
         let result = f(
             &mut flat,
             &mut self.old_gen,
@@ -1823,7 +1823,7 @@ impl HeapCore {
             &mut self.stats,
             &mut self.nursery,
         );
-        self.restore_flat_store(flat);
+        guard.flat = Some(flat);
         result
     }
 
@@ -1832,8 +1832,12 @@ impl HeapCore {
         f: impl FnOnce(&mut FlatObjectStore, &mut OldGenState, &mut HeapStats) -> R,
     ) -> R {
         let mut flat = self.take_flat_store();
+        let mut guard = FlatStoreRestore {
+            heap: self as *mut HeapCore,
+            flat: None,
+        };
         let result = f(&mut flat, &mut self.old_gen, &mut self.stats);
-        self.restore_flat_store(flat);
+        guard.flat = Some(flat);
         result
     }
 
@@ -2341,6 +2345,34 @@ impl HeapCore {
         objects
             .locator_of_key(gc.erase().object_key())
             .map(|locator| objects.get(locator).space())
+    }
+}
+
+/// Drain pending finalizers at the controlled boundary of `HeapCore`
+/// drop so that any arena- or old-block-backed `ObjectRecord`s
+/// sitting in `RuntimeState::pending_finalizers` run their payload
+/// `drop_in_place` while the backing buffers in `NurseryState` /
+/// `OldGenState` are still alive.
+///
+/// Without this, a `SharedHeap` clone of `RuntimeStateHandle` can keep
+/// the `RuntimeState` alive past `HeapCore`'s drop. When that Arc
+/// finally hits zero, the pending `ObjectRecord`s try to deref
+/// headers in arena or old-block buffers that have already been
+/// freed as part of `HeapCore`'s field-order drop sequence.
+///
+/// Guard that restores a flat store on Drop so a panicking collector
+/// callback doesn't permanently lose all live objects (M8 fix).
+struct FlatStoreRestore {
+    heap: *mut HeapCore,
+    flat: Option<FlatObjectStore>,
+}
+
+// SAFETY: only used within a single method call where the pointer is valid.
+impl Drop for FlatStoreRestore {
+    fn drop(&mut self) {
+        if let Some(flat) = self.flat.take() {
+            unsafe { &mut *self.heap }.restore_flat_store(flat);
+        }
     }
 }
 

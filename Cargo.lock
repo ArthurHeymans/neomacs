@@ -2876,6 +2876,7 @@ dependencies = [
  "lasso",
  "neovm-compiler",
  "neovm-gc",
+ "parking_lot",
  "regex",
  "rug",
 ]
