@@ -352,6 +352,7 @@ pub fn execute_with_jit_session(
                 regir: &regir as *const RegModule as *mut RegModule,
                 functions_by_name: &functions_by_name as *const HashMap<String, FunctionId>
                     as *mut HashMap<String, FunctionId>,
+                call_cache: HashMap::new(),
                 gc_roots: Vec::new(),
                 gc_root_base: 0,
             });
@@ -503,6 +504,7 @@ pub fn execute_with_jit_expand(
                 regir: &regir as *const RegModule as *mut RegModule,
                 functions_by_name: &functions_by_name as *const HashMap<String, FunctionId>
                     as *mut HashMap<String, FunctionId>,
+                call_cache: HashMap::new(),
                 gc_roots: Vec::new(),
                 gc_root_base: 0,
             });

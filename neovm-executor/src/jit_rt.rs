@@ -8,6 +8,19 @@ use neovm_compiler::surface::SurfaceForm;
 
 use crate::{LispValue, Runtime};
 
+/// Result of resolving a named call through the dispatch chain.
+/// Cached per symbol index so the JIT skips string-based dispatch
+/// on repeated calls to the same function.
+#[derive(Clone, Copy)]
+pub(crate) enum ResolvedCall {
+    /// A RegIR function (compiled but not JIT'd).
+    RegIrFunction(FunctionId),
+    /// A function found in a symbol's function cell (defalias/fset).
+    SymbolFunctionCell,
+    /// The call must go through the full interpreter fallback path.
+    InterpreterOnly,
+}
+
 #[repr(C)]
 pub struct JitContext {
     pub runtime: *mut Runtime,
@@ -17,6 +30,11 @@ pub struct JitContext {
     pub lambda_templates: *mut Vec<SsaLambdaTemplate>,
     pub regir: *mut RegModule,
     pub functions_by_name: *mut HashMap<String, FunctionId>,
+    /// Call resolution cache: maps interned symbol Spur index to
+    /// a pre-resolved call target.  Populated lazily on first
+    /// call to each symbol; subsequent calls skip the string-based
+    /// dispatch chain entirely.
+    pub call_cache: HashMap<u32, ResolvedCall>,
     pub gc_roots: Vec<LispValue>,
     pub gc_root_base: usize,
 }
@@ -210,37 +228,32 @@ unsafe fn make_lambda(vmctx: i64, template_index: i64, captures: &[i64]) -> i64 
 
 jit_shim!(__neomacs_rt_call_named_0(vmctx: i64, symbol_index: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
-    let name = resolve_sym!(ctx, symbol_index).to_string();
     let rt = &mut *ctx.runtime;
-    dispatch_named_call(ctx, &name, &[], rt)
+    dispatch_named_call(ctx, symbol_index as u32, &[], rt)
 });
 
 jit_shim!(__neomacs_rt_call_named_1(vmctx: i64, symbol_index: i64, arg0: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
-    let name = resolve_sym!(ctx, symbol_index).to_string();
     let rt = &mut *ctx.runtime;
-    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0)], rt)
+    dispatch_named_call(ctx, symbol_index as u32, &[LispValue::from_abi_i64(arg0)], rt)
 });
 
 jit_shim!(__neomacs_rt_call_named_2(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
-    let name = resolve_sym!(ctx, symbol_index).to_string();
     let rt = &mut *ctx.runtime;
-    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1)], rt)
+    dispatch_named_call(ctx, symbol_index as u32, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1)], rt)
 });
 
 jit_shim!(__neomacs_rt_call_named_3(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
-    let name = resolve_sym!(ctx, symbol_index).to_string();
     let rt = &mut *ctx.runtime;
-    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2)], rt)
+    dispatch_named_call(ctx, symbol_index as u32, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2)], rt)
 });
 
 jit_shim!(__neomacs_rt_call_named_4(vmctx: i64, symbol_index: i64, arg0: i64, arg1: i64, arg2: i64, arg3: i64) -> i64 {
     let ctx = &mut *(vmctx as *mut JitContext);
-    let name = resolve_sym!(ctx, symbol_index).to_string();
     let rt = &mut *ctx.runtime;
-    dispatch_named_call(ctx, &name, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2), LispValue::from_abi_i64(arg3)], rt)
+    dispatch_named_call(ctx, symbol_index as u32, &[LispValue::from_abi_i64(arg0), LispValue::from_abi_i64(arg1), LispValue::from_abi_i64(arg2), LispValue::from_abi_i64(arg3)], rt)
 });
 
 // Higher-arity call_named shims (5-16)
@@ -248,9 +261,8 @@ macro_rules! call_named_shim {
     ($fname:ident $($arg:ident)*) => {
         jit_shim!($fname(vmctx: i64, symbol_index: i64 $(, $arg: i64)*) -> i64 {
             let ctx = &mut *(vmctx as *mut JitContext);
-            let name = resolve_sym!(ctx, symbol_index).to_string();
             let rt = &mut *ctx.runtime;
-            dispatch_named_call(ctx, &name, &[$(LispValue::from_abi_i64($arg)),*], rt)
+            dispatch_named_call(ctx, symbol_index as u32, &[$(LispValue::from_abi_i64($arg)),*], rt)
         });
     };
 }
@@ -329,27 +341,129 @@ jit_shim!(__neomacs_rt_apply_3(vmctx: i64, callee: i64, arg0: i64, arg1: i64, ar
 
 // --- Dispatch helpers ---
 
+/// Fast-path dispatch for a named call with a cached resolution.
+///
+/// On first call for a given symbol index, resolves through the full
+/// dispatch chain (primitive match → RegIR lookup → symbol function cell
+/// → interpreter fallback) and caches the result.  On subsequent calls
+/// the cache hit skips string-based dispatch entirely — the common case
+/// for tight loops and repeated calls to the same function.
 unsafe fn dispatch_named_call(
+    ctx: &mut JitContext,
+    symbol_index: u32,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    // --- cache hit: fast path ---
+    if let Some(&cached) = ctx.call_cache.get(&symbol_index) {
+        return dispatch_cached_call(ctx, cached, symbol_index, args, rt);
+    }
+
+    // --- cache miss: full dispatch chain ---
+    let rodeo = unsafe { &*ctx.symbols };
+    let spur = Spur::try_from_usize(symbol_index as usize).expect("invalid symbol index");
+    let name = rodeo.resolve(&spur);
+    dispatch_named_call_uncached(ctx, name, Some(symbol_index), args, rt)
+}
+
+/// Uncached dispatch — used by `dispatch_funcall` where we only have
+/// a runtime-resolved name string, not a compile-time symbol index.
+unsafe fn dispatch_named_call_by_name(
     ctx: &mut JitContext,
     name: &str,
     args: &[LispValue],
     rt: &mut Runtime,
 ) -> i64 {
-    let fns = unsafe { &*ctx.functions_by_name };
-    match dispatch_primitive(name, args, rt, fns) {
-        Some(value) => value.to_abi_i64(),
-        None => {
+    dispatch_named_call_uncached(ctx, name, None, args, rt)
+}
+
+unsafe fn dispatch_named_call_uncached(
+    ctx: &mut JitContext,
+    name: &str,
+    cache_key: Option<u32>,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    // 1. Try primitive dispatch (string match over ~170 builtins).
+    {
+        let fns = unsafe { &*ctx.functions_by_name };
+        if let Some(value) = dispatch_primitive(name, args, rt, fns) {
+            return value.to_abi_i64();
+        }
+    }
+
+    // 2. Try RegIR function (compiled but not JIT'd).
+    {
+        let regir = unsafe { &*ctx.regir };
+        let fns = unsafe { &*ctx.functions_by_name };
+        if let Some(&fid) = fns.get(name) {
+            if let Some(key) = cache_key {
+                ctx.call_cache
+                    .insert(key, ResolvedCall::RegIrFunction(fid));
+            }
+            return crate::object_interp::execute_module_function(regir, fns, fid, args, rt)
+                .unwrap_or(LispValue::NIL)
+                .to_abi_i64();
+        }
+    }
+
+    // 3. Try symbol function cell (defalias / fset).
+    if let Some(sym) = rt.intern_soft(name) {
+        if let Ok(Some(func)) = rt.symbol_function(sym) {
+            if rt.is_function(func) {
+                if let Some(key) = cache_key {
+                    ctx.call_cache
+                        .insert(key, ResolvedCall::SymbolFunctionCell);
+                }
+                let regir = unsafe { &*ctx.regir };
+                let fns = unsafe { &*ctx.functions_by_name };
+                return crate::object_interp::execute_function_object_direct(
+                    regir, fns, func, args, rt,
+                )
+                .unwrap_or(LispValue::NIL)
+                .to_abi_i64();
+            }
+        }
+    }
+
+    // 4. Fall back to interpreter for higher-order ops.
+    if let Some(key) = cache_key {
+        ctx.call_cache
+            .insert(key, ResolvedCall::InterpreterOnly);
+    }
+    if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {
+        return value.to_abi_i64();
+    }
+    eprintln!("JIT: unhandled call `{name}`");
+    LispValue::NIL.to_abi_i64()
+}
+
+/// Execute a previously-cached call resolution.
+unsafe fn dispatch_cached_call(
+    ctx: &mut JitContext,
+    cached: ResolvedCall,
+    symbol_index: u32,
+    args: &[LispValue],
+    rt: &mut Runtime,
+) -> i64 {
+    match cached {
+        ResolvedCall::RegIrFunction(fid) => {
             let regir = unsafe { &*ctx.regir };
             let fns = unsafe { &*ctx.functions_by_name };
-            if let Some(&fid) = fns.get(name) {
-                return crate::object_interp::execute_module_function(regir, fns, fid, args, rt)
-                    .unwrap_or(LispValue::NIL)
-                    .to_abi_i64();
-            }
-            // Check symbol function cell (populated by defalias/fset)
+            crate::object_interp::execute_module_function(regir, fns, fid, args, rt)
+                .unwrap_or(LispValue::NIL)
+                .to_abi_i64()
+        }
+        ResolvedCall::SymbolFunctionCell => {
+            let rodeo = unsafe { &*ctx.symbols };
+            let spur = Spur::try_from_usize(symbol_index as usize)
+                .expect("invalid symbol index");
+            let name = rodeo.resolve(&spur);
             if let Some(sym) = rt.intern_soft(name) {
                 if let Ok(Some(func)) = rt.symbol_function(sym) {
                     if rt.is_function(func) {
+                        let regir = unsafe { &*ctx.regir };
+                        let fns = unsafe { &*ctx.functions_by_name };
                         return crate::object_interp::execute_function_object_direct(
                             regir, fns, func, args, rt,
                         )
@@ -358,13 +472,20 @@ unsafe fn dispatch_named_call(
                     }
                 }
             }
-            // Fall back to interpreter's primitive dispatch for higher-order ops
-            // (mapcar, mapc, maphash, require, etc.) that need evaluator context
+            // Cell was cleared — invalidate and retry uncached.
+            ctx.call_cache.remove(&symbol_index);
+            dispatch_named_call(ctx, symbol_index, args, rt)
+        }
+        ResolvedCall::InterpreterOnly => {
+            let rodeo = unsafe { &*ctx.symbols };
+            let spur = Spur::try_from_usize(symbol_index as usize)
+                .expect("invalid symbol index");
+            let name = rodeo.resolve(&spur);
             if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {
-                return value.to_abi_i64();
+                value.to_abi_i64()
+            } else {
+                LispValue::NIL.to_abi_i64()
             }
-            eprintln!("JIT: unhandled call `{name}`");
-            LispValue::NIL.to_abi_i64()
         }
     }
 }
@@ -393,7 +514,7 @@ unsafe fn dispatch_funcall(
                     return LispValue::NIL.to_abi_i64();
                 }
             };
-            return dispatch_named_call(ctx, &name, args, rt);
+            return dispatch_named_call_by_name(ctx, &name, args, rt);
         }
         eprintln!("JIT: funcall on non-callable");
         LispValue::NIL.to_abi_i64()
