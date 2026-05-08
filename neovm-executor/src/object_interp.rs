@@ -2219,6 +2219,49 @@ impl Interpreter<'_, '_, '_> {
                 self.runtime.add_load_path(path);
                 Some(LispValue::TRUE)
             }),
+
+            // --- Thread primitives ---
+            "make-thread" => self.min_max_arity(name, args, 2, 2).and_then(|_| {
+                let name = self.string_contents_owned(args[0])?;
+                let body = args[1];
+                let id = self.runtime.scheduler.make_thread(name, body);
+                Some(LispValue::expect_fixnum(id.0 as i64))
+            }),
+            "thread-yield" => {
+                self.runtime.scheduler.thread_yield();
+                Some(LispValue::NIL)
+            }
+            "thread-join" => self.exact_arity(name, args, 1).and_then(|_| {
+                let tid = self.fixnum_arg(name, args[0])? as u64;
+                let thread_id = crate::thread::ThreadId(tid);
+                let blocked = self.runtime.scheduler.thread_join(thread_id);
+                if blocked {
+                    Some(LispValue::NIL)
+                } else {
+                    self.runtime.scheduler.thread_result(thread_id)
+                }
+            }),
+            "thread-signal" => self.exact_arity(name, args, 2).and_then(|_| {
+                let tid = self.fixnum_arg(name, args[0])? as u64;
+                let error = args[1];
+                self.runtime
+                    .scheduler
+                    .thread_signal(crate::thread::ThreadId(tid), error);
+                Some(LispValue::NIL)
+            }),
+            "current-thread" => {
+                let id = self.runtime.scheduler.current_id();
+                Some(LispValue::expect_fixnum(id.0 as i64))
+            }
+            "thread-alive-p" => self.exact_arity(name, args, 1).and_then(|_| {
+                let tid = self.fixnum_arg(name, args[0])? as u64;
+                Some(bool_value(
+                    self.runtime
+                        .scheduler
+                        .thread_alive_p(crate::thread::ThreadId(tid)),
+                ))
+            }),
+
             _ => return None,
         };
         Some(value)
@@ -6706,5 +6749,65 @@ mod tests {
              (progn (defalias 'my-add (lambda (a b) (+ a b))) (my-add 3 4))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(7)));
+    }
+
+    // --- Thread tests ---
+
+    #[test]
+    fn thread_current_thread_returns_main() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (current-thread)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn thread_make_thread_returns_new_id() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (make-thread \"worker\" (lambda () 42))",
+        );
+        // New thread id should be > 0
+        match value {
+            Some(v) if v.is_fixnum() => {
+                assert!(v.as_fixnum().unwrap() > 0);
+            }
+            _ => panic!("expected fixnum thread id, got {value:?}"),
+        }
+        // Scheduler should now have 2 threads
+        assert_eq!(runtime.scheduler.thread_count(), 2);
+        assert!(runtime.scheduler.has_runnable());
+    }
+
+    #[test]
+    fn thread_yield_preserves_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (make-thread \"worker\" (lambda () 42)) (thread-yield) 99)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn thread_alive_p_detects_live_thread() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((tid (make-thread \"worker\" (lambda () 42)))) (thread-alive-p tid))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+        assert_eq!(runtime.scheduler.thread_count(), 2);
+    }
+
+    #[test]
+    fn thread_signal_marks_thread_error() {
+        let (value, runtime) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((tid (make-thread \"worker\" (lambda () (thread-yield))))) \
+               (thread-signal tid 'kill) \
+               (thread-alive-p tid))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+        assert_eq!(runtime.scheduler.thread_count(), 2);
     }
 }

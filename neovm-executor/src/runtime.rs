@@ -3,14 +3,15 @@ use std::{collections::HashMap, fmt, sync::Arc};
 use neovm_compiler::ssa::SsaLambdaTemplate;
 use neovm_gc::{Heap, HeapConfig, Mutator};
 
+use crate::thread::ThreadScheduler;
 use crate::value::LispValue;
 
 pub struct Runtime {
-    /// Shared GC heap for multi-threaded allocation.  The existing
-    /// Vec-based pools live alongside this during the incremental
-    /// migration; new thread-aware object types allocate through
-    /// the GC heap.
+    /// Shared GC heap for multi-threaded allocation.
     pub(crate) gc_heap: Arc<Heap>,
+    /// Cooperative thread scheduler.  Created with the Runtime,
+    /// holds the main thread and any spawned child threads.
+    pub(crate) scheduler: ThreadScheduler,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -37,8 +38,11 @@ struct MatchData {
 
 impl Default for Runtime {
     fn default() -> Self {
+        let gc_heap = Arc::new(Heap::new(HeapConfig::default()));
+        let scheduler = ThreadScheduler::new(Arc::clone(&gc_heap));
         Self {
-            gc_heap: Arc::new(Heap::new(HeapConfig::default())),
+            gc_heap,
+            scheduler,
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),

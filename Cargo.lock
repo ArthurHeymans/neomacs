@@ -2875,6 +2875,7 @@ dependencies = [
  "gmp-mpfr-sys",
  "lasso",
  "neovm-compiler",
+ "neovm-gc",
  "regex",
  "rug",
 ]

@@ -36,7 +36,7 @@ use crate::value::LispValue;
 
 /// Unique identifier for an Elisp thread.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct ThreadId(u64);
+pub(crate) struct ThreadId(pub(crate) u64);
 
 impl ThreadId {
     pub(crate) const MAIN: Self = ThreadId(0);
