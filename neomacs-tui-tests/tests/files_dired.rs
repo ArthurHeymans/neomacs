@@ -1243,6 +1243,48 @@ fn copy_directory_via_mx_copies_nested_tree() {
 }
 
 #[test]
+fn copy_directory_empty_source_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    for session in [&gnu, &neo] {
+        let source = session.home_dir().join("copy-empty-source-dir");
+        fs::create_dir_all(source.join("nested")).expect("create copy-directory fixture");
+        fs::write(source.join("alpha.txt"), "alpha copy\n").expect("write alpha fixture");
+    }
+
+    invoke_mx_command(&mut gnu, &mut neo, "copy-directory");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Copy directory:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Copy directory:"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty copy-directory source prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "copy_directory_empty_source_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn find_file_other_window_via_cx4_cf() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
