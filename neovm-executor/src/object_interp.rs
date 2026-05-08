@@ -7863,6 +7863,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_1plus_and_1minus() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (+ (1+ 5) (1- 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
     fn executes_neg_single_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(- 5)",
