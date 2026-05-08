@@ -7339,4 +7339,40 @@ mod tests {
         // cons is a built-in, so subrp should return t
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_nreverse_reverses_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nreverse (list 1 2 3))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_delq_removes_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (delq 2 (list 1 2 3 2))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_assq_finds_by_identity() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((key 'a)) (assq key '((a . 1) (b . 2))))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_copy_sequence_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((orig (list 1 2 3))) (eq orig (copy-sequence orig)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
