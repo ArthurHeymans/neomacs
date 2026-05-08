@@ -12,6 +12,11 @@ pub struct Runtime {
     /// Cooperative thread scheduler.  Created with the Runtime,
     /// holds the main thread and any spawned child threads.
     pub(crate) scheduler: ThreadScheduler,
+    /// O(1) object identity index: maps raw heap address → type tag.
+    /// Eliminates the linear scans in every is_* predicate.  Updated
+    /// on allocation; cleared objects are removed lazily (the lookup
+    /// tolerates stale entries by falling back to Vec scans).
+    object_index: HashMap<usize, HeapKind>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -47,6 +52,7 @@ impl Default for Runtime {
         Self {
             gc_heap,
             scheduler,
+            object_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -100,6 +106,7 @@ impl Runtime {
         Self {
             gc_heap: Arc::clone(&self.gc_heap),
             scheduler: self.scheduler.clone(),
+            object_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -132,6 +139,7 @@ impl Runtime {
             cdr,
         });
         let addr = (&mut *cell as *mut Cons) as usize;
+        self.object_index.insert(addr, HeapKind::Cons);
         self.cons_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
@@ -162,6 +170,7 @@ impl Runtime {
             data,
         });
         let addr = (&mut *string as *mut LispString) as usize;
+        self.object_index.insert(addr, HeapKind::String);
         self.strings.push(string);
         LispValue::from_heap_addr(addr)
     }
@@ -178,6 +187,7 @@ impl Runtime {
             elements,
         });
         let addr = (&mut *vector as *mut VectorObject) as usize;
+        self.object_index.insert(addr, HeapKind::Vector);
         self.vectors.push(vector);
         LispValue::from_heap_addr(addr)
     }
@@ -192,6 +202,7 @@ impl Runtime {
             equal_entries: Vec::new(),
         });
         let addr = (&mut *table as *mut HashTableObject) as usize;
+        self.object_index.insert(addr, HeapKind::HashTable);
         self.hash_tables.push(table);
         LispValue::from_heap_addr(addr)
     }
@@ -205,6 +216,7 @@ impl Runtime {
             captures,
         });
         let addr = (&mut *function as *mut FunctionObject) as usize;
+        self.object_index.insert(addr, HeapKind::Function);
         self.functions.push(function);
         LispValue::from_heap_addr(addr)
     }
@@ -217,6 +229,7 @@ impl Runtime {
             value,
         });
         let addr = (&mut *cell as *mut LexicalCell) as usize;
+        self.object_index.insert(addr, HeapKind::LexicalCell);
         self.lexical_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
@@ -242,6 +255,7 @@ impl Runtime {
         });
         let addr = (&mut *symbol as *mut Symbol) as usize;
         let value = LispValue::from_heap_addr(addr);
+        self.object_index.insert(addr, HeapKind::Symbol);
         self.symbols.push(symbol);
         self.interned_symbols.insert(name, value);
         value
@@ -260,6 +274,7 @@ impl Runtime {
         });
         let addr = (&mut *symbol as *mut Symbol) as usize;
         let value = LispValue::from_heap_addr(addr);
+        self.object_index.insert(addr, HeapKind::Symbol);
         self.symbols.push(symbol);
         value
     }
@@ -297,42 +312,34 @@ impl Runtime {
         Ok(cdr)
     }
 
+    /// O(1) type check using the object index.
+    fn heap_kind(&self, addr: usize) -> Option<HeapKind> {
+        self.object_index.get(&addr).copied()
+    }
+
     pub fn is_cons(&self, value: LispValue) -> bool {
-        value
-            .heap_addr()
-            .is_some_and(|addr| self.cons_by_addr(addr).is_some())
+        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Cons))
     }
 
     pub fn is_symbol(&self, value: LispValue) -> bool {
-        value.is_nil()
-            || value.is_true()
-            || value
-                .heap_addr()
-                .is_some_and(|addr| self.symbol_by_addr(addr).is_some())
+        value.is_nil() || value.is_true()
+            || value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Symbol))
     }
 
     pub fn is_string(&self, value: LispValue) -> bool {
-        value
-            .heap_addr()
-            .is_some_and(|addr| self.string_by_addr(addr).is_some())
+        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::String))
     }
 
     pub fn is_vector(&self, value: LispValue) -> bool {
-        value
-            .heap_addr()
-            .is_some_and(|addr| self.vector_by_addr(addr).is_some())
+        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Vector))
     }
 
     pub fn is_hash_table(&self, value: LispValue) -> bool {
-        value
-            .heap_addr()
-            .is_some_and(|addr| self.hash_table_by_addr(addr).is_some())
+        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::HashTable))
     }
 
     pub fn is_function(&self, value: LispValue) -> bool {
-        value
-            .heap_addr()
-            .is_some_and(|addr| self.function_by_addr(addr).is_some())
+        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Function))
     }
 
     pub fn float(&mut self, value: f64) -> LispValue {
@@ -343,6 +350,7 @@ impl Runtime {
             value,
         });
         let addr = (&mut *obj as *mut FloatObj) as usize;
+        self.object_index.insert(addr, HeapKind::Float);
         self.floats.push(obj);
         LispValue::from_heap_addr(addr)
     }
@@ -350,7 +358,7 @@ impl Runtime {
     pub fn is_float(&self, value: LispValue) -> bool {
         value
             .heap_addr()
-            .is_some_and(|addr| self.float_by_addr(addr).is_some())
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Float))
     }
 
     pub fn float_data(&self, value: LispValue) -> Result<f64, RuntimeError> {
@@ -391,6 +399,7 @@ impl Runtime {
             value,
         });
         let addr = (&mut *obj as *mut BignumObj) as usize;
+        self.object_index.insert(addr, HeapKind::Bignum);
         self.bignums.push(obj);
         LispValue::from_heap_addr(addr)
     }
@@ -398,7 +407,7 @@ impl Runtime {
     pub fn is_bignum(&self, value: LispValue) -> bool {
         value
             .heap_addr()
-            .is_some_and(|addr| self.bignum_by_addr(addr).is_some())
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Bignum))
     }
 
     pub fn as_integer(&self, value: LispValue) -> Option<rug::Integer> {
@@ -440,6 +449,7 @@ impl Runtime {
             value: std::sync::atomic::AtomicU64::new(val_u64),
         });
         let addr = (&mut *boxed as *mut AtomObj) as usize;
+        self.object_index.insert(addr, HeapKind::Atom);
         self.atoms.push(boxed);
         LispValue::from_heap_addr(addr)
     }
@@ -447,7 +457,7 @@ impl Runtime {
     pub fn is_atom(&self, value: LispValue) -> bool {
         value
             .heap_addr()
-            .is_some_and(|addr| self.atom_by_addr(addr).is_some())
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Atom))
     }
 
     /// Read the current value of an atom (lock-free).
@@ -533,6 +543,7 @@ impl Runtime {
             inner,
         });
         let addr = (&mut *boxed as *mut AgentObj) as usize;
+        self.object_index.insert(addr, HeapKind::Agent);
         self.agents.push(boxed);
         LispValue::from_heap_addr(addr)
     }
@@ -540,7 +551,7 @@ impl Runtime {
     pub fn is_agent(&self, value: LispValue) -> bool {
         value
             .heap_addr()
-            .is_some_and(|addr| self.agent_by_addr(addr).is_some())
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Agent))
     }
 
     /// Read the current agent value (non-blocking, may be stale).
@@ -683,6 +694,7 @@ impl Runtime {
             name,
         });
         let addr = (&mut *boxed as *mut MutexObj) as usize;
+        self.object_index.insert(addr, HeapKind::Mutex);
         self.mutexes.push(boxed);
         LispValue::from_heap_addr(addr)
     }
@@ -690,7 +702,7 @@ impl Runtime {
     pub fn is_mutex(&self, value: LispValue) -> bool {
         value
             .heap_addr()
-            .is_some_and(|addr| self.mutex_by_addr(addr).is_some())
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Mutex))
     }
 
     pub fn mutex_lock(&self, mutex: LispValue) -> Result<(), RuntimeError> {
@@ -718,6 +730,7 @@ impl Runtime {
             name,
         });
         let addr = (&mut *boxed as *mut CondvarObj) as usize;
+        self.object_index.insert(addr, HeapKind::Condvar);
         self.condvars.push(boxed);
         LispValue::from_heap_addr(addr)
     }
