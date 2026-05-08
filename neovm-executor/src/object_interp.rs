@@ -7133,4 +7133,49 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_setcar_mutates_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setcar p 99) (car p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_setcdr_mutates_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setcdr p 99) (cdr p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_error_signal_caught() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case err (error \"test error\") (error 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_prog1_returns_first() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (prog1 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_prog2_returns_second() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (prog2 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
 }
