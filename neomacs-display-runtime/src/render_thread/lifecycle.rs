@@ -185,10 +185,20 @@ impl RenderApp {
         if self.cursor.tick_animation() {
             self.frame_dirty = true;
         }
+        for cursor in self.visual_cursors.values_mut() {
+            if cursor.tick_animation() {
+                self.frame_dirty = true;
+            }
+        }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
         if self.cursor.tick_size_animation() {
             self.frame_dirty = true;
+        }
+        for cursor in self.visual_cursors.values_mut() {
+            if cursor.tick_size_animation() {
+                self.frame_dirty = true;
+            }
         }
 
         // Tick idle dimming

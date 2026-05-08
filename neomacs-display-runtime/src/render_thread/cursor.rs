@@ -136,6 +136,107 @@ impl Default for CursorState {
 }
 
 impl CursorState {
+    pub(super) fn set_target(&mut self, new_target: CursorTarget) -> (bool, bool) {
+        let had_target = self.target.is_some();
+        let target_moved = self.target.as_ref().map_or(true, |old| {
+            (old.x - new_target.x).abs() > 0.5
+                || (old.y - new_target.y).abs() > 0.5
+                || (old.width - new_target.width).abs() > 0.5
+                || (old.height - new_target.height).abs() > 0.5
+        });
+
+        if !had_target || !self.anim_enabled {
+            self.current_x = new_target.x;
+            self.current_y = new_target.y;
+            self.current_w = new_target.width;
+            self.current_h = new_target.height;
+            self.animating = false;
+            let corners = Self::target_corners(&new_target);
+            for (spring, (x, y)) in self.corner_springs.iter_mut().zip(corners) {
+                spring.x = x;
+                spring.y = y;
+                spring.vx = 0.0;
+                spring.vy = 0.0;
+                spring.target_x = x;
+                spring.target_y = y;
+            }
+            self.prev_target_cx = new_target.x + new_target.width / 2.0;
+            self.prev_target_cy = new_target.y + new_target.height / 2.0;
+        } else if target_moved {
+            let now = std::time::Instant::now();
+            self.animating = true;
+            self.last_anim_time = now;
+            self.start_x = self.current_x;
+            self.start_y = self.current_y;
+            self.start_w = self.current_w;
+            self.start_h = self.current_h;
+            self.anim_start_time = now;
+            self.velocity_x = 0.0;
+            self.velocity_y = 0.0;
+            self.velocity_w = 0.0;
+            self.velocity_h = 0.0;
+
+            if self.anim_style == CursorAnimStyle::CriticallyDampedSpring {
+                let new_corners = Self::target_corners(&new_target);
+                let new_cx = new_target.x + new_target.width / 2.0;
+                let new_cy = new_target.y + new_target.height / 2.0;
+                let old_cx = self.prev_target_cx;
+                let old_cy = self.prev_target_cy;
+
+                let dx = new_cx - old_cx;
+                let dy = new_cy - old_cy;
+                let len = (dx * dx + dy * dy).sqrt();
+                let (dir_x, dir_y) = if len > 0.001 {
+                    (dx / len, dy / len)
+                } else {
+                    (1.0, 0.0)
+                };
+
+                let corner_dirs: [(f32, f32); 4] =
+                    [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)];
+
+                let mut dots: [(f32, usize); 4] = corner_dirs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (cx, cy))| (cx * dir_x + cy * dir_y, i))
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap();
+                dots.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+                let base_dur = self.anim_duration;
+                for (rank, &(_dot, corner_idx)) in dots.iter().enumerate() {
+                    let factor = 1.0 - self.trail_size * (rank as f32 / 3.0);
+                    let duration_i = (base_dur * factor).max(0.01);
+                    let omega_i = 4.0 / duration_i;
+
+                    self.corner_springs[corner_idx].target_x = new_corners[corner_idx].0;
+                    self.corner_springs[corner_idx].target_y = new_corners[corner_idx].1;
+                    self.corner_springs[corner_idx].omega = omega_i;
+                }
+
+                self.prev_target_cx = new_cx;
+                self.prev_target_cy = new_cy;
+            }
+        }
+
+        if self.size_transition_enabled {
+            let dw = (new_target.width - self.size_target_w).abs();
+            let dh = (new_target.height - self.size_target_h).abs();
+            if dw > 2.0 || dh > 2.0 {
+                self.size_animating = true;
+                self.size_start_w = self.current_w;
+                self.size_start_h = self.current_h;
+                self.size_anim_start = std::time::Instant::now();
+            }
+            self.size_target_w = new_target.width;
+            self.size_target_h = new_target.height;
+        }
+
+        self.target = Some(new_target);
+        (had_target, target_moved)
+    }
+
     /// Compute the 4 target corners for a cursor based on its style.
     /// Returns [TL, TR, BR, BL] as (x, y) tuples.
     pub(super) fn target_corners(target: &CursorTarget) -> [(f32, f32); 4] {

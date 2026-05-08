@@ -225,6 +225,8 @@ pub(super) struct RenderApp {
 
     // Cursor state (blink, animation, size transition)
     pub(super) cursor: CursorState,
+    // Render-only visual cursors keyed by their stable visual cursor id.
+    pub(super) visual_cursors: HashMap<i32, CursorState>,
 
     // All visual effect configurations
     pub(super) effects: EffectsConfig,
@@ -373,6 +375,7 @@ impl RenderApp {
             image_dimensions,
             frame_dirty: false,
             cursor: CursorState::default(),
+            visual_cursors: HashMap::new(),
             effects: EffectsConfig::default(),
             transitions: TransitionState::default(),
             #[cfg(feature = "wpe-webkit")]

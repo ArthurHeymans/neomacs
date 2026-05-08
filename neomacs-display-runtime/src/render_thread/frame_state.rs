@@ -14,6 +14,7 @@ impl RenderApp {
         self.process_pending_images();
         self.refresh_faces_from_frames();
         self.apply_extra_spacing_if_needed();
+        self.apply_visual_cursor_animations();
     }
 
     fn update_fps_state(&mut self) {
@@ -48,6 +49,23 @@ impl RenderApp {
                     self.faces.len()
                 );
                 atlas.clear();
+            }
+        }
+    }
+
+    fn apply_visual_cursor_animations(&mut self) {
+        if self.visual_cursors.is_empty() {
+            return;
+        }
+        if let Some(ref mut frame) = self.current_frame {
+            for cursor in &mut frame.window_cursors {
+                let Some(state) = self.visual_cursors.get(&cursor.window_id) else {
+                    continue;
+                };
+                cursor.x = state.current_x;
+                cursor.y = state.current_y;
+                cursor.width = state.current_w;
+                cursor.height = state.current_h;
             }
         }
     }

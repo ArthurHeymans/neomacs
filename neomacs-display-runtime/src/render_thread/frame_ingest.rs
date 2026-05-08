@@ -1,8 +1,8 @@
 //! Frame ingestion and cursor target extraction.
 
 use super::RenderApp;
-use crate::core::types::CursorAnimStyle;
-use crate::render_thread::cursor::{CursorState, CursorTarget};
+use crate::render_thread::cursor::CursorTarget;
+use std::collections::HashSet;
 
 impl RenderApp {
     /// Get latest frame from Emacs (non-blocking).
@@ -186,88 +186,7 @@ impl RenderApp {
         }
 
         if let Some(new_target) = active_cursor {
-            let had_target = self.cursor.target.is_some();
-            let target_moved = self.cursor.target.as_ref().map_or(true, |old| {
-                (old.x - new_target.x).abs() > 0.5
-                    || (old.y - new_target.y).abs() > 0.5
-                    || (old.width - new_target.width).abs() > 0.5
-                    || (old.height - new_target.height).abs() > 0.5
-            });
-
-            if !had_target || !self.cursor.anim_enabled {
-                self.cursor.current_x = new_target.x;
-                self.cursor.current_y = new_target.y;
-                self.cursor.current_w = new_target.width;
-                self.cursor.current_h = new_target.height;
-                self.cursor.animating = false;
-                let corners = CursorState::target_corners(&new_target);
-                for (spring, (x, y)) in self.cursor.corner_springs.iter_mut().zip(corners) {
-                    spring.x = x;
-                    spring.y = y;
-                    spring.vx = 0.0;
-                    spring.vy = 0.0;
-                    spring.target_x = x;
-                    spring.target_y = y;
-                }
-                self.cursor.prev_target_cx = new_target.x + new_target.width / 2.0;
-                self.cursor.prev_target_cy = new_target.y + new_target.height / 2.0;
-            } else if target_moved {
-                let now = std::time::Instant::now();
-                self.cursor.animating = true;
-                self.cursor.last_anim_time = now;
-                self.cursor.start_x = self.cursor.current_x;
-                self.cursor.start_y = self.cursor.current_y;
-                self.cursor.start_w = self.cursor.current_w;
-                self.cursor.start_h = self.cursor.current_h;
-                self.cursor.anim_start_time = now;
-                self.cursor.velocity_x = 0.0;
-                self.cursor.velocity_y = 0.0;
-                self.cursor.velocity_w = 0.0;
-                self.cursor.velocity_h = 0.0;
-
-                if self.cursor.anim_style == CursorAnimStyle::CriticallyDampedSpring {
-                    let new_corners = CursorState::target_corners(&new_target);
-                    let new_cx = new_target.x + new_target.width / 2.0;
-                    let new_cy = new_target.y + new_target.height / 2.0;
-                    let old_cx = self.cursor.prev_target_cx;
-                    let old_cy = self.cursor.prev_target_cy;
-
-                    let dx = new_cx - old_cx;
-                    let dy = new_cy - old_cy;
-                    let len = (dx * dx + dy * dy).sqrt();
-                    let (dir_x, dir_y) = if len > 0.001 {
-                        (dx / len, dy / len)
-                    } else {
-                        (1.0, 0.0)
-                    };
-
-                    let corner_dirs: [(f32, f32); 4] =
-                        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)];
-
-                    let mut dots: [(f32, usize); 4] = corner_dirs
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (cx, cy))| (cx * dir_x + cy * dir_y, i))
-                        .collect::<Vec<_>>()
-                        .try_into()
-                        .unwrap();
-                    dots.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-                    let base_dur = self.cursor.anim_duration;
-                    for (rank, &(_dot, corner_idx)) in dots.iter().enumerate() {
-                        let factor = 1.0 - self.cursor.trail_size * (rank as f32 / 3.0);
-                        let duration_i = (base_dur * factor).max(0.01);
-                        let omega_i = 4.0 / duration_i;
-
-                        self.cursor.corner_springs[corner_idx].target_x = new_corners[corner_idx].0;
-                        self.cursor.corner_springs[corner_idx].target_y = new_corners[corner_idx].1;
-                        self.cursor.corner_springs[corner_idx].omega = omega_i;
-                    }
-
-                    self.cursor.prev_target_cx = new_cx;
-                    self.cursor.prev_target_cy = new_cy;
-                }
-            }
+            let (had_target, target_moved) = self.cursor.set_target(new_target.clone());
 
             if target_moved && had_target && self.effects.typing_ripple.enabled {
                 if let Some(renderer) = self.renderer.as_mut() {
@@ -289,21 +208,40 @@ impl RenderApp {
             }
 
             self.update_ime_cursor_area_if_needed(&new_target);
-
-            if self.cursor.size_transition_enabled {
-                let dw = (new_target.width - self.cursor.size_target_w).abs();
-                let dh = (new_target.height - self.cursor.size_target_h).abs();
-                if dw > 2.0 || dh > 2.0 {
-                    self.cursor.size_animating = true;
-                    self.cursor.size_start_w = self.cursor.current_w;
-                    self.cursor.size_start_h = self.cursor.current_h;
-                    self.cursor.size_anim_start = std::time::Instant::now();
-                }
-                self.cursor.size_target_w = new_target.width;
-                self.cursor.size_target_h = new_target.height;
-            }
-
-            self.cursor.target = Some(new_target);
         }
+
+        let mut live_visual_cursor_ids = HashSet::new();
+        if let Some(frame) = self.current_frame.as_ref() {
+            for cursor in &frame.window_cursors {
+                if cursor.window_id >= 0 {
+                    continue;
+                }
+                live_visual_cursor_ids.insert(cursor.window_id);
+                let target = CursorTarget {
+                    window_id: cursor.window_id,
+                    x: cursor.x,
+                    y: cursor.y,
+                    width: cursor.width,
+                    height: cursor.height,
+                    style: cursor.style,
+                    color: cursor.color,
+                    frame_id: 0,
+                };
+                let state = self.visual_cursors.entry(cursor.window_id).or_default();
+                state.anim_enabled = self.cursor.anim_enabled;
+                state.anim_speed = self.cursor.anim_speed;
+                state.anim_style = self.cursor.anim_style;
+                state.anim_duration = self.cursor.anim_duration;
+                state.trail_size = self.cursor.trail_size;
+                state.size_transition_enabled = self.cursor.size_transition_enabled;
+                state.size_transition_duration = self.cursor.size_transition_duration;
+                let (_had_target, target_moved) = state.set_target(target);
+                if target_moved {
+                    self.frame_dirty = true;
+                }
+            }
+        }
+        self.visual_cursors
+            .retain(|id, _| live_visual_cursor_ids.contains(id));
     }
 }

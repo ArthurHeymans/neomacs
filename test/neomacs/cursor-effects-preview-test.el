@@ -15,7 +15,7 @@
   :type 'number
   :group 'cursor-effects-preview)
 
-(defcustom cursor-effects-preview-move-seconds 0.085
+(defcustom cursor-effects-preview-move-seconds 0.04
   "Seconds between preview cursor moves."
   :type 'number
   :group 'cursor-effects-preview)
@@ -299,8 +299,9 @@
 (defun cursor-effects-preview--line-offset (line tick)
   (let* ((width (plist-get line :width))
          (index (plist-get line :index))
-         (phase (+ tick (* index 3)))
-         (period (+ 18 (mod index 13)))
+         (period (+ 28 (mod (* index 7) 23)))
+         (phase (+ (* tick (+ 1 (mod index 4)))
+                   (* index 11)))
          (step (mod phase (* 2 period))))
     (min (1- width)
          (if (< step period)
@@ -324,11 +325,12 @@
                       :color (plist-get line :color))))
             cursor-effects-preview--visual-lines)))
         (when (fboundp 'force-window-update)
-          (force-window-update buffer))))))
+          (force-window-update buffer))
+        (redisplay t)))))
 
 (defun cursor-effects-preview--insert-lines ()
   (let ((lines nil)
-        (bar-width 32))
+        (track "Make Emacs Great Again! Make Emacs Great Again!"))
     (cl-loop for effect in cursor-effects-preview--effects
              for index from 1
              for shape = (car cursor-effects-preview--cursor-types)
@@ -336,11 +338,11 @@
              do
              (insert (format "%02d  %-28s " index (plist-get effect :name)))
              (let ((start (point)))
-               (insert (make-string bar-width ?|))
+               (insert track)
                (insert "\n")
                (push (list :index index
                            :start start
-                           :width bar-width
+                           :width (length track)
                            :cursor-type shape
                            :effect (plist-get effect :forms)
                            :color color)
