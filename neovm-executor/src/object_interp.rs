@@ -7938,6 +7938,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_length_comparison() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (and (length= '(a b c) 3) (length< '(a) 3) (length> '(a b c d) 3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_string_remove_suffix() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
