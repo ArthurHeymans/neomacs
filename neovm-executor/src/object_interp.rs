@@ -7946,6 +7946,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_dotimes_loop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((sum 0)) (dotimes (i 5) (setq sum (+ sum i))) sum)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_dolist_loop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((sum 0)) (dolist (x '(1 2 3 4)) (setq sum (+ sum x))) sum)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
     fn executes_with_current_buffer_noop() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(with-current-buffer \"*scratch*\" 99)",
