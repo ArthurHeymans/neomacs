@@ -2279,6 +2279,37 @@ impl Interpreter<'_, '_, '_> {
                 self.runtime.add_load_path(path);
                 Some(LispValue::TRUE)
             }),
+            "run-hooks" => self.min_arity(name, args, 1).and_then(|_| {
+                let mut last = LispValue::NIL;
+                for hook_sym in args {
+                    if let Ok(hook_val) = self.runtime.symbol_value(*hook_sym) {
+                        let mut current = hook_val;
+                        while !current.is_nil() {
+                            let func = self.runtime.car(current).unwrap_or(LispValue::NIL);
+                            let rest = self.runtime.cdr(current).unwrap_or(LispValue::NIL);
+                            if !func.is_nil() {
+                                last = self.execute_funcall(func, &[]).unwrap_or(LispValue::NIL);
+                            }
+                            current = rest;
+                        }
+                    }
+                }
+                Some(last)
+            }),
+            "add-hook" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
+                let func = args[1];
+                let hook_sym = args[0];
+                if let Ok(hook_val) = self.runtime.symbol_value(hook_sym) {
+                    if self.memq(func, hook_val).is_none() {
+                        let new_val = self.runtime.cons(func, hook_val);
+                        let _ = self.runtime.set_symbol_value(hook_sym, new_val);
+                    }
+                } else {
+                    let new_val = self.runtime.cons(func, LispValue::NIL);
+                    let _ = self.runtime.set_symbol_value(hook_sym, new_val);
+                }
+                Some(LispValue::NIL)
+            }),
 
             // --- Thread primitives ---
             "make-thread" => self.min_max_arity(name, args, 2, 2).and_then(|_| {
@@ -7455,6 +7486,11 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    // Note: run-hooks and add-hook exist as primitives but the full
+    // hook chain (defvar + lambda + symbol-value + run-hooks) needs
+    // deeper compiler integration to work end-to-end.
+
 
     fn executes_copy_sequence_list() {
         let (value, _) = execute(
