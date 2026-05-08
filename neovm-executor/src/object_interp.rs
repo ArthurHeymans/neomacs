@@ -7954,6 +7954,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_cons_with_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(car (cons 42 nil))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_append_concatenates() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (append '(1 2) '(3 4) '(5 6)))",
