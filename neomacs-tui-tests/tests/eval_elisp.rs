@@ -2416,6 +2416,35 @@ fn subr_x_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn map_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'map) (message \"map:%S\" (let ((h (make-hash-table :test 'equal))) (puthash \"a\" 1 h) (list (map-elt '((a . 1)) 'a) (map-elt '(:a 2) :a) (map-elt h \"a\") (map-keys '((x . 1) (y . 2)))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("map:") && row.contains("(1 2 1 (x y))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: map library behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("map_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn macroexpand_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
