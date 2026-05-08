@@ -1242,6 +1242,39 @@ fn hash_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn hash_table_key_test_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"hashtest:%S\" (let ((eqh (make-hash-table :test 'eq)) (equalh (make-hash-table :test 'equal)) (eqlh (make-hash-table :test 'eql))) (puthash (copy-sequence \"k\") 'eq-string eqh) (puthash (copy-sequence \"k\") 'equal-string equalh) (puthash 1.0 'float eqlh) (puthash 1 'int eqlh) (list (gethash \"k\" eqh 'missing) (gethash \"k\" equalh 'missing) (gethash 1.0 eqlh 'missing) (gethash 1 eqlh 'missing))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("hashtest:") && row.contains("(missing equal-string float int)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: hash-table key-test semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "hash_table_key_test_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
