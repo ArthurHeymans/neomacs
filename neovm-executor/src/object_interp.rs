@@ -7846,6 +7846,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_assoc_returns_nil_for_empty_alist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (assoc 'a '())",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_rassoc_finds_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (rassoc 2 '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_string_lessp_multi_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
