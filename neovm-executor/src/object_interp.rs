@@ -7008,6 +7008,54 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(7)));
     }
 
+    // --- Nonlocal exit tests ---
+
+    #[test]
+    fn executes_catch_throw() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (catch 'exit (throw 'exit 42) 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_nested_catch_throw() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (catch 'outer (catch 'inner (throw 'outer 99)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_condition_case_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case err (signal 'search-failed '(\"test\")) \
+               (search-failed 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_condition_case_no_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case err 99 (error 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_unwind_protect_cleanup_runs() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((x 0)) (unwind-protect 1 (setq x 99)) x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
     // --- Native thread tests ---
 
     #[test]
