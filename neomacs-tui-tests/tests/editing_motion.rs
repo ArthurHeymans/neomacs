@@ -221,6 +221,61 @@ fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
     );
 }
 
+#[test]
+fn cx_u_with_active_region_undoes_only_region_change() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "undo-region.txt";
+
+    open_home_file(&mut gnu, &mut neo, name, "one\ntwo\n", "C-x C-f");
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"AAA ");
+    }
+    let first_edit = |grid: &[String]| grid.iter().any(|row| row.contains("AAA one"));
+    gnu.read_until(Duration::from_secs(6), first_edit);
+    neo.read_until(Duration::from_secs(8), first_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-a C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"BBB ");
+    }
+    let second_edit = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), second_edit);
+    neo.read_until(Duration::from_secs(8), second_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-a C-SPC C-e C-x u");
+    let region_undo = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.trim_end() == "two")
+            && !grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), region_undo);
+    neo.read_until(Duration::from_secs(8), region_undo);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "cx_u_with_active_region_undoes_only_region_change",
+        &gnu,
+        &neo,
+        2,
+    );
+
+    send_both(&mut gnu, &mut neo, "C-g");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    save_current_file_and_assert_contents(
+        "cx_u_with_active_region_undoes_only_region_change",
+        &mut gnu,
+        &mut neo,
+        name,
+        "AAA one\ntwo\n",
+    );
+}
+
 fn send_undo_key_both(
     gnu: &mut neomacs_tui_tests::TuiSession,
     neo: &mut neomacs_tui_tests::TuiSession,
