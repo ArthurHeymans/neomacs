@@ -59,8 +59,6 @@ struct CapturedCursorInfo {
     bg: Color,
     byte_idx: usize,
     col: usize,
-    face_id: u32,
-    face_space_w: f32,
     matrix_row: usize,
     slot_width: Option<f32>,
     stretch_like: bool,
@@ -1089,71 +1087,6 @@ fn cursor_width_for_style(
                 }
             }
             cursor_point_columns(text, byte_idx, col, params) as f32 * face_char_w
-        }
-    }
-}
-
-#[inline]
-unsafe fn cursor_point_advance(
-    text: &[u8],
-    byte_idx: usize,
-    col: i32,
-    params: &WindowParams,
-    face_char_w: f32,
-    face_space_w: f32,
-    char_w: f32,
-    font_size: i32,
-    font_family: &str,
-    font_weight: u16,
-    font_italic: bool,
-    ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
-    font_metrics_svc: &mut Option<FontMetricsService>,
-) -> Option<f32> {
-    if byte_idx >= text.len() {
-        return None;
-    }
-
-    let face_w = if face_char_w > 0.0 {
-        face_char_w
-    } else {
-        char_w
-    };
-    let (ch, _) = decode_utf8(&text[byte_idx..]);
-    match ch {
-        '\n' | '\r' => Some(face_w),
-        '\t' => {
-            let col_usize = col.max(0) as usize;
-            let next_tab = next_tab_stop_col(col_usize, params.tab_width, &params.tab_stop_list)
-                .max(col_usize + 1);
-            let tab_cols = next_tab.saturating_sub(col_usize).max(1);
-            let space_w = if face_space_w > 0.0 {
-                face_space_w
-            } else {
-                face_w
-            };
-            Some(tab_cols as f32 * space_w)
-        }
-        _ if ch < ' ' || ch == '\x7F' => Some(face_w),
-        _ => {
-            // Cluster extenders (combining marks, ZWJ, variation
-            // selectors) share the preceding base character's cell
-            // and contribute no advance of their own.
-            if is_cluster_extender(ch) {
-                return Some(0.0);
-            }
-            let char_cols = if is_wide_char(ch) { 2 } else { 1 };
-            Some(char_advance(
-                ascii_width_cache,
-                font_metrics_svc,
-                ch,
-                char_cols,
-                char_w,
-                font_size,
-                face_char_w,
-                font_family,
-                font_weight,
-                font_italic,
-            ))
         }
     }
 }
@@ -3306,8 +3239,6 @@ impl LayoutEngine {
                                 bg: current_bg,
                                 byte_idx,
                                 col,
-                                face_id: current_face_id.saturating_sub(1),
-                                face_space_w,
                                 matrix_row: row,
                                 slot_width: Some(face_char_w.max(1.0)),
                                 stretch_like: false,
@@ -3482,8 +3413,6 @@ impl LayoutEngine {
                                 bg: current_bg,
                                 byte_idx: ch_start_byte_idx,
                                 col,
-                                face_id: current_face_id.saturating_sub(1),
-                                face_space_w,
                                 matrix_row: row,
                                 slot_width: Some(face_char_w.max(1.0)),
                                 stretch_like: false,
@@ -3529,8 +3458,6 @@ impl LayoutEngine {
                                 bg: current_bg,
                                 byte_idx: ch_start_byte_idx,
                                 col,
-                                face_id: current_face_id.saturating_sub(1),
-                                face_space_w,
                                 matrix_row: row,
                                 slot_width: Some(face_char_w.max(1.0)),
                                 stretch_like: false,
@@ -3578,8 +3505,6 @@ impl LayoutEngine {
                                     bg: current_bg,
                                     byte_idx,
                                     col,
-                                    face_id: current_face_id.saturating_sub(1),
-                                    face_space_w,
                                     matrix_row: row,
                                     slot_width: Some(slot_width.max(1.0)),
                                     stretch_like: false,
@@ -3665,8 +3590,6 @@ impl LayoutEngine {
                                     bg: current_bg,
                                     byte_idx,
                                     col,
-                                    face_id: current_face_id.saturating_sub(1),
-                                    face_space_w,
                                     matrix_row: row,
                                     slot_width: Some(space_width.max(face_char_w).max(1.0)),
                                     stretch_like: true,
@@ -3740,8 +3663,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(display_width.max(1.0)),
                                         stretch_like: false,
@@ -3795,8 +3716,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(face_char_w.max(1.0)),
                                         stretch_like: false,
@@ -3884,8 +3803,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(display_width.max(1.0)),
                                         stretch_like: false,
@@ -3935,8 +3852,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(face_char_w.max(1.0)),
                                         stretch_like: false,
@@ -4004,8 +3919,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(display_width.max(1.0)),
                                         stretch_like: false,
@@ -4053,8 +3966,6 @@ impl LayoutEngine {
                                         bg: current_bg,
                                         byte_idx,
                                         col,
-                                        face_id: current_face_id.saturating_sub(1),
-                                        face_space_w,
                                         matrix_row: row,
                                         slot_width: Some(face_char_w.max(1.0)),
                                         stretch_like: false,
@@ -4439,8 +4350,6 @@ impl LayoutEngine {
                             bg: current_bg,
                             byte_idx: ch_start_byte_idx,
                             col,
-                            face_id: current_face_id.saturating_sub(1),
-                            face_space_w,
                             matrix_row: row,
                             slot_width: Some(advance.max(1.0)),
                             stretch_like: true,
@@ -5087,8 +4996,6 @@ impl LayoutEngine {
                         bg: current_bg,
                         byte_idx: ch_start_byte_idx,
                         col,
-                        face_id: current_face_id.saturating_sub(1),
-                        face_space_w,
                         matrix_row: row,
                         slot_width: Some(advance.max(1.0)),
                         stretch_like: false,
@@ -5304,8 +5211,6 @@ impl LayoutEngine {
                     bg: current_bg,
                     byte_idx,
                     col,
-                    face_id: current_face_id.saturating_sub(1),
-                    face_space_w,
                     matrix_row: row,
                     slot_width: Some(face_char_w.max(1.0)),
                     stretch_like: false,
@@ -5485,32 +5390,7 @@ impl LayoutEngine {
                         )
                         .max(1.0)
                     };
-                    let fallback_cursor_w = computed_slot_width.max(1.0);
-                    let actual_cursor_w = if cursor.slot_width.is_some() {
-                        computed_slot_width
-                    } else if let Some(face) = self.matrix_builder.faces().get(&cursor.face_id) {
-                        unsafe {
-                            cursor_point_advance(
-                                text,
-                                cursor.byte_idx,
-                                cursor.col as i32,
-                                params,
-                                cursor.face_w,
-                                cursor.face_space_w,
-                                char_w,
-                                face.font_size.max(1.0).round() as i32,
-                                &face.font_family,
-                                face.font_weight,
-                                face.is_italic(),
-                                &mut self.ascii_width_cache,
-                                &mut self.font_metrics,
-                            )
-                            .unwrap_or(fallback_cursor_w)
-                        }
-                        .max(1.0)
-                    } else {
-                        fallback_cursor_w
-                    };
+                    let actual_cursor_w = computed_slot_width;
                     let cursor_w = if cursor.stretch_like
                         && !params.x_stretch_cursor
                         && !matches!(style, CursorStyle::Bar(_))
