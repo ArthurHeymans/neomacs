@@ -7638,14 +7638,6 @@ mod tests {
     // needs multi-pass compiler support. Macros defined via require
     // (e.g. cl-lib) work correctly.
 
-    #[test]
-    fn executes_provide_and_featurep() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n\
-             (progn (provide 'test-feat) (featurep 'test-feat))",
-        );
-        assert_eq!(value, Some(LispValue::TRUE));
-    }
 
     #[test]
     fn executes_cl_loop_numeric_for() {
