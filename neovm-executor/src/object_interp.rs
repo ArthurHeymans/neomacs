@@ -7721,6 +7721,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_replace_regexp_in_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (replace-regexp-in-string \"[0-9]+\" \"X\" \"abc123def456\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_split_string_and_join_roundtrip() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
