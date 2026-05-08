@@ -7234,4 +7234,23 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_hash_table_count_and_clear() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((h (make-hash-table))) (puthash 'a 1 h) (puthash 'b 2 h) \
+               (prog1 (hash-table-count h) (clrhash h)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_hash_table_p_predicate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (hash-table-p (make-hash-table))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
