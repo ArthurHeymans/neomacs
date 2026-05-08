@@ -52,7 +52,10 @@ pub const CL_LIB_SOURCE: &str = r#"
   (cons 'defun (cons name (cons args body))))
 
 (defmacro cl-return (&optional value)
-  (list 'cl-return-from nil value))
+  (list 'throw '--cl-block-nil-- (or value nil)))
+
+(defmacro cl-return-from (block &optional value)
+  (list 'throw block (or value nil)))
 
 (defmacro with-mutex (mutex &rest body)
   (let ((m (make-symbol \"m\")))
