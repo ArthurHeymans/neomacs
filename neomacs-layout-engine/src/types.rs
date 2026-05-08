@@ -206,6 +206,12 @@ pub struct WindowParams {
     pub cursor_color: u32,
     /// Neomacs-specific cursor effect profile for this window.
     pub cursor_effects: Option<neomacs_display_protocol::effect_config::EffectsConfig>,
+    /// Neomacs-only visual cursors for this window's buffer.
+    ///
+    /// These do not affect GNU point, mark, selection, command dispatch, or
+    /// IME state. They are render-only cursor visuals anchored to buffer
+    /// positions.
+    pub visual_cursors: Vec<VisualCursorSpec>,
 
     /// Fringe widths in pixels
     pub left_fringe_width: f32,
@@ -242,6 +248,17 @@ pub struct WindowParams {
     pub left_margin_width: f32,
     /// Right margin width in pixels (0 = no margin)
     pub right_margin_width: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct VisualCursorSpec {
+    pub id: i32,
+    /// 0-based buffer character position.
+    pub charpos: i64,
+    pub cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind,
+    pub cursor_bar_width: i32,
+    pub color: u32,
+    pub effects: Option<neomacs_display_protocol::effect_config::EffectsConfig>,
 }
 
 /// Frame-level parameters for layout.

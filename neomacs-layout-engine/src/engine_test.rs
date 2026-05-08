@@ -47,6 +47,7 @@ fn test_window_params() -> WindowParams {
         x_stretch_cursor: false,
         cursor_color: 0xFFFFFF,
         cursor_effects: None,
+        visual_cursors: Vec::new(),
         left_fringe_width: 0.0,
         right_fringe_width: 0.0,
         indicate_empty_lines: 0,
@@ -699,6 +700,58 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         cursor.width, expected_w,
         "cursor must not use the following W glyph advance"
     );
+}
+
+#[test]
+fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("alpha\nbeta\n");
+        buf.goto_byte(0);
+        let visual_cursor = Value::list(vec![
+            Value::keyword(":position"),
+            Value::fixnum(3),
+            Value::keyword(":cursor-type"),
+            Value::cons(Value::symbol("bar"), Value::fixnum(6)),
+            Value::keyword(":color"),
+            Value::string("#ff0000"),
+        ]);
+        buf.set_buffer_local("neomacs-visual-cursors", Value::list(vec![visual_cursor]));
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-visual-cursor", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let visual = state
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id < 0)
+        .expect("visual cursor");
+    assert_eq!(visual.window_id, -1_000_000);
+    assert_eq!(visual.width, 6.0);
+    assert_eq!(visual.color, Color::from_pixel(0xff0000));
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let selected_window = frame.selected_window;
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let phys = snapshot.phys_cursor.as_ref().expect("phys cursor");
+    assert_eq!(phys.x, 0, "visual cursor must not move GNU point");
 }
 
 #[test]

@@ -1102,6 +1102,16 @@ fn cursor_style_for_window(params: &WindowParams) -> Option<CursorStyle> {
     CursorStyle::from_kind(params.cursor_kind, params.cursor_bar_width)
 }
 
+fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
+    use neomacs_display_protocol::frame_glyphs::CursorKind;
+
+    if spec.cursor_kind == CursorKind::NoCursor {
+        return None;
+    }
+
+    CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
+}
+
 /// Parse `:raise` factor from a display property value.
 ///
 /// Handles two forms:
@@ -5513,6 +5523,51 @@ impl LayoutEngine {
                 row_y_start,
                 row_max_height,
                 row_max_ascent,
+            );
+        }
+
+        for spec in &params.visual_cursors {
+            let Some((row_index, hit_row)) = hit_rows.iter().enumerate().find(|(_, hit_row)| {
+                spec.charpos >= hit_row.charpos_start && spec.charpos <= hit_row.charpos_end
+            }) else {
+                continue;
+            };
+            let Some(style) = cursor_style_for_visual(spec) else {
+                continue;
+            };
+            let row_height = (hit_row.y_end - hit_row.y_start).max(char_h);
+            let col = spec.charpos.saturating_sub(hit_row.charpos_start).max(0) as usize;
+            let x = text_area_left + col as f32 * char_w;
+            let (width, height, y) = match style {
+                CursorStyle::Bar(width) => (width.max(1.0), row_height, hit_row.y_start),
+                CursorStyle::Hbar(height) => {
+                    let h = height.max(1.0).min(row_height);
+                    (char_w.max(1.0), h, hit_row.y_end - h)
+                }
+                CursorStyle::FilledBox | CursorStyle::Hollow => {
+                    (char_w.max(1.0), row_height, hit_row.y_start)
+                }
+            };
+            if y < text_y || y + height > text_y + text_height {
+                continue;
+            }
+            if let Some(effects) = spec.effects.clone() {
+                self.matrix_builder
+                    .set_window_cursor_effects(spec.id, effects);
+            }
+            self.matrix_builder.push_cursor(
+                spec.id,
+                DisplaySlotId {
+                    window_id: spec.id as i64,
+                    row: (text_matrix_row_base + row_index) as u32,
+                    col: col as u16,
+                },
+                x,
+                y,
+                width,
+                height,
+                style,
+                Color::from_pixel(spec.color),
             );
         }
 

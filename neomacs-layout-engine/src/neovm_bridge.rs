@@ -19,7 +19,7 @@ use neovm_core::face::{
 };
 use neovm_core::window::{Frame, FrameId, Window};
 
-use super::types::{FrameParams, WindowParams};
+use super::types::{FrameParams, VisualCursorSpec, WindowParams};
 use crate::fontconfig::face_height_to_pixels;
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -590,6 +590,68 @@ fn parse_cursor_effect_profile(value: Value) -> Option<EffectsConfig> {
     }
 }
 
+fn parse_visual_cursor_spec(
+    value: Value,
+    index: usize,
+    default_color: u32,
+) -> Option<VisualCursorSpec> {
+    let items = list_to_vec(&value)?;
+    let mut charpos: Option<i64> = None;
+    let mut cursor_type = Value::symbol("bar");
+    let mut color = default_color;
+    let mut effects = None;
+
+    let mut iter = items.chunks_exact(2);
+    for pair in &mut iter {
+        let key = pair[0].as_symbol_name()?;
+        let value = pair[1];
+        match key {
+            ":position" | ":pos" => {
+                charpos = value.as_int().map(|pos| pos.saturating_sub(1).max(0));
+            }
+            ":cursor-type" | ":type" => {
+                cursor_type = value;
+            }
+            ":color" => {
+                if let Some(pixel) = parse_color_pixel(&value) {
+                    color = pixel;
+                }
+            }
+            ":effect" | ":effects" => {
+                effects = parse_cursor_effect_profile(value);
+            }
+            _ => {}
+        }
+    }
+    if !iter.remainder().is_empty() {
+        return None;
+    }
+
+    let cursor = parse_cursor_spec(&cursor_type)?;
+    Some(VisualCursorSpec {
+        id: -1_000_000 - index as i32,
+        charpos: charpos?,
+        cursor_kind: cursor.cursor_kind,
+        cursor_bar_width: cursor.bar_width,
+        color,
+        effects,
+    })
+}
+
+fn parse_visual_cursors(buffer: &Buffer, default_color: u32) -> Vec<VisualCursorSpec> {
+    let Some(value) = buffer_local_value(buffer, "neomacs-visual-cursors") else {
+        return Vec::new();
+    };
+    let Some(items) = list_to_vec(&value) else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, item)| parse_visual_cursor_spec(item, index, default_color))
+        .collect()
+}
+
 fn effective_cursor_spec(
     frame: &Frame,
     buffer: &Buffer,
@@ -792,6 +854,7 @@ pub fn window_params_from_neovm(
     let cursor_effects = parse_cursor_effect_profile(window_cursor_effect).or_else(|| {
         buffer_local_value(buffer, "neomacs-cursor-effect").and_then(parse_cursor_effect_profile)
     });
+    let visual_cursors = parse_visual_cursors(buffer, cursor_color);
     let x_stretch_cursor = global_bool(obarray, "x-stretch-cursor");
 
     // Header-line: show if header-line-format is non-nil
@@ -889,6 +952,7 @@ pub fn window_params_from_neovm(
         x_stretch_cursor,
         cursor_color,
         cursor_effects,
+        visual_cursors,
         left_fringe_width: left_fringe,
         right_fringe_width: right_fringe,
         indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") {
