@@ -1294,6 +1294,10 @@ impl Runtime {
         })
     }
 
+    pub fn hash_table_test(&self, table: LispValue) -> Result<HashTableTest, RuntimeError> {
+        Ok(self.expect_hash_table(table)?.test)
+    }
+
     pub fn gethash(
         &self,
         key: LispValue,

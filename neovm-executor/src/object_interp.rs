@@ -1733,6 +1733,9 @@ impl Interpreter<'_, '_, '_> {
             "hash-table-values" => self.exact_arity(name, args, 1).and_then(|_| {
                 self.hash_table_values(args[0])
             }),
+            "copy-hash-table" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.copy_hash_table(args[0])
+            }),
             "gethash" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.gethash(args[0], args[1], args.get(2).copied())),
@@ -4402,6 +4405,16 @@ impl Interpreter<'_, '_, '_> {
             result = self.runtime.cons(*value, result);
         }
         Some(result)
+    }
+
+    fn copy_hash_table(&mut self, table: LispValue) -> Option<LispValue> {
+        let test = self.runtime.hash_table_test(table).ok()?;
+        let new_table = self.runtime.hash_table(test);
+        let entries = self.runtime.hash_table_entries(table).ok()?;
+        for (key, value) in entries {
+            let _ = self.runtime.puthash(key, value, new_table);
+        }
+        Some(new_table)
     }
 
     fn sequence_index(&mut self, name: &str, value: LispValue) -> Option<usize> {
