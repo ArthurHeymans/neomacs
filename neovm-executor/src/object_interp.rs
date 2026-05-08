@@ -7644,6 +7644,15 @@ mod tests {
     // executes_float_constant, executes_floatp, executes_float_addition, etc.
 
     #[test]
+    fn executes_defalias_cross_form_call() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defalias 'my-fn (lambda (x) (+ x 1))) (my-fn 41))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn stress_test_many_objects_type_checks_fast() {
         // Create many objects of different types and verify O(1) lookups.
         // If type predicates still did O(n) scans, this would be very slow.
