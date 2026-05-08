@@ -7938,6 +7938,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_listp_and_nlistp() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (and (listp '(a b)) (not (listp 42)) (nlistp 42) (not (nlistp '(a b))))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_booleanp() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (booleanp t) (booleanp nil) (not (booleanp 42)))",
