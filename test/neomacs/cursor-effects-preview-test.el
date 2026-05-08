@@ -350,6 +350,14 @@
                   (set-window-point window (point))
                   (set-window-parameter
                    window 'neomacs-cursor-effect neomacs-cursor-effect)))
+    (balance-windows)
+    (setq windows (sort (window-list nil 'no-minibuf)
+                        (lambda (a b)
+                          (let ((ea (window-pixel-edges a))
+                                (eb (window-pixel-edges b)))
+                            (or (< (cadr ea) (cadr eb))
+                                (and (= (cadr ea) (cadr eb))
+                                     (< (car ea) (car eb))))))))
     windows))
 
 (defun cursor-effects-preview--pulse-selection ()
