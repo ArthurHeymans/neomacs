@@ -1345,6 +1345,9 @@ pub trait DisplayHost {
     fn opening_gui_frame_pending(&self) -> bool {
         false
     }
+    fn remove_gui_child_frame(&mut self, _frame_id: crate::window::FrameId) -> Result<(), String> {
+        Ok(())
+    }
     fn current_primary_window_size(&self) -> Option<GuiFrameHostSize> {
         None
     }

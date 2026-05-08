@@ -6701,6 +6701,17 @@ fn other_frames_in_state(
         })
 }
 
+fn direct_child_frame_ids(
+    eval: &super::eval::Context,
+    parent_id: crate::window::FrameId,
+) -> Vec<FrameId> {
+    eval.frames
+        .frame_list()
+        .into_iter()
+        .filter(|frame_id| eval.frames.frame_parent_id(*frame_id) == Some(parent_id))
+        .collect()
+}
+
 pub(crate) fn delete_frame_owned(
     eval: &mut super::eval::Context,
     fid: crate::window::FrameId,
@@ -6709,11 +6720,39 @@ pub(crate) fn delete_frame_owned(
     if eval.frames.get(fid).is_none() {
         return Ok(Value::NIL);
     }
+    let force_non_nil = mode.force_non_nil();
+    if !mode.bypasses_only_frame_check() && !other_frames_in_state(eval, fid, force_non_nil) {
+        return Err(signal(
+            "error",
+            vec![Value::string(if force_non_nil {
+                "Attempt to delete the only frame"
+            } else {
+                "Attempt to delete the sole visible or iconified frame"
+            })],
+        ));
+    }
+    for child_id in direct_child_frame_ids(eval, fid) {
+        if eval.frames.get(child_id).is_some() {
+            let _ = delete_frame_owned(
+                eval,
+                child_id,
+                DeleteFrameMode::Public {
+                    force_non_nil: false,
+                },
+            )?;
+        }
+    }
+    if eval.frames.get(fid).is_none() {
+        return Ok(Value::NIL);
+    }
     let terminal_id = eval
         .frames
         .get(fid)
         .map(|frame| frame.terminal_id)
         .unwrap_or(crate::emacs_core::terminal::pure::TERMINAL_ID);
+    let was_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
+        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
+    });
     let frame_value = Value::make_frame(fid.0);
     if mode.runs_hooks_immediately() {
         let delete_hook =
@@ -6729,19 +6768,12 @@ pub(crate) fn delete_frame_owned(
     if eval.frames.get(fid).is_none() {
         return Ok(Value::NIL);
     }
-    let force_non_nil = mode.force_non_nil();
-    if !mode.bypasses_only_frame_check() && !other_frames_in_state(eval, fid, force_non_nil) {
-        return Err(signal(
-            "error",
-            vec![Value::string(if force_non_nil {
-                "Attempt to delete the only frame"
-            } else {
-                "Attempt to delete the sole visible or iconified frame"
-            })],
-        ));
-    }
     if !eval.frames.delete_frame(fid) {
         return Err(signal("error", vec![Value::string("Cannot delete frame")]));
+    }
+    if was_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
+        host.remove_gui_child_frame(fid)
+            .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
     let terminal_is_empty = eval.frames.frame_list().into_iter().all(|frame_id| {
         eval.frames
@@ -6785,6 +6817,13 @@ pub(crate) fn builtin_delete_frame(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("delete-frame", &args, 2)?;
+    if let Some(frame) = args.first()
+        && matches!(frame.kind(), ValueKind::Veclike(VecLikeType::Frame))
+        && let Some(raw_id) = frame.as_frame_id()
+        && eval.frames.get(FrameId(raw_id)).is_none()
+    {
+        return Ok(Value::NIL);
+    }
     let fid = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
         resolve_frame_id_in_state(frames, buffers, args.first(), "framep")?

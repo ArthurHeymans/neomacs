@@ -949,6 +949,18 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         !self.primary_window_adopted
     }
 
+    fn remove_gui_child_frame(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+    ) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::RemoveChildFrame {
+                frame_id: frame_id.0,
+            },
+            "failed to remove GUI child frame",
+        )
+    }
+
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         let emacs_frame_id = if self.primary_frame_id == Some(request.frame_id) {
             0

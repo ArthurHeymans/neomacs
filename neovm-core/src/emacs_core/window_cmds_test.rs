@@ -84,6 +84,7 @@ fn active_minibuffer_window_tracks_live_minibuffer_state() {
 struct RecordingDisplayHost {
     realized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
     resized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
+    removed_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     geometry_hints:
         Rc<RefCell<Vec<(crate::window::FrameId, crate::window::GuiFrameGeometryHints)>>>,
     primary_size: Option<GuiFrameHostSize>,
@@ -138,6 +139,11 @@ impl DisplayHost for RecordingDisplayHost {
 
     fn opening_gui_frame_pending(&self) -> bool {
         self.realized.borrow().is_empty()
+    }
+
+    fn remove_gui_child_frame(&mut self, frame_id: crate::window::FrameId) -> Result<(), String> {
+        self.removed_child_frames.borrow_mut().push(frame_id);
+        Ok(())
     }
 
     fn resolve_frame_font(
@@ -3627,6 +3633,82 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
 }
 
 #[test]
+fn delete_frame_removes_gui_child_overlay_from_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("x")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let removed_child_frames = host.removed_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
+
+    super::builtin_delete_frame(&mut ev, vec![created]).expect("delete child frame");
+
+    assert!(ev.frames.get(child_id).is_none());
+    assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
+fn delete_parent_frame_cascades_to_gui_child_overlays() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    let other_id = ev.frames.create_frame("other", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("x")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let removed_child_frames = host.removed_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
+
+    super::builtin_delete_frame(&mut ev, vec![Value::make_frame(parent_id.0)])
+        .expect("delete parent frame");
+
+    assert!(ev.frames.get(parent_id).is_none());
+    assert!(ev.frames.get(child_id).is_none());
+    assert!(ev.frames.get(other_id).is_some());
+    assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
 fn x_create_frame_reserves_tab_bar_space_above_root_window() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3824,6 +3906,17 @@ fn delete_frame_works() {
            (length (frame-list)))",
     );
     assert_eq!(results[0], "OK 1");
+}
+
+#[test]
+fn delete_frame_on_dead_frame_object_returns_nil() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let ((f2 (make-frame)))
+           (delete-frame f2)
+           (delete-frame f2))",
+    );
+    assert_eq!(results[0], "OK nil");
 }
 
 #[test]
