@@ -1206,6 +1206,42 @@ fn remove_delq_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn alist_lookup_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"alist:%S\" (let ((xs (list (cons \"k\" 1) (cons (copy-sequence \"k\") 2) (cons 'sym 3)))) (list (assoc \"k\" xs) (assq \"k\" xs) (assq 'sym xs) (rassoc 2 xs))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("alist:")
+                && row.contains("nil")
+                && row.contains("(sym . 3)")
+                && row.contains(". 2)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: alist lookup behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "alist_lookup_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn vector_array_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
