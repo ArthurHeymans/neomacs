@@ -755,6 +755,116 @@ fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
 }
 
 #[test]
+fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("iW ");
+        let plist = Value::list(vec![
+            Value::keyword("family"),
+            Value::string("Noto Sans"),
+            Value::keyword("weight"),
+            Value::symbol("regular"),
+        ]);
+        buf.text
+            .text_props_put_property(0, buf.text.len(), Value::symbol("face"), plist);
+        let visual_cursor = Value::list(vec![
+            Value::keyword(":position"),
+            Value::fixnum(1),
+            Value::keyword(":cursor-type"),
+            Value::symbol("box"),
+            Value::keyword(":color"),
+            Value::string("#00ff00"),
+        ]);
+        buf.set_buffer_local("neomacs-visual-cursors", Value::list(vec![visual_cursor]));
+        buf.goto_byte(0);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-visual-cursor-display-point-geometry",
+        320,
+        120,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = 1;
+            *point = 1;
+        }
+    }
+
+    let mut metrics = FontMetricsService::new();
+    let face_font_size = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .font_pixel_size;
+    let expected_i = metrics
+        .char_width('i', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
+    let expected_w = metrics
+        .char_width('W', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
+    assert_ne!(
+        expected_i, expected_w,
+        "test requires proportional metrics for i and W"
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let i_point = snapshot.point_for_buffer_pos(1).expect("i point");
+    let visual = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id < 0)
+        .expect("visual cursor");
+
+    assert_eq!(
+        visual.width.round() as i64,
+        i_point.width,
+        "visual box cursor width must use the rendered glyph under :position"
+    );
+    assert_eq!(
+        visual.height.round() as i64,
+        i_point.height,
+        "visual box cursor height must use the rendered glyph under :position"
+    );
+    assert_ne!(
+        visual.width.round() as i64,
+        expected_w,
+        "visual cursor must not use the following glyph's width"
+    );
+}
+
+#[test]
 fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     let mut eval = Context::new();
     let buf_id = eval

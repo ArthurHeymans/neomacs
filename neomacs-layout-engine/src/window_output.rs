@@ -83,6 +83,10 @@ impl WindowOutputEmitter {
         &self.rows
     }
 
+    pub(crate) fn point_for_buffer_pos(&self, pos: usize) -> Option<&DisplayPointSnapshot> {
+        self.points.iter().find(|point| point.buffer_pos == pos)
+    }
+
     pub(crate) fn row_metrics(&self) -> &[RowMetricsSnapshot] {
         &self.row_metrics
     }

@@ -26,8 +26,8 @@ use neovm_core::emacs_core::keymap::is_list_keymap;
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::{
-    DisplayRowSnapshot, WindowCursorKind, WindowCursorPos, WindowCursorSnapshot,
-    WindowDisplaySnapshot,
+    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
+    WindowCursorSnapshot, WindowDisplaySnapshot,
 };
 
 /// Maximum number of characters in a ligature run before forced flush.
@@ -1110,6 +1110,26 @@ fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
     }
 
     CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
+}
+
+fn visual_cursor_rect_from_point(
+    style: CursorStyle,
+    point: &DisplayPointSnapshot,
+    text_area_left: f32,
+    window_top: f32,
+) -> (f32, f32, f32, f32) {
+    let point_x = text_area_left + point.x as f32;
+    let point_y = window_top + point.y as f32;
+    let point_w = (point.width as f32).max(1.0);
+    let point_h = (point.height as f32).max(1.0);
+    match style {
+        CursorStyle::Bar(width) => (point_x, point_y, width.max(1.0), point_h),
+        CursorStyle::Hbar(height) => {
+            let h = height.max(1.0).min(point_h);
+            (point_x, point_y + point_h - h, point_w, h)
+        }
+        CursorStyle::FilledBox | CursorStyle::Hollow => (point_x, point_y, point_w, point_h),
+    }
 }
 
 /// Parse `:raise` factor from a display property value.
@@ -5527,27 +5547,16 @@ impl LayoutEngine {
         }
 
         for spec in &params.visual_cursors {
-            let Some((row_index, hit_row)) = hit_rows.iter().enumerate().find(|(_, hit_row)| {
-                spec.charpos >= hit_row.charpos_start && spec.charpos <= hit_row.charpos_end
-            }) else {
-                continue;
-            };
             let Some(style) = cursor_style_for_visual(spec) else {
                 continue;
             };
-            let row_height = (hit_row.y_end - hit_row.y_start).max(char_h);
-            let col = spec.charpos.saturating_sub(hit_row.charpos_start).max(0) as usize;
-            let x = text_area_left + col as f32 * char_w;
-            let (width, height, y) = match style {
-                CursorStyle::Bar(width) => (width.max(1.0), row_height, hit_row.y_start),
-                CursorStyle::Hbar(height) => {
-                    let h = height.max(1.0).min(row_height);
-                    (char_w.max(1.0), h, hit_row.y_end - h)
-                }
-                CursorStyle::FilledBox | CursorStyle::Hollow => {
-                    (char_w.max(1.0), row_height, hit_row.y_start)
-                }
+            let Some(point) =
+                output_emitter.point_for_buffer_pos(spec.charpos.saturating_add(1) as usize)
+            else {
+                continue;
             };
+            let (x, y, width, height) =
+                visual_cursor_rect_from_point(style, point, text_area_left, window_top);
             if y < text_y || y + height > text_y + text_height {
                 continue;
             }
@@ -5559,8 +5568,8 @@ impl LayoutEngine {
                 spec.id,
                 DisplaySlotId {
                     window_id: spec.id as i64,
-                    row: (text_matrix_row_base + row_index) as u32,
-                    col: col as u16,
+                    row: point.row.max(0) as u32,
+                    col: point.col.max(0) as u16,
                 },
                 x,
                 y,
