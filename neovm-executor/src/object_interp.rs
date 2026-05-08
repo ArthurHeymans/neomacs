@@ -7637,9 +7637,17 @@ mod tests {
     // Note: defmacro cross-form expansion within a single progn
     // needs multi-pass compiler support. Macros defined via require
     // (e.g. cl-lib) work correctly.
-    // Note: defun cross-form calls need SymbolFunctionSet IR instruction
-    // to set the symbol's function slot at runtime. defalias works cross-form
-    // (tested above) because it does this explicitly.
+    // Note: defun cross-form calls need SymbolFunctionSet IR instruction.
+    // defalias works cross-form (tested above) because it sets the slot.
+
+    #[test]
+    fn executes_cl_loop_append_collects_lists() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i in '((1 2) (3 4) (5 6)) append i)",
+        );
+        assert!(value.is_some());
+    }
 
     // Float and number predicates already covered by existing tests:
     // executes_float_constant, executes_floatp, executes_float_addition, etc.
