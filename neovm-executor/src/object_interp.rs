@@ -7938,6 +7938,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_booleanp() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and (booleanp t) (booleanp nil) (not (booleanp 42)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cons_equal_for_identical() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
