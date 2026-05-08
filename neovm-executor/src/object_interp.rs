@@ -7758,6 +7758,19 @@ mod tests {
     }
 
     #[test]
+    fn executes_copy_hash_table_preserves_entries() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((h (make-hash-table)))\
+               (puthash 'a 1 h)\
+               (puthash 'b 2 h)\
+               (let ((h2 (copy-hash-table h)))\
+                 (+ (gethash 'a h2 0) (gethash 'b h2 0))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_replace_regexp_in_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
