@@ -7617,6 +7617,15 @@ mod tests {
 
     #[test]
     #[test]
+    fn executes_cl_loop_repeat_n_times() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop repeat 3 collect 1)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_cl_loop_while_breaks_early() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
