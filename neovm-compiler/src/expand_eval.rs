@@ -1115,11 +1115,34 @@ impl MacroEval {
             }
 
             Some("condition-case") | Some("condition-case-unless-debug") => {
-                // (condition-case var body-form handlers...) — try body, ignore handlers
-                if items.len() >= 3 {
-                    self.eval(&items[2], env)
-                } else {
-                    Ok(MacroValue::Nil)
+                // (condition-case var body-form (condition body)...) — try body,
+                // catch errors, and match handler conditions.  Simplified: we try
+                // the body and fall through to the first handler on any error.
+                if items.len() < 3 {
+                    return Ok(MacroValue::Nil);
+                }
+                let var_sym = items[1].symbol_name().unwrap_or_default();
+                let body_form = &items[2];
+                let handlers = &items[3..];
+                match self.eval(body_form, env) {
+                    Ok(value) => Ok(value),
+                    Err(_) => {
+                        // Body signalled an error — try each handler pair.
+                        for chunk in handlers.chunks(2) {
+                            if chunk.len() < 2 { break; }
+                            // Evaluate handler body (skip condition check —
+                            // in macro expansion any error triggers the first handler).
+                            let handler_body = &chunk[1];
+                            let mut handler_env = env.clone();
+                            if !var_sym.is_empty() {
+                                handler_env.bind(var_sym.to_string(), MacroValue::Nil);
+                            }
+                            if let Ok(val) = self.eval(handler_body, &mut handler_env) {
+                                return Ok(val);
+                            }
+                        }
+                        Ok(MacroValue::Nil)
+                    }
                 }
             }
 
