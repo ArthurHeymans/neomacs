@@ -1373,6 +1373,43 @@ fn overlay_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"textprop:%S\" (let ((s (copy-sequence \"abcd\"))) (put-text-property 1 3 'face 'bold s) (put-text-property 2 4 'mouse-face 'highlight s) (list (get-text-property 1 'face s) (get-text-property 2 'mouse-face s) (text-properties-at 2 s) (next-single-property-change 1 'face s) (previous-single-property-change 4 'mouse-face s))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("textprop:")
+                && row.contains("(bold highlight")
+                && row.contains("face bold")
+                && row.contains("mouse-face highlight")
+                && row.contains("3 2")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text property functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
