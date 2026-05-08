@@ -7420,6 +7420,42 @@ mod tests {
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
+    #[test]
+    fn executes_logior_bitwise_or() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (logior 5 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(7))); // 101 | 011 = 111
+    }
+
+    #[test]
+    fn executes_logand_bitwise_and() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (logand 5 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1))); // 101 & 011 = 001
+    }
+
+    #[test]
+    fn executes_lsh_left_shift() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (lsh 1 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(8)));
+    }
+
+    #[test]
+    fn executes_sort_ascending() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (sort (list 3 1 4 1 5 9) '<)",
+        );
+        assert!(value.is_some());
+    }
+
     fn executes_copy_sequence_list() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
