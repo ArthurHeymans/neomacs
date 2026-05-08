@@ -3093,6 +3093,40 @@ fn syntax_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn syntax_table_regexp_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"synre:%S\" (let ((st (make-syntax-table))) (modify-syntax-entry ?_ \"w\" st) (modify-syntax-entry ?$ \".\" st) (with-syntax-table st (list (char-syntax ?_) (char-syntax ?$) (string-match \"\\\\sw+\" \"__\") (string-match \"\\\\s.+\" \"$$\")))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("synre:") && row.contains("(119 46 0 0)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: syntax-table regexp classes should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "syntax_table_regexp_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn category_table_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
