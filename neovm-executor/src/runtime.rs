@@ -319,6 +319,7 @@ impl Runtime {
     }
 
     /// O(1) type check using the object index.
+    #[inline(always)]
     fn heap_kind(&self, addr: usize) -> Option<HeapKind> {
         self.object_index.get(&addr).copied()
     }
