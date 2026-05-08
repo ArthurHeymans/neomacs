@@ -7721,6 +7721,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_split_string_and_join_roundtrip() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-join (split-string \"a,b,c\" \",\") \"-\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_downcase_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
