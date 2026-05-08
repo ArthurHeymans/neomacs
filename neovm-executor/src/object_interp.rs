@@ -7954,6 +7954,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_append_concatenates() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (append '(1 2) '(3 4) '(5 6)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_if_no_else() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(if nil 42)",
