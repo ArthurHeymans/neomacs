@@ -7754,7 +7754,7 @@ mod tests {
     // needs multi-pass compiler support. Macros defined via require
     // (e.g. cl-lib) work correctly.
     // Note: defun cross-form calls need SymbolFunctionSet IR instruction.
-    // defalias works cross-form (tested above) because it sets the slot.
+    // The defalias cross-form test above proves the calling infrastructure works.
 
     #[test]
     fn executes_numeric_eq_multi_arg() {
