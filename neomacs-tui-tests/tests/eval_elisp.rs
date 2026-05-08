@@ -2852,6 +2852,43 @@ fn eieio_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn cl_generic_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'cl-generic) (cl-defgeneric neo-generic (x)) (cl-defmethod neo-generic ((x integer)) (list 'int x)) (cl-defmethod neo-generic ((x string)) (list 'str x)) (message \"clgen:%S\" (list (neo-generic 3) (neo-generic \"x\") (condition-case e (neo-generic 'sym) (cl-no-applicable-method (car e)) (error (car e))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("clgen:")
+                && row.contains("(int 3)")
+                && row.contains("str")
+                && row.contains("x")
+                && row.contains("cl-no-applicable-method")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: cl-generic dispatch and no-applicable-method signaling should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "cl_generic_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn define_minor_mode_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
