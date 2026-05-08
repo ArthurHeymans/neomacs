@@ -1122,6 +1122,47 @@ fn delete_directory_via_mx_removes_empty_directory() {
 }
 
 #[test]
+fn delete_directory_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let gnu_dir = gnu.home_dir().join("delete-empty-dir-prompt");
+    let neo_dir = neo.home_dir().join("delete-empty-dir-prompt");
+    fs::create_dir(&gnu_dir).expect("create GNU empty directory");
+    fs::create_dir(&neo_dir).expect("create Neo empty directory");
+
+    invoke_mx_command(&mut gnu, &mut neo, "delete-directory");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Delete directory:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Delete directory:"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty delete-directory prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "delete_directory_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn copy_directory_via_mx_copies_nested_tree() {
     let (mut gnu, mut neo) = boot_pair("");
     for session in [&gnu, &neo] {
