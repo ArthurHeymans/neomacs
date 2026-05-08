@@ -41,6 +41,15 @@
   "Log to stderr."
   (princ (concat (apply #'format fmt args) "\n") #'external-debugging-output))
 
+(defun cfm-test--insert-video-display (file width height)
+  "Insert FILE as a raw video display property with WIDTH and HEIGHT."
+  (insert (propertize " "
+                      'display `(video :file ,file
+                                       :width ,width
+                                       :height ,height
+                                       :loop-count -1
+                                       :autoplay t))))
+
 ;; ============================================================
 ;; Test: Image in child frame
 ;; ============================================================
@@ -90,15 +99,12 @@
           (progn
             (insert (format "File: %s\n\n" (file-name-nondirectory vid-path)))
             (condition-case err
-                (let ((vid-id (neomacs-video-insert-loop vid-path 400 250)))
-                  (if vid-id
-                      (progn
-                        (insert "\n\n")
-                        (insert (propertize (format "Video looping (id=%d)" vid-id)
-                                            'face '(:foreground "lime green")))
-                        (cfm-test--log "Video: OK (id=%d)" vid-id))
-                    (insert "[neomacs-video-insert returned nil]\n")
-                    (cfm-test--log "Video: FAILED (nil)")))
+                (progn
+                  (cfm-test--insert-video-display vid-path 400 250)
+                  (insert "\n\n")
+                  (insert (propertize "Video display property looping"
+                                      'face '(:foreground "lime green")))
+                  (cfm-test--log "Video: OK (display property)"))
               (error
                (insert (format "[Error: %S]\n" err))
                (cfm-test--log "Video: ERROR %S" err))))
@@ -136,10 +142,10 @@
       (insert (propertize "Video\n" 'face '(:foreground "cyan" :weight bold)))
       (if vid-path
           (condition-case err
-              (let ((vid-id (neomacs-video-insert-loop vid-path 350 220)))
-                (when vid-id
-                  (insert "\n")
-                  (cfm-test--log "Both/Video: OK (id=%d)" vid-id)))
+              (progn
+                (cfm-test--insert-video-display vid-path 350 220)
+                (insert "\n")
+                (cfm-test--log "Both/Video: OK (display property)"))
             (error (cfm-test--log "Both/Video: ERROR %S" err)))
         (insert "[No video]\n")
         (cfm-test--log "Both/Video: SKIPPED")))
