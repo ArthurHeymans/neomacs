@@ -178,6 +178,45 @@ fn find_file_tab_completion_via_cx_cf_completes_unique_home_file() {
 }
 
 #[test]
+fn find_file_minibuffer_del_deletes_previous_character() {
+    let (mut gnu, mut neo) = boot_pair("");
+    write_home_file(&gnu, "minibuffer-del-target.txt", "minibuffer del body\n");
+    write_home_file(&neo, "minibuffer-del-target.txt", "minibuffer del body\n");
+
+    send_both(&mut gnu, &mut neo, "C-x C-f");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Find file:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/minibuffer-del-target.txX");
+    }
+    send_both(&mut gnu, &mut neo, "DEL");
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"t");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("minibuffer-del-target.txt"))
+            && grid.iter().any(|row| row.contains("minibuffer del body"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "find_file_minibuffer_del_deletes_previous_character",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn list_directory_via_cx_cd_lists_entries() {
     let (mut gnu, mut neo) = boot_pair("");
     let unique = SystemTime::now()
