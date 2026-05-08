@@ -3,6 +3,7 @@ use std::{collections::HashMap, fmt, sync::Arc};
 use neovm_compiler::ssa::SsaLambdaTemplate;
 use neovm_gc::{Heap, HeapConfig, Mutator};
 
+use crate::agent_pool::AgentPool;
 use crate::thread::ThreadScheduler;
 use crate::value::LispValue;
 
@@ -12,6 +13,7 @@ pub struct Runtime {
     /// Cooperative thread scheduler.  Created with the Runtime,
     /// holds the main thread and any spawned child threads.
     pub(crate) scheduler: ThreadScheduler,
+    pub(crate) agent_pool: AgentPool,
     /// O(1) object identity index: maps raw heap address → type tag.
     /// Eliminates the linear scans in every is_* predicate.  Updated
     /// on allocation; cleared objects are removed lazily (the lookup
@@ -52,6 +54,7 @@ impl Default for Runtime {
         Self {
             gc_heap,
             scheduler,
+            agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
@@ -106,6 +109,7 @@ impl Runtime {
         Self {
             gc_heap: Arc::clone(&self.gc_heap),
             scheduler: self.scheduler.clone(),
+            agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),

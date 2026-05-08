@@ -1,5 +1,6 @@
 use std::path::Path;
 
+mod agent_pool;
 pub mod jit_interp;
 mod jit_rt;
 mod object_interp;
