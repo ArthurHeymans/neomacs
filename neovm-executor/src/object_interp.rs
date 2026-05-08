@@ -7863,6 +7863,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_evenp_oddp() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (and (evenp 4) (oddp 5))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_mod_negative() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(mod -5 3)",
