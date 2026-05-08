@@ -217,6 +217,43 @@ fn find_file_minibuffer_del_deletes_previous_character() {
 }
 
 #[test]
+fn find_file_minibuffer_ctrl_h_does_not_delete_previous_character() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "C-x C-f");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Find file:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/ctrl-h-probeX");
+    }
+    send_both(&mut gnu, &mut neo, "BS");
+
+    let path_preserved = |grid: &[String]| grid.iter().any(|row| row.contains("~/ctrl-h-probeX"));
+    gnu.read_until(Duration::from_secs(6), path_preserved);
+    neo.read_until(Duration::from_secs(8), path_preserved);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("~/ctrl-h-probeX")),
+            "{label} should keep the previous minibuffer character after terminal C-h\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "find_file_minibuffer_ctrl_h_does_not_delete_previous_character",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn list_directory_via_cx_cd_lists_entries() {
     let (mut gnu, mut neo) = boot_pair("");
     let unique = SystemTime::now()
