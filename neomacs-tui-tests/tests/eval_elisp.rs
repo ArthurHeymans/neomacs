@@ -2356,6 +2356,35 @@ fn rx_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn ring_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'ring) (message \"ring:%S\" (let ((r (make-ring 3))) (ring-insert r 'a) (ring-insert r 'b) (ring-insert r 'c) (ring-insert r 'd) (list (ring-length r) (ring-ref r 0) (ring-ref r 2) (ring-empty-p r)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("ring:") && row.contains("(3 d b nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: ring behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("ring_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn macroexpand_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
