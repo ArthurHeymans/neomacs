@@ -22,6 +22,7 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
     ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -575,6 +576,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
 
     neovm_core::emacs_core::DisplayHost::realize_gui_frame(
@@ -640,6 +642,7 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
         image_dimensions: Arc::clone(&image_dimensions),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -707,6 +710,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::File(LispString::from_utf8("/tmp/demo.mp4")),
@@ -739,6 +743,58 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
 }
 
 #[test]
+fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_id() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = WebKitResolveRequest {
+        source: WebKitResolveSource::Uri(LispString::from_utf8("https://example.com")),
+        width: 400,
+        height: 300,
+    };
+
+    let first = neovm_core::emacs_core::DisplayHost::request_webkit(&host, request.clone())
+        .expect("request webkit")
+        .expect("webkit handle");
+    let second = neovm_core::emacs_core::DisplayHost::request_webkit(&host, request)
+        .expect("request cached webkit")
+        .expect("webkit handle");
+
+    assert_eq!(first, second);
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert_eq!(commands.len(), 2);
+    assert!(matches!(
+        &commands[0],
+        RenderCommand::WebKitCreate {
+            id,
+            width: 400,
+            height: 300,
+        } if *id == first.webkit_id
+    ));
+    assert!(matches!(
+        &commands[1],
+        RenderCommand::WebKitLoadUri {
+            id,
+            url,
+        } if *id == first.webkit_id && url == "https://example.com"
+    ));
+}
+
+#[test]
 fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
     let mut eval = Context::new();
     let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());
@@ -758,6 +814,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
@@ -811,6 +868,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
 
     let started = Instant::now();
@@ -870,6 +928,7 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
 
     neovm_core::emacs_core::DisplayHost::set_cursor_blink(&mut host, false, 250)
@@ -906,6 +965,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         )),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");

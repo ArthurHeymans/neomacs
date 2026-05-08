@@ -1319,6 +1319,24 @@ pub struct ResolvedVideo {
     pub video_id: u32,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum WebKitResolveSource {
+    File(crate::heap_types::LispString),
+    Uri(crate::heap_types::LispString),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WebKitResolveRequest {
+    pub source: WebKitResolveSource,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedWebKit {
+    pub webkit_id: u32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum CursorEffectArg {
     Nil,
@@ -1388,6 +1406,12 @@ pub trait DisplayHost {
         &self,
         _request: VideoResolveRequest,
     ) -> Result<Option<ResolvedVideo>, String> {
+        Ok(None)
+    }
+    fn request_webkit(
+        &self,
+        _request: WebKitResolveRequest,
+    ) -> Result<Option<ResolvedWebKit>, String> {
         Ok(None)
     }
     fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {

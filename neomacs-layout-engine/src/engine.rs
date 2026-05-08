@@ -20,6 +20,7 @@ use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::eval::{
     ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::keymap::is_list_keymap;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -754,6 +755,15 @@ fn is_display_video_spec(val: &neovm_core::emacs_core::Value) -> bool {
     false
 }
 
+/// Check if a Value is a WebKit display spec: a cons whose car is `webkit`.
+/// e.g., `(webkit :uri "https://example.com" :width 800 :height 450)`
+fn is_display_webkit_spec(val: &neovm_core::emacs_core::Value) -> bool {
+    if val.is_cons() {
+        return val.cons_car().is_symbol_named("webkit");
+    }
+    false
+}
+
 #[derive(Clone, Debug)]
 struct DisplayImageLayout {
     request: ImageResolveRequest,
@@ -767,6 +777,13 @@ struct DisplayVideoLayout {
     height: f32,
     loop_count: i32,
     autoplay: bool,
+}
+
+#[derive(Clone, Debug)]
+struct DisplayWebKitLayout {
+    request: WebKitResolveRequest,
+    width: f32,
+    height: f32,
 }
 
 fn parse_image_dimension(value: Value) -> Option<u32> {
@@ -933,6 +950,63 @@ fn parse_display_video_layout(
         height,
         loop_count,
         autoplay,
+    })
+}
+
+fn parse_display_webkit_layout(
+    prop_val: &Value,
+    fallback_width: f32,
+    fallback_height: f32,
+) -> Option<DisplayWebKitLayout> {
+    let items = list_to_vec(prop_val)?;
+    if items.first()?.as_symbol_name() != Some("webkit") {
+        return None;
+    }
+
+    let mut source = None;
+    let mut width = fallback_width.max(1.0);
+    let mut height = fallback_height.max(1.0);
+
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        let key = items[i].as_symbol_name();
+        let value = items[i + 1];
+        match key {
+            Some(":file") => {
+                source = value
+                    .as_lisp_string()
+                    .cloned()
+                    .map(WebKitResolveSource::File);
+            }
+            Some(":uri") => {
+                source = value
+                    .as_lisp_string()
+                    .cloned()
+                    .map(WebKitResolveSource::Uri);
+            }
+            Some(":width") => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    width = parsed.max(1) as f32;
+                }
+            }
+            Some(":height") => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    height = parsed.max(1) as f32;
+                }
+            }
+            _ => {}
+        }
+        i += 2;
+    }
+
+    Some(DisplayWebKitLayout {
+        request: WebKitResolveRequest {
+            source: source?,
+            width: width.round().max(1.0) as u32,
+            height: height.round().max(1.0) as u32,
+        },
+        width,
+        height,
     })
 }
 
@@ -3894,13 +3968,131 @@ impl LayoutEngine {
                         continue;
                     }
 
-                    // Case 5: Raise — (raise FACTOR) or plist with :raise
+                    // Case 5: WebKit — resolve the declarative browser source to a
+                    // stable renderer handle, then emit an inline WebKit glyph.
+                    if is_display_webkit_spec(&prop_val) {
+                        let replacement_start_x = x;
+                        let replacement_start_col = col;
+                        let maybe_webkit = parse_display_webkit_layout(
+                            &prop_val,
+                            face_char_w * 40.0,
+                            face_h * 12.0,
+                        )
+                        .and_then(|spec| {
+                            evaluator
+                                .display_host
+                                .as_ref()
+                                .and_then(|host| {
+                                    host.request_webkit(spec.request.clone()).ok().flatten()
+                                })
+                                .map(|resolved| (spec, resolved))
+                        });
+
+                        if let Some((spec, resolved)) = maybe_webkit {
+                            let display_width = spec.width.max(1.0);
+                            let display_height = spec.height.max(1.0);
+
+                            if point_in_display_replacement {
+                                capture_cursor_info(
+                                    &mut cursor_info,
+                                    CapturedCursorInfo {
+                                        x,
+                                        y,
+                                        face_w: face_char_w,
+                                        face_h: display_height,
+                                        face_ascent: display_height,
+                                        bg: current_bg,
+                                        byte_idx,
+                                        col,
+                                        face_id: current_face_id.saturating_sub(1),
+                                        face_space_w,
+                                        matrix_row: row,
+                                        slot_width: Some(display_width.max(1.0)),
+                                        stretch_like: false,
+                                    },
+                                );
+                            }
+
+                            let webkit_y = y + raise_y_offset;
+                            self.matrix_builder.push_webkit(
+                                params.window_id,
+                                GlyphRowRole::Text,
+                                Some(params.text_bounds),
+                                resolved.webkit_id,
+                                x,
+                                webkit_y,
+                                display_width,
+                                display_height,
+                            );
+                            row_max_height = row_max_height.max(display_height);
+                            row_max_ascent = row_max_ascent.max(display_height);
+                            x += display_width;
+                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
+                            output_emitter.emit_text_span(
+                                evaluator,
+                                charpos as i64 + 1,
+                                row,
+                                y,
+                                replacement_start_x,
+                                webkit_y,
+                                x - replacement_start_x,
+                                display_height,
+                                replacement_start_col,
+                                col,
+                            );
+                        } else {
+                            if point_in_display_replacement {
+                                capture_cursor_info(
+                                    &mut cursor_info,
+                                    CapturedCursorInfo {
+                                        x,
+                                        y,
+                                        face_w: face_char_w,
+                                        face_h,
+                                        face_ascent: face_ascent_val,
+                                        bg: current_bg,
+                                        byte_idx,
+                                        col,
+                                        face_id: current_face_id.saturating_sub(1),
+                                        face_space_w,
+                                        matrix_row: row,
+                                        slot_width: Some(face_char_w.max(1.0)),
+                                        stretch_like: false,
+                                    },
+                                );
+                            }
+                            x += face_char_w * 5.0;
+                            col += 5;
+                            output_emitter.emit_text_span(
+                                evaluator,
+                                charpos as i64 + 1,
+                                row,
+                                y,
+                                replacement_start_x,
+                                y + raise_y_offset,
+                                x - replacement_start_x,
+                                face_h,
+                                replacement_start_col,
+                                col,
+                            );
+                        }
+
+                        // Skip covered buffer text
+                        while charpos < skip_to && byte_idx < text.len() {
+                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
+                            byte_idx += ch_len;
+                            charpos += 1;
+                        }
+                        continue;
+                    }
+
+                    // Case 6: Raise — (raise FACTOR) or plist with :raise
                     if let Some(factor) = parse_display_raise_factor(&prop_val) {
                         raise_y_offset = -(factor * char_h);
                         raise_end = display_next_check;
                     }
 
-                    // Case 6: Height — (height FACTOR) or plist with :height
+                    // Case 7: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = parse_display_height_factor(&prop_val) {
                         if factor > 0.0 {
                             height_scale = factor;

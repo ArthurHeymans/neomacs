@@ -8,9 +8,10 @@ repository.workspace = true
 description = "Standalone Rust binary for Neomacs (no C dependency)"
 
 [features]
-default = ["video"]
+default = ["video", "wpe-webkit"]
 neo-term = ["neomacs-display-runtime/neo-term"]
 video = ["neomacs-display-runtime/video"]
+wpe-webkit = ["neomacs-display-runtime/wpe-webkit"]
 
 [[bin]]
 name = "neomacs"

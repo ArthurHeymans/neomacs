@@ -42,7 +42,8 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ImageResolveRequest,
     ImageResolveSource, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedImage,
-    ResolvedVideo, VideoResolveRequest, VideoResolveSource,
+    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::load::LoadupDumpMode;
 use neovm_core::emacs_core::load::LoadupStartupSurface;
@@ -744,6 +745,7 @@ struct PrimaryWindowDisplayHost {
     image_dimensions: SharedImageDimensions,
     resolved_images: Mutex<HashMap<ImageResolveRequest, ResolvedImage>>,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
+    resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -758,6 +760,8 @@ const HOST_IMAGE_ID_START: u32 = 0x4000_0000;
 static HOST_IMAGE_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_IMAGE_ID_START);
 const HOST_VIDEO_ID_START: u32 = 0x5000_0000;
 static HOST_VIDEO_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_VIDEO_ID_START);
+const HOST_WEBKIT_ID_START: u32 = 0x6000_0000;
+static HOST_WEBKIT_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_WEBKIT_ID_START);
 
 fn next_host_image_id() -> u32 {
     HOST_IMAGE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
@@ -765,6 +769,10 @@ fn next_host_image_id() -> u32 {
 
 fn next_host_video_id() -> u32 {
     HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+}
+
+fn next_host_webkit_id() -> u32 {
+    HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
 fn wait_for_image_dimensions(
@@ -1354,6 +1362,59 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }
         Ok(Some(resolved))
     }
+
+    fn request_webkit(
+        &self,
+        request: WebKitResolveRequest,
+    ) -> Result<Option<ResolvedWebKit>, String> {
+        {
+            let cache = match self.resolved_webkits.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(webkit) = cache.get(&request).cloned() {
+                return Ok(Some(webkit));
+            }
+        }
+
+        let webkit_id = next_host_webkit_id();
+        self.send_render_command(
+            RenderCommand::WebKitCreate {
+                id: webkit_id,
+                width: request.width.max(1),
+                height: request.height.max(1),
+            },
+            "failed to queue WebKit create",
+        )?;
+
+        let url = match &request.source {
+            WebKitResolveSource::Uri(uri) => uri.as_utf8_str().unwrap_or_default().to_owned(),
+            WebKitResolveSource::File(path) => {
+                let path = path.as_utf8_str().unwrap_or_default();
+                if path.starts_with("file://") {
+                    path.to_owned()
+                } else {
+                    format!("file://{path}")
+                }
+            }
+        };
+        self.send_render_command(
+            RenderCommand::WebKitLoadUri { id: webkit_id, url },
+            "failed to queue WebKit load",
+        )?;
+
+        let resolved = ResolvedWebKit { webkit_id };
+        match self.resolved_webkits.lock() {
+            Ok(mut cache) => {
+                cache.insert(request, resolved.clone());
+            }
+            Err(poisoned) => {
+                let mut cache = poisoned.into_inner();
+                cache.insert(request, resolved.clone());
+            }
+        }
+        Ok(Some(resolved))
+    }
 }
 
 fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
@@ -1785,6 +1846,7 @@ fn run_gui_evaluator_worker(
         image_dimensions: Arc::clone(&gui_image_dimensions),
         resolved_images: Mutex::new(HashMap::new()),
         resolved_videos: Mutex::new(HashMap::new()),
+        resolved_webkits: Mutex::new(HashMap::new()),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

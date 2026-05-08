@@ -5,7 +5,7 @@ use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
-    VideoResolveRequest,
+    ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
 };
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
@@ -72,6 +72,7 @@ fn test_window_params() -> WindowParams {
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
     video_requests: Arc<Mutex<Vec<VideoResolveRequest>>>,
+    webkit_requests: Arc<Mutex<Vec<WebKitResolveRequest>>>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -109,6 +110,17 @@ impl DisplayHost for RecordingImageDisplayHost {
             .expect("video requests lock")
             .push(request);
         Ok(Some(ResolvedVideo { video_id: 88 }))
+    }
+
+    fn request_webkit(
+        &self,
+        request: WebKitResolveRequest,
+    ) -> Result<Option<ResolvedWebKit>, String> {
+        self.webkit_requests
+            .lock()
+            .expect("webkit requests lock")
+            .push(request);
+        Ok(Some(ResolvedWebKit { webkit_id: 99 }))
     }
 }
 
@@ -941,6 +953,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::clone(&requests),
         video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -999,6 +1012,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::new(Mutex::new(Vec::new())),
         video_requests: Arc::clone(&video_requests),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -1051,6 +1065,62 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].loop_count, -1);
     assert!(requests[0].autoplay);
+}
+
+#[test]
+fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
+    let mut eval = Context::new();
+    let webkit_requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::clone(&webkit_requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aWb");
+        buf.goto_byte(1);
+        buf.text.text_props_put_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("webkit"),
+                Value::keyword("uri"),
+                Value::string("https://example.com"),
+                Value::keyword("width"),
+                Value::fixnum(80),
+                Value::keyword("height"),
+                Value::fixnum(45),
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-inline-webkit", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let webkit = state.webkits.first().expect("inline webkit glyph");
+    assert_eq!(webkit.webkit_id, 99);
+    assert_eq!(webkit.width, 80.0);
+    assert_eq!(webkit.height, 45.0);
+
+    let requests = webkit_requests.lock().expect("webkit requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].width, 80);
+    assert_eq!(requests[0].height, 45);
 }
 
 #[test]

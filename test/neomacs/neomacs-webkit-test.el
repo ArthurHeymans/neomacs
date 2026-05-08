@@ -8,17 +8,16 @@
 ;; Or manually: DISPLAY=:0 ./src/emacs -Q -l test/neomacs/neomacs-webkit-test.el
 ;;
 ;; Neomacs renders WebKit views inline in buffers (not as floating overlays).
-;; This follows the standard Emacs xwidget pattern:
+;; This uses a declarative display property:
 ;;
-;;   (insert (propertize " " 'display (neomacs-insert-webkit url width height t)))
+;;   (insert (propertize " " 'display
+;;                       '(webkit :uri "https://example.com"
+;;                                :width 400 :height 300)))
 ;;
 ;; The webkit view becomes part of the buffer content, scrolls naturally,
 ;; and respects Emacs window management.
 
 ;;; Code:
-
-;; Load neomacs-webkit for auto-resize support
-(require 'neomacs-webkit nil t)
 
 (defvar neomacs-webkit-test-url "https://www.google.com/"
   "URL to load for testing.")
@@ -39,10 +38,6 @@
 
   (condition-case err
       (progn
-        (insert "Initializing WebKit subsystem...\n")
-        (neomacs-webkit-init)
-        (insert "WebKit initialized.\n\n")
-
         ;; Calculate dimensions (0 = auto-fit to window)
         (let* ((margin 16)
                (aspect-ratio (/ 16.0 9.0))
@@ -55,32 +50,14 @@
           (insert (format "Loading %s inline (%dx%d)...\n\n"
                           neomacs-webkit-test-url width height))
 
-          ;; Create inline webkit view
-          (let ((spec (neomacs-insert-webkit neomacs-webkit-test-url
-                                             width
-                                             height
-                                             t)))
-            (if spec
-                (progn
-                  ;; Insert the webkit view inline and track position
-                  (let ((pos (point))
-                        (view-id (plist-get (cdr spec) :id)))
-                    (insert (propertize " " 'display spec))
-                    ;; Register for auto-resize tracking
-                    (neomacs-webkit--register-view pos view-id)
-                    ;; Enable auto-resize hook
-                    (neomacs-webkit-enable-auto-resize))
-                  (insert "\n\n")
-                  (insert (format "WebKit spec: %S\n\n" spec))
-                  (insert "SUCCESS! Inline WebKit rendering works.\n")
-                  (insert "Auto-resize enabled - try resizing the window!\n")
-                  (insert "\nControls (use view ID from spec above):\n")
-                  (insert "  (neomacs-webkit-load-uri ID \"url\") - load new URL\n")
-                  (insert "  (neomacs-webkit-go-back ID) - go back\n")
-                  (insert "  (neomacs-webkit-go-forward ID) - go forward\n")
-                  (insert "  (neomacs-webkit-resize ID w h) - resize view\n")
-                  (insert "  (neomacs-webkit-reload ID) - reload\n"))
-              (insert "FAILED: neomacs-insert-webkit returned nil\n")))))
+          (let ((spec (list 'webkit
+                            :uri neomacs-webkit-test-url
+                            :width width
+                            :height height)))
+            (insert (propertize " " 'display spec))
+            (insert "\n\n")
+            (insert (format "WebKit spec: %S\n\n" spec))
+            (insert "SUCCESS! Declarative inline WebKit display property installed.\n"))))
     (error
      (insert (format "ERROR: %S\n" err))))
 
