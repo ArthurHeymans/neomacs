@@ -1270,6 +1270,8 @@ impl MacroEval {
         let mut for_on = false;
         let mut step_fn: Option<SurfaceForm> = None;
         let mut collect_exprs: Vec<SurfaceForm> = Vec::new();
+        let mut append_exprs: Vec<SurfaceForm> = Vec::new();
+        let mut nconc_exprs: Vec<SurfaceForm> = Vec::new();
         let mut sum_exprs: Vec<SurfaceForm> = Vec::new();
         let mut sum_vars: Vec<Option<String>> = Vec::new();
         let mut count_exprs: Vec<SurfaceForm> = Vec::new();
@@ -1366,14 +1368,24 @@ impl MacroEval {
                     if pos < items.len() {
                         collect_exprs.push(items[pos].clone());
                         pos += 1;
-                        // Check for into
                         if pos < items.len() && items[pos].symbol_name() == Some("into") {
                             pos += 1;
-                            // named accumulator — skip for now
-                            if pos < items.len() {
-                                pos += 1;
-                            }
+                            if pos < items.len() { pos += 1; }
                         }
+                    }
+                }
+                Some("append") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        append_exprs.push(items[pos].clone());
+                        pos += 1;
+                    }
+                }
+                Some("nconc") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        nconc_exprs.push(items[pos].clone());
+                        pos += 1;
                     }
                 }
                 Some("sum") => {
@@ -1679,6 +1691,27 @@ impl MacroEval {
                 let v = self.eval(expr, env)?;
                 results.push(v);
             }
+            for expr in &append_exprs {
+                let v = self.eval(expr, env)?;
+                // append: concatenate list elements
+                let mut items = v;
+                let mut collected = Vec::new();
+                while items.is_truthy() {
+                    collected.push(items.car());
+                    items = items.cdr();
+                }
+                results.extend(collected);
+            }
+            for expr in &nconc_exprs {
+                let v = self.eval(expr, env)?;
+                let mut items = v;
+                let mut collected = Vec::new();
+                while items.is_truthy() {
+                    collected.push(items.car());
+                    items = items.cdr();
+                }
+                results.extend(collected);
+            }
             for (i, expr) in sum_exprs.iter().enumerate() {
                 let v = self.eval(expr, env)?;
                 let n = v.as_int().unwrap_or(0);
@@ -1729,8 +1762,7 @@ impl MacroEval {
         if thereis_cond.is_some() {
             return Ok(MacroValue::Nil);
         }
-        if !collect_exprs.is_empty() {
-            // nreverse results
+        if !collect_exprs.is_empty() || !append_exprs.is_empty() || !nconc_exprs.is_empty() {
             results.reverse();
             Ok(MacroValue::list(results))
         } else if !sum_exprs.is_empty() {
