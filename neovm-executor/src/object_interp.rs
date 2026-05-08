@@ -2310,6 +2310,16 @@ impl Interpreter<'_, '_, '_> {
                 }
                 Some(LispValue::NIL)
             }),
+            "remove-hook" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
+                let func = args[1];
+                let hook_sym = args[0];
+                if let Ok(hook_val) = self.runtime.symbol_value(hook_sym) {
+                    if let Some(new_val) = self.delq(func, hook_val) {
+                        let _ = self.runtime.set_symbol_value(hook_sym, new_val);
+                    }
+                }
+                Some(LispValue::NIL)
+            }),
 
             // --- Thread primitives ---
             "make-thread" => self.min_max_arity(name, args, 2, 2).and_then(|_| {
