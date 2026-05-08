@@ -556,6 +556,7 @@ impl Expander {
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
+            "with-mutex" => self.expand_with_mutex(span, items),
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items
@@ -1973,6 +1974,48 @@ impl Expander {
                 symbol_form("let", span),
                 list_form(let_bindings, span),
                 progn,
+            ],
+            span,
+        );
+        self.expand_form(result)
+    }
+
+    /// Expand (with-mutex MUTEX BODY...) to:
+    ///   (let ((m MUTEX))
+    ///     (mutex-lock m)
+    ///     (unwind-protect (progn BODY...) (mutex-unlock m)))
+    fn expand_with_mutex(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        if items.len() < 2 {
+            self.error(span, "with-mutex requires a mutex and a body");
+            return nil_form(span);
+        }
+        let mutex = items[0].clone();
+        let body: Vec<_> = items[1..].to_vec();
+        let m_sym = symbol_form("m", span);
+        let result = list_form(
+            vec![
+                symbol_form("let", span),
+                list_form(vec![list_form(vec![m_sym.clone(), mutex], span)], span),
+                list_form(
+                    vec![symbol_form("mutex-lock", span), m_sym.clone()],
+                    span,
+                ),
+                list_form(
+                    vec![
+                        symbol_form("unwind-protect", span),
+                        list_form(
+                            std::iter::once(symbol_form("progn", span))
+                                .chain(body)
+                                .collect(),
+                            span,
+                        ),
+                        list_form(
+                            vec![symbol_form("mutex-unlock", span), m_sym],
+                            span,
+                        ),
+                    ],
+                    span,
+                ),
             ],
             span,
         );
