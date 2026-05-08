@@ -1568,6 +1568,7 @@ impl MacroEval {
         // Numeric iteration: from/start value
         let from_val = for_from.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
         let to_val = for_to.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let to_int = to_val.as_ref().and_then(|v| v.as_int());
         let step_val: i64 = if let Some(ref step) = step_fn {
             // Evaluate the step expression once for numeric for
             let v = self.eval(step, env)?;
@@ -1628,7 +1629,7 @@ impl MacroEval {
         let mut remaining = repeat_count.unwrap_or(i64::MAX);
 
         while remaining > 0
-            && (is_numeric && numeric_continue(numeric_idx, to_val.and_then(|v| v.as_int()), dir, step_val)
+            && (is_numeric && numeric_continue(numeric_idx, to_int, dir, step_val)
                 || !is_numeric && current.is_truthy())
         {
             remaining -= 1;
