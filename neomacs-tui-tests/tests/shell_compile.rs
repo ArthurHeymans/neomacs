@@ -170,6 +170,44 @@ fn async_shell_command_via_mampersand_displays_output_buffer() {
 }
 
 #[test]
+fn async_shell_command_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "M-&");
+    let prompt_ready =
+        |grid: &[String]| grid.iter().any(|row| row.contains("Async shell command:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Async shell command:"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty async shell-command prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "async_shell_command_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn shell_command_on_region_with_prefix_replaces_region_via_mbar() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
