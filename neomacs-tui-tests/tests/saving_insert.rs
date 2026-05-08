@@ -630,6 +630,54 @@ fn insert_char_hex_via_cx8ret_inserts_named_character() {
 }
 
 #[test]
+fn insert_char_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "insert-char-empty-del.txt",
+        "alpha\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-> C-x 8 RET");
+    let prompt_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Insert character (Unicode name or hex):"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Insert character (Unicode name or hex):"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty insert-char prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "insert_char_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn view_file_via_mx_opens_view_mode_and_q_quits() {
     let (mut gnu, mut neo) = boot_pair("");
     write_home_file(
