@@ -1675,6 +1675,40 @@ fn save_excursion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn save_current_buffer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"savebuf:%S\" (let ((a (current-buffer)) (b (generate-new-buffer \" *neo-savebuf*\")) inside after) (unwind-protect (progn (setq inside (save-current-buffer (set-buffer b) (buffer-name (current-buffer)))) (setq after (eq (current-buffer) a)) (list inside after (buffer-live-p b))) (kill-buffer b))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("savebuf:") && row.contains("t t"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: save-current-buffer should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "save_current_buffer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
