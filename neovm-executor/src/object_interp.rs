@@ -7524,9 +7524,27 @@ mod tests {
     fn executes_mapconcat_joins_strings() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (mapconcat (lambda (x) x) (list \"a\" \"b\" \"c\") \",\")",
+             (mapconcat 'number-to-string (list 1 2 3) \"-\")",
         );
         assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_logxor_bitwise_xor() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (logxor 5 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6))); // 101 ^ 011 = 110
+    }
+
+    #[test]
+    fn executes_lsh_right_shift() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (lsh 8 -2)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
 
