@@ -3540,6 +3540,40 @@ fn case_fold_search_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn case_fold_regexp_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"casefre:%S\" (list (let ((case-fold-search t)) (string-match \"abc\" \"ABC\")) (let ((case-fold-search nil)) (string-match \"abc\" \"ABC\")) (let ((case-fold-search t)) (string-match \"[[:upper:]]+\" \"abc\")) (let ((case-fold-search nil)) (string-match \"[[:upper:]]+\" \"abc\"))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("casefre:") && row.contains("(0 nil 0 nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: case-fold-search regexp behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "case_fold_regexp_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn replace_match_literal_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
