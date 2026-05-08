@@ -7855,6 +7855,22 @@ mod tests {
     }
 
     #[test]
+    fn executes_add_zero_args_returns_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(+)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_mul_zero_args_returns_one() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(*)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
     fn executes_nth_returns_correct_element() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
