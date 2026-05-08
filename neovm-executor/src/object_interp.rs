@@ -7872,6 +7872,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_minusp_and_plusp() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and (minusp -3) (plusp 5))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_not_and_null() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (not nil) (null nil) (not (null t)))",
