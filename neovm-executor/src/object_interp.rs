@@ -2449,7 +2449,7 @@ impl Interpreter<'_, '_, '_> {
                 self.runtime.agent_deref(agent).ok()
             }),
             "agent-error" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.runtime.agent_error(args[0]).ok().flatten()
+                Some(self.runtime.agent_error(args[0]).ok().flatten().unwrap_or(LispValue::NIL))
             }),
             "restart-agent" => self.exact_arity(name, args, 2).and_then(|_| {
                 let _ = self.runtime.agent_update(args[0], args[1], None);
