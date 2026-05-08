@@ -4163,6 +4163,47 @@ fn format_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn with_output_to_string_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"outstr:%S\" (list (with-output-to-string (princ \"A\") (prin1 'b)) (prin1-to-string '(a . b)) (prin1-to-string [1 2])))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("outstr:")
+            && recent.contains("Ab")
+            && recent.contains("(a . b)")
+            && recent.contains("[1 2]")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: with-output-to-string and object printing should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "with_output_to_string_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
