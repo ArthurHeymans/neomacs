@@ -2385,6 +2385,37 @@ fn ring_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn subr_x_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'subr-x) (message \"subrx:%S\" (list (string-empty-p \"\") (string-trim \"  hi \") (when-let ((x 3)) (+ x 4)) (if-let ((x nil)) x 'fallback))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("subrx:")
+                && row.contains("(t")
+                && row.contains("hi")
+                && row.contains("7 fallback")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: subr-x behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("subr_x_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn macroexpand_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
