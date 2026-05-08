@@ -7828,6 +7828,33 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_equal_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= \"ab\" \"ab\" \"ab\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_equal_multi_arg_false() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= \"ab\" \"ab\" \"xy\")",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_string_lessp_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string< \"a\" \"b\" \"c\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_min_multi_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
