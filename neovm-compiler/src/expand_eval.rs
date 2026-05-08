@@ -1589,10 +1589,10 @@ impl MacroEval {
 
         // Return default accumulator — always/never/thereis take priority
         if always_cond.is_some() {
-            return Ok(MacroValue::TRUE);
+            return Ok(MacroValue::Symbol("t".into()));
         }
         if never_cond.is_some() {
-            return Ok(MacroValue::TRUE);
+            return Ok(MacroValue::Symbol("t".into()));
         }
         if thereis_cond.is_some() {
             return Ok(MacroValue::Nil);
