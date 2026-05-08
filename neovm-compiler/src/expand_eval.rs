@@ -1278,6 +1278,7 @@ impl MacroEval {
         let mut never_cond: Option<SurfaceForm> = None;
         let mut thereis_cond: Option<SurfaceForm> = None;
         let mut repeat_count: Option<i64> = None;
+        let mut with_vars: Vec<(String, Option<SurfaceForm>)> = Vec::new();
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1401,6 +1402,19 @@ impl MacroEval {
                         pos += 1;
                     }
                 }
+                Some("with") => {
+                    pos += 1;
+                    // Parse: with var = expr, or with var
+                    if pos < items.len() {
+                        let name = items[pos].symbol_name().map(|s| s.to_string());
+                        pos += 1;
+                        let init = if pos < items.len() && items[pos].symbol_name() == Some("=") {
+                            pos += 1;
+                            if pos < items.len() { let v = Some(items[pos].clone()); pos += 1; v } else { None }
+                        } else { None };
+                        if let Some(n) = name { with_vars.push((n, init)); }
+                    }
+                }
                 Some("while") => {
                     pos += 1;
                     if pos < items.len() {
@@ -1510,6 +1524,15 @@ impl MacroEval {
             }
             v.cdr()
         };
+
+        // Initialize `with` variables before entering the loop
+        for (name, init) in &with_vars {
+            let val = match init {
+                Some(expr) => self.eval(expr, env)?,
+                None => MacroValue::Nil,
+            };
+            env.bind(name.clone(), val);
+        }
 
         let var_name = for_var.as_deref().unwrap_or("--cl-it--");
         let mut current = list_val;
