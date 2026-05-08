@@ -1282,6 +1282,8 @@ impl MacroEval {
         let mut always_cond: Option<SurfaceForm> = None;
         let mut never_cond: Option<SurfaceForm> = None;
         let mut thereis_cond: Option<SurfaceForm> = None;
+        let mut maximize_expr: Option<SurfaceForm> = None;
+        let mut minimize_expr: Option<SurfaceForm> = None;
         let mut repeat_count: Option<i64> = None;
         let mut with_vars: Vec<(String, Option<SurfaceForm>)> = Vec::new();
         let mut initially_body: Vec<SurfaceForm> = Vec::new();
@@ -1443,6 +1445,14 @@ impl MacroEval {
                 Some("thereis") => {
                     pos += 1;
                     if pos < items.len() { thereis_cond = Some(items[pos].clone()); pos += 1; }
+                }
+                Some("maximize") => {
+                    pos += 1;
+                    if pos < items.len() { maximize_expr = Some(items[pos].clone()); pos += 1; }
+                }
+                Some("minimize") => {
+                    pos += 1;
+                    if pos < items.len() { minimize_expr = Some(items[pos].clone()); pos += 1; }
                 }
                 Some("repeat") => {
                     pos += 1;
@@ -1692,6 +1702,18 @@ impl MacroEval {
                 let v = self.eval(cond, env)?;
                 if v.is_truthy() { return Ok(v); }
             }
+            if let Some(ref expr) = maximize_expr {
+                let v = self.eval(expr, env)?;
+                let n = v.as_int().unwrap_or(0);
+                if sum_exprs.is_empty() { sum_result = n; }
+                sum_result = sum_result.max(n);
+            }
+            if let Some(ref expr) = minimize_expr {
+                let v = self.eval(expr, env)?;
+                let n = v.as_int().unwrap_or(0);
+                if sum_exprs.is_empty() { sum_result = n; }
+                sum_result = sum_result.min(n);
+            }
 
             // Evaluate body clauses
             for expr in &collect_exprs {
@@ -1772,6 +1794,8 @@ impl MacroEval {
         if !collect_exprs.is_empty() || !append_exprs.is_empty() || !nconc_exprs.is_empty() {
             results.reverse();
             Ok(MacroValue::list(results))
+        } else if maximize_expr.is_some() || minimize_expr.is_some() {
+            Ok(MacroValue::Int(sum_result))
         } else if !sum_exprs.is_empty() {
             Ok(MacroValue::Int(sum_result))
         } else if !count_exprs.is_empty() {
