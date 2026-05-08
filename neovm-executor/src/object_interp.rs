@@ -7539,6 +7539,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_loop_collect() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 1 to 3 collect (* i i))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_cl_loop_sum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 1 to 4 sum i)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
     fn executes_string_match_finds_pattern() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
