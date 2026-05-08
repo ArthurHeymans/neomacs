@@ -7380,6 +7380,15 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn executes_random_returns_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (numberp (random 100))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
     fn executes_copy_sequence_list() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\

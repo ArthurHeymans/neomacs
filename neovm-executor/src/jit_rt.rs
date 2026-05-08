@@ -990,6 +990,7 @@ const BUILTIN_PRIMITIVE_NAMES: &[&str] = &[
     "provide",
     "put",
     "puthash",
+    "random",
     "rem",
     "remhash",
     "remove",
@@ -1050,6 +1051,13 @@ fn dispatch_primitive(
         "1-" => numeric_sub1(rt, args[0]),
         "%" => numeric_rem(rt, args),
         "mod" => numeric_mod(rt, args),
+        "random" => {
+            let limit = args.first().and_then(|v| v.as_fixnum()).unwrap_or(i64::MAX).max(1);
+            let hash = std::collections::hash_map::RandomState::new()
+                .build_hasher()
+                .finish();
+            Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
+        }
         "rem" => numeric_rem(rt, args),
         "abs" => numeric_abs(rt, args[0]),
         "max" => numeric_max(rt, args),
