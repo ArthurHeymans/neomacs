@@ -2350,6 +2350,41 @@ fn delete_text_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn change_hook_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"changehook:%S\" (with-temp-buffer (let (seen) (add-hook 'before-change-functions (lambda (b e) (push (list 'before b e) seen)) nil t) (add-hook 'after-change-functions (lambda (b e l) (push (list 'after b e l) seen)) nil t) (insert \"ab\") (nreverse seen))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("changehook:")
+                && row.contains("(before 1 1)")
+                && row.contains("(after 1 3 0)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: change hook behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "change_hook_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_at_point_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
