@@ -1383,7 +1383,7 @@ impl Interpreter<'_, '_, '_> {
                     Some(bool_value(val % 2 == 0))
                 }
             }),
-            "cl-oddp" => self.exact_arity(name, args, 1).and_then(|_| {
+            "oddp" | "cl-oddp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
                     Some(bool_value(val.is_odd()))
