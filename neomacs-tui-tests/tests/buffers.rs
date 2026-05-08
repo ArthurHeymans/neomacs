@@ -380,6 +380,56 @@ fn switch_to_file_buffer_via_cx_b_restores_existing_buffer() {
 }
 
 #[test]
+fn switch_to_buffer_empty_input_uses_default_previous_buffer() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "default-buffer-alpha.txt",
+        "default alpha body\n",
+        "C-x C-f",
+    );
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "default-buffer-beta.txt",
+        "default beta body\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-x b");
+    let prompt_ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("Switch to buffer")
+                && row.contains("default")
+                && row.contains("default-buffer-alpha.txt")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "RET");
+    let alpha_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("default-buffer-alpha.txt"))
+            && grid.iter().any(|row| row.contains("default alpha body"))
+            && !grid.iter().any(|row| row.contains("default beta body"))
+    };
+    gnu.read_until(Duration::from_secs(6), alpha_ready);
+    neo.read_until(Duration::from_secs(8), alpha_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "switch_to_buffer_empty_input_uses_default_previous_buffer",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
 
