@@ -1628,6 +1628,21 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.length(args[0]))
                 .and_then(|length| i64::try_from(length).ok())
                 .and_then(|length| self.fixnum(length, "length")),
+            "length=" => self.exact_arity(name, args, 2).and_then(|_| {
+                let len = self.length(args[0])?;
+                let n = self.fixnum_arg(name, args[1])?;
+                Some(bool_value(len as i64 == n))
+            }),
+            "length<" => self.exact_arity(name, args, 2).and_then(|_| {
+                let len = self.length(args[0])?;
+                let n = self.fixnum_arg(name, args[1])?;
+                Some(bool_value((len as i64) < n))
+            }),
+            "length>" => self.exact_arity(name, args, 2).and_then(|_| {
+                let len = self.length(args[0])?;
+                let n = self.fixnum_arg(name, args[1])?;
+                Some(bool_value((len as i64) > n))
+            }),
             "concat" => self.concat(args),
             "substring" => self
                 .min_max_arity(name, args, 2, 3)
