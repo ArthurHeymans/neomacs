@@ -449,9 +449,7 @@ impl Runtime {
     pub fn make_atom(&mut self, value: LispValue) -> LispValue {
         let val_u64 = value.to_abi_i64() as u64;
         let mut boxed = Box::new(AtomObj {
-            header: HeapHeader {
-                kind: HeapKind::Atom,
-            },
+            header: HeapHeader { kind: HeapKind::Atom },
             value: std::sync::atomic::AtomicU64::new(val_u64),
         });
         let addr = (&mut *boxed as *mut AtomObj) as usize;
@@ -2388,6 +2386,12 @@ struct BignumObj {
 struct AtomObj {
     header: HeapHeader,
     value: std::sync::atomic::AtomicU64,
+}
+
+// SAFETY: AtomObj has no GC-managed edges (the value is AtomicU64).
+unsafe impl neovm_gc::Trace for AtomObj {
+    fn trace(&self, _tracer: &mut dyn neovm_gc::Tracer) {}
+    fn relocate(&self, _relocator: &mut dyn neovm_gc::Relocator) {}
 }
 
 /// Clojure-style agent: an asynchronous, serialized mutable cell.
