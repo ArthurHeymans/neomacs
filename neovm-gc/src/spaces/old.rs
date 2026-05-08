@@ -546,6 +546,10 @@ pub(crate) struct OldGenState {
     blocks: parking_lot::RwLock<Vec<OldBlock>>,
     reserved_bytes: AtomicUsize,
     total_used_bytes: AtomicUsize,
+    /// Cache of the last block index found by `record_write_barrier`.
+    /// Eliminates the binary search for repeated writes to the same
+    /// block (common in tight loops).  `usize::MAX` means no cache.
+    last_block_index: AtomicUsize,
 }
 
 impl Default for OldGenState {
@@ -554,6 +558,7 @@ impl Default for OldGenState {
             blocks: parking_lot::RwLock::new(Vec::new()),
             reserved_bytes: AtomicUsize::new(0),
             total_used_bytes: AtomicUsize::new(0),
+            last_block_index: AtomicUsize::new(usize::MAX),
         }
     }
 }
@@ -781,9 +786,24 @@ impl OldGenState {
     /// false case so the minor GC's old-to-young scan still
     /// covers the owner.
     pub(crate) fn record_write_barrier(&self, owner_addr: usize) -> bool {
+        // Check the cached block index first.  In tight loops most
+        // writes hit the same block, so this avoids the O(log n)
+        // binary search on the hot path.
+        let cached = self.last_block_index.load(Ordering::Relaxed);
+        if cached != usize::MAX {
+            let blocks = self.blocks.read();
+            if let Some(block) = blocks.get(cached)
+                && block.contains_addr(owner_addr)
+            {
+                block.card_table().record_write(owner_addr);
+                return true;
+            }
+        }
+        // Cache miss — do the full search.
         let Some(index) = self.find_block_for_addr(owner_addr) else {
             return false;
         };
+        self.last_block_index.store(index, Ordering::Relaxed);
         self.blocks.read()[index].card_table().record_write(owner_addr);
         true
     }
