@@ -267,6 +267,7 @@
 
 (defvar cursor-effects-preview--windows nil)
 (defvar cursor-effects-preview--gallery-timer nil)
+(defvar cursor-effects-preview--placeholder-buffers nil)
 
 (defvar cursor-effects-preview-mode-map
   (let ((map (make-sparse-keymap)))
@@ -280,6 +281,10 @@
 
 (defun cursor-effects-preview--buffer-name (index effect)
   (format "*Cursor Effect %02d %s*" index (plist-get effect :name)))
+
+(defun cursor-effects-preview--grid-shape (count)
+  (let ((side (ceiling (sqrt count))))
+    (cons side side)))
 
 (defun cursor-effects-preview--insert-gallery-buffer (index effect shape)
   (let ((inhibit-read-only t))
@@ -304,6 +309,17 @@
       (cursor-effects-preview--insert-gallery-buffer index effect shape))
     buffer))
 
+(defun cursor-effects-preview--make-placeholder-buffer (index)
+  (let ((buffer (get-buffer-create
+                 (format "*Cursor Effect Placeholder %02d*" index))))
+    (with-current-buffer buffer
+      (cursor-effects-preview-mode)
+      (setq-local cursor-type nil)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert "\n")))
+    buffer))
+
 (defun cursor-effects-preview--maximize-frame ()
   (setq frame-resize-pixelwise t)
   (set-frame-parameter nil 'fullscreen 'maximized)
@@ -316,8 +332,18 @@
 
 (defun cursor-effects-preview--split-grid (buffers)
   (delete-other-windows)
-  (let ((windows (list (selected-window))))
-    (while (< (length windows) (length buffers))
+  (let* ((shape (cursor-effects-preview--grid-shape (length buffers)))
+         (target-count (* (car shape) (cdr shape)))
+         (placeholders nil)
+         (all-buffers buffers)
+         (windows (list (selected-window))))
+    (dotimes (index (- target-count (length buffers)))
+      (push (cursor-effects-preview--make-placeholder-buffer (1+ index))
+            placeholders))
+    (setq placeholders (nreverse placeholders))
+    (setq cursor-effects-preview--placeholder-buffers placeholders)
+    (setq all-buffers (append buffers placeholders))
+    (while (< (length windows) target-count)
       (let* ((window (car (sort (copy-sequence windows)
                                 (lambda (a b)
                                   (> (* (window-pixel-width a)
@@ -332,7 +358,7 @@
                     (split-window window nil 'below))
                 (error
                  (error "Cursor effects preview needs %d windows; current frame %dx%d is too small"
-                        (length buffers)
+                        target-count
                         (frame-pixel-width)
                         (frame-pixel-height))))))
         (push new-window windows)))
@@ -344,7 +370,7 @@
                                 (and (= (cadr ea) (cadr eb))
                                      (< (car ea) (car eb))))))))
     (cl-loop for window in windows
-             for buffer in buffers
+             for buffer in all-buffers
              do (set-window-buffer window buffer)
              do (with-current-buffer buffer
                   (set-window-point window (point))
@@ -358,7 +384,7 @@
                             (or (< (cadr ea) (cadr eb))
                                 (and (= (cadr ea) (cadr eb))
                                      (< (car ea) (car eb))))))))
-    windows))
+    (cl-subseq windows 0 (length buffers))))
 
 (defun cursor-effects-preview--pulse-selection ()
   (when cursor-effects-preview--windows
