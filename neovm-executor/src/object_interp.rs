@@ -7953,6 +7953,17 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
+    // cl-return/return-from expand to throw — test the full chain
+    #[test]
+    fn executes_cl_return_from_loop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-loop for i from 1 to 10 do (when (> i 3) (cl-return i)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
     #[test]
     fn executes_require_feature_marks_provided() {
         let (value, _) = execute(
