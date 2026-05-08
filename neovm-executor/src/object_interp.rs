@@ -376,8 +376,11 @@ impl Interpreter<'_, '_, '_> {
 
         loop {
             if *self.fuel == 0 {
-                self.error("object interpreter exhausted execution fuel");
-                return self.finish(None);
+                // Yield to the thread scheduler before resetting fuel,
+                // so cooperative threads get a chance to run.  If no
+                // other threads are runnable this is a no-op.
+                self.runtime.scheduler.thread_yield();
+                *self.fuel = 100_000;
             }
             *self.fuel -= 1;
 

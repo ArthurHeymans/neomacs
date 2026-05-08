@@ -212,7 +212,15 @@ fn empty_ssa_function() -> SsaFunction {
 }
 
 pub fn ssa_to_regir(function: &SsaFunction) -> LowerOutput<RegFunction> {
-    let mut lowerer = RegLowerer::new(function);
+    ssa_to_regir_with_opts(function, false)
+}
+
+pub fn ssa_to_regir_with_yield(function: &SsaFunction) -> LowerOutput<RegFunction> {
+    ssa_to_regir_with_opts(function, true)
+}
+
+fn ssa_to_regir_with_opts(function: &SsaFunction, inject_yield_points: bool) -> LowerOutput<RegFunction> {
+    let mut lowerer = RegLowerer::new(function, inject_yield_points);
     lowerer.lower();
     LowerOutput {
         value: lowerer.function,
@@ -388,10 +396,13 @@ struct RegLowerer<'a> {
     safepoint_liveness: SsaSafepointLiveness,
     current_inst: Option<(BlockId, usize)>,
     diagnostics: Vec<Diagnostic>,
+    /// When true, injects a `(thread-yield)` check at every loop
+    /// back-edge so cooperative threads can't starve each other.
+    inject_yield_points: bool,
 }
 
 impl<'a> RegLowerer<'a> {
-    fn new(ssa: &'a SsaFunction) -> Self {
+    fn new(ssa: &'a SsaFunction, inject_yield_points: bool) -> Self {
         let mut function = RegFunction {
             name: ssa.name.clone(),
             lambda_list: ssa.lambda_list.clone(),
@@ -437,6 +448,7 @@ impl<'a> RegLowerer<'a> {
             safepoint_liveness: SsaSafepointLiveness::compute(ssa),
             current_inst: None,
             diagnostics: Vec::new(),
+            inject_yield_points,
         }
     }
 

@@ -188,7 +188,8 @@ impl Runtime {
                 kind: HeapKind::HashTable,
             },
             test,
-            entries: Vec::new(),
+            entries: HashMap::new(),
+            equal_entries: Vec::new(),
         });
         let addr = (&mut *table as *mut HashTableObject) as usize;
         self.hash_tables.push(table);
@@ -1269,7 +1270,11 @@ impl Runtime {
     }
 
     pub fn hash_table_count(&self, table: LispValue) -> Result<usize, RuntimeError> {
-        Ok(self.expect_hash_table(table)?.entries.len())
+        let ht = self.expect_hash_table(table)?;
+        Ok(match ht.test {
+            HashTableTest::Equal => ht.equal_entries.len(),
+            _ => ht.entries.len(),
+        })
     }
 
     pub fn gethash(
@@ -1278,9 +1283,13 @@ impl Runtime {
         table: LispValue,
     ) -> Result<Option<LispValue>, RuntimeError> {
         let table_object = self.expect_hash_table(table)?;
-        Ok(self
-            .hash_table_entry_index(table_object, key)
-            .map(|index| table_object.entries[index].value))
+        match table_object.test {
+            HashTableTest::Equal => {
+                let pos = table_object.equal_entries.iter().position(|entry| self.equal(entry.key, key));
+                Ok(pos.map(|i| table_object.equal_entries[i].value))
+            }
+            _ => Ok(table_object.entries.get(&(key.to_abi_i64() as u64)).copied()),
+        }
     }
 
     pub fn puthash(
@@ -1289,33 +1298,59 @@ impl Runtime {
         value: LispValue,
         table: LispValue,
     ) -> Result<LispValue, RuntimeError> {
-        let index = {
-            let table_object = self.expect_hash_table(table)?;
-            self.hash_table_entry_index(table_object, key)
+        // For equal tables, find the entry position before taking the
+        // mutable borrow (since equal() needs &self).
+        let equal_pos = if self.expect_hash_table(table)?.test == HashTableTest::Equal {
+            self.expect_hash_table(table)?
+                .equal_entries
+                .iter()
+                .position(|entry| self.equal(entry.key, key))
+        } else {
+            None
         };
         let table_object = self.expect_hash_table_mut(table)?;
-        if let Some(index) = index {
-            table_object.entries[index].value = value;
-        } else {
-            table_object.entries.push(HashEntry { key, value });
+        match table_object.test {
+            HashTableTest::Equal => {
+                if let Some(i) = equal_pos {
+                    table_object.equal_entries[i].value = value;
+                } else {
+                    table_object.equal_entries.push(HashEntry { key, value });
+                }
+            }
+            _ => {
+                table_object.entries.insert(key.to_abi_i64() as u64, value);
+            }
         }
         Ok(value)
     }
 
     pub fn remhash(&mut self, key: LispValue, table: LispValue) -> Result<LispValue, RuntimeError> {
-        let index = {
-            let table_object = self.expect_hash_table(table)?;
-            self.hash_table_entry_index(table_object, key)
+        let equal_pos = if self.expect_hash_table(table)?.test == HashTableTest::Equal {
+            self.expect_hash_table(table)?
+                .equal_entries
+                .iter()
+                .position(|entry| self.equal(entry.key, key))
+        } else {
+            None
         };
         let table_object = self.expect_hash_table_mut(table)?;
-        if let Some(index) = index {
-            table_object.entries.remove(index);
+        match table_object.test {
+            HashTableTest::Equal => {
+                if let Some(i) = equal_pos {
+                    table_object.equal_entries.remove(i);
+                }
+            }
+            _ => {
+                table_object.entries.remove(&(key.to_abi_i64() as u64));
+            }
         }
         Ok(LispValue::NIL)
     }
 
     pub fn clrhash(&mut self, table: LispValue) -> Result<LispValue, RuntimeError> {
-        self.expect_hash_table_mut(table)?.entries.clear();
+        let ht = self.expect_hash_table_mut(table)?;
+        ht.entries.clear();
+        ht.equal_entries.clear();
         Ok(table)
     }
 
@@ -1323,12 +1358,11 @@ impl Runtime {
         &self,
         table: LispValue,
     ) -> Result<Vec<(LispValue, LispValue)>, RuntimeError> {
-        Ok(self
-            .expect_hash_table(table)?
-            .entries
-            .iter()
-            .map(|entry| (entry.key, entry.value))
-            .collect())
+        let ht = self.expect_hash_table(table)?;
+        match ht.test {
+            HashTableTest::Equal => Ok(ht.equal_entries.iter().map(|e| (e.key, e.value)).collect()),
+            _ => Ok(ht.entries.iter().map(|(k, v)| (LispValue::from_abi_i64(*k as i64), *v)).collect()),
+        }
     }
 
     pub fn function_parts(
@@ -1720,13 +1754,6 @@ impl Runtime {
         Some(pair.cdr)
     }
 
-    fn hash_table_entry_index(&self, table: &HashTableObject, key: LispValue) -> Option<usize> {
-        table.entries.iter().position(|entry| match table.test {
-            HashTableTest::Eq | HashTableTest::Eql => entry.key == key,
-            HashTableTest::Equal => self.equal(entry.key, key),
-        })
-    }
-
     pub fn equal(&self, left: LispValue, right: LispValue) -> bool {
         self.equal_with_depth(left, right, 256)
     }
@@ -1962,7 +1989,7 @@ impl Runtime {
         if let Some(addr) = value.heap_addr()
             && let Some(table) = self.hash_table_by_addr(addr)
         {
-            return format!("#<hash-table count {}>", table.entries.len());
+            return format!("#<hash-table count {}>", table.entries.len() + table.equal_entries.len());
         }
         if self.is_function(value) {
             return "#<function>".to_string();
@@ -2351,7 +2378,11 @@ struct VectorObject {
 struct HashTableObject {
     header: HeapHeader,
     test: HashTableTest,
-    entries: Vec<HashEntry>,
+    /// O(1) storage for `eq`/`eql` tables (identity equality).
+    /// Key is the raw u64 tag of the LispValue.
+    entries: HashMap<u64, LispValue>,
+    /// Fallback for `equal` tables (structural equality).
+    equal_entries: Vec<HashEntry>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
