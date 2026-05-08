@@ -7968,6 +7968,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_setcar_changes_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setcar p 99) (car p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_setcdr_changes_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setcdr p 99) (cdr p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
     fn executes_logior_no_args_returns_zero() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(logior)",
