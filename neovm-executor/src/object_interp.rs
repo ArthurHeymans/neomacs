@@ -7521,6 +7521,41 @@ mod tests {
     // deeper compiler integration to work end-to-end.
 
     #[test]
+    fn executes_thread_join_after_finish() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((tid (make-thread \"worker\" (lambda () 42))))\
+               (thread-yield) (thread-yield)\
+               (thread-join tid))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_thread_not_alive_after_signal() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((tid (make-thread \"worker\" (lambda () 1))))\
+               (thread-signal tid 'kill)\
+               (thread-alive-p tid))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_agent_send_multiple_actions() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ag (make-agent 0)))\
+               (send ag (lambda (x) (+ x 1)))\
+               (send ag (lambda (x) (+ x 2)))\
+               (send ag (lambda (x) (+ x 3)))\
+               (agent-await ag))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_with_mutex_macro_locks_and_unlocks() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
