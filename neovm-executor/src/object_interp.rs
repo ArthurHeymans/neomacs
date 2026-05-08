@@ -1727,6 +1727,12 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.hash_table_count(args[0]);
                 self.runtime_usize(result, name)
             }),
+            "hash-table-keys" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.hash_table_keys(args[0])
+            }),
+            "hash-table-values" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.hash_table_values(args[0])
+            }),
             "gethash" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.gethash(args[0], args[1], args.get(2).copied())),
@@ -4378,6 +4384,24 @@ impl Interpreter<'_, '_, '_> {
             self.execute_funcall(function, &[key, value])?;
         }
         Some(LispValue::NIL)
+    }
+
+    fn hash_table_keys(&mut self, table: LispValue) -> Option<LispValue> {
+        let entries = self.runtime.hash_table_entries(table).ok()?;
+        let mut result = LispValue::NIL;
+        for (key, _) in entries.iter().rev() {
+            result = self.runtime.cons(*key, result);
+        }
+        Some(result)
+    }
+
+    fn hash_table_values(&mut self, table: LispValue) -> Option<LispValue> {
+        let entries = self.runtime.hash_table_entries(table).ok()?;
+        let mut result = LispValue::NIL;
+        for (_, value) in entries.iter().rev() {
+            result = self.runtime.cons(*value, result);
+        }
+        Some(result)
     }
 
     fn sequence_index(&mut self, name: &str, value: LispValue) -> Option<usize> {
