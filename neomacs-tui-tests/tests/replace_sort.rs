@@ -123,6 +123,50 @@ fn query_replace_via_mpercent_bang() {
 }
 
 #[test]
+fn query_replace_empty_from_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "query-replace-empty-del.txt",
+        "alpha one\nalpha two\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-%");
+    let from_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Query replace"));
+    gnu.read_until(Duration::from_secs(6), from_ready);
+    neo.read_until(Duration::from_secs(8), from_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Query replace"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty query-replace prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "query_replace_empty_from_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn query_replace_question_mark_shows_query_help_without_replacing() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
