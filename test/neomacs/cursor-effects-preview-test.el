@@ -20,6 +20,16 @@
   :type 'number
   :group 'cursor-effects-preview)
 
+(defcustom cursor-effects-preview-min-frame-width 2400
+  "Minimum frame pixel width requested for the cursor effect gallery."
+  :type 'integer
+  :group 'cursor-effects-preview)
+
+(defcustom cursor-effects-preview-min-frame-height 1500
+  "Minimum frame pixel height requested for the cursor effect gallery."
+  :type 'integer
+  :group 'cursor-effects-preview)
+
 (defvar cursor-effects-preview--effect-timer nil)
 (defvar cursor-effects-preview--move-timer nil)
 (defvar cursor-effects-preview--index 0)
@@ -294,6 +304,16 @@
       (cursor-effects-preview--insert-gallery-buffer index effect shape))
     buffer))
 
+(defun cursor-effects-preview--maximize-frame ()
+  (setq frame-resize-pixelwise t)
+  (set-frame-parameter nil 'fullscreen 'maximized)
+  (when (fboundp 'set-frame-size)
+    (let ((width (max (frame-pixel-width)
+                      cursor-effects-preview-min-frame-width))
+          (height (max (frame-pixel-height)
+                       cursor-effects-preview-min-frame-height)))
+      (set-frame-size (selected-frame) width height t))))
+
 (defun cursor-effects-preview--split-grid (buffers)
   (delete-other-windows)
   (let ((windows (list (selected-window))))
@@ -304,10 +324,17 @@
                                         (window-pixel-height a))
                                      (* (window-pixel-width b)
                                         (window-pixel-height b)))))))
-             (new-window (if (> (window-pixel-width window)
-                                (* 1.35 (window-pixel-height window)))
-                             (split-window window nil 'right)
-                           (split-window window nil 'below))))
+             (new-window
+              (condition-case nil
+                  (if (> (window-pixel-width window)
+                         (* 1.35 (window-pixel-height window)))
+                      (split-window window nil 'right)
+                    (split-window window nil 'below))
+                (error
+                 (error "Cursor effects preview needs %d windows; current frame %dx%d is too small"
+                        (length buffers)
+                        (frame-pixel-width)
+                        (frame-pixel-height))))))
         (push new-window windows)))
     (setq windows (sort windows
                         (lambda (a b)
@@ -349,6 +376,7 @@
 (defun cursor-effects-preview-start ()
   "Start the Neomacs cursor effects preview."
   (interactive)
+  (cursor-effects-preview--maximize-frame)
   (cursor-effects-preview-stop)
   (when (fboundp 'blink-cursor-mode)
     (blink-cursor-mode -1))
