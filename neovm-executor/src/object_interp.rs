@@ -7259,7 +7259,9 @@ mod tests {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (let ((a (make-atom 0)) (m (make-mutex \"t\")))\
-               (with-mutex m (atom-reset! a 42))\
+               (mutex-lock m)\
+               (atom-reset! a 42)\
+               (mutex-unlock m)\
                (atom-deref a))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
