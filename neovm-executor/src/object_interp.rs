@@ -7520,6 +7520,15 @@ mod tests {
     // hook chain (defvar + lambda + symbol-value + run-hooks) needs
     // deeper compiler integration to work end-to-end.
 
+    #[test]
+    fn executes_mapconcat_joins_strings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapconcat (lambda (x) x) (list \"a\" \"b\" \"c\") \",\")",
+        );
+        assert!(value.is_some());
+    }
+
 
     fn executes_copy_sequence_list() {
         let (value, _) = execute(
