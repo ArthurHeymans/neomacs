@@ -7617,6 +7617,24 @@ mod tests {
 
     #[test]
     #[test]
+    fn executes_apply_with_arg_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (apply '+ 1 2 '(3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_funcall_with_multiple_args() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (funcall '+ 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_cl_loop_repeat_n_times() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
