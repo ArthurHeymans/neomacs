@@ -54,5 +54,12 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-return (&optional value)
   (list 'cl-return-from nil value))
 
+(defmacro with-mutex (mutex &rest body)
+  (let ((m (make-symbol \"m\")))
+    `(let ((,m ,mutex))
+       (mutex-lock ,m)
+       (unwind-protect (progn ,@body)
+         (mutex-unlock ,m)))))
+
 (provide 'cl-lib)
 "#;
