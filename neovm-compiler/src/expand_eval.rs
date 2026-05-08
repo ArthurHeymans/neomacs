@@ -211,6 +211,15 @@ impl MacroEval {
                 Ok(surface_to_value(&form))
             }
 
+            // Mutex and condition variable primitives.
+            Some("make-mutex") | Some("with-mutex") | Some("mutex-lock")
+            | Some("mutex-unlock") | Some("make-condition-variable")
+            | Some("condition-wait") | Some("condition-notify")
+            | Some("condition-notify-all") => {
+                let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
+                Ok(surface_to_value(&form))
+            }
+
             Some("car") | Some("first") => {
                 self.eval_unary(span, "car", &items[1..], env, |v| v.car())
             }

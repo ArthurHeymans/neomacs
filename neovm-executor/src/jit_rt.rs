@@ -348,7 +348,7 @@ jit_shim!(__neomacs_rt_apply_3(vmctx: i64, callee: i64, arg0: i64, arg1: i64, ar
 /// → interpreter fallback) and caches the result.  On subsequent calls
 /// the cache hit skips string-based dispatch entirely — the common case
 /// for tight loops and repeated calls to the same function.
-unsafe fn dispatch_named_call(
+fn dispatch_named_call(
     ctx: &mut JitContext,
     symbol_index: u32,
     args: &[LispValue],
@@ -368,7 +368,7 @@ unsafe fn dispatch_named_call(
 
 /// Uncached dispatch — used by `dispatch_funcall` where we only have
 /// a runtime-resolved name string, not a compile-time symbol index.
-unsafe fn dispatch_named_call_by_name(
+fn dispatch_named_call_by_name(
     ctx: &mut JitContext,
     name: &str,
     args: &[LispValue],
@@ -377,7 +377,7 @@ unsafe fn dispatch_named_call_by_name(
     dispatch_named_call_uncached(ctx, name, None, args, rt)
 }
 
-unsafe fn dispatch_named_call_uncached(
+fn dispatch_named_call_uncached(
     ctx: &mut JitContext,
     name: &str,
     cache_key: Option<u32>,
@@ -439,7 +439,7 @@ unsafe fn dispatch_named_call_uncached(
 }
 
 /// Execute a previously-cached call resolution.
-unsafe fn dispatch_cached_call(
+fn dispatch_cached_call(
     ctx: &mut JitContext,
     cached: ResolvedCall,
     symbol_index: u32,

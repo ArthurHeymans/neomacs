@@ -23,6 +23,8 @@ pub struct Runtime {
     bignums: Vec<Box<BignumObj>>,
     atoms: Vec<Box<AtomObj>>,
     agents: Vec<Box<AgentObj>>,
+    mutexes: Vec<Box<MutexObj>>,
+    condvars: Vec<Box<CondvarObj>>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
@@ -56,6 +58,8 @@ impl Default for Runtime {
             bignums: Vec::new(),
             atoms: Vec::new(),
             agents: Vec::new(),
+            mutexes: Vec::new(),
+            condvars: Vec::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: Vec::new(),
@@ -614,6 +618,123 @@ impl Runtime {
     fn agent_by_addr(&self, addr: usize) -> Option<&AgentObj> {
         for obj in &self.agents {
             if (&**obj as *const AgentObj) as usize == addr {
+                return Some(obj);
+            }
+        }
+        None
+    }
+
+    // --- Mutexes ---
+
+    pub fn make_mutex(&mut self, name: String) -> LispValue {
+        let mut boxed = Box::new(MutexObj {
+            header: HeapHeader {
+                kind: HeapKind::Mutex,
+            },
+            inner: parking_lot::Mutex::new(()),
+            name,
+        });
+        let addr = (&mut *boxed as *mut MutexObj) as usize;
+        self.mutexes.push(boxed);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn is_mutex(&self, value: LispValue) -> bool {
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.mutex_by_addr(addr).is_some())
+    }
+
+    pub fn mutex_lock(&self, mutex: LispValue) -> Result<(), RuntimeError> {
+        let obj = self.mutex_obj(mutex)?;
+        obj.inner.lock();
+        Ok(())
+    }
+
+    pub fn mutex_unlock(&self, mutex: LispValue) -> Result<(), RuntimeError> {
+        let obj = self.mutex_obj(mutex)?;
+        // Safety: the mutex must be locked by the current thread.
+        // parking_lot::Mutex::unlock is unsafe for this reason.
+        unsafe { obj.inner.force_unlock() };
+        Ok(())
+    }
+
+    // --- Condition Variables ---
+
+    pub fn make_condvar(&mut self, name: String) -> LispValue {
+        let mut boxed = Box::new(CondvarObj {
+            header: HeapHeader {
+                kind: HeapKind::Condvar,
+            },
+            inner: parking_lot::Condvar::new(),
+            name,
+        });
+        let addr = (&mut *boxed as *mut CondvarObj) as usize;
+        self.condvars.push(boxed);
+        LispValue::from_heap_addr(addr)
+    }
+
+    pub fn condvar_wait(&self, cv: LispValue, mutex: LispValue) -> Result<(), RuntimeError> {
+        let cv_obj = self.condvar_obj(cv)?;
+        let mtx_obj = self.mutex_obj(mutex)?;
+        // Unlock the mutex, wait, re-lock.  parking_lot::Condvar::wait
+        // requires a MutexGuard, which we acquire fresh here.  Callers
+        // must hold the mutex before calling condition-wait.
+        let mut guard = mtx_obj.inner.lock();
+        cv_obj.inner.wait(&mut guard);
+        Ok(())
+    }
+
+    pub fn condvar_notify(&self, cv: LispValue) -> Result<(), RuntimeError> {
+        let obj = self.condvar_obj(cv)?;
+        obj.inner.notify_one();
+        Ok(())
+    }
+
+    pub fn condvar_notify_all(&self, cv: LispValue) -> Result<(), RuntimeError> {
+        let obj = self.condvar_obj(cv)?;
+        obj.inner.notify_all();
+        Ok(())
+    }
+
+    // --- Mutex/Condvar helpers ---
+
+    fn mutex_obj(&self, mutex: LispValue) -> Result<&MutexObj, RuntimeError> {
+        let addr = mutex.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "mutex",
+            value: mutex,
+        })?;
+        self.mutex_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "mutex",
+                value: mutex,
+            })
+    }
+
+    fn mutex_by_addr(&self, addr: usize) -> Option<&MutexObj> {
+        for obj in &self.mutexes {
+            if (&**obj as *const MutexObj) as usize == addr {
+                return Some(obj);
+            }
+        }
+        None
+    }
+
+    fn condvar_obj(&self, cv: LispValue) -> Result<&CondvarObj, RuntimeError> {
+        let addr = cv.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "condition-variable",
+            value: cv,
+        })?;
+        self.condvar_by_addr(addr)
+            .ok_or(RuntimeError::WrongTypeArgument {
+                expected: "condition-variable",
+                value: cv,
+            })
+    }
+
+    fn condvar_by_addr(&self, addr: usize) -> Option<&CondvarObj> {
+        for obj in &self.condvars {
+            if (&**obj as *const CondvarObj) as usize == addr {
                 return Some(obj);
             }
         }
@@ -2142,6 +2263,8 @@ enum HeapKind {
     Bignum = 9,
     Atom = 10,
     Agent = 11,
+    Mutex = 12,
+    Condvar = 13,
 }
 
 #[repr(C)]
@@ -2242,6 +2365,22 @@ pub(crate) struct AgentAction {
     pub(crate) func: LispValue,
     pub(crate) args: Vec<LispValue>,
     pub(crate) via_pool: bool,
+}
+
+/// A mutex for Elisp thread synchronization.
+/// Uses parking_lot::Mutex which supports manual lock/unlock and
+/// is already a dependency via neovm-gc.
+struct MutexObj {
+    header: HeapHeader,
+    inner: parking_lot::Mutex<()>,
+    name: String,
+}
+
+/// A condition variable paired with a mutex.
+struct CondvarObj {
+    header: HeapHeader,
+    inner: parking_lot::Condvar,
+    name: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

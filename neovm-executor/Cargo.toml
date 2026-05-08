@@ -15,6 +15,7 @@ gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-sys
 regex = "1"
 neovm-compiler = { path = "../neovm-compiler", version = "0.0.1" }
 neovm-gc = { path = "../neovm-gc" }
+parking_lot.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

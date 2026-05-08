@@ -2345,6 +2345,38 @@ impl Interpreter<'_, '_, '_> {
                 Some(LispValue::NIL)
             }),
 
+            // --- Mutex/condition variable primitives ---
+            "make-mutex" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
+                let name = self.string_contents_owned(args[0])
+                    .unwrap_or("unnamed".to_string());
+                Some(self.runtime.make_mutex(name))
+            }),
+            "mutex-lock" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.mutex_lock(args[0]).ok()?;
+                Some(LispValue::TRUE)
+            }),
+            "mutex-unlock" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.mutex_unlock(args[0]).ok()?;
+                Some(LispValue::TRUE)
+            }),
+            "make-condition-variable" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
+                let name = self.string_contents_owned(args[0])
+                    .unwrap_or("unnamed".to_string());
+                Some(self.runtime.make_condvar(name))
+            }),
+            "condition-wait" => self.exact_arity(name, args, 2).and_then(|_| {
+                self.runtime.condvar_wait(args[0], args[1]).ok()?;
+                Some(LispValue::NIL)
+            }),
+            "condition-notify" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.condvar_notify(args[0]).ok()?;
+                Some(LispValue::NIL)
+            }),
+            "condition-notify-all" => self.exact_arity(name, args, 1).and_then(|_| {
+                self.runtime.condvar_notify_all(args[0]).ok()?;
+                Some(LispValue::NIL)
+            }),
+
             _ => return None,
         };
         Some(value)
