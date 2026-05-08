@@ -80,10 +80,8 @@
 (defun cfm-test--video ()
   "Create a child frame containing an inline video."
   (cfm-test--cleanup)
-  (let* ((vid-path (or (let ((p (expand-file-name "~/Videos/4k_test.mp4")))
-                         (and (file-exists-p p) p))
-                       (let ((p (expand-file-name "~/Videos/test.mp4")))
-                         (and (file-exists-p p) p))))
+  (let* ((vid-path (let ((p (expand-file-name "~/Videos/test.mp4")))
+                     (and (file-exists-p p) p)))
          (f (cfm-test--make-child "video" 50 30 60 20)))
     (with-selected-frame f
       (insert (propertize "Video in Child Frame\n"
@@ -92,12 +90,11 @@
           (progn
             (insert (format "File: %s\n\n" (file-name-nondirectory vid-path)))
             (condition-case err
-                (let ((vid-id (neomacs-video-insert vid-path 400 250)))
+                (let ((vid-id (neomacs-video-insert-loop vid-path 400 250)))
                   (if vid-id
                       (progn
-                        (neomacs-video-play vid-id)
                         (insert "\n\n")
-                        (insert (propertize (format "Video playing (id=%d)" vid-id)
+                        (insert (propertize (format "Video looping (id=%d)" vid-id)
                                             'face '(:foreground "lime green")))
                         (cfm-test--log "Video: OK (id=%d)" vid-id))
                     (insert "[neomacs-video-insert returned nil]\n")
@@ -119,10 +116,8 @@
   (let* ((img-path (or (let ((p (expand-file-name "~/Pictures/4k_image_1.jpg")))
                          (and (file-exists-p p) p))
                        (expand-file-name "etc/images/splash.png")))
-         (vid-path (or (let ((p (expand-file-name "~/Videos/4k_test.mp4")))
-                         (and (file-exists-p p) p))
-                       (let ((p (expand-file-name "~/Videos/test.mp4")))
-                         (and (file-exists-p p) p))))
+         (vid-path (let ((p (expand-file-name "~/Videos/test.mp4")))
+                     (and (file-exists-p p) p)))
          (f-img (cfm-test--make-child "img" 30 30 55 18))
          (f-vid (cfm-test--make-child "vid" 480 320 55 18)))
     ;; Image child frame
@@ -141,9 +136,8 @@
       (insert (propertize "Video\n" 'face '(:foreground "cyan" :weight bold)))
       (if vid-path
           (condition-case err
-              (let ((vid-id (neomacs-video-insert vid-path 350 220)))
+              (let ((vid-id (neomacs-video-insert-loop vid-path 350 220)))
                 (when vid-id
-                  (neomacs-video-play vid-id)
                   (insert "\n")
                   (cfm-test--log "Both/Video: OK (id=%d)" vid-id)))
             (error (cfm-test--log "Both/Video: ERROR %S" err)))

@@ -44,7 +44,7 @@ fn coalesce_latest_frames_keeps_only_most_recent_per_video() {
 #[test]
 fn load_file_with_id_preserves_caller_allocated_id() {
     let mut cache = VideoCache::new();
-    cache.load_file_with_id(0x5000_0000, "/tmp/neomacs-missing-video.mp4");
+    cache.load_file_with_id(0x5000_0000, "/tmp/neomacs-missing-video.mp4", 0, false);
 
     assert_eq!(cache.get_state(0x5000_0000), Some(VideoState::Loading));
     assert_eq!(cache.get_dimensions(0x5000_0000), Some((0, 0)));

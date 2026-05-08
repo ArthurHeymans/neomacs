@@ -347,11 +347,16 @@ impl RenderApp {
                 }
                 Ok(())
             }
-            RenderCommand::VideoCreate { id, path } => {
+            RenderCommand::VideoCreate {
+                id,
+                path,
+                loop_count,
+                autoplay,
+            } => {
                 tracing::info!("Loading video {}: {}", id, path);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.load_video_file_with_id(id, &path);
+                    renderer.load_video_file_with_id(id, &path, loop_count, autoplay);
                     tracing::info!("Video loaded with requested id {}", id);
                 }
                 Ok(())

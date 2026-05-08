@@ -216,22 +216,26 @@ impl VideoCache {
     pub fn load_file(&mut self, path: &str) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
-        self.load_file_with_id(id, path);
+        self.load_file_with_id(id, path, 0, false);
         id
     }
 
     /// Load a video file with a pre-allocated ID.
-    pub fn load_file_with_id(&mut self, id: u32, path: &str) {
+    pub fn load_file_with_id(&mut self, id: u32, path: &str, loop_count: i32, autoplay: bool) {
         self.next_id = self.next_id.max(id.saturating_add(1));
         // Create placeholder entry
-        let loop_count = Arc::new(AtomicI32::new(0));
+        let loop_count = Arc::new(AtomicI32::new(loop_count));
         self.videos.insert(
             id,
             CachedVideo {
                 id,
                 width: 0,
                 height: 0,
-                state: VideoState::Loading,
+                state: if autoplay {
+                    VideoState::Playing
+                } else {
+                    VideoState::Loading
+                },
                 texture: None,
                 texture_view: None,
                 bind_group: None,

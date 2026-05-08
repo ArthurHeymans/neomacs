@@ -1049,6 +1049,8 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
 
     let requests = video_requests.lock().expect("video requests lock");
     assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].loop_count, -1);
+    assert!(requests[0].autoplay);
 }
 
 #[test]

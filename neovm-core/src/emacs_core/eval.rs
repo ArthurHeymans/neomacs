@@ -1310,6 +1310,8 @@ pub enum VideoResolveSource {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VideoResolveRequest {
     pub source: VideoResolveSource,
+    pub loop_count: i32,
+    pub autoplay: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1333,7 +1333,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         };
         self.send_render_command(
-            RenderCommand::VideoCreate { id: video_id, path },
+            RenderCommand::VideoCreate {
+                id: video_id,
+                path,
+                loop_count: request.loop_count,
+                autoplay: request.autoplay,
+            },
             "failed to queue video create",
         )?;
 

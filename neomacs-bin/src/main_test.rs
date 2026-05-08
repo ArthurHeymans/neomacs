@@ -710,6 +710,8 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::File(LispString::from_utf8("/tmp/demo.mp4")),
+        loop_count: -1,
+        autoplay: true,
     };
 
     let first = neovm_core::emacs_core::DisplayHost::request_video(&host, request.clone())
@@ -724,8 +726,15 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::VideoCreate { id, path }
-            if *id == first.video_id && path == "/tmp/demo.mp4"
+        RenderCommand::VideoCreate {
+            id,
+            path,
+            loop_count,
+            autoplay,
+        } if *id == first.video_id
+            && path == "/tmp/demo.mp4"
+            && *loop_count == -1
+            && *autoplay
     ));
 }
 

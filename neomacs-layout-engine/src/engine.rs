@@ -924,7 +924,11 @@ fn parse_display_video_layout(
     }
 
     Some(DisplayVideoLayout {
-        request: VideoResolveRequest { source: source? },
+        request: VideoResolveRequest {
+            source: source?,
+            loop_count,
+            autoplay,
+        },
         width,
         height,
         loop_count,

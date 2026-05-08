@@ -322,6 +322,8 @@ pub enum RenderCommand {
     VideoCreate {
         id: u32,
         path: String,
+        loop_count: i32,
+        autoplay: bool,
     },
     /// Control video playback
     VideoPlay {
