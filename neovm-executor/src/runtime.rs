@@ -29,6 +29,8 @@ pub struct Runtime {
     floats: Vec<Box<FloatObj>>,
     bignums: Vec<Box<BignumObj>>,
     atoms: Vec<Box<AtomObj>>,
+    /// GC-allocated atom addresses. Checked before Vec scan.
+    gc_atoms: HashMap<usize, ()>,
     agents: Vec<Box<AgentObj>>,
     mutexes: Vec<Box<MutexObj>>,
     condvars: Vec<Box<CondvarObj>>,
@@ -66,6 +68,7 @@ impl Default for Runtime {
             floats: Vec::new(),
             bignums: Vec::new(),
             atoms: Vec::new(),
+            gc_atoms: HashMap::new(),
             agents: Vec::new(),
             mutexes: Vec::new(),
             condvars: Vec::new(),
@@ -121,6 +124,7 @@ impl Runtime {
             floats: Vec::new(),
             bignums: Vec::new(),
             atoms: Vec::new(),
+            gc_atoms: HashMap::new(),
             agents: Vec::new(),
             mutexes: Vec::new(),
             condvars: Vec::new(),
@@ -448,6 +452,11 @@ impl Runtime {
 
     pub fn make_atom(&mut self, value: LispValue) -> LispValue {
         let val_u64 = value.to_abi_i64() as u64;
+        // Try GC allocation first
+        if let Some(addr) = self.make_atom_gc(val_u64) {
+            return LispValue::from_heap_addr(addr);
+        }
+        // Fall back to Vec-based allocation
         let mut boxed = Box::new(AtomObj {
             header: HeapHeader { kind: HeapKind::Atom },
             value: std::sync::atomic::AtomicU64::new(val_u64),
@@ -456,6 +465,21 @@ impl Runtime {
         self.object_index.insert(addr, HeapKind::Atom);
         self.atoms.push(boxed);
         LispValue::from_heap_addr(addr)
+    }
+
+    fn make_atom_gc(&mut self, val_u64: u64) -> Option<usize> {
+        let mut mutator = self.gc_heap.mutator();
+        let mut scope = mutator.handle_scope();
+        let obj = AtomObj {
+            header: HeapHeader { kind: HeapKind::Atom },
+            value: std::sync::atomic::AtomicU64::new(val_u64),
+        };
+        let root = mutator.alloc(&mut scope, obj).ok()?;
+        let ptr = root.as_gc().as_non_null().as_ptr();
+        let addr = ptr as usize;
+        self.object_index.insert(addr, HeapKind::Atom);
+        self.gc_atoms.insert(addr, ());
+        Some(addr)
     }
 
     pub fn is_atom(&self, value: LispValue) -> bool {
@@ -658,6 +682,11 @@ impl Runtime {
     }
 
     fn atom_by_addr(&self, addr: usize) -> Option<&AtomObj> {
+        // Check GC-allocated atoms first (O(1))
+        if self.gc_atoms.contains_key(&addr) {
+            return Some(unsafe { Self::deref_heap(addr) });
+        }
+        // Fall back to Vec scan
         for obj in &self.atoms {
             if (&**obj as *const AtomObj) as usize == addr {
                 return Some(obj);
