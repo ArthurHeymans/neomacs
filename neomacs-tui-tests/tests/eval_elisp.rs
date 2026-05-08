@@ -1018,6 +1018,43 @@ fn fundamental_elisp_operations_return_correct_values() {
     }
 }
 
+#[test]
+fn sequence_mutation_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"seq-mut:%S\" (list (mapcar (lambda (x) (cons x (* x x))) '(1 2 3)) (let ((xs (list 3 1 2))) (sort xs '<)) (delq 'b (list 'a 'b 'c 'b)) (nreverse (list 1 2 3))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("seq-mut:")
+                && row.contains("((1 . 1) (2 . 4) (3 . 9))")
+                && row.contains("(1 2 3)")
+                && row.contains("(a c)")
+                && row.contains("(3 2 1)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: sequence mutation functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "sequence_mutation_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
 // ── String and numeric operation tests ──────────────────────
 
 #[test]
