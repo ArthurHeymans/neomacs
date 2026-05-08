@@ -7712,6 +7712,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_upcase_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (upcase \"hello\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_downcase_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (downcase \"HELLO\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_min_multi_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
