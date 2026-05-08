@@ -913,6 +913,47 @@ fn where_is_prompt_ctrl_h_preserves_command_text() {
 }
 
 #[test]
+fn where_is_prompt_del_deletes_previous_command_character() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "w");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Where is command"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"find-fileX");
+    }
+    send_both(&mut gnu, &mut neo, "DEL RET");
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("find-file is on") && row.contains("C-x C-f"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label} should run where-is for corrected find-file after terminal DEL\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "where_is_prompt_del_deletes_previous_command_character",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn view_lossage_via_ch_l_shows_recent_keys_and_commands() {
     let (mut gnu, mut neo) = boot_pair("");
 
