@@ -7938,6 +7938,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cons_equal_for_identical() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (equal p p))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_length_comparison() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
