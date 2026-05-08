@@ -2716,6 +2716,35 @@ fn thread_macro_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn eieio_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'eieio) (defclass neo-eieio-test () ((x :initarg :x :initform 1))) (message \"eieio:%S\" (let ((o (neo-eieio-test :x 5))) (list (object-of-class-p o 'neo-eieio-test) (oref o x) (progn (oset o x 7) (oref o x))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("eieio:") && row.contains("(t 5 7)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: EIEIO behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("eieio_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
