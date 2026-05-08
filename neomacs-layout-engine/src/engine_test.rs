@@ -611,6 +611,97 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
 }
 
 #[test]
+fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("iW ");
+        let plist = Value::list(vec![
+            Value::keyword("family"),
+            Value::string("Noto Sans"),
+            Value::keyword("weight"),
+            Value::symbol("regular"),
+        ]);
+        buf.text
+            .text_props_put_property(0, buf.text.len(), Value::symbol("face"), plist);
+        buf.goto_byte(0);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-cursor-current-glyph-advance",
+        320,
+        120,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = 1;
+            *point = 1;
+        }
+    }
+
+    let mut metrics = FontMetricsService::new();
+    let face_font_size = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .font_pixel_size;
+    let expected_i = metrics
+        .char_width('i', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
+    let expected_w = metrics
+        .char_width('W', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
+    assert_ne!(
+        expected_i, expected_w,
+        "test requires proportional metrics for i and W"
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let i_point = snapshot.point_for_buffer_pos(1).expect("i point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(
+        i_point.width, expected_i,
+        "point geometry should publish the current glyph advance"
+    );
+    assert_eq!(
+        cursor.width, i_point.width,
+        "box cursor width must come from the glyph under point, not the following glyph"
+    );
+    assert_ne!(
+        cursor.width, expected_w,
+        "cursor must not use the following W glyph advance"
+    );
+}
+
+#[test]
 fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     let mut eval = Context::new();
     let buf_id = eval
