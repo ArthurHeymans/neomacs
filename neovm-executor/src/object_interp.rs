@@ -7521,6 +7521,18 @@ mod tests {
     // deeper compiler integration to work end-to-end.
 
     #[test]
+    fn executes_with_mutex_macro_locks_and_unlocks() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((a (make-atom 0)) (m (make-mutex \"t\")))\
+               (with-mutex m (atom-reset! a 42))\
+               (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_mapconcat_joins_strings() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
