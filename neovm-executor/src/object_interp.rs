@@ -7302,4 +7302,41 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
+
+    #[test]
+    fn executes_special_form_p() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (special-form-p 'if)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_special_form_p_returns_nil_for_function() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (special-form-p 'cons)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_functionp_for_lambda() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (functionp (lambda (x) (+ x 1)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_subrp_for_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (subrp (symbol-function 'cons))",
+        );
+        // cons is a built-in, so subrp should return t
+        assert!(value.is_some());
+    }
 }
