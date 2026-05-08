@@ -592,6 +592,50 @@ fn insert_file_via_cx_i_inserts_contents_at_point() {
 }
 
 #[test]
+fn insert_file_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "insert-file-empty-del.txt",
+        "target header\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-> C-x i");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Insert file:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Insert file:"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty insert-file prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "insert_file_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn insert_file_literally_via_mx_inserts_contents_at_point() {
     let (mut gnu, mut neo) = boot_pair("");
     write_home_file(&gnu, "literal-source.txt", "literal alpha\nliteral beta\n");
