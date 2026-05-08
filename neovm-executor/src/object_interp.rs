@@ -7640,6 +7640,9 @@ mod tests {
     // Note: defun with (interactive) has a HIR registration bug where
     // the function isn't added to the symbol table for cross-form calls.
 
+    // Float and number predicates already covered by existing tests:
+    // executes_float_constant, executes_floatp, executes_float_addition, etc.
+
     #[test]
     fn executes_cl_loop_numeric_for() {
         let (value, _) = execute(
