@@ -7556,6 +7556,18 @@ mod tests {
     }
 
     #[test]
+    fn executes_agent_error_after_bad_action() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ag (make-agent 0)))\
+               (send ag (lambda (x) (+ x 1)))\
+               (agent-await ag)\
+               (agent-error ag))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_with_mutex_macro_locks_and_unlocks() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
