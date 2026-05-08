@@ -2093,6 +2093,37 @@ impl Interpreter<'_, '_, '_> {
                 let hash = h.finish();
                 Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
             }),
+            "logior" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+                args[1..].iter().fold(args[0], |a, b| {
+                    let av = a.as_fixnum().unwrap_or(0);
+                    let bv = b.as_fixnum().unwrap_or(0);
+                    LispValue::expect_fixnum(av | bv)
+                })
+            }),
+            "logand" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+                if args.is_empty() { return LispValue::expect_fixnum(-1); }
+                args[1..].iter().fold(args[0], |a, b| {
+                    let av = a.as_fixnum().unwrap_or(0);
+                    let bv = b.as_fixnum().unwrap_or(0);
+                    LispValue::expect_fixnum(av & bv)
+                })
+            }),
+            "logxor" => self.min_max_arity(name, args, 1, usize::MAX).map(|_| {
+                args[1..].iter().fold(args[0], |a, b| {
+                    let av = a.as_fixnum().unwrap_or(0);
+                    let bv = b.as_fixnum().unwrap_or(0);
+                    LispValue::expect_fixnum(av ^ bv)
+                })
+            }),
+            "lsh" | "ash" => self.exact_arity(name, args, 2).and_then(|_| {
+                let val = self.fixnum_arg(name, args[0])?;
+                let shift = self.fixnum_arg(name, args[1])?;
+                if shift >= 0 {
+                    self.fixnum(val.wrapping_shl(shift as u32), name)
+                } else {
+                    self.fixnum(val.wrapping_shr((-shift) as u32), name)
+                }
+            }),
             "max" => {
                 if args.is_empty() {
                     self.error("primitive `max` requires at least one argument");
