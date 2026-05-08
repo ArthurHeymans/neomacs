@@ -1880,6 +1880,40 @@ fn obarray_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn abbrev_table_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"abbrev:%S\" (let ((tab (make-abbrev-table))) (define-abbrev tab \"btw\" \"by the way\") (list (abbrev-table-p tab) (symbol-value (intern-soft \"btw\" tab)) (abbrev-expansion \"btw\" tab))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("abbrev:") && row.contains("(t") && row.contains("by the way"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: abbrev table behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "abbrev_table_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn symbol_value_cell_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
