@@ -1919,6 +1919,40 @@ fn read_from_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn provide_eval_after_load_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (setq neo-after-load-log nil) (eval-after-load 'neo-feature '(push 'after neo-after-load-log)) (message \"feature:%S\" (list (featurep 'neo-feature) neo-after-load-log (provide 'neo-feature) (featurep 'neo-feature) neo-after-load-log)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("feature:(nil nil neo-feature t (after))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: provide, featurep, and eval-after-load should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "provide_eval_after_load_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn match_data_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
