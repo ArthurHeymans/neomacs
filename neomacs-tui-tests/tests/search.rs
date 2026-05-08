@@ -92,6 +92,48 @@ fn occur_via_ms_o_lists_matching_lines() {
 }
 
 #[test]
+fn occur_prompt_ctrl_h_preserves_regexp_text() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "occur-ctrl-h.txt",
+        "alpha needle\nbeta plain\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-s o");
+    let occur_prompt = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("List lines matching regexp"))
+    };
+    gnu.read_until(Duration::from_secs(6), occur_prompt);
+    neo.read_until(Duration::from_secs(8), occur_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"needleX");
+    }
+    send_both(&mut gnu, &mut neo, "BS");
+
+    let regexp_preserved = |grid: &[String]| grid.iter().any(|row| row.contains("needleX"));
+    gnu.read_until(Duration::from_secs(6), regexp_preserved);
+    neo.read_until(Duration::from_secs(8), regexp_preserved);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            regexp_preserved(&grid),
+            "{label} should keep the previous occur prompt character after terminal C-h\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("occur_prompt_ctrl_h_preserves_regexp_text", &gnu, &neo, 2);
+}
+
+#[test]
 fn isearch_forward_via_cs() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
