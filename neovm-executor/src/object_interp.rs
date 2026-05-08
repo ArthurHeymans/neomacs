@@ -2016,6 +2016,20 @@ impl Interpreter<'_, '_, '_> {
                                 .is_some_and(|name| self.is_callable_name(&name))),
                 )
             }),
+            "macrop" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(
+                    self.runtime.is_symbol(args[0])
+                        && self.runtime.symbol_name(args[0]).ok()
+                            .is_some_and(|name| self.functions_by_name.contains_key(&format!("{name}-macro")))
+                )
+            }),
+            "special-form-p" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(
+                    self.runtime.is_symbol(args[0])
+                        && self.runtime.symbol_name(args[0]).ok()
+                            .is_some_and(|name| self.is_special_form_name(&name))
+                )
+            }),
             "rem" => self.exact_arity(name, args, 2).and_then(|_| {
                 if self.has_float_arg(args) {
                     let dividend = self.number_arg(name, args[0])?;
@@ -2501,6 +2515,21 @@ impl Interpreter<'_, '_, '_> {
 
     fn is_callable_name(&self, name: &str) -> bool {
         is_primitive_name(name) || self.functions_by_name.contains_key(name)
+    }
+
+    fn is_special_form_name(&self, name: &str) -> bool {
+        matches!(name,
+            "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
+            | "quote" | "function" | "progn" | "prog1" | "prog2"
+            | "catch" | "throw" | "condition-case" | "unwind-protect"
+            | "defun" | "defvar" | "defconst" | "defmacro" | "lambda"
+            | "letrec" | "cl-loop" | "pcase" | "setf" | "cl-labels"
+            | "cl-flet" | "interactive" | "save-excursion"
+            | "save-restriction" | "save-current-buffer"
+            | "with-mutex" | "make-thread" | "thread-yield"
+            | "make-atom" | "make-agent" | "make-mutex"
+            | "make-condition-variable"
+        )
     }
 
     fn execute_module_call(
