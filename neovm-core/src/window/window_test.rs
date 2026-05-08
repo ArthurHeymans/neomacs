@@ -43,6 +43,58 @@ fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer(
 }
 
 #[test]
+fn render_frame_tree_returns_root_relative_bottom_to_top_nodes() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let root_id = mgr.create_frame("root", 80, 25, BufferId(1));
+    let back_id = mgr.create_frame("back", 10, 4, BufferId(1));
+    let front_id = mgr.create_frame("front", 10, 4, BufferId(1));
+    let nested_id = mgr.create_frame("nested", 4, 2, BufferId(1));
+
+    {
+        let back = mgr.get_mut(back_id).expect("back child");
+        back.parent_frame = Value::make_frame(root_id.0);
+        back.left_pos = 10;
+        back.top_pos = 20;
+        back.z_order = 1;
+    }
+    {
+        let front = mgr.get_mut(front_id).expect("front child");
+        front.parent_frame = Value::make_frame(root_id.0);
+        front.left_pos = 30;
+        front.top_pos = 40;
+        front.z_order = 2;
+    }
+    {
+        let nested = mgr.get_mut(nested_id).expect("nested child");
+        nested.parent_frame = Value::make_frame(front_id.0);
+        nested.left_pos = 3;
+        nested.top_pos = 4;
+        nested.z_order = 1;
+    }
+
+    let tree = mgr
+        .render_frame_tree(nested_id, true)
+        .expect("render frame tree");
+    let ids: Vec<_> = tree
+        .frames_bottom_to_top
+        .iter()
+        .map(|node| node.frame_id)
+        .collect();
+
+    assert_eq!(tree.root_id, root_id);
+    assert_eq!(ids, vec![root_id, back_id, front_id, nested_id]);
+    let nested = tree
+        .frames_bottom_to_top
+        .iter()
+        .find(|node| node.frame_id == nested_id)
+        .expect("nested node");
+    assert_eq!(nested.parent_id, Some(front_id));
+    assert_eq!(nested.origin_in_root_x, 33.0);
+    assert_eq!(nested.origin_in_root_y, 44.0);
+}
+
+#[test]
 fn frame_manager_gc_traces_name_icon_name_and_title_values() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

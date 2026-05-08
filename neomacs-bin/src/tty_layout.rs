@@ -31,18 +31,6 @@ pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
         .map(|frame| frame.id)
 }
 
-/// Run the layout engine on the selected live frame.
-pub fn run_layout(evaluator: &mut Context) {
-    let Some(frame_id) = current_layout_frame_id(evaluator) else {
-        tracing::warn!("run_layout: no selected live frame");
-        return;
-    };
-
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().layout_frame_rust(evaluator, frame_id);
-    });
-}
-
 pub fn layout_frame_display_state(
     evaluator: &mut Context,
     frame_id: FrameId,
@@ -55,22 +43,10 @@ pub fn layout_frame_display_state(
 }
 
 fn frame_origin_in_root(evaluator: &Context, frame_id: FrameId) -> (f32, f32) {
-    let mut x = 0_i64;
-    let mut y = 0_i64;
-    let mut current = Some(frame_id);
-    let mut seen = std::collections::HashSet::new();
-    while let Some(fid) = current {
-        if !seen.insert(fid) {
-            break;
-        }
-        let Some(frame) = evaluator.frame_manager().get(fid) else {
-            break;
-        };
-        x += frame.left_pos;
-        y += frame.top_pos;
-        current = evaluator.frame_manager().frame_parent_id(fid);
-    }
-    (x as f32, y as f32)
+    evaluator
+        .frame_manager()
+        .frame_origin_in_root(frame_id)
+        .unwrap_or((0.0, 0.0))
 }
 
 // ── TTY layout tree and redisplay ─────────────────────────────────────────

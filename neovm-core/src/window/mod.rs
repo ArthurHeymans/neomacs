@@ -31,6 +31,23 @@ pub struct WindowId(pub u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FrameId(pub u64);
 
+/// Root-relative frame placement used by redisplay backends.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RenderFrameNode {
+    pub frame_id: FrameId,
+    pub parent_id: Option<FrameId>,
+    pub origin_in_root_x: f32,
+    pub origin_in_root_y: f32,
+    pub z_order: i32,
+}
+
+/// Bottom-to-top render order for one frame tree.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderFrameTree {
+    pub root_id: FrameId,
+    pub frames_bottom_to_top: Vec<RenderFrameNode>,
+}
+
 /// Keep frame and window numeric domains disjoint while both are represented
 /// as Lisp integers.
 pub(crate) const FRAME_ID_BASE: u64 = 1 << 32;
@@ -2454,6 +2471,55 @@ impl FrameManager {
             .collect();
         frames.sort_by(|a, b| self.frame_z_order_cmp(*a, *b));
         frames
+    }
+
+    pub fn frame_origin_in_root(&self, id: FrameId) -> Option<(f32, f32)> {
+        if !self.frames.contains_key(&id) {
+            return None;
+        }
+
+        let mut x = 0_i64;
+        let mut y = 0_i64;
+        let mut current = Some(id);
+        let mut seen = HashSet::new();
+        while let Some(frame_id) = current {
+            if !seen.insert(frame_id) {
+                return None;
+            }
+            let frame = self.frames.get(&frame_id)?;
+            x += frame.left_pos;
+            y += frame.top_pos;
+            current = self.frame_parent_id(frame_id);
+        }
+        Some((x as f32, y as f32))
+    }
+
+    pub fn render_frame_tree(
+        &self,
+        selected_or_root: FrameId,
+        visible_only: bool,
+    ) -> Option<RenderFrameTree> {
+        let root_id = self.root_frame_id(selected_or_root)?;
+        let frames_bottom_to_top = self
+            .frames_in_reverse_z_order(root_id, visible_only)
+            .into_iter()
+            .filter_map(|frame_id| {
+                let frame = self.frames.get(&frame_id)?;
+                let (origin_in_root_x, origin_in_root_y) = self.frame_origin_in_root(frame_id)?;
+                Some(RenderFrameNode {
+                    frame_id,
+                    parent_id: self.frame_parent_id(frame_id),
+                    origin_in_root_x,
+                    origin_in_root_y,
+                    z_order: frame.z_order,
+                })
+            })
+            .collect();
+
+        Some(RenderFrameTree {
+            root_id,
+            frames_bottom_to_top,
+        })
     }
 
     /// Split a window horizontally or vertically.

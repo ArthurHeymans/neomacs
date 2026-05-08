@@ -1431,10 +1431,9 @@ fn adopt_existing_primary_gui_frame(eval: &mut Context) -> Result<(), String> {
 fn sync_live_gui_frame_titles(eval: &mut Context) {
     let frame_ids = eval.frame_manager().frame_list();
     for frame_id in frame_ids {
-        let is_gui_frame = eval
-            .frame_manager()
-            .get(frame_id)
-            .is_some_and(|frame| frame.effective_window_system().is_some());
+        let is_gui_frame = eval.frame_manager().get(frame_id).is_some_and(|frame| {
+            frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_none()
+        });
         if !is_gui_frame {
             continue;
         }
@@ -2865,20 +2864,36 @@ fn publish_gui_frame(
 ) {
     evaluator.setup_thread_locals();
     sync_selected_gui_chrome_state(evaluator);
-    tty_layout::run_layout(evaluator);
     sync_live_gui_frame_titles(evaluator);
 
-    // Take the complete FrameDisplayState produced by the layout engine's
-    // GlyphMatrixBuilder and hand it to the render thread.
-    let display_state = tty_layout::LAYOUT_ENGINE
-        .with(|engine| engine.borrow_mut().last_frame_display_state.take());
-    let Some(display_state) = display_state else {
+    let Some(selected) = evaluator
+        .frame_manager()
+        .selected_frame()
+        .map(|frame| frame.id)
+    else {
         return;
     };
-    if frame_tx.try_send(display_state).is_ok() {
-        if let Some(waker) = render_waker {
-            waker.wake();
+    let Some(tree) = evaluator.frame_manager().render_frame_tree(selected, true) else {
+        return;
+    };
+
+    let mut sent_any = false;
+    for node in tree.frames_bottom_to_top {
+        let display_state = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
+        let Some(mut display_state) = display_state else {
+            continue;
+        };
+        display_state.parent_id = node.parent_id.map(|id| id.0).unwrap_or(0);
+        display_state.parent_x = node.origin_in_root_x;
+        display_state.parent_y = node.origin_in_root_y;
+        display_state.z_order = node.z_order;
+        if frame_tx.try_send(display_state).is_ok() {
+            sent_any = true;
         }
+    }
+
+    if sent_any && let Some(waker) = render_waker {
+        waker.wake();
     }
 }
 

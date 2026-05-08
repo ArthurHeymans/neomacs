@@ -3560,6 +3560,73 @@ fn x_create_frame_creates_opening_frame_and_notifies_host() {
 }
 
 #[test]
+fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_window() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("x")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+        if let Some(mini_leaf) = parent.minibuffer_leaf.as_mut() {
+            mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
+        }
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let requests = host.realized.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("name"), Value::string("child")),
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("left"), Value::fixnum(30)),
+        Value::cons(Value::symbol("top"), Value::fixnum(40)),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+        Value::cons(Value::symbol("undecorated"), Value::T),
+        Value::cons(Value::symbol("no-accept-focus"), Value::T),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+
+    let child_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", created)),
+    );
+    let parent_minibuffer = ev
+        .frames
+        .get(parent_id)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("parent minibuffer");
+    let child = ev.frames.get(child_id).expect("child frame");
+
+    assert_eq!(requests.borrow().len(), 0);
+    assert_eq!(child.parent_frame, Value::make_frame(parent_id.0));
+    assert_eq!(
+        child.parameter("parent-frame"),
+        Some(Value::make_frame(parent_id.0))
+    );
+    assert_eq!(child.left_pos, 30);
+    assert_eq!(child.top_pos, 40);
+    assert_eq!(child.width, 200);
+    assert_eq!(child.height, 100);
+    assert_eq!(child.char_width, 10.0);
+    assert_eq!(child.char_height, 20.0);
+    assert!(child.undecorated);
+    assert!(child.no_accept_focus);
+    assert_eq!(child.minibuffer_window, Some(parent_minibuffer));
+    assert!(child.minibuffer_leaf.is_none());
+}
+
+#[test]
 fn x_create_frame_reserves_tab_bar_space_above_root_window() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

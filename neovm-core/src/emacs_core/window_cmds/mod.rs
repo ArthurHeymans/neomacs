@@ -4781,7 +4781,13 @@ fn resize_live_gui_frame(
         }
     }
 
-    if !pretend && let Some(host) = display_host.as_mut() {
+    let is_child_frame = frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some());
+    if !pretend
+        && !is_child_frame
+        && let Some(host) = display_host.as_mut()
+    {
         let geometry_hints = frames
             .get(fid)
             .map(|frame| frame.gui_geometry_hints())
@@ -4858,7 +4864,10 @@ fn request_live_gui_frame_resize(
         frame.clear_pending_gui_resize();
     }
 
-    if let Some(host) = display_host.as_mut() {
+    let is_child_frame = frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some());
+    if !is_child_frame && let Some(host) = display_host.as_mut() {
         let geometry_hints = frames
             .get(fid)
             .map(|frame| frame.gui_geometry_hints())
@@ -4908,7 +4917,10 @@ fn request_live_gui_frame_resize_and_keep_pending(
         )
     };
 
-    let Some(host) = display_host.as_mut() else {
+    let is_child_frame = frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some());
+    let Some(host) = display_host.as_mut().filter(|_| !is_child_frame) else {
         return request_live_gui_frame_resize(
             frames,
             display_host,
@@ -6053,7 +6065,7 @@ pub(crate) fn make_frame_with_state(
     make_frame_plain(frames, buffers, args)
 }
 
-fn resolve_tty_child_shared_minibuffer(
+fn resolve_child_shared_minibuffer(
     frames: &FrameManager,
     parent_id: FrameId,
     minibuffer_param: Option<Value>,
@@ -6205,7 +6217,7 @@ fn make_frame_plain(
             let fid =
                 frames.create_frame_value_on_terminal(name, terminal_id, width, height, buf_id);
             let shared_minibuffer =
-                resolve_tty_child_shared_minibuffer(frames, parent_id, minibuffer_param)?;
+                resolve_child_shared_minibuffer(frames, parent_id, minibuffer_param)?;
             let z_order = 1 + frames.max_child_z_order(parent_id);
             let frame = frames
                 .get_mut(fid)
@@ -6290,6 +6302,13 @@ struct ParsedGuiFrameParams {
     width_columns: Option<u32>,
     height_lines: Option<u32>,
     visibility: Option<bool>,
+    parent_frame: Option<FrameId>,
+    left: Option<i64>,
+    top: Option<i64>,
+    minibuffer: Option<Value>,
+    undecorated: bool,
+    no_accept_focus: bool,
+    unsplittable: bool,
     all: std::collections::HashMap<SymId, Value>,
 }
 
@@ -6371,6 +6390,17 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
                 }
             }
             "visibility" => parsed.visibility = Some(pair_cdr.is_truthy()),
+            "parent-frame" => {
+                if let Some(id) = pair_cdr.as_frame_id() {
+                    parsed.parent_frame = Some(FrameId(id));
+                }
+            }
+            "left" => parsed.left = pair_cdr.as_int(),
+            "top" => parsed.top = pair_cdr.as_int(),
+            "minibuffer" => parsed.minibuffer = Some(pair_cdr),
+            "undecorated" => parsed.undecorated = pair_cdr.is_truthy(),
+            "no-accept-focus" => parsed.no_accept_focus = pair_cdr.is_truthy(),
+            "unsplittable" => parsed.unsplittable = pair_cdr.is_truthy(),
             _ => {}
         }
     }
@@ -6459,24 +6489,55 @@ pub(crate) fn x_create_frame_impl(
         display_host.is_some(),
         args.first()
     );
-    let metrics = current_gui_frame_metrics_in_state(frames);
+    let parent_id = parsed
+        .parent_frame
+        .filter(|parent_id| frames.get(*parent_id).is_some());
+    let parent_frame_value = parent_id
+        .map(|parent_id| Value::make_frame(parent_id.0))
+        .unwrap_or(Value::NIL);
+    let metrics = parent_id
+        .and_then(|parent_id| frames.get(parent_id))
+        .map(|parent| GuiFrameMetrics {
+            width_px: parent.width.max(1),
+            height_px: parent.height.max(1),
+            char_width: parent.char_width.max(1.0),
+            char_height: parent.char_height.max(1.0),
+            font_pixel_size: parent.font_pixel_size.max(1.0),
+            minibuffer_height: parent
+                .minibuffer_leaf
+                .as_ref()
+                .map(|leaf| leaf.bounds().height.max(parent.char_height).max(1.0))
+                .unwrap_or_else(|| (parent.char_height * 2.0).max(1.0)),
+        })
+        .unwrap_or_else(|| current_gui_frame_metrics_in_state(frames));
     let host_size = current_primary_window_size(&*display_host);
     let opening_frame_adoption = display_host
         .as_ref()
         .is_some_and(|host| host.opening_gui_frame_pending());
+    let is_child_frame = parent_id.is_some();
     let width_px = parsed
         .width_columns
         .map(|cols| ((cols as f32 * metrics.char_width).round().max(1.0)) as u32)
-        .unwrap_or_else(|| host_size.map(|size| size.width).unwrap_or(metrics.width_px));
+        .unwrap_or_else(|| {
+            if is_child_frame {
+                metrics.width_px
+            } else {
+                host_size.map(|size| size.width).unwrap_or(metrics.width_px)
+            }
+        });
     let text_height_px = parsed.height_lines.map(|lines| {
         ((lines as f32 * metrics.char_height)
             .round()
             .max(metrics.char_height)) as u32
     });
     let height_px = text_height_px.map(|text| text).unwrap_or_else(|| {
-        host_size
-            .map(|size| size.height)
-            .unwrap_or(metrics.height_px)
+        if is_child_frame {
+            metrics.height_px
+        } else {
+            host_size
+                .map(|size| size.height)
+                .unwrap_or(metrics.height_px)
+        }
     });
     tracing::debug!(
         "x-create-frame: parsed width_cols={:?} height_lines={:?} host_size={:?} metrics={}x{} char={}x{} mini_h={} -> size={}x{}",
@@ -6503,6 +6564,11 @@ pub(crate) fn x_create_frame_impl(
         .current_buffer()
         .map(|buffer| buffer.id)
         .unwrap_or_else(|| buffers.create_buffer("*scratch*"));
+    let shared_minibuffer = parent_id
+        .map(|parent_id| resolve_child_shared_minibuffer(frames, parent_id, parsed.minibuffer))
+        .transpose()?
+        .flatten();
+    let z_order = parent_id.map(|parent_id| 1 + frames.max_child_z_order(parent_id));
     let minibuffer_buffer_id = buffers.find_buffer_by_name(" *Minibuf-0*");
     let fid = frames.create_frame_value(name, width_px, height_px, current_buffer_id);
     {
@@ -6518,6 +6584,15 @@ pub(crate) fn x_create_frame_impl(
         frame.width = width_px;
         frame.height = height_px;
         frame.visible = parsed.visibility.unwrap_or(frame.visible);
+        frame.parent_frame = parent_frame_value;
+        if let Some(z_order) = z_order {
+            frame.z_order = z_order;
+        }
+        frame.left_pos = parsed.left.unwrap_or(0);
+        frame.top_pos = parsed.top.unwrap_or(0);
+        frame.undecorated = parsed.undecorated;
+        frame.no_accept_focus = parsed.no_accept_focus;
+        frame.no_split = parsed.unsplittable;
         frame.char_width = metrics.char_width;
         frame.char_height = metrics.char_height;
         frame.font_pixel_size = metrics.font_pixel_size;
@@ -6530,6 +6605,17 @@ pub(crate) fn x_create_frame_impl(
         frame.set_parameter(Value::symbol("background-color"), Value::string("white"));
         for (key, value) in parsed.all {
             frame.set_parameter(Value::from_sym_id(key), value);
+        }
+        frame.set_parameter(Value::symbol("parent-frame"), parent_frame_value);
+        frame.set_parameter(Value::symbol("left"), Value::fixnum(frame.left_pos));
+        frame.set_parameter(Value::symbol("top"), Value::fixnum(frame.top_pos));
+        if let Some(shared_minibuffer) = shared_minibuffer {
+            frame.minibuffer_leaf = None;
+            frame.minibuffer_window = Some(shared_minibuffer);
+            frame.set_parameter(
+                Value::symbol("minibuffer"),
+                Value::make_window(shared_minibuffer.0),
+            );
         }
         if let Window::Leaf { buffer_id, .. } = &mut frame.root_window {
             *buffer_id = current_buffer_id;
@@ -6549,7 +6635,7 @@ pub(crate) fn x_create_frame_impl(
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
     }
-    if let Some(host) = display_host.as_mut() {
+    if !is_child_frame && let Some(host) = display_host.as_mut() {
         let geometry_hints = frames
             .get(fid)
             .map(|frame| frame.gui_geometry_hints())
@@ -6563,7 +6649,7 @@ pub(crate) fn x_create_frame_impl(
         })
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
-    if opening_frame_adoption {
+    if !is_child_frame && opening_frame_adoption {
         frames.select_frame(fid);
         if let Some(selected_wid) = frames.get(fid).map(|frame| frame.selected_window) {
             let _ = frames.note_window_selected(selected_wid);
