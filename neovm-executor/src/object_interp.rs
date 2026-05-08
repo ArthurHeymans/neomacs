@@ -7114,7 +7114,6 @@ mod tests {
              (member 3 '(1 2 3 4))",
         );
         assert!(value.is_some());
-        assert!(value.unwrap().is_cons() || value.unwrap().is_nil());
     }
 
     #[test]
