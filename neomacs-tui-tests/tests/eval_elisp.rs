@@ -1548,6 +1548,39 @@ fn text_property_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_removal_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"tprop2:%S\" (let ((s (copy-sequence \"abcd\"))) (put-text-property 0 4 'face 'bold s) (remove-text-properties 1 3 '(face nil) s) (list (text-properties-at 0 s) (text-properties-at 1 s) (next-single-property-change 0 'face s) (next-single-property-change 1 'face s) s)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("tprop2:") && row.contains("(face bold)") && row.contains("nil 1 3")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text property removal should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_removal_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_substring_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
