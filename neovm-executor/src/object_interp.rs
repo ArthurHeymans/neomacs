@@ -7863,6 +7863,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_mod_negative() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(mod -5 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
     fn executes_1plus_and_1minus() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
