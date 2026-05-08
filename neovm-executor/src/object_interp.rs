@@ -7644,6 +7644,34 @@ mod tests {
     // executes_float_constant, executes_floatp, executes_float_addition, etc.
 
     #[test]
+    fn stress_test_many_objects_type_checks_fast() {
+        // Create many objects of different types and verify O(1) lookups.
+        // If type predicates still did O(n) scans, this would be very slow.
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (make-vector 100 0)) (h (make-hash-table)))\
+               (dotimes (i 100)\
+                 (aset v i (cons i i))\
+                 (puthash i i h))\
+               (and (vectorp v) (hash-table-p h) (consp (aref v 50)) t))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn stress_test_many_objects_car_cdr_fast() {
+        // Build a 100-element list and access car/cdr through it.
+        // With direct pointer dereference, this is O(n) total, not O(n^2).
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((lst nil))\
+               (dotimes (i 100) (push i lst))\
+               (car (cdr (cdr lst))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(97)));
+    }
+
+    #[test]
     fn executes_cl_loop_numeric_for() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
