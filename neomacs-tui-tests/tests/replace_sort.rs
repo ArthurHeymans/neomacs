@@ -354,6 +354,50 @@ fn replace_string_via_mx_replaces_from_point_to_end() {
 }
 
 #[test]
+fn replace_string_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "replace-string-empty-del.txt",
+        "alpha one\nbeta one\n",
+        "C-x C-f",
+    );
+
+    invoke_mx_command(&mut gnu, &mut neo, "replace-string");
+    let prompt = |grid: &[String]| grid.iter().any(|row| row.contains("Replace string"));
+    gnu.read_until(Duration::from_secs(6), prompt);
+    neo.read_until(Duration::from_secs(8), prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Replace string"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty replace-string prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_string_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn replace_regexp_via_mx_replaces_numbers_from_point_to_end() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
