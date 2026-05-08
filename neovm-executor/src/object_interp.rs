@@ -7635,6 +7635,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_loop_numeric_for() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop for i from 1 to 3 sum i)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_cl_loop_repeat_n_times() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
