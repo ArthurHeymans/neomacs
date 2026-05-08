@@ -2313,9 +2313,16 @@ impl Interpreter<'_, '_, '_> {
             }),
             "send" | "send-off" => self.min_max_arity(name, args, 2, usize::MAX).and_then(|_| {
                 let via_pool = name == "send-off";
-                self.runtime
+                let result = self.runtime
                     .agent_send(args[0], args[1], &args[2..], via_pool)
-                    .ok()
+                    .ok();
+                if via_pool {
+                    // Submit to background pool for async processing.
+                    if let Some(addr) = args[0].heap_addr() {
+                        self.runtime.agent_pool.submit(addr);
+                    }
+                }
+                result
             }),
             "agent-await" => self.exact_arity(name, args, 1).and_then(|_| {
                 let agent = args[0];
