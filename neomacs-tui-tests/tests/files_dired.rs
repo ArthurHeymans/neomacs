@@ -254,6 +254,35 @@ fn find_file_minibuffer_ctrl_h_does_not_delete_previous_character() {
 }
 
 #[test]
+fn keyboard_quit_after_find_file_ctrl_h_returns_to_scratch() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "C-x C-f");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Find file:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/ctrl-h-quit-probe");
+    }
+    send_both(&mut gnu, &mut neo, "BS C-g");
+
+    let scratch_only =
+        |grid: &[String]| scratch_ready(grid) && !grid.iter().any(|row| row.contains("Find file:"));
+    gnu.read_until(Duration::from_secs(6), scratch_only);
+    neo.read_until(Duration::from_secs(8), scratch_only);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "keyboard_quit_after_find_file_ctrl_h_returns_to_scratch",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn list_directory_via_cx_cd_lists_entries() {
     let (mut gnu, mut neo) = boot_pair("");
     let unique = SystemTime::now()
