@@ -161,6 +161,48 @@ fn execute_extended_command_minibuffer_ctrl_h_preserves_command_text() {
 }
 
 #[test]
+fn execute_extended_command_minibuffer_del_deletes_previous_character() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "M-x");
+    let mx_prompt = |grid: &[String]| grid.iter().any(|row| row.contains("M-x"));
+    gnu.read_until(Duration::from_secs(6), mx_prompt);
+    neo.read_until(Duration::from_secs(8), mx_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"forward-charX");
+    }
+    send_both(&mut gnu, &mut neo, "DEL");
+    send_both(&mut gnu, &mut neo, "RET");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"Z");
+    }
+
+    let inserted = |grid: &[String]| grid.iter().any(|row| row.trim_end() == "Z");
+    gnu.read_until(Duration::from_secs(6), inserted);
+    neo.read_until(Duration::from_secs(8), inserted);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            inserted(&grid),
+            "{label} should run corrected forward-char after terminal DEL in M-x\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "execute_extended_command_minibuffer_del_deletes_previous_character",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn trace_function_background_writes_trace_output_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
 
