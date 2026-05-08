@@ -1963,31 +1963,14 @@ fn numeric_cmp(
     args: &[LispValue],
     cmp: impl Fn(f64, f64) -> bool,
 ) -> Option<LispValue> {
+    if args.len() < 2 { return Some(LispValue::TRUE); }
     let has_float = args.iter().any(|v| rt.is_float(*v));
-    if !has_float {
-        // For pure fixnum comparisons, use i64 comparison directly
-        let a = args[0].as_fixnum()?;
-        let b = args[1].as_fixnum()?;
-        // Determine which comparison from the closure behavior
-        let result = if cmp(0.0, 1.0) && !cmp(1.0, 0.0) && !cmp(0.0, 0.0) {
-            a < b // <
-        } else if cmp(0.0, 1.0) && cmp(1.0, 0.0) && !cmp(1.0, 1.0) {
-            a != b // never happens for < <= > >=
-        } else if cmp(0.0, 0.0) && cmp(0.0, 1.0) && !cmp(1.0, 0.0) {
-            a <= b // <=
-        } else if !cmp(0.0, 1.0) && cmp(1.0, 0.0) && !cmp(0.0, 0.0) {
-            a > b // >
-        } else if cmp(0.0, 0.0) && !cmp(0.0, 1.0) && cmp(1.0, 0.0) {
-            a >= b // >=
-        } else {
-            // Fallback: use f64
-            return Some(bool_value(cmp(a as f64, b as f64)));
-        };
-        return Some(bool_value(result));
-    }
-    let a = to_f64(rt, args[0]);
-    let b = to_f64(rt, args[1]);
-    Some(bool_value(cmp(a, b)))
+    // Convert all args to f64 for comparison
+    let values: Vec<f64> = args.iter().map(|v| {
+        if has_float { to_f64(rt, *v) } else { v.as_fixnum().unwrap_or(0) as f64 }
+    }).collect();
+    // Check pairwise: (< a b c) means a < b AND b < c
+    Some(bool_value(values.windows(2).all(|w| cmp(w[0], w[1]))))
 }
 
 // --- Type-of ---
