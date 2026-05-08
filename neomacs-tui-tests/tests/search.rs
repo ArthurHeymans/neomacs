@@ -208,6 +208,53 @@ fn isearch_delete_char_recovers_from_failed_search() {
 }
 
 #[test]
+fn isearch_ctrl_h_enters_isearch_help() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "isearch-ctrl-h.txt",
+        "alpha target\nomega line\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-s");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("I-search"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"targetx");
+    }
+    let failing_search = |grid: &[String]| grid.iter().any(|row| row.contains("Failing I-search"));
+    gnu.read_until(Duration::from_secs(6), failing_search);
+    neo.read_until(Duration::from_secs(8), failing_search);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "BS");
+    let help_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Type ? for further options"))
+    };
+    gnu.read_until(Duration::from_secs(6), help_ready);
+    neo.read_until(Duration::from_secs(8), help_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("Type ? for further options")),
+            "{label} should enter isearch help after terminal C-h\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("isearch_ctrl_h_enters_isearch_help", &gnu, &neo, 2);
+}
+
+#[test]
 fn isearch_backward_via_cr() {
     let (mut gnu, mut neo) = boot_pair("");
     let mut contents = String::new();
