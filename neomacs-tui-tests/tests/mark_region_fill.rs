@@ -162,6 +162,54 @@ fn set_fill_column_then_fill_paragraph_via_cx_f_mq() {
 }
 
 #[test]
+fn set_fill_column_empty_prompt_multiple_del_keeps_prompt() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "fill-column-empty-del.txt",
+        "alpha beta gamma\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-x f");
+    let prompt_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Change fill-column from"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "DEL DEL DEL");
+
+    let prompt_intact = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Change fill-column from"))
+            && !grid.iter().any(|row| row.contains("*Help*"))
+    };
+    gnu.read_until(Duration::from_secs(6), prompt_intact);
+    neo.read_until(Duration::from_secs(8), prompt_intact);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            prompt_intact(&grid),
+            "{label} should keep the empty set-fill-column prompt intact after repeated terminal DEL keyhits\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "set_fill_column_empty_prompt_multiple_del_keeps_prompt",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn auto_fill_mode_wraps_inserted_text_after_fill_column() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(&mut gnu, &mut neo, "auto-fill.txt", "seed\n", "C-x C-f");
