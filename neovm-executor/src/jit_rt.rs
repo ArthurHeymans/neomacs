@@ -1939,27 +1939,23 @@ fn numeric_min(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
 }
 
 fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    if args.len() < 2 { return Some(LispValue::TRUE); }
     let has_float = any_float(rt, args);
-    if !has_float {
-        let a = args[0].as_fixnum()?;
-        let b = args[1].as_fixnum()?;
-        return Some(bool_value(a == b));
-    }
-    let a = to_f64(rt, args[0]);
-    let b = to_f64(rt, args[1]);
-    Some(bool_value(a == b))
+    let first = if has_float { to_f64(rt, args[0]) } else { args[0].as_fixnum()? as f64 };
+    Some(bool_value(args[1..].iter().all(|a| {
+        let v = if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 };
+        v == first
+    })))
 }
 
 fn numeric_ne(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
+    if args.len() < 2 { return Some(LispValue::NIL); }
     let has_float = any_float(rt, args);
-    if !has_float {
-        let a = args[0].as_fixnum()?;
-        let b = args[1].as_fixnum()?;
-        return Some(bool_value(a != b));
-    }
-    let a = to_f64(rt, args[0]);
-    let b = to_f64(rt, args[1]);
-    Some(bool_value(a != b))
+    let first = if has_float { to_f64(rt, args[0]) } else { args[0].as_fixnum()? as f64 };
+    Some(bool_value(args[1..].iter().all(|a| {
+        let v = if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 };
+        v != first
+    })))
 }
 
 fn numeric_cmp(
