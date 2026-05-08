@@ -7659,6 +7659,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_less_than_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (< 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_less_equal_multi_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (<= 1 1 2)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_loop_append_collects_lists() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
