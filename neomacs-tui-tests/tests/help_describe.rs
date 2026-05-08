@@ -877,6 +877,42 @@ fn where_is_find_file_via_ch_w_reports_key_binding() {
 }
 
 #[test]
+fn where_is_prompt_ctrl_h_preserves_command_text() {
+    let (mut gnu, mut neo) = boot_pair("");
+    send_help_sequence(&mut gnu, &mut neo, "w");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Where is command"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"find-fileX");
+    }
+    send_both(&mut gnu, &mut neo, "BS");
+
+    let command_preserved = |grid: &[String]| grid.iter().any(|row| row.contains("find-fileX"));
+    gnu.read_until(Duration::from_secs(6), command_preserved);
+    neo.read_until(Duration::from_secs(8), command_preserved);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            command_preserved(&grid),
+            "{label} should keep the where-is minibuffer text after terminal C-h\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "where_is_prompt_ctrl_h_preserves_command_text",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn view_lossage_via_ch_l_shows_recent_keys_and_commands() {
     let (mut gnu, mut neo) = boot_pair("");
 
