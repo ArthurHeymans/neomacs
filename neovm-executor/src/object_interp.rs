@@ -7685,6 +7685,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_not_equal_multi_arg_all_distinct() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (/= 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_not_equal_multi_arg_not_distinct() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (/= 1 2 1)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_cl_loop_append_collects_lists() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
