@@ -7056,6 +7056,21 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
 
+    // --- Thread + atom integration tests ---
+
+    #[test]
+    fn thread_mutex_protects_shared_state() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((m (make-mutex \"test\")) (a (make-atom 0)))\
+               (mutex-lock m)\
+               (atom-reset! a 42)\
+               (mutex-unlock m)\
+               (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
     // --- Native thread tests ---
 
     #[test]
