@@ -87,6 +87,43 @@ fn eval_last_sexp_error_via_cx_ce_opens_backtrace() {
 }
 
 #[test]
+fn eval_expression_minibuffer_ctrl_h_does_not_delete_previous_character() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "M-:");
+    let eval_prompt = |grid: &[String]| grid.iter().any(|row| row.contains("Eval:"));
+    gnu.read_until(Duration::from_secs(6), eval_prompt);
+    neo.read_until(Duration::from_secs(8), eval_prompt);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"(+ 1 2)X");
+    }
+    send_both(&mut gnu, &mut neo, "BS");
+
+    let expression_preserved = |grid: &[String]| grid.iter().any(|row| row.contains("(+ 1 2)X"));
+    gnu.read_until(Duration::from_secs(6), expression_preserved);
+    neo.read_until(Duration::from_secs(8), expression_preserved);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            expression_preserved(&grid),
+            "{label} should keep the previous eval-expression minibuffer character after terminal C-h\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "eval_expression_minibuffer_ctrl_h_does_not_delete_previous_character",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn trace_function_background_writes_trace_output_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
 
