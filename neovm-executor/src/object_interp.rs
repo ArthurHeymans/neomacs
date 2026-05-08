@@ -1156,7 +1156,7 @@ impl Interpreter<'_, '_, '_> {
             "nlistp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(!self.runtime.is_cons(args[0]) || args[0].is_nil())),
-            "cl-minusp" => self.exact_arity(name, args, 1).and_then(|_| {
+            "minusp" | "cl-minusp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
                     Some(bool_value(val < 0))
@@ -1165,7 +1165,7 @@ impl Interpreter<'_, '_, '_> {
                         .map(|value| bool_value(value < 0.0))
                 }
             }),
-            "cl-plusp" => self.exact_arity(name, args, 1).and_then(|_| {
+            "plusp" | "cl-plusp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
                     Some(bool_value(val > 0))
