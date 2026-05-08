@@ -3548,7 +3548,7 @@ impl Interpreter<'_, '_, '_> {
         if args.len() <= 1 { return Some(LispValue::TRUE); }
         let first = self.string_contents_owned(args[0])?;
         Some(bool_value(args[1..].iter().all(|a| {
-            self.string_contents_owned(*a).ok().as_deref() == Some(first.as_str())
+            self.string_contents_owned(*a).as_deref() == Some(first.as_str())
         })))
     }
 
@@ -3556,7 +3556,7 @@ impl Interpreter<'_, '_, '_> {
         if args.len() <= 1 { return Some(LispValue::TRUE); }
         let first = self.string_contents_owned(args[0])?.to_lowercase();
         Some(bool_value(args[1..].iter().all(|a| {
-            self.string_contents_owned(*a).ok().map(|s| s.to_lowercase()).as_deref() == Some(first.as_str())
+            self.string_contents_owned(*a).map(|s| s.to_lowercase()).as_deref() == Some(first.as_str())
         })))
     }
 
