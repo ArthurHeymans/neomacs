@@ -1092,6 +1092,43 @@ fn property_list_elisp_functions_match_gnu_semantics() {
     );
 }
 
+#[test]
+fn symbol_property_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"symprop:%S\" (let ((sym (make-symbol \"symprop-target\"))) (put sym 'alpha 1) (put sym 'beta '(x y)) (list (get sym 'alpha) (or (get sym 'missing) 'fallback) (symbol-plist sym) (progn (setplist sym '(gamma 3 delta 4)) (symbol-plist sym)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("symprop:")
+                && row.contains("(1 fallback")
+                && row.contains("alpha 1")
+                && row.contains("beta (x y)")
+                && row.contains("(gamma 3 delta 4)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: symbol property functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "symbol_property_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
 // ── String and numeric operation tests ──────────────────────
 
 #[test]
