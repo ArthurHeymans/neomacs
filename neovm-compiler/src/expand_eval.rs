@@ -1264,6 +1264,9 @@ impl MacroEval {
         let mut for_var: Option<String> = None;
         let mut for_destructure: Option<SurfaceForm> = None;
         let mut for_list: Option<SurfaceForm> = None;
+        let mut for_from: Option<SurfaceForm> = None;
+        let mut for_to: Option<SurfaceForm> = None;
+        let mut for_direction: Option<&str> = None;
         let mut for_on = false;
         let mut step_fn: Option<SurfaceForm> = None;
         let mut collect_exprs: Vec<SurfaceForm> = Vec::new();
@@ -1319,9 +1322,42 @@ impl MacroEval {
                         // Already handled in/on above, skip
                     }
                 }
-                Some("from") | Some("upto") | Some("to") | Some("below") => {
+                Some("from") => {
                     pos += 1;
                     if pos < items.len() {
+                        for_from = Some(items[pos].clone());
+                        pos += 1;
+                    }
+                }
+                Some("to") | Some("upto") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        for_to = Some(items[pos].clone());
+                        for_direction = Some("to");
+                        pos += 1;
+                    }
+                }
+                Some("downto") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        for_to = Some(items[pos].clone());
+                        for_direction = Some("downto");
+                        pos += 1;
+                    }
+                }
+                Some("below") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        for_to = Some(items[pos].clone());
+                        for_direction = Some("below");
+                        pos += 1;
+                    }
+                }
+                Some("above") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        for_to = Some(items[pos].clone());
+                        for_direction = Some("above");
                         pos += 1;
                     }
                 }
@@ -1515,15 +1551,46 @@ impl MacroEval {
         }
 
         // Execute the loop
-        let Some(list_expr) = for_list else {
+        // Determine iteration mode: list-based or numeric
+        let is_numeric = for_from.is_some() || for_to.is_some();
+        if !is_numeric && for_list.is_none() {
             // No iteration — evaluate body once
             if let Some(ret) = &finally_return {
                 return self.eval(ret, env);
             }
             return Ok(MacroValue::Nil);
-        };
+        }
 
-        let list_val = self.eval(&list_expr, env)?;
+        // Setup iteration state
+        let list_val = for_list.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let mut current = list_val.unwrap_or(MacroValue::Nil);
+
+        // Numeric iteration: from/start value
+        let from_val = for_from.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let to_val = for_to.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let step_val: i64 = if let Some(ref step) = step_fn {
+            // Evaluate the step expression once for numeric for
+            let v = self.eval(step, env)?;
+            let n = v.as_int().unwrap_or(1);
+            n
+        } else {
+            1
+        };
+        let dir = for_direction.unwrap_or("to");
+        let mut numeric_idx = from_val.and_then(|v| v.as_int()).unwrap_or(0);
+
+        // Check numeric iteration condition
+        fn numeric_continue(idx: i64, to: Option<i64>, dir: &str, step: i64) -> bool {
+            let Some(end) = to else { return true };
+            match dir {
+                "to" | "upto" => if step > 0 { idx <= end } else { idx >= end },
+                "downto" => if step > 0 { idx >= end } else { idx <= end },
+                "below" => idx < end,
+                "above" => idx > end,
+                _ => true,
+            }
+        }
+
         let step_closure = |v: &MacroValue| -> MacroValue {
             if let Some(ref step) = step_fn {
                 // Only support #'cddr and #'cdr for now
@@ -1553,7 +1620,6 @@ impl MacroEval {
         }
 
         let var_name = for_var.as_deref().unwrap_or("--cl-it--");
-        let mut current = list_val;
         let mut results: Vec<MacroValue> = Vec::new();
         let mut sum_result: i64 = 0;
         let mut named_sums: HashMap<String, i64> = HashMap::new();
@@ -1561,10 +1627,15 @@ impl MacroEval {
         let mut named_counts: HashMap<String, i64> = HashMap::new();
         let mut remaining = repeat_count.unwrap_or(i64::MAX);
 
-        while current.is_truthy() && remaining > 0 {
+        while remaining > 0
+            && (is_numeric && numeric_continue(numeric_idx, to_val.and_then(|v| v.as_int()), dir, step_val)
+                || !is_numeric && current.is_truthy())
+        {
             remaining -= 1;
             // Bind iteration variable
-            let val = if for_on {
+            let val = if is_numeric {
+                MacroValue::Int(numeric_idx)
+            } else if for_on {
                 current.clone()
             } else {
                 current.car()
@@ -1631,7 +1702,15 @@ impl MacroEval {
             }
 
             // Advance
-            current = step_closure(&current);
+            if is_numeric {
+                let actual_step = match dir {
+                    "downto" => -step_val.abs(),
+                    _ => step_val.abs(),
+                };
+                numeric_idx += actual_step;
+            } else {
+                current = step_closure(&current);
+            }
         }
 
         // Handle finally return
