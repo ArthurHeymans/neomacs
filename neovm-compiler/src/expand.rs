@@ -598,7 +598,10 @@ impl Expander {
             let expansion_items =
                 match std::mem::replace(&mut form.kind, SurfaceKind::Atom(SurfaceAtom::Nil)) {
                     SurfaceKind::List(items) => items,
-                    _ => unreachable!(),
+                    other => {
+                        self.error(form.span, format!("macro returned non-list: {other:?}"));
+                        return form;
+                    }
                 };
             form = match self.invoke_macro(&next_def, &expansion_items[1..]) {
                 Some(expanded) => expanded,
@@ -3922,7 +3925,10 @@ impl Expander {
                     "downto" => EndDirection::Downto,
                     "below" => EndDirection::Below,
                     "above" => EndDirection::Above,
-                    _ => unreachable!(),
+                    other => {
+                        self.error(span, format!("cl-loop: unexpected direction keyword `{other}`"));
+                        return None;
+                    }
                 };
                 *pos += 1;
                 let end_val = items.get(*pos)?.clone();
