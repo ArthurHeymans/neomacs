@@ -292,6 +292,7 @@ impl Runtime {
         self.interned_symbols.get(name).copied()
     }
 
+    #[inline(always)]
     pub fn car(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -299,6 +300,7 @@ impl Runtime {
         Ok(self.expect_cons(pair)?.car)
     }
 
+    #[inline(always)]
     pub fn cdr(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -321,10 +323,12 @@ impl Runtime {
         self.object_index.get(&addr).copied()
     }
 
+    #[inline(always)]
     pub fn is_cons(&self, value: LispValue) -> bool {
         value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Cons))
     }
 
+    #[inline(always)]
     pub fn is_symbol(&self, value: LispValue) -> bool {
         value.is_nil() || value.is_true()
             || value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Symbol))
