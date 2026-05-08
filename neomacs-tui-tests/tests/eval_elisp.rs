@@ -1132,6 +1132,46 @@ fn symbol_property_elisp_functions_match_gnu_semantics() {
 // ── String and numeric operation tests ──────────────────────
 
 #[test]
+fn string_search_replace_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"strfun:%S\" (list (upcase \"aBz\") (downcase \"AbZ\") (capitalize \"hello-world test\") (let ((s (copy-sequence \"abc\"))) (aset s 1 ?Z) s) (progn (string-match \"\\\\([a-z]+\\\\)-\\\\([0-9]+\\\\)\" \"foo-123\") (list (match-string 0 \"foo-123\") (match-string 1 \"foo-123\") (replace-match \"bar\" nil nil \"foo-123\" 1)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("strfun:")
+                && row.contains("ABZ")
+                && row.contains("abz")
+                && row.contains("Hello-World Test")
+                && row.contains("aZc")
+                && row.contains("foo-123")
+                && row.contains("foo")
+                && row.contains("bar-123")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: string search/replace functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_search_replace_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
