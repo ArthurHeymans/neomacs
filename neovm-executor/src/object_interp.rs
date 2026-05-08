@@ -3172,16 +3172,14 @@ impl Interpreter<'_, '_, '_> {
         sequence: LispValue,
         separator: LispValue,
     ) -> Option<LispValue> {
-        let sep = self.runtime.string_contents(separator).ok()?;
-        let parts: Vec<String> = self
-            .sequence_values(sequence)?
-            .into_iter()
-            .map(|elem| {
-                let result = self.execute_funcall(function, &[elem]).unwrap_or(LispValue::NIL);
-                self.runtime.string_contents_emacs(result).unwrap_or_default()
-            })
-            .collect();
-        Some(self.runtime.string(&parts.join(sep)))
+        let sep = self.runtime.string_contents(separator).ok()?.to_string();
+        let elements = self.sequence_values(sequence)?;
+        let mut parts = Vec::new();
+        for elem in elements {
+            let result = self.execute_funcall(function, &[elem]).unwrap_or(LispValue::NIL);
+            parts.push(self.runtime.string_contents_emacs(result).unwrap_or_default());
+        }
+        Some(self.runtime.string(&parts.join(&sep)))
     }
 
     fn copy_list(&mut self, list: LispValue) -> Option<LispValue> {
