@@ -303,6 +303,87 @@ fn other_window_via_cxo() {
 }
 
 #[test]
+fn other_window_numeric_prefix_skips_windows_in_cycle_order() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "window-cycle-a.txt",
+        "window cycle A\n",
+        "C-x C-f",
+    );
+    send_both(&mut gnu, &mut neo, "C-x 2 C-x o C-x C-f");
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/window-cycle-b.txt");
+    }
+    write_home_file(&gnu, "window-cycle-b.txt", "window cycle B\n");
+    write_home_file(&neo, "window-cycle-b.txt", "window cycle B\n");
+    send_both(&mut gnu, &mut neo, "RET");
+
+    let two_windows_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("window cycle A"))
+            && grid.iter().any(|row| row.contains("window cycle B"))
+    };
+    gnu.read_until(Duration::from_secs(6), two_windows_ready);
+    neo.read_until(Duration::from_secs(8), two_windows_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "C-x 3 C-x o C-x C-f");
+    write_home_file(&gnu, "window-cycle-c.txt", "window cycle C\n");
+    write_home_file(&neo, "window-cycle-c.txt", "window cycle C\n");
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/window-cycle-c.txt");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    let three_windows_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("window cycle A"))
+            && grid.iter().any(|row| row.contains("window cycle B"))
+            && grid.iter().any(|row| row.contains("window cycle C"))
+    };
+    gnu.read_until(Duration::from_secs(6), three_windows_ready);
+    neo.read_until(Duration::from_secs(8), three_windows_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "C-u 2 C-x o");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"SELECTED ");
+    }
+
+    let selected_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("SELECTED window cycle B"))
+            && grid.iter().any(|row| row.contains("window cycle A"))
+            && grid.iter().any(|row| row.contains("window cycle C"))
+            && !grid
+                .iter()
+                .any(|row| row.contains("SELECTED window cycle A"))
+            && !grid
+                .iter()
+                .any(|row| row.contains("SELECTED window cycle C"))
+    };
+    gnu.read_until(Duration::from_secs(6), selected_ready);
+    neo.read_until(Duration::from_secs(8), selected_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            selected_ready(&grid),
+            "{label} should select the GNU cycle-order target for C-u 2 C-x o\n{}",
+            grid.join("\n")
+        );
+    }
+    assert_pair_nearly_matches(
+        "other_window_numeric_prefix_skips_windows_in_cycle_order",
+        &gnu,
+        &neo,
+        3,
+    );
+}
+
+#[test]
 fn delete_other_windows_after_find_file_other_window_via_cx1() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
