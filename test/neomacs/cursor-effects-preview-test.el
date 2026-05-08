@@ -266,6 +266,7 @@
   "Cursor shapes to combine with preview effects.")
 
 (defvar cursor-effects-preview--gallery-timer nil)
+(defvar-local cursor-effects-preview--move-tick 0)
 (defvar-local cursor-effects-preview--visual-lines nil)
 (defvar-local neomacs-visual-cursors nil)
 
@@ -300,8 +301,7 @@
   (let* ((width (plist-get line :width))
          (index (plist-get line :index))
          (period (+ 28 (mod (* index 7) 23)))
-         (phase (+ (* tick (+ 1 (mod index 4)))
-                   (* index 11)))
+         (phase (+ tick (* index 11)))
          (step (mod phase (* 2 period))))
     (min (1- width)
          (if (< step period)
@@ -312,7 +312,9 @@
   (let ((buffer (or buffer (current-buffer))))
     (when (buffer-live-p buffer)
       (with-current-buffer buffer
-        (let ((tick (floor (* 10 (float-time)))))
+        (let ((tick cursor-effects-preview--move-tick))
+          (setq-local cursor-effects-preview--move-tick
+                      (1+ cursor-effects-preview--move-tick))
           (setq-local
            neomacs-visual-cursors
            (mapcar
@@ -386,6 +388,8 @@
   (when (fboundp 'blink-cursor-mode)
     (blink-cursor-mode -1))
   (let ((buffer (cursor-effects-preview--make-buffer)))
+    (with-current-buffer buffer
+      (setq-local cursor-effects-preview--move-tick 0))
     (cursor-effects-preview--show-buffer buffer)
     (setq cursor-effects-preview--gallery-timer
           (run-at-time 0 cursor-effects-preview-move-seconds
