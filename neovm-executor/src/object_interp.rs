@@ -7855,6 +7855,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_nth_returns_correct_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nth 2 '(10 20 30 40))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(30)));
+    }
+
+    #[test]
     fn executes_rassoc_finds_value() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
