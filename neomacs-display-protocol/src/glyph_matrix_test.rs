@@ -160,6 +160,7 @@ fn frame_display_state_add_window_matrix() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
         selected: true,
     });
     assert_eq!(state.window_matrices.len(), 1);
@@ -192,6 +193,7 @@ fn state_with_text(text: &str) -> FrameDisplayState {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         selected: true,
     });
     state
@@ -363,6 +365,7 @@ fn materialize_pixel_positions_from_grid() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
+        text_pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
         selected: true,
     });
 
@@ -424,6 +427,7 @@ fn materialize_preserves_char_bidi_level() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
         selected: true,
     });
 
@@ -457,6 +461,7 @@ fn materialize_preserves_stretch_bidi_level() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         selected: true,
     });
 
@@ -491,6 +496,7 @@ fn materialize_uses_explicit_row_metrics() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
+        text_pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
         selected: true,
     });
 
@@ -557,6 +563,7 @@ fn materialize_disabled_rows_are_skipped() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
         selected: true,
     });
 
@@ -587,6 +594,7 @@ fn materialize_padding_glyphs_are_skipped() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         selected: true,
     });
 
@@ -628,6 +636,7 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         selected: true,
     });
 
@@ -675,6 +684,7 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
         selected: true,
     });
 
@@ -705,6 +715,57 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
 }
 
 #[test]
+fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
+    let mut state = FrameDisplayState::new(10, 2, 8.0, 16.0);
+    let mut matrix = GlyphMatrix::new(2, 4);
+
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].role = GlyphRowRole::Text;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('t', 0, 0));
+
+    matrix.rows[1].enabled = true;
+    matrix.rows[1].role = GlyphRowRole::ModeLine;
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', 0, 1));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(8.0, 0.0, 64.0, 16.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    let text = buf
+        .glyphs
+        .iter()
+        .find(|glyph| matches!(glyph, FrameGlyph::Char { char: 't', .. }))
+        .expect("text glyph");
+    let chrome = buf
+        .glyphs
+        .iter()
+        .find(|glyph| matches!(glyph, FrameGlyph::Char { char: 'm', .. }))
+        .expect("mode-line glyph");
+
+    assert!(matches!(
+        text,
+        FrameGlyph::Char {
+            x: 8.0,
+            width: 16.0,
+            ..
+        }
+    ));
+    assert!(matches!(
+        chrome,
+        FrameGlyph::Char {
+            x: 0.0,
+            width: 20.0,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn materialize_stretch_glyph() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.faces.insert(0, Face::new(0));
@@ -717,6 +778,7 @@ fn materialize_stretch_glyph() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         selected: true,
     });
 

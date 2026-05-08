@@ -341,7 +341,16 @@ impl GlyphMatrix {
 pub struct WindowMatrixEntry {
     pub window_id: u64,
     pub matrix: GlyphMatrix,
+    /// Frame-relative bounds of the whole Emacs window area owned by
+    /// this matrix, including margins/fringes and chrome rows.
     pub pixel_bounds: Rect,
+    /// Frame-relative bounds of the GNU TEXT_AREA inside this window.
+    ///
+    /// Buffer text glyphs and the physical cursor are laid out in
+    /// text-area-local coordinates; materialization applies this
+    /// origin when converting them to frame pixels.  Header/mode-line
+    /// rows remain window-wide and continue to use `pixel_bounds`.
+    pub text_pixel_bounds: Rect,
     /// True when this window is the frame's selected window at the
     /// time the display state was built. The TTY rasterizer uses
     /// this to decide which window owns the physical terminal
@@ -888,18 +897,19 @@ impl FrameDisplayState {
             );
         }
         for entry in &self.window_matrices {
-            let char_w = if entry.matrix.ncols > 0 {
-                entry.pixel_bounds.width / entry.matrix.ncols as f32
-            } else {
-                self.char_width
-            };
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
+                let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let char_w = if entry.matrix.ncols > 0 {
+                    row_bounds.width / entry.matrix.ncols as f32
+                } else {
+                    self.char_width
+                };
                 self.materialize_grid_row(
                     &mut buf,
                     entry.window_id as i64,
                     row_idx as u32,
                     glyph_row,
-                    entry.pixel_bounds,
+                    row_bounds,
                     char_w,
                     self.char_height,
                 );
@@ -1332,6 +1342,16 @@ impl FrameDisplayState {
                 stipple_id: 0,
                 stipple_fg: None,
             });
+        }
+    }
+}
+
+impl WindowMatrixEntry {
+    pub fn row_pixel_bounds(&self, role: GlyphRowRole) -> Rect {
+        if role == GlyphRowRole::Text {
+            self.text_pixel_bounds
+        } else {
+            self.pixel_bounds
         }
     }
 }

@@ -2905,11 +2905,12 @@ impl LayoutEngine {
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
             let max_rows_echo = echo_lines.clamp(1, max_mini);
             let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
-            self.matrix_builder.begin_window(
+            self.matrix_builder.begin_window_with_text_bounds(
                 params.window_id as u64,
                 max_rows_echo,
                 cols_echo,
                 params.bounds,
+                params.text_bounds,
                 params.selected,
             );
             let (rendered_face, rows) = self.render_minibuffer_echo_via_backend(
@@ -3197,11 +3198,12 @@ impl LayoutEngine {
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
         let matrix_cols = cols.max(1);
-        self.matrix_builder.begin_window(
+        self.matrix_builder.begin_window_with_text_bounds(
             params.window_id as u64,
             matrix_rows,
             matrix_cols,
             params.bounds,
+            params.text_bounds,
             params.selected,
         );
         self.matrix_builder.begin_row(

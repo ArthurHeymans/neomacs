@@ -211,6 +211,7 @@ fn make_simple_state(text: &str) -> FrameDisplayState {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),
         selected: true,
     });
     state
@@ -245,6 +246,7 @@ fn make_grid_state(
         window_id: frame_id + 100,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
         selected: true,
     });
     state
@@ -285,6 +287,7 @@ fn rasterize_respects_matrix_position() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(40.0, 32.0, 80.0, 48.0),
+        text_pixel_bounds: Rect::new(40.0, 32.0, 80.0, 48.0),
         selected: true,
     });
 
@@ -357,6 +360,7 @@ fn rasterize_disabled_rows_are_skipped() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
 
@@ -390,6 +394,7 @@ fn rasterize_wide_char_creates_padding() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
 
@@ -424,6 +429,7 @@ fn rasterize_explicit_padding_glyph_is_not_duplicated() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
 
@@ -452,6 +458,7 @@ fn rasterize_stretch_glyph_uses_declared_width() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
 
@@ -487,6 +494,7 @@ fn rasterize_tracks_phys_cursor_position() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
@@ -538,6 +546,7 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
@@ -611,6 +620,7 @@ fn rasterize_ignores_matrix_cursor_columns_without_phys_cursor() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
 
@@ -639,6 +649,7 @@ fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
@@ -690,6 +701,7 @@ fn rasterize_ignores_nonselected_hollow_cursor_visual_on_tty() {
         window_id: 9,
         matrix,
         pixel_bounds: Rect::new(0.0, 16.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 16.0, 80.0, 32.0),
         selected: false,
     });
 
@@ -717,6 +729,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
         window_id: 1,
         matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
@@ -797,6 +810,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
         window_id: 1,
         matrix: top_matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         selected: true,
     });
 
@@ -818,6 +832,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
         matrix: bot_matrix,
         // Bottom half of the screen.
         pixel_bounds: Rect::new(0.0, 32.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 32.0, 80.0, 32.0),
         selected: false,
     });
     state.phys_cursor = Some(PhysCursor {
@@ -885,6 +900,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
         window_id: 1,
         matrix: w1_matrix,
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         selected: false,
     });
 
@@ -902,6 +918,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
         window_id: 2,
         matrix: w2_matrix,
         pixel_bounds: Rect::new(0.0, 32.0, 80.0, 32.0),
+        text_pixel_bounds: Rect::new(0.0, 32.0, 80.0, 32.0),
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {

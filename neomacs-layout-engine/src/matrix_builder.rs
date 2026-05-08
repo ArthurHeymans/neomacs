@@ -63,6 +63,7 @@ pub struct GlyphMatrixBuilder {
     current_matrix: Option<GlyphMatrix>,
     current_window_id: u64,
     current_pixel_bounds: Rect,
+    current_text_pixel_bounds: Rect,
     /// Whether the window currently open in the builder is the
     /// selected window. Copied into `WindowMatrixEntry.selected`
     /// by `end_window`. Mirrors GNU's per-frame
@@ -211,6 +212,7 @@ impl GlyphMatrixBuilder {
             current_matrix: None,
             current_window_id: 0,
             current_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
+            current_text_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
             current_selected: false,
             current_row: 0,
             in_row: false,
@@ -306,9 +308,29 @@ impl GlyphMatrixBuilder {
         pixel_bounds: Rect,
         selected: bool,
     ) {
+        self.begin_window_with_text_bounds(
+            window_id,
+            nrows,
+            ncols,
+            pixel_bounds,
+            pixel_bounds,
+            selected,
+        );
+    }
+
+    pub fn begin_window_with_text_bounds(
+        &mut self,
+        window_id: u64,
+        nrows: usize,
+        ncols: usize,
+        pixel_bounds: Rect,
+        text_pixel_bounds: Rect,
+        selected: bool,
+    ) {
         self.current_matrix = Some(GlyphMatrix::new(nrows, ncols));
         self.current_window_id = window_id;
         self.current_pixel_bounds = pixel_bounds;
+        self.current_text_pixel_bounds = text_pixel_bounds;
         self.current_selected = selected;
         self.current_row = 0;
         self.in_row = false;
@@ -320,6 +342,7 @@ impl GlyphMatrixBuilder {
                 window_id: self.current_window_id,
                 matrix,
                 pixel_bounds: self.current_pixel_bounds,
+                text_pixel_bounds: self.current_text_pixel_bounds,
                 selected: self.current_selected,
             });
         }
