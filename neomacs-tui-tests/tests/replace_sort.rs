@@ -198,6 +198,63 @@ fn query_replace_question_mark_shows_query_help_without_replacing() {
 }
 
 #[test]
+fn query_replace_keyboard_quit_leaves_buffer_unchanged() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "query-replace-quit.txt";
+    let contents = "alpha one\nalpha two\n";
+
+    open_home_file(&mut gnu, &mut neo, name, contents, "C-x C-f");
+
+    send_both(&mut gnu, &mut neo, "M-%");
+    let from_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Query replace"));
+    gnu.read_until(Duration::from_secs(6), from_ready);
+    neo.read_until(Duration::from_secs(8), from_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"alpha");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+    let to_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("with:")) || grid.iter().any(|row| row.contains("with "))
+    };
+    gnu.read_until(Duration::from_secs(6), to_ready);
+    neo.read_until(Duration::from_secs(8), to_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"omega");
+    }
+    send_both(&mut gnu, &mut neo, "C-g");
+
+    let unchanged = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("alpha one"))
+            && grid.iter().any(|row| row.contains("alpha two"))
+            && !grid.iter().any(|row| row.contains("omega one"))
+            && grid
+                .iter()
+                .all(|row| !row.contains("Query replace") && !row.contains("with:"))
+    };
+    gnu.read_until(Duration::from_secs(6), unchanged);
+    neo.read_until(Duration::from_secs(8), unchanged);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "query_replace_keyboard_quit_leaves_buffer_unchanged",
+        &gnu,
+        &neo,
+        2,
+    );
+    save_current_file_and_assert_contents(
+        "query_replace_keyboard_quit_leaves_buffer_unchanged",
+        &mut gnu,
+        &mut neo,
+        name,
+        contents,
+    );
+}
+
+#[test]
 fn replace_string_via_mx_replaces_from_point_to_end() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
