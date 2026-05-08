@@ -966,6 +966,7 @@ const BUILTIN_PRIMITIVE_NAMES: &[&str] = &[
     "make-list",
     "make-symbol",
     "make-vector",
+    "macrop",
     "max",
     "member",
     "memq",
@@ -998,6 +999,7 @@ const BUILTIN_PRIMITIVE_NAMES: &[&str] = &[
     "setcdr",
     "setplist",
     "signal",
+    "special-form-p",
     "split-string",
     "string-bytes",
     "string-equal",
@@ -1096,6 +1098,21 @@ fn dispatch_primitive(
                         .is_some_and(|name| jit_functions.contains_key(&name))));
             Some(bool_value(is_fn || has_symbol_fn))
         }
+        "macrop" => Some(bool_value(
+            rt.is_symbol(args[0])
+                && rt.symbol_name(args[0]).ok()
+                    .is_some_and(|name| jit_functions.contains_key(&format!("{name}-macro")))
+        )),
+        "special-form-p" => Some(bool_value(
+            rt.is_symbol(args[0])
+                && rt.symbol_name(args[0]).ok()
+                    .is_some_and(|name| matches!(name.as_str(),
+                        "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
+                        | "quote" | "function" | "progn" | "prog1" | "prog2"
+                        | "catch" | "throw" | "condition-case" | "unwind-protect"
+                        | "defun" | "defvar" | "defconst" | "defmacro" | "lambda"
+                        | "letrec" | "cl-loop" | "pcase" | "setf"))
+        )),
         "booleanp" => Some(bool_value(args[0].is_nil() || args[0].is_true())),
         "natnump" | "wholenump" => Some(bool_value(args[0].as_fixnum().is_some_and(|v| v >= 0))),
         "zerop" => Some(bool_value(args[0].as_fixnum() == Some(0))),
