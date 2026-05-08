@@ -1846,6 +1846,43 @@ fn condition_object_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn define_error_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (define-error 'neo-test-error \"Neo message\" 'file-error) (message \"deferr:%S\" (list (get 'neo-test-error 'error-conditions) (get 'neo-test-error 'error-message) (condition-case e (signal 'neo-test-error '(\"payload\")) (file-error (list 'file (car e) (cdr e))) (error (list 'error e))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("deferr:")
+                && row.contains("neo-test-error")
+                && row.contains("file-error")
+                && row.contains("Neo message")
+                && row.contains("payload")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: define-error inheritance and signaling should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "define_error_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn match_data_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
