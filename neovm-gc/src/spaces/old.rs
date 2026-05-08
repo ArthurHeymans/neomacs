@@ -539,7 +539,11 @@ pub(crate) struct OldGenState {
     /// `HeapCore` write lock.  GC paths also acquire this lock, but
     /// since the safepoint write lock excludes all mutators during
     /// collection, the acquisition is always uncontended.
-    blocks: parking_lot::Mutex<Vec<OldBlock>>,
+    /// Block pool protected by an RwLock.  The barrier hot path takes
+    /// only a read lock (find_block_for_addr / record_write_barrier),
+    /// avoiding contention with other concurrent barriers.  Allocation
+    /// takes the write lock.
+    blocks: parking_lot::RwLock<Vec<OldBlock>>,
     reserved_bytes: AtomicUsize,
     total_used_bytes: AtomicUsize,
 }
@@ -547,7 +551,7 @@ pub(crate) struct OldGenState {
 impl Default for OldGenState {
     fn default() -> Self {
         Self {
-            blocks: parking_lot::Mutex::new(Vec::new()),
+            blocks: parking_lot::RwLock::new(Vec::new()),
             reserved_bytes: AtomicUsize::new(0),
             total_used_bytes: AtomicUsize::new(0),
         }
@@ -568,7 +572,7 @@ pub(crate) struct PreparedOldGenReclaim {
 
 impl OldGenState {
     pub(crate) fn is_empty(&self) -> bool {
-        self.blocks.lock().is_empty()
+        self.blocks.read().is_empty()
     }
 
     pub(crate) fn reserved_bytes(&self) -> usize {
@@ -586,7 +590,7 @@ impl OldGenState {
     }
 
     fn refresh_cached_layout_totals(&self) {
-        let blocks = self.blocks.lock();
+        let blocks = self.blocks.read();
         let reserved_bytes: usize = blocks.iter().map(|block| block.capacity_bytes()).sum();
         let total_used_bytes: usize = blocks.iter().map(|block| block.used_bytes()).sum();
         self.reserved_bytes.store(reserved_bytes, Ordering::Relaxed);
@@ -607,7 +611,7 @@ impl OldGenState {
         config: &OldGenConfig,
         layout: core::alloc::Layout,
     ) -> Option<(OldBlockPlacement, core::ptr::NonNull<u8>)> {
-        let mut blocks = self.blocks.lock();
+        let mut blocks = self.blocks.write();
         // Try every existing block from oldest to newest. Hot allocation
         // benefits from staying in the most recently used block first, but
         // hole filling improves overall density at the cost of one extra
@@ -681,7 +685,7 @@ impl OldGenState {
         layout: core::alloc::Layout,
         target_hint: Option<usize>,
     ) -> Option<(OldBlockPlacement, core::ptr::NonNull<u8>, usize)> {
-        let mut blocks = self.blocks.lock();
+        let mut blocks = self.blocks.write();
         if let Some(index) = target_hint
             && let Some(block) = blocks.get(index)
             && let Some((offset, ptr)) = block.try_alloc(layout)
@@ -717,7 +721,7 @@ impl OldGenState {
         let mut block = OldBlock::new(capacity, line_bytes);
         let (offset, ptr) = block.try_alloc(layout)?;
         let used_bytes = block.used_bytes();
-        let mut blocks = self.blocks.lock();
+        let mut blocks = self.blocks.write();
         let block_index = blocks.len();
         blocks.push(block);
         drop(blocks);
@@ -736,13 +740,13 @@ impl OldGenState {
 
     /// Number of physical blocks currently in the pool.
     pub(crate) fn block_count(&self) -> usize {
-        self.blocks.lock().len()
+        self.blocks.read().len()
     }
 
     /// Iterate over every block in the pool.
     /// Returns a guard that derefs to `&[OldBlock]`.
-    pub(crate) fn blocks(&self) -> parking_lot::MutexGuard<'_, Vec<OldBlock>> {
-        self.blocks.lock()
+    pub(crate) fn blocks(&self) -> parking_lot::RwLockReadGuard<'_, Vec<OldBlock>> {
+        self.blocks.read()
     }
 
     /// Find the index of the block whose backing buffer contains `addr`.
@@ -753,7 +757,7 @@ impl OldGenState {
     /// addresses are monotonically non-decreasing.
     pub(crate) fn find_block_for_addr(&self, addr: usize) -> Option<usize> {
         self.blocks
-            .lock()
+            .read()
             .binary_search_by(|block| {
                 let base = block.base_ptr() as usize;
                 let end = base.saturating_add(block.buffer.len());
@@ -780,7 +784,7 @@ impl OldGenState {
         let Some(index) = self.find_block_for_addr(owner_addr) else {
             return false;
         };
-        self.blocks.lock()[index].card_table().record_write(owner_addr);
+        self.blocks.read()[index].card_table().record_write(owner_addr);
         true
     }
 
@@ -788,7 +792,7 @@ impl OldGenState {
     /// end of a minor collection after the dirty-card scan has produced
     /// roots for the trace.
     pub(crate) fn clear_all_dirty_cards(&self) {
-        for block in self.blocks.lock().iter() {
+        for block in self.blocks.read().iter() {
             block.card_table().clear_all();
         }
     }
@@ -796,7 +800,7 @@ impl OldGenState {
     /// Total number of dirty cards across every block in the pool.
     pub(crate) fn dirty_card_count(&self) -> usize {
         self.blocks
-            .lock()
+            .read()
             .iter()
             .map(|block| block.card_table().dirty_card_indices().len())
             .sum()
@@ -804,21 +808,21 @@ impl OldGenState {
 
     /// Clear every line mark across every block.
     pub(crate) fn clear_all_block_line_marks(&self) {
-        for block in self.blocks.lock().iter() {
+        for block in self.blocks.read().iter() {
             block.clear_line_marks();
         }
     }
 
     /// Clear every per-card object-start entry across every block.
     pub(crate) fn clear_all_block_object_starts(&self) {
-        for block in self.blocks.lock().iter_mut() {
+        for block in self.blocks.write().iter_mut() {
             block.clear_object_starts();
         }
     }
 
     /// Clear the live-object accounting counters on every block.
     pub(crate) fn clear_all_block_live_accounting(&self) {
-        for block in self.blocks.lock().iter_mut() {
+        for block in self.blocks.write().iter_mut() {
             block.clear_live_accounting();
         }
     }
@@ -834,7 +838,7 @@ impl OldGenState {
         &self,
         placement: OldBlockPlacement,
     ) {
-        if let Some(block) = self.blocks.lock().get_mut(placement.block_index) {
+        if let Some(block) = self.blocks.write().get_mut(placement.block_index) {
             block.record_object_accounting(placement.offset_bytes, placement.total_size);
         }
     }
@@ -843,28 +847,28 @@ impl OldGenState {
         &self,
         placement: OldBlockPlacement,
     ) {
-        if let Some(block) = self.blocks.lock().get(placement.block_index) {
+        if let Some(block) = self.blocks.read().get(placement.block_index) {
             block.record_object_accounting_shared(placement.offset_bytes, placement.total_size);
         }
     }
 
     /// Record an object start in the block identified by `placement`.
     pub(crate) fn record_block_object_start_for_placement(&self, placement: OldBlockPlacement) {
-        if let Some(block) = self.blocks.lock().get(placement.block_index) {
+        if let Some(block) = self.blocks.read().get(placement.block_index) {
             block.record_object_start(placement.offset_bytes);
         }
     }
 
     /// Mark the lines covered by `placement` in the corresponding block.
     pub(crate) fn mark_block_lines_for_placement(&self, placement: OldBlockPlacement) {
-        if let Some(block) = self.blocks.lock().get(placement.block_index) {
+        if let Some(block) = self.blocks.read().get(placement.block_index) {
             block.mark_lines_for_range(placement.offset_bytes, placement.total_size);
         }
     }
 
     /// Reset every block's bump cursor without dropping any blocks.
     pub(crate) fn reset_block_cursors(&self) {
-        for block in self.blocks.lock().iter_mut() {
+        for block in self.blocks.write().iter_mut() {
             block.reset_cursor();
         }
     }
@@ -874,7 +878,7 @@ impl OldGenState {
     /// where `new_indices[old] == Some(new)` if the block survives or `None`
     /// if it was dropped.
     pub(crate) fn compute_block_index_remap(&self) -> (Vec<Option<usize>>, usize) {
-        let blocks = self.blocks.lock();
+        let blocks = self.blocks.read();
         let mut new_indices = Vec::with_capacity(blocks.len());
         let mut next = 0usize;
         let mut dropped = 0usize;
@@ -907,11 +911,11 @@ impl OldGenState {
         }
 
         let mut next = 0usize;
-        let mut keep_mask = Vec::with_capacity(self.blocks.lock().len());
+        let mut keep_mask = Vec::with_capacity(self.blocks.read().len());
         for entry in &remap {
             keep_mask.push(entry.is_some());
         }
-        self.blocks.lock().retain(|_| {
+        self.blocks.write().retain(|_| {
             let keep = keep_mask[next];
             next += 1;
             keep
@@ -923,7 +927,7 @@ impl OldGenState {
 
     pub(crate) fn record_object(&self, object: &ObjectRecord) {
         if let Some(block_placement) = object.old_block_placement()
-            && let Some(block) = self.blocks.lock().get(block_placement.block_index)
+            && let Some(block) = self.blocks.read().get(block_placement.block_index)
         {
             block
                 .record_object_accounting_shared(block_placement.offset_bytes, object.total_size());
@@ -960,7 +964,7 @@ impl OldGenState {
     ///   live data.
     pub(crate) fn block_region_stats(&self) -> Vec<OldRegionStats> {
         self.blocks
-            .lock()
+            .read()
             .iter()
             .enumerate()
             .map(|(index, block)| {
