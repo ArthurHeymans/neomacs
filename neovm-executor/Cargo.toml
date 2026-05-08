@@ -14,6 +14,7 @@ rug = { version = "1", default-features = false, features = ["integer", "std"] }
 gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-system-libs"] }
 regex = "1"
 neovm-compiler = { path = "../neovm-compiler", version = "0.0.1" }
+neovm-gc = { path = "../neovm-gc" }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

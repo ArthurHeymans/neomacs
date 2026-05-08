@@ -194,6 +194,14 @@ impl MacroEval {
             Some("progn") => self.eval_progn(&items[1..], env),
             Some("while") => self.eval_while(span, &items[1..], env),
 
+            // Thread primitives — passed through to the HIR compiler.
+            // The expander treats these as ordinary function calls.
+            Some("make-thread") | Some("thread-yield") | Some("thread-join")
+            | Some("thread-signal") | Some("current-thread") | Some("thread-alive-p") => {
+                let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
+                Ok(surface_to_value(&form))
+            }
+
             Some("car") | Some("first") => {
                 self.eval_unary(span, "car", &items[1..], env, |v| v.car())
             }

@@ -1,10 +1,16 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use neovm_compiler::ssa::SsaLambdaTemplate;
+use neovm_gc::{Heap, HeapConfig, Mutator};
 
 use crate::value::LispValue;
 
 pub struct Runtime {
+    /// Shared GC heap for multi-threaded allocation.  The existing
+    /// Vec-based pools live alongside this during the incremental
+    /// migration; new thread-aware object types allocate through
+    /// the GC heap.
+    pub(crate) gc_heap: Arc<Heap>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -32,6 +38,7 @@ struct MatchData {
 impl Default for Runtime {
     fn default() -> Self {
         Self {
+            gc_heap: Arc::new(Heap::new(HeapConfig::default())),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),

@@ -4,6 +4,7 @@ pub mod jit_interp;
 mod jit_rt;
 mod object_interp;
 pub mod runtime;
+pub mod thread;
 pub mod value;
 
 pub use neovm_compiler::CompileArtifact;
