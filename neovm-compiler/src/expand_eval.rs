@@ -1277,6 +1277,7 @@ impl MacroEval {
         let mut always_cond: Option<SurfaceForm> = None;
         let mut never_cond: Option<SurfaceForm> = None;
         let mut thereis_cond: Option<SurfaceForm> = None;
+        let mut repeat_count: Option<i64> = None;
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1391,6 +1392,14 @@ impl MacroEval {
                 Some("thereis") => {
                     pos += 1;
                     if pos < items.len() { thereis_cond = Some(items[pos].clone()); pos += 1; }
+                }
+                Some("repeat") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        let count_val = self.eval(&items[pos], env).ok();
+                        repeat_count = count_val.and_then(|v| v.as_int());
+                        pos += 1;
+                    }
                 }
                 Some("while") => {
                     pos += 1;
@@ -1509,8 +1518,10 @@ impl MacroEval {
         let mut named_sums: HashMap<String, i64> = HashMap::new();
         let mut count_result: i64 = 0;
         let mut named_counts: HashMap<String, i64> = HashMap::new();
+        let mut remaining = repeat_count.unwrap_or(i64::MAX);
 
-        while current.is_truthy() {
+        while current.is_truthy() && remaining > 0 {
+            remaining -= 1;
             // Bind iteration variable
             let val = if for_on {
                 current.clone()
