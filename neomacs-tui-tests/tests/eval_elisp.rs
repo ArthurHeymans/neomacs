@@ -1172,6 +1172,42 @@ fn string_search_replace_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn vector_array_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"vecfun:%S\" (let* ((v (vector 'a 'b 'c)) (copy (copy-sequence v))) (aset copy 1 'B) (list (length v) (aref v 1) copy (vconcat '(1 2) [3 4] \"ab\") (append [x y] '(z)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("vecfun:")
+                && row.contains("(3 b [a B c]")
+                && row.contains("[1 2 3 4 97 98]")
+                && row.contains("(x y z)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: vector/array functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "vector_array_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
