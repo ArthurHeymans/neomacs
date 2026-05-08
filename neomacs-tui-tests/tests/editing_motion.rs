@@ -150,6 +150,77 @@ fn undo_edit_via_cx_u() {
 }
 
 #[test]
+fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let name = "undo-cx-u-chain.txt";
+    let original = "one\ntwo\n";
+
+    open_home_file(&mut gnu, &mut neo, name, original, "C-x C-f");
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"AAA ");
+    }
+    let first_edit = |grid: &[String]| grid.iter().any(|row| row.contains("AAA one"));
+    gnu.read_until(Duration::from_secs(6), first_edit);
+    neo.read_until(Duration::from_secs(8), first_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-a C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"BBB ");
+    }
+    let second_edit = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), second_edit);
+    neo.read_until(Duration::from_secs(8), second_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-x u");
+    let first_undo = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.trim_end() == "two")
+            && !grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), first_undo);
+    neo.read_until(Duration::from_secs(8), first_undo);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "repeated_cx_u_continues_undo_chain_across_edit_boundaries/first",
+        &gnu,
+        &neo,
+        2,
+    );
+
+    send_both(&mut gnu, &mut neo, "C-x u");
+    let second_undo = |grid: &[String]| {
+        grid.iter().any(|row| row.trim_end() == "one")
+            && grid.iter().any(|row| row.trim_end() == "two")
+            && !grid.iter().any(|row| row.contains("AAA one"))
+            && !grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), second_undo);
+    neo.read_until(Duration::from_secs(8), second_undo);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "repeated_cx_u_continues_undo_chain_across_edit_boundaries/second",
+        &gnu,
+        &neo,
+        2,
+    );
+
+    save_current_file_and_assert_contents(
+        "repeated_cx_u_continues_undo_chain_across_edit_boundaries",
+        &mut gnu,
+        &mut neo,
+        name,
+        original,
+    );
+}
+
+#[test]
 fn scroll_page_down_and_up_via_cv_mv() {
     let (mut gnu, mut neo) = boot_pair("");
     let mut contents = String::new();
