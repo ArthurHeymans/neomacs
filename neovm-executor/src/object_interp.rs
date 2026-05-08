@@ -7253,4 +7253,15 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_with_mutex_protects_body() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a (make-atom 0)) (m (make-mutex \"t\")))\
+               (with-mutex m (atom-reset! a 42))\
+               (atom-deref a))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
 }
