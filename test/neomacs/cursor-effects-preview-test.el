@@ -15,7 +15,7 @@
   :type 'number
   :group 'cursor-effects-preview)
 
-(defcustom cursor-effects-preview-move-seconds 0.04
+(defcustom cursor-effects-preview-move-seconds 1.0
   "Seconds between preview cursor moves."
   :type 'number
   :group 'cursor-effects-preview)
