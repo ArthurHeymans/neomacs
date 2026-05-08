@@ -7539,6 +7539,15 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn executes_eval_evaluates_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (eval '(+ 1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
     fn executes_cl_loop_collect() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
