@@ -221,8 +221,15 @@ fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
     );
 }
 
-#[test]
-fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
+fn send_undo_key_both(
+    gnu: &mut neomacs_tui_tests::TuiSession,
+    neo: &mut neomacs_tui_tests::TuiSession,
+    key: &str,
+) {
+    send_both(gnu, neo, key);
+}
+
+fn assert_repeated_undo_in_scratch_buffer_matches_gnu(label: &str, undo_key: &str) {
     let (mut gnu, mut neo) = boot_pair("");
     let original = "one\ntwo";
 
@@ -262,7 +269,7 @@ fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
     neo.read_until(Duration::from_secs(8), second_edit);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
-    send_both(&mut gnu, &mut neo, "C-x u");
+    send_undo_key_both(&mut gnu, &mut neo, undo_key);
     let first_undo = |grid: &[String]| {
         grid.iter().any(|row| row.contains("AAA one"))
             && grid.iter().any(|row| row.trim_end() == "two")
@@ -271,14 +278,9 @@ fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
     gnu.read_until(Duration::from_secs(6), first_undo);
     neo.read_until(Duration::from_secs(8), first_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics/first",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_nearly_matches(&format!("{label}/first"), &gnu, &neo, 2);
 
-    send_both(&mut gnu, &mut neo, "C-x u");
+    send_undo_key_both(&mut gnu, &mut neo, undo_key);
     let second_undo = |grid: &[String]| {
         grid.iter().any(|row| row.trim_end() == "one")
             && grid.iter().any(|row| row.trim_end() == "two")
@@ -288,12 +290,7 @@ fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
     gnu.read_until(Duration::from_secs(6), second_undo);
     neo.read_until(Duration::from_secs(8), second_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics/second",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_nearly_matches(&format!("{label}/second"), &gnu, &neo, 2);
 
     eval_expression(
         &mut gnu,
@@ -312,6 +309,30 @@ fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
             .expect("read Neomacs dump"),
         original,
         "Neomacs scratch buffer contents after repeated C-x u"
+    );
+}
+
+#[test]
+fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
+    assert_repeated_undo_in_scratch_buffer_matches_gnu(
+        "repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics",
+        "C-x u",
+    );
+}
+
+#[test]
+fn repeated_cslash_in_scratch_buffer_keeps_non_file_undo_semantics() {
+    assert_repeated_undo_in_scratch_buffer_matches_gnu(
+        "repeated_cslash_in_scratch_buffer_keeps_non_file_undo_semantics",
+        "C-/",
+    );
+}
+
+#[test]
+fn repeated_cunderscore_in_scratch_buffer_keeps_non_file_undo_semantics() {
+    assert_repeated_undo_in_scratch_buffer_matches_gnu(
+        "repeated_cunderscore_in_scratch_buffer_keeps_non_file_undo_semantics",
+        "C-_",
     );
 }
 
