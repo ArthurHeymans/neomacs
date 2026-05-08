@@ -6811,9 +6811,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "neomacs-frame-edges",
-        |_ctx, args| builtin_neomacs_frame_edges(args),
+        super::window_cmds::builtin_neomacs_frame_edges,
         0,
-        None,
+        Some(2),
     );
     ctx.defsubr(
         "neomacs-mouse-absolute-pixel-position",

@@ -1159,6 +1159,57 @@ pub(crate) fn builtin_tty_frame_edges(
     Ok(tty_frame_edges_value(frame))
 }
 
+/// `(neomacs-frame-edges &optional FRAME TYPE)` -> GUI frame edges.
+///
+/// GNU's toolkit-specific `*-frame-edges` functions return a four-number
+/// edge list for `outer-edges`, `native-edges` (or nil), and `inner-edges`.
+/// Neomacs renders frames into one GPU-composited display surface, so native
+/// and outer edges currently coincide; inner edges exclude the frame's
+/// internal border just like GNU's `frame_geometry`.
+pub(crate) fn builtin_neomacs_frame_edges(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("neomacs-frame-edges", &args, 2)?;
+    let fid = resolve_frame_id(eval, args.first(), "frame-live-p")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    if frame.initial || frame.effective_window_system().is_none() {
+        return Ok(Value::NIL);
+    }
+
+    let (left, top) = eval.frames.frame_origin_in_root(fid).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Frame origin unavailable for frame edges")],
+        )
+    })?;
+    let mut left = left.round() as i64;
+    let mut top = top.round() as i64;
+    let mut right = left.saturating_add(i64::from(frame.width));
+    let mut bottom = top.saturating_add(i64::from(frame.height));
+
+    if args
+        .get(1)
+        .is_some_and(|value| value.is_symbol_named("inner-edges"))
+    {
+        let border = frame.internal_border_width().max(0);
+        left = left.saturating_add(border);
+        top = top.saturating_add(border);
+        right = right.saturating_sub(border);
+        bottom = bottom.saturating_sub(border);
+    }
+
+    Ok(Value::list(vec![
+        Value::fixnum(left),
+        Value::fixnum(top),
+        Value::fixnum(right),
+        Value::fixnum(bottom),
+    ]))
+}
+
 /// `(tty-frame-geometry &optional FRAME)` -> terminal frame geometry alist.
 pub(crate) fn builtin_tty_frame_geometry(
     eval: &mut super::eval::Context,

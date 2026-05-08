@@ -4279,6 +4279,23 @@ fn frame_border_width_builtins_read_effective_gnu_values() {
 }
 
 #[test]
+fn neomacs_frame_edges_return_numeric_gui_edges_like_gnu_toolkits() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_gui_frame(
+        "(modify-frame-parameters (selected-frame) '((internal-border-width . 4)))
+         (list (neomacs-frame-edges)
+               (neomacs-frame-edges nil 'native-edges)
+               (neomacs-frame-edges nil 'outer-edges)
+               (neomacs-frame-edges nil 'inner-edges))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(
+        results[1],
+        "OK ((0 0 800 600) (0 0 800 600) (0 0 800 600) (4 4 796 596))"
+    );
+}
+
+#[test]
 fn window_right_divider_width_only_applies_to_non_rightmost_windows() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
