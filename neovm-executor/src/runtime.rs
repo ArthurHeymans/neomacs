@@ -1410,178 +1410,121 @@ impl Runtime {
             .rposition(|binding| binding.symbol == symbol)
     }
 
+    /// Dereference a heap pointer directly (no Vec scan).
+    /// Box pointers are stable because there is no GC compaction.
+    /// Safety verified by O(1) heap_kind() type check.
+    #[inline(always)]
+    unsafe fn deref_heap<'a, T>(addr: usize) -> &'a T {
+        unsafe { &*(addr as *const T) }
+    }
+
+    #[inline(always)]
+    unsafe fn deref_heap_mut<'a, T>(addr: usize) -> &'a mut T {
+        unsafe { &mut *(addr as *mut T) }
+    }
+
     fn expect_cons(&self, value: LispValue) -> Result<&Cons, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "consp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Cons) {
             return Err(RuntimeError::WrongTypeArgument {
                 expected: "consp",
                 value,
             });
-        };
-        self.cons_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "consp",
-                value,
-            })
+        }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_cons_mut(&mut self, value: LispValue) -> Result<&mut Cons, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "consp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Cons) {
             return Err(RuntimeError::WrongTypeArgument {
                 expected: "consp",
                 value,
             });
-        };
-        self.cons_by_addr_mut(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "consp",
-                value,
-            })
+        }
+        Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_symbol(&self, value: LispValue) -> Result<&Symbol, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "symbolp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Symbol) {
             return Err(RuntimeError::WrongTypeArgument {
                 expected: "symbolp",
                 value,
             });
-        };
-        self.symbol_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "symbolp",
-                value,
-            })
+        }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_symbol_mut(&mut self, value: LispValue) -> Result<&mut Symbol, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "symbolp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Symbol) {
             return Err(RuntimeError::WrongTypeArgument {
                 expected: "symbolp",
                 value,
             });
-        };
-        self.symbol_by_addr_mut(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "symbolp",
-                value,
-            })
+        }
+        Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_string(&self, value: LispValue) -> Result<&LispString, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "stringp",
-                value,
-            });
-        };
-        self.string_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "stringp",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "stringp", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::String) { return Err(RuntimeError::WrongTypeArgument { expected: "stringp", value }); }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_vector(&self, value: LispValue) -> Result<&VectorObject, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "vectorp",
-                value,
-            });
-        };
-        self.vector_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "vectorp",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "vectorp", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::Vector) { return Err(RuntimeError::WrongTypeArgument { expected: "vectorp", value }); }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_vector_mut(&mut self, value: LispValue) -> Result<&mut VectorObject, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "vectorp",
-                value,
-            });
-        };
-        self.vector_by_addr_mut(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "vectorp",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "vectorp", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::Vector) { return Err(RuntimeError::WrongTypeArgument { expected: "vectorp", value }); }
+        Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_hash_table(&self, value: LispValue) -> Result<&HashTableObject, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "hash-table-p",
-                value,
-            });
-        };
-        self.hash_table_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "hash-table-p",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::HashTable) { return Err(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value }); }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
-    fn expect_hash_table_mut(
-        &mut self,
-        value: LispValue,
-    ) -> Result<&mut HashTableObject, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "hash-table-p",
-                value,
-            });
-        };
-        self.hash_table_by_addr_mut(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "hash-table-p",
-                value,
-            })
+    fn expect_hash_table_mut(&mut self, value: LispValue) -> Result<&mut HashTableObject, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::HashTable) { return Err(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value }); }
+        Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_function(&self, value: LispValue) -> Result<&FunctionObject, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "functionp",
-                value,
-            });
-        };
-        self.function_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "functionp",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "functionp", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::Function) { return Err(RuntimeError::WrongTypeArgument { expected: "functionp", value }); }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_lexical_cell(&self, value: LispValue) -> Result<&LexicalCell, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "lexical-cell",
-                value,
-            });
-        };
-        self.lexical_cell_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "lexical-cell",
-                value,
-            })
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) { return Err(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value }); }
+        Ok(unsafe { Self::deref_heap(addr) })
     }
 
-    fn expect_lexical_cell_mut(
-        &mut self,
-        value: LispValue,
-    ) -> Result<&mut LexicalCell, RuntimeError> {
-        let Some(addr) = value.heap_addr() else {
-            return Err(RuntimeError::WrongTypeArgument {
-                expected: "lexical-cell",
-                value,
-            });
-        };
-        self.lexical_cell_by_addr_mut(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "lexical-cell",
-                value,
-            })
+    fn expect_lexical_cell_mut(&mut self, value: LispValue) -> Result<&mut LexicalCell, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value })?;
+        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) { return Err(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value }); }
+        Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn cons_by_addr(&self, addr: usize) -> Option<&Cons> {
