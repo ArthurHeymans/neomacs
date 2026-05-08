@@ -1701,6 +1701,12 @@ impl Interpreter<'_, '_, '_> {
             "string-trim-right" => self
                 .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.string_trim_right(args[0], args.get(1).copied())),
+            "string-remove-prefix" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_remove_prefix(args[0], args[1])),
+            "string-remove-suffix" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.string_remove_suffix(args[0], args[1])),
             "substring-no-properties" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
                 self.substring(
                     args[0],
@@ -3530,6 +3536,26 @@ impl Interpreter<'_, '_, '_> {
             s = s.trim_end().to_string();
         }
         Some(self.runtime.string(s))
+    }
+
+    fn string_remove_prefix(&mut self, str_val: LispValue, prefix: LispValue) -> Option<LispValue> {
+        let s = self.string_contents_owned(str_val)?;
+        let p = self.string_contents_owned(prefix)?;
+        if s.starts_with(&p) {
+            Some(self.runtime.string(&s[p.len()..]))
+        } else {
+            Some(str_val)
+        }
+    }
+
+    fn string_remove_suffix(&mut self, str_val: LispValue, suffix: LispValue) -> Option<LispValue> {
+        let s = self.string_contents_owned(str_val)?;
+        let suf = self.string_contents_owned(suffix)?;
+        if s.ends_with(&suf) {
+            Some(self.runtime.string(&s[..s.len().saturating_sub(suf.len())]))
+        } else {
+            Some(str_val)
+        }
     }
 
     fn string_lessp(&mut self, left: LispValue, right: LispValue) -> Option<LispValue> {
