@@ -7004,4 +7004,29 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(7)));
     }
+
+    // --- Native thread tests ---
+
+    #[test]
+    fn native_thread_spawns_and_computes() {
+        let runtime = Runtime::new();
+        let handle = runtime.spawn_native(|rt| {
+            let a = rt.make_atom(LispValue::expect_fixnum(1));
+            let _ = rt.atom_reset(a, LispValue::expect_fixnum(42));
+            rt.atom_deref(a).unwrap_or(LispValue::NIL)
+        });
+        let result = handle.join().expect("native thread panicked");
+        assert_eq!(result, LispValue::expect_fixnum(42));
+    }
+
+    #[test]
+    fn native_thread_two_threads_parallel_computation() {
+        let runtime = Runtime::new();
+        let h1 = runtime.spawn_native(|_rt| LispValue::expect_fixnum(10));
+        let h2 = runtime.spawn_native(|_rt| LispValue::expect_fixnum(20));
+        let r1 = h1.join().expect("thread 1 panicked");
+        let r2 = h2.join().expect("thread 2 panicked");
+        assert_eq!(r1, LispValue::expect_fixnum(10));
+        assert_eq!(r2, LispValue::expect_fixnum(20));
+    }
 }

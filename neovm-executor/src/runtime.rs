@@ -76,6 +76,53 @@ impl Runtime {
         Self::default()
     }
 
+    /// Spawn a closure in a native OS thread with a forked Runtime.
+    /// The closure receives the forked Runtime and returns a LispValue
+    /// result.  Returns a JoinHandle for joining and retrieving the result.
+    pub fn spawn_native<F>(&self, f: F) -> std::thread::JoinHandle<LispValue>
+    where
+        F: FnOnce(&mut Runtime) -> LispValue + Send + 'static,
+    {
+        let mut forked = self.fork();
+        std::thread::spawn(move || {
+            let result = f(&mut forked);
+            // Notify the scheduler that this thread is done.
+            // (In Phase 3 full integration, this would be more graceful.)
+            result
+        })
+    }
+
+    /// Create a lightweight fork of this Runtime for use in a native OS
+    /// thread.  The forked Runtime shares the `gc_heap` and `scheduler`
+    /// (via Arc) but has its own Vec-based heaps, dynamic bindings, and
+    /// thread-local state.
+    pub fn fork(&self) -> Self {
+        Self {
+            gc_heap: Arc::clone(&self.gc_heap),
+            scheduler: self.scheduler.clone(),
+            cons_cells: Vec::new(),
+            symbols: Vec::new(),
+            strings: Vec::new(),
+            vectors: Vec::new(),
+            hash_tables: Vec::new(),
+            functions: Vec::new(),
+            lexical_cells: Vec::new(),
+            floats: Vec::new(),
+            bignums: Vec::new(),
+            atoms: Vec::new(),
+            agents: Vec::new(),
+            mutexes: Vec::new(),
+            condvars: Vec::new(),
+            interned_symbols: HashMap::new(),
+            dynamic_bindings: Vec::new(),
+            features: self.features.clone(),
+            nil_plist: self.nil_plist,
+            true_plist: self.true_plist,
+            match_data: None,
+            load_path: self.load_path.clone(),
+        }
+    }
+
     pub fn cons(&mut self, car: LispValue, cdr: LispValue) -> LispValue {
         let mut cell = Box::new(Cons {
             header: HeapHeader {
