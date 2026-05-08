@@ -7864,6 +7864,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_nthcdr_returns_tail() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (nthcdr 2 '(10 20 30 40)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(30)));
+    }
+
+    #[test]
     fn executes_rassoc_finds_value() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
