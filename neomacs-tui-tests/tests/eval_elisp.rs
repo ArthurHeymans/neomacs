@@ -2745,6 +2745,42 @@ fn eieio_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn define_minor_mode_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'easy-mmode) (define-minor-mode neo-test-mode \"Doc.\" :init-value nil :lighter \" Neo\") (with-temp-buffer (neo-test-mode 1) (message \"minor:%S\" (list neo-test-mode (assq 'neo-test-mode minor-mode-alist) (commandp 'neo-test-mode)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("minor:")
+                && row.contains("neo-test-mode")
+                && row.contains("Neo")
+                && row.contains("t")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: define-minor-mode behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "define_minor_mode_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
