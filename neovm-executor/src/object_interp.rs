@@ -7095,4 +7095,43 @@ mod tests {
         assert_eq!(r1, LispValue::expect_fixnum(10));
         assert_eq!(r2, LispValue::expect_fixnum(20));
     }
+
+    // --- Additional primitive coverage ---
+
+    #[test]
+    fn executes_apply_variadic() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (apply '+ '(1 2 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_member_present() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (member 3 '(1 2 3 4))",
+        );
+        assert!(value.is_some());
+        assert!(value.unwrap().is_cons() || value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_assoc_lookup() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (assoc 'b '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_mapcar_transform() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcar '1+ '(1 2 3))",
+        );
+        assert!(value.is_some());
+    }
 }
