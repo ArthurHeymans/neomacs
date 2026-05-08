@@ -2781,6 +2781,42 @@ fn define_minor_mode_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn define_derived_mode_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (define-derived-mode neo-derived-mode fundamental-mode \"NeoD\" \"Doc.\") (with-temp-buffer (neo-derived-mode) (message \"derived:%S\" (list major-mode mode-name (derived-mode-p 'fundamental-mode) (derived-mode-p 'neo-derived-mode)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("derived:")
+                && row.contains("neo-derived-mode")
+                && row.contains("NeoD")
+                && row.contains("nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: define-derived-mode behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "define_derived_mode_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
