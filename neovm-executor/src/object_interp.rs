@@ -7962,6 +7962,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_let_parallel() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(let ((x 1) (y 2)) (+ x y))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_let_star_sequential() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(let* ((x 1) (y (+ x 2))) y)",
