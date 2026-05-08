@@ -556,6 +556,26 @@ impl Expander {
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
+
+            // Editor macros: no-ops that expand to (progn body...) since
+            // the executor doesn't yet have buffer/point primitives.
+            "save-excursion" | "save-restriction" | "with-current-buffer"
+            | "with-temp-buffer" | "with-temp-file" | "with-temp-message"
+            | "with-output-to-string" => {
+                let body = &items[1..];
+                if body.is_empty() {
+                    nil_form(span)
+                } else {
+                    let progn = list_form(
+                        std::iter::once(symbol_form("progn", span))
+                            .chain(body.iter().map(|f| self.expand_form(f.clone())))
+                            .collect(),
+                        span,
+                    );
+                    self.expand_form(progn)
+                }
+            }
+
             _ => SurfaceForm::new(
                 SurfaceKind::List(
                     items

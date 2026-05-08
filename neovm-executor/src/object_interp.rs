@@ -7938,6 +7938,22 @@ mod tests {
     }
 
     #[test]
+    fn executes_save_excursion_noop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(save-excursion 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_with_current_buffer_noop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(with-current-buffer \"*scratch*\" 99)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
     fn executes_abs_negative() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(abs -5)",
