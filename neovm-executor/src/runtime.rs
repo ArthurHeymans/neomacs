@@ -370,12 +370,10 @@ impl Runtime {
             expected: "float",
             value,
         })?;
-        let obj = self
-            .float_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "float",
-                value,
-            })?;
+        if self.heap_kind(addr) != Some(HeapKind::Float) {
+            return Err(RuntimeError::WrongTypeArgument { expected: "float", value });
+        }
+        let obj: &FloatObj = unsafe { Self::deref_heap(addr) };
         Ok(obj.value)
     }
 
@@ -383,10 +381,11 @@ impl Runtime {
         if let Some(fixnum) = value.as_fixnum() {
             return Some(fixnum as f64);
         }
-        if let Some(addr) = value.heap_addr() {
-            if let Some(obj) = self.float_by_addr(addr) {
-                return Some(obj.value);
-            }
+        if let Some(addr) = value.heap_addr()
+            && self.heap_kind(addr) == Some(HeapKind::Float)
+        {
+            let obj: &FloatObj = unsafe { Self::deref_heap(addr) };
+            return Some(obj.value);
         }
         None
     }
@@ -433,12 +432,10 @@ impl Runtime {
             expected: "bignum",
             value,
         })?;
-        let obj = self
-            .bignum_by_addr(addr)
-            .ok_or(RuntimeError::WrongTypeArgument {
-                expected: "bignum",
-                value,
-            })?;
+        if self.heap_kind(addr) != Some(HeapKind::Bignum) {
+            return Err(RuntimeError::WrongTypeArgument { expected: "bignum", value });
+        }
+        let obj: &BignumObj = unsafe { Self::deref_heap(addr) };
         Ok(obj.value.clone())
     }
 
