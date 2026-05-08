@@ -1817,6 +1817,9 @@ impl Interpreter<'_, '_, '_> {
             "mapcar" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapcar(args[0], args[1])),
+            "mapconcat" => self
+                .exact_arity(name, args, 3)
+                .and_then(|_| self.mapconcat(args[0], args[1], args[2])),
             "mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
@@ -3161,6 +3164,24 @@ impl Interpreter<'_, '_, '_> {
             self.execute_funcall(function, &[element])?;
         }
         Some(sequence)
+    }
+
+    fn mapconcat(
+        &mut self,
+        function: LispValue,
+        sequence: LispValue,
+        separator: LispValue,
+    ) -> Option<LispValue> {
+        let sep = self.runtime.string_contents(separator).ok()?;
+        let parts: Vec<String> = self
+            .sequence_values(sequence)?
+            .into_iter()
+            .map(|elem| {
+                let result = self.execute_funcall(function, &[elem]).unwrap_or(LispValue::NIL);
+                self.runtime.string_contents_emacs(result).unwrap_or_default()
+            })
+            .collect();
+        Some(self.runtime.string(&parts.join(sep)))
     }
 
     fn copy_list(&mut self, list: LispValue) -> Option<LispValue> {
