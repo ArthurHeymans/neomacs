@@ -7223,4 +7223,15 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_letrec_mutual_recursion() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (letrec ((even (lambda (n) (if (= n 0) t (odd (- n 1)))))\
+                      (odd (lambda (n) (if (= n 0) nil (even (- n 1))))))\
+               (even 4))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
