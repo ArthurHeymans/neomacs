@@ -7530,6 +7530,33 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_to_number() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-to-number \"42\")",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_string_match_with_group() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-match \"a\\\\(b\\\\)c\" \"abc\")",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_match_string_extracts_group() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (string-match \"a\\\\(b\\\\)c\" \"abc\") (match-string 1 \"abc\"))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_logxor_bitwise_xor() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
