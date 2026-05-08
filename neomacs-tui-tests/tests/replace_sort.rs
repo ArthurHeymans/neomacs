@@ -123,6 +123,81 @@ fn query_replace_via_mpercent_bang() {
 }
 
 #[test]
+fn query_replace_question_mark_shows_query_help_without_replacing() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "query-replace-help.txt",
+        "alpha one\nalpha two\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "M-%");
+    let from_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Query replace"));
+    gnu.read_until(Duration::from_secs(6), from_ready);
+    neo.read_until(Duration::from_secs(8), from_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"alpha");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+    let to_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("with:")) || grid.iter().any(|row| row.contains("with "))
+    };
+    gnu.read_until(Duration::from_secs(6), to_ready);
+    neo.read_until(Duration::from_secs(8), to_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"omega");
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+    let query_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Query replacing"))
+            && grid.iter().any(|row| row.contains("(y/n/!/q/?)"))
+    };
+    gnu.read_until(Duration::from_secs(6), query_ready);
+    neo.read_until(Duration::from_secs(8), query_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    send_both(&mut gnu, &mut neo, "?");
+    let help_ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Type SPC or y to replace one match"))
+            || grid
+                .iter()
+                .any(|row| row.contains("Delete or n to skip to next"))
+    };
+    gnu.read_until(Duration::from_secs(6), help_ready);
+    neo.read_until(Duration::from_secs(8), help_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            help_ready(&grid),
+            "{label} should show query-replace help after ?\n{}",
+            grid.join("\n")
+        );
+        assert!(
+            grid.iter().any(|row| row.contains("alpha one"))
+                && !grid.iter().any(|row| row.contains("omega one")),
+            "{label} should not replace text when only query-replace help was requested\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "query_replace_question_mark_shows_query_help_without_replacing",
+        &gnu,
+        &neo,
+        4,
+    );
+}
+
+#[test]
 fn replace_string_via_mx_replaces_from_point_to_end() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
