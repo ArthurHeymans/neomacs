@@ -7914,6 +7914,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_remove_prefix() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-remove-prefix \"pre-\" \"pre-fix\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_string_remove_suffix() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-remove-suffix \"-suf\" \"pre-suf\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_zerop() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (zerop 0) (not (zerop 1)))",
