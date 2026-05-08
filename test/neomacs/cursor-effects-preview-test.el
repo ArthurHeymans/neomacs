@@ -20,12 +20,12 @@
   :type 'number
   :group 'cursor-effects-preview)
 
-(defcustom cursor-effects-preview-min-frame-width 2400
+(defcustom cursor-effects-preview-min-frame-width 3200
   "Minimum frame pixel width requested for the cursor effect gallery."
   :type 'integer
   :group 'cursor-effects-preview)
 
-(defcustom cursor-effects-preview-min-frame-height 1500
+(defcustom cursor-effects-preview-min-frame-height 2000
   "Minimum frame pixel height requested for the cursor effect gallery."
   :type 'integer
   :group 'cursor-effects-preview)
@@ -262,7 +262,7 @@
   "Cursor effects to preview.")
 
 (defconst cursor-effects-preview--cursor-types
-  '(box hollow bar (bar . 3) hbar (hbar . 3))
+  '(bar)
   "Cursor shapes to combine with preview effects.")
 
 (defvar cursor-effects-preview--windows nil)
@@ -277,14 +277,18 @@
 (define-derived-mode cursor-effects-preview-mode special-mode "Cursor-Effects"
   "Major mode for the Neomacs cursor effects preview."
   (setq-local cursor-type 'box)
-  (setq-local truncate-lines t))
+  (setq-local truncate-lines t)
+  (setq-local mode-line-format nil)
+  (setq-local header-line-format nil)
+  (setq-local tab-line-format nil))
 
 (defun cursor-effects-preview--buffer-name (index effect)
   (format "*Cursor Effect %02d %s*" index (plist-get effect :name)))
 
 (defun cursor-effects-preview--grid-shape (count)
-  (let ((side (ceiling (sqrt count))))
-    (cons side side)))
+  (let* ((columns 9)
+         (rows (ceiling (/ (float count) columns))))
+    (cons rows columns)))
 
 (defun cursor-effects-preview--insert-gallery-buffer (index effect shape)
   (let ((inhibit-read-only t))
@@ -322,6 +326,10 @@
 
 (defun cursor-effects-preview--maximize-frame ()
   (setq frame-resize-pixelwise t)
+  (setq window-resize-pixelwise t)
+  (setq window-combination-resize t)
+  (setq window-min-height 1)
+  (setq window-min-width 1)
   (set-frame-parameter nil 'fullscreen 'maximized)
   (when (fboundp 'set-frame-size)
     (let ((width (max (frame-pixel-width)
@@ -330,45 +338,62 @@
                        cursor-effects-preview-min-frame-height)))
       (set-frame-size (selected-frame) width height t))))
 
+(defun cursor-effects-preview--sort-windows (windows)
+  (sort windows
+        (lambda (a b)
+          (let ((ea (window-pixel-edges a))
+                (eb (window-pixel-edges b)))
+            (or (< (cadr ea) (cadr eb))
+                (and (= (cadr ea) (cadr eb))
+                     (< (car ea) (car eb))))))))
+
+(defun cursor-effects-preview--split-one (window side target-count)
+  (condition-case nil
+      (split-window window nil side)
+    (error
+     (error "Cursor effects preview needs %d windows; current frame %dx%d is too small"
+            target-count
+            (frame-pixel-width)
+            (frame-pixel-height)))))
+
+(defun cursor-effects-preview--split-evenly (window count side target-count)
+  (let ((windows (list window))
+        (tail window))
+    (dotimes (_ (1- count))
+      (setq tail (cursor-effects-preview--split-one tail side target-count))
+      (push tail windows))
+    (balance-windows)
+    (cursor-effects-preview--sort-windows windows)))
+
 (defun cursor-effects-preview--split-grid (buffers)
   (delete-other-windows)
   (let* ((shape (cursor-effects-preview--grid-shape (length buffers)))
-         (target-count (* (car shape) (cdr shape)))
+         (rows (car shape))
+         (columns (cdr shape))
+         (target-count (* rows columns))
          (placeholders nil)
          (all-buffers buffers)
-         (windows (list (selected-window))))
+         (row-windows nil)
+         (windows nil))
     (dotimes (index (- target-count (length buffers)))
       (push (cursor-effects-preview--make-placeholder-buffer (1+ index))
             placeholders))
     (setq placeholders (nreverse placeholders))
     (setq cursor-effects-preview--placeholder-buffers placeholders)
     (setq all-buffers (append buffers placeholders))
-    (while (< (length windows) target-count)
-      (let* ((window (car (sort (copy-sequence windows)
-                                (lambda (a b)
-                                  (> (* (window-pixel-width a)
-                                        (window-pixel-height a))
-                                     (* (window-pixel-width b)
-                                        (window-pixel-height b)))))))
-             (new-window
-              (condition-case nil
-                  (if (> (window-pixel-width window)
-                         (* 1.35 (window-pixel-height window)))
-                      (split-window window nil 'right)
-                    (split-window window nil 'below))
-                (error
-                 (error "Cursor effects preview needs %d windows; current frame %dx%d is too small"
-                        target-count
-                        (frame-pixel-width)
-                        (frame-pixel-height))))))
-        (push new-window windows)))
-    (setq windows (sort windows
-                        (lambda (a b)
-                          (let ((ea (window-pixel-edges a))
-                                (eb (window-pixel-edges b)))
-                            (or (< (cadr ea) (cadr eb))
-                                (and (= (cadr ea) (cadr eb))
-                                     (< (car ea) (car eb))))))))
+    (setq row-windows
+          (cursor-effects-preview--split-evenly
+           (selected-window) rows 'below target-count))
+    (setq windows
+          (apply #'append
+                 (mapcar (lambda (row-window)
+                           (cursor-effects-preview--split-evenly
+                            row-window columns 'right target-count))
+                         row-windows)))
+    (balance-windows)
+    (setq windows
+          (cursor-effects-preview--sort-windows
+           (window-list nil 'no-minibuf)))
     (cl-loop for window in windows
              for buffer in all-buffers
              do (set-window-buffer window buffer)
@@ -377,13 +402,9 @@
                   (set-window-parameter
                    window 'neomacs-cursor-effect neomacs-cursor-effect)))
     (balance-windows)
-    (setq windows (sort (window-list nil 'no-minibuf)
-                        (lambda (a b)
-                          (let ((ea (window-pixel-edges a))
-                                (eb (window-pixel-edges b)))
-                            (or (< (cadr ea) (cadr eb))
-                                (and (= (cadr ea) (cadr eb))
-                                     (< (car ea) (car eb))))))))
+    (setq windows
+          (cursor-effects-preview--sort-windows
+           (window-list nil 'no-minibuf)))
     (cl-subseq windows 0 (length buffers))))
 
 (defun cursor-effects-preview--pulse-selection ()
