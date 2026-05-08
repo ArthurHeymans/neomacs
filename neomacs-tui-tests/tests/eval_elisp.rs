@@ -2051,6 +2051,35 @@ fn documentation_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn advice_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"advice:%S\" (let ((s (make-symbol \"adv\")) (adv (lambda (orig x) (* 10 (funcall orig x))))) (fset s (lambda (x) (+ x 1))) (advice-add s :around adv) (prog1 (list (funcall s 2) (not (null (advice-member-p adv s)))) (advice-remove s adv))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("advice:") && row.contains("(30 t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: advice behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("advice_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn lambda_binding_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
