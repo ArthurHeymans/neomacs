@@ -1272,6 +1272,8 @@ impl MacroEval {
         let mut count_exprs: Vec<SurfaceForm> = Vec::new();
         let mut count_vars: Vec<Option<String>> = Vec::new();
         let mut do_body: Vec<SurfaceForm> = Vec::new();
+        let mut while_conds: Vec<SurfaceForm> = Vec::new();
+        let mut until_conds: Vec<SurfaceForm> = Vec::new();
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1373,6 +1375,20 @@ impl MacroEval {
                         } else {
                             count_vars.push(None);
                         }
+                    }
+                }
+                Some("while") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        while_conds.push(items[pos].clone());
+                        pos += 1;
+                    }
+                }
+                Some("until") => {
+                    pos += 1;
+                    if pos < items.len() {
+                        until_conds.push(items[pos].clone());
+                        pos += 1;
                     }
                 }
                 Some("do") => {
@@ -1492,6 +1508,18 @@ impl MacroEval {
             if let Some(ref pattern) = for_destructure {
                 self.bind_destructure(pattern, &val, env);
             }
+
+            // while/until conditions: break if any while is nil or any until is truthy
+            let mut should_break = false;
+            for cond in &while_conds {
+                if !self.eval(cond, env)?.is_truthy() { should_break = true; break; }
+            }
+            if !should_break {
+                for cond in &until_conds {
+                    if self.eval(cond, env)?.is_truthy() { should_break = true; break; }
+                }
+            }
+            if should_break { break; }
 
             // Evaluate body clauses
             for expr in &collect_exprs {
