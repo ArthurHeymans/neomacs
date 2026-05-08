@@ -141,6 +141,38 @@ fn render_frame_tree_returns_root_relative_bottom_to_top_nodes() {
 }
 
 #[test]
+fn child_frame_origin_is_relative_to_parent_child_frame_viewport() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let root_id = mgr.create_frame("root", 800, 600, BufferId(1));
+    let child_id = mgr.create_frame("child", 160, 90, BufferId(1));
+    let nested_id = mgr.create_frame("nested", 80, 40, BufferId(1));
+
+    {
+        let root = mgr.get_mut(root_id).expect("root");
+        root.menu_bar_height = 33;
+        root.tool_bar_height = 44;
+        root.tab_bar_height = 22;
+    }
+    {
+        let child = mgr.get_mut(child_id).expect("child");
+        child.parent_frame = Value::make_frame(root_id.0);
+        child.left_pos = 20;
+        child.top_pos = 20;
+        child.menu_bar_height = 11;
+    }
+    {
+        let nested = mgr.get_mut(nested_id).expect("nested");
+        nested.parent_frame = Value::make_frame(child_id.0);
+        nested.left_pos = 5;
+        nested.top_pos = 7;
+    }
+
+    assert_eq!(mgr.frame_origin_in_root(child_id), Some((20.0, 119.0)));
+    assert_eq!(mgr.frame_origin_in_root(nested_id), Some((25.0, 137.0)));
+}
+
+#[test]
 fn frame_manager_gc_traces_name_icon_name_and_title_values() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

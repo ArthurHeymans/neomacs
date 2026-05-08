@@ -1930,11 +1930,15 @@ impl LayoutEngine {
 
             // Set up frame dimensions in the builder
             if let Some(frame) = evaluator.frame_manager().get(frame_id) {
+                let (origin_x, origin_y) = evaluator
+                    .frame_manager()
+                    .frame_origin_in_root(frame_id)
+                    .unwrap_or((frame.left_pos as f32, frame.top_pos as f32));
                 self.matrix_builder.set_frame_identity(
                     frame.id.0,
                     frame.parent_frame.as_frame_id().unwrap_or(0),
-                    frame.left_pos as f32,
-                    frame.top_pos as f32,
+                    origin_x,
+                    origin_y,
                     frame.z_order,
                     frame.undecorated,
                     frame.internal_border_width() as f32,

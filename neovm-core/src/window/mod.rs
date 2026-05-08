@@ -1817,6 +1817,10 @@ impl Frame {
             .saturating_add(self.tab_bar_height) as f32
     }
 
+    pub fn child_frame_viewport_origin(&self) -> (f32, f32) {
+        (0.0, self.chrome_top_height().min(self.height as f32))
+    }
+
     fn default_left_fringe_width(&self) -> i64 {
         self.parameter("left-fringe")
             .and_then(|v| v.as_int())
@@ -2513,6 +2517,8 @@ impl FrameManager {
 
         let mut x = 0_i64;
         let mut y = 0_i64;
+        let mut viewport_x = 0.0_f32;
+        let mut viewport_y = 0.0_f32;
         let mut current = Some(id);
         let mut seen = HashSet::new();
         while let Some(frame_id) = current {
@@ -2523,8 +2529,14 @@ impl FrameManager {
             x += frame.left_pos;
             y += frame.top_pos;
             current = self.frame_parent_id(frame_id);
+            if let Some(parent_id) = current {
+                let parent = self.frames.get(&parent_id)?;
+                let (dx, dy) = parent.child_frame_viewport_origin();
+                viewport_x += dx;
+                viewport_y += dy;
+            }
         }
-        Some((x as f32, y as f32))
+        Some((x as f32 + viewport_x, y as f32 + viewport_y))
     }
 
     pub fn render_frame_tree(
