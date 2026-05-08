@@ -7938,6 +7938,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_reverse_and_nreverse() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((l (list 1 2 3))) (equal (reverse l) (nreverse (copy-sequence l))))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_listp_and_nlistp() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
