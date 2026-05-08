@@ -7178,4 +7178,49 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
+
+    #[test]
+    fn executes_string_equality() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= \"abc\" \"abc\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_concat_strings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (concat \"ab\" \"cd\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_aref_aset_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (vector 1 2 3))) (aset v 1 99) (aref v 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_length_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length '(a b c d e))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn executes_nconc_destructive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nconc (list 1 2) (list 3 4))",
+        );
+        assert!(value.is_some());
+    }
 }
