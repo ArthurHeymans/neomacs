@@ -4311,6 +4311,42 @@ fn sparse_keymap_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn substitute_command_keys_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"keys:%S\" (let ((map (make-sparse-keymap))) (define-key map (kbd \"C-c n\") 'next-line) (let ((overriding-local-map map)) (list (key-description (kbd \"C-c n\")) (lookup-key map (kbd \"C-c n\")) (substitute-command-keys \"Go: \\\\[next-line]\")))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("keys:")
+                && row.contains("C-c n")
+                && row.contains("next-line")
+                && row.contains("Go: C-c n")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: substitute-command-keys should match GNU keymap substitution semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "substitute_command_keys_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn lookup_key_global_map_returns_correct_binding() {
     let (mut gnu, mut neo) = boot_pair("");
 
