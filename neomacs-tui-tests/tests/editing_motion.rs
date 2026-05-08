@@ -1,6 +1,7 @@
 //! TUI comparison tests: editing motion.
 
 mod support;
+use std::fs;
 use std::time::Duration;
 use support::*;
 
@@ -217,6 +218,100 @@ fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
         &mut neo,
         name,
         original,
+    );
+}
+
+#[test]
+fn repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let original = "one\ntwo";
+
+    send_both(&mut gnu, &mut neo, "C-x h C-w");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"one\rtwo");
+    }
+    let original_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.trim_end() == "one")
+            && grid.iter().any(|row| row.trim_end() == "two")
+    };
+    gnu.read_until(Duration::from_secs(6), original_ready);
+    neo.read_until(Duration::from_secs(8), original_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"AAA ");
+    }
+    let first_edit = |grid: &[String]| grid.iter().any(|row| row.contains("AAA one"));
+    gnu.read_until(Duration::from_secs(6), first_edit);
+    neo.read_until(Duration::from_secs(8), first_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-a C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"BBB ");
+    }
+    let second_edit = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), second_edit);
+    neo.read_until(Duration::from_secs(8), second_edit);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "C-x u");
+    let first_undo = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("AAA one"))
+            && grid.iter().any(|row| row.trim_end() == "two")
+            && !grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), first_undo);
+    neo.read_until(Duration::from_secs(8), first_undo);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics/first",
+        &gnu,
+        &neo,
+        2,
+    );
+
+    send_both(&mut gnu, &mut neo, "C-x u");
+    let second_undo = |grid: &[String]| {
+        grid.iter().any(|row| row.trim_end() == "one")
+            && grid.iter().any(|row| row.trim_end() == "two")
+            && !grid.iter().any(|row| row.contains("AAA one"))
+            && !grid.iter().any(|row| row.contains("BBB two"))
+    };
+    gnu.read_until(Duration::from_secs(6), second_undo);
+    neo.read_until(Duration::from_secs(8), second_undo);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_nearly_matches(
+        "repeated_cx_u_in_scratch_buffer_keeps_non_file_undo_semantics/second",
+        &gnu,
+        &neo,
+        2,
+    );
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(with-current-buffer "*scratch*" (write-region (point-min) (point-max) "~/scratch-cx-u-chain.txt" nil 'silent))"#,
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_eq!(
+        fs::read_to_string(gnu.home_dir().join("scratch-cx-u-chain.txt")).expect("read GNU dump"),
+        original,
+        "GNU scratch buffer contents after repeated C-x u"
+    );
+    assert_eq!(
+        fs::read_to_string(neo.home_dir().join("scratch-cx-u-chain.txt"))
+            .expect("read Neomacs dump"),
+        original,
+        "Neomacs scratch buffer contents after repeated C-x u"
     );
 }
 
