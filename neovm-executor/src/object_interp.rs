@@ -7938,6 +7938,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_abs_negative() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(abs -5)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
     fn executes_reverse_and_nreverse() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
