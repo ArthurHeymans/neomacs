@@ -7637,8 +7637,9 @@ mod tests {
     // Note: defmacro cross-form expansion within a single progn
     // needs multi-pass compiler support. Macros defined via require
     // (e.g. cl-lib) work correctly.
-    // Note: defun with (interactive) has a HIR registration bug where
-    // the function isn't added to the symbol table for cross-form calls.
+    // Note: defun cross-form calls need SymbolFunctionSet IR instruction
+    // to set the symbol's function slot at runtime. defalias works cross-form
+    // (tested above) because it does this explicitly.
 
     // Float and number predicates already covered by existing tests:
     // executes_float_constant, executes_floatp, executes_float_addition, etc.
