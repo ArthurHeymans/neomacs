@@ -2708,6 +2708,40 @@ fn cl_lib_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn cl_symbol_macrolet_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'cl-lib) (message \"symmac:%S\" (list (cl-symbol-macrolet ((x (car cell))) (let ((cell (list 1))) (setq x 7) cell)) (macroexpand '(cl-symbol-macrolet ((x y)) x)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("symmac:") && row.contains("((7) y)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: cl-symbol-macrolet expansion and setq behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "cl_symbol_macrolet_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn seq_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
