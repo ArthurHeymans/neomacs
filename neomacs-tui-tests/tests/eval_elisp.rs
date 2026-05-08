@@ -1055,6 +1055,43 @@ fn sequence_mutation_elisp_functions_match_gnu_semantics() {
     );
 }
 
+#[test]
+fn property_list_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"plist:%S\" (let ((plist (list :a 1 :b 2 :a 3))) (list (plist-get plist :a) (plist-member plist :b) (progn (setq plist (plist-put plist :c 4)) plist) (progn (setq plist (plist-put plist :a 9)) plist))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("plist:")
+                && row.contains("(1")
+                && row.contains("(:b 2 :a 3 :c 4)")
+                && row.contains(":c 4")
+                && row.contains(":a 9")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: property-list functions should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "property_list_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
 // ── String and numeric operation tests ──────────────────────
 
 #[test]
