@@ -2082,15 +2082,15 @@ impl Interpreter<'_, '_, '_> {
                 }
             }),
             "random" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
-                use std::collections::hash_map::RandomState;
-                use std::hash::{BuildHasher, Hasher};
+                use std::hash::Hasher;
                 let limit = if args.is_empty() {
                     i64::MAX
                 } else {
                     self.fixnum_arg(name, args[0])?.max(1)
                 };
-                // Simple hash-based PRNG — good enough for non-crypto use.
-                let hash = RandomState::new().build_hasher().finish();
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                h.write_u64(0);
+                let hash = h.finish();
                 Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
             }),
             "max" => {

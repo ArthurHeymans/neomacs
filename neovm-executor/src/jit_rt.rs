@@ -1053,9 +1053,10 @@ fn dispatch_primitive(
         "mod" => numeric_mod(rt, args),
         "random" => {
             let limit = args.first().and_then(|v| v.as_fixnum()).unwrap_or(i64::MAX).max(1);
-            let hash = std::collections::hash_map::RandomState::new()
-                .build_hasher()
-                .finish();
+            use std::hash::Hasher;
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            h.write_u64(0);
+            let hash = h.finish();
             Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
         }
         "rem" => numeric_rem(rt, args),
