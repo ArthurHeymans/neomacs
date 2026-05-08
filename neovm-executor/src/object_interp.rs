@@ -7888,6 +7888,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_zerop() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and (zerop 0) (not (zerop 1)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_mod_negative() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(mod -5 3)",
