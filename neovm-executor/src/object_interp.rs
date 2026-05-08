@@ -1865,15 +1865,23 @@ impl Interpreter<'_, '_, '_> {
             "<=" => self.number_compare(args, |left, right| left <= right),
             ">" => self.number_compare(args, |left, right| left > right),
             ">=" => self.number_compare(args, |left, right| left >= right),
-            "/=" => self.exact_arity(name, args, 2).and_then(|_| {
+            "/=" => self.min_arity(name, args, 2).and_then(|_| {
+                // All args must be pairwise distinct (GNU Emacs semantics).
                 if self.has_float_arg(args) {
-                    let left = self.number_arg(name, args[0])?;
-                    let right = self.number_arg(name, args[1])?;
-                    Some(bool_value(left != right))
+                    let vals: Vec<f64> = args.iter()
+                        .map(|v| self.number_arg(name, *v))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(bool_value(vals.windows(2).all(|w| w[0] != w[1])
+                        && (vals.len() <= 2 || vals.iter().all(|v| vals.iter().filter(|x| *x == v).count() == 1))))
                 } else {
-                    let left = self.fixnum_arg(name, args[0])?;
-                    let right = self.fixnum_arg(name, args[1])?;
-                    Some(bool_value(left != right))
+                    let vals: Vec<i64> = args.iter()
+                        .map(|v| self.fixnum_arg(name, *v))
+                        .collect::<Option<Vec<_>>>()?;
+                    // Check pairwise and all-unique
+                    let all_unique = (0..vals.len()).all(|i|
+                        (i+1..vals.len()).all(|j| vals[i] != vals[j])
+                    );
+                    Some(bool_value(all_unique))
                 }
             }),
             "%" => self.exact_arity(name, args, 2).and_then(|_| {
