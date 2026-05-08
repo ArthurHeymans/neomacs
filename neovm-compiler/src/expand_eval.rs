@@ -1274,6 +1274,9 @@ impl MacroEval {
         let mut do_body: Vec<SurfaceForm> = Vec::new();
         let mut while_conds: Vec<SurfaceForm> = Vec::new();
         let mut until_conds: Vec<SurfaceForm> = Vec::new();
+        let mut always_cond: Option<SurfaceForm> = None;
+        let mut never_cond: Option<SurfaceForm> = None;
+        let mut thereis_cond: Option<SurfaceForm> = None;
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1376,6 +1379,18 @@ impl MacroEval {
                             count_vars.push(None);
                         }
                     }
+                }
+                Some("always") => {
+                    pos += 1;
+                    if pos < items.len() { always_cond = Some(items[pos].clone()); pos += 1; }
+                }
+                Some("never") => {
+                    pos += 1;
+                    if pos < items.len() { never_cond = Some(items[pos].clone()); pos += 1; }
+                }
+                Some("thereis") => {
+                    pos += 1;
+                    if pos < items.len() { thereis_cond = Some(items[pos].clone()); pos += 1; }
                 }
                 Some("while") => {
                     pos += 1;
@@ -1509,7 +1524,7 @@ impl MacroEval {
                 self.bind_destructure(pattern, &val, env);
             }
 
-            // while/until conditions: break if any while is nil or any until is truthy
+            // while/until conditions
             let mut should_break = false;
             for cond in &while_conds {
                 if !self.eval(cond, env)?.is_truthy() { should_break = true; break; }
@@ -1520,6 +1535,20 @@ impl MacroEval {
                 }
             }
             if should_break { break; }
+
+            // always: if expr is nil, return nil immediately
+            if let Some(ref cond) = always_cond {
+                if !self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
+            }
+            // never: if expr is truthy, return nil immediately
+            if let Some(ref cond) = never_cond {
+                if self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
+            }
+            // thereis: if expr is non-nil, return it immediately
+            if let Some(ref cond) = thereis_cond {
+                let v = self.eval(cond, env)?;
+                if v.is_truthy() { return Ok(v); }
+            }
 
             // Evaluate body clauses
             for expr in &collect_exprs {
@@ -1558,7 +1587,16 @@ impl MacroEval {
             return self.eval(ret_expr, env);
         }
 
-        // Return default accumulator
+        // Return default accumulator — always/never/thereis take priority
+        if always_cond.is_some() {
+            return Ok(MacroValue::TRUE);
+        }
+        if never_cond.is_some() {
+            return Ok(MacroValue::TRUE);
+        }
+        if thereis_cond.is_some() {
+            return Ok(MacroValue::Nil);
+        }
         if !collect_exprs.is_empty() {
             // nreverse results
             results.reverse();
