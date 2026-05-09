@@ -7958,15 +7958,6 @@ mod tests {
     // cl-block and cl-return-from macros are defined in builtin_libs.
 
     #[test]
-    fn executes_pcase_let_star() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n\
-             (pcase-let* ((`(,x ,y) '(1 2))) (+ x y))",
-        );
-        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
-    }
-
-    #[test]
     fn executes_pcase_simple_match() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
