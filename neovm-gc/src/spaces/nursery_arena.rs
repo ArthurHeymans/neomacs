@@ -334,10 +334,11 @@ impl NurseryTlab {
         let size = layout.size();
         let align = layout.align().max(1);
         let base_addr = self.base.as_ptr() as usize;
-        let current = base_addr.checked_add(self.cursor)?;
+        // Overflow impossible: cursor and len are bounded by the TLAB size.
+        let current = base_addr.wrapping_add(self.cursor);
         let aligned = align_up(current, align)?;
-        let padding = aligned.checked_sub(base_addr)?;
-        let end = padding.checked_add(size)?;
+        let padding = aligned.wrapping_sub(base_addr);
+        let end = padding.wrapping_add(size);
         if end > self.len {
             return None;
         }
