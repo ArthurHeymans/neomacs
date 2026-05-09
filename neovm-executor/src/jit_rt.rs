@@ -1949,13 +1949,17 @@ fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
 }
 
 fn numeric_ne(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
-    if args.len() < 2 { return Some(LispValue::NIL); }
+    // In Emacs, (/=) and (/= x) return t.
+    if args.len() < 2 { return Some(LispValue::TRUE); }
     let has_float = any_float(rt, args);
-    let first = if has_float { to_f64(rt, args[0]) } else { args[0].as_fixnum()? as f64 };
-    Some(bool_value(args[1..].iter().all(|a| {
-        let v = if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 };
-        v != first
-    })))
+    let vals: Vec<f64> = args.iter().map(|a| {
+        if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 }
+    }).collect();
+    // Check all pairs for distinctness.
+    let all_distinct = (0..vals.len()).all(|i|
+        (i+1..vals.len()).all(|j| vals[i] != vals[j])
+    );
+    Some(bool_value(all_distinct))
 }
 
 fn numeric_cmp(

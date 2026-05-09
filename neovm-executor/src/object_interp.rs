@@ -1915,23 +1915,26 @@ impl Interpreter<'_, '_, '_> {
             "<=" => self.number_compare(args, |left, right| left <= right),
             ">" => self.number_compare(args, |left, right| left > right),
             ">=" => self.number_compare(args, |left, right| left >= right),
-            "/=" => self.min_arity(name, args, 2).and_then(|_| {
+            "/=" => self.min_max_arity(name, args, 0, usize::MAX).and_then(|_| {
+                // (=/=) and (=/= x) return t.
+                if args.len() < 2 { return Some(LispValue::TRUE); }
                 // All args must be pairwise distinct (GNU Emacs semantics).
                 if self.has_float_arg(args) {
                     let vals: Vec<f64> = args.iter()
                         .map(|v| self.number_arg(name, *v))
                         .collect::<Option<Vec<_>>>()?;
-                    Some(bool_value(vals.windows(2).all(|w| w[0] != w[1])
-                        && (vals.len() <= 2 || vals.iter().all(|v| vals.iter().filter(|x| *x == v).count() == 1))))
+                    let all_distinct = (0..vals.len()).all(|i|
+                        (i+1..vals.len()).all(|j| vals[i] != vals[j])
+                    );
+                    Some(bool_value(all_distinct))
                 } else {
                     let vals: Vec<i64> = args.iter()
                         .map(|v| self.fixnum_arg(name, *v))
                         .collect::<Option<Vec<_>>>()?;
-                    // Check pairwise and all-unique
-                    let all_unique = (0..vals.len()).all(|i|
+                    let all_distinct = (0..vals.len()).all(|i|
                         (i+1..vals.len()).all(|j| vals[i] != vals[j])
                     );
-                    Some(bool_value(all_unique))
+                    Some(bool_value(all_distinct))
                 }
             }),
             "%" => self.exact_arity(name, args, 2).and_then(|_| {
@@ -7926,6 +7929,31 @@ mod tests {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (/= 1 2 1)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_not_equal_zero_args_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(/=)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_not_equal_one_arg_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(/= 42)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_not_equal_multi_arg_dup_not_first() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (/= 1 2 3 2)",
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
