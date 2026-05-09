@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_trim_strips_whitespace() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(string-trim \"  hello  \")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_make_vector_default_init() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(aref (make-vector 3 42) 1)",
