@@ -1932,6 +1932,7 @@ impl Interpreter<'_, '_, '_> {
                 .min_arity(name, args, 1)
                 .and_then(|_| self.last(args[0])),
             "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
+            "memql" => self.subr_2(name, args, |s| s.memql(args[0], args[1])),
             "member" | "cl-member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
             "cl-member-if" => self.subr_2(name, args, |s| {
                 s.cl_member_if(args[0], args[1])
@@ -3356,6 +3357,22 @@ impl Interpreter<'_, '_, '_> {
             let result = self.runtime.car(current);
             let car = self.runtime_value(result)?;
             if car == needle {
+                return Some(current);
+            }
+            let result = self.runtime.cdr(current);
+            current = self.runtime_value(result)?;
+        }
+    }
+
+    fn memql(&mut self, needle: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            let result = self.runtime.car(current);
+            let car = self.runtime_value(result)?;
+            if self.eql_values(car, needle) {
                 return Some(current);
             }
             let result = self.runtime.cdr(current);
@@ -6980,6 +6997,7 @@ fn is_primitive_name(name: &str) -> bool {
             "max",
             "member",
             "memq",
+            "memql",
             "message",
             "min",
             "mod",
