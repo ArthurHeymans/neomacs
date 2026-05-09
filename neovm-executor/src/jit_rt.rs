@@ -1324,6 +1324,8 @@ fn dispatch_primitive(
             Some(bool_value(has_fn || has_jit_fn || is_builtin))
         }
         "fset" => rt.set_symbol_function(args[0], args[1]).ok(),
+        "fmakunbound" => rt.fmakunbound(args[0]).ok(),
+        "makunbound" => rt.set_symbol_unbound(args[0]).ok().map(|()| args[0]),
         "defalias" => {
             let _ = rt.set_symbol_function(args[0], args[1]);
             Some(args[0])

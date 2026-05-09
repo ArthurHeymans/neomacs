@@ -1227,6 +1227,10 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.set_symbol_unbound(args[0]).map(|()| args[0]);
                 self.runtime_value(result)
             }),
+            "fmakunbound" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.fmakunbound(args[0]);
+                self.runtime_value(result)
+            }),
             "fboundp" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.fboundp(args[0])),
@@ -1873,6 +1877,12 @@ impl Interpreter<'_, '_, '_> {
             "mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
+            "every" | "cl-every" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.sequence_every(args[0], args[1])),
+            "some" | "cl-some" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.sequence_some(args[0], args[1])),
             "copy-list" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_list(args[0])),
@@ -3188,6 +3198,33 @@ impl Interpreter<'_, '_, '_> {
             self.execute_funcall(function, &[element])?;
         }
         Some(sequence)
+    }
+
+    fn sequence_every(
+        &mut self,
+        predicate: LispValue,
+        sequence: LispValue,
+    ) -> Option<LispValue> {
+        for element in self.sequence_values(sequence)? {
+            if self.execute_funcall(predicate, &[element])?.is_nil() {
+                return Some(LispValue::NIL);
+            }
+        }
+        Some(LispValue::TRUE)
+    }
+
+    fn sequence_some(
+        &mut self,
+        predicate: LispValue,
+        sequence: LispValue,
+    ) -> Option<LispValue> {
+        for element in self.sequence_values(sequence)? {
+            let result = self.execute_funcall(predicate, &[element])?;
+            if !result.is_nil() {
+                return Some(result);
+            }
+        }
+        Some(LispValue::NIL)
     }
 
     fn mapconcat(
@@ -7877,6 +7914,53 @@ mod tests {
              (progn (defvar y 42) (makunbound 'y) (not (boundp 'y)))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_fmakunbound_removes_function_binding() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (fset 'my-fn (lambda () 1)) \
+               (fmakunbound 'my-fn) \
+               (not (fboundp 'my-fn)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_every_all_satisfy_predicate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (every #'numberp '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_every_one_fails_predicate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (every #'numberp '(1 a 3))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_some_returns_first_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (some #'numberp '(a b 3 c))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_some_returns_nil_when_no_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (some #'numberp '(a b c))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]

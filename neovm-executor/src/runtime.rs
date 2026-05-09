@@ -1292,6 +1292,21 @@ impl Runtime {
         Ok(function)
     }
 
+    pub fn fmakunbound(&mut self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
+        if symbol.is_nil() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "nil".to_string(),
+            });
+        }
+        if symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: "t".to_string(),
+            });
+        }
+        self.expect_symbol_mut(symbol)?.function = None;
+        Ok(symbol)
+    }
+
     pub fn string_contents(&self, string: LispValue) -> Result<&str, RuntimeError> {
         self.expect_string(string)?
             .data
