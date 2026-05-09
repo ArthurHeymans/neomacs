@@ -9444,4 +9444,24 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(6)));
     }
+
+    #[test]
+    fn executes_cl_rotatef_swaps_values() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((a 1) (b 2)) (cl-rotatef a b) (+ a (* b 10)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
+    #[test]
+    fn executes_cl_shiftf_shifts_values() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((a 1) (b 2) (c 3)) (cl-shiftf a b c) (+ a (* b 10) (* c 100)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(332)));
+    }
 }
