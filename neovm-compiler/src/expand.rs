@@ -427,20 +427,18 @@ impl Expander {
             "when-let*" => self.expand_when_let(span, items),
             // declare-function is a compile-time declaration — discard
             "declare-function" => nil_form(span),
-            // pcase-let* -> let* (simplified: extracts symbol bindings, ignores destructuring patterns)
+            // pcase-let* -> let* with destructuring support
             "pcase-let*" => {
                 if items.len() >= 3 {
-                    // items[1] = ((pattern expr) ...), items[2..] = body
                     let bindings_form = &items[1];
                     let body: Vec<SurfaceForm> = items[2..]
                         .iter()
                         .map(|f| self.expand_form(f.clone()))
                         .collect();
-                    // Convert pcase bindings to let* bindings: ((pat expr) ...) -> ((sym expr) ...)
-                    let simple_bindings = self.simplify_pcase_bindings(bindings_form);
-                    let mut result = vec![symbol_form("let*", span), simple_bindings];
-                    result.extend(body);
-                    list_form(result, span)
+                    let destructured = self.expand_pcase_let_bindings(
+                        span, bindings_form, body,
+                    );
+                    self.expand_form(destructured)
                 } else {
                     let expanded: Vec<SurfaceForm> =
                         items.into_iter().map(|f| self.expand_form(f)).collect();
@@ -1071,6 +1069,123 @@ impl Expander {
                 // Unknown place — pass through as-is
                 let expanded = vec![symbol_form("setf", span), place.clone(), value.clone()];
                 SurfaceForm::new(SurfaceKind::List(expanded), span)
+            }
+        }
+    }
+
+    /// Expand pcase-let* bindings into a let* form with destructuring support.
+    /// Handles both simple symbol bindings and backquote patterns like `(,x ,y).
+    fn expand_pcase_let_bindings(
+        &mut self,
+        span: Span,
+        bindings_form: &SurfaceForm,
+        body: Vec<SurfaceForm>,
+    ) -> SurfaceForm {
+        let SurfaceKind::List(bindings) = &bindings_form.kind else {
+            return list_form(
+                std::iter::once(symbol_form("let*", span))
+                    .chain(std::iter::once(bindings_form.clone()))
+                    .chain(body)
+                    .collect(),
+                span,
+            );
+        };
+        let mut let_bindings: Vec<SurfaceForm> = Vec::new();
+        for binding in bindings {
+            let (pat, expr) = match &binding.kind {
+                SurfaceKind::List(items) if items.len() == 2 => {
+                    (items[0].clone(), items[1].clone())
+                }
+                _ => continue,
+            };
+            if pat.symbol_name().is_some() {
+                // Simple symbol binding: (x expr)
+                let_bindings.push(list_form(vec![pat, expr], span));
+            } else if let SurfaceKind::Backquote(template) = &pat.kind {
+                // Backquote destructuring: `(,x ,y) -> car/cdr chain
+                let tmp = format!("--pcase-dst-{}--", self.pcase_counter);
+                self.pcase_counter += 1;
+                let_bindings.push(list_form(
+                    vec![symbol_form(&tmp, span), expr],
+                    span,
+                ));
+                self.emit_pcase_destructure(span, template, &tmp, &mut let_bindings);
+            } else {
+                // Unknown pattern: bind to underscore (value is evaluated but ignored)
+                let_bindings.push(list_form(
+                    vec![symbol_form("_", span), expr],
+                    span,
+                ));
+            }
+        }
+        let mut result = vec![symbol_form("let*", span), list_form(let_bindings, span)];
+        result.extend(body);
+        list_form(result, span)
+    }
+
+    /// Emit let* bindings that destructure a backquote template into its car/cdr components.
+    fn emit_pcase_destructure(
+        &mut self,
+        span: Span,
+        template: &SurfaceForm,
+        src: &str,
+        bindings: &mut Vec<SurfaceForm>,
+    ) {
+        match &template.kind {
+            SurfaceKind::Atom(_) => {
+                // Literal in pattern: ignore (compatibility, not matched)
+            }
+            SurfaceKind::Comma(inner) => {
+                // Unquote: bind the current source to the variable
+                if let Some(name) = inner.symbol_name() {
+                    bindings.push(list_form(
+                        vec![
+                            symbol_form(name, inner.span),
+                            symbol_form(src, span),
+                        ],
+                        span,
+                    ));
+                }
+            }
+            SurfaceKind::List(items) => {
+                // Destructure a list: car for head, cdr for tail
+                let head_tmp = format!("--pcase-dst-{}--", self.pcase_counter);
+                self.pcase_counter += 1;
+                bindings.push(list_form(
+                    vec![
+                        symbol_form(&head_tmp, span),
+                        list_form(
+                            vec![symbol_form("car", span), symbol_form(src, span)],
+                            span,
+                        ),
+                    ],
+                    span,
+                ));
+                self.emit_pcase_destructure(span, &items[0], &head_tmp, bindings);
+                // Advance src to cdr for remaining elements
+                if items.len() > 1 {
+                    let cdr_src = format!("--pcase-dst-{}--", self.pcase_counter);
+                    self.pcase_counter += 1;
+                    bindings.push(list_form(
+                        vec![
+                            symbol_form(&cdr_src, span),
+                            list_form(
+                                vec![symbol_form("cdr", span), symbol_form(src, span)],
+                                span,
+                            ),
+                        ],
+                        span,
+                    ));
+                    // Build a "list" of remaining items
+                    let rest = SurfaceForm::new(
+                        SurfaceKind::List(items[1..].to_vec()),
+                        span,
+                    );
+                    self.emit_pcase_destructure(span, &rest, &cdr_src, bindings);
+                }
+            }
+            _ => {
+                // Unsupported pattern: ignore
             }
         }
     }

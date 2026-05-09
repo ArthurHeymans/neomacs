@@ -7799,8 +7799,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "pcase-let*: expander only handles symbol bindings"]
-    fn gap_pcase_let_star_destructure() {
+    #[test]
+    fn executes_pcase_let_star_destructure() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (pcase-let* ((`(,x ,y) '(1 2))) (+ x y))",
