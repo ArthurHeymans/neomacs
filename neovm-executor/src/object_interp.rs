@@ -1932,6 +1932,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
+            "cl-concatenate" => self.subr_vararg(name, args, |s| {
+                s.cl_concatenate(args)
+            }),
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
@@ -3453,6 +3456,33 @@ impl Interpreter<'_, '_, '_> {
             Some(make_list(self.runtime, result.into_iter()))
         } else {
             Some(self.runtime.vector(result))
+        }
+    }
+
+    fn cl_concatenate(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        if args.is_empty() {
+            return Some(LispValue::NIL);
+        }
+        let mut all: Vec<LispValue> = Vec::new();
+        for arg in &args[1..] {
+            if let Some(values) = self.sequence_values(*arg) {
+                all.extend(values);
+            }
+        }
+        let type_sym = self.runtime.symbol_name(args[0]).ok()?;
+        match type_sym.as_str() {
+            "list" => Some(make_list(self.runtime, all.into_iter())),
+            "string" => {
+                let mut s = String::new();
+                for v in all {
+                    if self.runtime.is_string(v) {
+                        s.push_str(&self.runtime.string_contents_emacs(v).unwrap_or_default());
+                    }
+                }
+                Some(self.runtime.string(&s))
+            }
+            "vector" => Some(self.runtime.vector(all)),
+            _ => Some(make_list(self.runtime, all.into_iter())),
         }
     }
 
@@ -5769,6 +5799,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-concatenate",
             "cl-delete",
             "cl-delete-duplicates",
             "cl-delq",
@@ -10255,6 +10286,15 @@ mod tests {
              (car (cl-member 2 '(1 2 3)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_concatenate_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-concatenate 'list '(1 2) '(3 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
     }
 
     #[test]
