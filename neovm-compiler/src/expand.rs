@@ -632,6 +632,7 @@ impl Expander {
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
+            "cl-case" => self.expand_cl_case(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -2522,6 +2523,74 @@ impl Expander {
                 span,
             ),
         }
+    }
+
+    // ── cl-case expansion ──────────────────────────────────────────────
+
+    fn expand_cl_case(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        if items.len() < 3 {
+            self.error(span, "cl-case requires an expression and at least one clause");
+            return nil_form(span);
+        }
+        let expr = &items[1];
+        let clauses = &items[2..];
+        let temp = "--cl-case--val--";
+        // Build (let ((temp expr)) (cond ...))
+        let mut cond_clauses = Vec::new();
+        for clause in clauses {
+            let SurfaceKind::List(clause_items) = &clause.kind else { continue };
+            let Some((key_form, body)) = clause_items.split_first() else { continue };
+            if body.is_empty() { continue; }
+            let test = if key_form.symbol_name() == Some("t")
+                || key_form.symbol_name() == Some("otherwise")
+            {
+                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::True), span)
+            } else if let SurfaceKind::List(keys) = &key_form.kind {
+                list_form(vec![
+                    symbol_form("memq", span),
+                    symbol_form(temp, span),
+                    list_form(vec![
+                        symbol_form("quote", span),
+                        SurfaceForm::new(SurfaceKind::List(keys.clone()), span),
+                    ], span),
+                ], span)
+            } else {
+                list_form(vec![
+                    symbol_form("eql", span),
+                    symbol_form(temp, span),
+                    list_form(vec![
+                        symbol_form("quote", span),
+                        key_form.clone(),
+                    ], span),
+                ], span)
+            };
+            cond_clauses.push(list_form(
+                std::iter::once(test)
+                    .chain(std::iter::once(list_form(
+                        std::iter::once(symbol_form("progn", span))
+                            .chain(body.iter().cloned())
+                            .collect(),
+                        span,
+                    )))
+                    .collect(),
+                span,
+            ));
+        }
+        let mut result = vec![
+            symbol_form("let", span),
+            list_form(vec![list_form(vec![
+                symbol_form(temp, span),
+                expr.clone(),
+            ], span)], span),
+            list_form(
+                std::iter::once(symbol_form("cond", span))
+                    .chain(cond_clauses)
+                    .collect(),
+                span,
+            ),
+        ];
+        let expanded = list_form(result, span);
+        self.expand_form(expanded)
     }
 
     // ── cl-loop expansion ──────────────────────────────────────────────

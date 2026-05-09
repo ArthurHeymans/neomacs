@@ -9417,4 +9417,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
+
+    #[test]
+    fn executes_cl_case_single_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-case 'b ((a) 1) ((b c) 2) (t 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_case_otherwise_fallback() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-case 'z ((a) 1) ((b) 2) (otherwise 99))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
 }

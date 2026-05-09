@@ -408,7 +408,7 @@ impl MacroEval {
             }),
             Some("make-symbol") => {
                 self.eval_unary(span, "make-symbol", &items[1..], env, |v| match v {
-                    MacroValue::String(s) => MacroValue::Symbol(format!(" {}", s)),
+                    MacroValue::String(s) => MacroValue::Symbol(s),
                     other => other.clone(),
                 })
             }
