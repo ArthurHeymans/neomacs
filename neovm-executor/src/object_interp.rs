@@ -7968,6 +7968,26 @@ mod tests {
     }
 
     #[test]
+    fn executes_comparison_zero_args_returns_t() {
+        for op in ["=", "<", ">", "<=", ">="] {
+            let (value, _) = execute(
+                &format!(";;; -*- lexical-binding: t; -*-\n({op})"),
+            );
+            assert_eq!(value, Some(LispValue::TRUE), "({op}) should return t");
+        }
+    }
+
+    #[test]
+    fn executes_comparison_one_arg_returns_t() {
+        for op in ["=", "<", ">", "<=", ">="] {
+            let (value, _) = execute(
+                &format!(";;; -*- lexical-binding: t; -*-\n({op} 1)"),
+            );
+            assert_eq!(value, Some(LispValue::TRUE), "({op} 1) should return t");
+        }
+    }
+
+    #[test]
     fn executes_upcase_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
