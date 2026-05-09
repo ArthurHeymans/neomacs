@@ -1979,6 +1979,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-union" => self.subr_2(name, args, |s| {
                 s.cl_union(args[0], args[1])
             }),
+            "cl-set-exclusive-or" => self.subr_2(name, args, |s| {
+                s.cl_set_exclusive_or(args[0], args[1])
+            }),
             "cl-sublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
@@ -3821,6 +3824,24 @@ impl Interpreter<'_, '_, '_> {
             self.error("cl-fill: expected sequence");
             None
         }
+    }
+
+    fn cl_set_exclusive_or(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
+        // Elements in exactly one of the two lists, preserving order.
+        let elements1 = self.list_values(list1)?;
+        let elements2 = self.list_values(list2)?;
+        let mut result = Vec::new();
+        for e in &elements1 {
+            if !elements2.iter().any(|x| self.eql_values(*x, *e)) {
+                result.push(*e);
+            }
+        }
+        for e in &elements2 {
+            if !elements1.iter().any(|x| self.eql_values(*x, *e)) {
+                result.push(*e);
+            }
+        }
+        Some(make_list(self.runtime, result.into_iter()))
     }
 
     fn cl_union(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
@@ -6203,6 +6224,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-remove-if",
             "cl-remove-if-not",
             "cl-set-difference",
+            "cl-set-exclusive-or",
             "cl-sort",
             "clrhash",
             "compiled-function-p",
@@ -11256,6 +11278,15 @@ mod tests {
              (cl-fill '(a b c d) 99)",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(99 99 99 99)");
+    }
+
+    #[test]
+    fn executes_cl_set_exclusive_or_returns_unique_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-set-exclusive-or '(1 2 3 4) '(3 4 5 6))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 5 6)");
     }
 
     #[test]
