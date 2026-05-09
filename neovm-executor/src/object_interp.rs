@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_mapconcat_with_number_to_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapconcat 'number-to-string '(1 2 3) \",\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_copy_tree_deep() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
