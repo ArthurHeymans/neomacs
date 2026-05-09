@@ -5508,244 +5508,247 @@ fn bool_value(value: bool) -> LispValue {
 }
 
 fn is_primitive_name(name: &str) -> bool {
-    matches!(
-        name,
-        "cons"
-            | "car"
-            | "cdr"
-            | "car-safe"
-            | "cdr-safe"
-            | "setcar"
-            | "setcdr"
-            | "eq"
-            | "eql"
-            | "equal"
-            | "consp"
-            | "listp"
-            | "nlistp"
-            | "atom"
-            | "numberp"
-            | "integerp"
-            | "natnump"
-            | "wholenump"
-            | "zerop"
-            | "symbolp"
-            | "stringp"
-            | "vectorp"
-            | "hash-table-p"
-            | "arrayp"
-            | "char-table-p"
-            | "symbol-value"
-            | "set"
-            | "boundp"
-            | "fboundp"
-            | "provide"
-            | "featurep"
-            | "require"
-            | "get"
-            | "put"
-            | "symbol-plist"
-            | "setplist"
-            | "plist-get"
-            | "plist-put"
-            | "autoload"
-            | "symbol-function"
-            | "fset"
-            | "defalias"
-            | "read"
-            | "eval"
-            | "macroexpand"
-            | "macroexpand-1"
-            | "defun"
-            | "intern"
-            | "symbol-name"
-            | "not"
-            | "null"
-            | "identity"
-            | "ignore"
-            | "list"
-            | "make-list"
-            | "length"
-            | "concat"
-            | "substring"
-            | "split-string"
-            | "prin1-to-string"
-            | "princ-to-string"
-            | "string-join"
-            | "string-trim"
-            | "string-trim-left"
-            | "string-trim-right"
-            | "substring-no-properties"
-            | "subseq"
-            | "string="
-            | "string-equal"
-            | "string<"
-            | "string-lessp"
-            | "string>"
-            | "string-greaterp"
-            | "string-bytes"
-            | "string-match-p"
-            | "replace-regexp-in-string"
-            | "string-match"
-            | "match-string"
-            | "match-beginning"
-            | "match-end"
-            | "replace-match"
-            | "char-to-string"
-            | "string-to-char"
-            | "format"
-            | "format-message"
-            | "vector"
-            | "aref"
-            | "aset"
-            | "make-hash-table"
-            | "hash-table-count"
-            | "gethash"
-            | "puthash"
-            | "remhash"
-            | "clrhash"
-            | "maphash"
-            | "sxhash-eq"
-            | "sxhash-eql"
-            | "sxhash-equal"
-            | "reverse"
-            | "nreverse"
-            | "append"
-            | "nth"
-            | "nthcdr"
-            | "last"
-            | "safe-length"
-            | "sort"
-            | "memq"
-            | "member"
-            | "assq"
-            | "assoc"
-            | "rassq"
-            | "rassoc"
-            | "assoc-string"
-            | "alist-get"
-            | "every"
-            | "some"
-            | "fmakunbound"
-            | "copy-sequence"
-            | "copy-list"
-            | "mapcar"
-            | "mapc"
-            | "+"
-            | "*"
-            | "-"
-            | "/"
-            | "1+"
-            | "1-"
-            | "="
-            | "<"
-            | "<="
-            | ">"
-            | ">="
-            | "/="
-            | "%"
-            | "message"
-            | "print"
-            | "prin1"
-            | "signal"
-            | "define-error"
-            | "error"
-            | "user-error"
-            | "funcall"
-            | "apply"
-            | "functionp"
-            | "mod"
-            | "rem"
-            | "abs"
-            | "max"
-            | "min"
-            | "type-of"
-            | "cadr"
-            | "caar"
-            | "cdar"
-            | "cddr"
-            | "caaar"
-            | "caadr"
-            | "cadar"
-            | "caddr"
-            | "cdaar"
-            | "cdadr"
-            | "cddar"
-            | "cdddr"
-            | "caaaar"
-            | "caaadr"
-            | "caadar"
-            | "caaddr"
-            | "cadaar"
-            | "cadadr"
-            | "caddar"
-            | "cadddr"
-            | "cdaaar"
-            | "cdaadr"
-            | "cdadar"
-            | "cdaddr"
-            | "cddaar"
-            | "cddadr"
-            | "cdddar"
-            | "cddddr"
-            | "number-or-marker-p"
-            | "floatp"
-            | "string-or-null-p"
-            | "booleanp"
-            | "file-exists-p"
-            | "file-readable-p"
-            | "load"
-            | "add-load-path"
-            | "prog1"
-            | "make-symbol"
-            | "intern-soft"
-            | "elt"
-            | "downcase"
-            | "upcase"
-            | "capitalize"
-            | "keywordp"
-            | "subrp"
-            | "compiled-function-p"
-            | "special-variable-p"
-            | "evenp"
-            | "cl-evenp"
-            | "cl-oddp"
-            | "cl-minusp"
-            | "cl-plusp"
-            | "random"
-            | "gensym"
-            | "butlast"
-            | "delq"
-            | "delete"
-            | "remq"
-            | "remove"
-            | "copy-tree"
-            | "copy-alist"
-            | "vconcat"
-            | "fillarray"
-            | "nconc"
-            | "number-to-string"
-            | "string-to-number"
-            | "logand"
-            | "logior"
-            | "logxor"
-            | "lognot"
-            | "ash"
-            | "lsh"
-            | "expt"
-            | "float"
-            | "truncate"
-            | "floor"
-            | "ceiling"
-            | "round"
-            | "sqrt"
-            | "sin"
-            | "cos"
-            | "tan"
-            | "log"
-            | "exp"
-            | "number-sequence"
-    )
+    use std::sync::OnceLock;
+    static PRIMITIVES: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
+    PRIMITIVES.get_or_init(|| {
+        std::collections::HashSet::from([
+            "%",
+            "*",
+            "+",
+            "-",
+            "/",
+            "/=",
+            "<",
+            "<=",
+            "=",
+            ">",
+            ">=",
+            "1+",
+            "1-",
+            "abs",
+            "add-load-path",
+            "alist-get",
+            "append",
+            "apply",
+            "aref",
+            "arrayp",
+            "aset",
+            "ash",
+            "assoc",
+            "assoc-string",
+            "assq",
+            "atom",
+            "autoload",
+            "booleanp",
+            "boundp",
+            "butlast",
+            "caaaar",
+            "caaadr",
+            "caaar",
+            "caadar",
+            "caaddr",
+            "caadr",
+            "caar",
+            "cadaar",
+            "cadadr",
+            "cadar",
+            "caddar",
+            "cadddr",
+            "caddr",
+            "cadr",
+            "capitalize",
+            "car",
+            "car-safe",
+            "cdaaar",
+            "cdaadr",
+            "cdaar",
+            "cdadar",
+            "cdaddr",
+            "cdadr",
+            "cdar",
+            "cddaar",
+            "cddadr",
+            "cddar",
+            "cdddar",
+            "cddddr",
+            "cdddr",
+            "cddr",
+            "cdr",
+            "cdr-safe",
+            "ceiling",
+            "char-table-p",
+            "char-to-string",
+            "cl-evenp",
+            "cl-minusp",
+            "cl-oddp",
+            "cl-plusp",
+            "clrhash",
+            "compiled-function-p",
+            "concat",
+            "cons",
+            "consp",
+            "copy-alist",
+            "copy-list",
+            "copy-sequence",
+            "copy-tree",
+            "cos",
+            "defalias",
+            "define-error",
+            "defun",
+            "delq",
+            "delete",
+            "downcase",
+            "elt",
+            "eql",
+            "eq",
+            "equal",
+            "error",
+            "eval",
+            "evenp",
+            "every",
+            "exp",
+            "expt",
+            "fboundp",
+            "featurep",
+            "file-exists-p",
+            "file-readable-p",
+            "fillarray",
+            "float",
+            "floatp",
+            "floor",
+            "fmakunbound",
+            "format",
+            "format-message",
+            "fset",
+            "funcall",
+            "functionp",
+            "gensym",
+            "get",
+            "gethash",
+            "hash-table-count",
+            "hash-table-p",
+            "identity",
+            "ignore",
+            "integerp",
+            "intern",
+            "intern-soft",
+            "keywordp",
+            "last",
+            "length",
+            "list",
+            "listp",
+            "load",
+            "log",
+            "logand",
+            "logior",
+            "lognot",
+            "logxor",
+            "lsh",
+            "macroexpand",
+            "macroexpand-1",
+            "make-hash-table",
+            "make-list",
+            "make-symbol",
+            "mapc",
+            "mapcar",
+            "maphash",
+            "match-beginning",
+            "match-end",
+            "match-string",
+            "max",
+            "member",
+            "memq",
+            "message",
+            "min",
+            "mod",
+            "natnump",
+            "nconc",
+            "nlistp",
+            "not",
+            "nreverse",
+            "nth",
+            "nthcdr",
+            "null",
+            "number-or-marker-p",
+            "number-sequence",
+            "number-to-string",
+            "numberp",
+            "plist-get",
+            "plist-put",
+            "prin1",
+            "prin1-to-string",
+            "princ-to-string",
+            "print",
+            "prog1",
+            "provide",
+            "put",
+            "puthash",
+            "random",
+            "rassoc",
+            "rassq",
+            "read",
+            "rem",
+            "remhash",
+            "remq",
+            "remove",
+            "replace-match",
+            "replace-regexp-in-string",
+            "require",
+            "reverse",
+            "round",
+            "safe-length",
+            "set",
+            "setcar",
+            "setcdr",
+            "setplist",
+            "signal",
+            "sin",
+            "some",
+            "sort",
+            "special-variable-p",
+            "split-string",
+            "sqrt",
+            "string-bytes",
+            "string-equal",
+            "string-greaterp",
+            "string-join",
+            "string-lessp",
+            "string-match",
+            "string-match-p",
+            "string-or-null-p",
+            "string-to-char",
+            "string-to-number",
+            "string-trim",
+            "string-trim-left",
+            "string-trim-right",
+            "string<",
+            "string=",
+            "string>",
+            "stringp",
+            "subrp",
+            "subseq",
+            "substring",
+            "substring-no-properties",
+            "sxhash-eq",
+            "sxhash-eql",
+            "sxhash-equal",
+            "symbol-function",
+            "symbol-name",
+            "symbol-plist",
+            "symbol-value",
+            "symbolp",
+            "tan",
+            "truncate",
+            "type-of",
+            "upcase",
+            "user-error",
+            "vconcat",
+            "vector",
+            "vectorp",
+            "wholenump",
+            "zerop",
+        ])
+    }).contains(name)
 }
 
 fn macro_value_to_lisp(
