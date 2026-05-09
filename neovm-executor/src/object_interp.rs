@@ -7956,8 +7956,15 @@ mod tests {
     }
 
     // cl-block and cl-return-from macros are defined in builtin_libs.
-    // The expander evaluator doesn't support let/cons, so macros using
-    // those forms work via require but not in the mini-evaluator.
+
+    #[test]
+    fn executes_plist_get_and_put() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((plist (plist-put nil :key 42))) (plist-get plist :key))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
 
     #[test]
     fn executes_logand_no_args_returns_neg_one() {
