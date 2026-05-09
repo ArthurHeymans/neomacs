@@ -363,6 +363,17 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
     }
 }
 
+fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> bool) -> Option<SsaConst> {
+    let ordering = match (a, b) {
+        (SsaConst::Int(a), SsaConst::Int(b)) => a.cmp(b),
+        (SsaConst::Float(a), SsaConst::Float(b)) => f64::total_cmp(a, b),
+        (SsaConst::Int(a), SsaConst::Float(b)) => f64::total_cmp(&(*a as f64), b),
+        (SsaConst::Float(a), SsaConst::Int(b)) => f64::total_cmp(a, &(*b as f64)),
+        _ => return None,
+    };
+    Some(if cmp(ordering) { SsaConst::True } else { SsaConst::Nil })
+}
+
 fn fold_binary_arith(
     a: &SsaConst,
     b: &SsaConst,
@@ -400,38 +411,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Float(a / b))
             } else { None }
         }
-        "=" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a == b {
-                SsaConst::True
-            } else {
-                SsaConst::Nil
-            })
-        }
-        "<" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a < b { SsaConst::True } else { SsaConst::Nil })
-        }
-        ">" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a > b { SsaConst::True } else { SsaConst::Nil })
-        }
-        "<=" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a <= b {
-                SsaConst::True
-            } else {
-                SsaConst::Nil
-            })
-        }
-        ">=" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(if a >= b {
-                SsaConst::True
-            } else {
-                SsaConst::Nil
-            })
-        }
+        "=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_eq()),
+        "<" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_lt()),
+        ">" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_gt()),
+        "<=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_le()),
+        ">=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_ge()),
         "eq" | "eql" if args.len() == 2 => match (args[0], args[1]) {
             (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b {
                 SsaConst::True
