@@ -7094,6 +7094,56 @@ mod tests {
     }
 
     #[test]
+    fn executes_expt_with_integers() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(expt 2 10)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(1024)));
+    }
+
+    #[test]
+    fn executes_truncate_returns_integer() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(truncate 3.7)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_floor_returns_integer() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(floor 3.7)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(floor -3.7)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(-4)));
+    }
+
+    #[test]
+    fn executes_ceiling_returns_integer() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(ceiling 3.2)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn executes_round_returns_integer() {
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(round 3.5)");
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn executes_sqrt_returns_float() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(sqrt 16.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let f = rt.float_data(value.unwrap()).unwrap();
+        assert!((f - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn executes_sin_cos_tan() {
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(sin 0.0)");
+        assert!(rt.is_float(value.unwrap()));
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cos 0.0)");
+        assert!(value.is_some());
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(tan 0.0)");
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_zerop_float() {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(zerop 0.0)");
         assert_eq!(value, Some(LispValue::TRUE));
@@ -9325,6 +9375,14 @@ mod tests {
              (logxor 5 3)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(6))); // 101 ^ 011 = 110
+    }
+
+    #[test]
+    fn executes_logxor_no_args_returns_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(logxor)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
     #[test]
