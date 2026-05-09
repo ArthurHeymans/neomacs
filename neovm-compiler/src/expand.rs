@@ -1242,6 +1242,19 @@ impl Expander {
                 );
                 self.expand_form(expanded)
             }
+            "get" if place_items.len() == 3 => {
+                // (setf (get sym prop) val) → (put sym prop val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("put", span),
+                        place_items[1].clone(),
+                        place_items[2].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
             _ => {
                 // Unknown place — pass through as-is
                 let expanded = vec![symbol_form("setf", span), place.clone(), value.clone()];
