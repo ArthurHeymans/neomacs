@@ -1808,6 +1808,15 @@ impl Interpreter<'_, '_, '_> {
             "maphash" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.maphash(args[0], args[1])),
+            "sxhash-eq" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.sxhash_eq(args[0])),
+            "sxhash-eql" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.sxhash_eql(args[0])),
+            "sxhash-equal" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.sxhash_equal(args[0])),
             "reverse" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.list_values(args[0]))
@@ -4609,6 +4618,89 @@ impl Interpreter<'_, '_, '_> {
         Some(LispValue::NIL)
     }
 
+    fn sxhash_eq(&mut self, obj: LispValue) -> Option<LispValue> {
+        // Identity hash: use the raw bits of the LispValue as the hash.
+        // Fixnums and other immediates use their tag bits.
+        let hash = obj.as_fixnum().map(|n| n as u64).unwrap_or_else(|| {
+            obj.heap_addr().map(|a| a as u64).unwrap_or(0)
+        });
+        self.fixnum(hash as i64, "sxhash-eq")
+    }
+
+    fn sxhash_eql(&mut self, obj: LispValue) -> Option<LispValue> {
+        // Like eq but floats and bignums compare by value.
+        if self.runtime.is_float(obj) {
+            let f = self.runtime.float_data(obj).ok()?;
+            self.fixnum(f.to_bits() as i64, "sxhash-eql")
+        } else if self.runtime.is_bignum(obj) {
+            // Hash bignum by its string representation
+            let s = self.runtime.format_value(obj);
+            let mut h: u64 = 0;
+            for b in s.bytes() {
+                h = h.wrapping_mul(31).wrapping_add(b as u64);
+            }
+            self.fixnum(h as i64, "sxhash-eql")
+        } else {
+            self.sxhash_eq(obj)
+        }
+    }
+
+    fn sxhash_equal(&mut self, obj: LispValue) -> Option<LispValue> {
+        // Deep hash: recurse into conses, vectors, strings.
+        let hash = self.sxhash_equal_value(obj, 0)?;
+        self.fixnum(hash as i64, "sxhash-equal")
+    }
+
+    fn sxhash_equal_value(&mut self, obj: LispValue, depth: usize) -> Option<u64> {
+        if depth > 8 {
+            return Some(0);
+        }
+        if obj.is_nil() {
+            return Some(0);
+        }
+        if obj.is_true() {
+            return Some(1);
+        }
+        if let Some(n) = obj.as_fixnum() {
+            return Some(n as u64);
+        }
+        if self.runtime.is_float(obj) {
+            return Some(self.runtime.float_data(obj).ok()?.to_bits());
+        }
+        if self.runtime.is_string(obj) {
+            let s = self.runtime.string_contents_emacs(obj).unwrap_or_default();
+            let mut h: u64 = 0;
+            for b in s.bytes() {
+                h = h.wrapping_mul(31).wrapping_add(b as u64);
+            }
+            return Some(h);
+        }
+        if self.runtime.is_cons(obj) {
+            let car = self.runtime.car(obj).ok()?;
+            let cdr = self.runtime.cdr(obj).ok()?;
+            let car_h = self.sxhash_equal_value(car, depth + 1).unwrap_or(0);
+            let cdr_h = self.sxhash_equal_value(cdr, depth + 1).unwrap_or(0);
+            return Some(car_h.wrapping_mul(31).wrapping_add(cdr_h));
+        }
+        if self.runtime.is_vector(obj) {
+            let elements = self.runtime.vector_elements(obj).ok()?;
+            let mut h: u64 = 0;
+            for elem in &elements {
+                h = h.wrapping_mul(31).wrapping_add(
+                    self.sxhash_equal_value(*elem, depth + 1).unwrap_or(0)
+                );
+            }
+            return Some(h);
+        }
+        // Fallback: use format/display representation
+        let s = self.runtime.format_value(obj);
+        let mut h: u64 = 0;
+        for b in s.bytes() {
+            h = h.wrapping_mul(31).wrapping_add(b as u64);
+        }
+        Some(h)
+    }
+
     fn hash_table_keys(&mut self, table: LispValue) -> Option<LispValue> {
         let entries = self.runtime.hash_table_entries(table).ok()?;
         let mut result = LispValue::NIL;
@@ -5501,6 +5593,9 @@ fn is_primitive_name(name: &str) -> bool {
             | "remhash"
             | "clrhash"
             | "maphash"
+            | "sxhash-eq"
+            | "sxhash-eql"
+            | "sxhash-equal"
             | "reverse"
             | "nreverse"
             | "append"
@@ -8137,6 +8232,42 @@ mod tests {
              (macroexpand-1 '(when t 42))",
         );
         assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_sxhash_eq_returns_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (integerp (sxhash-eq 'foo))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sxhash_eql_returns_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (integerp (sxhash-eql 42))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sxhash_equal_returns_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (integerp (sxhash-equal '(a b c)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sxhash_equal_is_consistent() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (sxhash-equal '(1 2 3)) (sxhash-equal '(1 2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
