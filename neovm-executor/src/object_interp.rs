@@ -1967,6 +1967,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-subst-if-not" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], true)
             }),
+            "cl-sublis" => self.subr_2(name, args, |s| {
+                s.cl_sublis(args[0], args[1])
+            }),
             "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
@@ -3738,6 +3741,37 @@ impl Interpreter<'_, '_, '_> {
             _ => return Some(LispValue::NIL),
         };
         Some(bool_value(result))
+    }
+
+    fn cl_sublis(&mut self, alist: LispValue, tree: LispValue) -> Option<LispValue> {
+        // Substitute keys→values in tree leaves using eql comparison.
+        if tree.is_nil() {
+            return Some(LispValue::NIL);
+        }
+        if !self.runtime.is_cons(tree) {
+            // Leaf: look up in alist by eql
+            let mut current = alist;
+            loop {
+                if current.is_nil() {
+                    return Some(tree); // no match, keep original
+                }
+                if !self.runtime.is_cons(current) {
+                    break;
+                }
+                let entry = self.runtime.car(current).ok()?;
+                let key = self.runtime.car(entry).ok()?;
+                if self.eql_values(key, tree) {
+                    return self.runtime.cdr(entry).ok();
+                }
+                current = self.runtime.cdr(current).ok()?;
+            }
+            return Some(tree);
+        }
+        let car = self.runtime.car(tree).ok()?;
+        let cdr = self.runtime.cdr(tree).ok()?;
+        let new_car = self.cl_sublis(alist, car)?;
+        let new_cdr = self.cl_sublis(alist, cdr)?;
+        Some(self.runtime.cons(new_car, new_cdr))
     }
 
     fn substitute_seq(
@@ -6055,6 +6089,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nsubstitute",
             "cl-subst-if",
             "cl-subst-if-not",
+            "cl-sublis",
             "cl-substitute",
             "cl-tree-equal",
             "cl-typep",
@@ -11038,6 +11073,24 @@ mod tests {
              (cl-subst-if-not 0 #'evenp '(1 2 3 4))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(0 2 0 4)");
+    }
+
+    #[test]
+    fn executes_cl_sublis_replaces_from_alist() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-sublis '((a . 1) (b . 2)) '(a b c))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 c)");
+    }
+
+    #[test]
+    fn executes_cl_sublis_on_nested_tree() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-sublis '((a . x) (b . y)) '((a . b) (c . a)))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "((x . y) (c . x))");
     }
 
     #[test]
