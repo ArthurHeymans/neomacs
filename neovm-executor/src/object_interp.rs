@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_join_separator() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(string-join '(\"a\" \"b\" \"c\") \"-\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_last_returns_tail() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(car (last '(1 2 3 4 5)))",
