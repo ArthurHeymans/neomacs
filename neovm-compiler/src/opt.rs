@@ -519,6 +519,19 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let r = a.wrapping_rem(b);
             Some(SsaConst::Int(if r == 0 || (a ^ b) >= 0 { r } else { r.wrapping_add(b) }))
         }
+        "consp" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::Nil,
+        }),
+        "listp" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Value(_) => return None,
+            SsaConst::Nil => SsaConst::True,
+            _ => SsaConst::Nil,
+        }),
+        "atom" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::True,
+        }),
         _ => None,
     }
 }
