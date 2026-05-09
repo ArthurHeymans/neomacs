@@ -2082,6 +2082,18 @@ impl Interpreter<'_, '_, '_> {
                 });
                 None
             }),
+            "define-error" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
+                let symbol = args[0];
+                let message = args[1];
+                let parent = args.get(2).copied().unwrap_or_else(|| self.runtime.intern("error"));
+                let parent_cons = self.runtime.cons(parent, LispValue::NIL);
+                let conditions = self.runtime.cons(symbol, parent_cons);
+                let msg_key = self.runtime.intern("error-message");
+                let cond_key = self.runtime.intern("error-conditions");
+                let _ = self.runtime.put_symbol_property(symbol, msg_key, message);
+                let _ = self.runtime.put_symbol_property(symbol, cond_key, conditions);
+                Some(symbol)
+            }),
             "error" => {
                 let symbol = self.runtime.intern("error");
                 let data = self.format_signal_data(args);
@@ -5636,6 +5648,7 @@ fn is_primitive_name(name: &str) -> bool {
             | "print"
             | "prin1"
             | "signal"
+            | "define-error"
             | "error"
             | "user-error"
             | "funcall"
@@ -8268,6 +8281,15 @@ mod tests {
              (= (sxhash-equal '(1 2 3)) (sxhash-equal '(1 2 3)))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_define_error_creates_symbol() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (define-error 'my-test-error \"test message\")",
+        );
+        assert!(value.is_some());
     }
 
     #[test]
