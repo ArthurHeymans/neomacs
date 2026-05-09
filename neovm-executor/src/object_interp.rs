@@ -1932,7 +1932,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
-            "cl-substitute" | "cl-nsubstitute" => self.subr_3(name, args, |s| {
+            "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
             "copy-sequence" => self
