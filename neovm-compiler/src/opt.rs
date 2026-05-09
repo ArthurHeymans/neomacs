@@ -542,6 +542,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
+        "vectorp" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::Nil,
+        }),
         _ => None,
     }
 }
