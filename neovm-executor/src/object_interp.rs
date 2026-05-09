@@ -1972,6 +1972,15 @@ impl Interpreter<'_, '_, '_> {
             "cl-count-if" => self.subr_2(name, args, |s| {
                 s.cl_count_if(args[0], args[1])
             }),
+            "cl-count-if-not" => self.subr_2(name, args, |s| {
+                s.cl_count_if_not(args[0], args[1])
+            }),
+            "cl-find-if-not" => self.subr_2(name, args, |s| {
+                s.cl_find_if_not(args[0], args[1])
+            }),
+            "cl-position-if-not" => self.subr_2(name, args, |s| {
+                s.cl_position_if_not(args[0], args[1])
+            }),
             "cl-mismatch" => self.subr_2(name, args, |s| {
                 s.cl_mismatch(args[0], args[1])
             }),
@@ -3716,6 +3725,37 @@ impl Interpreter<'_, '_, '_> {
         } else {
             Some(LispValue::NIL)
         }
+    }
+
+    fn cl_count_if_not(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        let mut count = 0i64;
+        for e in elements {
+            if self.execute_funcall(predicate, &[e])?.is_nil() {
+                count += 1;
+            }
+        }
+        self.fixnum(count, "cl-count-if-not")
+    }
+
+    fn cl_find_if_not(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        for e in elements {
+            if self.execute_funcall(predicate, &[e])?.is_nil() {
+                return Some(e);
+            }
+        }
+        Some(LispValue::NIL)
+    }
+
+    fn cl_position_if_not(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        for (i, e) in elements.into_iter().enumerate() {
+            if self.execute_funcall(predicate, &[e])?.is_nil() {
+                return self.fixnum(i as i64, "cl-position-if-not");
+            }
+        }
+        Some(LispValue::NIL)
     }
 
     fn cl_count_if(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
@@ -6695,16 +6735,19 @@ fn is_primitive_name(name: &str) -> bool {
             "char-to-string",
             "cl-count",
             "cl-count-if",
+            "cl-count-if-not",
             "cl-endp",
             "cl-evenp",
             "cl-fill",
             "cl-find",
             "cl-find-if",
+            "cl-find-if-not",
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
             "cl-position",
             "cl-position-if",
+            "cl-position-if-not",
             "cl-coerce",
             "cl-concatenate",
             "cl-delete",
