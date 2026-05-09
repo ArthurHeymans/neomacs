@@ -7589,7 +7589,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn executes_random_returns_fixnum() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
@@ -7716,7 +7715,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn executes_eval_evaluates_form() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
@@ -7733,7 +7731,6 @@ mod tests {
         assert!(value.is_some());
     }
 
-    #[test]
     #[test]
     fn executes_apply_with_arg_list() {
         let (value, _) = execute(
@@ -7798,7 +7795,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn executes_pcase_let_star_destructure() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
@@ -7825,7 +7821,6 @@ mod tests {
     }
 
     #[test]
-
     fn executes_cl_accessors() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
@@ -8053,7 +8048,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn executes_nconc_destructive_append() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (nconc (list 1 2) (list 3 4)))",
@@ -8084,8 +8078,6 @@ mod tests {
         assert!(value.is_some());
     }
 
-    #[test]
-    #[test]
     #[test]
     fn executes_cdr_safe_non_cons_returns_nil() {
         let (value, _) = execute(
