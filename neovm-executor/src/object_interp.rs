@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_fillarray_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (vector 1 2 3))) (fillarray v 0) (aref v 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
     fn executes_string_lessp_ordering() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(string-lessp \"abc\" \"abd\")",
