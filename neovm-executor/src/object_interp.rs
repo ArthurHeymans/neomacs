@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_eq_float_int() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(= 1 1.0)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_atom_predicate() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (atom 42) (atom nil) (not (atom '(1 2))))",
