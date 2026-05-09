@@ -536,6 +536,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
+        "string-to-number" if args.len() >= 1 => match args[0] {
+            SsaConst::String(s) => {
+                if let Ok(n) = s.parse::<i64>() {
+                    Some(SsaConst::Int(n))
+                } else if let Ok(f) = s.parse::<f64>() {
+                    Some(SsaConst::Float(f))
+                } else { None }
+            }
+            _ => None,
+        },
         "concat" if !args.is_empty() => {
             if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
                 let s: String = args.iter()
