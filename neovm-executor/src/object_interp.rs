@@ -10865,6 +10865,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_every_empty_list_is_true() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-every #'identity '())",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_some_empty_list_is_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-some #'identity '())",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_cl_reduce_star_pattern() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
