@@ -3727,10 +3727,13 @@ impl Interpreter<'_, '_, '_> {
             "symbol" => obj.is_nil() || obj.is_true() || self.runtime.is_symbol(obj),
             "cons" | "list" => self.runtime.is_cons(obj),
             "null" => obj.is_nil(),
+            "sequence" => obj.is_nil() || self.runtime.is_cons(obj)
+                || self.runtime.is_vector(obj) || self.runtime.is_string(obj),
             "vector" | "array" => self.runtime.is_vector(obj),
             "function" => self.runtime.is_function(obj),
             "hash-table" => self.runtime.is_hash_table(obj),
             "number" => self.runtime.is_number(obj),
+            "boolean" => obj.is_nil() || obj.is_true(),
             "atom" => !self.runtime.is_cons(obj),
             _ => return Some(LispValue::NIL),
         };
