@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_eval_when_compile_evaluates_at_compile_time() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (eval-when-compile (+ 1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_destructuring_bind() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
