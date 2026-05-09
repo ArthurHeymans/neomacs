@@ -1194,6 +1194,12 @@ impl Interpreter<'_, '_, '_> {
                 bool_value(self.runtime.is_vector(args[0]) || self.runtime.is_string(args[0]))
             }),
             "char-table-p" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(
+                    args[0].as_char().is_some()
+                        || self.runtime.is_string(args[0])
+                )
+            }),
             "atom" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(!self.runtime.is_cons(args[0]))),
@@ -6772,6 +6778,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cdr",
             "cdr-safe",
             "ceiling",
+            "char-or-string-p",
             "char-table-p",
             "char-to-string",
             "cl-count",
