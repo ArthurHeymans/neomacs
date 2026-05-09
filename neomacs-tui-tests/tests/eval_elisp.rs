@@ -4632,6 +4632,42 @@ fn generate_buffer_name_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn rename_buffer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"renbuf:%S\" (let ((b (generate-new-buffer \"neo-buf\"))) (unwind-protect (with-current-buffer b (list (buffer-name) (rename-buffer \"neo-renamed\" t) (buffer-name) (generate-new-buffer-name \"neo-renamed\"))) (when (buffer-live-p b) (kill-buffer b)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("renbuf:")
+                && row.contains("neo-buf")
+                && row.contains("neo-renamed")
+                && row.contains("neo-renamed<2>")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: rename-buffer behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "rename_buffer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn kill_buffer_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
