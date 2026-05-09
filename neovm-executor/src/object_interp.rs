@@ -2000,6 +2000,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-set-exclusive-or" => self.subr_2(name, args, |s| {
                 s.cl_set_exclusive_or(args[0], args[1])
             }),
+            "cl-search" => self.subr_2(name, args, |s| {
+                s.cl_search(args[0], args[1])
+            }),
             "cl-sublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
@@ -3405,6 +3408,26 @@ impl Interpreter<'_, '_, '_> {
             if !self.execute_funcall(predicate, &[e])?.is_nil() {
                 return self.fixnum(i as i64, "cl-position-if");
             }
+        }
+        Some(LispValue::NIL)
+    }
+
+    fn cl_search(&mut self, needle: LispValue, haystack: LispValue) -> Option<LispValue> {
+        let ne = self.sequence_values(needle)?;
+        let hs = self.sequence_values(haystack)?;
+        if ne.is_empty() {
+            return self.fixnum(0, "cl-search");
+        }
+        if ne.len() > hs.len() {
+            return Some(LispValue::NIL);
+        }
+        'outer: for start in 0..=hs.len() - ne.len() {
+            for j in 0..ne.len() {
+                if !self.eql_values(hs[start + j], ne[j]) {
+                    continue 'outer;
+                }
+            }
+            return self.fixnum(start as i64, "cl-search");
         }
         Some(LispValue::NIL)
     }
@@ -6328,6 +6351,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-remove-if-not",
             "cl-set-difference",
             "cl-set-exclusive-or",
+            "cl-search",
             "cl-sort",
             "clrhash",
             "compiled-function-p",
@@ -11447,6 +11471,15 @@ mod tests {
              (cl-member-if #'evenp '(1 3 4 5 6))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(4 5 6)");
+    }
+
+    #[test]
+    fn executes_cl_search_finds_subsequence() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-search '(2 3) '(1 2 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
     #[test]
