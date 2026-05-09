@@ -7958,6 +7958,15 @@ mod tests {
     // cl-block and cl-return-from macros are defined in builtin_libs.
 
     #[test]
+    fn executes_pcase_simple_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase 42\n  ((pred numberp) 'yes)\n  (_ 'no))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_symbol_get_and_put() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
