@@ -1268,49 +1268,6 @@ impl Expander {
         }
     }
 
-    /// Simplify pcase-let* bindings: ((pattern expr) ...) -> ((sym expr) ...)
-    /// For non-symbol patterns, extract the expression but bind to a gensym-like name.
-    fn simplify_pcase_bindings(&mut self, form: &SurfaceForm) -> SurfaceForm {
-        let SurfaceKind::List(items) = &form.kind else {
-            return form.clone();
-        };
-        let span = form.span;
-        let bindings: Vec<SurfaceForm> = items
-            .iter()
-            .filter_map(|binding| {
-                let SurfaceKind::List(binding_items) = &binding.kind else {
-                    return None;
-                };
-                if binding_items.len() == 2 {
-                    let pat = &binding_items[0];
-                    let expr = &binding_items[1];
-                    if let Some(name) = pat.symbol_name() {
-                        Some(list_form(
-                            vec![symbol_form(name, pat.span), expr.clone()],
-                            span,
-                        ))
-                    } else {
-                        Some(list_form(
-                            vec![symbol_form("_", pat.span), expr.clone()],
-                            span,
-                        ))
-                    }
-                } else if binding_items.len() == 1 {
-                    Some(list_form(
-                        vec![
-                            symbol_form("_", binding_items[0].span),
-                            binding_items[0].clone(),
-                        ],
-                        span,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        list_form(bindings, span)
-    }
-
     fn expand_if_let(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         if items.len() < 3 {
             self.error(span, "if-let* requires bindings and a then form");

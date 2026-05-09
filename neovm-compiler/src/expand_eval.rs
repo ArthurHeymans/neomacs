@@ -1344,7 +1344,7 @@ impl MacroEval {
         let mut repeat_count: Option<i64> = None;
         let mut with_vars: Vec<(String, Option<SurfaceForm>)> = Vec::new();
         let mut initially_body: Vec<SurfaceForm> = Vec::new();
-        let mut named_block: Option<String> = None;
+        let mut _named_block: Option<String> = None;
         let mut finally_return: Option<SurfaceForm> = None;
         let mut default_into: Option<String> = None;
 
@@ -1522,7 +1522,7 @@ impl MacroEval {
                 Some("named") => {
                     pos += 1;
                     if pos < items.len() {
-                        named_block = items[pos].symbol_name().map(|s| s.to_string());
+                        _named_block = items[pos].symbol_name().map(|s| s.to_string());
                         pos += 1;
                     }
                 }

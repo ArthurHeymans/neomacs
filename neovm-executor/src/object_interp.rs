@@ -2128,42 +2128,6 @@ impl Interpreter<'_, '_, '_> {
                     value.checked_abs().and_then(|v| self.fixnum(v, name))
                 }
             }),
-            "random" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
-                use std::hash::Hasher;
-                let limit = if args.is_empty() {
-                    i64::MAX
-                } else {
-                    self.fixnum_arg(name, args[0])?.max(1)
-                };
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                h.write_u64(0);
-                let hash = h.finish();
-                Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
-            }),
-            "logior" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
-                if args.is_empty() { return LispValue::expect_fixnum(0); }
-                args[1..].iter().fold(args[0], |a, b| {
-                    let av = a.as_fixnum().unwrap_or(0);
-                    let bv = b.as_fixnum().unwrap_or(0);
-                    LispValue::expect_fixnum(av | bv)
-                })
-            }),
-            "logand" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
-                if args.is_empty() { return LispValue::expect_fixnum(-1); }
-                args[1..].iter().fold(args[0], |a, b| {
-                    let av = a.as_fixnum().unwrap_or(0);
-                    let bv = b.as_fixnum().unwrap_or(0);
-                    LispValue::expect_fixnum(av & bv)
-                })
-            }),
-            "logxor" => self.min_max_arity(name, args, 0, usize::MAX).map(|_| {
-                if args.is_empty() { return LispValue::expect_fixnum(0); }
-                args[1..].iter().fold(args[0], |a, b| {
-                    let av = a.as_fixnum().unwrap_or(0);
-                    let bv = b.as_fixnum().unwrap_or(0);
-                    LispValue::expect_fixnum(av ^ bv)
-                })
-            }),
             "max" => {
                 if args.is_empty() {
                     self.error("primitive `max` requires at least one argument");
