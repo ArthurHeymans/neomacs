@@ -441,12 +441,6 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             Some(true) => Some(SsaConst::Nil),
             None => None,
         },
-        "1+" if args.len() == 1 => {
-            Some(SsaConst::Int(args[0].as_int()?.wrapping_add(1)))
-        }
-        "1-" if args.len() == 1 => {
-            Some(SsaConst::Int(args[0].as_int()?.wrapping_sub(1)))
-        }
         "/=" if args.len() >= 2 => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             let mut seen = std::collections::HashSet::new();
@@ -460,6 +454,30 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "min" if args.len() >= 1 => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().min().unwrap()))
+        }
+        "+" if args.len() >= 2 => {
+            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            Some(SsaConst::Int(ints.into_iter().sum()))
+        }
+        "*" if args.len() >= 2 => {
+            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            Some(SsaConst::Int(ints.into_iter().product()))
+        }
+        "logand" if args.len() >= 1 => {
+            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            Some(SsaConst::Int(ints.into_iter().fold(!0i64, |a, b| a & b)))
+        }
+        "logior" if args.len() >= 1 => {
+            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a | b)))
+        }
+        "logxor" if args.len() >= 1 => {
+            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a ^ b)))
+        }
+        "abs" if args.len() == 1 => {
+            let a = args[0].as_int()?;
+            Some(SsaConst::Int(a.wrapping_abs()))
         }
         _ => None,
     }
