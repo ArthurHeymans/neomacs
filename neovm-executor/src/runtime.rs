@@ -312,7 +312,6 @@ impl Runtime {
     }
 
     #[inline(always)]
-    #[inline(always)]
     pub fn car(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -340,7 +339,6 @@ impl Runtime {
     }
 
     /// O(1) type check using the object index.
-    #[inline(always)]
     #[inline(always)]
     fn heap_kind(&self, addr: usize) -> Option<HeapKind> {
         self.object_index.get(&addr).copied()
