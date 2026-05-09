@@ -125,7 +125,7 @@ impl RenderApp {
                     );
 
                     // Initialize wgpu with the window
-                    self.init_wgpu(window.clone());
+                    self.init_wgpu(event_loop, window.clone());
 
                     // Enable IME input for CJK and compose support
                     window.set_ime_allowed(true);

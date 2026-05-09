@@ -4,7 +4,7 @@ use super::{
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 use std::sync::Arc;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_os = "linux")]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 #[cfg(target_os = "linux")]
@@ -18,13 +18,10 @@ use crate::backend::wpe::sys::platform as plat;
 
 impl RenderApp {
     /// Initialize wgpu with the window
-    pub(super) fn init_wgpu(&mut self, window: Arc<Window>) {
+    pub(super) fn init_wgpu(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         tracing::info!("Initializing wgpu for render thread");
 
-        // Create wgpu instance
-        let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_descriptor.backends = wgpu::Backends::all();
-        let instance = wgpu::Instance::new(instance_descriptor);
+        let instance = create_wgpu_instance(event_loop);
 
         // Create surface from window
         let surface = match instance.create_surface(window.clone()) {
@@ -215,6 +212,14 @@ impl RenderApp {
 
         tracing::debug!("Surface resized to {}x{}", width, height);
     }
+}
+
+pub(super) fn create_wgpu_instance(event_loop: &ActiveEventLoop) -> wgpu::Instance {
+    let display_handle = event_loop.owned_display_handle();
+    let mut instance_descriptor =
+        wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display_handle));
+    instance_descriptor.backends = wgpu::Backends::all().with_env();
+    wgpu::Instance::new(instance_descriptor)
 }
 
 fn build_render_event_loop_impl(
