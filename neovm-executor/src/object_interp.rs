@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_rassq_finds_by_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(rassq 2 '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_butlast_removes_last() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (butlast '(1 2 3 4) 2))",
