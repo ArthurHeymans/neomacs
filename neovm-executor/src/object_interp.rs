@@ -1932,6 +1932,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
+            "cl-substitute" => self.subr_3(name, args, |s| {
+                s.substitute_seq(args[0], args[1], args[2])
+            }),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -3440,6 +3443,30 @@ impl Interpreter<'_, '_, '_> {
                 result.push(elem);
             }
         }
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            Some(self.runtime.vector(result))
+        }
+    }
+
+    fn substitute_seq(
+        &mut self,
+        new_val: LispValue,
+        old_val: LispValue,
+        sequence: LispValue,
+    ) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        let result: Vec<LispValue> = elements
+            .into_iter()
+            .map(|elem| {
+                if self.runtime.equal(elem, old_val) {
+                    new_val
+                } else {
+                    elem
+                }
+            })
+            .collect();
         if sequence.is_nil() || self.runtime.is_cons(sequence) {
             Some(make_list(self.runtime, result.into_iter()))
         } else {
@@ -8512,6 +8539,15 @@ mod tests {
              (length (cl-remove-duplicates [1 2 3 1 2 3]))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_substitute_replaces_elements() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-substitute 99 2 '(1 2 3 2 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
 
