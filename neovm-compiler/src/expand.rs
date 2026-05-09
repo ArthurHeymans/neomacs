@@ -73,6 +73,13 @@ impl CompilerSession {
         };
 
         let mut expanded_forms = Vec::new();
+
+        // Pre-scan: register defmacros nested inside progn so they are
+        // available for expansion of later forms in the same file.
+        for form in &forms {
+            Expander::pre_scan_defmacros(form, &mut expander);
+        }
+
         for form in forms {
             // Handle top-level (require 'feature)
             if let Some(feature) = extract_require_feature(&form) {
@@ -255,6 +262,28 @@ struct Expander {
 }
 
 impl Expander {
+    /// Pre-scan a form (and its progn sub-forms) for defmacros and register
+    /// them before the main expansion pass. This makes macros defined inside
+    /// progn available to later forms in the same file.
+    fn pre_scan_defmacros(form: &SurfaceForm, expander: &mut Expander) {
+        if let SurfaceKind::List(items) = &form.kind {
+            if let Some(head) = items.first().and_then(|f| f.symbol_name()) {
+                match head {
+                    "defmacro" => {
+                        expander.register_top_level_macro(form);
+                    }
+                    "progn" | "prog1" | "prog2" | "eval-and-compile"
+                    | "eval-when-compile" | "with-no-warnings" => {
+                        for sub in &items[1..] {
+                            Self::pre_scan_defmacros(sub, expander);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn register_top_level_macro(&mut self, form: &SurfaceForm) -> Option<SurfaceForm> {
         let SurfaceKind::List(items) = &form.kind else {
             return None;
@@ -400,7 +429,21 @@ impl Expander {
         // byte-run.el) don't shadow the semantic lowering.
         match head {
             "quote" | "function" => return SurfaceForm::new(SurfaceKind::List(items), span),
-            "defun" | "defmacro" | "defvar" | "defconst" | "defsubst" | "defcustom"
+            "defmacro" => {
+                // Register the macro (even when nested inside progn) and
+                // replace with a defalias form so the HIR doesn't see it.
+                let form = SurfaceForm::new(
+                    SurfaceKind::List(items.into_iter()
+                        .map(|item| self.expand_form(item))
+                        .collect()),
+                    span,
+                );
+                if let Some(defalias_form) = self.register_top_level_macro(&form) {
+                    return defalias_form;
+                }
+                return form;
+            }
+            "defun" | "defvar" | "defconst" | "defsubst" | "defcustom"
             | "defgroup" | "defface" | "defclass" | "defmethod" | "defgeneric" => {
                 return SurfaceForm::new(
                     SurfaceKind::List(

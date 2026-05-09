@@ -7765,8 +7765,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "defmacro cross-form: needs multi-pass compiler"]
-    fn gap_defmacro_cross_form() {
+    fn executes_defmacro_cross_form() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (progn (defmacro my-inc (x) (list '+ x 1)) (my-inc 41))",
