@@ -3124,6 +3124,40 @@ fn cl_lib_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn cl_defstruct_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'cl-lib) (cl-defstruct neo-point x y) (message \"clstruct:%S\" (let ((p (make-neo-point :x 1 :y 2))) (setf (neo-point-y p) 9) (list (neo-point-p p) (neo-point-x p) (neo-point-y p) (type-of p) (length p)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("clstruct:") && row.contains("(t 1 9 neo-point 3)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: cl-defstruct constructor/accessor behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "cl_defstruct_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn cl_symbol_macrolet_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
