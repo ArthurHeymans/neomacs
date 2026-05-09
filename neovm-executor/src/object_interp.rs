@@ -10137,6 +10137,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_acons_works_as_alias() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr (assq 'k (cl-acons 'k 99 nil)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
