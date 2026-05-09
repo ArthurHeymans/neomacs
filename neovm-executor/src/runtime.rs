@@ -34,7 +34,9 @@ pub struct Runtime {
     agents: Vec<Box<AgentObj>>,
     gc_agents: HashMap<usize, ()>,
     mutexes: Vec<Box<MutexObj>>,
+    gc_mutexes: HashMap<usize, ()>,
     condvars: Vec<Box<CondvarObj>>,
+    gc_condvars: HashMap<usize, ()>,
     interned_symbols: HashMap<String, LispValue>,
     dynamic_bindings: Vec<DynamicBinding>,
     features: Vec<LispValue>,
@@ -73,7 +75,9 @@ impl Default for Runtime {
             agents: Vec::new(),
             gc_agents: HashMap::new(),
             mutexes: Vec::new(),
+            gc_mutexes: HashMap::new(),
             condvars: Vec::new(),
+            gc_condvars: HashMap::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: Vec::new(),
@@ -130,7 +134,9 @@ impl Runtime {
             agents: Vec::new(),
             gc_agents: HashMap::new(),
             mutexes: Vec::new(),
+            gc_mutexes: HashMap::new(),
             condvars: Vec::new(),
+            gc_condvars: HashMap::new(),
             interned_symbols: HashMap::new(),
             dynamic_bindings: Vec::new(),
             features: self.features.clone(),
@@ -812,6 +818,9 @@ impl Runtime {
     }
 
     fn mutex_by_addr(&self, addr: usize) -> Option<&MutexObj> {
+        if self.gc_mutexes.contains_key(&addr) {
+            return Some(unsafe { Self::deref_heap(addr) });
+        }
         for obj in &self.mutexes {
             if (&**obj as *const MutexObj) as usize == addr {
                 return Some(obj);
@@ -833,6 +842,9 @@ impl Runtime {
     }
 
     fn condvar_by_addr(&self, addr: usize) -> Option<&CondvarObj> {
+        if self.gc_condvars.contains_key(&addr) {
+            return Some(unsafe { Self::deref_heap(addr) });
+        }
         for obj in &self.condvars {
             if (&**obj as *const CondvarObj) as usize == addr {
                 return Some(obj);
