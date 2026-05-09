@@ -492,8 +492,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else if count <= -64 {
                 Some(SsaConst::Int(if value < 0 { -1 } else { 0 }))
             } else {
-                // Arithmetic right shift via signed >> which preserves sign
                 Some(SsaConst::Int(value >> (-count)))
+            }
+        }
+        "lsh" if args.len() == 2 => {
+            let value = args[0].as_int()?;
+            let count = args[1].as_int()?;
+            let u = value as u64;
+            if count >= 64 {
+                Some(SsaConst::Int(0))
+            } else if count >= 0 {
+                Some(SsaConst::Int((u.wrapping_shl(count as u32)) as i64))
+            } else if count <= -64 {
+                Some(SsaConst::Int(0))
+            } else {
+                Some(SsaConst::Int((u.wrapping_shr((-count) as u32)) as i64))
             }
         }
         "abs" if args.len() == 1 => {
