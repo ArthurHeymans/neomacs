@@ -5351,6 +5351,43 @@ fn getenv_returns_same_path_as_gnu() {
 }
 
 #[test]
+fn key_description_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"kbd:%S\" (list (key-description (kbd \"C-x C-f\")) (single-key-description ?\\C-h) (vectorp (kbd \"<f5>\")) (key-description [f5])))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("kbd:")
+                && row.contains("C-x C-f")
+                && row.contains("C-h")
+                && row.contains(" t ")
+                && row.contains("<f5>")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: keyboard description helpers should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "key_description_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn sparse_keymap_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
