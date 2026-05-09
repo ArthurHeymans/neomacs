@@ -1929,7 +1929,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-if-not" => self.subr_2(name, args, |s| {
                 s.remove_if(args[0], args[1], true)
             }),
-            "cl-remove-duplicates" => self.subr_1(name, args, |s| {
+            "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
             "copy-sequence" => self
@@ -5702,6 +5702,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-delete-duplicates",
             "cl-remove-duplicates",
             "cl-remove-if",
             "cl-remove-if-not",
