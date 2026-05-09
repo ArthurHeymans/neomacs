@@ -2577,6 +2577,12 @@ impl Interpreter<'_, '_, '_> {
             "bare-symbol-p" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(!args[0].is_nil() && !args[0].is_true() && self.runtime.is_symbol(args[0]))
             }),
+            "bignump" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(self.runtime.is_bignum(args[0]))
+            }),
+            "fixnump" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(args[0].is_fixnum())
+            }),
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
@@ -6857,6 +6863,7 @@ fn is_primitive_name(name: &str) -> bool {
             "atom",
             "autoload",
             "bare-symbol-p",
+            "bignump",
             "bool-vector-p",
             "booleanp",
             "boundp",
@@ -6998,6 +7005,7 @@ fn is_primitive_name(name: &str) -> bool {
             "file-exists-p",
             "file-readable-p",
             "fillarray",
+            "fixnump",
             "float",
             "floatp",
             "floor",
