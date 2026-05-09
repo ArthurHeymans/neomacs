@@ -1193,6 +1193,12 @@ impl Interpreter<'_, '_, '_> {
             "arrayp" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(self.runtime.is_vector(args[0]) || self.runtime.is_string(args[0]))
             }),
+            "char-equal" => self.subr_2(name, args, |s| {
+                let a = args[0].as_char();
+                let b = args[1].as_char();
+                Some(bool_value(a.is_some() && b.is_some()
+                    && a.unwrap().to_ascii_lowercase() == b.unwrap().to_ascii_lowercase()))
+            }),
             "char-table-p" | "bool-vector-p" | "recordp"
             | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
             "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
@@ -6857,6 +6863,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cdr",
             "cdr-safe",
             "ceiling",
+            "char-equal",
             "char-or-string-p",
             "char-table-p",
             "char-to-string",
