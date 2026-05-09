@@ -643,7 +643,7 @@ impl OldGenState {
         // layout.
         let capacity = config.region_bytes.max(layout.size());
         let line_bytes = config.line_bytes.max(1);
-        let mut block = OldBlock::new(capacity, line_bytes);
+        let block = OldBlock::new(capacity, line_bytes);
         let (offset, ptr) = block.try_alloc(layout)?;
         let used_bytes = block.used_bytes();
         let block_index = blocks.len();
@@ -690,7 +690,7 @@ impl OldGenState {
         layout: core::alloc::Layout,
         target_hint: Option<usize>,
     ) -> Option<(OldBlockPlacement, core::ptr::NonNull<u8>, usize)> {
-        let mut blocks = self.blocks.write();
+        let blocks = self.blocks.write();
         if let Some(index) = target_hint
             && let Some(block) = blocks.get(index)
             && let Some((offset, ptr)) = block.try_alloc(layout)
@@ -723,7 +723,7 @@ impl OldGenState {
     ) -> Option<(OldBlockPlacement, core::ptr::NonNull<u8>)> {
         let capacity = config.region_bytes.max(layout.size());
         let line_bytes = config.line_bytes.max(1);
-        let mut block = OldBlock::new(capacity, line_bytes);
+        let block = OldBlock::new(capacity, line_bytes);
         let (offset, ptr) = block.try_alloc(layout)?;
         let used_bytes = block.used_bytes();
         let mut blocks = self.blocks.write();

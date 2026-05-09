@@ -573,7 +573,7 @@ impl ObjectStore {
         // and candidate lists without an O(n) rebuild.
         let current_gen = self.generation();
         {
-            let mut cache = self.cached_read.lock();
+            let cache = self.cached_read.lock();
             if let Some(ref cached) = *cache {
                 if cached.generation == current_gen {
                     return ObjectStoreReadGuard {
