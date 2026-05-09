@@ -5190,6 +5190,40 @@ fn sexp_motion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn scan_lists_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"scanlists:%S\" (with-temp-buffer (emacs-lisp-mode) (insert \"(a (b) c)\") (list (scan-lists 1 1 0) (scan-lists 4 1 0) (condition-case e (scan-lists 1 -1 0) (scan-error (car e)) (error (car e))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("scanlists:") && row.contains("(10 7 nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: scan-lists behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "scan_lists_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn parse_partial_sexp_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
