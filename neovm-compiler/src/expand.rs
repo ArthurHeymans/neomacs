@@ -687,6 +687,7 @@ impl Expander {
             "cl-dolist" => self.expand_cl_dolist(span, items),
             "cl-dotimes" => self.expand_cl_dotimes(span, items),
             "psetq" => self.expand_psetq(span, items),
+            "psetf" | "cl-psetf" => self.expand_psetf(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -2970,6 +2971,37 @@ impl Expander {
             list_form(let_bindings, span),
         ];
         result.extend(setq_forms);
+        result.push(nil_form(span));
+        let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    fn expand_psetf(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (psetf PLACE VAL PLACE VAL ...) — parallel setf
+        // Expands to: (let* ((__v1 VAL1) (__v2 VAL2))
+        //               (setf PLACE1 __v1) (setf PLACE2 __v2) nil)
+        if items.len() < 3 || items.len() % 2 != 1 {
+            self.error(span, "psetf requires an even number of arguments");
+            return nil_form(span);
+        }
+        let pairs = &items[1..];
+        let mut let_bindings = Vec::new();
+        let mut setf_forms = Vec::new();
+        for i in (0..pairs.len()).step_by(2) {
+            let place = &pairs[i];
+            let val = &pairs[i + 1];
+            let tmp = format!("--psetf-tmp-{}--", i / 2);
+            let_bindings.push(list_form(
+                vec![symbol_form(&tmp, span), val.clone()], span));
+            setf_forms.push(list_form(
+                vec![symbol_form("setf", span), place.clone(),
+                     symbol_form(&tmp, span)], span));
+        }
+        let mut result = vec![
+            symbol_form("let", span),
+            list_form(let_bindings, span),
+        ];
+        result.extend(setf_forms);
         result.push(nil_form(span));
         let expanded = list_form(result, span);
         self.expand_form(expanded)
