@@ -1459,12 +1459,12 @@ impl Interpreter<'_, '_, '_> {
             "butlast" => self
                 .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.butlast(args[0], args.get(1).copied())),
-            "delq" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.delq(args[0], args[1])),
-            "delete" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.remove(args[0], args[1])),
+            "delq" | "cl-delq" => self.subr_2(name, args, |s| {
+                s.delq(args[0], args[1])
+            }),
+            "delete" | "cl-delete" => self.subr_2(name, args, |s| {
+                s.remove(args[0], args[1])
+            }),
             "remq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.delq(args[0], args[1])),
@@ -5729,7 +5729,9 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-delete",
             "cl-delete-duplicates",
+            "cl-delq",
             "cl-nsubstitute",
             "cl-substitute",
             "cl-remove",
