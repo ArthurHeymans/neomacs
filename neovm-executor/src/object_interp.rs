@@ -1361,6 +1361,7 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_nil())),
             "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "ignore" => Some(LispValue::NIL),
+            "always" => Some(LispValue::TRUE),
             "prog1" => {
                 if args.is_empty() {
                     Some(LispValue::NIL)
@@ -6725,6 +6726,7 @@ fn is_primitive_name(name: &str) -> bool {
             "abs",
             "add-load-path",
             "alist-get",
+            "always",
             "append",
             "apply",
             "aref",
