@@ -1924,6 +1924,19 @@ impl Interpreter<'_, '_, '_> {
             "cl-count" => self.subr_2(name, args, |s| {
                 s.cl_count(args[0], args[1])
             }),
+            "cl-endp" => self.exact_arity(name, args, 1).map(|_| {
+                if args[0].is_nil() {
+                    bool_value(true)
+                } else if self.runtime.is_cons(args[0]) {
+                    bool_value(false)
+                } else {
+                    self.error(format!(
+                        "Wrong type argument: listp, {}",
+                        self.runtime.format_value(args[0])
+                    ));
+                    bool_value(false)
+                }
+            }),
             "cl-adjoin" => self.subr_2(name, args, |s| {
                 s.cl_adjoin(args[0], args[1])
             }),
@@ -5922,6 +5935,7 @@ fn is_primitive_name(name: &str) -> bool {
             "char-table-p",
             "char-to-string",
             "cl-count",
+            "cl-endp",
             "cl-evenp",
             "cl-find",
             "cl-minusp",
@@ -10725,6 +10739,33 @@ mod tests {
              (cl-adjoin 2 '(1 2 3))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 2 3)");
+    }
+
+    #[test]
+    fn executes_cl_endp_nil_is_true() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-endp nil)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_endp_cons_is_false() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-endp (cons 1 2))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_endp_empty_list_is_true() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-endp '())",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
