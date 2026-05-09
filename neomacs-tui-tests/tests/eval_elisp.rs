@@ -4578,6 +4578,44 @@ fn file_name_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn file_name_edge_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"fileedge:%S\" (list (file-name-directory \"/tmp/a/b.txt\") (file-name-nondirectory \"/tmp/a/b.txt\") (directory-file-name \"/tmp/a/\") (file-name-as-directory \"/tmp/a\") (file-remote-p \"/ssh:host:/tmp/x\" 'method) (file-remote-p \"/tmp/x\")))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("fileedge:")
+                && row.contains("/tmp/a/")
+                && row.contains("b.txt")
+                && row.contains("/tmp/a")
+                && row.contains("ssh")
+                && row.contains("nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: file-name edge behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "file_name_edge_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
