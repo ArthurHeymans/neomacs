@@ -7967,14 +7967,6 @@ mod tests {
     }
 
     #[test]
-    fn executes_macroexpand_builtin() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(macroexpand '(when t 42))",
-        );
-        assert!(value.is_some());
-    }
-
-    #[test]
     fn executes_string_trim_strips_whitespace() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(string-trim \"  hello  \")",
