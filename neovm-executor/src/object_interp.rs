@@ -8397,6 +8397,19 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(12)));
     }
 
+    #[test]
+    fn executes_cl_accessors_on_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (+ (cl-first '(10 20 30 40)) \
+                (cl-second '(10 20 30 40)) \
+                (cl-third '(10 20 30 40)) \
+                (cl-fourth '(10 20 30 40)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(100)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
