@@ -546,6 +546,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
+        "nlistp" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Nil => SsaConst::Nil,
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::True,
+        }),
+        "functionp" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::Nil,
+        }),
         _ => None,
     }
 }
