@@ -1087,7 +1087,7 @@ impl Interpreter<'_, '_, '_> {
             "cons" => self
                 .exact_arity(name, args, 2)
                 .map(|_| self.runtime.cons(args[0], args[1])),
-            "list*" => self.subr_vararg(name, args, |s| {
+            "list*" | "cl-list*" => self.subr_vararg(name, args, |s| {
                 // (list* a b c) = (cons a (cons b c))
                 // (list* a) = a, (list*) = nil
                 let mut result = args.last().copied().unwrap_or(LispValue::NIL);
@@ -1678,7 +1678,7 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))
                 .map(|v| self.runtime.float(v.exp())),
-            "list" => Some(make_list(self.runtime, args.iter().copied())),
+            "list" | "cl-list" => Some(make_list(self.runtime, args.iter().copied())),
             "length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.length(args[0]))
@@ -6025,6 +6025,8 @@ fn is_primitive_name(name: &str) -> bool {
             "length",
             "list",
             "list*",
+            "cl-list",
+            "cl-list*",
             "listp",
             "load",
             "log",
