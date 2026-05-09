@@ -6168,6 +6168,43 @@ fn key_description_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn event_conversion_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"kbdvector:%S\" (list (kbd \"C-M-a\") (key-description (vector (event-convert-list '(control meta a)))) (event-modifiers (event-convert-list '(control meta a))) (event-basic-type (event-convert-list '(control meta a)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("kbdvector:")
+                && row.contains("[134217729]")
+                && row.contains("C-M-a")
+                && row.contains("(control meta)")
+                && row.contains("97")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: event conversion and modifier helpers should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "event_conversion_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn command_remapping_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
