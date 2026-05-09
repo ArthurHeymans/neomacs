@@ -8311,6 +8311,18 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_do_with_cl_return() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-do ((i 0 (1+ i))) \
+               ((= i 5) 99) \
+               (when (= i 2) (cl-return 42)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_function_special_form_returns_function() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
