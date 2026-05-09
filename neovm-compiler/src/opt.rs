@@ -524,6 +524,26 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Float(f) => Some(SsaConst::Float(f.abs())),
             _ => None,
         },
+        "truncate" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(*a)),
+            SsaConst::Float(f) => Some(SsaConst::Int(f.trunc() as i64)),
+            _ => None,
+        },
+        "floor" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(*a)),
+            SsaConst::Float(f) => Some(SsaConst::Int(f.floor() as i64)),
+            _ => None,
+        },
+        "ceiling" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(*a)),
+            SsaConst::Float(f) => Some(SsaConst::Int(f.ceil() as i64)),
+            _ => None,
+        },
+        "round" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(*a)),
+            SsaConst::Float(f) => Some(SsaConst::Int(f.round() as i64)),
+            _ => None,
+        },
         "lognot" if args.len() == 1 => {
             Some(SsaConst::Int(!args[0].as_int()?))
         }
