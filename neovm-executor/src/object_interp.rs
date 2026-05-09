@@ -7958,6 +7958,15 @@ mod tests {
     // cl-block and cl-return-from macros are defined in builtin_libs.
 
     #[test]
+    fn executes_symbol_get_and_put() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (put 'test-key 'prop 42) (get 'test-key 'prop))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_plist_get_and_put() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
