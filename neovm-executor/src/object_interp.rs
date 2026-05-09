@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_safe_length_dotted() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(safe-length '(a b . c))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_make_list_fill() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (make-list 5 42))",
