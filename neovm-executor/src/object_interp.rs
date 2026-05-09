@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_copy_tree_deep() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((orig '((1 . 2) (3 . 4)))) (eq orig (copy-tree orig)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_safe_length_dotted() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(safe-length '(a b . c))",
