@@ -4234,6 +4234,42 @@ fn sexp_motion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn parse_partial_sexp_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"pparse:%S\" (with-temp-buffer (emacs-lisp-mode) (insert \"(a \\\"b\\\") ;c\") (list (parse-partial-sexp 1 (point-max)) (nth 0 (syntax-ppss (point-max))) (nth 3 (syntax-ppss (point-max))) (nth 4 (syntax-ppss (point-max))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("pparse:")
+                && row.contains("(0 nil 1 nil t")
+                && row.contains("9 nil nil")
+                && row.contains("0 nil t")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: parse-partial-sexp and syntax-ppss should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "parse_partial_sexp_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn case_fold_search_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
