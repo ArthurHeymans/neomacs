@@ -1649,6 +1649,12 @@ pub struct Context {
     pub(crate) interactive_minibuffer_read_count: u64,
     /// Current echo-area message text, mirroring GNU `current-message`.
     pub(crate) current_message: Option<crate::heap_types::LispString>,
+    /// True after print output has selected the current echo area buffer.
+    ///
+    /// Mirrors GNU xdisp.c `message_buf_print`: `message`/clear reset it, and
+    /// the next print-to-echo starts with a fresh echo buffer instead of
+    /// appending to the previous message.
+    pub(crate) message_buf_print: bool,
     /// Window that was selected when the active minibuffer session began.
     pub(crate) minibuffer_selected_window: Option<crate::window::WindowId>,
     /// Currently active minibuffer window, if any.
@@ -4349,6 +4355,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            message_buf_print: false,
             minibuffer_selected_window: None,
             active_minibuffer_window: None,
             shutdown_request: None,
@@ -4508,6 +4515,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            message_buf_print: false,
             minibuffer_selected_window: None,
             active_minibuffer_window: None,
             shutdown_request: None,
@@ -6837,6 +6845,7 @@ impl Context {
     }
 
     pub fn set_current_message(&mut self, message: Option<crate::heap_types::LispString>) {
+        self.message_buf_print = false;
         if self.current_message != message {
             self.current_message = message;
             self.invalidate_redisplay();
@@ -6864,7 +6873,16 @@ impl Context {
         self.invalidate_redisplay();
     }
 
+    pub(crate) fn append_echo_area_print_runtime_text(&mut self, text: &str) {
+        if !self.message_buf_print {
+            self.current_message = None;
+            self.message_buf_print = true;
+        }
+        self.append_current_message_runtime_text(text);
+    }
+
     pub fn clear_current_message(&mut self) {
+        self.message_buf_print = false;
         if self.current_message.is_none() {
             return;
         }

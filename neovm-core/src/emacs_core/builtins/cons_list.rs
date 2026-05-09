@@ -775,6 +775,22 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                         append_element(&mut result, &mut last, item);
                     }
                 }
+                ValueKind::Veclike(VecLikeType::Vector)
+                    if super::chartable::is_bool_vector(arg) =>
+                {
+                    let len = super::chartable::bool_vector_length(arg).unwrap_or_default();
+                    for index in 0..usize::try_from(len).unwrap_or_default() {
+                        let item = super::chartable::bool_vector_ref_value(arg, index).ok_or_else(
+                            || {
+                                signal(
+                                    "wrong-type-argument",
+                                    vec![Value::symbol("bool-vector-p"), *arg],
+                                )
+                            },
+                        )?;
+                        append_element(&mut result, &mut last, item);
+                    }
+                }
                 ValueKind::Veclike(VecLikeType::Vector) => {
                     if let Some(items) = arg.as_vector_data() {
                         for item in items.as_slice().iter().copied() {

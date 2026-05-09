@@ -102,6 +102,22 @@ pub(crate) fn bool_vector_length(v: &Value) -> Option<i64> {
     })
 }
 
+/// Return a bool-vector element as GNU `bool_vector_ref` would expose it.
+pub(crate) fn bool_vector_ref_value(v: &Value, index: usize) -> Option<Value> {
+    let len = usize::try_from(bool_vector_length(v)?).ok()?;
+    if index >= len {
+        return None;
+    }
+    let vec = v.as_vector_data()?;
+    let bit = vec.get(index + 2).copied()?;
+    let truthy = match bit.kind() {
+        ValueKind::Fixnum(n) => n != 0,
+        ValueKind::Nil => false,
+        _ => bit.is_truthy(),
+    };
+    Some(Value::bool_val(truthy))
+}
+
 /// Return the logical sequence length if `v` is a char-table.
 pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
     if !v.is_vector() {

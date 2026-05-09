@@ -538,6 +538,23 @@ fn pure_dispatch_typed_append_flattens_vector_and_string() {
 }
 
 #[test]
+fn pure_dispatch_typed_append_flattens_bool_vector_logical_bits() {
+    crate::test_utils::init_test_tracing();
+    let bool_vector =
+        super::chartable::builtin_bool_vector(vec![Value::NIL, Value::T, Value::NIL, Value::T])
+            .expect("bool-vector");
+
+    let result = dispatch_builtin_pure("append", vec![bool_vector, Value::NIL])
+        .expect("builtin append should resolve")
+        .expect("builtin append should evaluate");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::NIL, Value::T, Value::NIL, Value::T])
+    );
+}
+
+#[test]
 fn pure_dispatch_typed_append_flattens_bytecode_slots() {
     crate::test_utils::init_test_tracing();
     let bc = Value::make_bytecode(crate::emacs_core::bytecode::ByteCodeFunction::new(
@@ -606,6 +623,23 @@ fn pure_dispatch_typed_vconcat_flattens_bytecode_slots() {
     assert!((slots[1].is_nil() || slots[1].is_string()));
     assert!(slots[2].is_vector());
     assert!(slots[3].is_fixnum());
+}
+
+#[test]
+fn pure_dispatch_typed_vconcat_flattens_bool_vector_logical_bits() {
+    crate::test_utils::init_test_tracing();
+    let bool_vector =
+        super::chartable::builtin_bool_vector(vec![Value::NIL, Value::T, Value::NIL, Value::T])
+            .expect("bool-vector");
+
+    let result = dispatch_builtin_pure("vconcat", vec![bool_vector])
+        .expect("builtin vconcat should resolve")
+        .expect("builtin vconcat should evaluate");
+
+    assert_eq!(
+        result,
+        Value::vector(vec![Value::NIL, Value::T, Value::NIL, Value::T])
+    );
 }
 
 #[test]
@@ -10771,6 +10805,37 @@ fn current_message_preserves_raw_unibyte_payload() {
     let current = current.as_lisp_string().expect("current-message string");
     assert!(!current.is_multibyte());
     assert_eq!(current.as_bytes(), &[0xFF]);
+}
+
+#[test]
+fn echo_area_print_after_message_replaces_message_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    eval.eval_str(r#"(progn (message "inner") (prin1 "outer" t) nil)"#)
+        .expect("message followed by echo print should evaluate");
+
+    assert_eq!(
+        eval.current_message_text(),
+        Some("\"outer\"".to_string()),
+        "GNU xdisp.c setup_echo_area_for_printing clears the prior message when message_buf_print is false"
+    );
+}
+
+#[test]
+fn echo_area_print_calls_append_until_next_message_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    eval.eval_str("(progn (prin1 'a t) (prin1 'b t) nil)")
+        .expect("consecutive echo prints should evaluate");
+    assert_eq!(eval.current_message_text(), Some("ab".to_string()));
+
+    eval.eval_str(r#"(progn (message "inner") (prin1 'c t) nil)"#)
+        .expect("message should reset echo print append state");
+    assert_eq!(eval.current_message_text(), Some("c".to_string()));
 }
 
 #[test]

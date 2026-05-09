@@ -1050,53 +1050,45 @@ pub(crate) fn resolve_print_target_in_state(
 }
 
 fn write_print_output_to_target(
-    buffers: &mut crate::buffer::BufferManager,
-    echo_area: &mut Option<crate::heap_types::LispString>,
+    ctx: &mut crate::emacs_core::eval::Context,
     target: Value,
     text: &str,
 ) -> Result<(), Flow> {
     match target.kind() {
-        // GNU print.c: when printcharfun is t, output goes to the echo
-        // area via printchar_stdout_last → echo_char.  Accumulate
-        // characters into current_message so the echo area displays them.
+        // GNU print.c: when printcharfun is t, output goes through
+        // setup_echo_area_for_printing.  A preceding message resets
+        // message_buf_print, so the next print starts with a fresh echo buffer;
+        // later print calls append to that buffer.
         ValueKind::T | ValueKind::Nil => {
-            let multibyte = echo_area
-                .as_ref()
-                .map(crate::heap_types::LispString::is_multibyte)
-                .unwrap_or(true);
-            let piece = super::runtime_string_to_lisp_string(text, multibyte);
-            match echo_area {
-                Some(msg) => *msg = msg.concat(&piece),
-                None => *echo_area = Some(piece),
-            }
+            ctx.append_echo_area_print_runtime_text(text);
             Ok(())
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let id = target.as_buffer_id().unwrap();
-            if buffers.get(id).is_none() {
+            if ctx.buffers.get(id).is_none() {
                 return Err(signal(
                     "error",
                     vec![Value::string("Output buffer no longer exists")],
                 ));
             }
-            let _ = buffers.insert_into_buffer(id, text);
+            let _ = ctx.buffers.insert_into_buffer(id, text);
             Ok(())
         }
         ValueKind::String => {
             let name = runtime_string_value(target);
-            let Some(id) = buffers.find_buffer_by_name(&name) else {
+            let Some(id) = ctx.buffers.find_buffer_by_name(&name) else {
                 return Err(signal(
                     "error",
                     vec![Value::string(format!("No buffer named {name}"))],
                 ));
             };
-            if buffers.get(id).is_none() {
+            if ctx.buffers.get(id).is_none() {
                 return Err(signal(
                     "error",
                     vec![Value::string("Output buffer no longer exists")],
                 ));
             }
-            let _ = buffers.insert_into_buffer(id, text);
+            let _ = ctx.buffers.insert_into_buffer(id, text);
             Ok(())
         }
         _other if super::marker::is_marker(&target) => {
@@ -1107,8 +1099,9 @@ fn write_print_output_to_target(
                     vec![Value::string("Marker does not point anywhere")],
                 ));
             };
-            let marker_pos = super::marker::marker_position_as_int_with_buffers(buffers, &target)?;
-            let Some(buffer) = buffers.get(buffer_id) else {
+            let marker_pos =
+                super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &target)?;
+            let Some(buffer) = ctx.buffers.get(buffer_id) else {
                 return Err(signal(
                     "error",
                     vec![Value::string("Output buffer no longer exists")],
@@ -1125,14 +1118,16 @@ fn write_print_output_to_target(
                 ));
             }
             let marker_byte = buffer.lisp_pos_to_byte(marker_pos);
-            let saved_current = buffers.current_buffer_id();
-            let saved_point = saved_current.and_then(|id| buffers.get(id).map(|buf| buf.point()));
+            let saved_current = ctx.buffers.current_buffer_id();
+            let saved_point =
+                saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point()));
 
-            buffers.switch_current(buffer_id);
-            let _ = buffers.goto_buffer_byte(buffer_id, marker_byte);
-            let _ = buffers.insert_into_buffer(buffer_id, text);
+            ctx.buffers.switch_current(buffer_id);
+            let _ = ctx.buffers.goto_buffer_byte(buffer_id, marker_byte);
+            let _ = ctx.buffers.insert_into_buffer(buffer_id, text);
 
-            let new_marker_pos = buffers
+            let new_marker_pos = ctx
+                .buffers
                 .get(buffer_id)
                 .map(|buf| buf.point_char() as i64 + 1)
                 .ok_or_else(|| {
@@ -1142,7 +1137,7 @@ fn write_print_output_to_target(
                     )
                 })?;
             let _ = super::marker::builtin_set_marker_in_buffers(
-                buffers,
+                &mut ctx.buffers,
                 vec![
                     target,
                     Value::fixnum(new_marker_pos),
@@ -1151,14 +1146,14 @@ fn write_print_output_to_target(
             )?;
 
             if let Some(saved_id) = saved_current {
-                buffers.switch_current(saved_id);
+                ctx.buffers.switch_current(saved_id);
                 if let Some(old_point) = saved_point {
                     let restore_point = if saved_id == buffer_id && old_point >= marker_byte {
                         old_point + text.len()
                     } else {
                         old_point
                     };
-                    let _ = buffers.goto_buffer_byte(saved_id, restore_point);
+                    let _ = ctx.buffers.goto_buffer_byte(saved_id, restore_point);
                 }
             }
             Ok(())
@@ -1195,7 +1190,7 @@ fn write_print_output(
         let _ = std::io::stdout().flush();
         return Ok(());
     }
-    write_print_output_to_target(&mut eval.buffers, &mut eval.current_message, target, text)
+    write_print_output_to_target(eval, target, text)
 }
 
 fn write_print_output_from_ctx(
@@ -1211,13 +1206,13 @@ fn write_print_output_from_ctx(
         let _ = std::io::stdout().flush();
         return Ok(());
     }
-    write_print_output_to_target(&mut ctx.buffers, &mut ctx.current_message, target, text)
+    write_print_output_to_target(ctx, target, text)
 }
 
 fn write_terpri_output(eval: &mut super::eval::Context, target: Value) -> Result<(), Flow> {
     match target.kind() {
         ValueKind::T | ValueKind::Nil => {
-            eval.append_current_message_runtime_text("\n");
+            eval.append_echo_area_print_runtime_text("\n");
             Ok(())
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {

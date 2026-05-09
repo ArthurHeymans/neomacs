@@ -269,7 +269,7 @@ fn minibuffer_echo_message_still_renders_when_minibuffer_is_inactive() {
     );
 }
 
-fn assert_multiline_echo_message_uses_minibuffer_rows(use_gui_metrics: bool) {
+fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -4426,13 +4426,13 @@ fn layout_frame_rust_keeps_echo_message_in_minibuffer_window_for_gui() {
 }
 
 #[test]
-fn layout_frame_rust_keeps_multiline_echo_rows_for_tty() {
-    assert_multiline_echo_message_uses_minibuffer_rows(false);
+fn layout_frame_rust_resizes_multiline_echo_rows_for_tty() {
+    assert_multiline_echo_message_resizes_minibuffer_rows(false);
 }
 
 #[test]
-fn layout_frame_rust_keeps_multiline_echo_rows_for_gui() {
-    assert_multiline_echo_message_uses_minibuffer_rows(true);
+fn layout_frame_rust_resizes_multiline_echo_rows_for_gui() {
+    assert_multiline_echo_message_resizes_minibuffer_rows(true);
 }
 
 #[test]

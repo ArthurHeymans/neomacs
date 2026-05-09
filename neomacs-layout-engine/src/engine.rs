@@ -2900,11 +2900,11 @@ impl LayoutEngine {
         );
 
         if let Some(echo_message) = echo_message {
-            // The echo area is minibuffer content, not post-window chrome.
-            // Size the matrix from the echo text itself so the existing
-            // minibuffer auto-resize pass can grow the physical minibuffer
-            // window when a multiline message needs more rows than the
-            // current one-line allocation.
+            // GNU `display_echo_area_1` displays the current message by
+            // temporarily making the echo-area buffer current, calling
+            // `resize_mini_window`, then redisplaying the minibuffer window.
+            // Count logical echo rows here so the existing minibuffer resize
+            // retry can grow the mini-window and relayout the root window.
             let echo_lines = echo_message
                 .split(|ch| ch == '\n' || ch == '\r')
                 .count()

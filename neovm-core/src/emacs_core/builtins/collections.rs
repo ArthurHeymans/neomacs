@@ -49,28 +49,8 @@ fn builtin_aref_values(array: Value, index: Value) -> EvalResult {
             let is_bool_vector =
                 items.len() >= 2 && items[0].as_symbol_name() == Some("--bool-vector--");
             if is_bool_vector {
-                let len = match items.get(1).map(|v| v.kind()) {
-                    Some(ValueKind::Fixnum(n)) if n >= 0 => n as usize,
-                    _ => {
-                        return Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("bool-vector-p"), array],
-                        ));
-                    }
-                };
-                if idx >= len {
-                    return Err(signal("args-out-of-range", vec![array, index]));
-                }
-                let bit = items
-                    .get(idx + 2)
-                    .copied()
-                    .ok_or_else(|| signal("args-out-of-range", vec![array, index]))?;
-                let truthy = match bit.kind() {
-                    ValueKind::Fixnum(n) => n != 0,
-                    ValueKind::Nil => false,
-                    _ => bit.is_truthy(),
-                };
-                return Ok(Value::bool_val(truthy));
+                return super::chartable::bool_vector_ref_value(&array, idx)
+                    .ok_or_else(|| signal("args-out-of-range", vec![array, index]));
             }
             items
                 .get(idx)
@@ -275,6 +255,19 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
     let mut result = Vec::new();
     for arg in args {
         match arg.kind() {
+            ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_bool_vector(arg) => {
+                let len = super::chartable::bool_vector_length(arg).unwrap_or_default();
+                for index in 0..usize::try_from(len).unwrap_or_default() {
+                    let bit =
+                        super::chartable::bool_vector_ref_value(arg, index).ok_or_else(|| {
+                            signal(
+                                "wrong-type-argument",
+                                vec![Value::symbol("bool-vector-p"), *arg],
+                            )
+                        })?;
+                    result.push(bit);
+                }
+            }
             ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
                 result.extend(arg.as_vector_data().unwrap().clone().into_iter())
             }
