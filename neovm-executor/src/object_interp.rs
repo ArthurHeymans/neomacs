@@ -1854,11 +1854,11 @@ impl Interpreter<'_, '_, '_> {
             "sxhash-equal" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.sxhash_equal(args[0])),
-            "reverse" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.list_values(args[0]))
-                .map(|values| make_list(self.runtime, values.iter().rev().copied())),
-            "nreverse" => self.exact_arity(name, args, 1).and_then(|_| {
+            "reverse" | "cl-reverse" => self.subr_1(name, args, |s| {
+                let values = s.list_values(args[0])?;
+                Some(make_list(s.runtime, values.iter().rev().copied()))
+            }),
+            "nreverse" | "cl-nreverse" => self.exact_arity(name, args, 1).and_then(|_| {
                 let mut current = args[0];
                 if current.is_nil() {
                     return Some(LispValue::NIL);
@@ -5774,8 +5774,10 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-substitute",
             "cl-tree-equal",
             "cl-typep",
+            "cl-nreverse",
             "cl-remq",
             "cl-remove",
+            "cl-reverse",
             "cl-remove-duplicates",
             "cl-remove-if",
             "cl-remove-if-not",
