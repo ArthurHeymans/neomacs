@@ -3923,6 +3923,40 @@ fn syntax_table_regexp_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn syntax_table_comment_flags_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"syntaxextra:%S\" (let ((st (make-syntax-table))) (modify-syntax-entry ?/ \". 124b\" st) (modify-syntax-entry ?* \". 23\" st) (with-syntax-table st (list (string-to-syntax \". 124b\") (char-syntax ?/) (char-syntax ?*)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("syntaxextra:") && row.contains("((2818049) 46 46)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: syntax-table comment flag encoding should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "syntax_table_comment_flags_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn category_table_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
