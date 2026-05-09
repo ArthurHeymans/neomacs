@@ -766,7 +766,10 @@ impl Runtime {
 
     pub fn mutex_lock(&self, mutex: LispValue) -> Result<(), RuntimeError> {
         let obj = self.mutex_obj(mutex)?;
-        obj.inner.lock();
+        // Lock and leak the guard to keep the mutex held until
+        // force_unlock is called in mutex_unlock.
+        let guard = obj.inner.lock();
+        std::mem::forget(guard);
         Ok(())
     }
 
