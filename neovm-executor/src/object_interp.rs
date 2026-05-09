@@ -7967,6 +7967,17 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_labels_mutual_recursion() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-labels ((even (n) (if (= n 0) t (odd (- n 1))))\
+                         (odd (n) (if (= n 0) nil (even (- n 1)))))\
+               (even 4))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_flet_local_function() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
