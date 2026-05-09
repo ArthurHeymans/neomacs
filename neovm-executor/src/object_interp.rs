@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_make_vector_default_init() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(aref (make-vector 3 42) 1)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_cl_labels_mutual_recursion() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
