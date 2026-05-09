@@ -4420,6 +4420,40 @@ fn point_motion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn line_position_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"bufferpos:%S\" (with-temp-buffer (insert \"ab\\ncd\\nef\") (list (pos-bol) (pos-eol) (progn (forward-line 1) (list (line-number-at-pos) (pos-bol) (pos-eol) (count-lines (point-min) (point-max)))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("bufferpos:") && row.contains("(7 9 (3 7 9 3))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: line position helpers should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "line_position_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn delete_text_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
