@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_caddr_third_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(caddr '(10 20 30))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(30)));
+    }
+
+    #[test]
     fn executes_cadr_second_element() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(cadr '(10 20 30))",
