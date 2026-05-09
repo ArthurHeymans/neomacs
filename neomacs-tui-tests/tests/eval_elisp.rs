@@ -2809,6 +2809,43 @@ fn function_predicate_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn function_arity_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"arity:%S\" (list (func-arity (lambda (a &optional b &rest c) nil)) (subr-arity (symbol-function 'car)) (help-function-arglist (lambda (x &optional y) nil)) (help-function-arglist (symbol-function 'cons))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("arity:")
+                && row.contains("(1 . many)")
+                && row.contains("(1 . 1)")
+                && row.contains("(x &optional y)")
+                && row.contains("(arg1 arg2)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: function arity introspection should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "function_arity_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn interactive_form_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
