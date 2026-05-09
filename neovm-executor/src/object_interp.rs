@@ -1290,6 +1290,9 @@ impl Interpreter<'_, '_, '_> {
             "macroexpand" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.macroexpand_one(args[0])),
+            "macroexpand-1" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.macroexpand_one(args[0])),
             "defun" => self
                 .min_arity(name, args, 3)
                 .and_then(|_| self.defun_runtime(args)),
@@ -5447,6 +5450,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "defalias"
             | "read"
             | "eval"
+            | "macroexpand"
+            | "macroexpand-1"
             | "defun"
             | "intern"
             | "symbol-name"
@@ -5460,6 +5465,8 @@ fn is_primitive_name(name: &str) -> bool {
             | "concat"
             | "substring"
             | "split-string"
+            | "prin1-to-string"
+            | "princ-to-string"
             | "string-join"
             | "string-trim"
             | "string-trim-left"
@@ -8121,6 +8128,15 @@ mod tests {
              (ignore-errors 42)",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_macroexpand_1_expands_top_level_macro() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (macroexpand-1 '(when t 42))",
+        );
+        assert!(value.is_some());
     }
 
     #[test]
