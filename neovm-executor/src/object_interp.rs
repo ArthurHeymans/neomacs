@@ -9435,4 +9435,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
+
+    #[test]
+    fn executes_cl_destructuring_bind() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-destructuring-bind (x y z) '(1 2 3) (+ x y z))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
 }

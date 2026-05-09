@@ -633,6 +633,26 @@ impl Expander {
             "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
             "cl-case" => self.expand_cl_case(span, items),
+            "cl-destructuring-bind" => {
+                if items.len() >= 4 {
+                    let bindings_form = list_form(
+                        vec![list_form(vec![items[1].clone(), items[2].clone()], span)],
+                        span,
+                    );
+                    let body: Vec<SurfaceForm> = items[3..]
+                        .iter()
+                        .map(|f| self.expand_form(f.clone()))
+                        .collect();
+                    let destructured = self.expand_pcase_let_bindings(
+                        span, &bindings_form, body,
+                    );
+                    self.expand_form(destructured)
+                } else {
+                    let expanded: Vec<SurfaceForm> =
+                        items.into_iter().map(|f| self.expand_form(f)).collect();
+                    SurfaceForm::new(SurfaceKind::List(expanded), span)
+                }
+            }
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -1188,7 +1208,18 @@ impl Expander {
                     vec![symbol_form(&tmp, span), expr],
                     span,
                 ));
-                self.emit_pcase_destructure(span, template, &tmp, &mut let_bindings);
+                self.emit_pcase_destructure(span, template, &tmp, &mut let_bindings, false);
+            } else if let SurfaceKind::List(pattern_items) = &pat.kind {
+                // Simple list pattern: (x y z) -> car/cdr chain
+                // Bare symbols are bindings (unlike backquote where only
+                // ,X and ,@X are bindings).
+                let tmp = format!("--pcase-dst-{}--", self.pcase_counter);
+                self.pcase_counter += 1;
+                let_bindings.push(list_form(
+                    vec![symbol_form(&tmp, span), expr],
+                    span,
+                ));
+                self.emit_pcase_destructure(span, &pat, &tmp, &mut let_bindings, true);
             } else {
                 // Unknown pattern: bind to underscore (value is evaluated but ignored)
                 let_bindings.push(list_form(
@@ -1209,10 +1240,23 @@ impl Expander {
         template: &SurfaceForm,
         src: &str,
         bindings: &mut Vec<SurfaceForm>,
+        simple: bool,
     ) {
         match &template.kind {
-            SurfaceKind::Atom(_) => {
-                // Literal in pattern: ignore (compatibility, not matched)
+            SurfaceKind::Atom(atom) => {
+                // In simple patterns, bare symbols are variable bindings.
+                // In backquote patterns, bare symbols are literal matches (ignored).
+                if simple {
+                    if let SurfaceAtom::Symbol(name) = atom {
+                        bindings.push(list_form(
+                            vec![
+                                symbol_form(name, template.span),
+                                symbol_form(src, span),
+                            ],
+                            span,
+                        ));
+                    }
+                }
             }
             SurfaceKind::Comma(inner) => {
                 // Unquote: bind the current source to the variable
@@ -1240,7 +1284,7 @@ impl Expander {
                     ],
                     span,
                 ));
-                self.emit_pcase_destructure(span, &items[0], &head_tmp, bindings);
+                self.emit_pcase_destructure(span, &items[0], &head_tmp, bindings, simple);
                 // Advance src to cdr for remaining elements
                 if items.len() > 1 {
                     let cdr_src = format!("--pcase-dst-{}--", self.pcase_counter);
@@ -1260,7 +1304,7 @@ impl Expander {
                         SurfaceKind::List(items[1..].to_vec()),
                         span,
                     );
-                    self.emit_pcase_destructure(span, &rest, &cdr_src, bindings);
+                    self.emit_pcase_destructure(span, &rest, &cdr_src, bindings, simple);
                 }
             }
             _ => {
