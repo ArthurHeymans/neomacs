@@ -1936,6 +1936,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-if-not" => self.subr_2(name, args, |s| {
                 s.remove_if(args[0], args[1], true)
             }),
+            "cl-remprop" => self.subr_2(name, args, |s| {
+                s.cl_remprop(args[0], args[1])
+            }),
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
@@ -3556,6 +3559,34 @@ impl Interpreter<'_, '_, '_> {
             result.push(car);
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn cl_remprop(&mut self, symbol: LispValue, propname: LispValue) -> Option<LispValue> {
+        let Ok(plist) = self.runtime.symbol_plist(symbol) else { return Some(LispValue::NIL); };
+        // Walk plist: (prop1 val1 prop2 val2 ...)
+        let mut current = plist;
+        let mut prev: Option<LispValue> = None;
+        loop {
+            if current.is_nil() { break; }
+            if !self.runtime.is_cons(current) { break; }
+            let key = self.runtime.car(current).ok()?;
+            let val_cell = self.runtime.cdr(current).ok()?;
+            if val_cell.is_nil() || !self.runtime.is_cons(val_cell) { break; }
+            if key == propname {
+                // Splice out key and val: prev->cdr = cddr(current)
+                let rest = self.runtime.cdr(val_cell).ok()?;
+                if let Some(p) = prev {
+                    self.runtime.set_cdr(p, rest).ok()?;
+                } else {
+                    // key is first in plist — update symbol plist to rest
+                    self.runtime.set_symbol_plist(symbol, rest).ok()?;
+                }
+                return Some(LispValue::TRUE);
+            }
+            prev = Some(val_cell);
+            current = self.runtime.cdr(val_cell).ok()?;
+        }
+        Some(LispValue::NIL)
     }
 
     fn cl_tailp(&self, sublist: LispValue, list: LispValue) -> bool {
@@ -6562,6 +6593,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nreverse",
             "cl-rassoc",
             "cl-rassq",
+            "cl-remprop",
             "cl-remq",
             "cl-remove",
             "cl-reverse",
@@ -11751,6 +11783,18 @@ mod tests {
              (let ((v (cl-coerce '(1 2 3) 'vector))) (aref v 1))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_remprop_removes_property() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((s (make-symbol \"test\"))) \
+               (put s 'color 'red) \
+               (cl-remprop s 'color) \
+               (get s 'color))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
