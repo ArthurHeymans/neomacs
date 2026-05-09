@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_mul_mixed_float() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(* 2 3.5)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_eq_float_int() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(= 1 1.0)",
