@@ -673,6 +673,7 @@ impl Expander {
                 let sequential = kw == "cl-do*";
                 self.expand_cl_do(span, items, sequential)
             }
+            "cl-dolist" => self.expand_cl_dolist(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -2750,6 +2751,82 @@ impl Expander {
         ];
         result.extend(end_result);
         let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    // ── cl-dolist expansion ─────────────────────────────────────────────
+
+    fn expand_cl_dolist(
+        &mut self,
+        span: Span,
+        items: Vec<SurfaceForm>,
+    ) -> SurfaceForm {
+        if items.len() < 2 {
+            self.error(span, "cl-dolist requires a spec and body");
+            return nil_form(span);
+        }
+        // Parse spec: (VAR LIST [RESULT])
+        let SurfaceKind::List(spec_parts) = &items[1].kind else {
+            self.error(items[1].span, "cl-dolist spec must be a list");
+            return nil_form(span);
+        };
+        if spec_parts.is_empty() {
+            self.error(items[1].span, "cl-dolist spec requires at least a variable");
+            return nil_form(span);
+        }
+        let var = spec_parts[0].clone();
+        let list_expr = if spec_parts.len() > 1 { spec_parts[1].clone() } else { nil_form(span) };
+        let result = if spec_parts.len() > 2 { vec![spec_parts[2].clone()] } else { vec![nil_form(span)] };
+        let body = &items[2..];
+
+        let tail = format!("--dolist-tail--{}--", self.pcase_counter);
+        self.pcase_counter += 1;
+
+        // (let ((TAIL LIST))
+        //   (while TAIL
+        //     (let ((VAR (car TAIL)))
+        //       BODY...
+        //       (setq TAIL (cdr TAIL))))
+        //   RESULT)
+        let while_body = list_form(
+            vec![
+                symbol_form("progn", span),
+                list_form(vec![
+                    symbol_form("let", span),
+                    list_form(vec![list_form(vec![
+                        var.clone(),
+                        list_form(vec![symbol_form("car", span), symbol_form(&tail, span)], span),
+                    ], span)], span),
+                    list_form(
+                        std::iter::once(symbol_form("progn", span))
+                            .chain(body.iter().cloned())
+                            .chain(std::iter::once(list_form(vec![
+                                symbol_form("setq", span),
+                                symbol_form(&tail, span),
+                                list_form(vec![symbol_form("cdr", span), symbol_form(&tail, span)], span),
+                            ], span)))
+                            .collect(),
+                        span,
+                    ),
+                ], span),
+            ],
+            span,
+        );
+
+        let mut parts = vec![
+            symbol_form("let", span),
+            list_form(vec![list_form(vec![
+                symbol_form(&tail, span),
+                list_expr.clone(),
+            ], span)], span),
+            list_form(vec![
+                symbol_form("while", span),
+                symbol_form(&tail, span),
+                while_body,
+            ], span),
+        ];
+        parts.extend(result);
+        let expanded = list_form(parts, span);
         self.expand_form(expanded)
     }
 

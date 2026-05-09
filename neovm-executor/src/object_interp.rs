@@ -8239,6 +8239,31 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_dolist_iterates_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((sum 0)) \
+               (cl-dolist (x '(1 2 3 4) sum) \
+                 (setq sum (+ sum x))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_cl_dolist_without_result() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((items nil)) \
+               (cl-dolist (x '(a b c)) \
+                 (push x items)) \
+               (length items))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
