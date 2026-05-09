@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_cdar_alist_access() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(cdar '((a . 1) (b . 2)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
     fn executes_cddr_skips_two() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(car (cddr '(10 20 30 40)))",
