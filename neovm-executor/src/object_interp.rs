@@ -2734,7 +2734,9 @@ impl Interpreter<'_, '_, '_> {
                 return None;
             }
         };
-        let target = find_condition_handler(instructions, signal_index, &signal_name)?;
+        let target = find_condition_handler(
+            instructions, signal_index, &signal_name, signaled.symbol, self.runtime,
+        )?;
         // Pop skipped inner condition-case frames. Clamp to avoid over-popping
         // when inner handlers have already been activated (and thus already
         // popped their frames from condition_stack).
@@ -5403,6 +5405,8 @@ fn find_condition_handler(
     instructions: &[RegInst],
     signal_index: usize,
     signal_name: &str,
+    signal_symbol: LispValue,
+    rt: &Runtime,
 ) -> Option<ConditionHandlerTarget> {
     let mut depth = 0usize;
     let mut handler_index = None;
@@ -5427,7 +5431,8 @@ fn find_condition_handler(
             RegInstKind::ConditionCaseHandler { pattern } if depth == 0 => {
                 if handler_index.is_some() && stop_index.is_none() {
                     stop_index = Some(index);
-                } else if handler_index.is_none() && condition_pattern_matches(pattern, signal_name)
+                } else if handler_index.is_none()
+                    && condition_pattern_matches(pattern, signal_name, signal_symbol, rt)
                 {
                     handler_index = Some(index);
                 }
@@ -5438,9 +5443,14 @@ fn find_condition_handler(
     None
 }
 
-fn condition_pattern_matches(pattern: &SurfaceForm, signal_name: &str) -> bool {
+fn condition_pattern_matches(
+    pattern: &SurfaceForm,
+    signal_name: &str,
+    signal_symbol: LispValue,
+    rt: &Runtime,
+) -> bool {
     if let Some(name) = pattern.symbol_name() {
-        return condition_name_matches(name, signal_name);
+        return condition_name_matches(name, signal_name, signal_symbol, rt);
     }
     let SurfaceKind::List(items) = &pattern.kind else {
         return false;
@@ -5448,11 +5458,23 @@ fn condition_pattern_matches(pattern: &SurfaceForm, signal_name: &str) -> bool {
     items
         .iter()
         .filter_map(SurfaceForm::symbol_name)
-        .any(|name| condition_name_matches(name, signal_name))
+        .any(|name| condition_name_matches(name, signal_name, signal_symbol, rt))
 }
 
-fn condition_name_matches(pattern_name: &str, signal_name: &str) -> bool {
-    pattern_name == signal_name || pattern_name == "error"
+fn condition_name_matches(
+    pattern_name: &str,
+    signal_name: &str,
+    signal_symbol: LispValue,
+    rt: &Runtime,
+) -> bool {
+    if pattern_name == signal_name || pattern_name == "error" {
+        return true;
+    }
+    // Check the error-conditions parent chain.
+    let Some(parents) = rt.signal_error_conditions(signal_symbol) else {
+        return false;
+    };
+    parents.contains(&pattern_name.to_string())
 }
 
 fn instruction_result_reg(kind: &RegInstKind) -> Option<RegId> {
@@ -7140,6 +7162,17 @@ mod tests {
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cos 0.0)");
         assert!(value.is_some());
         let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(tan 0.0)");
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_condition_case_catches_child_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case err \
+               (signal 'arith-error '(\"test\")) \
+               (error 'caught))",
+        );
         assert!(value.is_some());
     }
 

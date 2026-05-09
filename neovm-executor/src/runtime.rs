@@ -1275,6 +1275,55 @@ impl Runtime {
         self.cons(property, value_tail)
     }
 
+    /// Return the error condition names for a signal symbol by reading its
+    /// `error-conditions` property. Returns None only if the symbol doesn't
+    /// have that property.
+    pub fn signal_error_conditions(&self, symbol: LispValue) -> Option<Vec<String>> {
+        let plist = self.symbol_plist(symbol).ok()?;
+        // Walk the plist looking for the `error-conditions` property by name
+        // to avoid needing &mut self for intern.
+        let mut current = plist;
+        while self.is_cons(current) {
+            let pair = current;
+            if let Ok(prop) = self.car(pair) {
+                if let Ok(name) = self.symbol_name(prop) {
+                    if name == "error-conditions" {
+                        // Found it — next element in the plist pair is the value
+                        if let Ok(value_pair) = self.cdr(pair)
+                            && self.is_cons(value_pair)
+                        {
+                            let cond_list = self.car(value_pair).unwrap_or(LispValue::NIL);
+                            let mut conditions = Vec::new();
+                            let mut cond = cond_list;
+                            while self.is_cons(cond) {
+                                if let Ok(car) = self.car(cond) {
+                                    if let Ok(n) = self.symbol_name(car) {
+                                        conditions.push(n);
+                                    }
+                                }
+                                if let Ok(cdr) = self.cdr(cond) {
+                                    cond = cdr;
+                                } else {
+                                    break;
+                                }
+                            }
+                            return Some(conditions);
+                        }
+                    }
+                }
+            }
+            // Advance: skip key and value
+            if let Ok(next) = self.cdr(pair)
+                && self.is_cons(next)
+            {
+                current = self.cdr(next).unwrap_or(LispValue::NIL);
+            } else {
+                break;
+            }
+        }
+        Some(Vec::new())
+    }
+
     pub fn symbol_function(&self, symbol: LispValue) -> Result<Option<LispValue>, RuntimeError> {
         if symbol.is_nil() || symbol.is_true() {
             return Ok(None);
