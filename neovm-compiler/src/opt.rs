@@ -69,6 +69,17 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
     any_changed
 }
 
+fn is_special_form_name(name: &str) -> bool {
+    matches!(name,
+        "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
+        | "quote" | "function" | "progn" | "prog1" | "prog2"
+        | "condition-case" | "unwind-protect" | "catch" | "throw"
+        | "defun" | "defvar" | "defconst" | "defmacro" | "defalias"
+        | "lambda" | "setf" | "interactive" | "letrec"
+        | "cl-block" | "cl-return" | "cl-return-from"
+    )
+}
+
 fn is_pure(effects: &Effects) -> bool {
     effects.as_slice().iter().all(|e| matches!(e, Effect::Pure))
 }
@@ -559,6 +570,17 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
+        "special-form-p" if args.len() == 1 => {
+            let name = match args[0] {
+                SsaConst::Symbol(s) => s.as_str(),
+                _ => return Some(SsaConst::Nil),
+            };
+            Some(if is_special_form_name(name) {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
+        }
         _ => None,
     }
 }
