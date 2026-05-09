@@ -672,7 +672,10 @@ impl TextPropertyTable {
         if start >= end {
             return Ok(());
         }
-        for (interval_start, node) in self.intervals.range(start..) {
+        for (interval_start, node) in self.intervals.range(..end) {
+            if node.end <= start {
+                continue;
+            }
             if *interval_start >= end {
                 break;
             }

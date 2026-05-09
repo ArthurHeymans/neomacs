@@ -8444,11 +8444,18 @@ fn delete_read_only_text_property_matches_gnu() {
              (goto-char 2)
              (condition-case err
                  (progn (delete-char -1) (list :ok (buffer-string)))
+               (error (list (car err) (cdr err) (buffer-substring-no-properties (point-min) (point-max))))))
+           (with-temp-buffer
+             (insert "abcdef")
+             (put-text-property 1 7 'read-only t)
+             (goto-char 5)
+             (condition-case err
+                 (progn (delete-char -1) (list :ok (buffer-string)))
                (error (list (car err) (cdr err) (buffer-substring-no-properties (point-min) (point-max)))))))"#,
     );
     assert_eq!(
         results[0],
-        r#"OK ((text-read-only nil "abc") (text-read-only ("locked") "abc") (text-read-only nil "abc"))"#
+        r#"OK ((text-read-only nil "abc") (text-read-only ("locked") "abc") (text-read-only nil "abc") (text-read-only nil "abcdef"))"#
     );
 }
 
