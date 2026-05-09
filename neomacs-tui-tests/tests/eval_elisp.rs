@@ -1278,6 +1278,42 @@ fn string_search_replace_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn subst_char_in_string_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"subst:%S\" (list (subst-char-in-string ?a ?x \"banana\") (let ((s (copy-sequence \"banana\"))) (list (subst-char-in-string ?a ?x s t) s)) (let ((s \"banana\")) (eq s (subst-char-in-string ?a ?x s))) (subst-char-in-string ?q ?x \"banana\")))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("subst:")
+                && row.matches("bxnxnx").count() >= 3
+                && row.contains("nil")
+                && row.contains("banana")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: subst-char-in-string copy and in-place behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "subst_char_in_string_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn remove_delq_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
