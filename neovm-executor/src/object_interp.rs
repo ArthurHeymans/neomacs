@@ -12237,6 +12237,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_char_equal_case_insensitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-equal ?a ?A)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
