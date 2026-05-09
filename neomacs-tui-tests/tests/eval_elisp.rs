@@ -5332,6 +5332,43 @@ fn completion_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn completion_ignore_case_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"completioncase:%S\" (let ((completion-ignore-case t) (tbl '(\"alpha\" \"Alpine\" \"beta\"))) (list (try-completion \"AL\" tbl) (all-completions \"AL\" tbl) (test-completion \"ALPHA\" tbl))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("completioncase:")
+                && row.contains("alp")
+                && row.contains("alpha")
+                && row.contains("Alpine")
+                && row.contains("t")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: completion-ignore-case behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "completion_ignore_case_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn add_to_history_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
