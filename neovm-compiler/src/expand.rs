@@ -41,7 +41,42 @@ impl CompilerSession {
             diagnostics: Vec::new(),
         };
         session.register_builtin("cl-lib", crate::builtin_libs::CL_LIB_SOURCE);
+        // Builtin core macros that are always available (from subr.el).
+        session.register_builtin(
+            "core-macros",
+            crate::builtin_libs::CORE_MACROS_SOURCE,
+        );
+        // Load core macros into the session immediately.
+        session.load_and_expand_builtin("core-macros");
         session
+    }
+
+    fn load_and_expand_builtin(&mut self, feature: &str) {
+        let Some(source) = self.builtin_libraries.get(feature).copied() else {
+            return;
+        };
+        self.mark_loaded(feature);
+        let source_file = crate::source::SourceFile::new(
+            crate::source::SourceId::new(0),
+            Some(feature.into()),
+            source.to_string(),
+        );
+        let reader_output = crate::reader::read_source(&source_file);
+        self.diagnostics.extend(reader_output.diagnostics);
+        // Process forms to register macros (like `when`, `unless`).
+        let mut expander = Expander {
+            macros: std::mem::take(&mut self.macros),
+            symbol_macros: std::mem::take(&mut self.symbol_macros),
+            diagnostics: Vec::new(),
+            pcase_counter: 0,
+        };
+        for form in reader_output.forms {
+            expander.register_top_level_macro(&form);
+            let _ = expander.expand_form(form);
+        }
+        self.macros = expander.macros;
+        self.symbol_macros = expander.symbol_macros;
+        self.diagnostics.extend(expander.diagnostics);
     }
 
     pub fn register_builtin(&mut self, feature: &str, source: &'static str) {

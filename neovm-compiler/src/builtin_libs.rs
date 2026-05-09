@@ -5,6 +5,19 @@
 //! Only macro definitions are included; runtime functions are omitted because
 //! the compiler only needs macro definitions at expansion time.
 
+/// Core macros from subr.el that are always available.
+pub const CORE_MACROS_SOURCE: &str = r#"
+;;; core-macros.el --- Always-available macros  -*- lexical-binding: t; -*-
+
+(defmacro when (cond &rest body)
+  (list 'if cond (cons 'progn body)))
+
+(defmacro unless (cond &rest body)
+  (list 'if cond nil (cons 'progn body)))
+
+(provide 'core-macros)
+"#;
+
 /// Minimal cl-lib macro definitions.
 pub const CL_LIB_SOURCE: &str = r#"
 ;;; cl-lib.el --- Common Lisp extensions  -*- lexical-binding: t; -*-

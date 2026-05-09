@@ -1269,6 +1269,9 @@ impl Interpreter<'_, '_, '_> {
             "eval" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.eval_form(args[0])),
+            "macroexpand" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.macroexpand_one(args[0])),
             "defun" => self
                 .min_arity(name, args, 3)
                 .and_then(|_| self.defun_runtime(args)),
@@ -4129,6 +4132,29 @@ impl Interpreter<'_, '_, '_> {
         None
     }
 
+    fn macroexpand_one(&mut self, form: LispValue) -> Option<LispValue> {
+        // Convert form to source text, expand macros, return expanded form.
+        let text = self.runtime.format_value(form);
+        let source = neovm_compiler::source::SourceFile::new(
+            neovm_compiler::source::SourceId::new(0),
+            Some("<macroexpand>".into()),
+            text.clone(),
+        );
+        let reader_output = neovm_compiler::reader::read_source(&source);
+        if !reader_output.diagnostics.is_empty() || reader_output.forms.is_empty() {
+            return Some(form); // Return original on parse failure
+        }
+        let mut session = neovm_compiler::expand::CompilerSession::new();
+        let expand_output = session.expand_file_forms(reader_output.forms);
+        if expand_output.forms.is_empty() {
+            return Some(form);
+        }
+        Some(surface_to_lisp_value(
+            self.runtime,
+            &expand_output.forms[0],
+        ))
+    }
+
     fn eval_form(&mut self, form: LispValue) -> Option<LispValue> {
         let text = self.runtime.format_value(form);
         let source = neovm_compiler::source::SourceFile::new(
@@ -5513,6 +5539,40 @@ fn macro_value_to_lisp(
                 items.iter().map(|v| macro_value_to_lisp(v, rt)).collect();
             rt.vector(elements)
         }
+    }
+}
+
+fn surface_to_lisp_value(runtime: &mut Runtime, form: &neovm_compiler::surface::SurfaceForm) -> LispValue {
+    use neovm_compiler::surface::{SurfaceKind, SurfaceAtom};
+    match &form.kind {
+        SurfaceKind::Atom(atom) => match atom {
+            SurfaceAtom::Nil => LispValue::NIL,
+            SurfaceAtom::True => LispValue::TRUE,
+            SurfaceAtom::Int(n) => LispValue::expect_fixnum(*n),
+            SurfaceAtom::Float(f) => runtime.float(*f),
+            SurfaceAtom::Symbol(name) => runtime.intern(name),
+            SurfaceAtom::String(s) => runtime.string(s.clone()),
+            SurfaceAtom::Char(c) => LispValue::expect_fixnum(*c),
+        },
+        SurfaceKind::List(items) => {
+            // Collect values first to avoid mutable borrow conflicts
+            let values: Vec<LispValue> = items
+                .iter()
+                .map(|item| surface_to_lisp_value(runtime, item))
+                .collect();
+            let mut result = LispValue::NIL;
+            for val in values.into_iter().rev() {
+                result = runtime.cons(val, result);
+            }
+            result
+        }
+        SurfaceKind::Quote(inner) => {
+            let inner_val = surface_to_lisp_value(runtime, inner);
+            let sym = runtime.intern("quote");
+            let cell1 = runtime.cons(inner_val, LispValue::NIL);
+            runtime.cons(sym, cell1)
+        }
+        _ => LispValue::NIL,
     }
 }
 
@@ -7811,8 +7871,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "macroexpand: not implemented"]
-    fn gap_macroexpand() {
+    #[test]
+    fn executes_macroexpand() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(macroexpand '(when t 42))",
         );
