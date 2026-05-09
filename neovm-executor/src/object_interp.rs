@@ -2000,13 +2000,13 @@ impl Interpreter<'_, '_, '_> {
             "cl-set-difference" | "cl-nset-difference" => self.subr_2(name, args, |s| {
                 s.cl_set_difference(args[0], args[1])
             }),
-            "cl-intersection" => self.subr_2(name, args, |s| {
+            "cl-intersection" | "cl-nintersection" => self.subr_2(name, args, |s| {
                 s.cl_intersection(args[0], args[1])
             }),
-            "cl-union" => self.subr_2(name, args, |s| {
+            "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| {
                 s.cl_union(args[0], args[1])
             }),
-            "cl-set-exclusive-or" => self.subr_2(name, args, |s| {
+            "cl-set-exclusive-or" | "cl-nset-exclusive-or" => self.subr_2(name, args, |s| {
                 s.cl_set_exclusive_or(args[0], args[1])
             }),
             "cl-search" => self.subr_2(name, args, |s| {
@@ -6444,6 +6444,9 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-subst-if-not",
             "cl-sublis",
             "cl-substitute",
+            "cl-nintersection",
+            "cl-nset-exclusive-or",
+            "cl-nunion",
             "cl-intersection",
             "cl-tree-equal",
             "cl-union",
