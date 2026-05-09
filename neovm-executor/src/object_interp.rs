@@ -9464,4 +9464,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(332)));
     }
+
+    #[test]
+    fn executes_let_with_empty_bindings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let () 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_let_with_nil_bindings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let nil 99)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
 }
