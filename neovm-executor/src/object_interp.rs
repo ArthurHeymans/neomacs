@@ -10146,6 +10146,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_adjoin_adds_uniquely() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (length (cl-adjoin 1 '(2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
