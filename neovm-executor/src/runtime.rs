@@ -1082,6 +1082,12 @@ impl Runtime {
         })
     }
 
+    pub fn default_boundp(&self, symbol: LispValue) -> bool {
+        // Bypass dynamic bindings — check symbol's global value cell only.
+        if symbol.is_nil() || symbol.is_true() { return true; }
+        self.expect_symbol(symbol).map_or(false, |s| s.value.is_some())
+    }
+
     pub fn set_default(&mut self, symbol: LispValue, value: LispValue) -> Result<LispValue, RuntimeError> {
         // Bypass dynamic bindings — set the symbol's global value cell directly.
         if symbol.is_nil() || symbol.is_true() {

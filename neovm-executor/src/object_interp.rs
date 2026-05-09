@@ -1242,6 +1242,9 @@ impl Interpreter<'_, '_, '_> {
                 let sym = format!("{}{}", prefix, self.runtime.symbol_count());
                 Some(self.runtime.intern(&sym))
             }),
+            "default-boundp" => self.subr_1(name, args, |s| {
+                Some(bool_value(s.runtime.default_boundp(args[0])))
+            }),
             "default-value" => self.subr_1(name, args, |s| {
                 let result = s.runtime.default_value(args[0]);
                 s.runtime_value(result)
@@ -6846,6 +6849,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cos",
             "defalias",
             "define-error",
+            "default-boundp",
             "default-value",
             "defun",
             "delq",
