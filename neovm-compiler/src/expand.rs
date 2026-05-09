@@ -27,6 +27,9 @@ pub struct CompilerSession {
     builtin_libraries: HashMap<String, &'static str>,
     load_paths: Vec<String>,
     diagnostics: Vec<Diagnostic>,
+    /// Expanded forms from builtin sources, prepended to every
+    /// file's forms so runtime function definitions are compiled.
+    builtin_forms: Vec<SurfaceForm>,
 }
 
 impl CompilerSession {
@@ -39,12 +42,18 @@ impl CompilerSession {
             builtin_libraries: HashMap::new(),
             load_paths: vec!["lisp".to_string(), "lisp/emacs-lisp".to_string()],
             diagnostics: Vec::new(),
+            builtin_forms: Vec::new(),
         };
         session.register_builtin("cl-lib", crate::builtin_libs::CL_LIB_SOURCE);
         // Builtin core macros that are always available (from subr.el).
         session.register_builtin(
             "core-macros",
             crate::builtin_libs::CORE_MACROS_SOURCE,
+        );
+        // Register core runtime functions (loadable via require).
+        session.register_builtin(
+            "core-functions",
+            crate::builtin_libs::CORE_FUNCTIONS_SOURCE,
         );
         // Load core macros into the session immediately.
         session.load_and_expand_builtin("core-macros");
@@ -72,7 +81,14 @@ impl CompilerSession {
         };
         for form in reader_output.forms {
             expander.register_top_level_macro(&form);
-            let _ = expander.expand_form(form);
+            // Collect expanded forms (defun, etc.) for HIR lowering.
+            let expanded = expander.expand_form(form);
+            // Filter out (provide ...) forms since they're already loaded.
+            if !matches!(&expanded.kind, SurfaceKind::List(items)
+                if items.first().and_then(SurfaceForm::symbol_name) == Some("provide"))
+            {
+                self.builtin_forms.push(expanded);
+            }
         }
         self.macros = expander.macros;
         self.symbol_macros = expander.symbol_macros;

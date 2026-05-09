@@ -1,9 +1,9 @@
-//! Built-in macro library sources for common Elisp packages.
+//! Built-in library sources for common Elisp packages.
 //!
 //! These are injected into the CompilerSession at creation time so that
 //! `(require 'cl-lib)` works without needing actual .el files on disk.
-//! Only macro definitions are included; runtime functions are omitted because
-//! the compiler only needs macro definitions at expansion time.
+//! Macro definitions are available at expansion time; `defun` forms are
+//! compiled as module functions via `builtin_forms`.
 
 /// Core macros from subr.el that are always available.
 pub const CORE_MACROS_SOURCE: &str = r#"
@@ -16,6 +16,22 @@ pub const CORE_MACROS_SOURCE: &str = r#"
   (list 'if cond nil (cons 'progn body)))
 
 (provide 'core-macros)
+"#;
+
+/// Core runtime functions from subr.el, always available.
+/// These are compiled as module functions so they don't need
+/// hand-written Rust implementations.
+pub const CORE_FUNCTIONS_SOURCE: &str = r#"
+;;; core-functions.el --- Always-available runtime functions  -*- lexical-binding: t; -*-
+
+(defun pairlis (keys values &optional alist)
+  "Return an alist formed by pairing elements of KEYS and VALUES."
+  (if (null keys)
+      (or alist nil)
+    (cons (cons (car keys) (car values))
+          (pairlis (cdr keys) (cdr values) alist))))
+
+(provide 'core-functions)
 "#;
 
 /// Minimal cl-lib macro definitions.
