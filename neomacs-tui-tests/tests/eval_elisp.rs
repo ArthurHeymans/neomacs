@@ -4786,6 +4786,41 @@ fn time_value_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn parse_time_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"timeparse:%S\" (list (parse-time-string \"2026-05-08 11:22:33 -0400\") (format-time-string \"%Y-%m-%d %H:%M:%S %z\" (encode-time (parse-time-string \"2026-05-08 11:22:33 -0400\")) t)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("timeparse:")
+                && row.contains("(33 22 11 8 5 2026 nil -1 -14400)")
+                && row.contains("2026-05-08 15:22:33 +0000")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: parse-time-string and encode-time timezone behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "parse_time_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn split_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
