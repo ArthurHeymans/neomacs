@@ -231,6 +231,58 @@ pub struct HirConditionHandler {
     pub span: Span,
 }
 
+/// Hoist `defun`/`defsubst`/`defmacro` forms out of top-level `progn` forms
+/// so that the HIR lowering can register them as module-level items. The
+/// remaining body forms (if any) stay wrapped in a progn.
+fn hoist_top_level_defuns(forms: Vec<SurfaceForm>) -> Vec<SurfaceForm> {
+    let mut result = Vec::new();
+    for form in forms {
+        match list_items(&form) {
+            Some(items) if !items.is_empty() => {
+                let head = items[0].symbol_name().unwrap_or("");
+                match head {
+                    "progn" | "eval-and-compile" | "eval-when-compile"
+                    | "with-no-warnings" | "prog1" | "prog2" => {
+                        let mut body = Vec::new();
+                        for sub in &items[1..] {
+                            let is_def = sub.symbol_name()
+                                .map(|n| matches!(n, "defun" | "defsubst"))
+                                .unwrap_or(false)
+                                || list_items(sub)
+                                    .and_then(|l| l.first())
+                                    .and_then(|f| f.symbol_name())
+                                    .map(|n| matches!(n, "defun" | "defsubst"))
+                                    .unwrap_or(false);
+                            if is_def {
+                                result.push(sub.clone());
+                            } else {
+                                body.push(sub.clone());
+                            }
+                        }
+                        if !body.is_empty() {
+                            let new_head = SurfaceForm::new(
+                                SurfaceKind::Atom(SurfaceAtom::Symbol(
+                                    head.to_string()
+                                )),
+                                form.span,
+                            );
+                            let mut new_items = vec![new_head];
+                            new_items.extend(body);
+                            result.push(SurfaceForm::new(
+                                SurfaceKind::List(new_items),
+                                form.span,
+                            ));
+                        }
+                    }
+                    _ => result.push(form),
+                }
+            }
+            _ => result.push(form),
+        }
+    }
+    result
+}
+
 pub fn lower_expanded_forms(
     source: &SourceFile,
     forms: Vec<SurfaceForm>,
@@ -247,7 +299,7 @@ pub fn lower_expanded_forms(
         depth: 0,
     };
     let mut items = Vec::new();
-    for form in forms {
+    for form in hoist_top_level_defuns(forms) {
         if let Some(item) = lowerer.lower_item(&form) {
             items.push(item);
         }

@@ -7760,8 +7760,7 @@ mod tests {
     // The defalias cross-form test above proves the calling infrastructure works.
 
     #[test]
-    #[ignore = "defun cross-form: needs SymbolFunctionSet IR to set function slot"]
-    fn gap_defun_cross_form_call() {
+    fn executes_defun_cross_form_call() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (progn (defun my-add (x y) (+ x y)) (my-add 40 2))",
@@ -7780,8 +7779,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "interactive in defun: HIR registration bug"]
-    fn gap_defun_with_interactive() {
+    fn executes_defun_with_interactive() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (progn (defun my-cmd () (interactive) 42) (my-cmd))",
