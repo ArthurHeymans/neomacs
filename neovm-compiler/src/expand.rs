@@ -3066,7 +3066,7 @@ impl Expander {
         }
         let mut psetf_form = vec![symbol_form("psetf", span)];
         psetf_form.extend(psetf_pairs);
-        let mut result = vec![
+        let result = vec![
             symbol_form("let*", span),
             list_form(let_bindings, span),
             list_form(psetf_form, span),
@@ -3114,7 +3114,7 @@ impl Expander {
         }
         let mut psetf_form = vec![symbol_form("psetf", span)];
         psetf_form.extend(psetf_pairs);
-        let mut result = vec![
+        let result = vec![
             symbol_form("let*", span),
             list_form(let_bindings, span),
             list_form(psetf_form, span),
