@@ -1924,6 +1924,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-count" => self.subr_2(name, args, |s| {
                 s.cl_count(args[0], args[1])
             }),
+            "cl-adjoin" => self.subr_2(name, args, |s| {
+                s.cl_adjoin(args[0], args[1])
+            }),
             "cl-reduce" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.cl_reduce(args[0], args[1], args.get(2).copied())),
@@ -3294,6 +3297,28 @@ impl Interpreter<'_, '_, '_> {
             acc = self.execute_funcall(function, &[acc, elements[i]])?;
         }
         Some(acc)
+    }
+
+    fn cl_adjoin(&mut self, item: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                // Item not found — cons it onto the list.
+                return Some(self.runtime.cons(item, list));
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.eql_values(car, item) {
+                return Some(list); // Already present, return original list.
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
     }
 
     fn assoc(&mut self, key: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
@@ -5852,6 +5877,7 @@ fn is_primitive_name(name: &str) -> bool {
             "assoc",
             "assoc-string",
             "assq",
+            "cl-adjoin",
             "cl-assoc",
             "cl-assq",
             "atom",
@@ -10677,6 +10703,37 @@ mod tests {
              (cl-reduce #'+ '())",
         );
         assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_adjoin_adds_new_item() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-adjoin 3 '(1 2))",
+        );
+        let result = value.unwrap();
+        assert_eq!(
+            rt.format_value(result),
+            "(3 1 2)"
+        );
+    }
+
+    #[test]
+    fn executes_cl_adjoin_does_not_add_duplicate() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-adjoin 2 '(1 2 3))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 3)");
+    }
+
+    #[test]
+    fn executes_cl_adjoin_empty_list_adds_item() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-adjoin 1 '())",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1)");
     }
 
     #[test]
