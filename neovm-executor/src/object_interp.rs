@@ -1886,6 +1886,12 @@ impl Interpreter<'_, '_, '_> {
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
+            "acons" | "cl-acons" => self
+                .exact_arity(name, args, 3)
+                .map(|_| {
+                    let pair = self.runtime.cons(args[0], args[1]);
+                    self.runtime.cons(pair, args[2])
+                }),
             "alist-get" => self
                 .min_max_arity(name, args, 2, 5)
                 .and_then(|_| self.alist_get(
@@ -9590,6 +9596,15 @@ mod tests {
                ((> x 3) y))",
         );
         assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_acons_constructs_alist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr (assq 'x (acons 'x 1 (acons 'y 2 nil))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
     #[test]
