@@ -1491,6 +1491,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-delete-if-not" => self.subr_2(name, args, |s| {
                 s.cl_delete_if(args[0], args[1], true)
             }),
+            "delete-dups" => self.subr_1(name, args, |s| {
+                Some(s.delete_dups(args[0]))
+            }),
             "delq" | "cl-delq" => self.subr_2(name, args, |s| {
                 s.delq(args[0], args[1])
             }),
@@ -5290,6 +5293,24 @@ impl Interpreter<'_, '_, '_> {
         Some(make_list(self.runtime, result.into_iter()))
     }
 
+    fn delete_dups(&mut self, list: LispValue) -> LispValue {
+        let mut current = list;
+        loop {
+            if current.is_nil() || !self.runtime.is_cons(current) { break; }
+            let cdr = self.runtime.cdr(current).ok().unwrap_or(LispValue::NIL);
+            if cdr.is_nil() || !self.runtime.is_cons(cdr) { break; }
+            let car = self.runtime.car(current).ok().unwrap_or(LispValue::NIL);
+            let cadr = self.runtime.car(cdr).ok().unwrap_or(LispValue::NIL);
+            if self.runtime.equal(car, cadr) {
+                let cddr = self.runtime.cdr(cdr).ok().unwrap_or(LispValue::NIL);
+                if self.runtime.set_cdr(current, cddr).is_err() { break; }
+            } else {
+                current = cdr;
+            }
+        }
+        list
+    }
+
     fn delq(&mut self, obj: LispValue, list: LispValue) -> Option<LispValue> {
         let values = self.list_values(list)?;
         let result: Vec<_> = values.into_iter().filter(|v| *v != obj).collect();
@@ -6945,8 +6966,9 @@ fn is_primitive_name(name: &str) -> bool {
             "default-boundp",
             "default-value",
             "defun",
-            "delq",
             "delete",
+            "delete-dups",
+            "delq",
             "downcase",
             "elt",
             "emacs-pid",
