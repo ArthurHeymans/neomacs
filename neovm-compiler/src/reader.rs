@@ -311,8 +311,8 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
             }
             // Case 6b: Symbol starting with `?` that looks like a char literal.
             // E.g. `?\x41`, `?\101` — convert to Char.
-            if name.starts_with('?') && name.len() > 1 {
-                if let Some(value) = parse_char_code(name) {
+            if name.starts_with('?') && name.len() > 1
+                && let Some(value) = parse_char_code(name) {
                     tokens.push(Token {
                         kind: TokenKind::Char(value),
                         span: tok.span,
@@ -321,7 +321,6 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
                     i += 1;
                     continue;
                 }
-            }
         }
         tokens.push(raw_tokens[i].clone());
         i += 1;
@@ -329,12 +328,11 @@ fn lex_source(source: &SourceFile, diagnostics: &mut Vec<Diagnostic>) -> Vec<Tok
 
     // Detect unterminated strings: token text won't end with '"'
     for tok in &tokens {
-        if let TokenKind::String(_) = &tok.kind {
-            if !tok.text.ends_with('"') {
+        if let TokenKind::String(_) = &tok.kind
+            && !tok.text.ends_with('"') {
                 diagnostics
                     .push(Diagnostic::error("unterminated string literal").with_span(tok.span));
             }
-        }
     }
 
     tokens
@@ -1068,7 +1066,6 @@ impl SurfaceExtractor<'_> {
             | SyntaxKind::HashCaret
             | SyntaxKind::HashLabel
             | SyntaxKind::HashRef
-            | SyntaxKind::CharTable
             | SyntaxKind::Dot
             | SyntaxKind::Prefix
             | SyntaxKind::Symbol
@@ -1098,16 +1095,14 @@ impl SurfaceExtractor<'_> {
         // the actual form. If the label set pending_label but form is None,
         // that's expected — the label is consumed and the next form will
         // be wrapped (by the next call to extract_form_element).
-        if form.is_some() {
-            if let Some(n) = self.pending_label.take() {
-                if let Some(f) = form {
+        if form.is_some()
+            && let Some(n) = self.pending_label.take()
+                && let Some(f) = form {
                     let span = f.span;
                     let labeled = SurfaceForm::new(SurfaceKind::Labeled(n, Box::new(f)), span);
                     self.label_map.insert(n, labeled.clone());
                     return Some(labeled);
                 }
-            }
-        }
         form
     }
 

@@ -262,14 +262,13 @@ fn lower_destructured_param(builder: &mut SsaBuilder, temp_name: &str, pattern: 
                 });
             }
         }
-    } else if let Some(name) = pattern.symbol_name() {
-        if name != "_" && name != "nil" {
+    } else if let Some(name) = pattern.symbol_name()
+        && name != "_" && name != "nil" {
             builder.emit_no_result(SsaInstKind::BindLexical {
                 name: name.to_string(),
                 value: temp_val,
             });
         }
-    }
 }
 
 fn build_nth_car_cdr(builder: &mut SsaBuilder, base: ValueId, n: usize) -> ValueId {
@@ -398,6 +397,7 @@ struct RegLowerer<'a> {
     diagnostics: Vec<Diagnostic>,
     /// When true, injects a `(thread-yield)` check at every loop
     /// back-edge so cooperative threads can't starve each other.
+    #[allow(dead_code)]
     inject_yield_points: bool,
 }
 
@@ -1360,7 +1360,7 @@ impl SsaBuilder {
         match (then_value, else_value) {
             (None, None) => {
                 // Both branches diverge — the if diverges.
-                return None;
+                None
             }
             _ => {
                 self.current_block = merge_block;

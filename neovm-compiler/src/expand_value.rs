@@ -228,11 +228,10 @@ impl MacroValue {
         let mut current = self.clone();
         while let MacroValue::Cons(cell) = &current {
             let entry = &cell.car;
-            if let MacroValue::Cons(entry_cell) = entry {
-                if entry_cell.cdr == *val {
+            if let MacroValue::Cons(entry_cell) = entry
+                && entry_cell.cdr == *val {
                     return entry.clone();
                 }
-            }
             current = cell.cdr.clone();
         }
         MacroValue::Nil
@@ -242,11 +241,10 @@ impl MacroValue {
         let mut current = self.clone();
         while let MacroValue::Cons(cell) = &current {
             let entry = &cell.car;
-            if let MacroValue::Cons(entry_cell) = entry {
-                if entry_cell.car == *key {
+            if let MacroValue::Cons(entry_cell) = entry
+                && entry_cell.car == *key {
                     return entry.clone();
                 }
-            }
             current = cell.cdr.clone();
         }
         MacroValue::Nil

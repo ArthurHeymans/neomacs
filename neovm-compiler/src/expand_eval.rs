@@ -70,6 +70,12 @@ pub struct MacroEval {
 
 const MAX_EVAL_DEPTH: usize = 10;
 
+impl Default for MacroEval {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MacroEval {
     pub fn new() -> Self {
         Self {
@@ -533,9 +539,9 @@ impl MacroEval {
                 // Returns the subset of BINDINGS referenced in FORM, or nil.
                 // Simplified: check if any binding name appears in the form,
                 // return the bindings list if so, nil otherwise.
-                if items.len() >= 3 {
-                    if let Ok(binding_vals) = self.eval(&items[1], env) {
-                        if let Some(binding_pairs) = binding_vals.to_vec() {
+                if items.len() >= 3
+                    && let Ok(binding_vals) = self.eval(&items[1], env)
+                        && let Some(binding_pairs) = binding_vals.to_vec() {
                             let binding_names: Vec<String> = binding_pairs
                                 .iter()
                                 .filter_map(|pair| {
@@ -551,8 +557,6 @@ impl MacroEval {
                                 return Ok(binding_vals);
                             }
                         }
-                    }
-                }
                 Ok(MacroValue::Nil)
             }
 
@@ -1332,7 +1336,7 @@ impl MacroEval {
 
     fn eval_cl_loop(
         &mut self,
-        span: Span,
+        _span: Span,
         items: &[SurfaceForm],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {
@@ -1680,8 +1684,8 @@ impl MacroEval {
         let step_val: i64 = if let Some(ref step) = step_fn {
             // Evaluate the step expression once for numeric for
             let v = self.eval(step, env)?;
-            let n = v.as_int().unwrap_or(1);
-            n
+
+            v.as_int().unwrap_or(1)
         } else {
             1
         };
@@ -1769,13 +1773,11 @@ impl MacroEval {
             if should_break { break; }
 
             // always: if expr is nil, return nil immediately
-            if let Some(ref cond) = always_cond {
-                if !self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
-            }
+            if let Some(ref cond) = always_cond
+                && !self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
             // never: if expr is truthy, return nil immediately
-            if let Some(ref cond) = never_cond {
-                if self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
-            }
+            if let Some(ref cond) = never_cond
+                && self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
             // thereis: if expr is non-nil, return it immediately
             if let Some(ref cond) = thereis_cond {
                 let v = self.eval(cond, env)?;
@@ -2079,7 +2081,7 @@ impl MacroEval {
         pairs: &[SurfaceForm],
         env: &mut MacroEnv,
     ) -> Result<MacroValue, ()> {
-        if pairs.len() % 2 != 0 {
+        if !pairs.len().is_multiple_of(2) {
             self.error(span, "setq requires pairs of variable and value");
             return Err(());
         }
@@ -2468,7 +2470,7 @@ impl MacroEval {
         name: &str,
     ) -> Result<MacroValue, ()> {
         if args.len() != 2 {
-            self.error(span, &format!("{name} requires exactly 2 arguments"));
+            self.error(span, format!("{name} requires exactly 2 arguments"));
             return Err(());
         }
         let a = self.eval(&args[0], env)?;
@@ -2895,20 +2897,16 @@ impl MacroEval {
             return self.call_builtin_predicate(span, name, args);
         }
         // (function name) — function-quoted symbol: extract the name
-        if let MacroValue::Cons(pair) = func_val {
-            if let MacroValue::Symbol(ref fn_sym) = pair.car {
-                if fn_sym == "function" {
-                    if let MacroValue::Cons(rest) = &pair.cdr {
-                        if let MacroValue::Symbol(ref name) = rest.car {
+        if let MacroValue::Cons(pair) = func_val
+            && let MacroValue::Symbol(ref fn_sym) = pair.car
+                && fn_sym == "function"
+                    && let MacroValue::Cons(rest) = &pair.cdr
+                        && let MacroValue::Symbol(ref name) = rest.car {
                             if let Some(func) = env.lookup_function(name).cloned() {
                                 return self.call_macro_function(&func, args, env);
                             }
                             return self.call_builtin_predicate(span, name, args);
                         }
-                    }
-                }
-            }
-        }
         // Try lambda value
         if let Some((params, body_forms)) = extract_lambda(func_val) {
             let func = MacroFunction {
@@ -2923,7 +2921,7 @@ impl MacroEval {
 
     fn call_builtin_predicate(
         &mut self,
-        span: Span,
+        _span: Span,
         name: &str,
         args: &[MacroValue],
     ) -> Result<MacroValue, ()> {
@@ -3024,7 +3022,7 @@ fn extract_lambda(val: &MacroValue) -> Option<(Vec<String>, Vec<SurfaceForm>)> {
         .collect();
     let body: Vec<SurfaceForm> = items[2..]
         .iter()
-        .filter_map(|v| value_to_surface_form(v))
+        .filter_map(value_to_surface_form)
         .collect();
     if body.is_empty() {
         return None;

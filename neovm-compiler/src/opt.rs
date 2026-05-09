@@ -278,12 +278,11 @@ pub fn constant_folding(function: &mut SsaFunction) -> OptOutput {
 
     // Collect all existing constants.
     for (_block_id, block) in function.blocks.iter() {
-        for (_inst_idx, inst) in block.instructions.iter().enumerate() {
-            if let SsaInstKind::Const(c) = &inst.kind {
-                if let Some(result) = inst.result {
+        for inst in block.instructions.iter() {
+            if let SsaInstKind::Const(c) = &inst.kind
+                && let Some(result) = inst.result {
                     const_map.insert(result, c.clone());
                 }
-            }
         }
     }
 
@@ -299,23 +298,20 @@ pub fn constant_folding(function: &mut SsaFunction) -> OptOutput {
             None => continue,
         };
         let is_nil = matches!(c, SsaConst::Nil);
-        match &block.terminator {
-            SsaTerminator::BranchIfNil {
+        if let SsaTerminator::BranchIfNil {
                 then_target,
                 then_args,
                 else_target,
                 else_args,
                 ..
-            } => {
-                let (target, args) = if is_nil {
-                    (*then_target, then_args.clone())
-                } else {
-                    (*else_target, else_args.clone())
-                };
-                block.terminator = SsaTerminator::Jump { target, args };
-                changed = true;
-            }
-            _ => {}
+            } = &block.terminator {
+            let (target, args) = if is_nil {
+                (*then_target, then_args.clone())
+            } else {
+                (*else_target, else_args.clone())
+            };
+            block.terminator = SsaTerminator::Jump { target, args };
+            changed = true;
         }
     }
 
@@ -447,11 +443,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let all_distinct = ints.iter().all(|i| seen.insert(*i));
             Some(if all_distinct { SsaConst::True } else { SsaConst::Nil })
         }
-        "max" if args.len() >= 1 => {
+        "max" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().max().unwrap()))
         }
-        "min" if args.len() >= 1 => {
+        "min" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().min().unwrap()))
         }
@@ -463,15 +459,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().product()))
         }
-        "logand" if args.len() >= 1 => {
+        "logand" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(!0i64, |a, b| a & b)))
         }
-        "logior" if args.len() >= 1 => {
+        "logior" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a | b)))
         }
-        "logxor" if args.len() >= 1 => {
+        "logxor" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a ^ b)))
         }
@@ -524,7 +520,7 @@ pub fn dead_code_elimination(function: &mut SsaFunction) -> OptOutput {
             for inst in &block.instructions {
                 let is_used = inst
                     .result
-                    .map_or(true, |r| *use_counts.get(&r).unwrap_or(&0) > 0);
+                    .is_none_or(|r| *use_counts.get(&r).unwrap_or(&0) > 0);
                 if !is_used && is_pure(&inst.effects) {
                     loop_changed = true;
                     changed = true;
@@ -555,18 +551,14 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
         let preds = crate::verify::predecessor_map(function);
         let mut merge: Option<(BlockId, BlockId)> = None;
         for (bid, block) in function.blocks.iter() {
-            if let SsaTerminator::Jump { target, args } = &block.terminator {
-                if args.is_empty() {
-                    if let Some(pred_list) = preds.get(target) {
-                        if pred_list.len() == 1 && pred_list[0] == bid {
-                            if function.blocks[*target].params.is_empty() {
+            if let SsaTerminator::Jump { target, args } = &block.terminator
+                && args.is_empty()
+                    && let Some(pred_list) = preds.get(target)
+                        && pred_list.len() == 1 && pred_list[0] == bid
+                            && function.blocks[*target].params.is_empty() {
                                 merge = Some((bid, *target));
                                 break;
                             }
-                        }
-                    }
-                }
-            }
         }
         let (src, dst) = match merge {
             Some(m) => m,
@@ -592,11 +584,10 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
         function.blocks[dst].terminator = SsaTerminator::Unreachable;
         // Redirect any other jumps to the merged block so they point to src
         for (_, block) in function.blocks.iter_mut() {
-            if let SsaTerminator::Jump { target, .. } = &mut block.terminator {
-                if *target == dst {
+            if let SsaTerminator::Jump { target, .. } = &mut block.terminator
+                && *target == dst {
                     *target = src;
                 }
-            }
             if let SsaTerminator::BranchIfNil {
                 then_target,
                 else_target,
@@ -656,7 +647,7 @@ pub fn common_subexpression_elimination(function: &mut SsaFunction) -> OptOutput
                         }
                         current
                     };
-                    let resolved: Vec<ValueId> = args.iter().map(|a| resolve(a)).collect();
+                    let resolved: Vec<ValueId> = args.iter().map(resolve).collect();
                     Some(CseKey::CallNamed {
                         name: name.clone(),
                         args: resolved,

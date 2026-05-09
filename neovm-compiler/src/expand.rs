@@ -32,6 +32,12 @@ pub struct CompilerSession {
     builtin_forms: Vec<SurfaceForm>,
 }
 
+impl Default for CompilerSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerSession {
     pub fn new() -> Self {
         let mut session = Self {
@@ -138,8 +144,8 @@ impl CompilerSession {
                 self.macros = std::mem::take(&mut expander.macros);
                 self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
 
-                if !self.is_loaded(&feature) {
-                    if let Some(new_forms) = self.load_feature_forms(&feature, form.span) {
+                if !self.is_loaded(&feature)
+                    && let Some(new_forms) = self.load_feature_forms(&feature, form.span) {
                         // Move macros back into expander so the required
                         // forms are expanded with the current macro set,
                         // including any newly-defined macros from this file.
@@ -163,7 +169,6 @@ impl CompilerSession {
                         self.macros = std::mem::take(&mut expander.macros);
                         self.symbol_macros = std::mem::take(&mut expander.symbol_macros);
                     }
-                }
 
                 // Move session macros back into expander for remaining forms
                 expander.macros = std::mem::take(&mut self.macros);
@@ -201,7 +206,7 @@ impl CompilerSession {
         }
     }
 
-    fn load_feature_forms(&mut self, feature: &str, span: Span) -> Option<Vec<SurfaceForm>> {
+    fn load_feature_forms(&mut self, feature: &str, _span: Span) -> Option<Vec<SurfaceForm>> {
         if self.loading_stack.len() > 50 {
             self.diagnostics.push(Diagnostic::error(format!(
                 "require depth limit exceeded loading '{}'",
@@ -317,8 +322,8 @@ impl Expander {
     /// them before the main expansion pass. This makes macros defined inside
     /// progn available to later forms in the same file.
     fn pre_scan_defmacros(form: &SurfaceForm, expander: &mut Expander) {
-        if let SurfaceKind::List(items) = &form.kind {
-            if let Some(head) = items.first().and_then(|f| f.symbol_name()) {
+        if let SurfaceKind::List(items) = &form.kind
+            && let Some(head) = items.first().and_then(|f| f.symbol_name()) {
                 match head {
                     "defmacro" => {
                         expander.register_top_level_macro(form);
@@ -332,7 +337,6 @@ impl Expander {
                     _ => {}
                 }
             }
-        }
     }
 
     fn register_top_level_macro(&mut self, form: &SurfaceForm) -> Option<SurfaceForm> {
@@ -428,12 +432,11 @@ impl Expander {
                             results.push(form);
                         }
                         SurfaceKind::Atom(ref atom) => {
-                            if let SurfaceAtom::Symbol(name) = atom {
-                                if let Some(expansion) = self.symbol_macros.get(name) {
+                            if let SurfaceAtom::Symbol(name) = atom
+                                && let Some(expansion) = self.symbol_macros.get(name) {
                                     stack.push(Work::Expand(expansion.clone()));
                                     continue;
                                 }
-                            }
                             results.push(form);
                         }
                     }
@@ -941,7 +944,7 @@ impl Expander {
     fn expand_setf(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
         // (setf place value [place value ...])
         // Handle pairs of place/value
-        if items.len() < 3 || items.len() % 2 == 0 {
+        if items.len() < 3 || items.len().is_multiple_of(2) {
             let expanded: Vec<SurfaceForm> =
                 items.into_iter().map(|f| self.expand_form(f)).collect();
             return SurfaceForm::new(SurfaceKind::List(expanded), span);
@@ -1277,8 +1280,8 @@ impl Expander {
             SurfaceKind::Atom(atom) => {
                 // In simple patterns, bare symbols are variable bindings.
                 // In backquote patterns, bare symbols are literal matches (ignored).
-                if simple {
-                    if let SurfaceAtom::Symbol(name) = atom {
+                if simple
+                    && let SurfaceAtom::Symbol(name) = atom {
                         bindings.push(list_form(
                             vec![
                                 symbol_form(name, template.span),
@@ -1287,7 +1290,6 @@ impl Expander {
                             span,
                         ));
                     }
-                }
             }
             SurfaceKind::Comma(inner) => {
                 // Unquote: bind the current source to the variable
@@ -2229,8 +2231,8 @@ impl Expander {
     fn rewrite_labels_calls(form: &SurfaceForm, label_names: &[String]) -> SurfaceForm {
         match &form.kind {
             SurfaceKind::List(items) if !items.is_empty() => {
-                if let SurfaceKind::Atom(SurfaceAtom::Symbol(name)) = &items[0].kind {
-                    if label_names.contains(name) {
+                if let SurfaceKind::Atom(SurfaceAtom::Symbol(name)) = &items[0].kind
+                    && label_names.contains(name) {
                         // (name args...) -> (funcall name args...)
                         let mut new_items = vec![
                             symbol_form("funcall", form.span),
@@ -2244,14 +2246,13 @@ impl Expander {
                         );
                         return list_form(new_items, form.span);
                     }
-                }
                 let rewritten: Vec<SurfaceForm> = items
                     .iter()
                     .map(|item| Self::rewrite_labels_calls(item, label_names))
                     .collect();
                 SurfaceForm::new(SurfaceKind::List(rewritten), form.span)
             }
-            SurfaceKind::List(items) => form.clone(),
+            SurfaceKind::List(_items) => form.clone(),
             _ => form.clone(),
         }
     }
@@ -2651,7 +2652,7 @@ impl Expander {
                 span,
             ));
         }
-        let mut result = vec![
+        let result = vec![
             symbol_form("let", span),
             list_form(vec![list_form(vec![
                 symbol_form(temp, span),
@@ -3103,7 +3104,7 @@ impl Expander {
                     if clauses_contain_return(then_clauses)
                         || else_clauses
                             .as_ref()
-                            .map_or(false, |ec| clauses_contain_return(ec))
+                            .is_some_and(|ec| clauses_contain_return(ec))
                     {
                         has_return = true;
                     }
@@ -3267,14 +3268,13 @@ impl Expander {
         }
 
         // Repeat binding
-        if has_repeat {
-            if let Some(count) = &repeat_count {
+        if has_repeat
+            && let Some(count) = &repeat_count {
                 let_bindings.push(list_form(
                     vec![symbol_form("--cl-repeat--", span), count.clone()],
                     span,
                 ));
             }
-        }
 
         // Always/never flag variable
         if has_always_never {
@@ -3354,7 +3354,7 @@ impl Expander {
         } else {
             list_form(
                 std::iter::once(symbol_form("and", span))
-                    .chain(while_tests.into_iter())
+                    .chain(while_tests)
                     .collect(),
                 span,
             )
@@ -3893,7 +3893,7 @@ impl Expander {
         let_body.push(list_form(
             std::iter::once(symbol_form("while", span))
                 .chain(std::iter::once(while_test))
-                .chain(while_body.into_iter())
+                .chain(while_body)
                 .collect(),
             span,
         ));
@@ -3902,7 +3902,7 @@ impl Expander {
         let let_form = list_form(
             std::iter::once(symbol_form("let", span))
                 .chain(std::iter::once(list_form(let_bindings, span)))
-                .chain(let_body.into_iter())
+                .chain(let_body)
                 .collect(),
             span,
         );
@@ -4240,7 +4240,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Collect { expr, into });
                 }
                 "append" => {
@@ -4250,7 +4250,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Append { expr, into });
                 }
                 "nconc" => {
@@ -4260,7 +4260,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Nconc { expr, into });
                 }
                 "sum" => {
@@ -4270,7 +4270,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Sum { expr, into });
                 }
                 "count" => {
@@ -4280,7 +4280,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Count { expr, into });
                 }
                 "minimize" => {
@@ -4290,7 +4290,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Minimize { expr, into });
                 }
                 "maximize" => {
@@ -4300,7 +4300,7 @@ impl Expander {
                     }
                     let expr = items[pos].clone();
                     pos += 1;
-                    let into = Self::parse_into_keyword(&items, &mut pos);
+                    let into = Self::parse_into_keyword(items, &mut pos);
                     clauses.push(LoopClause::Maximize { expr, into });
                 }
                 "thereis" => {
@@ -4511,7 +4511,7 @@ impl Expander {
         let next_kw = items[*pos].symbol_name().unwrap_or("");
         match next_kw {
             "from" | "upfrom" | "downfrom" => {
-                let is_down = next_kw == "downfrom";
+                let _is_down = next_kw == "downfrom";
                 *pos += 1;
                 let start = items.get(*pos)?.clone();
                 *pos += 1;
@@ -4916,7 +4916,7 @@ fn clauses_contain_return(clauses: &[LoopClause]) -> bool {
             clauses_contain_return(then_clauses)
                 || else_clauses
                     .as_ref()
-                    .map_or(false, |ec| clauses_contain_return(ec))
+                    .is_some_and(|ec| clauses_contain_return(ec))
         }
         _ => false,
     })

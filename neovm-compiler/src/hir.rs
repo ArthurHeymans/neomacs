@@ -1345,7 +1345,6 @@ impl Lowerer<'_> {
         if items.is_empty() {
             return None;
         }
-        if items.len() > 2 {}
         let name_form = &items[0];
         if let Some(name) = name_form.symbol_name().map(str::to_string) {
             let init = if let Some(init_form) = items.get(1) {
@@ -1407,12 +1406,12 @@ impl Lowerer<'_> {
             return;
         }
         if let Some(parts) = list_items(pattern) {
-            let len = parts.len();
+            let _len = parts.len();
             for (i, part) in parts.iter().enumerate() {
                 let elem_expr = car_expr_inner(nth_cdr_hir(accessor.clone(), i, span), span);
                 if part.symbol_name().is_some() {
-                    if let Some(name) = part.symbol_name() {
-                        if name != "_" && name != "nil" {
+                    if let Some(name) = part.symbol_name()
+                        && name != "_" && name != "nil" {
                             bindings.push(HirBinding {
                                 name: name.to_string(),
                                 mode: BindingMode::Lexical,
@@ -1420,7 +1419,6 @@ impl Lowerer<'_> {
                                 span,
                             });
                         }
-                    }
                 } else {
                     let sub_temp = format!("\0destruct.{}", self.fresh_id());
                     bindings.push(HirBinding {
@@ -1433,7 +1431,6 @@ impl Lowerer<'_> {
                     self.emit_destructure_hir(part, &sub, span, bindings);
                 }
             }
-            return;
         }
     }
 
@@ -1690,12 +1687,7 @@ impl Lowerer<'_> {
             || matches!(&tail[0].kind, SurfaceKind::List(items) if items.is_empty())
         {
             None
-        } else if let Some(name) = tail[0].symbol_name() {
-            Some(name.to_string())
-        } else {
-            // Accept non-symbol forms (e.g., destructuring patterns) — treat as unnamed
-            None
-        };
+        } else { tail[0].symbol_name().map(|name| name.to_string()) };
         let body = self.lower_expr(&tail[1])?;
         let mut handlers = Vec::new();
         for handler_form in &tail[2..] {
@@ -1838,8 +1830,8 @@ impl Lowerer<'_> {
             i += 2;
         }
         // Handle trailing single symbol: (setq foo) just returns foo's value
-        if i < pairs.len() {
-            if let Some(name) = pairs[i].symbol_name().map(str::to_string) {
+        if i < pairs.len()
+            && let Some(name) = pairs[i].symbol_name().map(str::to_string) {
                 let kind = if self.is_lexical(&name) {
                     HirExprKind::LexicalGet(name)
                 } else {
@@ -1850,7 +1842,6 @@ impl Lowerer<'_> {
                     span: pairs[i].span,
                 });
             }
-        }
         if exprs.is_empty() {
             return nil_expr(form.span).into();
         }
@@ -2057,8 +2048,8 @@ impl Lowerer<'_> {
             // (defun f () "doc" (declare ...) (interactive ...) body).
             // A string is only a docstring if it is followed by declare/interactive
             // or another body form — a lone string is a return value.
-            if body_start == 0 {
-                if let SurfaceKind::Atom(SurfaceAtom::String(_)) = &form.kind {
+            if body_start == 0
+                && let SurfaceKind::Atom(SurfaceAtom::String(_)) = &form.kind {
                     // Only treat as docstring if there is more content after it
                     if forms.len() > 1 {
                         body_start += 1;
@@ -2066,7 +2057,6 @@ impl Lowerer<'_> {
                     }
                     break;
                 }
-            }
             let Some(items) = list_items(form) else {
                 break;
             };
