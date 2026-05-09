@@ -8242,6 +8242,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_defvar_with_docstring() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defvar my-doc-var 42 \"documentation string\")\
+                    (symbol-value 'my-doc-var))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_fmakunbound_removes_function_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
