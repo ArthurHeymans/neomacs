@@ -1997,7 +1997,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-subst-if-not" | "cl-nsubst-if-not" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], true)
             }),
-            "cl-set-difference" => self.subr_2(name, args, |s| {
+            "cl-set-difference" | "cl-nset-difference" => self.subr_2(name, args, |s| {
                 s.cl_set_difference(args[0], args[1])
             }),
             "cl-intersection" => self.subr_2(name, args, |s| {
@@ -6436,6 +6436,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delete-if",
             "cl-delete-if-not",
             "cl-delq",
+            "cl-nset-difference",
             "cl-nsubst-if",
             "cl-nsubst-if-not",
             "cl-nsubstitute",
