@@ -1361,6 +1361,11 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil())),
             "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
+            "garbage-collect" => {
+                let _ = self.runtime.gc_heap.collect(neovm_gc::plan::CollectionKind::Minor);
+                Some(LispValue::NIL)
+            }
+            "purecopy" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "indirect-function" => self.subr_1(name, args, |s| {
                 s.indirect_function(args[0])
             }),
@@ -6914,6 +6919,7 @@ fn is_primitive_name(name: &str) -> bool {
             "fset",
             "funcall",
             "functionp",
+            "garbage-collect",
             "gensym",
             "get",
             "gethash",
@@ -7000,6 +7006,7 @@ fn is_primitive_name(name: &str) -> bool {
             "print",
             "prog1",
             "provide",
+            "purecopy",
             "put",
             "puthash",
             "random",
