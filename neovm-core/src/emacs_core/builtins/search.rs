@@ -779,6 +779,7 @@ pub(crate) fn builtin_posix_looking_at_with_state(
 
 pub(crate) fn builtin_string_match_with_state(
     case_fold: bool,
+    syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -802,13 +803,22 @@ pub(crate) fn builtin_string_match_with_state(
                     } else {
                         match_data
                     };
-                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+                    let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
+                    let buffer_syntax = syntax_table.map(|syntax_table| {
+                        crate::emacs_core::regex_emacs::BufferSyntaxLookup {
+                            syntax_table: syntax_table.clone(),
+                        }
+                    });
+                    let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
+                        buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
                         super::regex::SearchedString::Heap(args[1]),
                         start,
                         case_fold,
                         false,
+                        syntax,
                         target,
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
@@ -854,6 +864,10 @@ pub(crate) fn builtin_string_match_slice(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_table = eval
+        .buffers
+        .current_buffer()
+        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let mut throwaway: Option<super::regex::MatchData> = None;
     let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
@@ -861,7 +875,7 @@ pub(crate) fn builtin_string_match_slice(
     } else {
         &mut eval.match_data
     };
-    let result = builtin_string_match_with_state(case_fold, md_slot, args);
+    let result = builtin_string_match_with_state(case_fold, syntax_table.as_ref(), md_slot, args);
     // Promote a TLS-detected quit (see `builtin_re_search_forward`).
     eval.maybe_quit()?;
     result
@@ -869,6 +883,7 @@ pub(crate) fn builtin_string_match_slice(
 
 pub(crate) fn builtin_posix_string_match_with_state(
     case_fold: bool,
+    syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -898,13 +913,22 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     } else {
                         match_data
                     };
-                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+                    let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
+                    let buffer_syntax = syntax_table.map(|syntax_table| {
+                        crate::emacs_core::regex_emacs::BufferSyntaxLookup {
+                            syntax_table: syntax_table.clone(),
+                        }
+                    });
+                    let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
+                        buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
                         super::regex::SearchedString::Heap(args[1]),
                         start,
                         case_fold,
                         true,
+                        syntax,
                         target,
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
@@ -935,7 +959,11 @@ pub(crate) fn builtin_posix_string_match_with_state(
     )
 }
 
-pub(crate) fn builtin_string_match_p_with_case_fold(case_fold: bool, args: &[Value]) -> EvalResult {
+pub(crate) fn builtin_string_match_p_with_case_fold(
+    case_fold: bool,
+    syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
+    args: &[Value],
+) -> EvalResult {
     expect_range_args("string-match-p", args, 2, 3)?;
     match (args[0].kind(), args[1].kind()) {
         (ValueKind::String, ValueKind::String) => {
@@ -944,13 +972,22 @@ pub(crate) fn builtin_string_match_p_with_case_fold(case_fold: bool, args: &[Val
             let start =
                 crate::emacs_core::search::normalize_lisp_string_start_arg(string, args.get(2))?;
             let mut throwaway = None;
-            match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+            let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
+            let buffer_syntax = syntax_table.map(|syntax_table| {
+                crate::emacs_core::regex_emacs::BufferSyntaxLookup {
+                    syntax_table: syntax_table.clone(),
+                }
+            });
+            let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
+                buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+            match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
                 pattern,
                 string,
                 super::regex::SearchedString::Heap(args[1]),
                 start,
                 case_fold,
                 false,
+                syntax,
                 &mut throwaway,
             ) {
                 Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
@@ -986,7 +1023,11 @@ pub(crate) fn builtin_string_match_p(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    builtin_string_match_p_with_case_fold(case_fold, &args)
+    let syntax_table = eval
+        .buffers
+        .current_buffer()
+        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    builtin_string_match_p_with_case_fold(case_fold, syntax_table.as_ref(), &args)
 }
 
 pub(crate) fn builtin_posix_string_match(
@@ -996,6 +1037,10 @@ pub(crate) fn builtin_posix_string_match(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_table = eval
+        .buffers
+        .current_buffer()
+        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let mut throwaway: Option<super::regex::MatchData> = None;
     let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
@@ -1003,7 +1048,7 @@ pub(crate) fn builtin_posix_string_match(
     } else {
         &mut eval.match_data
     };
-    builtin_posix_string_match_with_state(case_fold, md_slot, &args)
+    builtin_posix_string_match_with_state(case_fold, syntax_table.as_ref(), md_slot, &args)
 }
 
 pub(crate) fn builtin_match_string(

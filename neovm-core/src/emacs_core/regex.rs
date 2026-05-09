@@ -1998,17 +1998,38 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
+    string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
+        pattern,
+        string,
+        searched_string,
+        start,
+        case_fold,
+        posix,
+        &DefaultSyntaxLookup,
+        match_data,
+    )
+}
+
+pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
+    pattern: &LispString,
+    string: &crate::heap_types::LispString,
+    searched_string: SearchedString,
+    start: usize,
+    case_fold: bool,
+    posix: bool,
+    syntax: &dyn SyntaxLookup,
+    match_data: &mut Option<MatchData>,
+) -> Result<Option<usize>, String> {
     if start > string.byte_len() {
         return Ok(None);
     }
 
     let compiled =
         compile_lisp_pattern_with_posix(pattern, case_fold, posix, string.is_multibyte())?;
-    let syn = DefaultSyntaxLookup;
     let text_bytes = string.as_bytes();
     let range = (text_bytes.len() - start) as isize;
     if let Some((_pos, regs)) =
-        regex_emacs::re_search(compiled.as_ref(), text_bytes, start, range, &syn, start)
+        regex_emacs::re_search(compiled.as_ref(), text_bytes, start, range, syntax, start)
     {
         let byte_md = match_data_from_registers(&regs, 0);
         let char_md = string_char_match_data(searched_string, byte_md);
@@ -2052,22 +2073,24 @@ pub(crate) fn string_match_full_with_case_fold_source_posix(
         return Ok(None);
     }
 
-    string_match_full_with_case_fold_source_compiled(
+    string_match_full_with_case_fold_source_compiled_syntax(
         compile_search_pattern_with_posix(pattern, case_fold, posix)?,
         string,
         searched_string,
         start,
         case_fold,
+        &DefaultSyntaxLookup,
         match_data,
     )
 }
 
-fn string_match_full_with_case_fold_source_compiled(
+fn string_match_full_with_case_fold_source_compiled_syntax(
     compiled: CompiledSearchPattern,
     string: &str,
     searched_string: SearchedString,
     start: usize,
     _case_fold: bool,
+    syntax: &dyn SyntaxLookup,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
     match compiled {
@@ -2087,11 +2110,10 @@ fn string_match_full_with_case_fold_source_compiled(
             }
         }
         CompiledSearchPattern::Emacs(cp) => {
-            let syn = DefaultSyntaxLookup;
             let text_bytes = string.as_bytes();
             let range = (text_bytes.len() - start) as isize;
             if let Some((_pos, regs)) =
-                regex_emacs::re_search(cp.as_ref(), text_bytes, start, range, &syn, start)
+                regex_emacs::re_search(cp.as_ref(), text_bytes, start, range, syntax, start)
             {
                 let byte_md = match_data_from_registers(&regs, 0);
                 let char_md = string_char_match_data(searched_string, byte_md);

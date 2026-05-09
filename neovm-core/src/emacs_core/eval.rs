@@ -2728,8 +2728,13 @@ impl Context {
                     rendered
                 };
 
+                let syntax_table = self
+                    .buffers
+                    .current_buffer()
+                    .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
                 if builtins::search::builtin_string_match_p_with_case_fold(
                     false,
+                    syntax_table.as_ref(),
                     &[entry, message],
                 )?
                 .as_fixnum()

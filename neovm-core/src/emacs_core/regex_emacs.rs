@@ -235,6 +235,16 @@ pub(crate) struct CompiledPattern {
     /// True if the pattern can match the empty string.
     pub can_be_null: bool,
 
+    /// True if matching this pattern depends on the active syntax table.
+    ///
+    /// GNU `src/search.c:compile_pattern` keeps syntax-table-sensitive
+    /// regexps in cache entries keyed by `BVAR (current_buffer, syntax_table)`.
+    /// Neomacs currently keeps compiled regexp bytecode independent of the
+    /// syntax table and passes the active table to the matcher, so fastmap
+    /// skipping must be disabled for these patterns unless the fastmap was
+    /// built for the same table.
+    pub uses_syntax: bool,
+
     /// Character translation table for case-folding.
     /// Maps each character to its canonical form (e.g., 'A' → 'a').
     pub translate: Option<Vec<char>>,
@@ -277,6 +287,7 @@ impl CompiledPattern {
             multibyte: true,
             target_multibyte: true,
             can_be_null: false,
+            uses_syntax: false,
             translate: None,
             multibyte_charsets: HashMap::new(),
             charset_class_bits: HashMap::new(),
@@ -831,6 +842,7 @@ pub(crate) fn regex_compile_lisp(
                     b'b' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::WordBound);
                     }
 
@@ -838,6 +850,7 @@ pub(crate) fn regex_compile_lisp(
                     b'B' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::NotWordBound);
                     }
 
@@ -845,6 +858,7 @@ pub(crate) fn regex_compile_lisp(
                     b'<' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::WordBeg);
                     }
 
@@ -852,6 +866,7 @@ pub(crate) fn regex_compile_lisp(
                     b'>' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::WordEnd);
                     }
 
@@ -864,11 +879,13 @@ pub(crate) fn regex_compile_lisp(
                                 b'<' => {
                                     laststart = Some(bpos!());
                                     pending_exact = None;
+                                    buf.uses_syntax = true;
                                     emit_op!(RegexOp::SymBeg);
                                 }
                                 b'>' => {
                                     laststart = Some(bpos!());
                                     pending_exact = None;
+                                    buf.uses_syntax = true;
                                     emit_op!(RegexOp::SymEnd);
                                 }
                                 _ => {
@@ -889,6 +906,7 @@ pub(crate) fn regex_compile_lisp(
                     b'w' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::SyntaxSpec);
                         emit!(SyntaxClass::Word as u8);
                     }
@@ -897,6 +915,7 @@ pub(crate) fn regex_compile_lisp(
                     b'W' => {
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::NotSyntaxSpec);
                         emit!(SyntaxClass::Word as u8);
                     }
@@ -917,6 +936,7 @@ pub(crate) fn regex_compile_lisp(
                         };
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::SyntaxSpec);
                         emit!(class as u8);
                     }
@@ -937,6 +957,7 @@ pub(crate) fn regex_compile_lisp(
                         };
                         laststart = Some(bpos!());
                         pending_exact = None;
+                        buf.uses_syntax = true;
                         emit_op!(RegexOp::NotSyntaxSpec);
                         emit!(class as u8);
                     }
@@ -1525,7 +1546,7 @@ fn compile_charset(
 
     // Special case: ] at start is literal
     let mut first = true;
-    let mut last_char: Option<char> = None; // Track last single char for ranges
+    let mut pending_char: Option<char> = None;
     let mut closed = false;
 
     while *p < plen {
@@ -1543,52 +1564,47 @@ fn compile_charset(
         first = false;
 
         if b == b'-' && *p < plen && pattern[*p] != b']' {
-            if let Some(range_start) = last_char {
+            if let Some(range_start) = pending_char.take() {
                 // Range: range_start - next_char
                 let (range_end, rlen) = decode_pattern_char(pattern, *p, pattern_multibyte)
                     .unwrap_or((pattern[*p] as u32, 1));
                 let range_end = emacs_char_to_rust_char(range_end);
                 *p += rlen;
                 let translate = buf.translate.as_deref();
-                if range_start.is_ascii() && range_end.is_ascii() {
-                    // Both ASCII — use the bitmap
-                    for ch in (range_start as u8)..=(range_end as u8) {
-                        set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, translate);
-                    }
-                } else {
-                    // At least one endpoint is non-ASCII.
-                    // Put the ASCII portion in the bitmap and the rest in
-                    // multibyte ranges.
-                    let start_u32 = range_start as u32;
-                    let end_u32 = range_end as u32;
-                    // ASCII portion: codepoints <= 127
-                    if start_u32 <= 127 {
-                        let ascii_end = end_u32.min(127) as u8;
-                        for ch in (start_u32 as u8)..=ascii_end {
+                if range_start <= range_end {
+                    if range_start.is_ascii() && range_end.is_ascii() {
+                        // Both ASCII — use the bitmap
+                        for ch in (range_start as u8)..=(range_end as u8) {
                             set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, translate);
                         }
-                    }
-                    // Multibyte portion: codepoints >= 128
-                    let mb_start = if start_u32 >= 128 {
-                        range_start
                     } else {
-                        '\u{80}'
-                    };
-                    if end_u32 >= 128 {
-                        add_multibyte_range(&mut mb_ranges, mb_start, range_end, case_fold);
+                        // At least one endpoint is non-ASCII.
+                        // Put the ASCII portion in the bitmap and the rest in
+                        // multibyte ranges.
+                        let start_u32 = range_start as u32;
+                        let end_u32 = range_end as u32;
+                        // ASCII portion: codepoints <= 127
+                        if start_u32 <= 127 {
+                            let ascii_end = end_u32.min(127) as u8;
+                            for ch in (start_u32 as u8)..=ascii_end {
+                                set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, translate);
+                            }
+                        }
+                        // Multibyte portion: codepoints >= 128
+                        let mb_start = if start_u32 >= 128 {
+                            range_start
+                        } else {
+                            '\u{80}'
+                        };
+                        if end_u32 >= 128 {
+                            add_multibyte_range(&mut mb_ranges, mb_start, range_end, case_fold);
+                        }
                     }
                 }
-                last_char = None; // Range consumed
                 continue;
             }
             // '-' at start or after a range → literal '-'
-            set_bitmap_bit(
-                &mut buf.buffer,
-                bitmap_start,
-                b'-',
-                buf.translate.as_deref(),
-            );
-            last_char = Some('-');
+            pending_char = Some('-');
             continue;
         }
 
@@ -1607,13 +1623,19 @@ fn compile_charset(
         // finding #10 in `drafts/regex-search-audit.md`; it has
         // been removed.
         if b == b'\\' {
-            set_bitmap_bit(
-                &mut buf.buffer,
-                bitmap_start,
-                b'\\',
-                buf.translate.as_deref(),
-            );
-            last_char = Some('\\');
+            if let Some(c) = pending_char.take() {
+                if c.is_ascii() {
+                    set_bitmap_bit(
+                        &mut buf.buffer,
+                        bitmap_start,
+                        c as u8,
+                        buf.translate.as_deref(),
+                    );
+                } else {
+                    add_multibyte_range(&mut mb_ranges, c, c, case_fold);
+                }
+            }
+            pending_char = Some('\\');
             continue;
         }
 
@@ -1630,6 +1652,18 @@ fn compile_charset(
                 if *p < plen && pattern[*p] == b']' {
                     *p += 1; // skip ]
                 }
+                if let Some(c) = pending_char.take() {
+                    if c.is_ascii() {
+                        set_bitmap_bit(
+                            &mut buf.buffer,
+                            bitmap_start,
+                            c as u8,
+                            buf.translate.as_deref(),
+                        );
+                    } else {
+                        add_multibyte_range(&mut mb_ranges, c, c, case_fold);
+                    }
+                }
                 apply_posix_class(
                     class_name,
                     &mut buf.buffer,
@@ -1638,13 +1672,34 @@ fn compile_charset(
                     &mut class_bits,
                     buf.translate.as_deref(),
                 )?;
-                last_char = None;
                 continue;
             }
         }
 
         // Regular character
         let c = emacs_char_to_rust_char(c);
+        if let Some(prev) = pending_char.take() {
+            if prev.is_ascii() {
+                set_bitmap_bit(
+                    &mut buf.buffer,
+                    bitmap_start,
+                    prev as u8,
+                    buf.translate.as_deref(),
+                );
+            } else {
+                add_multibyte_range(&mut mb_ranges, prev, prev, case_fold);
+            }
+        }
+        pending_char = Some(c);
+    }
+
+    if !closed {
+        return Err(RegexCompileError {
+            message: "Unmatched [ or [^".to_string(),
+        });
+    }
+
+    if let Some(c) = pending_char.take() {
         if c.is_ascii() {
             set_bitmap_bit(
                 &mut buf.buffer,
@@ -1653,16 +1708,8 @@ fn compile_charset(
                 buf.translate.as_deref(),
             );
         } else {
-            // Non-ASCII character — add as a single-char range to multibyte list
             add_multibyte_range(&mut mb_ranges, c, c, case_fold);
         }
-        last_char = Some(c);
-    }
-
-    if !closed {
-        return Err(RegexCompileError {
-            message: "Unmatched [ or [^".to_string(),
-        });
     }
 
     // Store multibyte ranges if any were collected.
@@ -1673,6 +1720,7 @@ fn compile_charset(
     // Record class flags so the matcher can consult the buffer
     // syntax table at run time for `[[:word:]]` and `[[:space:]]`.
     if class_bits != 0 {
+        buf.uses_syntax = true;
         buf.charset_class_bits
             .insert(charset_opcode_pos, class_bits);
     }
@@ -3544,7 +3592,7 @@ pub(crate) fn re_search(
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
     let text_len = text.len();
-    let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null;
+    let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !pattern.uses_syntax;
     let translate = pattern.translate.as_deref();
 
     if range >= 0 {
