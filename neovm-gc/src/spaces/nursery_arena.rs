@@ -134,7 +134,8 @@ impl NurseryArena {
 fn align_up(addr: usize, align: usize) -> Option<usize> {
     debug_assert!(align.is_power_of_two(), "alignment must be a power of two");
     let mask = align - 1;
-    addr.checked_add(mask).map(|v| v & !mask)
+    // Overflow impossible: addr is a valid heap pointer, mask is a few bytes.
+    Some((addr.wrapping_add(mask)) & !mask)
 }
 
 /// A bump-pointer sub-arena owned by a single evacuation worker.
