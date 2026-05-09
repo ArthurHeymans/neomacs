@@ -10165,6 +10165,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_mapc_alias() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((xs '(1 2 3))) (eq xs (cl-mapc #'1+ xs)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
