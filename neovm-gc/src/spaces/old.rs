@@ -274,8 +274,10 @@ impl OldBlock {
         self.live_bytes.store(0, Ordering::Relaxed);
         self.object_count.store(0, Ordering::Relaxed);
         self.occupied_line_count.store(0, Ordering::Relaxed);
-        for line in self.occupied_lines.iter_mut() {
-            line.store(0, Ordering::Relaxed);
+        if !self.occupied_lines.is_empty() {
+            let ptr = self.occupied_lines.as_ptr() as *mut u8;
+            let len = self.occupied_lines.len();
+            unsafe { std::ptr::write_bytes(ptr, 0, len); }
         }
     }
 
@@ -306,9 +308,12 @@ impl OldBlock {
     /// the post-sweep rebuild before walking surviving records to repopulate
     /// the index.
     pub(crate) fn clear_object_starts(&mut self) {
-        for slot in self.object_starts.iter_mut() {
-            *slot.get_mut() = OBJECT_START_NONE;
-        }
+        // Bulk fill via raw pointer — stop-the-world guarantees no
+        // concurrent access. OBJECT_START_NONE == u32::MAX, so fill
+        // every byte with 0xFF.
+        let ptr = self.object_starts.as_ptr() as *mut u8;
+        let len = self.object_starts.len() * core::mem::size_of::<u32>();
+        unsafe { std::ptr::write_bytes(ptr, 0xFF, len); }
     }
 
     /// Record an object start at the given buffer offset. The per-card
@@ -414,9 +419,11 @@ impl OldBlock {
 
     /// Clear every line mark in the block.
     pub(crate) fn clear_line_marks(&self) {
-        for slot in self.line_marks.iter() {
-            slot.store(0, Ordering::Relaxed);
-        }
+        // Bulk zero via raw pointer — safe because stop-the-world
+        // guarantees no concurrent access to line marks.
+        let ptr = self.line_marks.as_ptr() as *mut u8;
+        let len = self.line_marks.len();
+        unsafe { std::ptr::write_bytes(ptr, 0, len); }
     }
 
     /// True when no line is marked as occupied. Empty blocks are reclaimed
