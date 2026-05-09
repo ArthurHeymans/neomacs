@@ -8376,6 +8376,19 @@ mod tests {
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
+    #[test]
+    fn executes_define_error_with_condition_case() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn \
+               (define-error 'my-test-err \"test\")\
+               (condition-case err \
+                 (signal 'my-test-err '(42)) \
+                 (error (cadr err))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
