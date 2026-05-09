@@ -1958,6 +1958,12 @@ impl Interpreter<'_, '_, '_> {
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
+            "cl-subst-if" => self.subr_3(name, args, |s| {
+                s.cl_subst_if(args[0], args[1], args[2], false)
+            }),
+            "cl-subst-if-not" => self.subr_3(name, args, |s| {
+                s.cl_subst_if(args[0], args[1], args[2], true)
+            }),
             "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
@@ -3709,6 +3715,28 @@ impl Interpreter<'_, '_, '_> {
         } else {
             Some(self.runtime.vector(result))
         }
+    }
+
+    fn cl_subst_if(
+        &mut self,
+        new_val: LispValue,
+        predicate: LispValue,
+        tree: LispValue,
+        negate: bool,
+    ) -> Option<LispValue> {
+        if tree.is_nil() {
+            return Some(LispValue::NIL);
+        }
+        if !self.runtime.is_cons(tree) {
+            let result = self.execute_funcall(predicate, &[tree])?;
+            let matches = if negate { result.is_nil() } else { !result.is_nil() };
+            return if matches { Some(new_val) } else { Some(tree) };
+        }
+        let car = self.runtime.car(tree).ok()?;
+        let cdr = self.runtime.cdr(tree).ok()?;
+        let new_car = self.cl_subst_if(new_val, predicate, car, negate)?;
+        let new_cdr = self.cl_subst_if(new_val, predicate, cdr, negate)?;
+        Some(self.runtime.cons(new_car, new_cdr))
     }
 
     fn mapconcat(
@@ -5978,6 +6006,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delete-duplicates",
             "cl-delq",
             "cl-nsubstitute",
+            "cl-subst-if",
+            "cl-subst-if-not",
             "cl-substitute",
             "cl-tree-equal",
             "cl-typep",
@@ -10940,6 +10970,35 @@ mod tests {
              (cl-notany #'oddp (list 2 4 6))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_subst_if_replaces_matching_leaves() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-subst-if 99 #'oddp '(1 2 3 4))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(99 2 99 4)");
+    }
+
+    #[test]
+    fn executes_cl_subst_if_not_replaces_non_matching() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-subst-if-not 0 #'evenp '(1 2 3 4))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(0 2 0 4)");
+    }
+
+    #[test]
+    fn executes_cl_subst_if_works_on_nested_tree() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-subst-if 'x #'atom '((1 2) (3 4)))",
+        );
+        // Every atom is replaced by x, but x is also an atom, so everything becomes x
+        // Actually (cl-subst-if 'x #'atom tree) replaces atoms: ((x x) (x x))
+        assert_eq!(rt.format_value(value.unwrap()), "((x x) (x x))");
     }
 
     #[test]
