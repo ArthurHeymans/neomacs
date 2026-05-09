@@ -4409,6 +4409,40 @@ fn replace_match_literal_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn replace_regexp_in_string_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"replcase:%S\" (list (replace-regexp-in-string \"[a-z]\" (lambda (m) (upcase m)) \"ab\") (let ((case-replace t)) (replace-regexp-in-string \"foo\" \"bar\" \"Foo\")) (let ((case-replace nil)) (replace-regexp-in-string \"foo\" \"bar\" \"Foo\"))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("replcase:") && row.contains("AB") && row.contains("Bar"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: replace-regexp-in-string behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_regexp_in_string_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn equality_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
