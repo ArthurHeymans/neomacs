@@ -1921,6 +1921,12 @@ impl Interpreter<'_, '_, '_> {
             }),
             "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
             "rassoc" | "cl-rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
+            "cl-rassoc-if" => self.subr_2(name, args, |s| {
+                s.cl_rassoc_if(args[0], args[1])
+            }),
+            "cl-rassoc-if-not" => self.subr_2(name, args, |s| {
+                s.cl_rassoc_if_not(args[0], args[1])
+            }),
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
@@ -3326,6 +3332,40 @@ impl Interpreter<'_, '_, '_> {
             }
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn cl_rassoc_if(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() { return Some(LispValue::NIL); }
+            if !self.runtime.is_cons(current) { break; }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let val = self.runtime.cdr(entry).ok()?;
+                if !self.execute_funcall(predicate, &[val])?.is_nil() {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+        Some(LispValue::NIL)
+    }
+
+    fn cl_rassoc_if_not(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() { return Some(LispValue::NIL); }
+            if !self.runtime.is_cons(current) { break; }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let val = self.runtime.cdr(entry).ok()?;
+                if self.execute_funcall(predicate, &[val])?.is_nil() {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+        Some(LispValue::NIL)
     }
 
     fn cl_assoc_if_not(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
@@ -6642,6 +6682,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nreplace",
             "cl-nreverse",
             "cl-rassoc",
+            "cl-rassoc-if",
+            "cl-rassoc-if-not",
             "cl-rassq",
             "cl-remprop",
             "cl-remq",
