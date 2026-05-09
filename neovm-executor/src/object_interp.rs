@@ -1936,6 +1936,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-count" => self.subr_2(name, args, |s| {
                 s.cl_count(args[0], args[1])
             }),
+            "cl-count-if" => self.subr_2(name, args, |s| {
+                s.cl_count_if(args[0], args[1])
+            }),
             "cl-endp" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() {
                     bool_value(true)
@@ -3333,6 +3336,17 @@ impl Interpreter<'_, '_, '_> {
             }
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn cl_count_if(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        let mut count = 0i64;
+        for e in elements {
+            if !self.execute_funcall(predicate, &[e])?.is_nil() {
+                count += 1;
+            }
+        }
+        self.fixnum(count, "cl-count-if")
     }
 
     fn cl_count(&mut self, item: LispValue, list: LispValue) -> Option<LispValue> {
@@ -6192,6 +6206,7 @@ fn is_primitive_name(name: &str) -> bool {
             "char-table-p",
             "char-to-string",
             "cl-count",
+            "cl-count-if",
             "cl-endp",
             "cl-evenp",
             "cl-fill",
@@ -11287,6 +11302,15 @@ mod tests {
              (cl-set-exclusive-or '(1 2 3 4) '(3 4 5 6))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 2 5 6)");
+    }
+
+    #[test]
+    fn executes_cl_count_if_counts_matching_elements() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-count-if #'oddp (list 1 2 3 4 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
