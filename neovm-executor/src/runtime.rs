@@ -639,7 +639,7 @@ impl Runtime {
     /// Pop the next pending action for this agent.  Returns `None` if
     /// the queue is empty.  The caller (interpreter) executes the action
     /// and calls `agent_update` with the result.
-    pub fn agent_pop_action(&self, agent: LispValue) -> Result<Option<AgentAction>, RuntimeError> {
+    pub(crate) fn agent_pop_action(&self, agent: LispValue) -> Result<Option<AgentAction>, RuntimeError> {
         let obj = self.agent_obj(agent)?;
         let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
             expected: "agent (not poisoned)",
