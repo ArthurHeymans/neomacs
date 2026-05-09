@@ -517,6 +517,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int(value >> (-count)))
             }
         }
+        "concat" if !args.is_empty() => {
+            if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
+                let s: String = args.iter()
+                    .filter_map(|a| match a { SsaConst::String(s) => Some(s.as_str()), _ => None })
+                    .collect();
+                Some(SsaConst::String(s))
+            } else { None }
+        }
         "lsh" if args.len() == 2 => {
             let value = args[0].as_int()?;
             let count = args[1].as_int()?;
