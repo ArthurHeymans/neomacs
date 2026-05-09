@@ -1250,29 +1250,27 @@ impl Interpreter<'_, '_, '_> {
                 let sym = format!("{}{}", prefix, self.runtime.symbol_count());
                 Some(self.runtime.intern(&sym))
             }),
-            "symbol-value" => self.exact_arity(name, args, 1).and_then(|_| {
-                let result = self.runtime.symbol_value(args[0]);
-                self.runtime_value(result)
+            "symbol-value" => self.subr_1(name, args, |s| {
+                let result = s.runtime.symbol_value(args[0]);
+                s.runtime_value(result)
             }),
-            "set" => self.exact_arity(name, args, 2).and_then(|_| {
-                let result = self.runtime.set_symbol_value(args[0], args[1]);
-                self.runtime_value(result)
+            "set" => self.subr_2(name, args, |s| {
+                let result = s.runtime.set_symbol_value(args[0], args[1]);
+                s.runtime_value(result)
             }),
-            "boundp" => self.exact_arity(name, args, 1).and_then(|_| {
-                let result = self.runtime.is_bound_symbol(args[0]);
-                self.runtime_bool(result)
+            "boundp" => self.subr_1(name, args, |s| {
+                let result = s.runtime.is_bound_symbol(args[0]);
+                s.runtime_bool(result)
             }),
-            "makunbound" => self.exact_arity(name, args, 1).and_then(|_| {
-                let result = self.runtime.set_symbol_unbound(args[0]).map(|()| args[0]);
-                self.runtime_value(result)
+            "makunbound" => self.subr_1(name, args, |s| {
+                let result = s.runtime.set_symbol_unbound(args[0]).map(|()| args[0]);
+                s.runtime_value(result)
             }),
-            "fmakunbound" => self.exact_arity(name, args, 1).and_then(|_| {
-                let result = self.runtime.fmakunbound(args[0]);
-                self.runtime_value(result)
+            "fmakunbound" => self.subr_1(name, args, |s| {
+                let result = s.runtime.fmakunbound(args[0]);
+                s.runtime_value(result)
             }),
-            "fboundp" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.fboundp(args[0])),
+            "fboundp" => self.subr_1(name, args, |s| s.fboundp(args[0])),
             "provide" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.provide(args[0]);
                 self.runtime_value(result)
@@ -1288,24 +1286,24 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.symbol_property(args[0], args[1]);
                 self.runtime_value(result)
             }),
-            "put" => self.exact_arity(name, args, 3).and_then(|_| {
-                let result = self.runtime.put_symbol_property(args[0], args[1], args[2]);
-                self.runtime_value(result)
+            "put" => self.subr_3(name, args, |s| {
+                let result = s.runtime.put_symbol_property(args[0], args[1], args[2]);
+                s.runtime_value(result)
             }),
-            "symbol-plist" => self.exact_arity(name, args, 1).and_then(|_| {
-                let result = self.runtime.symbol_plist(args[0]);
-                self.runtime_value(result)
+            "symbol-plist" => self.subr_1(name, args, |s| {
+                let result = s.runtime.symbol_plist(args[0]);
+                s.runtime_value(result)
             }),
-            "setplist" => self.exact_arity(name, args, 2).and_then(|_| {
-                let result = self.runtime.set_symbol_plist(args[0], args[1]);
-                self.runtime_value(result)
+            "setplist" => self.subr_2(name, args, |s| {
+                let result = s.runtime.set_symbol_plist(args[0], args[1]);
+                s.runtime_value(result)
             }),
-            "plist-get" => self
-                .exact_arity(name, args, 2)
-                .map(|_| self.runtime.plist_get(args[0], args[1])),
-            "plist-put" => self
-                .exact_arity(name, args, 3)
-                .map(|_| self.runtime.plist_put(args[0], args[1], args[2])),
+            "plist-get" => self.subr_2(name, args, |s| {
+                Some(s.runtime.plist_get(args[0], args[1]))
+            }),
+            "plist-put" => self.subr_3(name, args, |s| {
+                Some(s.runtime.plist_put(args[0], args[1], args[2]))
+            }),
             "autoload" => self
                 .min_max_arity(name, args, 2, 5)
                 .and_then(|_| self.autoload(args)),
