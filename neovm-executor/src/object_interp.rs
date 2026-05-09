@@ -8264,6 +8264,31 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_dotimes_iterates_range() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((sum 0)) \
+               (cl-dotimes (i 5 sum) \
+                 (setq sum (+ sum i))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_cl_dotimes_without_result() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((count 0)) \
+               (cl-dotimes (_ 3) \
+                 (setq count (1+ count))) \
+               count)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\

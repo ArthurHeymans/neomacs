@@ -674,6 +674,7 @@ impl Expander {
                 self.expand_cl_do(span, items, sequential)
             }
             "cl-dolist" => self.expand_cl_dolist(span, items),
+            "cl-dotimes" => self.expand_cl_dotimes(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -2822,6 +2823,74 @@ impl Expander {
             list_form(vec![
                 symbol_form("while", span),
                 symbol_form(&tail, span),
+                while_body,
+            ], span),
+        ];
+        parts.extend(result);
+        let expanded = list_form(parts, span);
+        self.expand_form(expanded)
+    }
+
+    // ── cl-dotimes expansion ────────────────────────────────────────────
+
+    fn expand_cl_dotimes(
+        &mut self,
+        span: Span,
+        items: Vec<SurfaceForm>,
+    ) -> SurfaceForm {
+        if items.len() < 2 {
+            self.error(span, "cl-dotimes requires a spec and body");
+            return nil_form(span);
+        }
+        let SurfaceKind::List(spec_parts) = &items[1].kind else {
+            self.error(items[1].span, "cl-dotimes spec must be a list");
+            return nil_form(span);
+        };
+        if spec_parts.is_empty() {
+            self.error(items[1].span, "cl-dotimes spec requires at least a variable");
+            return nil_form(span);
+        }
+        let var = spec_parts[0].clone();
+        let count = if spec_parts.len() > 1 { spec_parts[1].clone() } else { nil_form(span) };
+        let result = if spec_parts.len() > 2 { vec![spec_parts[2].clone()] } else { vec![nil_form(span)] };
+        let body = &items[2..];
+
+        // (let ((VAR 0))
+        //   (while (< VAR COUNT)
+        //     BODY...
+        //     (setq VAR (1+ VAR)))
+        //   RESULT)
+        let while_body = list_form(
+            vec![
+                symbol_form("progn", span),
+                list_form(
+                    std::iter::once(symbol_form("progn", span))
+                        .chain(body.iter().cloned())
+                        .chain(std::iter::once(list_form(vec![
+                            symbol_form("setq", span),
+                            var.clone(),
+                            list_form(vec![symbol_form("1+", span), var.clone()], span),
+                        ], span)))
+                        .collect(),
+                    span,
+                ),
+            ],
+            span,
+        );
+
+        let mut parts = vec![
+            symbol_form("let", span),
+            list_form(vec![list_form(vec![
+                var.clone(),
+                SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::Int(0)), span),
+            ], span)], span),
+            list_form(vec![
+                symbol_form("while", span),
+                list_form(vec![
+                    symbol_form("<", span),
+                    var,
+                    count,
+                ], span),
                 while_body,
             ], span),
         ];
