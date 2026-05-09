@@ -8311,6 +8311,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_function_special_form_returns_function() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (funcall (function +) 1 2)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_sharp_quote_returns_function() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (funcall #'+ 1 2)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
