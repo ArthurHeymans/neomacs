@@ -2600,6 +2600,18 @@ impl Interpreter<'_, '_, '_> {
                 Some(LispValue::NIL)
             }),
 
+            // ── Demo: Rust function callable from Elisp ─────────────────
+            // Step 1: implement the function
+            "fib" => self.subr_1(name, args, |s| {
+                let n = s.fixnum_arg("fib", args[0])?;
+                let (mut a, mut b) = (0i64, 1i64);
+                for _ in 0..n { let t = a + b; a = b; b = t; }
+                s.fixnum(a, "fib")
+            }),
+            // Step 2: add "fib" to is_primitive_name HashSet (done below).
+            // Step 3: (optional) add JIT fast path in jit_rt.rs.
+            // Now callable from Elisp: (fib 10) → 55
+
             _ => return None,
         };
         Some(value)
@@ -9710,6 +9722,14 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(car (list 42))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_rust_subr_fib() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(fib 10)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(55)));
     }
 
     #[test]
