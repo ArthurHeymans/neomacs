@@ -5058,4 +5058,30 @@ mod tests {
         assert!(rendered.contains("\"while\""));
         assert!(rendered.contains("\"<\""));
     }
+
+    #[test]
+    fn cl_loop_named_creates_catch_wrapper() {
+        let artifact = compile_source(
+            "cl-loop-named.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-loop named my-block for i from 1 to 5 collect i)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"catch\""));
+        assert!(rendered.contains("\"my-block\""));
+    }
+
+    #[test]
+    fn pcase_let_star_destructure_backquote() {
+        let artifact = compile_source(
+            "pcase-let-dest.el",
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase-let* ((`(,x ,y) '(1 2))) (+ x y))",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let rendered = format!("{:?}", artifact.surface);
+        assert!(rendered.contains("\"let*\""));
+        assert!(rendered.contains("\"car\""));
+    }
 }
