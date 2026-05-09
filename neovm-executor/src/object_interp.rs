@@ -1960,6 +1960,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-mismatch" => self.subr_2(name, args, |s| {
                 s.cl_mismatch(args[0], args[1])
             }),
+            "cl-merge" => self.subr_vararg(name, args, |s| {
+                s.cl_merge(args)
+            }),
             "cl-endp" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() {
                     bool_value(true)
@@ -3436,6 +3439,33 @@ impl Interpreter<'_, '_, '_> {
             return self.fixnum(start as i64, "cl-search");
         }
         Some(LispValue::NIL)
+    }
+
+    fn cl_merge(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        // (cl-merge TYPE SEQ1 SEQ2 PRED)
+        if args.len() < 4 {
+            self.error("cl-merge requires type, two sequences, and a predicate");
+            return None;
+        }
+        let elems1 = self.sequence_values(args[1])?;
+        let elems2 = self.sequence_values(args[2])?;
+        let predicate = args[3];
+        let mut i = 0usize;
+        let mut j = 0usize;
+        let mut result = Vec::with_capacity(elems1.len() + elems2.len());
+        while i < elems1.len() && j < elems2.len() {
+            let cmp = self.execute_funcall(predicate, &[elems1[i], elems2[j]])?;
+            if cmp.is_nil() {
+                result.push(elems2[j]);
+                j += 1;
+            } else {
+                result.push(elems1[i]);
+                i += 1;
+            }
+        }
+        result.extend_from_slice(&elems1[i..]);
+        result.extend_from_slice(&elems2[j..]);
+        Some(make_list(self.runtime, result.into_iter()))
     }
 
     fn cl_mismatch(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
@@ -6488,6 +6518,7 @@ fn is_primitive_name(name: &str) -> bool {
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
+            "cl-merge",
             "cl-member-if",
             "cl-member-if-not",
             "cl-mismatch",
@@ -11546,6 +11577,15 @@ mod tests {
              (cl-delete-if #'oddp '(1 2 3 4 5))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(2 4)");
+    }
+
+    #[test]
+    fn executes_cl_merge_combines_sorted_lists() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-merge 'list '(1 3 5) '(2 4 6) #'<)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 3 4 5 6)");
     }
 
     #[test]
