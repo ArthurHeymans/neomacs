@@ -363,30 +363,42 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
     }
 }
 
+fn fold_binary_arith(
+    a: &SsaConst,
+    b: &SsaConst,
+    int_op: impl FnOnce(i64, i64) -> i64,
+    float_op: impl FnOnce(f64, f64) -> f64,
+) -> Option<SsaConst> {
+    match (a, b) {
+        (SsaConst::Int(a), SsaConst::Int(b)) => Some(SsaConst::Int(int_op(*a, *b))),
+        (SsaConst::Float(a), SsaConst::Float(b)) => Some(SsaConst::Float(float_op(*a, *b))),
+        (SsaConst::Int(a), SsaConst::Float(b)) => Some(SsaConst::Float(float_op(*a as f64, *b))),
+        (SsaConst::Float(a), SsaConst::Int(b)) => Some(SsaConst::Float(float_op(*a, *b as f64))),
+        _ => None,
+    }
+}
+
 fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
     match name {
-        "+" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(SsaConst::Int(a.wrapping_add(b)))
-        }
-        "-" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(SsaConst::Int(a.wrapping_sub(b)))
-        }
-        "-" if args.len() == 1 => {
-            let a = args[0].as_int()?;
-            Some(SsaConst::Int(a.wrapping_neg()))
-        }
-        "*" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            Some(SsaConst::Int(a.wrapping_mul(b)))
-        }
+        "+" if args.len() == 2 => fold_binary_arith(args[0], args[1],
+            |a, b| a.wrapping_add(b), |a, b| a + b),
+        "-" if args.len() == 2 => fold_binary_arith(args[0], args[1],
+            |a, b| a.wrapping_sub(b), |a, b| a - b),
+        "-" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_neg())),
+            SsaConst::Float(f) => Some(SsaConst::Float(-f)),
+            _ => None,
+        },
+        "*" if args.len() == 2 => fold_binary_arith(args[0], args[1],
+            |a, b| a.wrapping_mul(b), |a, b| a * b),
         "/" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 {
-                return None;
-            }
-            Some(SsaConst::Int(a.wrapping_div(b)))
+            if let (SsaConst::Int(a), SsaConst::Int(b)) = (args[0], args[1]) {
+                if *b == 0 { return None; }
+                Some(SsaConst::Int(a.wrapping_div(*b)))
+            } else if let (SsaConst::Float(a), SsaConst::Float(b)) = (args[0], args[1]) {
+                if *b == 0.0 { return None; }
+                Some(SsaConst::Float(a / b))
+            } else { None }
         }
         "=" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
