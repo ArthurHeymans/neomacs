@@ -1224,6 +1224,18 @@ impl Expander {
                 );
                 self.expand_form(expanded)
             }
+            "default-value" if place_items.len() == 2 => {
+                // (setf (default-value sym) val) → (set-default sym val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("set-default", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
             "symbol-plist" if place_items.len() == 2 => {
                 // (setf (symbol-plist sym) val) → (setplist sym val)
                 let expanded = list_form(
