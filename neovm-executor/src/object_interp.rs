@@ -1991,10 +1991,10 @@ impl Interpreter<'_, '_, '_> {
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
-            "cl-subst-if" => self.subr_3(name, args, |s| {
+            "cl-subst-if" | "cl-nsubst-if" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], false)
             }),
-            "cl-subst-if-not" => self.subr_3(name, args, |s| {
+            "cl-subst-if-not" | "cl-nsubst-if-not" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], true)
             }),
             "cl-set-difference" => self.subr_2(name, args, |s| {
@@ -6416,6 +6416,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delete-if",
             "cl-delete-if-not",
             "cl-delq",
+            "cl-nsubst-if",
+            "cl-nsubst-if-not",
             "cl-nsubstitute",
             "cl-subst-if",
             "cl-subst-if-not",
