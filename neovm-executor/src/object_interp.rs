@@ -1913,6 +1913,12 @@ impl Interpreter<'_, '_, '_> {
             }),
             "assq" | "cl-assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
             "assoc" | "cl-assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
+            "cl-assoc-if" => self.subr_2(name, args, |s| {
+                s.cl_assoc_if(args[0], args[1])
+            }),
+            "cl-assoc-if-not" => self.subr_2(name, args, |s| {
+                s.cl_assoc_if_not(args[0], args[1])
+            }),
             "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
             "rassoc" | "cl-rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
             "assoc-string" => self
@@ -3298,6 +3304,48 @@ impl Interpreter<'_, '_, '_> {
             }
             let result = self.runtime.cdr(current);
             current = self.runtime_value(result)?;
+        }
+    }
+
+    fn cl_assoc_if(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper alist, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let key = self.runtime.car(entry).ok()?;
+                if !self.execute_funcall(predicate, &[key])?.is_nil() {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn cl_assoc_if_not(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
+        let mut current = alist;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper alist, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let key = self.runtime.car(entry).ok()?;
+                if self.execute_funcall(predicate, &[key])?.is_nil() {
+                    return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
         }
     }
 
@@ -6511,6 +6559,8 @@ fn is_primitive_name(name: &str) -> bool {
             "assq",
             "cl-adjoin",
             "cl-assoc",
+            "cl-assoc-if",
+            "cl-assoc-if-not",
             "cl-assq",
             "atom",
             "autoload",
@@ -11738,6 +11788,15 @@ mod tests {
              (cl-member-if #'evenp '(1 3 4 5 6))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(4 5 6)");
+    }
+
+    #[test]
+    fn executes_cl_assoc_if_finds_by_predicate() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-assoc-if #'symbolp '((1 . a) (b . c) (3 . d)))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(b . c)");
     }
 
     #[test]
