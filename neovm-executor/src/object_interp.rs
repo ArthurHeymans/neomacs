@@ -8106,6 +8106,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_ignore_errors_returns_nil_on_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (ignore-errors (error \"boom\"))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_ignore_errors_returns_result_when_no_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (ignore-errors 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_every_one_fails_predicate() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
