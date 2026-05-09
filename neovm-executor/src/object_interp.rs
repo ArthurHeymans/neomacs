@@ -9653,4 +9653,60 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_setf_car_modifies_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setf (car p) 9) (car p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
+    fn executes_setf_cdr_modifies_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((p (cons 1 2))) (setf (cdr p) 9) (cdr p))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(9)));
+    }
+
+    #[test]
+    fn executes_setf_aref_modifies_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (vector 1 2 3))) (setf (aref v 1) 99) (aref v 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_setf_gethash_modifies_hash_table() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((h (make-hash-table))) \
+               (setf (gethash 'k h) 42) \
+               (gethash 'k h))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_setf_symbol_value_modifies_symbol() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (setq x 1) (setf (symbol-value 'x) 99) (symbol-value 'x))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_setf_nth_modifies_list_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((xs (list 10 20 30))) (setf (nth 1 xs) 99) (nth 1 xs))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
 }
