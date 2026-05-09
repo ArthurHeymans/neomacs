@@ -10200,6 +10200,12 @@ mod tests {
     }
 
     #[test]
+    fn executes_lsh_right_shift_test() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(lsh 16 -2)").0,
+            Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
