@@ -2293,6 +2293,9 @@ impl Interpreter<'_, '_, '_> {
                     self.fixnum(result, name)
                 }
             }
+            "cl-typep" => self.subr_2(name, args, |s| {
+                s.cl_typep(args[0], args[1])
+            }),
             "type-of" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() || args[0].is_true() {
                     self.runtime.intern("symbol")
@@ -3448,6 +3451,26 @@ impl Interpreter<'_, '_, '_> {
         } else {
             Some(self.runtime.vector(result))
         }
+    }
+
+    fn cl_typep(&self, obj: LispValue, type_spec: LispValue) -> Option<LispValue> {
+        let type_name = self.runtime.symbol_name(type_spec).ok()?;
+        let result = match type_name.as_str() {
+            "integer" => obj.is_fixnum() || self.runtime.is_bignum(obj),
+            "fixnum" => obj.is_fixnum(),
+            "float" => self.runtime.is_float(obj),
+            "string" => self.runtime.is_string(obj),
+            "symbol" => obj.is_nil() || obj.is_true() || self.runtime.is_symbol(obj),
+            "cons" | "list" => self.runtime.is_cons(obj),
+            "null" => obj.is_nil(),
+            "vector" | "array" => self.runtime.is_vector(obj),
+            "function" => self.runtime.is_function(obj),
+            "hash-table" => self.runtime.is_hash_table(obj),
+            "number" => self.runtime.is_number(obj),
+            "atom" => !self.runtime.is_cons(obj),
+            _ => return Some(LispValue::NIL),
+        };
+        Some(bool_value(result))
     }
 
     fn substitute_seq(
@@ -5734,6 +5757,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delq",
             "cl-nsubstitute",
             "cl-substitute",
+            "cl-typep",
             "cl-remq",
             "cl-remove",
             "cl-remove-duplicates",
@@ -8554,6 +8578,18 @@ mod tests {
              (length (cl-substitute 99 2 '(1 2 3 2 4)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn executes_cl_typep_basic_types() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'integer)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 3.14 'float)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep \"hi\" 'string)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep nil 'null)").0,
+            Some(LispValue::TRUE));
     }
 
     #[test]
