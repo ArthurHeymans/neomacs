@@ -1865,6 +1865,9 @@ impl Interpreter<'_, '_, '_> {
             "rassoc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.rassoc(args[0], args[1], true)),
+            "assoc-string" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -3143,6 +3146,41 @@ impl Interpreter<'_, '_, '_> {
                 };
                 if matched {
                     return Some(entry);
+                }
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn assoc_string(
+        &mut self,
+        key: LispValue,
+        alist: LispValue,
+        case_fold: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let key_str = self.runtime.string_contents_emacs(key).unwrap_or_default();
+        let fold = case_fold.is_some_and(|f| !f.is_nil());
+        let mut current = alist;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                return Some(LispValue::NIL);
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let entry_key = self.runtime.car(entry).ok()?;
+                if self.runtime.is_string(entry_key) {
+                    let entry_str = self.runtime.string_contents_emacs(entry_key).unwrap_or_default();
+                    let matched = if fold {
+                        entry_str.eq_ignore_ascii_case(&key_str)
+                    } else {
+                        entry_str == key_str
+                    };
+                    if matched {
+                        return Some(entry);
+                    }
                 }
             }
             current = self.runtime.cdr(current).ok()?;
@@ -7934,6 +7972,24 @@ mod tests {
              (every #'numberp '(1 2 3))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_assoc_string_case_sensitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr (assoc-string \"key\" '((\"key\" . 42) (\"KEY\" . 99))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_assoc_string_case_insensitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr (assoc-string \"key\" '((\"KEY\" . 42) (\"other\" . 99)) t))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
     #[test]
