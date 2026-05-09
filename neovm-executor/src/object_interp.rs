@@ -1906,8 +1906,8 @@ impl Interpreter<'_, '_, '_> {
             "member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
             "assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
             "assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
-            "rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
-            "rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
+            "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
+            "rassoc" | "cl-rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
@@ -5775,6 +5775,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-tree-equal",
             "cl-typep",
             "cl-nreverse",
+            "cl-rassoc",
+            "cl-rassq",
             "cl-remq",
             "cl-remove",
             "cl-reverse",
@@ -10232,6 +10234,15 @@ mod tests {
              (car (cl-reverse '(1 2 3)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_rassoc_finds_by_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr (cl-rassoc 2 '((a . 1) (b . 2) (c . 3))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
