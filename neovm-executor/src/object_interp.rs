@@ -10192,6 +10192,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_ash_left_and_right_shift() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(ash 8 -2)").0,
+            Some(LispValue::expect_fixnum(2)));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(ash 2 3)").0,
+            Some(LispValue::expect_fixnum(16)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
