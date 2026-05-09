@@ -3372,4 +3372,16 @@ mod tests {
         let v = eval_expr("(concat \"hello\" \" \" \"world\")");
         assert_eq!(v, MacroValue::String("hello world".into()));
     }
+
+    #[test]
+    fn cl_return_expands_to_throw_nil_block() {
+        let v = eval_expr("(catch '--cl-block-nil-- (cl-return 42) 99)");
+        assert_eq!(v, MacroValue::Int(42));
+    }
+
+    #[test]
+    fn cl_return_from_expands_to_throw_named_block() {
+        let v = eval_expr("(catch 'my-block (cl-return-from my-block 77) 99)");
+        assert_eq!(v, MacroValue::Int(77));
+    }
 }
