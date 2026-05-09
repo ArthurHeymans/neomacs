@@ -3417,6 +3417,78 @@ fn bootstrap_runtime_read_key_sequence_follows_escape_prefix_command() {
 }
 
 #[test]
+fn bootstrap_runtime_read_key_sequence_prioritizes_timer_unread_command_events() {
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    eval.eval_str(r#"(run-at-time 0 nil (lambda () (setq unread-command-events (list ?\e))))"#)
+        .expect("schedule unread ESC timer");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        tx.send(crate::keyboard::InputEvent::KeyPress {
+            key: crate::keyboard::KeyEvent::char('x'),
+            emacs_frame_id: 0,
+        })
+        .expect("queue x host input");
+    });
+
+    let (keys, binding) = eval
+        .read_key_sequence()
+        .expect("read timer-requeued ESC before host x");
+    assert_eq!(keys, vec![Value::fixnum(27), Value::fixnum('x' as i64)]);
+    assert_eq!(binding, Value::symbol("execute-extended-command"));
+}
+
+#[test]
+fn bootstrap_runtime_escape_prefix_bypasses_input_method_function() {
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    eval.eval_str("(setq input-method-function (lambda (_char) nil))")
+        .expect("install dropping input method");
+
+    eval.command_loop.keyboard.kboard.unread_events.push_back(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
+    );
+    eval.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('x' as i64));
+
+    let (keys, binding) = eval
+        .read_key_sequence()
+        .expect("read ESC x with input method installed");
+    assert_eq!(keys, vec![Value::fixnum(27), Value::fixnum('x' as i64)]);
+    assert_eq!(binding, Value::symbol("execute-extended-command"));
+}
+
+#[test]
+fn bootstrap_runtime_local_function_key_map_does_not_shadow_bound_meta_sequence() {
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    eval.eval_str(r#"(define-key local-function-key-map (kbd "ESC x") [?x])"#)
+        .expect("install conflicting function-key translation");
+
+    eval.command_loop.keyboard.kboard.unread_events.push_back(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
+    );
+    eval.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('x' as i64));
+
+    let (keys, binding) = eval
+        .read_key_sequence()
+        .expect("read ESC x despite function-key translation");
+    assert_eq!(keys, vec![Value::fixnum(27), Value::fixnum('x' as i64)]);
+    assert_eq!(binding, Value::symbol("execute-extended-command"));
+}
+
+#[test]
 fn bootstrap_runtime_read_key_sequence_follows_meta_x_command() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

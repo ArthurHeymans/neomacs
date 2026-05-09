@@ -416,6 +416,13 @@ fn restore_minibuffer_window_in_state(
     *active_minibuffer_window = saved.previous_active_minibuffer_window;
 }
 
+fn erase_expired_minibuffer_buffer_in_state(
+    buffers: &mut crate::buffer::BufferManager,
+    minibuf_id: crate::buffer::BufferId,
+) {
+    let _ = buffers.replace_buffer_contents(minibuf_id, "");
+}
+
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
     restore_minibuffer_window_in_state(
         &mut eval.frames,
@@ -1081,6 +1088,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
 
     // Restore state
     if let Some(saved) = active_window_state {
+        erase_expired_minibuffer_buffer_in_state(buffers, minibuf_id);
         restore_minibuffer_window_in_state(
             frames,
             minibuffer_selected_window,
@@ -1646,6 +1654,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     }
 
     if let Some(saved) = active_window_state {
+        erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_id);
         restore_minibuffer_window_in_state(
             &mut shared.frames,
             &mut shared.minibuffer_selected_window,

@@ -2066,6 +2066,12 @@ struct MousePosnDescriptor {
     metrics: MousePosnMetrics,
 }
 
+enum QueuedReadCharEvent {
+    None,
+    HandledInternally,
+    Event(Value),
+}
+
 impl crate::emacs_core::eval::Context {
     fn restore_delayed_selection_event(&mut self, delayed_selection_event: &mut Option<Value>) {
         if let Some(event) = delayed_selection_event.take() {
@@ -2145,15 +2151,6 @@ impl crate::emacs_core::eval::Context {
             }
         }
         None
-    }
-
-    fn current_key_sequence_translation_maps(&self) -> [Value; 3] {
-        [
-            self.command_loop.keyboard.input_decode_map(),
-            self.command_loop.keyboard.local_function_key_map(),
-            self.eval_symbol("key-translation-map")
-                .unwrap_or(Value::NIL),
-        ]
     }
 
     fn special_event_binding(&self, event: &Value) -> Option<Value> {
@@ -2247,33 +2244,22 @@ impl crate::emacs_core::eval::Context {
             .any(|start| is_list_keymap(&list_keymap_lookup_seq(&map, &events[start..])))
     }
 
-    fn apply_translation_maps_to_current_key_sequence(
+    fn apply_translation_map_to_events(
         &mut self,
-        options: ReadKeySequenceOptions,
+        map: Value,
+        mut translated: Vec<Value>,
+        prompt: Value,
     ) -> Result<CurrentKeySequenceTranslation, crate::emacs_core::error::Flow> {
-        let mut translated = self
-            .command_loop
-            .keyboard
-            .kboard
-            .current_key_sequence
-            .translated_events()
-            .to_vec();
         let mut has_pending_translation_prefix = false;
 
-        for map in self.current_key_sequence_translation_maps() {
-            if let Some(suffix_translation) =
-                self.lookup_key_sequence_suffix_translation(map, &translated, options.prompt)?
-            {
-                translated.truncate(suffix_translation.start);
-                translated.extend(suffix_translation.replacement);
-            }
-            has_pending_translation_prefix |=
-                self.translation_map_has_pending_suffix_prefix(map, &translated);
+        if let Some(suffix_translation) =
+            self.lookup_key_sequence_suffix_translation(map, &translated, prompt)?
+        {
+            translated.truncate(suffix_translation.start);
+            translated.extend(suffix_translation.replacement);
         }
-
-        self.command_loop
-            .keyboard
-            .rewrite_key_sequence_translation(translated.clone());
+        has_pending_translation_prefix |=
+            self.translation_map_has_pending_suffix_prefix(map, &translated);
 
         Ok(CurrentKeySequenceTranslation {
             translated_events: translated,
@@ -2367,7 +2353,11 @@ impl crate::emacs_core::eval::Context {
         let Some(c) = event.as_fixnum() else {
             return Ok(false);
         };
-        if c <= 0 || c >= 0x3fff_ff {
+        // GNU keyboard.c::read_char only calls input-method-function for
+        // single-byte printable characters: ' ' <= c < 256 && c != DEL.
+        // Control bytes such as ESC must remain ordinary key-sequence input
+        // so terminal Meta prefixes keep working.
+        if !(i64::from(b' ') <= c && c < 256 && c != 127) {
             return Ok(false);
         }
 
@@ -2959,14 +2949,29 @@ impl crate::emacs_core::eval::Context {
                 }
             }
 
-            let translation = match self.apply_translation_maps_to_current_key_sequence(options) {
+            let mut translated_events = self
+                .command_loop
+                .keyboard
+                .kboard
+                .current_key_sequence
+                .translated_events()
+                .to_vec();
+
+            let input_decode_translation = match self.apply_translation_map_to_events(
+                self.command_loop.keyboard.input_decode_map(),
+                translated_events,
+                options.prompt,
+            ) {
                 Ok(translation) => translation,
                 Err(err) => {
                     self.restore_delayed_selection_event(&mut delayed_selection_event);
                     return Err(err);
                 }
             };
-            let mut translated_events = translation.translated_events;
+            translated_events = input_decode_translation.translated_events;
+            self.command_loop
+                .keyboard
+                .rewrite_key_sequence_translation(translated_events.clone());
 
             if self
                 .command_loop
@@ -2983,6 +2988,70 @@ impl crate::emacs_core::eval::Context {
                     .rewrite_key_sequence_translation(prefixed.clone());
                 translated_events = prefixed;
             }
+
+            let lookup_position = Self::key_sequence_lookup_position(&translated_events);
+            let pre_function_key_resolution = match resolve_active_key_binding(
+                self,
+                &translated_events,
+                false,
+                false,
+                lookup_position.as_ref(),
+            ) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    self.restore_delayed_selection_event(&mut delayed_selection_event);
+                    self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
+                    return Err(err);
+                }
+            };
+            let pre_function_key_binding = pre_function_key_resolution.binding;
+            let pre_function_key_undefined = pre_function_key_resolution.lookup.is_nil()
+                || pre_function_key_resolution.lookup == Value::symbol("undefined")
+                || pre_function_key_binding.is_nil()
+                || pre_function_key_binding == Value::symbol("undefined");
+            let pre_function_key_is_prefix = resolve_prefix_keymap_binding_in_obarray(
+                &self.obarray,
+                &pre_function_key_resolution.lookup,
+            )
+            .is_some();
+
+            let mut has_pending_translation_prefix =
+                input_decode_translation.has_pending_translation_prefix;
+            if pre_function_key_undefined || pre_function_key_is_prefix {
+                let function_key_translation = match self.apply_translation_map_to_events(
+                    self.command_loop.keyboard.local_function_key_map(),
+                    translated_events,
+                    options.prompt,
+                ) {
+                    Ok(translation) => translation,
+                    Err(err) => {
+                        self.restore_delayed_selection_event(&mut delayed_selection_event);
+                        return Err(err);
+                    }
+                };
+                translated_events = function_key_translation.translated_events;
+                has_pending_translation_prefix |=
+                    function_key_translation.has_pending_translation_prefix;
+            }
+
+            let key_translation = match self.apply_translation_map_to_events(
+                self.eval_symbol("key-translation-map")
+                    .unwrap_or(Value::NIL),
+                translated_events,
+                options.prompt,
+            ) {
+                Ok(translation) => translation,
+                Err(err) => {
+                    self.restore_delayed_selection_event(&mut delayed_selection_event);
+                    return Err(err);
+                }
+            };
+            translated_events = key_translation.translated_events;
+            has_pending_translation_prefix |= key_translation.has_pending_translation_prefix;
+            self.command_loop
+                .keyboard
+                .rewrite_key_sequence_translation(translated_events.clone());
+
             if self
                 .command_loop
                 .keyboard
@@ -3038,7 +3107,7 @@ impl crate::emacs_core::eval::Context {
             );
 
             if sequence_is_undefined {
-                if translation.has_pending_translation_prefix {
+                if has_pending_translation_prefix {
                     tracing::debug!(
                         "read_key_sequence: continuing because translation suffix is still a prefix"
                     );
@@ -3208,6 +3277,37 @@ impl crate::emacs_core::eval::Context {
                 None
             }
         }
+    }
+
+    fn pop_queued_read_char_event(
+        &mut self,
+    ) -> Result<QueuedReadCharEvent, crate::emacs_core::error::Flow> {
+        if let Some(event) = self.pop_unread_command_event_unrecorded() {
+            return Ok(QueuedReadCharEvent::Event(event));
+        }
+        if let Some(event) = self.command_loop.keyboard.take_unread_selection_event() {
+            return Ok(QueuedReadCharEvent::Event(event));
+        }
+
+        if let Some(event) = self.command_loop.keyboard.pop_unread_event() {
+            if self.handle_help_echo_event(event)? {
+                return Ok(QueuedReadCharEvent::HandledInternally);
+            }
+            if self.execute_special_event_if_bound(event)? {
+                return Ok(QueuedReadCharEvent::HandledInternally);
+            }
+            return Ok(QueuedReadCharEvent::Event(event));
+        }
+
+        if let Some(event) = self.command_loop.keyboard.next_executing_kbd_macro_event() {
+            self.assign(
+                "executing-kbd-macro-index",
+                Value::fixnum(self.command_loop.keyboard.kboard.kbd_macro_index as i64),
+            );
+            return Ok(QueuedReadCharEvent::Event(event));
+        }
+
+        Ok(QueuedReadCharEvent::None)
     }
 
     fn handle_display_terminal_disconnect(&mut self) {
@@ -3409,29 +3509,10 @@ impl crate::emacs_core::eval::Context {
 
         loop {
             self.sync_keyboard_terminal_owner();
-            if let Some(event) = self.pop_unread_command_event_unrecorded() {
-                return Ok(Some(event));
-            }
-            if let Some(event) = self.command_loop.keyboard.take_unread_selection_event() {
-                return Ok(Some(event));
-            }
-
-            if let Some(event) = self.command_loop.keyboard.pop_unread_event() {
-                if self.handle_help_echo_event(event)? {
-                    continue;
-                }
-                if self.execute_special_event_if_bound(event)? {
-                    continue;
-                }
-                return Ok(Some(event));
-            }
-
-            if let Some(event) = self.command_loop.keyboard.next_executing_kbd_macro_event() {
-                self.assign(
-                    "executing-kbd-macro-index",
-                    Value::fixnum(self.command_loop.keyboard.kboard.kbd_macro_index as i64),
-                );
-                return Ok(Some(event));
+            match self.pop_queued_read_char_event()? {
+                QueuedReadCharEvent::Event(event) => return Ok(Some(event)),
+                QueuedReadCharEvent::HandledInternally => continue,
+                QueuedReadCharEvent::None => {}
             }
 
             if self.sync_pending_resize_events() {
@@ -3459,6 +3540,16 @@ impl crate::emacs_core::eval::Context {
 
             self.redisplay_for_input_wait();
             let _ = self.service_wait_path_once(None, false, true, true)?;
+
+            // GNU read_char re-checks Vunread_command_events after idle
+            // timers/sit-for/read-event can requeue input, before consulting
+            // the terminal queue.  Keep that priority so `M-x` replay from
+            // sit-for cannot be overtaken by the next host byte.
+            match self.pop_queued_read_char_event()? {
+                QueuedReadCharEvent::Event(event) => return Ok(Some(event)),
+                QueuedReadCharEvent::HandledInternally => continue,
+                QueuedReadCharEvent::None => {}
+            }
 
             tracing::debug!(
                 "read_char: blocking on input (input_rx={})...",

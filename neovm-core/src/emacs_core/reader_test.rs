@@ -903,6 +903,41 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
 }
 
 #[test]
+fn expired_minibuffer_buffer_is_erased_before_restore() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
+    let minibuffer_window = ev
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("initial frame minibuffer window");
+    let previous_selected_window = ev
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let active_buffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    ev.buffer_manager_mut()
+        .replace_buffer_contents(active_buffer, "M-x bury-buffer")
+        .expect("install minibuffer contents");
+    let saved = activate_minibuffer_window(&mut ev, active_buffer).expect("activate minibuffer");
+
+    erase_expired_minibuffer_buffer_in_state(&mut ev.buffers, active_buffer);
+    restore_minibuffer_window(&mut ev, saved);
+
+    let active_minibuffer = ev
+        .buffer_manager()
+        .get(active_buffer)
+        .expect("active minibuffer buffer");
+    let text = active_minibuffer.buffer_substring(0, active_minibuffer.total_bytes());
+    assert_eq!(text, "");
+    let frame = ev.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(frame.selected_window, previous_selected_window);
+    assert_ne!(frame.selected_window, minibuffer_window);
+}
+
+#[test]
 fn active_minibuffer_window_sync_keeps_live_buffer_point() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
