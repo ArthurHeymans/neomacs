@@ -4964,6 +4964,50 @@ fn coding_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn url_util_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'url-util) (message \"urlhex:%S\" (list (url-hexify-string \"a b/é\") (url-unhex-string \"a%20b%2F%C3%A9\") (url-unhex-string \"%E9\") (url-hexify-string \"!*()\"))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("urlhex:")
+            && recent.contains("a%20b%2F%C3%A9")
+            && recent.contains("a b/")
+            && recent.contains("303")
+            && recent.contains("251")
+            && recent.contains("\\351")
+            && recent.contains("%21%2A%28%29")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: URL hex string helpers should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "url_util_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_code_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
