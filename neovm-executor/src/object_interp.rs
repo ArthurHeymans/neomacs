@@ -2045,6 +2045,12 @@ impl Interpreter<'_, '_, '_> {
             "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
+            "cl-substitute-if" | "cl-nsubstitute-if" => self.subr_3(name, args, |s| {
+                s.substitute_seq_if(args[0], args[1], args[2], false)
+            }),
+            "cl-substitute-if-not" | "cl-nsubstitute-if-not" => self.subr_3(name, args, |s| {
+                s.substitute_seq_if(args[0], args[1], args[2], true)
+            }),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -4339,6 +4345,29 @@ impl Interpreter<'_, '_, '_> {
         let new_car = self.cl_sublis(alist, car)?;
         let new_cdr = self.cl_sublis(alist, cdr)?;
         Some(self.runtime.cons(new_car, new_cdr))
+    }
+
+    fn substitute_seq_if(
+        &mut self,
+        new_val: LispValue,
+        predicate: LispValue,
+        sequence: LispValue,
+        negate: bool,
+    ) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        let result: Vec<LispValue> = elements
+            .into_iter()
+            .map(|elem| {
+                let matched = !self.execute_funcall(predicate, &[elem])
+                    .unwrap_or(LispValue::NIL).is_nil();
+                if matched != negate { new_val } else { elem }
+            })
+            .collect();
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            Some(self.runtime.vector(result))
+        }
     }
 
     fn substitute_seq(
@@ -6667,10 +6696,14 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nsubst-if-not",
             "cl-nsublis",
             "cl-nsubstitute",
+            "cl-nsubstitute-if",
+            "cl-nsubstitute-if-not",
             "cl-subst-if",
             "cl-subst-if-not",
             "cl-sublis",
             "cl-substitute",
+            "cl-substitute-if",
+            "cl-substitute-if-not",
             "cl-nintersection",
             "cl-nset-exclusive-or",
             "cl-nunion",
