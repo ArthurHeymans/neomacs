@@ -1937,6 +1937,12 @@ impl Interpreter<'_, '_, '_> {
                     args.get(3).copied(),
                     args.get(4).copied(),
                 )),
+            "cl-remove-if" => self.subr_2(name, args, |s| {
+                s.remove_if(args[0], args[1], false)
+            }),
+            "cl-remove-if-not" => self.subr_2(name, args, |s| {
+                s.remove_if(args[0], args[1], true)
+            }),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -3402,6 +3408,29 @@ impl Interpreter<'_, '_, '_> {
             }
         }
         Some(LispValue::NIL)
+    }
+
+    fn remove_if(
+        &mut self,
+        predicate: LispValue,
+        sequence: LispValue,
+        negate: bool,
+    ) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        let mut result = Vec::new();
+        for element in elements {
+            let satisfied = !self.execute_funcall(predicate, &[element])?.is_nil();
+            // cl-remove-if (negate=false): keep if !satisfied
+            // cl-remove-if-not (negate=true): keep if satisfied
+            if satisfied == negate {
+                result.push(element);
+            }
+        }
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            Some(self.runtime.vector(result))
+        }
     }
 
     fn mapconcat(
@@ -5659,6 +5688,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-remove-if",
+            "cl-remove-if-not",
             "clrhash",
             "compiled-function-p",
             "concat",
@@ -9797,6 +9828,24 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n(eql 1 1)",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_remove_if_filters_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-remove-if #'evenp '(1 2 3 4 5 6)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_remove_if_not_filters_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (cl-remove-if-not (lambda (x) (numberp x)) '(a 1 b 2)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
     #[test]
