@@ -1251,6 +1251,17 @@ impl MacroEval {
                 }
             }
 
+            Some("rassoc") => {
+                // (rassoc VALUE ALIST) — find entry by cdr
+                if items.len() >= 3 {
+                    let val = self.eval(&items[1], env)?;
+                    let alist = self.eval(&items[2], env)?;
+                    Ok(alist.rassoc(&val))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
             Some("macroexp-const-p") => {
                 // (macroexp-const-p FORM) — is form a constant?
                 // Return nil (assume not constant at macro time)

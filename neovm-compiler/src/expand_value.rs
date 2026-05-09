@@ -224,6 +224,20 @@ impl MacroValue {
         MacroValue::Nil
     }
 
+    pub fn rassoc(&self, val: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            let entry = &cell.car;
+            if let MacroValue::Cons(entry_cell) = entry {
+                if entry_cell.cdr == *val {
+                    return entry.clone();
+                }
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
     pub fn assoc(&self, key: &MacroValue) -> MacroValue {
         let mut current = self.clone();
         while let MacroValue::Cons(cell) = &current {
