@@ -1181,6 +1181,10 @@ impl Interpreter<'_, '_, '_> {
             "symbolp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_symbol(args[0]))),
+            "string-prefix-p" => self.subr_2(name, args, |s| {
+                let (prefix, s) = (s.string_contents_owned(args[0])?, s.string_contents_owned(args[1])?);
+                Some(bool_value(s.starts_with(&prefix)))
+            }),
             "stringp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_string(args[0]))),
@@ -7124,6 +7128,7 @@ fn is_primitive_name(name: &str) -> bool {
             "string-match",
             "string-match-p",
             "string-or-null-p",
+            "string-prefix-p",
             "string-to-char",
             "string-to-number",
             "string-trim",
