@@ -1146,10 +1146,10 @@ impl Interpreter<'_, '_, '_> {
             "listp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || self.runtime.is_cons(args[0]))),
-            "numberp" => self
+            "numberp" | "number-or-marker-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_number(args[0]))),
-            "integerp" => self
+            "integerp" | "integer-or-marker-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_fixnum() || self.runtime.is_bignum(args[0]))),
             "natnump" | "wholenump" => self
@@ -6895,6 +6895,7 @@ fn is_primitive_name(name: &str) -> bool {
             "hash-table-p",
             "identity",
             "ignore",
+            "integer-or-marker-p",
             "integerp",
             "intern",
             "intern-soft",
@@ -6958,6 +6959,7 @@ fn is_primitive_name(name: &str) -> bool {
             "null",
             "number-or-marker-p",
             "number-sequence",
+            "number-or-marker-p",
             "number-to-string",
             "numberp",
             "pairlis",
