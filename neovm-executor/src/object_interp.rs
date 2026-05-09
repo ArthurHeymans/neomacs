@@ -1451,6 +1451,12 @@ impl Interpreter<'_, '_, '_> {
             "butlast" => self
                 .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.butlast(args[0], args.get(1).copied())),
+            "cl-delete-if" => self.subr_2(name, args, |s| {
+                s.cl_delete_if(args[0], args[1], false)
+            }),
+            "cl-delete-if-not" => self.subr_2(name, args, |s| {
+                s.cl_delete_if(args[0], args[1], true)
+            }),
             "delq" | "cl-delq" => self.subr_2(name, args, |s| {
                 s.delq(args[0], args[1])
             }),
@@ -1891,7 +1897,7 @@ impl Interpreter<'_, '_, '_> {
             "safe-length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.safe_length(args[0])),
-            "subseq" => self
+            "subseq" | "cl-subseq" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.subseq(args[0], args[1], args.get(2).copied())),
             "last" => self
@@ -3781,6 +3787,54 @@ impl Interpreter<'_, '_, '_> {
             }
         }
         Some(LispValue::NIL)
+    }
+
+    fn cl_delete_if(
+        &mut self,
+        predicate: LispValue,
+        list: LispValue,
+        negate: bool,
+    ) -> Option<LispValue> {
+        // Skip matching elements at the front.
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            let matched = !self.execute_funcall(predicate, &[car])?.is_nil();
+            let should_delete = if negate { !matched } else { matched };
+            if !should_delete {
+                break;
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+        let result = current;
+        // Walk the rest, splicing out matching elements.
+        loop {
+            let cdr = self.runtime.cdr(current).ok()?;
+            if cdr.is_nil() {
+                break;
+            }
+            if !self.runtime.is_cons(cdr) {
+                self.error(format!("expected a proper list, got {}", self.runtime.format_value(cdr)));
+                return None;
+            }
+            let car = self.runtime.car(cdr).ok()?;
+            let matched = !self.execute_funcall(predicate, &[car])?.is_nil();
+            let should_delete = if negate { !matched } else { matched };
+            if should_delete {
+                let cdrdr = self.runtime.cdr(cdr).ok()?;
+                self.runtime.set_cdr(current, cdrdr).ok()?;
+            } else {
+                current = cdr;
+            }
+        }
+        Some(result)
     }
 
     fn remove_if(
@@ -6329,6 +6383,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-concatenate",
             "cl-delete",
             "cl-delete-duplicates",
+            "cl-delete-if",
+            "cl-delete-if-not",
             "cl-delq",
             "cl-nsubstitute",
             "cl-subst-if",
@@ -6515,6 +6571,7 @@ fn is_primitive_name(name: &str) -> bool {
             "string>",
             "stringp",
             "subrp",
+            "cl-subseq",
             "subseq",
             "substring",
             "substring-no-properties",
@@ -11480,6 +11537,15 @@ mod tests {
              (cl-search '(2 3) '(1 2 3 4))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_cl_delete_if_removes_matching_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-delete-if #'oddp '(1 2 3 4 5))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(2 4)");
     }
 
     #[test]
