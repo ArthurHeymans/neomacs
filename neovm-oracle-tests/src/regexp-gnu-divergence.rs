@@ -119,6 +119,45 @@ fn oracle_prop_regexp_gnu_malformed_symbol_boundary_errors() {
 }
 
 #[test]
+#[ignore = "known divergence: GNU Emacs does not signal for invalid \\s/\\S syntax-class designators"]
+fn oracle_prop_regexp_gnu_invalid_syntax_class_designators() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(let ((probe (lambda (regexp string)
+                       (condition-case err
+                           (let ((pos (string-match regexp string)))
+                             (list regexp string pos
+                                   (and pos (match-string 0 string))))
+                         (error (list regexp string :error
+                                      (car err) (cadr err)))))))
+      (list
+       (funcall probe "\\sz" "z")
+       (funcall probe "\\sq" "q")
+       (funcall probe "\\s0" "0")
+       (funcall probe "\\S0" "0")
+       (funcall probe "\\S0" "a")))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+#[ignore = "known divergence: GNU Emacs rejects unknown (?...) group extensions"]
+fn oracle_prop_regexp_gnu_unknown_group_extension_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(list
+      (condition-case err
+          (string-match "\\(?x:a\\)" "(?x:a)")
+        (error (list :error (car err) (cadr err))))
+      (condition-case err
+          (string-match "\\(??:a\\)" "(??:a)")
+        (error (list :error (car err) (cadr err))))
+      (condition-case err
+          (string-match "\\(?-1:a\\)" "(?-1:a)")
+        (error (list :error (car err) (cadr err)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 #[ignore = "known divergence: Neomacs uses approximate built-in category predicates"]
 fn oracle_prop_regexp_gnu_category_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
