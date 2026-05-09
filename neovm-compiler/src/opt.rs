@@ -587,10 +587,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
-        "zerop" if args.len() == 1 => {
-            let a = args[0].as_int()?;
-            Some(if a == 0 { SsaConst::True } else { SsaConst::Nil })
-        }
+        "zerop" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(if *a == 0 { SsaConst::True } else { SsaConst::Nil }),
+            SsaConst::Float(f) => Some(if *f == 0.0 || *f == -0.0 { SsaConst::True } else { SsaConst::Nil }),
+            _ => None,
+        },
         "rem" | "%" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
             if b == 0 {
