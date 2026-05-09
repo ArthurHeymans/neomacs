@@ -9775,6 +9775,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_prog2_returns_second_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(prog2 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_cond_empty_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(cond)",
