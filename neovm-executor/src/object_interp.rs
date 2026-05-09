@@ -8022,6 +8022,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_defvar_without_value_declares_special() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defvar my-var) (boundp 'my-var))",
+        );
+        // In Emacs, (defvar SYM) declares it special but leaves it unbound
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_fmakunbound_removes_function_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\

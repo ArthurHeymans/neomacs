@@ -312,6 +312,7 @@ impl Runtime {
     }
 
     #[inline(always)]
+    #[inline(always)]
     pub fn car(&self, pair: LispValue) -> Result<LispValue, RuntimeError> {
         if pair.is_nil() {
             return Ok(LispValue::NIL);
@@ -327,6 +328,7 @@ impl Runtime {
         Ok(self.expect_cons(pair)?.cdr)
     }
 
+    #[inline(always)]
     pub fn set_car(&mut self, pair: LispValue, car: LispValue) -> Result<LispValue, RuntimeError> {
         self.expect_cons_mut(pair)?.car = car;
         Ok(car)
@@ -338,6 +340,7 @@ impl Runtime {
     }
 
     /// O(1) type check using the object index.
+    #[inline(always)]
     #[inline(always)]
     fn heap_kind(&self, addr: usize) -> Option<HeapKind> {
         self.object_index.get(&addr).copied()
@@ -354,18 +357,22 @@ impl Runtime {
             || value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Symbol))
     }
 
+    #[inline(always)]
     pub fn is_string(&self, value: LispValue) -> bool {
         value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::String))
     }
 
+    #[inline(always)]
     pub fn is_vector(&self, value: LispValue) -> bool {
         value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Vector))
     }
 
+    #[inline(always)]
     pub fn is_hash_table(&self, value: LispValue) -> bool {
         value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::HashTable))
     }
 
+    #[inline(always)]
     pub fn is_function(&self, value: LispValue) -> bool {
         value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Function))
     }
@@ -383,6 +390,7 @@ impl Runtime {
         LispValue::from_heap_addr(addr)
     }
 
+    #[inline(always)]
     pub fn is_float(&self, value: LispValue) -> bool {
         value
             .heap_addr()
