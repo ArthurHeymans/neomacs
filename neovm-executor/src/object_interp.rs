@@ -1468,9 +1468,9 @@ impl Interpreter<'_, '_, '_> {
             "remq" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.delq(args[0], args[1])),
-            "remove" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.remove(args[0], args[1])),
+            "remove" | "cl-remove" => self.subr_2(name, args, |s| {
+                s.remove(args[0], args[1])
+            }),
             "copy-tree" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_tree(args[0])),
@@ -5732,6 +5732,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delete-duplicates",
             "cl-nsubstitute",
             "cl-substitute",
+            "cl-remove",
             "cl-remove-duplicates",
             "cl-remove-if",
             "cl-remove-if-not",
