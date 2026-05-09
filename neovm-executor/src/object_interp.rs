@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_equal_case_insensitive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(string-equal \"Hello\" \"hello\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_mul_mixed_float() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(* 2 3.5)",
