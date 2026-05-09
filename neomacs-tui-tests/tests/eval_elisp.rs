@@ -5379,6 +5379,38 @@ fn xml_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn dom_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(progn (require 'dom) (let ((tree '(root ((class . \"top\")) (section ((id . \"a\")) \"Alpha\") (section ((id . \"b\")) (span nil \"Beta\"))))) (message \"dom:%S\" (list (dom-tag tree) (dom-attr tree 'class) (length (dom-by-tag tree 'section)) (dom-text (car (dom-by-tag tree 'span)))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("dom:")
+                && row.contains("root")
+                && row.contains("top")
+                && row.contains(" 2 ")
+                && row.contains("Beta")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: DOM helper traversal should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("dom_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn string_and_numeric_operations_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
