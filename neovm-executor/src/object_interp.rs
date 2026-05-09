@@ -9783,6 +9783,23 @@ mod tests {
     }
 
     #[test]
+    fn executes_eql_distinguishes_types() {
+        // eql returns nil for different numeric types (fixnum vs float)
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(eql 1 1.0)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_eql_equivalent_values() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(eql 1 1)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cond_empty_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(cond)",
