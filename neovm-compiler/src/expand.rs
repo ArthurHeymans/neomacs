@@ -690,6 +690,7 @@ impl Expander {
             "cl-dotimes" => self.expand_cl_dotimes(span, items),
             "psetq" => self.expand_psetq(span, items),
             "psetf" | "cl-psetf" => self.expand_psetf(span, items),
+            "cl-block" => self.expand_cl_block(span, items),
             "cl-return" => self.expand_cl_return(span, items),
             "cl-return-from" => self.expand_cl_return_from(span, items),
             "cl-rotatef" => self.expand_cl_rotatef(span, items),
@@ -3087,6 +3088,27 @@ impl Expander {
             nil_form(span),
         ];
         let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    fn expand_cl_block(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-block NAME BODY...) => (catch (quote NAME) (progn BODY...))
+        if items.len() < 2 {
+            self.error(span, "cl-block requires a block name");
+            return nil_form(span);
+        }
+        let name = &items[1];
+        let body = &items[2..];
+        let expanded = list_form(vec![
+            symbol_form("catch", span),
+            list_form(vec![symbol_form("quote", span), name.clone()], span),
+            list_form(
+                std::iter::once(symbol_form("progn", span))
+                    .chain(body.iter().cloned())
+                    .collect(),
+                span,
+            ),
+        ], span);
         self.expand_form(expanded)
     }
 
