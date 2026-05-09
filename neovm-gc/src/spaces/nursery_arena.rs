@@ -98,10 +98,12 @@ impl NurseryArena {
         let buffer_len = self.buffer.len();
         let mut current = self.cursor.load(Ordering::Acquire);
         loop {
-            let current_addr = buffer_base.checked_add(current)?;
+            // Overflow is impossible: buffer_base is a heap allocation,
+            // current is bounded by buffer_len, and both fit in usize.
+            let current_addr = buffer_base.wrapping_add(current);
             let aligned = align_up(current_addr, align)?;
-            let offset = aligned.checked_sub(buffer_base)?;
-            let end = offset.checked_add(size)?;
+            let offset = aligned.wrapping_sub(buffer_base);
+            let end = offset.wrapping_add(size);
             if end > buffer_len {
                 return None;
             }
