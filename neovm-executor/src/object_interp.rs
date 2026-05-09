@@ -1967,6 +1967,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-subst-if-not" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], true)
             }),
+            "cl-set-difference" => self.subr_2(name, args, |s| {
+                s.cl_set_difference(args[0], args[1])
+            }),
             "cl-sublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
@@ -3753,6 +3756,19 @@ impl Interpreter<'_, '_, '_> {
             _ => return Some(LispValue::NIL),
         };
         Some(bool_value(result))
+    }
+
+    fn cl_set_difference(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
+        let elements1 = self.list_values(list1)?;
+        let elements2 = self.list_values(list2)?;
+        let mut result = Vec::new();
+        for e in elements1 {
+            let in_list2 = elements2.iter().any(|x| self.eql_values(*x, e));
+            if !in_list2 {
+                result.push(e);
+            }
+        }
+        Some(make_list(self.runtime, result.into_iter()))
     }
 
     fn cl_sublis(&mut self, alist: LispValue, tree: LispValue) -> Option<LispValue> {
@@ -6115,6 +6131,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-reduce",
             "cl-remove-if",
             "cl-remove-if-not",
+            "cl-set-difference",
             "cl-sort",
             "clrhash",
             "compiled-function-p",
@@ -11132,6 +11149,15 @@ mod tests {
              (mapcan (lambda (x) (list x (* 10 x))) (list 1 2 3))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 10 2 20 3 30)");
+    }
+
+    #[test]
+    fn executes_cl_set_difference_removes_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-set-difference '(1 2 3 4) '(3 5))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 4)");
     }
 
     #[test]
