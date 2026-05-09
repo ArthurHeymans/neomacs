@@ -12112,6 +12112,17 @@ mod tests {
     }
 
     #[test]
+    fn executes_memql_finds_float_by_value() {
+        // memql uses eql, so floats compare by value (bit pattern)
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (memql 3.0 (list 1.0 2.0 3.0 4.0))",
+        );
+        // Returns non-nil tail if found
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
     fn executes_default_boundp_checks_global_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
