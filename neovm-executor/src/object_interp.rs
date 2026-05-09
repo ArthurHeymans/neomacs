@@ -10182,6 +10182,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_plusp_minusp_predicates() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp 5)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp -1)").0,
+            Some(LispValue::NIL));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-minusp -3)").0,
+            Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
