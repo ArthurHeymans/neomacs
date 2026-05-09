@@ -482,6 +482,20 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a ^ b)))
         }
+        "ash" if args.len() == 2 => {
+            let value = args[0].as_int()?;
+            let count = args[1].as_int()?;
+            if count >= 64 {
+                Some(SsaConst::Int(0))
+            } else if count >= 0 {
+                Some(SsaConst::Int(value.wrapping_shl(count as u32)))
+            } else if count <= -64 {
+                Some(SsaConst::Int(if value < 0 { -1 } else { 0 }))
+            } else {
+                // Arithmetic right shift via signed >> which preserves sign
+                Some(SsaConst::Int(value >> (-count)))
+            }
+        }
         "abs" if args.len() == 1 => {
             let a = args[0].as_int()?;
             Some(SsaConst::Int(a.wrapping_abs()))
