@@ -1979,6 +1979,14 @@ impl Interpreter<'_, '_, '_> {
             "some" | "cl-some" => self.subr_2(name, args, |s| {
                 s.sequence_some(args[0], args[1])
             }),
+            "notany" | "cl-notany" => self.subr_2(name, args, |s| {
+                s.sequence_some(args[0], args[1])
+                    .map(|v| if v.is_nil() { LispValue::TRUE } else { LispValue::NIL })
+            }),
+            "notevery" | "cl-notevery" => self.subr_2(name, args, |s| {
+                s.sequence_every(args[0], args[1])
+                    .map(|v| if v.is_nil() { LispValue::TRUE } else { LispValue::NIL })
+            }),
             "copy-list" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_list(args[0])),
@@ -6061,6 +6069,8 @@ fn is_primitive_name(name: &str) -> bool {
             "nconc",
             "nlistp",
             "not",
+            "notany",
+            "notevery",
             "nreverse",
             "nth",
             "nthcdr",
@@ -10880,6 +10890,24 @@ mod tests {
              (cl-some #'identity '())",
         );
         assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_notany_returns_t_when_none_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-notany #'oddp (list 2 4 6))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_notevery_returns_t_when_not_all_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-notevery #'oddp (list 1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
