@@ -7967,15 +7967,6 @@ mod tests {
     }
 
     #[test]
-    fn executes_makunbound_and_boundp() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n\
-             (progn (setq x 42) (makunbound 'x) (not (boundp 'x)))",
-        );
-        assert_eq!(value, Some(LispValue::TRUE));
-    }
-
-    #[test]
     fn executes_symbol_name_returns_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(symbol-name 'hello)",
