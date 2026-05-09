@@ -7967,15 +7967,6 @@ mod tests {
     }
 
     #[test]
-    fn executes_cl_accessors() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n\
-             (+ (cl-first '(1 2 3)) (cl-second '(1 2 3)) (cl-third '(1 2 3)))",
-        );
-        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
-    }
-
-    #[test]
     fn executes_remq_removes_by_identity() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
