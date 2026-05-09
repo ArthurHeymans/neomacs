@@ -690,6 +690,7 @@ impl Expander {
             "psetq" => self.expand_psetq(span, items),
             "psetf" | "cl-psetf" => self.expand_psetf(span, items),
             "cl-rotatef" => self.expand_cl_rotatef(span, items),
+            "cl-shiftf" => self.expand_cl_shiftf(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -3029,6 +3030,48 @@ impl Expander {
         ];
         result.extend(setq_forms);
         result.push(nil_form(span));
+        let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    fn expand_cl_shiftf(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-shiftf PLACE1 ... PLACEn NEWVAL)
+        // Save temps for first n-1 places, then psetf each place rightward
+        if items.len() < 3 {
+            self.error(span, "cl-shiftf requires at least one place and a new value");
+            return nil_form(span);
+        }
+        let all = &items[1..];
+        let n_places = all.len() - 1; // last is newval
+        if n_places == 0 { return nil_form(span); }
+        // Save all places in temps (including last, whose old value is lost)
+        let mut let_bindings = Vec::new();
+        for i in 0..n_places {
+            let tmp = format!("--shiftf-{}--", i);
+            let_bindings.push(list_form(
+                vec![symbol_form(&tmp, span), all[i].clone()], span));
+        }
+        let newval = &all[n_places];
+        let mut psetf_pairs = Vec::new();
+        for i in 0..n_places {
+            psetf_pairs.push(all[i].clone());
+            if i < n_places - 1 {
+                // place[i] gets the OLD value of place[i+1] (saved in temp[i+1])
+                psetf_pairs.push(symbol_form(
+                    &format!("--shiftf-{}--", i + 1), span));
+            } else {
+                // Last place gets newval
+                psetf_pairs.push(newval.clone());
+            }
+        }
+        let mut psetf_form = vec![symbol_form("psetf", span)];
+        psetf_form.extend(psetf_pairs);
+        let mut result = vec![
+            symbol_form("let*", span),
+            list_form(let_bindings, span),
+            list_form(psetf_form, span),
+            nil_form(span),
+        ];
         let expanded = list_form(result, span);
         self.expand_form(expanded)
     }
