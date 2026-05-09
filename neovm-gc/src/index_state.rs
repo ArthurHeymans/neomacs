@@ -331,22 +331,30 @@ impl RememberedSetState {
         object_index: &ObjectIndex,
         kind: CollectionKind,
     ) -> Vec<ObjectKey> {
-        self.owners_including_pending()
-            .into_iter()
-            .filter(|owner_key| {
-                let Some(&owner_locator) = object_index.get(owner_key) else {
-                    return false;
-                };
-                let owner = flat_record(objects, owner_locator);
-                if !keep_object_for_collection(kind, owner) {
-                    return false;
+        let filter = |owner_key: &ObjectKey| -> bool {
+            let Some(&owner_locator) = object_index.get(owner_key) else {
+                return false;
+            };
+            let owner = flat_record(objects, owner_locator);
+            if !keep_object_for_collection(kind, owner) {
+                return false;
+            }
+            if !owner_qualifies_as_explicit_remembered_owner(owner) {
+                return false;
+            }
+            owner_has_nursery_edge(objects, object_index, owner)
+        };
+        let mut result: Vec<ObjectKey> = self.owners.iter().copied().filter(filter).collect();
+        // Fold in pending inserts that haven't been merged into owners yet.
+        if self.pending_count.load(Ordering::Relaxed) > 0 {
+            let pending = self.pending_inserts.lock();
+            for key in pending.iter().copied() {
+                if !self.owner_set.contains(&key) && !result.contains(&key) && filter(&key) {
+                    result.push(key);
                 }
-                if !owner_qualifies_as_explicit_remembered_owner(owner) {
-                    return false;
-                }
-                owner_has_nursery_edge(objects, object_index, owner)
-            })
-            .collect()
+            }
+        }
+        result
     }
 
     /// Replace the owner set with the given list. Used by the
