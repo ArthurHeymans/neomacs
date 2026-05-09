@@ -1056,6 +1056,40 @@ fn sequence_mutation_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn vector_sort_compare_strings_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"sortseq:%S\" (list (sort (copy-sequence [3 1 2]) '<) (compare-strings \"abc\" nil nil \"abd\" nil nil) (compare-strings \"abc\" nil nil \"ABC\" nil nil t)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("sortseq:") && row.contains("([1 2 3] -3 t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: vector sort and compare-strings should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "vector_sort_compare_strings_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn copy_tree_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
