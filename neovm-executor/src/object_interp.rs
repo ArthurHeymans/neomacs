@@ -364,9 +364,8 @@ impl Interpreter<'_, '_, '_> {
             ));
             return self.finish(None);
         }
-        let entry_params = self.function.entry_params.clone();
-        for (reg, value) in entry_params.into_iter().zip(args.iter().copied()) {
-            self.set(reg, value);
+        for (reg, value) in self.function.entry_params.iter().zip(args.iter().copied()) {
+            self.set(*reg, value);
         }
 
         let Some(mut block) = self.function.entry else {
