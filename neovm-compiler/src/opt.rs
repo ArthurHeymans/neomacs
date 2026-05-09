@@ -479,6 +479,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let a = args[0].as_int()?;
             Some(SsaConst::Int(a.wrapping_abs()))
         }
+        "lognot" if args.len() == 1 => {
+            Some(SsaConst::Int(!args[0].as_int()?))
+        }
         _ => None,
     }
 }
