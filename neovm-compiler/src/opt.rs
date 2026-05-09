@@ -517,6 +517,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int(value >> (-count)))
             }
         }
+        "string-trim" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) => Some(SsaConst::String(s.trim().to_string())),
+            _ => None,
+        },
         "downcase" if args.len() == 1 => match args[0] {
             SsaConst::String(s) if s.is_ascii() => Some(SsaConst::String(s.to_ascii_lowercase())),
             _ => None,
