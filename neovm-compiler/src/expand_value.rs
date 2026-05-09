@@ -224,6 +224,20 @@ impl MacroValue {
         MacroValue::Nil
     }
 
+    pub fn assoc(&self, key: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            let entry = &cell.car;
+            if let MacroValue::Cons(entry_cell) = entry {
+                if entry_cell.car == *key {
+                    return entry.clone();
+                }
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
     /// (butlast list n) — return list without last n elements
     pub fn butlast(&self, n: usize) -> MacroValue {
         let Some(vec) = self.to_vec() else {

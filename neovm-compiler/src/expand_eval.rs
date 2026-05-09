@@ -1240,6 +1240,17 @@ impl MacroEval {
                 }
             }
 
+            Some("assoc") => {
+                // (assoc KEY ALIST) — find entry by key
+                if items.len() >= 3 {
+                    let key = self.eval(&items[1], env)?;
+                    let alist = self.eval(&items[2], env)?;
+                    Ok(alist.assoc(&key))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+
             Some("macroexp-const-p") => {
                 // (macroexp-const-p FORM) — is form a constant?
                 // Return nil (assume not constant at macro time)
