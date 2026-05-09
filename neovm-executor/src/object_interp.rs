@@ -2065,7 +2065,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-ldiff" => self.subr_2(name, args, |s| {
                 s.cl_ldiff(args[0], args[1])
             }),
-            "cl-list-length" => self.subr_1(name, args, |s| {
+            "cl-list-length" | "proper-list-p" => self.subr_1(name, args, |s| {
                 s.cl_list_length(args[0])
             }),
             "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| {
@@ -7026,6 +7026,7 @@ fn is_primitive_name(name: &str) -> bool {
             "princ-to-string",
             "print",
             "prog1",
+            "proper-list-p",
             "provide",
             "purecopy",
             "put",
