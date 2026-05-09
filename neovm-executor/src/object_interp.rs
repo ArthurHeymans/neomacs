@@ -1470,6 +1470,9 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_alist(args[0])),
             "vconcat" => self.vconcat(args),
+            "cl-fill" => self.subr_2(name, args, |s| {
+                s.cl_fill(args[0], args[1])
+            }),
             "fillarray" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.fillarray(args[0], args[1])),
@@ -3788,6 +3791,36 @@ impl Interpreter<'_, '_, '_> {
             }
         }
         Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_fill(&mut self, seq: LispValue, item: LispValue) -> Option<LispValue> {
+        if seq.is_nil() || self.runtime.is_cons(seq) {
+            let elements = self.list_values(seq)?;
+            let mut result = Vec::with_capacity(elements.len());
+            for _ in 0..elements.len() {
+                result.push(item);
+            }
+            Some(make_list(self.runtime, result.into_iter()))
+        } else if self.runtime.is_vector(seq) {
+            match self.runtime.vector_elements(seq) {
+                Ok(elements) => {
+                    let mut result = Vec::with_capacity(elements.len());
+                    for _ in 0..elements.len() {
+                        result.push(item);
+                    }
+                    Some(self.runtime.vector(result))
+                }
+                Err(e) => {
+                    self.runtime_error(e);
+                    None
+                }
+            }
+        } else if self.runtime.is_string(seq) {
+            Some(seq)
+        } else {
+            self.error("cl-fill: expected sequence");
+            None
+        }
     }
 
     fn cl_union(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
@@ -6140,6 +6173,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-count",
             "cl-endp",
             "cl-evenp",
+            "cl-fill",
             "cl-find",
             "cl-minusp",
             "cl-oddp",
@@ -11213,6 +11247,15 @@ mod tests {
              (cl-union '(1 2 3) '(3 4 5))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 2 3 4 5)");
+    }
+
+    #[test]
+    fn executes_cl_fill_replaces_all_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-fill '(a b c d) 99)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(99 99 99 99)");
     }
 
     #[test]
