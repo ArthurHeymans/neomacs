@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_make_list_fill() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (make-list 5 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
     fn executes_lognot_bitwise() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(lognot 0)",
