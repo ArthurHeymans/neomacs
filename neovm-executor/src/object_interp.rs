@@ -1725,6 +1725,12 @@ impl Interpreter<'_, '_, '_> {
             "format" | "format-message" => self
                 .min_arity(name, args, 1)
                 .and_then(|_| self.format_string(args[0], &args[1..])),
+            "prin1-to-string" => self
+                .min_max_arity(name, args, 1, 2)
+                .and_then(|_| self.prin1_to_string(args[0])),
+            "princ-to-string" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.prin1_to_string(args[0])),
             "split-string" => self.min_max_arity(name, args, 1, 3).and_then(|_| {
                 self.split_string(args[0], args.get(1).copied(), args.get(2).copied())
             }),
@@ -4345,6 +4351,10 @@ impl Interpreter<'_, '_, '_> {
         let result = execute_module_with_args(&regir, &[], self.runtime);
         self.diagnostics.extend(result.diagnostics);
         Some(LispValue::TRUE)
+    }
+
+    fn prin1_to_string(&mut self, value: LispValue) -> Option<LispValue> {
+        Some(self.runtime.string(self.runtime.format_value(value)))
     }
 
     fn format_string(&mut self, format: LispValue, args: &[LispValue]) -> Option<LispValue> {
@@ -8074,6 +8084,15 @@ mod tests {
              (alist-get 'z '((a . 1)))",
         );
         assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_prin1_to_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (prin1-to-string 42)",
+        );
+        assert!(value.is_some());
     }
 
     #[test]
