@@ -1982,7 +1982,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-adjoin" => self.subr_2(name, args, |s| {
                 s.cl_adjoin(args[0], args[1])
             }),
-            "cl-replace" => self.subr_2(name, args, |s| {
+            "cl-replace" | "cl-nreplace" => self.subr_2(name, args, |s| {
                 s.cl_replace(args[0], args[1])
             }),
             "cl-reduce" => self
@@ -6494,6 +6494,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-tree-equal",
             "cl-union",
             "cl-typep",
+            "cl-nreplace",
             "cl-nreverse",
             "cl-rassoc",
             "cl-rassq",
