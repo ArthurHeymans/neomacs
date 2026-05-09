@@ -31,6 +31,19 @@ use std::time::{Duration, Instant};
 pub const COLS: u16 = 160;
 pub const ROWS: u16 = 50;
 
+fn wait_for_pty_writable(pty: &pty_process::blocking::Pty, timeout: Duration) {
+    let timeout_ms = timeout.as_millis().min(50) as i32;
+    let fd = std::os::fd::AsRawFd::as_raw_fd(pty);
+    unsafe {
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let _ = libc::poll(&mut pfd, 1, timeout_ms);
+    }
+}
+
 /// A TUI editor session running inside an isolated PTY.
 pub struct TuiSession {
     pty: pty_process::blocking::Pty,
@@ -196,7 +209,38 @@ impl TuiSession {
 
     /// Send raw bytes to the PTY.
     pub fn send(&mut self, data: &[u8]) {
-        let _ = self.pty.write_all(data);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut written = 0;
+
+        while written < data.len() {
+            match self.pty.write(&data[written..]) {
+                Ok(0) => panic!(
+                    "{} PTY write returned 0 after {written}/{} bytes",
+                    self.name,
+                    data.len()
+                ),
+                Ok(n) => written += n,
+                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        panic!(
+                            "{} PTY write timed out after {written}/{} bytes",
+                            self.name,
+                            data.len()
+                        );
+                    }
+                    wait_for_pty_writable(
+                        &self.pty,
+                        deadline.saturating_duration_since(Instant::now()),
+                    );
+                }
+                Err(e) => panic!(
+                    "{} PTY write failed after {written}/{} bytes: {e}",
+                    self.name,
+                    data.len()
+                ),
+            }
+        }
     }
 
     /// Like [`TuiSession::read`] but keep reading past idle gaps until
