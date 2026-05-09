@@ -1193,7 +1193,8 @@ impl Interpreter<'_, '_, '_> {
             "arrayp" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(self.runtime.is_vector(args[0]) || self.runtime.is_string(args[0]))
             }),
-            "char-table-p" | "bool-vector-p" | "recordp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "char-table-p" | "bool-vector-p" | "recordp"
+            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
             "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(
                     args[0].as_char().is_some()
@@ -6769,6 +6770,7 @@ fn is_primitive_name(name: &str) -> bool {
             "bool-vector-p",
             "booleanp",
             "boundp",
+            "bufferp",
             "butlast",
             "caaaar",
             "caaadr",
@@ -6953,6 +6955,7 @@ fn is_primitive_name(name: &str) -> bool {
             "mapcan",
             "mapcon",
             "mapcar",
+            "markerp",
             "cl-mapc",
             "cl-mapcar",
             "cl-merge",
@@ -6972,6 +6975,7 @@ fn is_primitive_name(name: &str) -> bool {
             "min",
             "mod",
             "natnump",
+            "mutexp",
             "cl-nconc",
             "nconc",
             "nlistp",
@@ -7058,6 +7062,7 @@ fn is_primitive_name(name: &str) -> bool {
             "symbol-value",
             "symbolp",
             "tan",
+            "threadp",
             "truncate",
             "type-of",
             "upcase",
@@ -7066,6 +7071,7 @@ fn is_primitive_name(name: &str) -> bool {
             "vector",
             "vectorp",
             "wholenump",
+            "windowp",
             "zerop",
         ])
     }).contains(name)
