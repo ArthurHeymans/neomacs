@@ -1970,6 +1970,12 @@ impl Interpreter<'_, '_, '_> {
             "cl-set-difference" => self.subr_2(name, args, |s| {
                 s.cl_set_difference(args[0], args[1])
             }),
+            "cl-intersection" => self.subr_2(name, args, |s| {
+                s.cl_intersection(args[0], args[1])
+            }),
+            "cl-union" => self.subr_2(name, args, |s| {
+                s.cl_union(args[0], args[1])
+            }),
             "cl-sublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
@@ -3766,6 +3772,35 @@ impl Interpreter<'_, '_, '_> {
             let in_list2 = elements2.iter().any(|x| self.eql_values(*x, e));
             if !in_list2 {
                 result.push(e);
+            }
+        }
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_intersection(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
+        let elements1 = self.list_values(list1)?;
+        let elements2 = self.list_values(list2)?;
+        let mut result = Vec::new();
+        for e in elements1 {
+            let in_list2 = elements2.iter().any(|x| self.eql_values(*x, e));
+            if in_list2 {
+                result.push(e);
+            }
+        }
+        Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_union(&mut self, list1: LispValue, list2: LispValue) -> Option<LispValue> {
+        let elements1 = self.list_values(list1)?;
+        let elements2 = self.list_values(list2)?;
+        let mut result = Vec::new();
+        for e in &elements1 {
+            result.push(*e);
+        }
+        for e in &elements2 {
+            let already_in = result.iter().any(|x| self.eql_values(*x, *e));
+            if !already_in {
+                result.push(*e);
             }
         }
         Some(make_list(self.runtime, result.into_iter()))
@@ -6119,7 +6154,9 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-subst-if-not",
             "cl-sublis",
             "cl-substitute",
+            "cl-intersection",
             "cl-tree-equal",
+            "cl-union",
             "cl-typep",
             "cl-nreverse",
             "cl-rassoc",
@@ -11158,6 +11195,24 @@ mod tests {
              (cl-set-difference '(1 2 3 4) '(3 5))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 2 4)");
+    }
+
+    #[test]
+    fn executes_cl_intersection_keeps_common_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-intersection '(1 2 3 4) '(3 4 5 6))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(3 4)");
+    }
+
+    #[test]
+    fn executes_cl_union_merges_without_duplicates() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-union '(1 2 3) '(3 4 5))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 3 4 5)");
     }
 
     #[test]
