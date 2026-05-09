@@ -1210,6 +1210,10 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.is_bound_symbol(args[0]);
                 self.runtime_bool(result)
             }),
+            "makunbound" => self.exact_arity(name, args, 1).and_then(|_| {
+                let result = self.runtime.set_symbol_unbound(args[0]).map(|()| args[0]);
+                self.runtime_value(result)
+            }),
             "fboundp" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.fboundp(args[0])),
@@ -7841,9 +7845,7 @@ mod tests {
     }
 
     #[test]
-
-    #[ignore = "makunbound: dynamic binding semantic gap"]
-    fn gap_makunbound_dynamic() {
+    fn executes_makunbound_unbinds_defvar() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (progn (defvar y 42) (makunbound 'y) (not (boundp 'y)))",

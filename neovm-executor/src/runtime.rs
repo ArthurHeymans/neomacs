@@ -1074,6 +1074,16 @@ impl Runtime {
             || self.expect_symbol(symbol)?.value.is_some())
     }
 
+    pub fn set_symbol_unbound(&mut self, symbol: LispValue) -> Result<(), RuntimeError> {
+        if symbol.is_nil() || symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: if symbol.is_nil() { "nil" } else { "t" }.to_string(),
+            });
+        }
+        self.expect_symbol_mut(symbol)?.value = None;
+        Ok(())
+    }
+
     pub fn bind_dynamic_by_name(
         &mut self,
         name: &str,
