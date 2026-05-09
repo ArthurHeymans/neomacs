@@ -8602,6 +8602,8 @@ mod tests {
             Some(LispValue::TRUE));
         assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 4)))").0,
             Some(LispValue::NIL));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal nil nil)").0,
+            Some(LispValue::TRUE));
     }
 
     #[test]
