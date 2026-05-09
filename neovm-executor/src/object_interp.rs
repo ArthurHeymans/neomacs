@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_cddr_skips_two() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(car (cddr '(10 20 30 40)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(30)));
+    }
+
+    #[test]
     fn executes_substring_from_index() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(substring \"hello\" 1)",
