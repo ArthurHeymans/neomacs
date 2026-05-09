@@ -710,10 +710,26 @@ fn preserve_emacs_upcase_string_payload(code: i64) -> bool {
 }
 
 fn runtime_string_result_multibyte(source_is_multibyte: bool, rendered: &str) -> bool {
-    source_is_multibyte
-        || super::super::string_escape::decode_storage_char_codes(rendered)
-            .into_iter()
-            .any(|code| code > 0xFF)
+    if source_is_multibyte {
+        return true;
+    }
+
+    // GNU `styled_format` starts with the format/argument string
+    // multibyteness, but retries with a multibyte result when `%S`/prin1 or
+    // quoting produces multibyte text.  Neomacs runtime strings still use
+    // private sentinels for explicit unibyte bytes; those sentinels must not
+    // by themselves promote the result.  Ordinary non-ASCII Unicode text
+    // (including Latin-1 codepoints like U+00E9) must promote, otherwise the
+    // formatted Lisp string stores it as a unibyte byte and later displays the
+    // U+E3xx sentinel.
+    rendered.chars().any(|ch| {
+        let code = ch as u32;
+        code > 0x7F
+            && !(0xE300..=0xE3FF).contains(&code)
+            && !(0xE200..=0xE2FF).contains(&code)
+            && !(0xE110..=0xE116).contains(&code)
+            && code != 0xE100
+    })
 }
 
 fn preserve_emacs_downcase_payload(code: i64) -> bool {

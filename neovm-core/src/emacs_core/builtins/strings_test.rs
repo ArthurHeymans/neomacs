@@ -121,6 +121,30 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
 }
 
 #[test]
+fn format_percent_s_promotes_result_when_printer_outputs_non_ascii_text() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = builtin_format_wrapper_strict_slice(
+        &mut ctx,
+        &[
+            Value::string("%S"),
+            Value::list(vec![
+                Value::string("é"),
+                Value::fixnum(233),
+                Value::string("é"),
+            ]),
+        ],
+    )
+    .expect("format should evaluate");
+    let string = result.as_lisp_string().expect("format returns a string");
+
+    assert!(string.is_multibyte());
+    assert_eq!(result.as_utf8_str(), Some("(\"é\" 233 \"é\")"));
+    assert_eq!(string.as_bytes(), b"(\"\xc3\xa9\" 233 \"\xc3\xa9\")");
+}
+
+#[test]
 fn format_percent_g_uses_gnu_fixed_precision_for_negative_exponents() {
     crate::test_utils::init_test_tracing();
 
