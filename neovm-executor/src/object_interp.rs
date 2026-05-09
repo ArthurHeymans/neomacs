@@ -2048,6 +2048,9 @@ impl Interpreter<'_, '_, '_> {
             "mapcan" | "cl-mapcan" => self.subr_2(name, args, |s| {
                 s.mapcan(args[0], args[1])
             }),
+            "mapcon" | "cl-mapcon" => self.subr_2(name, args, |s| {
+                s.mapcon(args[0], args[1])
+            }),
             "every" | "cl-every" => self.subr_2(name, args, |s| {
                 s.sequence_every(args[0], args[1])
             }),
@@ -3835,6 +3838,23 @@ impl Interpreter<'_, '_, '_> {
             results.push(self.execute_funcall(function, &[current])?);
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn mapcon(&mut self, function: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut results = Vec::new();
+        loop {
+            if current.is_nil() {
+                break;
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            results.push(self.execute_funcall(function, &[current])?);
+            current = self.runtime.cdr(current).ok()?;
+        }
+        self.nconc(&results)
     }
 
     fn mapcan(&mut self, function: LispValue, list: LispValue) -> Option<LispValue> {
@@ -6586,6 +6606,7 @@ fn is_primitive_name(name: &str) -> bool {
             "maplist",
             "mapc",
             "mapcan",
+            "mapcon",
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
@@ -11532,6 +11553,15 @@ mod tests {
              (mapcan (lambda (x) (list x (* 10 x))) (list 1 2 3))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 10 2 20 3 30)");
+    }
+
+    #[test]
+    fn executes_mapcon_on_cdrs() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcon (lambda (tail) (list (car tail))) '(a b c))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(a b c)");
     }
 
     #[test]
