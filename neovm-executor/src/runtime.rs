@@ -1072,6 +1072,27 @@ impl Runtime {
         Ok(value)
     }
 
+    pub fn default_value(&self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
+        // Bypass dynamic bindings — return the symbol's global value cell directly.
+        if symbol.is_nil() { return Ok(LispValue::NIL); }
+        if symbol.is_true() { return Ok(LispValue::TRUE); }
+        let sym = self.expect_symbol(symbol)?;
+        sym.value.ok_or_else(|| RuntimeError::VoidVariable {
+            name: sym.name.clone(),
+        })
+    }
+
+    pub fn set_default(&mut self, symbol: LispValue, value: LispValue) -> Result<LispValue, RuntimeError> {
+        // Bypass dynamic bindings — set the symbol's global value cell directly.
+        if symbol.is_nil() || symbol.is_true() {
+            return Err(RuntimeError::ConstantSymbol {
+                name: if symbol.is_nil() { "nil".into() } else { "t".into() },
+            });
+        }
+        self.expect_symbol_mut(symbol)?.value = Some(value);
+        Ok(value)
+    }
+
     pub fn set_symbol_value_by_name(
         &mut self,
         name: &str,

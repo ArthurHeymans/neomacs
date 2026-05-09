@@ -1242,6 +1242,14 @@ impl Interpreter<'_, '_, '_> {
                 let sym = format!("{}{}", prefix, self.runtime.symbol_count());
                 Some(self.runtime.intern(&sym))
             }),
+            "default-value" => self.subr_1(name, args, |s| {
+                let result = s.runtime.default_value(args[0]);
+                s.runtime_value(result)
+            }),
+            "set-default" => self.subr_2(name, args, |s| {
+                let result = s.runtime.set_default(args[0], args[1]);
+                s.runtime_value(result)
+            }),
             "symbol-value" => self.subr_1(name, args, |s| {
                 let result = s.runtime.symbol_value(args[0]);
                 s.runtime_value(result)
@@ -6838,6 +6846,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cos",
             "defalias",
             "define-error",
+            "default-value",
             "defun",
             "delq",
             "delete",
@@ -6964,6 +6973,7 @@ fn is_primitive_name(name: &str) -> bool {
             "round",
             "safe-length",
             "set",
+            "set-default",
             "setcar",
             "setcdr",
             "setplist",
@@ -12005,6 +12015,24 @@ mod tests {
              (let ((xs (list 1 2 3))) (cl-tailp (cdr xs) xs))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_default_value_returns_global_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defvar test-var 42) (default-value 'test-var)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_set_default_sets_global_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defvar my-var 10) (set-default 'my-var 99) (default-value 'my-var)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
 
     #[test]
