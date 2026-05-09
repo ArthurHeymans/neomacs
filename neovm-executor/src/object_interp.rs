@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_subseq_range() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_remq_removes_by_identity() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
