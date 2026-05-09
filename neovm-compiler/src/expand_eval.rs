@@ -16,6 +16,8 @@ pub struct MacroFunction {
 pub struct MacroEnv {
     bindings: HashMap<String, MacroValue>,
     functions: HashMap<String, MacroFunction>,
+    /// Non-local exit signal: (tag, value). Set by `throw`, cleared by `catch`.
+    throw_signal: Option<(String, MacroValue)>,
 }
 
 impl MacroEnv {
@@ -50,6 +52,14 @@ impl MacroEnv {
 
     pub fn lookup_function(&self, name: &str) -> Option<&MacroFunction> {
         self.functions.get(name)
+    }
+
+    pub fn set_throw(&mut self, tag: String, value: MacroValue) {
+        self.throw_signal = Some((tag, value));
+    }
+
+    pub fn take_throw(&mut self) -> Option<(String, MacroValue)> {
+        self.throw_signal.take()
     }
 }
 
@@ -193,6 +203,53 @@ impl MacroEval {
             Some("setq") => self.eval_setq(span, &items[1..], env),
             Some("progn") => self.eval_progn(&items[1..], env),
             Some("while") => self.eval_while(span, &items[1..], env),
+            Some("catch") => {
+                if items.len() < 3 {
+                    self.error(span, "catch requires tag and body");
+                    return Err(());
+                }
+                let tag_val = self.eval(&items[1], env)?;
+                let tag_name = tag_val.as_symbol_name().unwrap_or("").to_string();
+                // Save outer throw state
+                let saved = env.take_throw();
+                // Evaluate body — if throw with matching tag, catch it
+                let result = self.eval_progn(&items[2..], env);
+                match result {
+                    Ok(v) => {
+                        // Restore outer throw (or keep what might have been re-set)
+                        let _ = env.take_throw();
+                        if let Some(saved_sig) = saved {
+                            env.set_throw(saved_sig.0, saved_sig.1);
+                        }
+                        Ok(v)
+                    }
+                    Err(()) => {
+                        if let Some((thrown_tag, thrown_val)) = env.take_throw() {
+                            if thrown_tag == tag_name {
+                                // Restore outer saved throw state
+                                if let Some(saved_sig) = saved {
+                                    env.set_throw(saved_sig.0, saved_sig.1);
+                                }
+                                return Ok(thrown_val);
+                            }
+                            // Not our tag — re-set and propagate
+                            env.set_throw(thrown_tag, thrown_val);
+                        }
+                        Err(())
+                    }
+                }
+            }
+            Some("throw") => {
+                if items.len() < 3 {
+                    self.error(span, "throw requires tag and value");
+                    return Err(());
+                }
+                let tag_val = self.eval(&items[1], env)?;
+                let tag_name = tag_val.as_symbol_name().unwrap_or("").to_string();
+                let value = self.eval(&items[2], env)?;
+                env.set_throw(tag_name, value);
+                Err(())
+            }
 
             // Thread primitives — passed through to the HIR compiler.
             Some("make-thread") | Some("thread-yield") | Some("thread-join")

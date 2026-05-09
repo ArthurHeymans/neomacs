@@ -2162,15 +2162,6 @@ impl Interpreter<'_, '_, '_> {
                     LispValue::expect_fixnum(av ^ bv)
                 })
             }),
-            "lsh" | "ash" => self.exact_arity(name, args, 2).and_then(|_| {
-                let val = self.fixnum_arg(name, args[0])?;
-                let shift = self.fixnum_arg(name, args[1])?;
-                if shift >= 0 {
-                    self.fixnum(val.wrapping_shl(shift as u32), name)
-                } else {
-                    self.fixnum(val.wrapping_shr((-shift) as u32), name)
-                }
-            }),
             "max" => {
                 if args.is_empty() {
                     self.error("primitive `max` requires at least one argument");
@@ -3027,6 +3018,8 @@ impl Interpreter<'_, '_, '_> {
         let start_idx = self.sequence_index("subseq", start)?;
         let len = if self.runtime.is_string(seq) {
             self.string_contents_owned(seq)?.len()
+        } else if self.runtime.is_cons(seq) || seq.is_nil() {
+            self.safe_length(seq)?.as_fixnum().unwrap_or(0) as usize
         } else {
             match self.runtime.vector_elements(seq) {
                 Ok(e) => e.len(),
@@ -3051,6 +3044,10 @@ impl Interpreter<'_, '_, '_> {
             let contents = self.string_contents_owned(seq)?;
             let slice = &contents[start_idx..end_idx];
             Some(self.runtime.string(slice.to_string()))
+        } else if self.runtime.is_cons(seq) || seq.is_nil() {
+            let elements = self.list_values(seq)?;
+            let slice = &elements[start_idx..end_idx];
+            Some(make_list(self.runtime, slice.iter().copied()))
         } else {
             let elements = match self.runtime.vector_elements(seq) {
                 Ok(e) => e,
@@ -7793,8 +7790,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "cl-loop named: needs catch wrapper in expander"]
-    fn gap_cl_loop_named_return() {
+    fn executes_cl_loop_named_return() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (require 'cl-lib)\
@@ -7815,9 +7811,7 @@ mod tests {
     }
 
     #[test]
-
-    #[ignore = "subseq: expect-fixnum assertion fails"]
-    fn gap_subseq_range() {
+    fn executes_subseq_on_list() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))",
         );
@@ -7835,7 +7829,7 @@ mod tests {
 
     #[test]
 
-    fn gap_cl_accessors() {
+    fn executes_cl_accessors() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (require 'cl-lib)\

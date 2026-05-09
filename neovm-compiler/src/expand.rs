@@ -2404,6 +2404,16 @@ impl Expander {
         let mut finally_body: Vec<SurfaceForm> = Vec::new();
         let mut with_bindings: Vec<(String, SurfaceForm)> = Vec::new();
         let mut accums: Vec<(AccumKind, String, SurfaceForm)> = Vec::new(); // (kind, var, init)
+        // Extract named block tag before classification (must be first pass
+        // so it's available for all clause handlers).
+        let loop_tag: String = clauses
+            .iter()
+            .find_map(|c| match c {
+                LoopClause::Named { name } => Some(name.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| "--cl-loop-tag--".to_string());
+
         let mut has_repeat = false;
         let mut repeat_count: Option<SurfaceForm> = None;
         let mut has_always_never = false;
@@ -2436,6 +2446,7 @@ impl Expander {
                     has_repeat = true;
                     repeat_count = Some(count.clone());
                 }
+                LoopClause::Named { .. } => { /* handled before the loop */ }
                 LoopClause::Initially { body } => initially_body.extend(body.iter().cloned()),
                 LoopClause::Finally { body } => {
                     // Process finally body forms, converting (return expr) to (throw ...)
@@ -2455,7 +2466,7 @@ impl Expander {
                                     list_form(
                                         vec![
                                             symbol_form("quote", span),
-                                            symbol_form("--cl-loop-tag--", span),
+                                            symbol_form(&loop_tag, span),
                                         ],
                                         span,
                                     ),
@@ -2936,7 +2947,7 @@ impl Expander {
                             list_form(
                                 vec![
                                     symbol_form("quote", span),
-                                    symbol_form("--cl-loop-tag--", span),
+                                    symbol_form(&loop_tag, span),
                                 ],
                                 span,
                             ),
@@ -2950,9 +2961,9 @@ impl Expander {
                     then_clauses,
                     else_clauses,
                 } => {
-                    let then_body = self.build_if_body(span, then_clauses, &accum_map);
+                    let then_body = self.build_if_body(span, then_clauses, &accum_map, &loop_tag);
                     let if_form = if let Some(else_cls) = else_clauses {
-                        let else_body = self.build_if_body(span, else_cls, &accum_map);
+                        let else_body = self.build_if_body(span, else_cls, &accum_map, &loop_tag);
                         list_form(
                             vec![
                                 symbol_form("if", span),
@@ -3296,15 +3307,17 @@ impl Expander {
             span,
         );
 
-        // Wrap in catch/throw if return clause present
-        if has_return {
+        // Wrap in catch/throw if return clause present, or if named block
+        // (so cl-return-from can target the named block).
+        let has_named = loop_tag != "--cl-loop-tag--";
+        if has_return || has_named {
             list_form(
                 vec![
                     symbol_form("catch", span),
                     list_form(
                         vec![
                             symbol_form("quote", span),
-                            symbol_form("--cl-loop-tag--", span),
+                            symbol_form(&loop_tag, span),
                         ],
                         span,
                     ),
@@ -3438,6 +3451,7 @@ impl Expander {
         span: Span,
         clauses: &[LoopClause],
         accum_map: &[(AccumKind, Option<String>, String)],
+        tag: &str,
     ) -> Vec<SurfaceForm> {
         let mut body: Vec<SurfaceForm> = Vec::new();
         for clause in clauses {
@@ -3554,7 +3568,7 @@ impl Expander {
                             list_form(
                                 vec![
                                     symbol_form("quote", span),
-                                    symbol_form("--cl-loop-tag--", span),
+                                    symbol_form(tag, span),
                                 ],
                                 span,
                             ),
@@ -3786,7 +3800,8 @@ impl Expander {
                 }
                 "finally" => {
                     pos += 1;
-                    // Handle "finally return expr" — generate a throw in the finally body
+                    // Handle "finally return expr" — store as (return expr); the actual
+                    // throw tag is injected by build_loop_expansion with the correct tag.
                     if pos < items.len() && items[pos].symbol_name() == Some("return") {
                         pos += 1;
                         if pos < items.len() {
@@ -3795,14 +3810,7 @@ impl Expander {
                             clauses.push(LoopClause::Finally {
                                 body: vec![list_form(
                                     vec![
-                                        symbol_form("throw", span),
-                                        list_form(
-                                            vec![
-                                                symbol_form("quote", span),
-                                                symbol_form("--cl-loop-tag--", span),
-                                            ],
-                                            span,
-                                        ),
+                                        symbol_form("return", span),
                                         expr,
                                     ],
                                     span,
@@ -3835,6 +3843,15 @@ impl Expander {
                     clauses.push(LoopClause::Never {
                         expr: items[pos].clone(),
                     });
+                    pos += 1;
+                }
+                "named" => {
+                    pos += 1;
+                    if pos >= items.len() {
+                        return None;
+                    }
+                    let name = items[pos].symbol_name().map(str::to_string)?;
+                    clauses.push(LoopClause::Named { name });
                     pos += 1;
                 }
                 "repeat" => {
@@ -4233,6 +4250,9 @@ enum LoopClause {
     Repeat {
         count: SurfaceForm,
     },
+    Named {
+        name: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4281,6 +4301,7 @@ fn is_loop_keyword(kw: &str) -> bool {
             | "thereis"
             | "repeat"
             | "into"
+            | "named"
     )
 }
 

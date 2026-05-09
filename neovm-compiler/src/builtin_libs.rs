@@ -53,13 +53,13 @@ pub const CL_LIB_SOURCE: &str = r#"
 
 (defmacro cl-block (name &rest body)
   (let ((tag (if (eq name nil) '--cl-block-nil-- name)))
-    (cons 'catch (cons tag body))))
+    (cons 'catch (cons (list 'quote tag) body))))
 
 (defmacro cl-return (&optional value)
-  (list 'throw '--cl-block-nil-- (or value nil)))
+  (list 'throw (list 'quote '--cl-block-nil--) (or value nil)))
 
 (defmacro cl-return-from (block &optional value)
-  (list 'throw block (or value nil)))
+  (list 'throw (list 'quote block) (or value nil)))
 
 (defmacro with-mutex (mutex &rest body)
   (let ((m (make-symbol \"m\")))
