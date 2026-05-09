@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_flet_local_function() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-flet ((double (x) (* x 2))) (double 21))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_eval_when_compile_evaluates_at_compile_time() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
