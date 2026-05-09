@@ -827,7 +827,11 @@ impl OldGenState {
     /// roots for the trace.
     pub(crate) fn clear_all_dirty_cards(&self) {
         for block in self.blocks.read().iter() {
-            block.card_table().clear_all();
+            // Skip blocks with no dirty cards — common after
+            // minor GC where only a few blocks were touched.
+            if block.card_table().dirty_card_count() > 0 {
+                block.card_table().clear_all();
+            }
         }
     }
 
