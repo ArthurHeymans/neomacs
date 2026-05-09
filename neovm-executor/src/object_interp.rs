@@ -1087,6 +1087,15 @@ impl Interpreter<'_, '_, '_> {
             "cons" => self
                 .exact_arity(name, args, 2)
                 .map(|_| self.runtime.cons(args[0], args[1])),
+            "list*" => self.subr_vararg(name, args, |s| {
+                // (list* a b c) = (cons a (cons b c))
+                // (list* a) = a, (list*) = nil
+                let mut result = args.last().copied().unwrap_or(LispValue::NIL);
+                for i in (0..args.len().saturating_sub(1)).rev() {
+                    result = s.runtime.cons(args[i], result);
+                }
+                Some(result)
+            }),
             "car" => self.exact_arity(name, args, 1).and_then(|_| {
                 let result = self.runtime.car(args[0]);
                 self.runtime_value(result)
@@ -6015,6 +6024,7 @@ fn is_primitive_name(name: &str) -> bool {
             "last",
             "length",
             "list",
+            "list*",
             "listp",
             "load",
             "log",
@@ -10793,6 +10803,42 @@ mod tests {
              (cl-count 'x (list 'a 'x 'b 'x 'c 'x))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_list_star_builds_dotted_pair() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list* 1 2)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 . 2)");
+    }
+
+    #[test]
+    fn executes_list_star_builds_chain_with_tail() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list* 1 2 3)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 . 3)");
+    }
+
+    #[test]
+    fn executes_list_star_one_arg_is_identity() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list* 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_list_star_no_args_is_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list*)",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
     }
 
     #[test]
