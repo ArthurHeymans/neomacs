@@ -1946,6 +1946,9 @@ impl Interpreter<'_, '_, '_> {
                     bool_value(false)
                 }
             }),
+            "pairlis" | "cl-pairlis" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.pairlis(args[0], args[1], args.get(2).copied().unwrap_or(LispValue::NIL))),
             "cl-adjoin" => self.subr_2(name, args, |s| {
                 s.cl_adjoin(args[0], args[1])
             }),
@@ -3369,6 +3372,22 @@ impl Interpreter<'_, '_, '_> {
             }
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn pairlis(
+        &mut self,
+        keys: LispValue,
+        values: LispValue,
+        alist: LispValue,
+    ) -> Option<LispValue> {
+        let keys = self.list_values(keys)?;
+        let vals = self.list_values(values)?;
+        let mut result = alist;
+        for (k, v) in keys.into_iter().zip(vals.into_iter()).rev() {
+            let pair = self.runtime.cons(k, v);
+            result = self.runtime.cons(pair, result);
+        }
+        Some(result)
     }
 
     fn assoc(&mut self, key: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
@@ -6123,6 +6142,7 @@ fn is_primitive_name(name: &str) -> bool {
             "number-sequence",
             "number-to-string",
             "numberp",
+            "pairlis",
             "plist-get",
             "plist-put",
             "prin1",
@@ -10988,6 +11008,24 @@ mod tests {
              (cl-subst-if-not 0 #'evenp '(1 2 3 4))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(0 2 0 4)");
+    }
+
+    #[test]
+    fn executes_pairlis_creates_alist() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pairlis '(a b c) '(1 2 3))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "((a . 1) (b . 2) (c . 3))");
+    }
+
+    #[test]
+    fn executes_pairlis_appends_to_existing_alist() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pairlis '(c d) '(3 4) '((a . 1) (b . 2)))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "((c . 3) (d . 4) (a . 1) (b . 2))");
     }
 
     #[test]
