@@ -12094,6 +12094,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_default_boundp_checks_global_binding() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defvar boundp-test-var 42) (default-boundp 'boundp-test-var)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
