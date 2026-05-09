@@ -2574,6 +2574,9 @@ impl Interpreter<'_, '_, '_> {
             "string-or-null-p" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))),
+            "bare-symbol-p" => self.exact_arity(name, args, 1).map(|_| {
+                bool_value(!args[0].is_nil() && !args[0].is_true() && self.runtime.is_symbol(args[0]))
+            }),
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
@@ -6853,6 +6856,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-assq",
             "atom",
             "autoload",
+            "bare-symbol-p",
             "bool-vector-p",
             "booleanp",
             "boundp",
