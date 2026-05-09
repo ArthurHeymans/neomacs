@@ -2294,6 +2294,7 @@ impl Interpreter<'_, '_, '_> {
                     self.format_string(args[0], &args[1..])
                 }
             }
+            "terpri" => Some(LispValue::NIL),
             "print" | "prin1" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "signal" => self.exact_arity(name, args, 2).and_then(|_| {
                 self.pending_signal = Some(SignaledValue {
@@ -7071,6 +7072,7 @@ fn is_primitive_name(name: &str) -> bool {
             "symbol-value",
             "symbolp",
             "tan",
+            "terpri",
             "threadp",
             "truncate",
             "type-of",
