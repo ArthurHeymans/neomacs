@@ -8505,6 +8505,15 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
+    #[test]
+    fn executes_cl_remove_duplicates_on_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-remove-duplicates [1 2 3 1 2 3]))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
