@@ -582,6 +582,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let n = args[0].as_int()?;
             Some(if n & 1 != 0 { SsaConst::True } else { SsaConst::Nil })
         }
+        "minusp" | "cl-minusp" if args.len() == 1 => {
+            let n = args[0].as_int()?;
+            Some(if n < 0 { SsaConst::True } else { SsaConst::Nil })
+        }
+        "plusp" | "cl-plusp" if args.len() == 1 => {
+            let n = args[0].as_int()?;
+            Some(if n > 0 { SsaConst::True } else { SsaConst::Nil })
+        }
         "special-form-p" if args.len() == 1 => {
             let name = match args[0] {
                 SsaConst::Symbol(s) => s.as_str(),
