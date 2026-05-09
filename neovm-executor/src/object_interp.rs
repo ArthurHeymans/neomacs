@@ -7801,6 +7801,45 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "pcase-let*: expander only handles symbol bindings"]
+    fn gap_pcase_let_star_destructure() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase-let* ((`(,x ,y) '(1 2))) (+ x y))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    #[ignore = "subseq: arity mismatch with 3 args"]
+    fn gap_subseq_range() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    #[ignore = "macroexpand: not implemented"]
+    fn gap_macroexpand() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(macroexpand '(when t 42))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    #[ignore = "cl-first/second: not in builtin libs"]
+    fn gap_cl_accessors() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (+ (cl-first '(1 2 3)) (cl-second '(1 2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     #[ignore = "makunbound: setq creates lexical binding"]
     fn gap_makunbound_dynamic() {
         let (value, _) = execute(
