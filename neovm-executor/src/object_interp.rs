@@ -9563,6 +9563,36 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_do_simple_iteration() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-do ((i 0 (1+ i))) \
+               ((>= i 5) i))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn executes_cl_do_return_result() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-do ((x 1 (1+ x))) \
+               ((> x 5) (* x 10)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(60)));
+    }
+
+    #[test]
+    fn executes_cl_do_star_sequential() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-do* ((x 1 (1+ x)) (y (* x 2) (* x 2))) \
+               ((> x 3) y))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_let_with_empty_bindings() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\

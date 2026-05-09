@@ -653,6 +653,10 @@ impl Expander {
                     SurfaceForm::new(SurfaceKind::List(expanded), span)
                 }
             }
+            kw @ ("cl-do" | "cl-do*") => {
+                let sequential = kw == "cl-do*";
+                self.expand_cl_do(span, items, sequential)
+            }
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -1209,7 +1213,7 @@ impl Expander {
                     span,
                 ));
                 self.emit_pcase_destructure(span, template, &tmp, &mut let_bindings, false);
-            } else if let SurfaceKind::List(pattern_items) = &pat.kind {
+            } else if let SurfaceKind::List(_) = &pat.kind {
                 // Simple list pattern: (x y z) -> car/cdr chain
                 // Bare symbols are bindings (unlike backquote where only
                 // ,X and ,@X are bindings).
@@ -2633,6 +2637,102 @@ impl Expander {
                 span,
             ),
         ];
+        let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    // ── cl-do / cl-do* expansion ────────────────────────────────────────
+
+    fn expand_cl_do(
+        &mut self,
+        span: Span,
+        items: Vec<SurfaceForm>,
+        sequential: bool,
+    ) -> SurfaceForm {
+        if items.len() < 3 {
+            self.error(span, "cl-do requires bindings, end-test, and body");
+            return nil_form(span);
+        }
+        let bindings_form = &items[1];
+        let end_form = &items[2];
+        let body = &items[3..];
+
+        // Parse bindings: ((VAR INIT [STEP]) ...)
+        let bindings_list = match &bindings_form.kind {
+            SurfaceKind::List(b) => b.clone(),
+            _ => {
+                self.error(bindings_form.span, "cl-do bindings must be a list");
+                return nil_form(span);
+            }
+        };
+
+        let let_kind = if sequential { "let*" } else { "let" };
+
+        // Build let-bindings (just VAR INIT)
+        let mut let_bindings: Vec<SurfaceForm> = Vec::new();
+        let mut step_forms: Vec<SurfaceForm> = Vec::new();
+        for binding in &bindings_list {
+            let SurfaceKind::List(parts) = &binding.kind else { continue };
+            if parts.is_empty() { continue; }
+            let var = &parts[0];
+            let init = if parts.len() > 1 { parts[1].clone() } else { nil_form(span) };
+            let_bindings.push(list_form(vec![var.clone(), init], span));
+            // Build step: (setq VAR STEP) or nil if no step
+            if parts.len() > 2 {
+                step_forms.push(list_form(vec![
+                    symbol_form("setq", span),
+                    var.clone(),
+                    parts[2].clone(),
+                ], span));
+            }
+        }
+
+        // Parse end form: (TEST [RESULT...])
+        let (end_test, end_result) = if let SurfaceKind::List(ef) = &end_form.kind {
+            if ef.is_empty() {
+                (nil_form(span), vec![nil_form(span)])
+            } else {
+                let test = ef[0].clone();
+                let result = if ef.len() > 1 {
+                    ef[1..].to_vec()
+                } else {
+                    vec![nil_form(span)]
+                };
+                (test, result)
+            }
+        } else {
+            (end_form.clone(), vec![nil_form(span)])
+        };
+
+        // Build the while loop
+        let mut while_body: Vec<SurfaceForm> = Vec::new();
+        // Body forms
+        while_body.extend(body.iter().cloned());
+        // Step forms at end
+        while_body.extend(step_forms);
+
+        let not_end = list_form(vec![symbol_form("not", span), end_test], span);
+        let while_form = list_form(
+            vec![
+                symbol_form("while", span),
+                not_end,
+                list_form(
+                    std::iter::once(symbol_form("progn", span))
+                        .chain(while_body)
+                        .collect(),
+                    span,
+                ),
+            ],
+            span,
+        );
+
+        // Build (let/let* (bindings) while-loop result...)
+        let mut result = vec![
+            symbol_form(let_kind, span),
+            list_form(let_bindings, span),
+            while_form,
+        ];
+        result.extend(end_result);
         let expanded = list_form(result, span);
         self.expand_form(expanded)
     }
