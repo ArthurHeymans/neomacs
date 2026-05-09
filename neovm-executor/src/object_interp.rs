@@ -3141,7 +3141,9 @@ impl Interpreter<'_, '_, '_> {
         start: LispValue,
         end: Option<LispValue>,
     ) -> Option<LispValue> {
-        let start_idx = self.sequence_index("subseq", start)?;
+        let is_negative = |v: LispValue| -> bool {
+            v.as_fixnum().map(|n| n < 0).unwrap_or(false)
+        };
         let len = if self.runtime.is_string(seq) {
             self.string_contents_owned(seq)?.len()
         } else if self.runtime.is_cons(seq) || seq.is_nil() {
@@ -3155,8 +3157,20 @@ impl Interpreter<'_, '_, '_> {
                 }
             }
         };
+        // Resolve negative indices (count from end), then forward to
+        // sequence_index for the non-negative bound check.
+        let resolve_index = |s: &mut Self, val: LispValue| -> Option<usize> {
+            if is_negative(val) {
+                let neg = -(val.as_fixnum()?);
+                let abs = neg as usize;
+                if abs > len { None } else { Some(len - abs) }
+            } else {
+                s.sequence_index("subseq", val)
+            }
+        };
+        let start_idx = resolve_index(self, start)?;
         let end_idx = match end {
-            Some(e) if !e.is_nil() => self.sequence_index("subseq", e)?,
+            Some(e) if !e.is_nil() => resolve_index(self, e)?,
             _ => len,
         };
         if start_idx > len {
@@ -10890,6 +10904,33 @@ mod tests {
              (cl-some #'identity '())",
         );
         assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_subseq_negative_start_from_end() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (subseq '(a b c d e) -2)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(d e)");
+    }
+
+    #[test]
+    fn executes_subseq_negative_start_and_end() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (subseq '(a b c d e) -3 -1)",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(c d)");
+    }
+
+    #[test]
+    fn executes_subseq_negative_index_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (subseq \"hello\" -3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
