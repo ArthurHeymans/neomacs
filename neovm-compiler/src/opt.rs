@@ -429,6 +429,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }),
             (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
             (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
+            (SsaConst::Float(a), SsaConst::Float(b)) => {
+                Some(if a.to_bits() == b.to_bits() { SsaConst::True } else { SsaConst::Nil })
+            }
             _ => None,
         },
         "1+" if args.len() == 1 => match args[0] {
