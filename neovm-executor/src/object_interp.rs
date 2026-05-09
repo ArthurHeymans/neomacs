@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_butlast_removes_last() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (butlast '(1 2 3 4) 2))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_integerp_edge_cases() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
