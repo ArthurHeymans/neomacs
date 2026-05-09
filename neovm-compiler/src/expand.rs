@@ -2827,8 +2827,15 @@ impl Expander {
             ], span),
         ];
         parts.extend(result);
-        let expanded = list_form(parts, span);
-        self.expand_form(expanded)
+        let loop_body = list_form(parts, span);
+        // Wrap in catch for cl-return support.
+        let with_catch = list_form(vec![
+            symbol_form("catch", span),
+            list_form(vec![symbol_form("quote", span),
+                symbol_form("--cl-block-nil--", span)], span),
+            loop_body,
+        ], span);
+        self.expand_form(with_catch)
     }
 
     // ── cl-dotimes expansion ────────────────────────────────────────────
@@ -2895,8 +2902,15 @@ impl Expander {
             ], span),
         ];
         parts.extend(result);
-        let expanded = list_form(parts, span);
-        self.expand_form(expanded)
+        let loop_body = list_form(parts, span);
+        // Wrap in catch for cl-return support.
+        let with_catch = list_form(vec![
+            symbol_form("catch", span),
+            list_form(vec![symbol_form("quote", span),
+                symbol_form("--cl-block-nil--", span)], span),
+            loop_body,
+        ], span);
+        self.expand_form(with_catch)
     }
 
     // ── cl-loop expansion ──────────────────────────────────────────────

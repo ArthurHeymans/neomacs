@@ -8289,6 +8289,28 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_dotimes_with_cl_return() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-dotimes (i 10) \
+               (when (= i 3) (cl-return 99)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_cl_dolist_with_cl_return() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-dolist (x '(a b c d e)) \
+               (when (eq x 'c) (cl-return 42)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
