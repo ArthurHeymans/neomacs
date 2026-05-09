@@ -1982,6 +1982,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-adjoin" => self.subr_2(name, args, |s| {
                 s.cl_adjoin(args[0], args[1])
             }),
+            "cl-replace" => self.subr_2(name, args, |s| {
+                s.cl_replace(args[0], args[1])
+            }),
             "cl-reduce" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.cl_reduce(args[0], args[1], args.get(2).copied())),
@@ -3472,6 +3475,21 @@ impl Interpreter<'_, '_, '_> {
         result.extend_from_slice(&elems1[i..]);
         result.extend_from_slice(&elems2[j..]);
         Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_replace(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
+        let elems1 = self.sequence_values(seq1)?;
+        let elems2 = self.sequence_values(seq2)?;
+        let n = elems1.len().min(elems2.len());
+        let mut result = elems1;
+        for i in 0..n {
+            result[i] = elems2[i];
+        }
+        if seq1.is_nil() || self.runtime.is_cons(seq1) {
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            Some(self.runtime.vector(result))
+        }
     }
 
     fn cl_ldiff(&mut self, list: LispValue, sublist: LispValue) -> Option<LispValue> {
@@ -6486,6 +6504,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-reduce",
             "cl-remove-if",
             "cl-remove-if-not",
+            "cl-replace",
             "cl-set-difference",
             "cl-set-exclusive-or",
             "cl-search",
@@ -11647,6 +11666,15 @@ mod tests {
              (let ((xs (list 1 2 3))) (cl-tailp (cdr xs) xs))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_replace_copies_elements() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-replace '(a b c d) '(x y))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(x y c d)");
     }
 
     #[test]
