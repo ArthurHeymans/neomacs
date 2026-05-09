@@ -10174,6 +10174,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_evenp_oddp_aliases() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-evenp 4)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-oddp 3)").0,
+            Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
