@@ -1163,6 +1163,42 @@ fn property_list_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn property_list_edge_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"plistedge:%S\" (let ((p (list :a 1 :b 2 :a 3))) (list (plist-get p :a) (plist-member p :a) (plist-get (plist-put p :b 9) :b) (condition-case e (plist-get '(:a) :a) (wrong-type-argument (car e)) (error (car e))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("plistedge:")
+                && row.contains("(1 (:a 1")
+                && row.contains(":b 9")
+                && row.contains("nil")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: property-list edge behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "property_list_edge_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn symbol_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
