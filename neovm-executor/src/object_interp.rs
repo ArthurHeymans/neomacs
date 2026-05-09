@@ -1991,6 +1991,9 @@ impl Interpreter<'_, '_, '_> {
             "mapl" | "cl-mapl" => self.subr_2(name, args, |s| {
                 s.maplist(args[0], args[1]).map(|_| args[1])
             }),
+            "mapcan" | "cl-mapcan" => self.subr_2(name, args, |s| {
+                s.mapcan(args[0], args[1])
+            }),
             "every" | "cl-every" => self.subr_2(name, args, |s| {
                 s.sequence_every(args[0], args[1])
             }),
@@ -3597,6 +3600,15 @@ impl Interpreter<'_, '_, '_> {
             results.push(self.execute_funcall(function, &[current])?);
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn mapcan(&mut self, function: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.list_values(list)?;
+        let mut results = Vec::new();
+        for elem in elements {
+            results.push(self.execute_funcall(function, &[elem])?);
+        }
+        self.nconc(&results)
     }
 
     fn mapc(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
@@ -6179,6 +6191,7 @@ fn is_primitive_name(name: &str) -> bool {
             "mapl",
             "maplist",
             "mapc",
+            "mapcan",
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
@@ -11105,11 +11118,20 @@ mod tests {
 
     #[test]
     fn executes_mapl_returns_original_list() {
-        let (value, rt) = execute(
+        let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (let ((xs (list 10 20 30))) (eq xs (mapl #'ignore xs)))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_mapcan_concatenates_results() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcan (lambda (x) (list x (* 10 x))) (list 1 2 3))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 10 2 20 3 30)");
     }
 
     #[test]
