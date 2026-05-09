@@ -1868,6 +1868,14 @@ impl Interpreter<'_, '_, '_> {
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
+            "alist-get" => self
+                .min_max_arity(name, args, 2, 5)
+                .and_then(|_| self.alist_get(
+                    args[0], args[1],
+                    args.get(2).copied(),
+                    args.get(3).copied(),
+                    args.get(4).copied(),
+                )),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -3183,6 +3191,50 @@ impl Interpreter<'_, '_, '_> {
                     }
                 }
             }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn alist_get(
+        &mut self,
+        key: LispValue,
+        alist: LispValue,
+        default: Option<LispValue>,
+        remove: Option<LispValue>,
+        testfn: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let do_remove = remove.is_some_and(|f| !f.is_nil());
+        let use_equal = testfn.is_some_and(|f| !f.is_nil() && f != self.runtime.intern("eq"));
+        let mut current = alist;
+        let mut prev: Option<LispValue> = None;
+        loop {
+            if current.is_nil() {
+                return Some(default.unwrap_or(LispValue::NIL));
+            }
+            if !self.runtime.is_cons(current) {
+                return Some(default.unwrap_or(LispValue::NIL));
+            }
+            let entry = self.runtime.car(current).ok()?;
+            if self.runtime.is_cons(entry) {
+                let entry_key = self.runtime.car(entry).ok()?;
+                let matched = if use_equal {
+                    self.runtime.equal(entry_key, key)
+                } else {
+                    entry_key == key
+                };
+                if matched {
+                    let value = self.runtime.cdr(entry).ok()?;
+                    if do_remove {
+                        // Remove the entry from the alist
+                        let rest = self.runtime.cdr(current).ok()?;
+                        if let Some(p) = prev {
+                            self.runtime.set_cdr(p, rest).ok()?;
+                        }
+                    }
+                    return Some(value);
+                }
+            }
+            prev = Some(current);
             current = self.runtime.cdr(current).ok()?;
         }
     }
@@ -7990,6 +8042,33 @@ mod tests {
              (cdr (assoc-string \"key\" '((\"KEY\" . 42) (\"other\" . 99)) t))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_alist_get_finds_existing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'b '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_alist_get_returns_default_when_missing() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'z '((a . 1)) 99)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_alist_get_returns_nil_when_missing_no_default() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'z '((a . 1)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
