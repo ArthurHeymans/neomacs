@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_lognot_bitwise() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(lognot 0)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(-1)));
+    }
+
+    #[test]
     fn executes_cl_pushnew_dedup() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
