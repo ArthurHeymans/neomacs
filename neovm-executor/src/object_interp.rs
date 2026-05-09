@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_ignore_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(ignore 1 2 3)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_identity_returns_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(identity 42)",
