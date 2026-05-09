@@ -1935,7 +1935,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
-            "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" => self.subr_3(name, args, |s| {
+            "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
             "copy-sequence" => self
