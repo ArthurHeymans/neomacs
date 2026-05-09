@@ -101,7 +101,7 @@ impl NurseryArena {
             // Overflow is impossible: buffer_base is a heap allocation,
             // current is bounded by buffer_len, and both fit in usize.
             let current_addr = buffer_base.wrapping_add(current);
-            let aligned = align_up(current_addr, align)?;
+            let aligned = align_up(current_addr, align);
             let offset = aligned.wrapping_sub(buffer_base);
             let end = offset.wrapping_add(size);
             if end > buffer_len {
@@ -131,11 +131,10 @@ impl NurseryArena {
     }
 }
 
-fn align_up(addr: usize, align: usize) -> Option<usize> {
+fn align_up(addr: usize, align: usize) -> usize {
     debug_assert!(align.is_power_of_two(), "alignment must be a power of two");
     let mask = align - 1;
-    // Overflow impossible: addr is a valid heap pointer, mask is a few bytes.
-    Some((addr.wrapping_add(mask)) & !mask)
+    (addr.wrapping_add(mask)) & !mask
 }
 
 /// A bump-pointer sub-arena owned by a single evacuation worker.
@@ -205,7 +204,7 @@ impl WorkerEvacuationArena {
         let base_addr = self.base.as_ptr() as usize;
         // Overflow impossible: cursor and len are bounded by the slab size.
         let current = base_addr.wrapping_add(self.cursor);
-        let aligned = align_up(current, align)?;
+        let aligned = align_up(current, align);
         let padding = aligned.wrapping_sub(base_addr);
         let end = padding.wrapping_add(size);
         if end > self.len {
@@ -338,7 +337,7 @@ impl NurseryTlab {
         let base_addr = self.base.as_ptr() as usize;
         // Overflow impossible: cursor and len are bounded by the TLAB size.
         let current = base_addr.wrapping_add(self.cursor);
-        let aligned = align_up(current, align)?;
+        let aligned = align_up(current, align);
         let padding = aligned.wrapping_sub(base_addr);
         let end = padding.wrapping_add(size);
         if end > self.len {
