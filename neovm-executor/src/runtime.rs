@@ -32,6 +32,7 @@ pub struct Runtime {
     /// GC-allocated atom addresses. Checked before Vec scan.
     gc_atoms: HashMap<usize, ()>,
     agents: Vec<Box<AgentObj>>,
+    gc_agents: HashMap<usize, ()>,
     mutexes: Vec<Box<MutexObj>>,
     condvars: Vec<Box<CondvarObj>>,
     interned_symbols: HashMap<String, LispValue>,
@@ -70,6 +71,7 @@ impl Default for Runtime {
             atoms: Vec::new(),
             gc_atoms: HashMap::new(),
             agents: Vec::new(),
+            gc_agents: HashMap::new(),
             mutexes: Vec::new(),
             condvars: Vec::new(),
             interned_symbols: HashMap::new(),
@@ -126,6 +128,7 @@ impl Runtime {
             atoms: Vec::new(),
             gc_atoms: HashMap::new(),
             agents: Vec::new(),
+            gc_agents: HashMap::new(),
             mutexes: Vec::new(),
             condvars: Vec::new(),
             interned_symbols: HashMap::new(),
@@ -708,6 +711,9 @@ impl Runtime {
     }
 
     fn agent_by_addr(&self, addr: usize) -> Option<&AgentObj> {
+        if self.gc_agents.contains_key(&addr) {
+            return Some(unsafe { Self::deref_heap(addr) });
+        }
         for obj in &self.agents {
             if (&**obj as *const AgentObj) as usize == addr {
                 return Some(obj);
