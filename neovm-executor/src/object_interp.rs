@@ -12192,6 +12192,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_prefix_p_detects_prefix() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-prefix-p \"hello\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_suffix_p_detects_suffix() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-suffix-p \"world\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
