@@ -660,7 +660,8 @@ impl Expander {
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             "letrec" => self.expand_letrec(span, items),
             "cl-loop" => self.expand_cl_loop(span, items),
-            "cl-case" => self.expand_cl_case(span, items),
+            "cl-case" => self.expand_cl_case(span, items, false),
+            "cl-ecase" => self.expand_cl_case(span, items, true),
             "cl-destructuring-bind" => {
                 if items.len() >= 4 {
                     let bindings_form = list_form(
@@ -2662,7 +2663,7 @@ impl Expander {
 
     // ── cl-case expansion ──────────────────────────────────────────────
 
-    fn expand_cl_case(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+    fn expand_cl_case(&mut self, span: Span, items: Vec<SurfaceForm>, exhaustive: bool) -> SurfaceForm {
         if items.len() < 3 {
             self.error(span, "cl-case requires an expression and at least one clause");
             return nil_form(span);
@@ -2710,6 +2711,17 @@ impl Expander {
                     .collect(),
                 span,
             ));
+        }
+        if exhaustive {
+            cond_clauses.push(list_form(vec![
+                symbol_form("t", span),
+                list_form(vec![
+                    symbol_form("error", span),
+                    SurfaceForm::new(SurfaceKind::Atom(SurfaceAtom::String(
+                        format!("{temp} fell through ecase")).into()), span),
+                    symbol_form(temp, span),
+                ], span),
+            ], span));
         }
         let result = vec![
             symbol_form("let", span),
