@@ -7967,6 +7967,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_pushnew_dedup() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((lst '(1 2 3))) (cl-pushnew 2 lst) (length lst))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_cl_incf_and_decf() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
