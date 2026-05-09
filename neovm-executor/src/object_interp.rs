@@ -7759,6 +7759,58 @@ mod tests {
     // The defalias cross-form test above proves the calling infrastructure works.
 
     #[test]
+    #[ignore = "defun cross-form: needs SymbolFunctionSet IR to set function slot"]
+    fn gap_defun_cross_form_call() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defun my-add (x y) (+ x y)) (my-add 40 2))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    #[ignore = "defmacro cross-form: needs multi-pass compiler"]
+    fn gap_defmacro_cross_form() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defmacro my-inc (x) (list '+ x 1)) (my-inc 41))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    #[ignore = "interactive in defun: HIR registration bug"]
+    fn gap_defun_with_interactive() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defun my-cmd () (interactive) 42) (my-cmd))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    #[ignore = "cl-loop named: needs catch wrapper in expander"]
+    fn gap_cl_loop_named_return() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-loop named my-block for i from 1 to 10 \
+               do (when (> i 3) (cl-return-from my-block i)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    #[ignore = "makunbound: setq creates lexical binding"]
+    fn gap_makunbound_dynamic() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defvar y 42) (makunbound 'y) (not (boundp 'y)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_numeric_eq_multi_arg() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
