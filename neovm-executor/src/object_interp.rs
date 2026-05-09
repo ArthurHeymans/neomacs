@@ -1932,6 +1932,15 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
+            "cl-position" => self.subr_2(name, args, |s| {
+                s.cl_position(args[0], args[1])
+            }),
+            "cl-find" => self.subr_2(name, args, |s| {
+                s.cl_find(args[0], args[1])
+            }),
+            "cl-count" => self.subr_2(name, args, |s| {
+                s.cl_count(args[0], args[1])
+            }),
             "cl-concatenate" => self.subr_vararg(name, args, |s| {
                 s.cl_concatenate(args)
             }),
@@ -3191,6 +3200,89 @@ impl Interpreter<'_, '_, '_> {
             let car = self.runtime.car(current).ok()?;
             if self.runtime.equal(car, needle) {
                 return Some(current);
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn eql_values(&self, a: LispValue, b: LispValue) -> bool {
+        if a == b {
+            return true;
+        }
+        if self.runtime.is_float(a) && self.runtime.is_float(b) {
+            let fa = self.runtime.float_data(a).unwrap_or(0.0);
+            let fb = self.runtime.float_data(b).unwrap_or(0.0);
+            return fa.to_bits() == fb.to_bits();
+        }
+        if self.runtime.is_bignum(a) && self.runtime.is_bignum(b) {
+            let ba = self.runtime.bignum_data(a).unwrap_or_default();
+            let bb = self.runtime.bignum_data(b).unwrap_or_default();
+            return ba == bb;
+        }
+        false
+    }
+
+    fn cl_position(&mut self, item: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut idx = 0i64;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.eql_values(car, item) {
+                return self.fixnum(idx, "cl-position");
+            }
+            current = self.runtime.cdr(current).ok()?;
+            idx += 1;
+        }
+    }
+
+    fn cl_find(&mut self, item: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.eql_values(car, item) {
+                return Some(car);
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn cl_count(&mut self, item: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut count = 0i64;
+        loop {
+            if current.is_nil() {
+                return self.fixnum(count, "cl-count");
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.eql_values(car, item) {
+                count += 1;
             }
             current = self.runtime.cdr(current).ok()?;
         }
@@ -5795,10 +5887,13 @@ fn is_primitive_name(name: &str) -> bool {
             "ceiling",
             "char-table-p",
             "char-to-string",
+            "cl-count",
             "cl-evenp",
+            "cl-find",
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-position",
             "cl-concatenate",
             "cl-delete",
             "cl-delete-duplicates",
@@ -10465,5 +10560,77 @@ mod tests {
              (let ((xs (list 10 20 30))) (setf (nth 1 xs) 99) (nth 1 xs))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_cl_position_finds_index() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-position 2 (list 1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_cl_position_not_found_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-position 99 (list 1 2 3))",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_position_empty_list_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-position 1 '())",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_find_returns_item() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-find 'b (list 'a 'b 'c))",
+        );
+        assert_eq!(rt.symbol_name(value.unwrap()).unwrap(), "b");
+    }
+
+    #[test]
+    fn executes_cl_find_not_found_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-find 'z (list 'a 'b 'c))",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_count_counts_occurrences() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-count 1 (list 1 2 1 3 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_count_returns_zero_for_none() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-count 99 (list 1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_cl_count_empty_list_returns_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-count 1 '())",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 }
