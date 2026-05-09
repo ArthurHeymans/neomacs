@@ -3616,11 +3616,11 @@ impl Interpreter<'_, '_, '_> {
         for elem in elements {
             let key = if self.runtime.is_float(elem) {
                 self.runtime.float_data(elem).ok()?.to_bits()
-            } else if self.runtime.is_string(elem) {
-                self.runtime.string_contents(elem).ok()?.len() as u64
             } else if let Some(n) = elem.as_fixnum() {
                 n as u64
             } else {
+                // For eql comparison (default): identity-based for strings and other heap objects.
+                // Two distinct strings with same content are NOT eql (unlike equal).
                 elem.heap_addr().unwrap_or(0) as u64
             };
             if seen.insert(key) {
