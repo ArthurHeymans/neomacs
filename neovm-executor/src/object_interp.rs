@@ -1360,6 +1360,9 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil())),
             "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
+            "indirect-function" => self.subr_1(name, args, |s| {
+                s.indirect_function(args[0])
+            }),
             "ignore" => Some(LispValue::NIL),
             "always" => Some(LispValue::TRUE),
             "prog1" => {
@@ -3741,6 +3744,26 @@ impl Interpreter<'_, '_, '_> {
             current = self.runtime.cdr(val_cell).ok()?;
         }
         Some(LispValue::NIL)
+    }
+
+    fn indirect_function(&mut self, object: LispValue) -> Option<LispValue> {
+        if self.runtime.is_symbol(object) {
+            match self.runtime.symbol_function(object) {
+                Ok(Some(f)) => Some(f),
+                _ => Some(object),
+            }
+        } else if self.runtime.is_cons(object) {
+            // Check if it's a lambda form
+            let car = self.runtime.car(object).ok()?;
+            if let Ok(name) = self.runtime.symbol_name(car) {
+                if name == "lambda" || name == "macro" {
+                    return Some(object);
+                }
+            }
+            Some(object)
+        } else {
+            Some(object)
+        }
     }
 
     fn cl_tailp(&self, sublist: LispValue, list: LispValue) -> bool {
@@ -6895,6 +6918,7 @@ fn is_primitive_name(name: &str) -> bool {
             "hash-table-p",
             "identity",
             "ignore",
+            "indirect-function",
             "integer-or-marker-p",
             "integerp",
             "intern",
