@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_cadr_second_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(cadr '(10 20 30))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(20)));
+    }
+
+    #[test]
     fn executes_remq_removes_by_identity() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
