@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_destructuring_bind() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (destructuring-bind (a b c) '(1 2 3) (+ a b c))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_pcase_constant_match() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
