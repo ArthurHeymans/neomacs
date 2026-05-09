@@ -10206,6 +10206,13 @@ mod tests {
     }
 
     #[test]
+    fn executes_symbol_function_retrieves_binding() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n\
+            (functionp (symbol-function '+))").0,
+            Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
