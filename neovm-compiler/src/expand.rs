@@ -643,6 +643,14 @@ impl Expander {
             "destructuring-bind" => self.expand_destructuring_bind(span, items),
             "flet" | "cl-flet" => self.expand_flet(span, items),
             "labels" | "cl-labels" => self.expand_labels(span, items),
+            "cl-the" => {
+                // (cl-the TYPE FORM) — type assertion, returns FORM at runtime
+                if items.len() >= 3 {
+                    self.expand_form(items[2].clone())
+                } else {
+                    nil_form(span)
+                }
+            }
             "cl-defun" => self.expand_cl_defun(span, items),
             "cl-macrolet" => self.expand_cl_macrolet(span, items),
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
