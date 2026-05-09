@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::hashtab::hash_key_to_visible_value;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 // ===========================================================================
@@ -307,8 +308,15 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
 // ===========================================================================
 
 thread_local! {
-    static HASH_TABLE_TEST_ALIASES: RefCell<HashMap<String, HashTableTest>> =
+    static HASH_TABLE_TEST_ALIASES: RefCell<HashMap<String, HashTableTestAlias>> =
         RefCell::new(HashMap::new());
+}
+
+#[derive(Clone)]
+pub(super) struct HashTableTestAlias {
+    standard_test: Option<HashTableTest>,
+    user_cmp_function: Option<Value>,
+    user_hash_function: Option<Value>,
 }
 
 pub(super) fn reset_collections_thread_locals() {
@@ -345,11 +353,11 @@ fn hash_test_from_user_test_pair(test: &Value, hash: &Value) -> Option<HashTable
     }
 }
 
-fn register_hash_table_test_alias(name: &str, test: HashTableTest) {
-    HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow_mut().insert(name.to_string(), test));
+fn register_hash_table_test_alias(name: &str, alias: HashTableTestAlias) {
+    HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow_mut().insert(name.to_string(), alias));
 }
 
-pub(super) fn lookup_hash_table_test_alias(name: &str) -> Option<HashTableTest> {
+pub(super) fn lookup_hash_table_test_alias(name: &str) -> Option<HashTableTestAlias> {
     HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow().get(name).cloned())
 }
 
@@ -398,11 +406,16 @@ pub(crate) fn builtin_define_hash_table_test(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
-    if let Some(test) = hash_test_from_user_test_pair(&args[1], &args[2])
-        .or_else(|| hash_test_from_designator(&args[1]))
-    {
-        register_hash_table_test_alias(alias_name, test);
-    }
+    let standard_test = hash_test_from_user_test_pair(&args[1], &args[2])
+        .or_else(|| hash_test_from_designator(&args[1]));
+    register_hash_table_test_alias(
+        alias_name,
+        HashTableTestAlias {
+            standard_test: standard_test.clone(),
+            user_cmp_function: standard_test.is_none().then_some(args[1]),
+            user_hash_function: standard_test.is_none().then_some(args[2]),
+        },
+    );
     Ok(Value::list(vec![args[1], args[2]]))
 }
 
@@ -456,8 +469,8 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
                             "eql" => HashTableTest::Eql,
                             "equal" => HashTableTest::Equal,
                             _ => {
-                                if let Some(alias_test) = lookup_hash_table_test_alias(name) {
-                                    alias_test
+                                if let Some(alias) = lookup_hash_table_test_alias(name) {
+                                    alias.standard_test.unwrap_or(HashTableTest::Equal)
                                 } else {
                                     return Err(signal(
                                         "error",
@@ -569,6 +582,12 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
     if table.is_hash_table() {
         let _ = table.with_hash_table_mut(|ht| {
             ht.test_name = test_name;
+            if let Some(name_id) = test_name {
+                if let Some(alias) = lookup_hash_table_test_alias(resolve_sym(name_id)) {
+                    ht.user_cmp_function = alias.user_cmp_function;
+                    ht.user_hash_function = alias.user_hash_function;
+                }
+            }
         });
     }
     Ok(table)
@@ -593,7 +612,67 @@ pub(crate) fn builtin_gethash_3(
     table: Value,
     default: Value,
 ) -> EvalResult {
+    if let Some(result) = builtin_gethash_user_defined(eval, key_value, table, default)? {
+        return Ok(result);
+    }
     builtin_gethash_values(key_value, table, default, eval.symbols_with_pos_enabled)
+}
+
+fn table_user_defined_test(table: &LispHashTable) -> Option<(Value, Value)> {
+    Some((table.user_cmp_function?, table.user_hash_function?))
+}
+
+fn hash_table_user_hash(
+    eval: &mut super::eval::Context,
+    hash_function: Value,
+    key: Value,
+) -> EvalResult {
+    let hash = eval.apply1(hash_function, key)?;
+    Ok(match hash.kind() {
+        ValueKind::Fixnum(n) => Value::fixnum(n),
+        _ => Value::fixnum(super::super::hashtab::sxhash_for(
+            &hash,
+            HashTableTest::Equal,
+        )),
+    })
+}
+
+fn hash_table_user_keys_equal(
+    eval: &mut super::eval::Context,
+    cmp_function: Value,
+    a: Value,
+    b: Value,
+) -> EvalResult {
+    eval.apply2(cmp_function, a, b)
+}
+
+fn builtin_gethash_user_defined(
+    eval: &mut super::eval::Context,
+    key_value: Value,
+    table: Value,
+    default: Value,
+) -> Result<Option<Value>, Flow> {
+    let ValueKind::Veclike(VecLikeType::HashTable) = table.kind() else {
+        return Ok(None);
+    };
+    let ht = table.as_hash_table().unwrap().clone();
+    let Some((cmp_function, hash_function)) = table_user_defined_test(&ht) else {
+        return Ok(None);
+    };
+    let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
+    for key in &ht.insertion_order {
+        if !ht.data.contains_key(key) {
+            continue;
+        }
+        let candidate = hash_key_to_visible_value(&ht, key);
+        if hash_table_user_hash(eval, hash_function, candidate)? != wanted_hash {
+            continue;
+        }
+        if hash_table_user_keys_equal(eval, cmp_function, key_value, candidate)?.is_truthy() {
+            return Ok(Some(ht.data.get(key).copied().unwrap_or(default)));
+        }
+    }
+    Ok(Some(default))
 }
 
 fn builtin_gethash_values(
@@ -633,7 +712,53 @@ pub(crate) fn builtin_puthash_3(
     value: Value,
     table: Value,
 ) -> EvalResult {
+    if builtin_puthash_user_defined(eval, key_value, value, table)?.is_some() {
+        return Ok(value);
+    }
     builtin_puthash_values(key_value, value, table, eval.symbols_with_pos_enabled)
+}
+
+fn builtin_puthash_user_defined(
+    eval: &mut super::eval::Context,
+    key_value: Value,
+    value: Value,
+    table: Value,
+) -> Result<Option<()>, Flow> {
+    let ValueKind::Veclike(VecLikeType::HashTable) = table.kind() else {
+        return Ok(None);
+    };
+    let ht_snapshot = table.as_hash_table().unwrap().clone();
+    let Some((cmp_function, hash_function)) = table_user_defined_test(&ht_snapshot) else {
+        return Ok(None);
+    };
+    let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
+    let mut existing_key = None;
+    for key in &ht_snapshot.insertion_order {
+        if !ht_snapshot.data.contains_key(key) {
+            continue;
+        }
+        let candidate = hash_key_to_visible_value(&ht_snapshot, key);
+        if hash_table_user_hash(eval, hash_function, candidate)? != wanted_hash {
+            continue;
+        }
+        if hash_table_user_keys_equal(eval, cmp_function, key_value, candidate)?.is_truthy() {
+            existing_key = Some(key.clone());
+            break;
+        }
+    }
+
+    let storage_key = existing_key.unwrap_or_else(|| key_value.to_hash_key(&HashTableTest::Eq));
+    let _ = table.with_hash_table_mut(|ht| {
+        if let Some(slot) = ht.data.get_mut(&storage_key) {
+            *slot = value;
+        } else {
+            maybe_resize_hash_table_for_insert(ht, true);
+            ht.data.insert(storage_key.clone(), value);
+            ht.key_snapshots.insert(storage_key.clone(), key_value);
+            ht.insertion_order.push(storage_key);
+        }
+    });
+    Ok(Some(()))
 }
 
 fn builtin_puthash_values(

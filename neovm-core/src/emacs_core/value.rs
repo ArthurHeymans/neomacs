@@ -527,6 +527,8 @@ impl LambdaData {
 pub struct LispHashTable {
     pub test: HashTableTest,
     pub test_name: Option<SymId>,
+    pub user_cmp_function: Option<Value>,
+    pub user_hash_function: Option<Value>,
     pub size: i64,
     pub weakness: Option<HashTableWeakness>,
     pub rehash_size: f64,
@@ -684,6 +686,8 @@ impl LispHashTable {
         Self {
             test,
             test_name: None,
+            user_cmp_function: None,
+            user_hash_function: None,
             size,
             weakness,
             rehash_size,
@@ -708,6 +712,8 @@ pub(crate) fn build_hash_table_literal_value(
         Value::hash_table_with_options(test, size, weakness, rehash_size, rehash_threshold);
     let _ = table_value.with_hash_table_mut(|table| {
         table.test_name = test_name;
+        table.user_cmp_function = None;
+        table.user_hash_function = None;
         for (key_value, val_value) in entries {
             let key = key_value.to_hash_key(&table.test);
             let inserting_new_key = !table.data.contains_key(&key);

@@ -383,7 +383,7 @@ fn sxhash_emacs_uint_for(value: &Value, test: HashTableTest) -> u64 {
     }
 }
 
-fn sxhash_for(value: &Value, test: HashTableTest) -> i64 {
+pub(crate) fn sxhash_for(value: &Value, test: HashTableTest) -> i64 {
     reduce_emacs_uint_to_fixnum(sxhash_emacs_uint_for(value, test))
 }
 

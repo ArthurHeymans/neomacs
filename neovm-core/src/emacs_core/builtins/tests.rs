@@ -4459,6 +4459,29 @@ fn define_hash_table_test_alias_redefinition_updates_mapping() {
 }
 
 #[test]
+fn define_hash_table_test_accepts_user_defined_lisp_functions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let result = eval.eval_str(
+        r#"
+        (progn
+          (define-hash-table-test
+           'neovm-len-test
+           (lambda (a b) (= (length a) (length b)))
+           (lambda (a) (length a)))
+          (let ((h (make-hash-table :test 'neovm-len-test)))
+            (puthash "aa" 1 h)
+            (list (gethash "bb" h)
+                  (gethash "c" h 'missing)
+                  (hash-table-test h))))
+        "#,
+    );
+
+    assert_eq!(format_eval_result(&result), "OK (1 missing neovm-len-test)");
+}
+
+#[test]
 fn pure_dispatch_typed_plist_and_symbol_round_trip() {
     crate::test_utils::init_test_tracing();
     let plist = dispatch_builtin_pure(
