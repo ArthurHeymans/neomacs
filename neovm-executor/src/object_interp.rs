@@ -1039,6 +1039,45 @@ impl Interpreter<'_, '_, '_> {
         Some(adapted)
     }
 
+    // ── DEFUN helpers (Emacs subr-equivalent arity wrappers) ──────────
+    // Usage in execute_primitive_call — single-line subr registration:
+    //   "my-func" => self.subr_2(name, args, |s| { ... }),
+    // The closure receives &mut Self, args is captured from the outer scope.
+
+    fn subr_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.exact_arity(name, args, 1).and_then(|_| f(self))
+    }
+    fn subr_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.exact_arity(name, args, 2).and_then(|_| f(self))
+    }
+    fn subr_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.exact_arity(name, args, 3).and_then(|_| f(self))
+    }
+    fn subr_0_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 0, 1).and_then(|_| f(self))
+    }
+    fn subr_1_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 1, 2).and_then(|_| f(self))
+    }
+    fn subr_2_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 2, 3).and_then(|_| f(self))
+    }
+    fn subr_2_5(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 2, 5).and_then(|_| f(self))
+    }
+    fn subr_1_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 1, 3).and_then(|_| f(self))
+    }
+    fn subr_min_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_arity(name, args, 1).and_then(|_| f(self))
+    }
+    fn subr_min_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_arity(name, args, 2).and_then(|_| f(self))
+    }
+    fn subr_vararg(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+        self.min_max_arity(name, args, 0, usize::MAX).and_then(|_| f(self))
+    }
+
     fn execute_primitive_call(
         &mut self,
         name: &str,
@@ -1886,12 +1925,10 @@ impl Interpreter<'_, '_, '_> {
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
-            "acons" | "cl-acons" => self
-                .exact_arity(name, args, 3)
-                .map(|_| {
-                    let pair = self.runtime.cons(args[0], args[1]);
-                    self.runtime.cons(pair, args[2])
-                }),
+            "acons" | "cl-acons" => self.subr_3(name, args, |s| {
+                let pair = s.runtime.cons(args[0], args[1]);
+                Some(s.runtime.cons(pair, args[2]))
+            }),
             "alist-get" => self
                 .min_max_arity(name, args, 2, 5)
                 .and_then(|_| self.alist_get(
@@ -1912,12 +1949,12 @@ impl Interpreter<'_, '_, '_> {
             "mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
-            "every" | "cl-every" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.sequence_every(args[0], args[1])),
-            "some" | "cl-some" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.sequence_some(args[0], args[1])),
+            "every" | "cl-every" => self.subr_2(name, args, |s| {
+                s.sequence_every(args[0], args[1])
+            }),
+            "some" | "cl-some" => self.subr_2(name, args, |s| {
+                s.sequence_some(args[0], args[1])
+            }),
             "copy-list" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_list(args[0])),
@@ -5847,6 +5884,15 @@ fn surface_to_lisp_value(runtime: &mut Runtime, form: &neovm_compiler::surface::
         _ => LispValue::NIL,
     }
 }
+
+// ── Subr (DEFUN) helpers ────────────────────────────────────────────
+//
+// Emacs DEFUN equivalent: add one line to execute_primitive_call.
+// Example for a new function `my-func` taking 1-3 args:
+//
+//   "my-func" => self.subr_1_3("my-func", args, Self::my_func_impl),
+//
+// The JIT path needs a corresponding entry in jit_rt.rs for fast-path.
 
 #[cfg(test)]
 mod tests {
