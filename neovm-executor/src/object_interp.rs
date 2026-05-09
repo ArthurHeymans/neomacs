@@ -12228,6 +12228,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_bare_symbol_p_on_regular_symbol() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (bare-symbol-p 'my-sym)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
