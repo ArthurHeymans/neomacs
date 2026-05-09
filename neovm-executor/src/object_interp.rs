@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn executes_nconc_destructive_append() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (nconc (list 1 2) (list 3 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
     fn executes_symbol_name_returns_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(symbol-name 'hello)",
