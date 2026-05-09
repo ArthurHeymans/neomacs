@@ -4200,6 +4200,43 @@ fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn column_motion_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"column:%S\" (with-temp-buffer (setq tab-width 8) (insert \"a\\tb\") (goto-char (point-min)) (list (current-column) (progn (forward-char 1) (current-column)) (progn (forward-char 1) (current-column)) (progn (move-to-column 4 t) (list (current-column) (buffer-string))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("column:")
+                && row.contains("(0 1 8")
+                && row.contains("(4")
+                && row.contains("a")
+                && row.contains("b")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: current-column and move-to-column tab behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "column_motion_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn point_motion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
