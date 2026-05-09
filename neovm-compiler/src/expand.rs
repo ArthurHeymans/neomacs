@@ -1174,6 +1174,18 @@ impl Expander {
                 );
                 self.expand_form(expanded)
             }
+            "symbol-function" if place_items.len() == 2 => {
+                // (setf (symbol-function sym) val) → (fset sym val)
+                let expanded = list_form(
+                    vec![
+                        symbol_form("fset", span),
+                        place_items[1].clone(),
+                        value.clone(),
+                    ],
+                    span,
+                );
+                self.expand_form(expanded)
+            }
             "symbol-plist" if place_items.len() == 2 => {
                 // (setf (symbol-plist sym) val) → (setplist sym val)
                 let expanded = list_form(
