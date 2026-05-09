@@ -8436,6 +8436,16 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(12)));
     }
 
+    #[test]
+    fn executes_cl_symbol_macrolet() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-symbol-macrolet ((x 42)) \
+               (+ x 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(43)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
