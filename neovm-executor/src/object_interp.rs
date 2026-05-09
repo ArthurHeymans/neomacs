@@ -1929,6 +1929,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-if-not" => self.subr_2(name, args, |s| {
                 s.remove_if(args[0], args[1], true)
             }),
+            "cl-remove-duplicates" => self.subr_1(name, args, |s| {
+                s.remove_duplicates(args[0])
+            }),
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
@@ -3410,6 +3413,31 @@ impl Interpreter<'_, '_, '_> {
             // cl-remove-if-not (negate=true): keep if satisfied
             if satisfied == negate {
                 result.push(element);
+            }
+        }
+        if sequence.is_nil() || self.runtime.is_cons(sequence) {
+            Some(make_list(self.runtime, result.into_iter()))
+        } else {
+            Some(self.runtime.vector(result))
+        }
+    }
+
+    fn remove_duplicates(&mut self, sequence: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        let mut seen = std::collections::HashSet::new();
+        let mut result = Vec::new();
+        for elem in elements {
+            let key = if self.runtime.is_float(elem) {
+                self.runtime.float_data(elem).ok()?.to_bits()
+            } else if self.runtime.is_string(elem) {
+                self.runtime.string_contents(elem).ok()?.len() as u64
+            } else if let Some(n) = elem.as_fixnum() {
+                n as u64
+            } else {
+                elem.heap_addr().unwrap_or(0) as u64
+            };
+            if seen.insert(key) {
+                result.push(elem);
             }
         }
         if sequence.is_nil() || self.runtime.is_cons(sequence) {
@@ -5674,6 +5702,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
+            "cl-remove-duplicates",
             "cl-remove-if",
             "cl-remove-if-not",
             "clrhash",
@@ -8455,6 +8484,15 @@ mod tests {
                (length xs))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_remove_duplicates() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-remove-duplicates '(1 2 3 1 2 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
     }
 
 
