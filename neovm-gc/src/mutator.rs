@@ -381,7 +381,6 @@ impl<'heap> Mutator<'heap> {
 }
 
 /// --- Allocation helpers for each space kind ---
-
 fn alloc_nursery_slot<T: Trace + 'static>(
     local: &mut MutatorLocal,
     heap: &Heap,

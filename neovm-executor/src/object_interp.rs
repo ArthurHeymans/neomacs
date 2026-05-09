@@ -1991,6 +1991,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-concatenate" => self.subr_vararg(name, args, |s| {
                 s.cl_concatenate(args)
             }),
+            "cl-coerce" => self.subr_2(name, args, |s| {
+                s.cl_coerce(args[0], args[1])
+            }),
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
@@ -3478,6 +3481,46 @@ impl Interpreter<'_, '_, '_> {
         result.extend_from_slice(&elems1[i..]);
         result.extend_from_slice(&elems2[j..]);
         Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_coerce(&mut self, object: LispValue, result_type: LispValue) -> Option<LispValue> {
+        let type_name = self.runtime.symbol_name(result_type).ok()?;
+        match type_name.as_str() {
+            "list" => {
+                if object.is_nil() || self.runtime.is_cons(object) {
+                    Some(object)
+                } else if self.runtime.is_vector(object) {
+                    let elems = self.runtime.vector_elements(object).ok()?;
+                    Some(make_list(self.runtime, elems.into_iter()))
+                } else if self.runtime.is_string(object) {
+                    let s = self.string_contents_owned(object)?;
+                    let chars: Vec<LispValue> = s.chars().map(|c| LispValue::from_char(c)).collect();
+                    Some(make_list(self.runtime, chars.into_iter()))
+                } else {
+                    Some(make_list(self.runtime, [object].into_iter()))
+                }
+            }
+            "vector" => {
+                let elems = self.sequence_values(object)?;
+                Some(self.runtime.vector(elems))
+            }
+            "string" => {
+                if self.runtime.is_string(object) {
+                    Some(object)
+                } else {
+                    let elems = self.sequence_values(object)?;
+                    let s: String = elems.into_iter()
+                        .filter_map(|v| {
+                            if v.is_fixnum() {
+                                char::from_u32(v.as_fixnum()? as u32)
+                            } else { None }
+                        })
+                        .collect();
+                    Some(self.runtime.string(s))
+                }
+            }
+            _ => Some(object),
+        }
     }
 
     fn cl_replace(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
@@ -6491,6 +6534,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-plusp",
             "cl-position",
             "cl-position-if",
+            "cl-coerce",
             "cl-concatenate",
             "cl-delete",
             "cl-delete-duplicates",
@@ -11698,6 +11742,15 @@ mod tests {
              (let ((xs (list 1 2 3))) (cl-tailp (cdr xs) xs))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_coerce_list_to_vector() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((v (cl-coerce '(1 2 3) 'vector))) (aref v 1))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
