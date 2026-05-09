@@ -4883,6 +4883,39 @@ fn replace_match_literal_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn replace_match_buffer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"matchreplace:%S\" (with-temp-buffer (insert \"abc123def\") (goto-char (point-min)) (re-search-forward \"[0-9]+\") (replace-match \"NUM\") (list (buffer-string) (match-beginning 0) (match-end 0))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("matchreplace:") && row.contains("abcNUMdef") && row.contains("4 7")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: replace-match buffer mutation and match data should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_match_buffer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn replace_regexp_in_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
