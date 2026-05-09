@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_remq_removes_by_identity() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_delete_removes_element() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (delete 2 (list 1 2 3 2)))",
