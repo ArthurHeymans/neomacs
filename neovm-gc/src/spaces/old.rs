@@ -952,14 +952,10 @@ impl OldGenState {
             return remap;
         }
 
-        let mut next = 0usize;
-        let mut keep_mask = Vec::with_capacity(self.blocks.read().len());
-        for entry in &remap {
-            keep_mask.push(entry.is_some());
-        }
+        let mut idx = 0usize;
         self.blocks.write().retain(|_| {
-            let keep = keep_mask[next];
-            next += 1;
+            let keep = remap[idx].is_some();
+            idx += 1;
             keep
         });
         self.refresh_cached_layout_totals();
