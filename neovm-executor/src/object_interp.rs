@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_identity_returns_arg() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(identity 42)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_string_equal_case_insensitive() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(string-equal \"Hello\" \"hello\")",
