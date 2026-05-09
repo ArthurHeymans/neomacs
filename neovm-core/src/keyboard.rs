@@ -2324,6 +2324,23 @@ impl crate::emacs_core::eval::Context {
         false
     }
 
+    fn prefix_echo_message(&self, translated_events: &[Value]) -> Option<String> {
+        let key_vec = Value::vector(translated_events.to_vec());
+        let desc =
+            crate::emacs_core::builtins::keymaps::builtin_key_description(vec![key_vec]).ok()?;
+        let mut message = desc.as_utf8_str()?.to_string();
+        if translated_events.len() == 1
+            && translated_events
+                .first()
+                .is_some_and(|event| self.event_matches_help_char(event))
+        {
+            // GNU keyboard.c::echo_add_key appends this when a help event is
+            // the first echoed key, while waiting for the following help-map key.
+            message.push_str(" (Type ? for further options, C-q for quick help)");
+        }
+        Some(message)
+    }
+
     /// Invoke `input-method-function` on a just-read character
     /// event. Returns `Ok(true)` when the character was consumed
     /// by the input method (the translated events are now on the
@@ -3145,14 +3162,8 @@ impl crate::emacs_core::eval::Context {
                 // echo-keystrokes" bug but leaves the deadline
                 // scheduler for a later pass.
                 if self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0) {
-                    let key_vec = Value::vector(translated_events.clone());
-                    if let Ok(desc) =
-                        crate::emacs_core::builtins::keymaps::builtin_key_description(vec![key_vec])
-                    {
-                        if let Some(s) = desc.as_utf8_str() {
-                            let echo_msg = s.to_string();
-                            self.set_current_message(Some(LispString::from_utf8(&echo_msg)));
-                        }
+                    if let Some(echo_msg) = self.prefix_echo_message(&translated_events) {
+                        self.set_current_message(Some(LispString::from_utf8(&echo_msg)));
                     }
                 }
                 continue;

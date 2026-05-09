@@ -2208,6 +2208,42 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
 }
 
 #[test]
+fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.assign("help-char", Value::fixnum(8));
+    ev.assign("echo-keystrokes", Value::fixnum(1));
+    ev.eval_str(
+        r#"(fset 'neomacs-test-help-target-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup help target command");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum(8), Value::fixnum('?' as i64)],
+        Value::symbol("neomacs-test-help-target-command"),
+    )
+    .expect("define help prefix command");
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum(8));
+
+    let _ = ev.read_key_sequence();
+
+    let message = ev
+        .current_message_text()
+        .expect("help prefix should echo pending key");
+    assert!(
+        message.contains("Type ? for further options, C-q for quick help"),
+        "GNU help-prefix echo should include the help hint, got {message:?}"
+    );
+}
+
+#[test]
 fn read_key_sequence_shift_translates_uppercase_binding() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
