@@ -1903,7 +1903,7 @@ impl Interpreter<'_, '_, '_> {
                 .min_arity(name, args, 1)
                 .and_then(|_| self.last(args[0])),
             "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
-            "member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
+            "member" | "cl-member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
             "assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
             "assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
             "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
@@ -5857,6 +5857,7 @@ fn is_primitive_name(name: &str) -> bool {
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
+            "cl-member",
             "maphash",
             "match-beginning",
             "match-end",
