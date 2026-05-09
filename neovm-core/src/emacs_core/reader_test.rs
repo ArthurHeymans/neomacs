@@ -3346,6 +3346,35 @@ fn read_from_string_hash_radix_n_syntax_matches_gnu() {
 }
 
 #[test]
+fn read_from_string_circular_cons_label_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#1=(a . #1#)")])
+        .expect("circular cons read label should read");
+    let value = result.cons_car();
+    assert!(value.is_cons());
+    assert_eq!(value.cons_car(), Value::symbol("a"));
+    assert_eq!(value.cons_cdr(), value);
+
+    let printed = ev
+        .eval_str(
+            r##"(let ((print-circle t)
+                     (x (read "#1=(a . #1#)")))
+                 (list (consp x) (eq x (cdr x)) (prin1-to-string x)))"##,
+        )
+        .expect("circular read/print expression should evaluate");
+    assert!(printed.is_cons());
+    assert_eq!(printed.cons_car(), Value::T);
+    let rest = printed.cons_cdr();
+    assert_eq!(rest.cons_car(), Value::T);
+    assert_eq!(
+        rest.cons_cdr().cons_car().as_utf8_str(),
+        Some("#1=(a . #1#)")
+    );
+}
+
+#[test]
 fn read_from_string_hash_s_without_list_payload_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

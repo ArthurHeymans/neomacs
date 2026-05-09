@@ -1413,11 +1413,36 @@ impl<'a> Reader<'a> {
                         self.read_radix_number(n as u32)
                     }
                     Some(code) if code == b'=' as u32 => {
-                        // #N=EXPR — define label N and return EXPR
+                        // #N=EXPR -- GNU lread.c installs a placeholder
+                        // before reading EXPR so #N# can refer to recursive
+                        // structures being read.
                         self.bump();
-                        let expr = self.read_form()?;
-                        self.read_labels.insert(n, expr);
-                        Ok(expr)
+                        let placeholder = Value::cons(Value::NIL, Value::NIL);
+                        self.read_labels.insert(n, placeholder);
+                        let saved = save_scratch_gc_roots();
+                        push_scratch_gc_root(placeholder);
+                        let expr = match self.read_form() {
+                            Ok(expr) => expr,
+                            Err(err) => {
+                                restore_scratch_gc_roots(saved);
+                                return Err(err);
+                            }
+                        };
+
+                        let result = if expr.is_cons() {
+                            if expr == placeholder {
+                                restore_scratch_gc_roots(saved);
+                                return Err(self.error("nonsensical self-reference"));
+                            }
+                            placeholder.set_car(expr.cons_car());
+                            placeholder.set_cdr(expr.cons_cdr());
+                            placeholder
+                        } else {
+                            self.read_labels.insert(n, expr);
+                            expr
+                        };
+                        restore_scratch_gc_roots(saved);
+                        Ok(result)
                     }
                     Some(code) if code == b'#' as u32 => {
                         // #N# — reference previously defined label N
