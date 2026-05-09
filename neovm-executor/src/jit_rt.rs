@@ -43,7 +43,7 @@ macro_rules! jit_shim {
     ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? { $($body:tt)* }) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name($($arg: $ty),*) $(-> $ret)? {
-            unsafe { $($body)* }
+            $($body)*
         }
     };
 }
