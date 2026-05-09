@@ -519,10 +519,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int((u.wrapping_shr((-count) as u32)) as i64))
             }
         }
-        "abs" if args.len() == 1 => {
-            let a = args[0].as_int()?;
-            Some(SsaConst::Int(a.wrapping_abs()))
-        }
+        "abs" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_abs())),
+            SsaConst::Float(f) => Some(SsaConst::Float(f.abs())),
+            _ => None,
+        },
         "lognot" if args.len() == 1 => {
             Some(SsaConst::Int(!args[0].as_int()?))
         }
