@@ -2018,7 +2018,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-tailp" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.cl_tailp(args[0], args[1])))
             }),
-            "cl-sublis" => self.subr_2(name, args, |s| {
+            "cl-sublis" | "cl-nsublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
             "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
@@ -6462,6 +6462,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nset-difference",
             "cl-nsubst-if",
             "cl-nsubst-if-not",
+            "cl-nsublis",
             "cl-nsubstitute",
             "cl-subst-if",
             "cl-subst-if-not",
