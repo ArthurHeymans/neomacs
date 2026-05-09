@@ -1855,6 +1855,40 @@ fn text_property_stickiness_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_search_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"tpropsearch:%S\" (let ((s (copy-sequence \"abcdef\"))) (put-text-property 1 4 'face 'bold s) (list (text-property-any 0 6 'face 'bold s) (text-property-any 4 6 'face 'bold s) (text-property-not-all 1 4 'face 'bold s) (text-property-not-all 0 6 'face 'bold s))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("tpropsearch:") && row.contains("(1 nil nil 0)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property search helpers should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_search_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_substring_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
