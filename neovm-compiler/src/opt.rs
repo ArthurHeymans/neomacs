@@ -517,6 +517,25 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int(value >> (-count)))
             }
         }
+        "downcase" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if s.is_ascii() => Some(SsaConst::String(s.to_ascii_lowercase())),
+            _ => None,
+        },
+        "upcase" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if s.is_ascii() => Some(SsaConst::String(s.to_ascii_uppercase())),
+            _ => None,
+        },
+        "capitalize" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if s.is_ascii() => {
+                let mut c = s.chars();
+                let capitalized: String = match c.next() {
+                    Some(ch) => ch.to_ascii_uppercase().to_string() + c.as_str(),
+                    None => String::new(),
+                };
+                Some(SsaConst::String(capitalized))
+            }
+            _ => None,
+        },
         "concat" if !args.is_empty() => {
             if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
                 let s: String = args.iter()
