@@ -10156,6 +10156,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_mapcar_alias() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (cl-mapcar #'1+ '(1 2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
