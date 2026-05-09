@@ -656,6 +656,7 @@ impl Expander {
                 }
             }
             "cl-defun" => self.expand_cl_defun(span, items),
+            "cl-defmacro" => self.expand_cl_defmacro(span, items),
             "cl-macrolet" => self.expand_cl_macrolet(span, items),
             "cl-symbol-macrolet" => self.expand_cl_symbol_macrolet(span, items),
             "letrec" => self.expand_letrec(span, items),
@@ -2344,6 +2345,18 @@ impl Expander {
             result.push((name, params, body));
         }
         result
+    }
+
+    fn expand_cl_defmacro(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-defmacro NAME ARGS BODY...) => (defmacro NAME ARGS BODY...)
+        if items.len() < 4 {
+            self.error(span, "cl-defmacro requires a name, argument list, and body");
+            return nil_form(span);
+        }
+        let mut rewritten = vec![symbol_form("defmacro", span)];
+        rewritten.extend_from_slice(&items[1..]);
+        let form = list_form(rewritten, span);
+        self.expand_form(form)
     }
 
     fn expand_cl_defun(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
