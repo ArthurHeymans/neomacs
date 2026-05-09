@@ -2003,6 +2003,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-intersection" | "cl-nintersection" => self.subr_2(name, args, |s| {
                 s.cl_intersection(args[0], args[1])
             }),
+            "cl-ldiff" => self.subr_2(name, args, |s| {
+                s.cl_ldiff(args[0], args[1])
+            }),
             "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| {
                 s.cl_union(args[0], args[1])
             }),
@@ -3469,6 +3472,26 @@ impl Interpreter<'_, '_, '_> {
         result.extend_from_slice(&elems1[i..]);
         result.extend_from_slice(&elems2[j..]);
         Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_ldiff(&mut self, list: LispValue, sublist: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut result = Vec::new();
+        loop {
+            if current == sublist {
+                return Some(make_list(self.runtime, result.into_iter()));
+            }
+            if current.is_nil() {
+                // SUBLIST not found in LIST — return LIST (or nil per spec)
+                return Some(list);
+            }
+            if !self.runtime.is_cons(current) {
+                return Some(list);
+            }
+            let car = self.runtime.car(current).ok()?;
+            result.push(car);
+            current = self.runtime.cdr(current).ok()?;
+        }
     }
 
     fn cl_tailp(&self, sublist: LispValue, list: LispValue) -> bool {
@@ -6448,6 +6471,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-nset-exclusive-or",
             "cl-nunion",
             "cl-intersection",
+            "cl-ldiff",
             "cl-tree-equal",
             "cl-union",
             "cl-typep",
@@ -11622,6 +11646,15 @@ mod tests {
              (let ((xs (list 1 2 3))) (cl-tailp (cdr xs) xs))",
         );
         assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_ldiff_returns_prefix_up_to_sublist() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((xs (list 1 2 3 4 5))) (cl-ldiff xs (cddr xs)))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2)");
     }
 
     #[test]
