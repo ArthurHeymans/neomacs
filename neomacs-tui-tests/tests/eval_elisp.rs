@@ -3787,6 +3787,40 @@ fn syntax_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn syntax_table_copy_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"syntcopy:%S\" (let ((st (make-syntax-table))) (modify-syntax-entry ?_ \"w\" st) (let ((cp (copy-syntax-table st))) (modify-syntax-entry ?_ \"_\" cp) (list (with-syntax-table st (char-syntax ?_)) (with-syntax-table cp (char-syntax ?_)) (string-to-syntax \"w\")))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("syntcopy:") && row.contains("(119 95 (2))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: syntax-table copying should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "syntax_table_copy_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn syntax_table_regexp_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
