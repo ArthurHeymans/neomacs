@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_substring_from_index() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(substring \"hello\" 1)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_string_join_separator() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(string-join '(\"a\" \"b\" \"c\") \"-\")",
