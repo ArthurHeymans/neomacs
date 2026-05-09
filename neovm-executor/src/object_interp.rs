@@ -2054,6 +2054,9 @@ impl Interpreter<'_, '_, '_> {
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
+            "cl-map" => self
+                .min_max_arity(name, args, 3, usize::MAX)
+                .and_then(|_| self.cl_map(args)),
             "mapcar" | "cl-mapcar" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapcar(args[0], args[1])),
@@ -3978,6 +3981,24 @@ impl Interpreter<'_, '_, '_> {
             self.runtime.format_value(sequence)
         ));
         None
+    }
+
+    fn cl_map(&mut self, args: &[LispValue]) -> Option<LispValue> {
+        // (cl-map RESULT-TYPE FUNCTION SEQ &rest SEQS)
+        let result_type = args[0];
+        let function = args[1];
+        let seq = args[2];
+        let type_name = self.runtime.symbol_name(result_type).ok()?;
+        let elements = self.sequence_values(seq)?;
+        let mut mapped = Vec::with_capacity(elements.len());
+        for elem in elements {
+            mapped.push(self.execute_funcall(function, &[elem])?);
+        }
+        match type_name.as_str() {
+            "list" => Some(make_list(self.runtime, mapped.into_iter())),
+            "vector" => Some(self.runtime.vector(mapped)),
+            _ => Some(make_list(self.runtime, mapped.into_iter())),
+        }
     }
 
     fn mapcar(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
@@ -6813,6 +6834,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-mapc",
             "cl-mapcar",
             "cl-merge",
+            "cl-map",
             "cl-member-if",
             "cl-member-if-not",
             "cl-mismatch",
