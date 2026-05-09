@@ -2012,6 +2012,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-search" => self.subr_2(name, args, |s| {
                 s.cl_search(args[0], args[1])
             }),
+            "cl-tailp" => self.subr_2(name, args, |s| {
+                Some(bool_value(s.cl_tailp(args[0], args[1])))
+            }),
             "cl-sublis" => self.subr_2(name, args, |s| {
                 s.cl_sublis(args[0], args[1])
             }),
@@ -3466,6 +3469,23 @@ impl Interpreter<'_, '_, '_> {
         result.extend_from_slice(&elems1[i..]);
         result.extend_from_slice(&elems2[j..]);
         Some(make_list(self.runtime, result.into_iter()))
+    }
+
+    fn cl_tailp(&self, sublist: LispValue, list: LispValue) -> bool {
+        let mut current = list;
+        loop {
+            if current == sublist {
+                return true;
+            }
+            if current.is_nil() || !self.runtime.is_cons(current) {
+                return false;
+            }
+            // Walk cdr safely
+            current = match self.runtime.cdr(current) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+        }
     }
 
     fn cl_mismatch(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
@@ -6604,6 +6624,7 @@ fn is_primitive_name(name: &str) -> bool {
             "string>",
             "stringp",
             "subrp",
+            "cl-tailp",
             "cl-subseq",
             "subseq",
             "substring",
@@ -11588,6 +11609,15 @@ mod tests {
              (cl-merge 'list '(1 3 5) '(2 4 6) #'<)",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(1 2 3 4 5 6)");
+    }
+
+    #[test]
+    fn executes_cl_tailp_detects_tail() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((xs (list 1 2 3))) (cl-tailp (cdr xs) xs))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
