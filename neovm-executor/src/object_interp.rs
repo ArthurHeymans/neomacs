@@ -8352,6 +8352,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_float_negative_zero_is_distinct() {
+        // In Emacs, (eql 0.0 -0.0) -> nil
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(eql 0.0 -0.0)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
