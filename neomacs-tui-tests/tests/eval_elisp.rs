@@ -4996,6 +4996,42 @@ fn file_name_edge_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn file_mode_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"modes:%S\" (list (file-modes-symbolic-to-number \"u=rw,go=r\") (file-modes-number-to-symbolic #o644) (file-modes-number-to-symbolic #o755)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("modes:")
+                && row.contains("420")
+                && row.contains("-rw-r--r--")
+                && row.contains("-rwxr-xr-x")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: file mode conversion should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "file_mode_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
