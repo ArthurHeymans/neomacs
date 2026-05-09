@@ -1482,7 +1482,7 @@ impl Interpreter<'_, '_, '_> {
             "fillarray" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.fillarray(args[0], args[1])),
-            "nconc" => self.nconc(args),
+            "nconc" | "cl-nconc" => self.nconc(args),
             "number-to-string" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_float(args[0]) {
                     match self.runtime.float_data(args[0]) {
@@ -6828,6 +6828,7 @@ fn is_primitive_name(name: &str) -> bool {
             "min",
             "mod",
             "natnump",
+            "cl-nconc",
             "nconc",
             "nlistp",
             "not",
