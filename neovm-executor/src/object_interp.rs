@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_floatp_edges() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and (floatp 1.0) (not (floatp 1)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_nthcdr_skip_and_access() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(nthcdr 2 '(10 20 30 40))",
