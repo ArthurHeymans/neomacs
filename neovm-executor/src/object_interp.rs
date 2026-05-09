@@ -8496,6 +8496,15 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(4)));
     }
 
+    #[test]
+    fn executes_cl_remove_if_on_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (cl-remove-if #'evenp [1 2 3 4 5 6]))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
