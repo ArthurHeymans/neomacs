@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_symbol_name_returns_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(symbol-name 'hello)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_floatp_edges() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (floatp 1.0) (not (floatp 1)))",
