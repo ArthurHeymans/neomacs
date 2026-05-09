@@ -1716,6 +1716,9 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.number_arg(name, args[0]))
                 .map(|v| self.runtime.float(v.exp())),
             "list" | "cl-list" => Some(make_list(self.runtime, args.iter().copied())),
+            "length=" => self.subr_2(name, args, |s| {
+                s.length_equals(args[0], args[1])
+            }),
             "length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.length(args[0]))
@@ -3263,6 +3266,30 @@ impl Interpreter<'_, '_, '_> {
             });
             Some(make_list(self.runtime, values.into_iter()))
         }
+    }
+
+    fn length_equals(&mut self, seq: LispValue, expected: LispValue) -> Option<LispValue> {
+        let n = self.fixnum_arg("length=", expected)?;
+        if n < 0 { return Some(LispValue::NIL); }
+        let len = if seq.is_nil() || self.runtime.is_cons(seq) {
+            let mut current = seq;
+            let mut count = 0i64;
+            loop {
+                if current.is_nil() { break; }
+                if count > n { return Some(LispValue::NIL); }
+                if !self.runtime.is_cons(current) { return Some(LispValue::NIL); }
+                count += 1;
+                current = self.runtime.cdr(current).ok()?;
+            }
+            count
+        } else if self.runtime.is_vector(seq) {
+            self.runtime.vector_elements(seq).ok()?.len() as i64
+        } else if self.runtime.is_string(seq) {
+            self.string_contents_owned(seq)?.len() as i64
+        } else {
+            return Some(LispValue::NIL);
+        };
+        Some(bool_value(len == n))
     }
 
     fn safe_length(&mut self, list: LispValue) -> Option<LispValue> {
@@ -6955,6 +6982,7 @@ fn is_primitive_name(name: &str) -> bool {
             "keywordp",
             "last",
             "length",
+            "length=",
             "list",
             "list*",
             "cl-list",
