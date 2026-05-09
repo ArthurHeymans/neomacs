@@ -7955,9 +7955,18 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
-    // cl-return/return-from now correctly expand to throw. The cl-loop
-    // expander doesn't yet wrap named blocks in catch (needed for
-    // cl-return-from to work inside loops).
+    // cl-block provides named catch blocks, cl-return-from throws to them.
+    // cl-loop named blocks need the expander to wrap in catch — pending.
+
+    #[test]
+    fn executes_cl_block_with_return_from() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-block my-block (if t (cl-return-from my-block 42) 0))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
 
     #[test]
     fn executes_logand_no_args_returns_neg_one() {

@@ -51,6 +51,10 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-defun (name args &rest body)
   (cons 'defun (cons name (cons args body))))
 
+(defmacro cl-block (name &rest body)
+  (let ((tag (if (eq name nil) '--cl-block-nil-- name)))
+    `(catch ,tag ,@body)))
+
 (defmacro cl-return (&optional value)
   (list 'throw '--cl-block-nil-- (or value nil)))
 
