@@ -9608,6 +9608,19 @@ mod tests {
     }
 
     #[test]
+    fn executes_letrec_recursive_binding() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (letrec ((is-even (lambda (n) \
+               (if (= n 0) t (funcall is-odd (- n 1))))) \
+               (is-odd (lambda (n) \
+                 (if (= n 0) nil (funcall is-even (- n 1)))))) \
+               (funcall is-even 4))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_let_with_empty_bindings() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
