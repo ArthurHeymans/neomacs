@@ -4927,6 +4927,43 @@ fn character_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn coding_string_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"coding:%S\" (let* ((s \"é\") (u (encode-coding-string s 'utf-8))) (list (length s) (string-bytes s) (multibyte-string-p u) (string-bytes u) (decode-coding-string u 'utf-8) (string-as-unibyte \"é\"))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("coding:")
+                && row.contains("(1 2 nil 2")
+                && row.contains("é")
+                && row.contains("303")
+                && row.contains("251")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: coding string conversion should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "coding_string_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_code_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
