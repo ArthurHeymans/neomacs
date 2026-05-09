@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_number_sequence_range() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (number-sequence 1 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
     fn executes_caddr_third_element() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(caddr '(10 20 30))",
