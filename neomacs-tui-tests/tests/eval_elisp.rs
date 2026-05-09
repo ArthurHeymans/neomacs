@@ -3818,6 +3818,40 @@ fn char_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn char_table_map_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"chartabmap:%S\" (let ((ct (make-char-table nil nil)) seen) (set-char-table-range ct ?a 1) (set-char-table-range ct ?b 2) (map-char-table (lambda (k v) (push (cons k v) seen)) ct) (sort seen (lambda (a b) (< (car a) (car b))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("chartabmap:") && row.contains("((97 . 1) (98 . 2))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: map-char-table behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "char_table_map_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn save_excursion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
