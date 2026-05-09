@@ -435,14 +435,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
             _ => None,
         },
-        "1+" if args.len() == 1 => {
-            let a = args[0].as_int()?;
-            Some(SsaConst::Int(a.wrapping_add(1)))
-        }
-        "1-" if args.len() == 1 => {
-            let a = args[0].as_int()?;
-            Some(SsaConst::Int(a.wrapping_sub(1)))
-        }
+        "1+" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_add(1))),
+            SsaConst::Float(f) => Some(SsaConst::Float(f + 1.0)),
+            _ => None,
+        },
+        "1-" if args.len() == 1 => match args[0] {
+            SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_sub(1))),
+            SsaConst::Float(f) => Some(SsaConst::Float(f - 1.0)),
+            _ => None,
+        },
         "null" | "not" if args.len() == 1 => match const_to_bool(args[0]) {
             Some(false) => Some(SsaConst::True),
             Some(true) => Some(SsaConst::Nil),
