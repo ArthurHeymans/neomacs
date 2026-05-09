@@ -7967,6 +7967,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_integerp_edge_cases() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (and (integerp 0) (not (integerp 1.5)) (not (integerp 'sym)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_mapconcat_with_number_to_string() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
