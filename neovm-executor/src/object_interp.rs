@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_nthcdr_skip_and_access() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(nthcdr 2 '(10 20 30 40))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
     fn executes_ignore_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(ignore 1 2 3)",
