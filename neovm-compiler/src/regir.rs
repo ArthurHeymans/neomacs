@@ -162,6 +162,7 @@ pub enum RegInstKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[derive(Default)]
 pub enum RegTerminator {
     Return(Option<RegId>),
     Jump {
@@ -172,11 +173,6 @@ pub enum RegTerminator {
         then_target: RegBlockId,
         else_target: RegBlockId,
     },
+    #[default]
     Unreachable,
-}
-
-impl Default for RegTerminator {
-    fn default() -> Self {
-        Self::Unreachable
-    }
 }

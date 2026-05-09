@@ -181,7 +181,7 @@ impl CompileValue {
             MacroValue::Vector(items) => CompileValue::Vector(
                 items
                     .iter()
-                    .map(|v| CompileValue::from_macro_value(v))
+                    .map(CompileValue::from_macro_value)
                     .collect(),
             ),
         }

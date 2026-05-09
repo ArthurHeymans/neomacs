@@ -76,12 +76,11 @@ pub fn compile_ssa_to_jit_with_builder(ssa: &SsaModule, builder: JITBuilder) -> 
     // Phase 0: Register named SSA functions as local functions for direct JIT-to-JIT calls.
     // Only register functions with fixed arity (no &rest, no &optional).
     for (_fid, func) in ssa.functions.iter() {
-        if let Some(name) = &func.name {
-            if func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty() {
+        if let Some(name) = &func.name
+            && func.lambda_list.rest.is_none() && func.lambda_list.optional.is_empty() {
                 let arity = func.lambda_list.required.len();
                 runtime.register_local_function(name, arity, call_conv);
             }
-        }
     }
 
     // Phase 1: Lower each SSA function using the shared JIT module backend.

@@ -166,6 +166,7 @@ pub enum SsaConst {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[derive(Default)]
 pub enum SsaTerminator {
     Return(Option<ValueId>),
     Jump {
@@ -179,11 +180,6 @@ pub enum SsaTerminator {
         else_target: BlockId,
         else_args: Vec<ValueId>,
     },
+    #[default]
     Unreachable,
-}
-
-impl Default for SsaTerminator {
-    fn default() -> Self {
-        Self::Unreachable
-    }
 }

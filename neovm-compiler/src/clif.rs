@@ -1001,7 +1001,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                             return;
                         }
                     }
-                    SsaConst::Char(value) => ((*value as i64) << TAG_BITS) | CHAR_TAG,
+                    SsaConst::Char(value) => (*value << TAG_BITS) | CHAR_TAG,
                     SsaConst::Float(value) => {
                         let bits = value.to_bits();
                         let Some(func_ref) = self.float_const_ref() else {
@@ -1606,7 +1606,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     return;
                 };
                 let handler_block = self.exception_handlers[handler_idx].handler_block;
-                let (continuation_block, result_param, transitioned, no_match_block) =
+                let (continuation_block, _result_param, transitioned, no_match_block) =
                     match &mut self.exception_handlers[handler_idx].kind {
                         ExceptionHandlerKind::ConditionCase {
                             continuation_block,
@@ -1789,12 +1789,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     // Emit pop + propagate into no_match_block.
                     // If the handler body didn't complete normally, we're in a
                     // different block — jump to no_match_block first.
-                    if let Some(nmb) = no_match_block {
-                        if !handler_result_seen {
+                    if let Some(nmb) = no_match_block
+                        && !handler_result_seen {
                             self.builder.ins().jump(nmb, &[]);
                             self.builder.switch_to_block(nmb);
                         }
-                    }
                     let Some(pop_ref) = self.exception_func_ref("condition_case_pop", 0) else {
                         return;
                     };
@@ -2167,11 +2166,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let (block_id, inst_index) = self.current_inst?;
         let block = &self.ssa.blocks[block_id];
         for inst in &block.instructions[inst_index + 1..] {
-            if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind {
-                if let Some(vid) = body_result {
+            if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind
+                && let Some(vid) = body_result {
                     return self.value_map.get(vid).copied();
                 }
-            }
         }
         None
     }
@@ -2179,15 +2177,12 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
     fn value_from_end(&self) -> Option<ir::Value> {
         let (block_id, inst_index) = self.current_inst?;
         let block = &self.ssa.blocks[block_id];
-        if inst_index < block.instructions.len() {
-            if let SsaInstKind::ConditionCaseEnd { body_result } =
+        if inst_index < block.instructions.len()
+            && let SsaInstKind::ConditionCaseEnd { body_result } =
                 &block.instructions[inst_index].kind
-            {
-                if let Some(vid) = body_result {
+                && let Some(vid) = body_result {
                     return self.value_map.get(vid).copied();
                 }
-            }
-        }
         None
     }
 
@@ -2488,7 +2483,7 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
             CompileValue::Char(c) => self
                 .builder
                 .ins()
-                .iconst(types::I64, ((*c as i64) << TAG_BITS) | CHAR_TAG),
+                .iconst(types::I64, (*c << TAG_BITS) | CHAR_TAG),
             CompileValue::Float(f) => {
                 let bits = f.to_bits();
                 let Some(func_ref) = self.float_const_ref() else {
