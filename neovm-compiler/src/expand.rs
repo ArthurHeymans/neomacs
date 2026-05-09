@@ -516,6 +516,7 @@ impl Expander {
         }
         match head {
             "push" => self.expand_push(span, items),
+            "pushnew" | "cl-pushnew" => self.expand_pushnew(span, items),
             "pop" => self.expand_pop(span, items),
             "setf" => self.expand_setf(span, items),
             "cl-incf" | "incf" => self.expand_incf_decf(span, items, "+"),
@@ -844,6 +845,36 @@ impl Expander {
                 None
             }
         }
+    }
+
+    fn expand_pushnew(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (pushnew X PLACE) => cond-cons via setf only if X not already member
+        // Expand to: (let* ((--pn-- X))
+        //              (unless (member --pn-- PLACE)
+        //                (setf PLACE (cons --pn-- PLACE))))
+        if items.len() < 3 {
+            let expanded: Vec<SurfaceForm> =
+                items.into_iter().map(|f| self.expand_form(f)).collect();
+            return SurfaceForm::new(SurfaceKind::List(expanded), span);
+        }
+        let value = &items[1];
+        let place = &items[2];
+        let tmp = symbol_form("--pushnew--", span);
+        let unless_form = list_form(vec![
+            symbol_form("unless", span),
+            list_form(vec![symbol_form("member", span), tmp.clone(), place.clone()], span),
+            list_form(vec![
+                symbol_form("setf", span),
+                place.clone(),
+                list_form(vec![symbol_form("cons", span), tmp.clone(), place.clone()], span),
+            ], span),
+        ], span);
+        let expanded = list_form(vec![
+            symbol_form("let*", span),
+            list_form(vec![list_form(vec![tmp, value.clone()], span)], span),
+            unless_form,
+        ], span);
+        self.expand_form(expanded)
     }
 
     fn expand_push(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
