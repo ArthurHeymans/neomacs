@@ -4982,6 +4982,40 @@ fn sparse_keymap_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn keymap_parent_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"keyparent:%S\" (let ((parent (make-sparse-keymap)) (child (make-sparse-keymap))) (define-key parent (kbd \"C-c p\") 'previous-line) (define-key child (kbd \"C-c c\") 'next-line) (set-keymap-parent child parent) (list (lookup-key child (kbd \"C-c c\")) (lookup-key child (kbd \"C-c p\")) (eq (keymap-parent child) parent))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("keyparent:") && row.contains("(next-line previous-line t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: keymap parent inheritance should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "keymap_parent_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn substitute_command_keys_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
