@@ -1419,6 +1419,7 @@ impl Interpreter<'_, '_, '_> {
                 }
                 Some(LispValue::NIL)
             }),
+            "emacs-pid" => LispValue::from_fixnum(std::process::id() as i64),
             "elt" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.elt(args[0], args[1])),
@@ -6896,6 +6897,7 @@ fn is_primitive_name(name: &str) -> bool {
             "delete",
             "downcase",
             "elt",
+            "emacs-pid",
             "eql",
             "eq",
             "equal",
