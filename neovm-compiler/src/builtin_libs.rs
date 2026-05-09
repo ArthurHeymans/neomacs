@@ -53,7 +53,7 @@ pub const CL_LIB_SOURCE: &str = r#"
 
 (defmacro cl-block (name &rest body)
   (let ((tag (if (eq name nil) '--cl-block-nil-- name)))
-    `(catch ,tag ,@body)))
+    (cons 'catch (cons tag body))))
 
 (defmacro cl-return (&optional value)
   (list 'throw '--cl-block-nil-- (or value nil)))
@@ -67,6 +67,12 @@ pub const CL_LIB_SOURCE: &str = r#"
        (mutex-lock ,m)
        (unwind-protect (progn ,@body)
          (mutex-unlock ,m)))))
+
+(defmacro cl-adjoin (item list &rest keys)
+  (list 'if (list 'memq item list) list (list 'cons item list)))
+
+(defmacro cl-pushnew (item place &rest keys)
+  (list 'setq place (list 'cl-adjoin item place)))
 
 (provide 'cl-lib)
 "#;
