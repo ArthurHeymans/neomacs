@@ -10769,6 +10769,45 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_position_symbol_in_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-position 'b (list 'a 'b 'c))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_cl_find_return_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-find 42 (list 10 20 42 30))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_cl_count_zero_based_literal() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-count 'x (list 'a 'x 'b 'x 'c 'x))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_reduce_with_lambda_and_initial() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce (lambda (a b) (+ a (* 10 b))) (list 1 2 3) 0)",
+        );
+        // 0*10+1=1, 1*10+2=12, 12*10+3=123
+        // BUT reduce passes ACCUMULATOR first, ELEMENT second:
+        // (+ 0 (* 10 1)) = 10, (+ 10 (* 10 2)) = 30, (+ 30 (* 10 3)) = 60
+        assert_eq!(value, Some(LispValue::expect_fixnum(60)));
+    }
+
+    #[test]
     fn executes_cl_adjoin_empty_list_adds_item() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
