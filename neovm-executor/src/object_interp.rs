@@ -7967,6 +7967,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_incf_and_decf() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((x 10)) (cl-incf x) (cl-decf x 3) x)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(8)));
+    }
+
+    #[test]
     fn executes_string_trim_strips_whitespace() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(string-trim \"  hello  \")",
