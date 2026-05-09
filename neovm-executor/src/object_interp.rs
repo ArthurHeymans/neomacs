@@ -1904,24 +1904,12 @@ impl Interpreter<'_, '_, '_> {
             "last" => self
                 .min_arity(name, args, 1)
                 .and_then(|_| self.last(args[0])),
-            "memq" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.memq(args[0], args[1])),
-            "member" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.member(args[0], args[1])),
-            "assq" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.assoc(args[0], args[1], false)),
-            "assoc" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.assoc(args[0], args[1], true)),
-            "rassq" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.rassoc(args[0], args[1], false)),
-            "rassoc" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.rassoc(args[0], args[1], true)),
+            "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
+            "member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
+            "assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
+            "assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
+            "rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
+            "rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
