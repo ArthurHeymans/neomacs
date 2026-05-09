@@ -1982,6 +1982,12 @@ impl Interpreter<'_, '_, '_> {
             "mapc" | "cl-mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
+            "maplist" | "cl-maplist" => self.subr_2(name, args, |s| {
+                s.maplist(args[0], args[1])
+            }),
+            "mapl" | "cl-mapl" => self.subr_2(name, args, |s| {
+                s.maplist(args[0], args[1]).map(|_| args[1])
+            }),
             "every" | "cl-every" => self.subr_2(name, args, |s| {
                 s.sequence_every(args[0], args[1])
             }),
@@ -3569,6 +3575,25 @@ impl Interpreter<'_, '_, '_> {
             mapped.push(self.execute_funcall(function, &[element])?);
         }
         Some(make_list(self.runtime, mapped))
+    }
+
+    fn maplist(&mut self, function: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        let mut results = Vec::new();
+        loop {
+            if current.is_nil() {
+                return Some(make_list(self.runtime, results.into_iter()));
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
+                return None;
+            }
+            results.push(self.execute_funcall(function, &[current])?);
+            current = self.runtime.cdr(current).ok()?;
+        }
     }
 
     fn mapc(&mut self, function: LispValue, sequence: LispValue) -> Option<LispValue> {
@@ -6113,6 +6138,8 @@ fn is_primitive_name(name: &str) -> bool {
             "make-hash-table",
             "make-list",
             "make-symbol",
+            "mapl",
+            "maplist",
             "mapc",
             "mapcar",
             "cl-mapc",
@@ -11008,6 +11035,25 @@ mod tests {
              (cl-subst-if-not 0 #'evenp '(1 2 3 4))",
         );
         assert_eq!(rt.format_value(value.unwrap()), "(0 2 0 4)");
+    }
+
+    #[test]
+    fn executes_maplist_maps_over_cdrs() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (maplist #'car '(a b c))",
+        );
+        // (car (a b c)), (car (b c)), (car (c)) => (a b c)
+        assert_eq!(rt.format_value(value.unwrap()), "(a b c)");
+    }
+
+    #[test]
+    fn executes_mapl_returns_original_list() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((xs (list 10 20 30))) (eq xs (mapl #'ignore xs)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
