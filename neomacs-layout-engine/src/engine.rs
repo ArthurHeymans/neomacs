@@ -880,6 +880,17 @@ fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
     }
 }
 
+fn minibuffer_echo_message_for_window(
+    is_minibuffer_window: bool,
+    minibuffer_active: bool,
+    current_message: Option<String>,
+) -> Option<String> {
+    if !is_minibuffer_window || minibuffer_active {
+        return None;
+    }
+    current_message.filter(|message| !message.is_empty())
+}
+
 fn parse_display_image_layout(prop_val: &Value) -> Option<DisplayImageLayout> {
     let items = list_to_vec(prop_val)?;
     if items.first()?.as_symbol_name() != Some("image") {
@@ -2513,14 +2524,11 @@ impl LayoutEngine {
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
-        let echo_message = if params.is_minibuffer {
-            evaluator
-                .current_message_text()
-                .filter(|message| !message.is_empty())
-                .map(|message| message.to_string())
-        } else {
-            None
-        };
+        let echo_message = minibuffer_echo_message_for_window(
+            params.is_minibuffer,
+            evaluator.minibuffer_is_active(),
+            evaluator.current_message_text(),
+        );
 
         // Line number configuration from buffer-local variables
         let lnum_mode = match super::neovm_bridge::buffer_display_line_numbers_mode(buffer) {

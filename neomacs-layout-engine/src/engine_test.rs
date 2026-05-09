@@ -245,6 +245,30 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
     );
 }
 
+#[test]
+fn minibuffer_echo_message_is_suppressed_while_minibuffer_is_active() {
+    assert_eq!(
+        minibuffer_echo_message_for_window(true, true, Some("C-h".to_string())),
+        None
+    );
+}
+
+#[test]
+fn minibuffer_echo_message_still_renders_when_minibuffer_is_inactive() {
+    assert_eq!(
+        minibuffer_echo_message_for_window(true, false, Some("Echo".to_string())),
+        Some("Echo".to_string())
+    );
+    assert_eq!(
+        minibuffer_echo_message_for_window(true, false, Some(String::new())),
+        None
+    );
+    assert_eq!(
+        minibuffer_echo_message_for_window(false, false, Some("Echo".to_string())),
+        None
+    );
+}
+
 fn assert_multiline_echo_message_uses_minibuffer_rows(use_gui_metrics: bool) {
     let mut eval = Context::new();
     let buf_id = eval

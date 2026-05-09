@@ -6831,6 +6831,10 @@ impl Context {
             .map(|message| crate::emacs_core::builtins::runtime_string_from_lisp_string(message))
     }
 
+    pub fn minibuffer_is_active(&self) -> bool {
+        self.minibuffers.is_active()
+    }
+
     pub fn current_message_value(&self) -> Option<Value> {
         self.current_message
             .as_ref()
