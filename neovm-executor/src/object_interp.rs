@@ -8400,6 +8400,15 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
+    #[test]
+    fn executes_psetq_parallel_assignment() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((a 1) (b 2)) (psetq a b b a) (+ a (* b 10)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {

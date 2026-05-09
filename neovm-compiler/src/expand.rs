@@ -675,6 +675,7 @@ impl Expander {
             }
             "cl-dolist" => self.expand_cl_dolist(span, items),
             "cl-dotimes" => self.expand_cl_dotimes(span, items),
+            "psetq" => self.expand_psetq(span, items),
 
             // Editor macros: no-ops that expand to (progn body...) since
             // the executor doesn't yet have buffer/point primitives.
@@ -2688,20 +2689,35 @@ impl Expander {
 
         // Build let-bindings (just VAR INIT)
         let mut let_bindings: Vec<SurfaceForm> = Vec::new();
-        let mut step_forms: Vec<SurfaceForm> = Vec::new();
+        let mut step_vars: Vec<SurfaceForm> = Vec::new();
+        let mut step_vals: Vec<SurfaceForm> = Vec::new();
         for binding in &bindings_list {
             let SurfaceKind::List(parts) = &binding.kind else { continue };
             if parts.is_empty() { continue; }
             let var = &parts[0];
             let init = if parts.len() > 1 { parts[1].clone() } else { nil_form(span) };
             let_bindings.push(list_form(vec![var.clone(), init], span));
-            // Build step: (setq VAR STEP) or nil if no step
             if parts.len() > 2 {
-                step_forms.push(list_form(vec![
-                    symbol_form("setq", span),
-                    var.clone(),
-                    parts[2].clone(),
-                ], span));
+                step_vars.push(var.clone());
+                step_vals.push(parts[2].clone());
+            }
+        }
+        // Build step forms: single psetq for parallel, individual setq for sequential
+        let mut step_forms: Vec<SurfaceForm> = Vec::new();
+        if !step_vars.is_empty() {
+            if sequential {
+                for (var, val) in step_vars.iter().zip(step_vals.iter()) {
+                    step_forms.push(list_form(vec![
+                        symbol_form("setq", span), var.clone(), val.clone(),
+                    ], span));
+                }
+            } else {
+                let mut psetq_parts = vec![symbol_form("psetq", span)];
+                for (var, val) in step_vars.iter().zip(step_vals.iter()) {
+                    psetq_parts.push(var.clone());
+                    psetq_parts.push(val.clone());
+                }
+                step_forms.push(list_form(psetq_parts, span));
             }
         }
 
@@ -2918,6 +2934,36 @@ impl Expander {
             loop_body,
         ], span);
         self.expand_form(with_catch)
+    }
+
+    // ── psetq expansion ────────────────────────────────────────────────
+
+    fn expand_psetq(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        if items.len() < 3 || items.len() % 2 != 1 {
+            self.error(span, "psetq requires an even number of arguments");
+            return nil_form(span);
+        }
+        let pairs = &items[1..];
+        let mut let_bindings = Vec::new();
+        let mut setq_forms = Vec::new();
+        for i in (0..pairs.len()).step_by(2) {
+            let var = &pairs[i];
+            let val = &pairs[i + 1];
+            let tmp = format!("--psetq-tmp-{}--", i / 2);
+            let_bindings.push(list_form(
+                vec![symbol_form(&tmp, span), val.clone()], span));
+            setq_forms.push(list_form(
+                vec![symbol_form("setq", span), var.clone(),
+                     symbol_form(&tmp, span)], span));
+        }
+        let mut result = vec![
+            symbol_form("let", span),
+            list_form(let_bindings, span),
+        ];
+        result.extend(setq_forms);
+        result.push(nil_form(span));
+        let expanded = list_form(result, span);
+        self.expand_form(expanded)
     }
 
     // ── cl-loop expansion ──────────────────────────────────────────────
