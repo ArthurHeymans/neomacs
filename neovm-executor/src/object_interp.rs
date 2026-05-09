@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_lessp_ordering() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(string-lessp \"abc\" \"abd\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_rassq_finds_by_value() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(rassq 2 '((a . 1) (b . 2) (c . 3)))",
