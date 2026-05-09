@@ -1125,26 +1125,9 @@ impl Interpreter<'_, '_, '_> {
                 // for eq — unlike neovm-core's TaggedValue which falls back to equal_value.
                 bool_value(args[0] == args[1])
             }),
-            "eql" => self.exact_arity(name, args, 2).map(|_| {
-                // Emacs eql is like eq, except numbers are compared by value
-                // and zero vs negative zero are distinguished.
-                if args[0] == args[1] {
-                    return bool_value(true);
-                }
-                if self.runtime.is_float(args[0]) && self.runtime.is_float(args[1]) {
-                    let a = self.runtime.float_data(args[0]).unwrap_or(0.0);
-                    let b = self.runtime.float_data(args[1]).unwrap_or(0.0);
-                    // Emacs same_float: word-level XOR of IEEE 754 bits.
-                    // (eql 0.0 -0.0) → nil, (eql NaN NaN) → t if same bit pattern.
-                    return bool_value(a.to_bits() == b.to_bits());
-                }
-                if self.runtime.is_bignum(args[0]) && self.runtime.is_bignum(args[1]) {
-                    let a = self.runtime.bignum_data(args[0]).unwrap_or_default();
-                    let b = self.runtime.bignum_data(args[1]).unwrap_or_default();
-                    return bool_value(a == b);
-                }
-                bool_value(false)
-            }),
+            "eql" => self
+                .exact_arity(name, args, 2)
+                .map(|_| bool_value(self.eql_values(args[0], args[1]))),
             "equal" => self
                 .exact_arity(name, args, 2)
                 .map(|_| bool_value(self.runtime.equal(args[0], args[1]))),
@@ -1941,6 +1924,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-count" => self.subr_2(name, args, |s| {
                 s.cl_count(args[0], args[1])
             }),
+            "cl-reduce" => self
+                .min_max_arity(name, args, 2, 3)
+                .and_then(|_| self.cl_reduce(args[0], args[1], args.get(2).copied())),
             "cl-concatenate" => self.subr_vararg(name, args, |s| {
                 s.cl_concatenate(args)
             }),
@@ -3286,6 +3272,28 @@ impl Interpreter<'_, '_, '_> {
             }
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn cl_reduce(
+        &mut self,
+        function: LispValue,
+        sequence: LispValue,
+        initial: Option<LispValue>,
+    ) -> Option<LispValue> {
+        let elements = self.sequence_values(sequence)?;
+        if elements.is_empty() {
+            return initial.or(Some(LispValue::NIL));
+        }
+        let mut acc = if let Some(init) = initial {
+            init
+        } else {
+            elements[0]
+        };
+        let start = if initial.is_some() { 0 } else { 1 };
+        for i in start..elements.len() {
+            acc = self.execute_funcall(function, &[acc, elements[i]])?;
+        }
+        Some(acc)
     }
 
     fn assoc(&mut self, key: LispValue, alist: LispValue, use_equal: bool) -> Option<LispValue> {
@@ -5909,6 +5917,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-remove",
             "cl-reverse",
             "cl-remove-duplicates",
+            "cl-reduce",
             "cl-remove-if",
             "cl-remove-if-not",
             "cl-sort",
@@ -10632,5 +10641,50 @@ mod tests {
              (cl-count 1 '())",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_cl_reduce_sums_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce #'+ (list 1 2 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_cl_reduce_with_initial_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce #'+ (list 1 2 3) 10)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(16)));
+    }
+
+    #[test]
+    fn executes_cl_reduce_single_element_returns_it() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce #'+ (list 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_cl_reduce_empty_list_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce #'+ '())",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_reduce_star_pattern() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-reduce #'* (list 2 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(24)));
     }
 }
