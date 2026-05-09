@@ -3327,6 +3327,25 @@ fn read_from_string_hash_radix_missing_digits_payload_matches_oracle() {
 }
 
 #[test]
+fn read_from_string_hash_radix_n_syntax_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#36rZ")])
+        .expect("#36rZ should read as radix-36 integer");
+    assert_eq!(result.cons_car(), Value::fixnum(35));
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#2r2")]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "invalid-read-syntax");
+            assert_eq!(sig.data, vec![Value::string("integer, radix 2")]);
+        }
+        other => panic!("expected invalid-read-syntax, got {other:?}"),
+    }
+}
+
+#[test]
 fn read_from_string_hash_s_without_list_payload_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

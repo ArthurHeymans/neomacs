@@ -1403,6 +1403,15 @@ impl<'a> Reader<'a> {
                     }
                 }
                 match self.current_code() {
+                    Some(code) if code == b'r' as u32 || code == b'R' as u32 => {
+                        // #NrDIGITS -- radix-N integer.  GNU lread.c checks
+                        // this before #N=/#N# read-label syntax.
+                        self.bump();
+                        if !(2..=36).contains(&n) {
+                            return Err(self.error(&format!("integer, radix {}", n)));
+                        }
+                        self.read_radix_number(n as u32)
+                    }
                     Some(code) if code == b'=' as u32 => {
                         // #N=EXPR — define label N and return EXPR
                         self.bump();
