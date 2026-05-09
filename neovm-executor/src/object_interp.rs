@@ -12210,6 +12210,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_delete_dups_removes_adjacent_duplicates() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (delete-dups '(1 1 2 2 3 3))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(1 2 3)");
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
