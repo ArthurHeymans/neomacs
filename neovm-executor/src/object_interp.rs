@@ -2036,6 +2036,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-ldiff" => self.subr_2(name, args, |s| {
                 s.cl_ldiff(args[0], args[1])
             }),
+            "cl-list-length" => self.subr_1(name, args, |s| {
+                s.cl_list_length(args[0])
+            }),
             "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| {
                 s.cl_union(args[0], args[1])
             }),
@@ -3644,6 +3647,33 @@ impl Interpreter<'_, '_, '_> {
             Some(make_list(self.runtime, result.into_iter()))
         } else {
             Some(self.runtime.vector(result))
+        }
+    }
+
+    fn cl_list_length(&mut self, list: LispValue) -> Option<LispValue> {
+        // Returns length of a proper list, or nil if circular or dotted.
+        let mut slow = list;
+        let mut fast = list;
+        let mut len = 0i64;
+        loop {
+            if slow.is_nil() {
+                return self.fixnum(len, "cl-list-length");
+            }
+            if !self.runtime.is_cons(slow) {
+                return Some(LispValue::NIL);
+            }
+            len += 1;
+            // Advance fast by 2, slow by 1
+            for _ in 0..2 {
+                if !self.runtime.is_cons(fast) {
+                    return if fast.is_nil() { self.fixnum(len, "cl-list-length") } else { Some(LispValue::NIL) };
+                }
+                fast = self.runtime.cdr(fast).ok()?;
+            }
+            slow = self.runtime.cdr(slow).ok()?;
+            if slow == fast {
+                return Some(LispValue::NIL);
+            }
         }
     }
 
@@ -6853,6 +6883,7 @@ fn is_primitive_name(name: &str) -> bool {
             "list*",
             "cl-list",
             "cl-list*",
+            "cl-list-length",
             "listp",
             "load",
             "log",
