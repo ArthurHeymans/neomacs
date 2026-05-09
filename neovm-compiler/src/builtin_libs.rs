@@ -74,5 +74,10 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-pushnew (item place &rest keys)
   (list 'setq place (list 'cl-adjoin item place)))
 
+(defmacro cl-first (list) (list 'car list))
+(defmacro cl-second (list) (list 'cadr list))
+(defmacro cl-third (list) (list 'caddr list))
+(defmacro cl-fourth (list) (list 'cadddr list))
+
 (provide 'cl-lib)
 "#;

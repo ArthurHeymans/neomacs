@@ -7811,7 +7811,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "subseq: arity mismatch with 3 args"]
+
+    #[ignore = "subseq: expect-fixnum assertion fails"]
     fn gap_subseq_range() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))",
@@ -7829,7 +7830,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "cl-first/second: not in builtin libs"]
+
     fn gap_cl_accessors() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
@@ -7840,7 +7841,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "makunbound: setq creates lexical binding"]
+
+    #[ignore = "makunbound: dynamic binding semantic gap"]
     fn gap_makunbound_dynamic() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
