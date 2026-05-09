@@ -1946,13 +1946,13 @@ impl Interpreter<'_, '_, '_> {
             "copy-sequence" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_sequence(args[0])),
-            "mapcar" => self
+            "mapcar" | "cl-mapcar" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapcar(args[0], args[1])),
             "mapconcat" => self
                 .exact_arity(name, args, 3)
                 .and_then(|_| self.mapconcat(args[0], args[1], args[2])),
-            "mapc" => self
+            "mapc" | "cl-mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
             "every" | "cl-every" => self.subr_2(name, args, |s| {
@@ -5761,6 +5761,8 @@ fn is_primitive_name(name: &str) -> bool {
             "make-symbol",
             "mapc",
             "mapcar",
+            "cl-mapc",
+            "cl-mapcar",
             "maphash",
             "match-beginning",
             "match-end",
