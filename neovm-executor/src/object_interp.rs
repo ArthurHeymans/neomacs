@@ -8093,6 +8093,14 @@ mod tests {
 
     #[test]
     #[test]
+    #[test]
+    fn executes_cdr_safe_non_cons_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(cdr-safe 42)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
     fn executes_car_cdr_of_nil_return_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(and (null (car nil)) (null (cdr nil)))",
