@@ -7967,6 +7967,14 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_greaterp_reverse() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(string-greaterp \"b\" \"a\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_vconcat_concatenates() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (vconcat [1 2] [3 4] [5 6]))",
