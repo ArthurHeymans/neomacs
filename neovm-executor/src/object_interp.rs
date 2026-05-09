@@ -8444,6 +8444,19 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(43)));
     }
 
+    #[test]
+    fn executes_cl_pushnew_adds_uniquely() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((xs '(2 3))) \
+               (cl-pushnew 1 xs) \
+               (cl-pushnew 2 xs) \
+               (length xs))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
