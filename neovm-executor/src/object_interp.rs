@@ -7967,6 +7967,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_gensym_creates_unique() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (not (eq (cl-gensym) (cl-gensym)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_substring_from_index() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(substring \"hello\" 1)",
