@@ -5158,6 +5158,39 @@ fn arithmetic_remainder_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn string_number_conversion_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"strnum:%S\" (list (string-to-number \"010\") (string-to-number \"010\" 8) (string-to-number \"ff\" 16) (string-to-number \"12abc\") (number-to-string 1.5)))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("strnum:") && row.contains("(10 8 255 12") && row.contains("1.5")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: string/number conversion should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_number_conversion_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn integer_bit_arithmetic_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
