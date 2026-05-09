@@ -7961,7 +7961,16 @@ mod tests {
     fn executes_pcase_simple_match() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (pcase 42\n  ((pred numberp) 'yes)\n  (_ 'no))",
+             (pcase 42 ((pred numberp) 'yes) (_ 'no))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_pcase_constant_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase 'hello ('hello 'found) (_ 'missing))",
         );
         assert!(value.is_some());
     }
