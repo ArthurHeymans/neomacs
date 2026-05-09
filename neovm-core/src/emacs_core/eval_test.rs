@@ -8420,6 +8420,39 @@ fn insert_read_only_shape_and_noop_cases_match_gnu() {
 }
 
 #[test]
+fn delete_read_only_text_property_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(list
+           (with-temp-buffer
+             (insert "abc")
+             (put-text-property 1 2 'read-only t)
+             (goto-char 1)
+             (condition-case err
+                 (progn (delete-char 1) (list :ok (buffer-string)))
+               (error (list (car err) (cdr err) (buffer-substring-no-properties (point-min) (point-max))))))
+           (with-temp-buffer
+             (insert "abc")
+             (put-text-property 1 2 'read-only "locked")
+             (goto-char 1)
+             (condition-case err
+                 (progn (delete-region 1 2) (list :ok (buffer-string)))
+               (error (list (car err) (cdr err) (buffer-substring-no-properties (point-min) (point-max))))))
+           (with-temp-buffer
+             (insert "abc")
+             (put-text-property 1 2 'read-only t)
+             (goto-char 2)
+             (condition-case err
+                 (progn (delete-char -1) (list :ok (buffer-string)))
+               (error (list (car err) (cdr err) (buffer-substring-no-properties (point-min) (point-max)))))))"#,
+    );
+    assert_eq!(
+        results[0],
+        r#"OK ((text-read-only nil "abc") (text-read-only ("locked") "abc") (text-read-only nil "abc"))"#
+    );
+}
+
+#[test]
 fn lexical_inhibit_read_only_binding_overrides_buffer_read_only() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

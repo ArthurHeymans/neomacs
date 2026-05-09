@@ -3254,7 +3254,15 @@ impl Context {
         obarray.set_symbol_value("frame-inhibit-implied-resize", Value::NIL);
         obarray.set_symbol_value("mark-even-if-inactive", Value::T);
         obarray.set_symbol_value("read-buffer-function", Value::NIL);
-        obarray.set_symbol_value("minibuffer-prompt-properties", Value::NIL);
+        obarray.set_symbol_value(
+            "minibuffer-prompt-properties",
+            Value::list(vec![
+                Value::symbol("read-only"),
+                Value::T,
+                Value::symbol("face"),
+                Value::symbol("minibuffer-prompt"),
+            ]),
+        );
         obarray.set_symbol_value("help-event-list", Value::NIL);
         // GNU `keyboard.c:14127`:
         //   DEFVAR_LISP ("prefix-help-command", Vprefix_help_command, ...);

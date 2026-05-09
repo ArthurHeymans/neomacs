@@ -4256,6 +4256,7 @@ fn vm_minibuffer_builtins_use_shared_runtime_state() {
                         buf,
                         &crate::heap_types::LispString::from_utf8("Prompt: "),
                         Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
+                        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
                     );
                 }
                 eval.buffers.set_current(minibuf_id);

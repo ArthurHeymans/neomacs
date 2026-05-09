@@ -538,7 +538,7 @@ fn ordered_pairs_to_plist(pairs: &[(Value, Value)]) -> Value {
 /// `read-only` property that is not silenced by either the
 /// `inhibit-read-only` interval property or the dynamic
 /// `inhibit-read-only` variable.
-fn verify_text_read_only_in_state(
+pub(crate) fn verify_text_read_only_in_state(
     obarray: &Obarray,
     buffers: &BufferManager,
     buf_id: BufferId,

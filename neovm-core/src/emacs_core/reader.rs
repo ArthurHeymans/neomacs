@@ -979,8 +979,16 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let prompt_byte_len;
     {
         let buf = buffers.get_mut(minibuf_id).unwrap();
-        prompt_byte_len =
-            super::minibuffer::install_minibuffer_buffer_text(buf, &prompt, initial_input.as_ref());
+        let prompt_properties = obarray
+            .symbol_value("minibuffer-prompt-properties")
+            .copied()
+            .unwrap_or(Value::NIL);
+        prompt_byte_len = super::minibuffer::install_minibuffer_buffer_text(
+            buf,
+            &prompt,
+            initial_input.as_ref(),
+            prompt_properties,
+        );
     }
 
     let active_window_state = activate_minibuffer_window_in_state(
@@ -1522,8 +1530,17 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let prompt_byte_len;
     {
         let buf = shared.buffers.get_mut(minibuf_id).unwrap();
-        prompt_byte_len =
-            super::minibuffer::install_minibuffer_buffer_text(buf, &prompt, initial_input.as_ref());
+        let prompt_properties = shared
+            .obarray
+            .symbol_value("minibuffer-prompt-properties")
+            .copied()
+            .unwrap_or(Value::NIL);
+        prompt_byte_len = super::minibuffer::install_minibuffer_buffer_text(
+            buf,
+            &prompt,
+            initial_input.as_ref(),
+            prompt_properties,
+        );
     }
 
     let active_window_state = activate_minibuffer_window_in_state(

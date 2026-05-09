@@ -817,6 +817,7 @@ fn eval_minibuffer_runtime_state_tracks_active_prompt_and_contents() {
             buf,
             &crate::heap_types::LispString::from_utf8("Prompt: "),
             Some(&crate::heap_types::LispString::from_utf8("value")),
+            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
     }
     eval.buffers.set_current(minibuf_id);
@@ -870,6 +871,7 @@ fn eval_minibuffer_runtime_state_preserves_raw_unibyte_prompt_and_contents() {
             buf,
             &raw_prompt,
             Some(&crate::heap_types::LispString::from_utf8("value")),
+            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
     }
     eval.buffers.set_current(minibuf_id);
@@ -890,6 +892,50 @@ fn eval_minibuffer_runtime_state_preserves_raw_unibyte_prompt_and_contents() {
 }
 
 #[test]
+fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let minibuf_id = eval.buffers.create_buffer(" *Minibuf-props*");
+    let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
+    let prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+        buf,
+        &crate::heap_types::LispString::from_utf8("Prompt: "),
+        Some(&crate::heap_types::LispString::from_utf8("value")),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+    );
+
+    assert_eq!(prompt_end, "Prompt: ".len());
+    assert_eq!(
+        buf.text.text_props_get_property(0, Value::symbol("field")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        buf.text
+            .text_props_get_property(0, Value::symbol("front-sticky")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        buf.text
+            .text_props_get_property(0, Value::symbol("rear-nonsticky")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        buf.text
+            .text_props_get_property(0, Value::symbol("read-only")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        buf.text.text_props_get_property(0, Value::symbol("face")),
+        Some(Value::symbol("minibuffer-prompt"))
+    );
+    assert_eq!(
+        buf.text
+            .text_props_get_property(prompt_end, Value::symbol("read-only")),
+        None
+    );
+}
+
+#[test]
 fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -900,6 +946,7 @@ fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() 
             buf,
             &crate::heap_types::LispString::from_utf8("Prompt: "),
             Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
+            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
         let _ = buf
             .text
@@ -933,6 +980,7 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         buf,
         &crate::heap_types::LispString::from_utf8("Prompt: "),
         Some(&crate::heap_types::LispString::from_utf8("stale")),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
     assert_eq!(first_prompt_end, "Prompt: ".len());
     assert_eq!(buf.point_byte(), "Prompt: stale".len());
@@ -941,6 +989,7 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         buf,
         &crate::heap_types::LispString::from_utf8("Switch to buffer: "),
         Some(&crate::heap_types::LispString::from_utf8("*Messages*")),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
 
     assert_eq!(second_prompt_end, "Switch to buffer: ".len());

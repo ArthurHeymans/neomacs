@@ -2699,6 +2699,7 @@ fn bootstrap_minibuffer_complete_and_exit_accepts_exact_must_match_input() {
             Some(&crate::heap_types::LispString::from_utf8(
                 "insert-buffer-source",
             )),
+            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
     }
     eval.buffers.set_current(minibuf_id);

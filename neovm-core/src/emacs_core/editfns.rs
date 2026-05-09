@@ -897,6 +897,13 @@ pub(crate) fn builtin_delete_char(
             return Ok(Value::NIL);
         };
         let old_len = current_buffer_byte_span_char_len(ctx, start, end);
+        crate::emacs_core::textprop::verify_text_read_only_in_state(
+            &ctx.obarray,
+            &ctx.buffers,
+            current_id,
+            start,
+            end,
+        )?;
         signal_before_change(ctx, start, end)?;
         let _ = ctx.buffers.delete_buffer_region(current_id, start, end);
         signal_after_change(ctx, start, start, old_len)?;
@@ -932,6 +939,13 @@ pub(crate) fn builtin_delete_region(
             vec![Value::make_buffer(current_id)],
         ));
     }
+    crate::emacs_core::textprop::verify_text_read_only_in_state(
+        &ctx.obarray,
+        &ctx.buffers,
+        current_id,
+        start_byte,
+        end_byte,
+    )?;
 
     let old_len = current_buffer_byte_span_char_len(ctx, start_byte, end_byte);
     signal_before_change(ctx, start_byte, end_byte)?;
@@ -972,6 +986,13 @@ pub(crate) fn builtin_delete_and_extract_region(
         }
         buf.buffer_substring_value(start_byte, end_byte)
     };
+    crate::emacs_core::textprop::verify_text_read_only_in_state(
+        &ctx.obarray,
+        &ctx.buffers,
+        current_id,
+        start_byte,
+        end_byte,
+    )?;
 
     let old_len = current_buffer_byte_span_char_len(ctx, start_byte, end_byte);
     signal_before_change(ctx, start_byte, end_byte)?;

@@ -315,6 +315,7 @@ pub(crate) fn install_minibuffer_buffer_text(
     buf: &mut crate::buffer::Buffer,
     prompt: &LispString,
     initial: Option<&LispString>,
+    prompt_properties: Value,
 ) -> usize {
     // Match GNU `read_minibuf` / `erase-buffer`: clear the minibuffer through
     // the buffer edit pipeline so point, narrowing, and sibling state reset
@@ -335,6 +336,7 @@ pub(crate) fn install_minibuffer_buffer_text(
             .text_props_put_property(0, prompt_end, Value::symbol("front-sticky"), Value::T);
         buf.text
             .text_props_put_property(0, prompt_end, Value::symbol("rear-nonsticky"), Value::T);
+        apply_minibuffer_prompt_properties(buf, prompt_end, prompt_properties);
     }
 
     if let Some(initial) = initial {
@@ -345,6 +347,33 @@ pub(crate) fn install_minibuffer_buffer_text(
     buf.widen();
     buf.goto_byte(total_len);
     prompt_end
+}
+
+pub(crate) fn default_minibuffer_prompt_properties() -> Value {
+    Value::list(vec![
+        Value::symbol("read-only"),
+        Value::T,
+        Value::symbol("face"),
+        Value::symbol("minibuffer-prompt"),
+    ])
+}
+
+fn apply_minibuffer_prompt_properties(
+    buf: &mut crate::buffer::Buffer,
+    prompt_end: usize,
+    prompt_properties: Value,
+) {
+    let mut cursor = prompt_properties;
+    while cursor.is_cons() {
+        let key = cursor.cons_car();
+        cursor = cursor.cons_cdr();
+        if !cursor.is_cons() {
+            break;
+        }
+        let value = cursor.cons_car();
+        cursor = cursor.cons_cdr();
+        buf.text.text_props_put_property(0, prompt_end, key, value);
+    }
 }
 
 // ---------------------------------------------------------------------------
