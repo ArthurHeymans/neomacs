@@ -690,6 +690,8 @@ impl Expander {
             "cl-dotimes" => self.expand_cl_dotimes(span, items),
             "psetq" => self.expand_psetq(span, items),
             "psetf" | "cl-psetf" => self.expand_psetf(span, items),
+            "cl-return" => self.expand_cl_return(span, items),
+            "cl-return-from" => self.expand_cl_return_from(span, items),
             "cl-rotatef" => self.expand_cl_rotatef(span, items),
             "cl-shiftf" => self.expand_cl_shiftf(span, items),
 
@@ -3085,6 +3087,34 @@ impl Expander {
             nil_form(span),
         ];
         let expanded = list_form(result, span);
+        self.expand_form(expanded)
+    }
+
+    fn expand_cl_return(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-return VALUE) => (throw '--cl-block-nil-- VALUE)
+        let value = if items.len() >= 2 { items[1].clone() } else { nil_form(span) };
+        let expanded = list_form(vec![
+            symbol_form("throw", span),
+            list_form(vec![symbol_form("quote", span),
+                symbol_form("--cl-block-nil--", span)], span),
+            value,
+        ], span);
+        self.expand_form(expanded)
+    }
+
+    fn expand_cl_return_from(&mut self, span: Span, items: Vec<SurfaceForm>) -> SurfaceForm {
+        // (cl-return-from NAME VALUE) => (throw (quote NAME) VALUE)
+        if items.len() < 2 {
+            self.error(span, "cl-return-from requires a block name");
+            return nil_form(span);
+        }
+        let tag = &items[1];
+        let value = if items.len() >= 3 { items[2].clone() } else { nil_form(span) };
+        let expanded = list_form(vec![
+            symbol_form("throw", span),
+            list_form(vec![symbol_form("quote", span), tag.clone()], span),
+            value,
+        ], span);
         self.expand_form(expanded)
     }
 
