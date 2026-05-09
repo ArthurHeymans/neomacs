@@ -7967,6 +7967,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_remove_if_odd() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (length (cl-remove-if 'cl-oddp (list 1 2 3 4 5 6)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
     fn executes_remq_removes_by_identity() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
