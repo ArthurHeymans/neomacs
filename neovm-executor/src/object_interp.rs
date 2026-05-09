@@ -1939,6 +1939,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-count-if" => self.subr_2(name, args, |s| {
                 s.cl_count_if(args[0], args[1])
             }),
+            "cl-mismatch" => self.subr_2(name, args, |s| {
+                s.cl_mismatch(args[0], args[1])
+            }),
             "cl-endp" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() {
                     bool_value(true)
@@ -3335,6 +3338,21 @@ impl Interpreter<'_, '_, '_> {
                 return Some(car);
             }
             current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn cl_mismatch(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
+        let elems1 = self.sequence_values(seq1)?;
+        let elems2 = self.sequence_values(seq2)?;
+        for i in 0..elems1.len().min(elems2.len()) {
+            if !self.eql_values(elems1[i], elems2[i]) {
+                return self.fixnum(i as i64, "cl-mismatch");
+            }
+        }
+        if elems1.len() != elems2.len() {
+            self.fixnum(elems1.len().min(elems2.len()) as i64, "cl-mismatch")
+        } else {
+            Some(LispValue::NIL)
         }
     }
 
@@ -6320,6 +6338,7 @@ fn is_primitive_name(name: &str) -> bool {
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
+            "cl-mismatch",
             "cl-member",
             "maphash",
             "match-beginning",
@@ -11311,6 +11330,24 @@ mod tests {
              (cl-count-if #'oddp (list 1 2 3 4 5))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_cl_mismatch_finds_first_difference() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-mismatch '(1 2 3) '(1 2 4))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_mismatch_equal_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-mismatch '(1 2 3) '(1 2 3))",
+        );
+        assert!(matches!(value, Some(v) if v.is_nil()));
     }
 
     #[test]
