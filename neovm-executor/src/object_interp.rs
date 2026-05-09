@@ -8341,6 +8341,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_apply_append_flattens_lists() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length (apply #'append '((1 2) (3 4) (5 6))))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(6)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
