@@ -5462,29 +5462,6 @@ impl Context {
                 }
             }
 
-            // Update last-command (GNU `keyboard.c:1473`).
-            if let Ok(this_cmd) = self.eval_symbol("this-command") {
-                self.assign("last-command", this_cmd);
-            }
-
-            // Update last-repeatable-command per GNU
-            // `keyboard.c:1467-1470`. Finding 3.
-            //
-            //   KVAR (current_kboard, Vlast_repeatable_command)
-            //     = (EQ (Vreal_this_command, Qself_insert_command)
-            //        ? Vreal_last_command
-            //        : Vreal_this_command);
-            let real_this = self.eval_symbol("real-this-command").unwrap_or(Value::NIL);
-            let is_self_insert = real_this
-                .as_symbol_name()
-                .is_some_and(|n| n == "self-insert-command");
-            let last_repeatable = if is_self_insert {
-                self.eval_symbol("real-last-command").unwrap_or(Value::NIL)
-            } else {
-                real_this
-            };
-            self.assign("last-repeatable-command", last_repeatable);
-
             // GNU runs deactivate-mark handling BEFORE
             // post-command-hook (`keyboard.c:1471-1484`), so the
             // hook sees the post-deactivate state. Finding 14.
@@ -5492,6 +5469,24 @@ impl Context {
 
             // Run post-command-hook via safe-run-hooks (Finding 7).
             self.safe_run_hook_if_bound("post-command-hook")?;
+
+            // GNU updates the command-history variables after
+            // post-command-hook (`keyboard.c`: kset_last_command and
+            // kset_real_last_command near the bottom of command_loop_1).
+            // Undo uses `last-command` to decide whether a following undo
+            // continues the same undo chain or starts a redo.
+            if let Ok(this_cmd) = self.eval_symbol("this-command") {
+                self.assign("last-command", this_cmd);
+            }
+            let real_this = self.eval_symbol("real-this-command").unwrap_or(Value::NIL);
+            self.assign("real-last-command", real_this);
+
+            // GNU records the real command as last-repeatable-command for
+            // ordinary key events.
+            let last_event = self.eval_symbol("last-command-event").unwrap_or(Value::NIL);
+            if !last_event.is_cons() {
+                self.assign("last-repeatable-command", real_this);
+            }
 
             // Reset this-original-command for the next iteration so
             // a fresh command starts the cycle clean (mirroring
@@ -11365,6 +11360,35 @@ impl Context {
                 value.kind(),
                 value.bits()
             );
+        }
+
+        // `buffer-undo-list` is a per-buffer variable in GNU.  Neomacs stores
+        // it in SharedUndoState instead of the generic buffer-local alist, so
+        // dynamic binding must update that shared state directly.  This is
+        // required for GNU's `with-silent-modifications`, which binds
+        // `buffer-undo-list` to t so font-lock/jit-lock text-property changes
+        // do not enter the user's undo history.
+        if resolved == buffer_undo_list_symbol()
+            && let Some(buf_id) = self.buffers.current_buffer_id()
+        {
+            let old_value = self
+                .buffers
+                .get(buf_id)
+                .map(|buf| buf.get_undo_list())
+                .unwrap_or(Value::NIL);
+            self.specpdl.push(SpecBinding::LetLocal {
+                sym_id: resolved,
+                old_value,
+                buffer_id: buf_id,
+            });
+            if self.watchers.has_watchers(resolved) {
+                let _ = self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "let");
+            }
+            let _ = self
+                .buffers
+                .set_buffer_local_property_by_sym_id(buf_id, resolved, value);
+            self.sync_cached_runtime_binding_by_id(resolved, value);
+            return;
         }
 
         // Phase 10D: handle FORWARDED BUFFER_OBJFWD specbind separately

@@ -8781,6 +8781,26 @@ fn buffer_undo_list_reflects_recorded_edits() {
 }
 
 #[test]
+fn let_bound_buffer_undo_list_suppresses_text_property_undo_records() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(with-temp-buffer
+           (setq buffer-undo-list nil)
+           (insert \"abc\")
+           (let ((before buffer-undo-list)
+                 during after)
+             (let ((buffer-undo-list t))
+               (put-text-property 1 2 'fontified t)
+               (setq during (list buffer-undo-list
+                                  (get-text-property 1 'fontified))))
+             (setq after (list (eq buffer-undo-list before)
+                               buffer-undo-list))
+             (list during after)))",
+    );
+    assert_eq!(results[0], "OK ((t t) (t ((1 . 4) (t . 0))))");
+}
+
+#[test]
 fn char_primitives_respect_narrowing() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
