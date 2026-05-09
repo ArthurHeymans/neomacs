@@ -6139,6 +6139,40 @@ fn sparse_keymap_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn local_keymap_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"localmap:%S\" (with-temp-buffer (let ((m (make-sparse-keymap))) (define-key m (kbd \"C-c a\") 'ignore) (use-local-map m) (list (eq (current-local-map) m) (lookup-key (current-local-map) (kbd \"C-c a\")) (local-key-binding (kbd \"C-c a\"))))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("localmap:") && row.contains("(t ignore ignore)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: local keymap lookup should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "local_keymap_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn full_keymap_prompt_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
