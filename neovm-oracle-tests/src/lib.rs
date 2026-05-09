@@ -954,6 +954,8 @@ mod regexp_advanced;
 mod regexp_comprehensive_advanced;
 #[path = "regexp-comprehensive-patterns.rs"]
 mod regexp_comprehensive_patterns;
+#[path = "regexp-gnu-divergence.rs"]
+mod regexp_gnu_divergence;
 #[path = "regexp-operations.rs"]
 mod regexp_operations;
 #[path = "regexp-operations-advanced.rs"]
