@@ -2063,6 +2063,50 @@ fn button_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn field_property_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"field:%S\" (with-temp-buffer (insert \"aa\" (propertize \"bb\" 'field 'f) \"cc\") (mapcar (lambda (p) (list p (field-beginning p) (field-end p) (field-string p) (field-string-no-properties p))) '(1 3 4 5))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("field:")
+            && recent.contains("(1 1 3")
+            && recent.contains("(3 1 3")
+            && recent.contains("(4 3 5")
+            && recent.contains("(5 3 5")
+            && recent.contains("field f")
+            && recent.contains("bb")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: field text-property boundary helpers should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "field_property_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_substring_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
