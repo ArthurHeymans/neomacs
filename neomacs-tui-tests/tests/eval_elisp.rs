@@ -4237,6 +4237,43 @@ fn column_motion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn thing_at_point_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"bounds:%S\" (with-temp-buffer (insert \"foo bar\\n  baz\") (goto-char 2) (list (bounds-of-thing-at-point 'word) (thing-at-point 'word t) (progn (goto-char 6) (bounds-of-thing-at-point 'symbol)) (progn (goto-char 12) (thing-at-point 'line t)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("bounds:")
+                && row.contains("((1 . 4)")
+                && row.contains("foo")
+                && row.contains("(5 . 8)")
+                && row.contains("baz")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: thing-at-point bounds and text extraction should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "thing_at_point_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn point_motion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
