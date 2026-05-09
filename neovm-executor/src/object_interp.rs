@@ -939,22 +939,36 @@ impl Interpreter<'_, '_, '_> {
                 return None;
             }
         };
-        let lowered = lambda_template_to_ssa(&template);
-        if !lowered.diagnostics.is_empty() {
-            self.diagnostics.extend(lowered.diagnostics);
-            return None;
-        }
-        let regir = ssa_to_regir(&lowered.value);
-        if !regir.diagnostics.is_empty() {
-            self.diagnostics.extend(regir.diagnostics);
-            return None;
-        }
-        let args = self.adapt_lambda_args(&template.params, args)?;
-        let mut entry_args = Vec::with_capacity(captures.len() + args.len());
+        // Check compile cache to avoid re-lowering the same lambda on
+        // repeated calls (common in loops).
+        let func_addr = function.heap_addr();
+        let regir = if let Some(addr) = func_addr
+            && let Some(cached) = self.runtime.lambda_cache.get(&addr)
+        {
+            cached.clone()
+        } else {
+            let lowered = lambda_template_to_ssa(&template);
+            if !lowered.diagnostics.is_empty() {
+                self.diagnostics.extend(lowered.diagnostics);
+                return None;
+            }
+            let regir_out = ssa_to_regir(&lowered.value);
+            if !regir_out.diagnostics.is_empty() {
+                self.diagnostics.extend(regir_out.diagnostics);
+                return None;
+            }
+            let compiled = regir_out.value;
+            if let Some(addr) = func_addr {
+                self.runtime.lambda_cache.insert(addr, compiled.clone());
+            }
+            compiled
+        };
+        let adapted = self.adapt_lambda_args(&template.params, args)?;
+        let mut entry_args = Vec::with_capacity(captures.len() + adapted.len());
         entry_args.extend(captures);
-        entry_args.extend(args);
+        entry_args.extend(adapted);
         let result = execute_with_module(
-            &regir.value,
+            &regir,
             &entry_args,
             self.module,
             self.functions_by_name,

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt, sync::Arc};
 
+use neovm_compiler::regir::RegFunction;
 use neovm_compiler::ssa::SsaLambdaTemplate;
 use neovm_gc::{Heap, HeapConfig, Mutator};
 
@@ -28,6 +29,9 @@ pub struct Runtime {
     lexical_cells: Vec<Box<LexicalCell>>,
     floats: Vec<Box<FloatObj>>,
     bignums: Vec<Box<BignumObj>>,
+    /// Cache compiled RegIR for lambda functions keyed by address.
+    /// Avoids re-compiling the same SSA template on every invocation.
+    pub(crate) lambda_cache: HashMap<usize, RegFunction>,
     atoms: Vec<Box<AtomObj>>,
     /// GC-allocated atom addresses. Checked before Vec scan.
     gc_atoms: HashMap<usize, ()>,
@@ -70,6 +74,7 @@ impl Default for Runtime {
             lexical_cells: Vec::new(),
             floats: Vec::new(),
             bignums: Vec::new(),
+            lambda_cache: HashMap::new(),
             atoms: Vec::new(),
             gc_atoms: HashMap::new(),
             agents: Vec::new(),
@@ -129,6 +134,7 @@ impl Runtime {
             lexical_cells: Vec::new(),
             floats: Vec::new(),
             bignums: Vec::new(),
+            lambda_cache: HashMap::new(),
             atoms: Vec::new(),
             gc_atoms: HashMap::new(),
             agents: Vec::new(),
