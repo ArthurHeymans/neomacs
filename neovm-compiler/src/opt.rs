@@ -540,6 +540,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::String(s) => Some(SsaConst::Int(s.len() as i64)),
             _ => None,
         },
+        "number-to-string" if args.len() == 1 => match args[0] {
+            SsaConst::Int(n) => Some(SsaConst::String(n.to_string())),
+            _ => None,
+        },
         "substring" if args.len() >= 2 => {
             let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
             let start = args[1].as_int()? as usize;
