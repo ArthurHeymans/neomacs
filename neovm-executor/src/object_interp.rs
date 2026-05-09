@@ -8420,6 +8420,22 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(49)));
     }
 
+    #[test]
+    fn executes_complex_cl_integration() {
+        // flet + dolist + case: filter even numbers, double them, sum
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (let ((sum 0)) \
+               (cl-flet ((add (x) (setq sum (+ sum x)))) \
+                 (cl-dolist (n '(1 2 3 4 5 6)) \
+                   (cl-case (cl-oddp n) \
+                     ((nil) (add n))))) \
+               sum)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(12)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
