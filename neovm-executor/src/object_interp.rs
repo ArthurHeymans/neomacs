@@ -8252,6 +8252,26 @@ mod tests {
     }
 
     #[test]
+    fn executes_defvar_only_sets_when_unbound() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defvar my-var 1) (defvar my-var 99) (symbol-value 'my-var))",
+        );
+        // Second defvar does NOT overwrite the existing value
+        assert_eq!(value, Some(LispValue::expect_fixnum(1)));
+    }
+
+    #[test]
+    fn executes_defconst_always_sets() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defconst my-const 1) (defconst my-const 99) (symbol-value 'my-const))",
+        );
+        // defconst always overwrites
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
     fn executes_fmakunbound_removes_function_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
