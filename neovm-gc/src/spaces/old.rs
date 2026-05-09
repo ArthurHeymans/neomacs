@@ -847,7 +847,11 @@ impl OldGenState {
     /// Clear every line mark across every block.
     pub(crate) fn clear_all_block_line_marks(&self) {
         for block in self.blocks.read().iter() {
-            block.clear_line_marks();
+            // Skip blocks with no marks — common for freshly
+            // allocated blocks that haven't been used yet.
+            if !block.is_empty() {
+                block.clear_line_marks();
+            }
         }
     }
 
