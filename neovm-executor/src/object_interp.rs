@@ -9482,4 +9482,20 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
+
+    #[test]
+    fn executes_progn_empty_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(progn)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cond_empty_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(cond)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
