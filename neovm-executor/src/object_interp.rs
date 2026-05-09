@@ -10249,6 +10249,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cl_member_finds_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (cl-member 2 '(1 2 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
