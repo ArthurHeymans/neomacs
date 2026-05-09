@@ -799,12 +799,26 @@ impl OldGenState {
                 return true;
             }
         }
-        // Cache miss — do the full search.
-        let Some(index) = self.find_block_for_addr(owner_addr) else {
+        // Cache miss — do the full search under a single read lock.
+        let blocks = self.blocks.read();
+        let Some(index) = blocks
+            .binary_search_by(|block| {
+                let base = block.base_ptr() as usize;
+                let end = base.saturating_add(block.buffer.len());
+                if owner_addr < base {
+                    std::cmp::Ordering::Greater
+                } else if owner_addr >= end {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .ok()
+        else {
             return false;
         };
         self.last_block_index.store(index, Ordering::Relaxed);
-        self.blocks.read()[index].card_table().record_write(owner_addr);
+        blocks[index].card_table().record_write(owner_addr);
         true
     }
 
