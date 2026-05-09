@@ -8590,6 +8590,10 @@ mod tests {
             Some(LispValue::TRUE));
         assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep nil 'null)").0,
             Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep '(1 . 2) 'cons)").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'cons)").0,
+            Some(LispValue::NIL));
     }
 
     #[test]
