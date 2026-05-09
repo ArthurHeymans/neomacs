@@ -7967,6 +7967,22 @@ mod tests {
     }
 
     #[test]
+    fn executes_atom_predicate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and (atom 42) (atom nil) (not (atom '(1 2))))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_list_constructor() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(length (list 1 2 3 4 5))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
     fn executes_cdar_alist_access() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n(cdar '((a . 1) (b . 2)))",
