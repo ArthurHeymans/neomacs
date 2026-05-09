@@ -8192,6 +8192,22 @@ mod tests {
     }
 
     #[test]
+    fn executes_apply_empty_spread() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(apply '+ '())",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_apply_prefix_with_empty_spread() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(apply '+ 5 '())",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
     fn executes_funcall_with_multiple_args() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
