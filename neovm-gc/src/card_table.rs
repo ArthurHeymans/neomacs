@@ -143,9 +143,11 @@ impl CardTable {
     /// Clear every card back to `CARD_CLEAN`. Typically invoked at the
     /// end of a minor GC after dirty cards have been processed.
     pub(crate) fn clear_all(&self) {
-        for card in self.cards.iter() {
-            card.store(CARD_CLEAN, Ordering::Relaxed);
-        }
+        // Bulk zero via raw pointer — stop-the-world guarantees
+        // no concurrent access. CARD_CLEAN == 0, so memset to 0.
+        let ptr = self.cards.as_ptr() as *mut u8;
+        let len = self.cards.len();
+        unsafe { std::ptr::write_bytes(ptr, 0, len); }
     }
 
     /// Iterate the card indices that are currently dirty. Useful for
