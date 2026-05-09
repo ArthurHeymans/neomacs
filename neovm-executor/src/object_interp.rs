@@ -10213,6 +10213,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_fset_and_symbol_function_roundtrip() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (fset 'my-test-fn (lambda (x) (1+ x))) \
+               (funcall (symbol-function 'my-test-fn) 41))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_letrec_recursive_binding() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
