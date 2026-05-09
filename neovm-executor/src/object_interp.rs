@@ -1193,7 +1193,7 @@ impl Interpreter<'_, '_, '_> {
             "arrayp" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(self.runtime.is_vector(args[0]) || self.runtime.is_string(args[0]))
             }),
-            "char-table-p" | "bool-vector-p" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "char-table-p" | "bool-vector-p" | "recordp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
             "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(
                     args[0].as_char().is_some()
@@ -7002,6 +7002,7 @@ fn is_primitive_name(name: &str) -> bool {
             "rassoc",
             "rassq",
             "read",
+            "recordp",
             "rem",
             "remhash",
             "remq",
