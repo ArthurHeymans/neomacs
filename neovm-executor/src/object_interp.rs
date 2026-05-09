@@ -9697,6 +9697,22 @@ mod tests {
     }
 
     #[test]
+    fn executes_list_empty_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(list)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_list_single_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(car (list 42))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
     fn executes_let_with_empty_bindings() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
