@@ -8360,6 +8360,22 @@ mod tests {
         assert_eq!(value, Some(LispValue::NIL));
     }
 
+    #[test]
+    fn executes_and_short_circuits() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(and nil (error \"unreachable\"))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_or_short_circuits() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n(or t (error \"unreachable\"))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
