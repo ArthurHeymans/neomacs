@@ -1899,6 +1899,12 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.last(args[0])),
             "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
             "member" | "cl-member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
+            "cl-member-if" => self.subr_2(name, args, |s| {
+                s.cl_member_if(args[0], args[1])
+            }),
+            "cl-member-if-not" => self.subr_2(name, args, |s| {
+                s.cl_member_if_not(args[0], args[1])
+            }),
             "assq" | "cl-assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
             "assoc" | "cl-assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
             "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
@@ -3262,6 +3268,42 @@ impl Interpreter<'_, '_, '_> {
             }
             let result = self.runtime.cdr(current);
             current = self.runtime_value(result)?;
+        }
+    }
+
+    fn cl_member_if(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if !self.execute_funcall(predicate, &[car])?.is_nil() {
+                return Some(current);
+            }
+            current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn cl_member_if_not(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let mut current = list;
+        loop {
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                return None;
+            }
+            let car = self.runtime.car(current).ok()?;
+            if self.execute_funcall(predicate, &[car])?.is_nil() {
+                return Some(current);
+            }
+            current = self.runtime.cdr(current).ok()?;
         }
     }
 
@@ -6366,6 +6408,8 @@ fn is_primitive_name(name: &str) -> bool {
             "mapcar",
             "cl-mapc",
             "cl-mapcar",
+            "cl-member-if",
+            "cl-member-if-not",
             "cl-mismatch",
             "cl-member",
             "maphash",
@@ -11394,6 +11438,15 @@ mod tests {
              (cl-position-if #'evenp '(1 3 4 5 6))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_member_if_returns_tail() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-member-if #'evenp '(1 3 4 5 6))",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "(4 5 6)");
     }
 
     #[test]
