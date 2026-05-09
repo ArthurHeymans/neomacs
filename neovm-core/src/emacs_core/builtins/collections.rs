@@ -655,10 +655,11 @@ fn builtin_gethash_user_defined(
     let ValueKind::Veclike(VecLikeType::HashTable) = table.kind() else {
         return Ok(None);
     };
-    let ht = table.as_hash_table().unwrap().clone();
-    let Some((cmp_function, hash_function)) = table_user_defined_test(&ht) else {
+    let ht_ref = table.as_hash_table().unwrap();
+    let Some((cmp_function, hash_function)) = table_user_defined_test(ht_ref) else {
         return Ok(None);
     };
+    let ht = ht_ref.clone();
     let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
     for key in &ht.insertion_order {
         if !ht.data.contains_key(key) {
@@ -727,10 +728,11 @@ fn builtin_puthash_user_defined(
     let ValueKind::Veclike(VecLikeType::HashTable) = table.kind() else {
         return Ok(None);
     };
-    let ht_snapshot = table.as_hash_table().unwrap().clone();
-    let Some((cmp_function, hash_function)) = table_user_defined_test(&ht_snapshot) else {
+    let ht_ref = table.as_hash_table().unwrap();
+    let Some((cmp_function, hash_function)) = table_user_defined_test(ht_ref) else {
         return Ok(None);
     };
+    let ht_snapshot = ht_ref.clone();
     let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
     let mut existing_key = None;
     for key in &ht_snapshot.insertion_order {

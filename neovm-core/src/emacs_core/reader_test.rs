@@ -1,7 +1,7 @@
 use super::*;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::print_value;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::{ValueKind, VecLikeType, eq_value};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -3372,6 +3372,36 @@ fn read_from_string_circular_cons_label_matches_gnu() {
         rest.cons_cdr().cons_car().as_utf8_str(),
         Some("#1=(a . #1#)")
     );
+}
+
+#[test]
+fn read_from_string_read_label_identity_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let list = builtin_read_from_string(&mut ev, vec![Value::string("#1=(nil)")])
+        .expect("structurally-equal placeholder must not be treated as self-reference")
+        .cons_car();
+    assert!(list.is_cons());
+    assert!(list.cons_car().is_nil());
+    assert!(list.cons_cdr().is_nil());
+
+    let vector = builtin_read_from_string(&mut ev, vec![Value::string("#1=[#1#]")])
+        .expect("GNU accepts circular vectors through read-label substitution")
+        .cons_car();
+    assert!(vector.is_vector());
+    let slots = vector.as_vector_data().expect("vector slots");
+    assert_eq!(slots.len(), 1);
+    assert!(eq_value(&slots[0], &vector));
+
+    let direct_self = builtin_read_from_string(&mut ev, vec![Value::string("#1=#1#")]);
+    match direct_self {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "invalid-read-syntax");
+            assert_eq!(sig.data, vec![Value::string("nonsensical self-reference")]);
+        }
+        other => panic!("expected invalid-read-syntax, got {other:?}"),
+    }
 }
 
 #[test]

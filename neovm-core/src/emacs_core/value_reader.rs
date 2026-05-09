@@ -19,7 +19,7 @@ use super::emacs_char;
 use crate::buffer::Buffer;
 use smallvec::SmallVec;
 
-use super::value::{HashTableTest, Value, build_hash_table_literal_value};
+use super::value::{HashTableTest, Value, build_hash_table_literal_value, eq_value};
 
 const UNICODE_CHARACTER_NAME_LENGTH_BOUND: usize = 200;
 const CHAR_CODE_MASK: u32 = 0x3F_FFFF;
@@ -268,6 +268,59 @@ struct ReaderToken {
 }
 
 type ReaderTokenBytes = SmallVec<[u8; 64]>;
+
+fn substitute_read_placeholder(object: Value, placeholder: Value) {
+    let mut seen = Vec::new();
+    let result = substitute_read_placeholder_recurse(object, placeholder, object, &mut seen);
+    debug_assert!(eq_value(&result, &object));
+}
+
+fn substitute_read_placeholder_recurse(
+    object: Value,
+    placeholder: Value,
+    subtree: Value,
+    seen: &mut Vec<Value>,
+) -> Value {
+    if eq_value(&subtree, &placeholder) {
+        return object;
+    }
+
+    if subtree.is_symbol() || subtree.is_number() || subtree.is_string() {
+        return subtree;
+    }
+
+    if seen.iter().any(|seen| eq_value(seen, &subtree)) {
+        return subtree;
+    }
+    seen.push(subtree);
+
+    if subtree.is_cons() {
+        let car =
+            substitute_read_placeholder_recurse(object, placeholder, subtree.cons_car(), seen);
+        let cdr =
+            substitute_read_placeholder_recurse(object, placeholder, subtree.cons_cdr(), seen);
+        subtree.set_car(car);
+        subtree.set_cdr(cdr);
+    } else if subtree.is_vector() {
+        if let Some(items) = subtree.as_vector_data() {
+            let mut items = items.clone();
+            for item in &mut items {
+                *item = substitute_read_placeholder_recurse(object, placeholder, *item, seen);
+            }
+            let _ = subtree.replace_vector_data(items);
+        }
+    } else if subtree.is_record() {
+        if let Some(items) = subtree.as_record_data() {
+            let mut items = items.clone();
+            for item in &mut items {
+                *item = substitute_read_placeholder_recurse(object, placeholder, *item, seen);
+            }
+            let _ = subtree.replace_record_data(items);
+        }
+    }
+
+    subtree
+}
 
 fn translate_runtime_source_char(ch: char) -> u32 {
     let cp = ch as u32;
@@ -1430,7 +1483,7 @@ impl<'a> Reader<'a> {
                         };
 
                         let result = if expr.is_cons() {
-                            if expr == placeholder {
+                            if eq_value(&expr, &placeholder) {
                                 restore_scratch_gc_roots(saved);
                                 return Err(self.error("nonsensical self-reference"));
                             }
@@ -1438,6 +1491,7 @@ impl<'a> Reader<'a> {
                             placeholder.set_cdr(expr.cons_cdr());
                             placeholder
                         } else {
+                            substitute_read_placeholder(expr, placeholder);
                             self.read_labels.insert(n, expr);
                             expr
                         };
