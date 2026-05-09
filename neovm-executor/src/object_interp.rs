@@ -8389,6 +8389,17 @@ mod tests {
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
+    #[test]
+    fn executes_condition_case_normal_path() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case err \
+               (+ 1 2) \
+               (error 99))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
 
     #[test]
     fn executes_funcall_with_multiple_args() {
