@@ -1933,6 +1933,12 @@ impl Interpreter<'_, '_, '_> {
             "cl-find" => self.subr_2(name, args, |s| {
                 s.cl_find(args[0], args[1])
             }),
+            "cl-find-if" => self.subr_2(name, args, |s| {
+                s.cl_find_if(args[0], args[1])
+            }),
+            "cl-position-if" => self.subr_2(name, args, |s| {
+                s.cl_position_if(args[0], args[1])
+            }),
             "cl-count" => self.subr_2(name, args, |s| {
                 s.cl_count(args[0], args[1])
             }),
@@ -3339,6 +3345,26 @@ impl Interpreter<'_, '_, '_> {
             }
             current = self.runtime.cdr(current).ok()?;
         }
+    }
+
+    fn cl_find_if(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        for e in elements {
+            if !self.execute_funcall(predicate, &[e])?.is_nil() {
+                return Some(e);
+            }
+        }
+        Some(LispValue::NIL)
+    }
+
+    fn cl_position_if(&mut self, predicate: LispValue, list: LispValue) -> Option<LispValue> {
+        let elements = self.sequence_values(list)?;
+        for (i, e) in elements.into_iter().enumerate() {
+            if !self.execute_funcall(predicate, &[e])?.is_nil() {
+                return self.fixnum(i as i64, "cl-position-if");
+            }
+        }
+        Some(LispValue::NIL)
     }
 
     fn cl_mismatch(&mut self, seq1: LispValue, seq2: LispValue) -> Option<LispValue> {
@@ -6229,10 +6255,12 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-evenp",
             "cl-fill",
             "cl-find",
+            "cl-find-if",
             "cl-minusp",
             "cl-oddp",
             "cl-plusp",
             "cl-position",
+            "cl-position-if",
             "cl-concatenate",
             "cl-delete",
             "cl-delete-duplicates",
@@ -11348,6 +11376,24 @@ mod tests {
              (cl-mismatch '(1 2 3) '(1 2 3))",
         );
         assert!(matches!(value, Some(v) if v.is_nil()));
+    }
+
+    #[test]
+    fn executes_cl_find_if_returns_first_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-find-if #'evenp '(1 3 4 5 6))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(4)));
+    }
+
+    #[test]
+    fn executes_cl_position_if_returns_index() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-position-if #'evenp '(1 3 4 5 6))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
