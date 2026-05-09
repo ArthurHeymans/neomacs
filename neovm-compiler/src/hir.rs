@@ -895,8 +895,12 @@ impl Lowerer<'_> {
     }
 
     fn lower_progn(&mut self, form: &SurfaceForm, body: &[SurfaceForm]) -> Option<HirExpr> {
+        let exprs = self.lower_exprs(body)?;
+        if exprs.len() == 1 {
+            return Some(exprs.into_iter().next().unwrap());
+        }
         Some(HirExpr {
-            kind: HirExprKind::Progn(self.lower_exprs(body)?),
+            kind: HirExprKind::Progn(exprs),
             span: form.span,
         })
     }
