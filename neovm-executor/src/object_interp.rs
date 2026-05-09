@@ -1932,6 +1932,9 @@ impl Interpreter<'_, '_, '_> {
             "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
                 s.remove_duplicates(args[0])
             }),
+            "cl-tree-equal" => self.subr_2(name, args, |s| {
+                Some(bool_value(s.tree_equal(args[0], args[1])))
+            }),
             "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" => self.subr_3(name, args, |s| {
                 s.substitute_seq(args[0], args[1], args[2])
             }),
@@ -3450,6 +3453,18 @@ impl Interpreter<'_, '_, '_> {
             Some(make_list(self.runtime, result.into_iter()))
         } else {
             Some(self.runtime.vector(result))
+        }
+    }
+
+    fn tree_equal(&mut self, a: LispValue, b: LispValue) -> bool {
+        if self.runtime.is_cons(a) && self.runtime.is_cons(b) {
+            let a_car = self.runtime.car(a).unwrap_or(LispValue::NIL);
+            let b_car = self.runtime.car(b).unwrap_or(LispValue::NIL);
+            let a_cdr = self.runtime.cdr(a).unwrap_or(LispValue::NIL);
+            let b_cdr = self.runtime.cdr(b).unwrap_or(LispValue::NIL);
+            self.tree_equal(a_car, b_car) && self.tree_equal(a_cdr, b_cdr)
+        } else {
+            self.runtime.equal(a, b)
         }
     }
 
@@ -5757,6 +5772,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-delq",
             "cl-nsubstitute",
             "cl-substitute",
+            "cl-tree-equal",
             "cl-typep",
             "cl-remq",
             "cl-remove",
@@ -8578,6 +8594,14 @@ mod tests {
              (length (cl-substitute 99 2 '(1 2 3 2 4)))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
+    }
+
+    #[test]
+    fn executes_cl_tree_equal() {
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 3)))").0,
+            Some(LispValue::TRUE));
+        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 4)))").0,
+            Some(LispValue::NIL));
     }
 
     #[test]
