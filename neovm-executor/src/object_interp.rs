@@ -1890,9 +1890,9 @@ impl Interpreter<'_, '_, '_> {
             "nthcdr" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.nthcdr(args[0], args[1])),
-            "sort" => self
-                .exact_arity(name, args, 2)
-                .and_then(|_| self.sort_seq(args[0], args[1])),
+            "sort" | "cl-sort" => self.subr_2(name, args, |s| {
+                s.sort_seq(args[0], args[1])
+            }),
             "safe-length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.safe_length(args[0])),
@@ -5779,6 +5779,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-remove-duplicates",
             "cl-remove-if",
             "cl-remove-if-not",
+            "cl-sort",
             "clrhash",
             "compiled-function-p",
             "concat",
