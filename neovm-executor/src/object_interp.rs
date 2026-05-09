@@ -12219,6 +12219,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_fixnump_recognizes_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (fixnump 42)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
