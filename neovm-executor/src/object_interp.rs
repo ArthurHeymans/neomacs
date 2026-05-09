@@ -8836,4 +8836,83 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_macroexpand_expands_when_macro() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (car (macroexpand '(when t 42)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_macroexpand_expands_unless_macro() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (macroexpand '(unless nil 99))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_cl_loop_named_with_collect() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-loop named my-loop for i from 1 to 5 \
+               collect i into results \
+               finally (cl-return-from my-loop results))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_pcase_let_star_multiple_bindings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase-let* ((`(,a ,b) '(1 2)) (`(,c ,d) '(3 4))) (+ a b c d))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(10)));
+    }
+
+    #[test]
+    fn executes_pcase_let_star_symbol_binding() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (pcase-let* ((x 1) (y 2)) (+ x y))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_defun_cross_form_multiple_functions() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defun f1 (x) (+ x 1)) (defun f2 (x) (+ x 2)) (f2 (f1 10)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(13)));
+    }
+
+    #[test]
+    fn executes_defun_with_multiple_calls() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (defun double (x) (* x 2)) \
+               (+ (double 3) (double 4)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(14)));
+    }
+
+    #[test]
+    fn executes_cl_block_and_cl_return_from() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\
+             (cl-block outer \
+               (cl-block inner \
+                 (cl-return-from outer 42) 99))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
 }
