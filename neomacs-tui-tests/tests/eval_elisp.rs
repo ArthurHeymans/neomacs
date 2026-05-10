@@ -3355,6 +3355,79 @@ fn category_read_only_property_protects_text_like_gnu() {
 }
 
 #[test]
+fn text_property_modification_hooks_run_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/textprop.c:verify_interval_modification collects
+    // modification-hooks for non-empty changes and calls them before the
+    // actual deletion/replacement is applied.
+    let expr = r#"(message "tphooks2:%S" (with-temp-buffer (insert "abcd") (let ((events nil)) (put-text-property 2 4 'modification-hooks (list (lambda (beg end) (push (list 'mod beg end (substring-no-properties (buffer-string))) events)))) (delete-region 2 3) (list (substring-no-properties (buffer-string)) (nreverse events)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("tphooks2:")
+                && row.contains("acd")
+                && row.contains("mod 2 3")
+                && row.contains("abcd")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property modification-hooks should run before deletion like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_modification_hooks_run_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
+fn text_property_insert_hooks_run_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/textprop.c chooses insert-behind-hooks and
+    // insert-in-front-hooks before insertion, then report_interval_modification
+    // runs them after the inserted text exists.
+    let expr = r#"(message "inshooks2:%S" (with-temp-buffer (insert "ab") (let ((events nil)) (put-text-property 1 2 'insert-behind-hooks (list (lambda (beg end) (push (list 'behind beg end (substring-no-properties (buffer-string))) events)))) (put-text-property 2 3 'insert-in-front-hooks (list (lambda (beg end) (push (list 'front beg end (substring-no-properties (buffer-string))) events)))) (goto-char 2) (insert "X") (list (substring-no-properties (buffer-string)) (nreverse events)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("inshooks2:")
+                && row.contains("aXb")
+                && row.contains("behind 2 3")
+                && row.contains("front 2 3")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property insert hooks should run after insertion like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("text_property_insert_hooks_run_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn text_property_removal_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
