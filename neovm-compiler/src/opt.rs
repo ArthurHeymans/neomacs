@@ -545,15 +545,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             None
         }
-        "logand" if !args.is_empty() => {
+        "logand" => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(!0i64, |a, b| a & b)))
         }
-        "logior" if !args.is_empty() => {
+        "logior" => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a | b)))
         }
-        "logxor" if !args.is_empty() => {
+        "logxor" => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a ^ b)))
         }
