@@ -256,9 +256,12 @@ impl FrameManager {
             ..
         }) = frame.find_window_mut(window_id)
         {
+            let changed = *vscroll != next_raw;
             *vscroll = next_raw;
             *preserve = preserve_vscroll_p;
-            frame.display_snapshots.remove(&window_id);
+            if changed {
+                frame.display_snapshots.remove(&window_id);
+            }
         }
 
         let frame = self.get(frame_id)?;

@@ -943,6 +943,52 @@ fn set_display_snapshots_preserves_live_window_cursor_state() {
 }
 
 #[test]
+fn no_op_set_window_vscroll_preserves_display_snapshot() {
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let wid = mgr.get(fid).unwrap().selected_window;
+    {
+        let frame = mgr.get_mut(fid).unwrap();
+        frame.set_window_system(Some(Value::symbol("x")));
+        frame.set_display_snapshots(vec![WindowDisplaySnapshot {
+            window_id: wid,
+            points: vec![DisplayPointSnapshot {
+                buffer_pos: 5,
+                x: 64,
+                y: 0,
+                width: 16,
+                height: 33,
+                row: 0,
+                col: 4,
+            }],
+            rows: vec![DisplayRowSnapshot {
+                row: 0,
+                y: 0,
+                height: 33,
+                start_x: 0,
+                start_col: 0,
+                end_x: 96,
+                end_col: 6,
+                start_buffer_pos: Some(1),
+                end_buffer_pos: Some(6),
+            }],
+            ..WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let returned = mgr.set_window_vscroll(wid, 0.0, true, true);
+
+    assert_eq!(returned, Some(Value::fixnum(0)));
+    assert!(
+        mgr.get(fid)
+            .and_then(|frame| frame.window_display_snapshot(wid))
+            .and_then(|snapshot| snapshot.point_for_buffer_pos(5))
+            .is_some(),
+        "GNU Fset_window_vscroll only invalidates redisplay when vscroll changes"
+    );
+}
+
+#[test]
 fn replace_display_snapshots_preserves_logical_cursor_without_physical_cursor() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
