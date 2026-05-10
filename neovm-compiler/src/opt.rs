@@ -1070,6 +1070,23 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 SsaConst::Nil
             })
         }
+        "reverse" | "nreverse" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) => {
+                Some(SsaConst::String(s.chars().rev().collect()))
+            }
+            _ => None,
+        },
+        "subseq" if args.len() >= 2 => {
+            let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
+            let start = args[1].as_int()? as usize;
+            let end = if args.len() >= 3 {
+                args[2].as_int()? as usize
+            } else {
+                s.len()
+            };
+            if start > end || start > s.len() || end > s.len() { return None; }
+            Some(SsaConst::String(s[start..end].to_string()))
+        }
         _ => None,
     }
 }

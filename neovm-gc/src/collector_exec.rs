@@ -422,6 +422,12 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
     old_gen: &OldGenState,
     counter: &mut usize,
 ) -> Vec<crate::index_state::ObjectLocator> {
+    // Fast path: if no block has any dirty card, skip the entire
+    // header-index construction (which touches every old-gen object).
+    if !old_gen.blocks().iter().any(|b| b.card_table().has_dirty()) {
+        return Vec::new();
+    }
+
     let mut roots = Vec::new();
     let mut seen = std::collections::HashSet::new();
 

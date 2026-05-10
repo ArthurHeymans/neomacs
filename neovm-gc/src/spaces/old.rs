@@ -336,8 +336,8 @@ impl OldBlock {
     ///
     /// Takes `&self` — uses CAS on the per-card `AtomicU32`.
     pub(crate) fn record_object_start(&self, offset: usize) {
-        let card_size = self.card_table.card_size();
-        let card_idx = offset / card_size;
+        let card_shift = self.card_table.card_shift();
+        let card_idx = offset >> card_shift;
         let offset_u32 = offset as u32;
         let Some(slot) = self.object_starts.get(card_idx) else {
             return;

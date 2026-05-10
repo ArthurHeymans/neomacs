@@ -103,6 +103,11 @@ impl CardTable {
         self.card_size
     }
 
+    /// log2(card_size), cached for shift-based index computation.
+    pub(crate) fn card_shift(&self) -> u32 {
+        self.card_shift
+    }
+
     /// True if `addr` falls inside the table's covered range.
     #[inline]
     pub(crate) fn covers(&self, addr: usize) -> bool {
