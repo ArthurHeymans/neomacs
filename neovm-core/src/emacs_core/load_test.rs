@@ -3026,7 +3026,7 @@ fn bootstrap_runtime_command_loop_meta_s_o_opens_clean_occur_prompt_from_input_r
     assert_eq!(result, Value::NIL);
     assert_eq!(
         eval_rendered(&mut eval, "neo-occur-keyboard-prompt-log"),
-        r#"OK (#("List lines matching regexp: " 0 28 (rear-nonsticky t front-sticky t field t)) "List lines matching regexp: " 29 nil)"#
+        r#"OK (#("List lines matching regexp: " 0 28 (read-only t rear-nonsticky t front-sticky t field t)) "List lines matching regexp: " 29 nil)"#
     );
 }
 
@@ -3091,7 +3091,7 @@ fn bootstrap_runtime_command_loop_meta_x_ret_opens_clean_nested_grep_prompt_from
     assert_eq!(result, Value::NIL);
     assert_eq!(
         eval_rendered(&mut eval, "neo-grep-keyboard-prompt-log"),
-        r#"OK (#("Run grep (like this): grep --color=auto -nH --null -e " 0 22 (rear-nonsticky t front-sticky t field t)) "Run grep (like this): grep --color=auto -nH --null -e " 23 nil)"#
+        r#"OK (#("Run grep (like this): grep --color=auto -nH --null -e " 0 22 (read-only t rear-nonsticky t front-sticky t field t)) "Run grep (like this): grep --color=auto -nH --null -e " 23 nil)"#
     );
 }
 
@@ -6126,7 +6126,7 @@ fn bootstrap_runtime_command_execute_goto_line_installs_gnu_prompt_text() {
     );
     assert_eq!(
         rendered,
-        r#"OK (#("Goto line: " 0 11 (rear-nonsticky t front-sticky t field t)) "Goto line: " 12)"#
+        r#"OK (#("Goto line: " 0 11 (read-only t rear-nonsticky t front-sticky t field t)) "Goto line: " 12)"#
     );
 }
 
@@ -6166,7 +6166,7 @@ fn bootstrap_runtime_repeat_complex_command_reads_gnu_redo_form_from_command_his
     );
     assert_eq!(
         rendered,
-        r#"OK (#("Redo: (goto-line 2 nil nil t)" 0 6 (rear-nonsticky t front-sticky t field t)) "Redo: (goto-line 2 nil nil t)" 7)"#
+        r#"OK (#("Redo: (goto-line 2 nil nil t)" 0 6 (read-only t rear-nonsticky t front-sticky t field t)) "Redo: (goto-line 2 nil nil t)" 7)"#
     );
 }
 
@@ -6206,7 +6206,7 @@ fn bootstrap_runtime_occur_installs_clean_gnu_prompt_text() {
     );
     assert_eq!(
         rendered,
-        r#"OK (#("List lines matching regexp: " 0 28 (rear-nonsticky t front-sticky t field t)) "List lines matching regexp: " 29 nil)"#
+        r#"OK (#("List lines matching regexp: " 0 28 (read-only t rear-nonsticky t front-sticky t field t)) "List lines matching regexp: " 29 nil)"#
     );
 }
 
@@ -6252,7 +6252,7 @@ fn bootstrap_runtime_grep_installs_clean_gnu_prompt_text_and_default_command() {
     );
     assert_eq!(
         rendered,
-        r#"OK (#("Run grep (like this): grep --color=auto -nH --null -e " 0 22 (rear-nonsticky t front-sticky t field t)) "Run grep (like this): grep --color=auto -nH --null -e " 23 nil)"#
+        r#"OK (#("Run grep (like this): grep --color=auto -nH --null -e " 0 22 (read-only t rear-nonsticky t front-sticky t field t)) "Run grep (like this): grep --color=auto -nH --null -e " 23 nil)"#
     );
 }
 

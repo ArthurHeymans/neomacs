@@ -926,7 +926,7 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
     );
     assert_eq!(
         buf.text.text_props_get_property(0, Value::symbol("face")),
-        Some(Value::symbol("minibuffer-prompt"))
+        None
     );
     assert_eq!(
         buf.text

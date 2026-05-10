@@ -3267,12 +3267,7 @@ impl Context {
         obarray.set_symbol_value("read-buffer-function", Value::NIL);
         obarray.set_symbol_value(
             "minibuffer-prompt-properties",
-            Value::list(vec![
-                Value::symbol("read-only"),
-                Value::T,
-                Value::symbol("face"),
-                Value::symbol("minibuffer-prompt"),
-            ]),
+            Value::list(vec![Value::symbol("read-only"), Value::T]),
         );
         obarray.set_symbol_value("help-event-list", Value::NIL);
         // GNU `keyboard.c:14127`:
@@ -3462,6 +3457,7 @@ impl Context {
         );
         obarray.set_symbol_value("current-locale-environment", Value::string("C.UTF-8"));
         obarray.set_symbol_value("current-minibuffer-command", Value::NIL);
+        obarray.make_special("current-minibuffer-command");
         obarray.set_symbol_value("current-time-list", Value::T);
         obarray.set_symbol_value("current-transient-input-method", Value::NIL);
         obarray.set_symbol_value("real-last-command", Value::NIL);
@@ -3473,6 +3469,7 @@ impl Context {
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
         obarray.set_symbol_value("kbd-macro-termination-hook", Value::NIL);
         obarray.set_symbol_value("command-history", Value::NIL);
+        obarray.make_special("command-history");
         obarray.set_symbol_value("extended-command-history", Value::NIL);
         obarray.set_symbol_value("completion-ignore-case", Value::NIL);
         obarray.make_special("completion-ignore-case");
@@ -3778,12 +3775,7 @@ impl Context {
         }
         obarray.set_symbol_value(
             "minibuffer-prompt-properties",
-            Value::list(vec![
-                Value::symbol("read-only"),
-                Value::T,
-                Value::symbol("face"),
-                Value::symbol("minibuffer-prompt"),
-            ]),
+            Value::list(vec![Value::symbol("read-only"), Value::T]),
         );
         obarray.set_symbol_value("minibuffer-allow-text-properties", Value::NIL);
         obarray.set_symbol_value("minibuffer-scroll-window", Value::NIL);
@@ -3846,6 +3838,7 @@ impl Context {
         obarray.set_symbol_value("last-coding-system-used", Value::symbol("undecided-unix"));
         obarray.set_symbol_value("last-next-selection-coding-system", Value::NIL);
         obarray.set_symbol_value("command-debug-status", Value::NIL);
+        obarray.make_special("command-debug-status");
         obarray.set_symbol_value(
             "command-error-function",
             Value::symbol("help-command-error-confusable-suggestions"),
@@ -3881,6 +3874,7 @@ impl Context {
         obarray.set_symbol_value("deactivate-mark", Value::T);
         obarray.set_symbol_value("mark-active", Value::NIL);
         obarray.set_symbol_value("mark-even-if-inactive", Value::T);
+        obarray.make_special("mark-even-if-inactive");
         obarray.set_symbol_value("mark-ring", Value::NIL);
         obarray.set_symbol_value("mark-ring-max", Value::fixnum(16));
         // saved-region-selection is set by keyboard::pure::register_bootstrap_vars

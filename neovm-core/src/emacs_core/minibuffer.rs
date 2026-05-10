@@ -350,12 +350,7 @@ pub(crate) fn install_minibuffer_buffer_text(
 }
 
 pub(crate) fn default_minibuffer_prompt_properties() -> Value {
-    Value::list(vec![
-        Value::symbol("read-only"),
-        Value::T,
-        Value::symbol("face"),
-        Value::symbol("minibuffer-prompt"),
-    ])
+    Value::list(vec![Value::symbol("read-only"), Value::T])
 }
 
 fn apply_minibuffer_prompt_properties(

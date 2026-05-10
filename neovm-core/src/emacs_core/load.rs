@@ -3544,6 +3544,21 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
     // lexical. Set this after unwinding transient specpdl bindings so the
     // runtime top-level surface persists.
     eval.set_lexical_binding(true);
+    // Repair C-level DEFVAR declarations that may come from an older cached
+    // pdump. These mirror GNU callint.c, keyboard.c, and minibuf.c startup
+    // declarations and must be special under lexical-binding.
+    for name in [
+        "command-history",
+        "command-debug-status",
+        "mark-even-if-inactive",
+        "current-minibuffer-command",
+    ] {
+        eval.obarray.make_special(name);
+    }
+    eval.assign(
+        "minibuffer-prompt-properties",
+        Value::list(vec![Value::symbol("read-only"), Value::T]),
+    );
 
     Ok(())
 }
