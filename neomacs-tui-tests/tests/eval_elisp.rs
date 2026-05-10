@@ -8169,6 +8169,40 @@ fn add_to_history_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn add_to_history_keep_all_and_limits_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "history-corners:%S" (let ((history-delete-duplicates t) (history-length 10)) (defvar h1 nil) (defvar h2 nil) (defvar h3 nil) (defvar h4 nil) (setq h1 nil h2 nil h3 nil h4 nil) (add-to-history 'h1 "") (add-to-history 'h1 "" nil t) (add-to-history 'h1 "" nil t) (add-to-history 'h2 "a" 0) (put 'h3 'history-length 2) (mapc (lambda (x) (add-to-history 'h3 x)) '("a" "b" "c")) (let ((history-delete-duplicates nil)) (add-to-history 'h4 "a") (add-to-history 'h4 "a" nil nil) (add-to-history 'h4 "a" nil t)) (list h1 h2 h3 h4)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("history-corners:((\\\"\\\") nil"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: add-to-history keep-all, duplicate deletion, and length limits should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "add_to_history_keep_all_and_limits_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn numeric_rounding_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
