@@ -13962,4 +13962,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_multi_arg_division() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (/ 100 2 5) 10)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
