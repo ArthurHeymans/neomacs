@@ -25,7 +25,7 @@
 //! via the fast-path range check; callers must ensure they use the
 //! right table for each address space.
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 /// Default card size in bytes. 512B is the canonical choice from G1
 /// and similar collectors: 8 cards cover one 4KB page.
@@ -47,6 +47,9 @@ pub(crate) struct CardTable {
     card_shift: u32,
     /// One entry per card. Each byte is either 0 (clean) or 1 (dirty).
     cards: Box<[AtomicU8]>,
+    /// True if at least one card is dirty. Avoids O(cards) scan
+    /// in `clear_all_dirty_cards` for blocks with no dirty cards.
+    has_dirty: AtomicBool,
 }
 
 /// Card state values. The table uses byte granularity so entries can
@@ -79,6 +82,7 @@ impl CardTable {
             card_size,
             card_shift,
             cards: cards.into_boxed_slice(),
+            has_dirty: AtomicBool::new(false),
         }
     }
 
@@ -128,6 +132,7 @@ impl CardTable {
             return;
         };
         self.cards[index].store(CARD_DIRTY, Ordering::Release);
+        self.has_dirty.store(true, Ordering::Release);
     }
 
     /// Check whether the card containing `addr` is dirty. Returns
@@ -142,12 +147,17 @@ impl CardTable {
 
     /// Clear every card back to `CARD_CLEAN`. Typically invoked at the
     /// end of a minor GC after dirty cards have been processed.
+    pub(crate) fn has_dirty(&self) -> bool {
+        self.has_dirty.load(Ordering::Relaxed)
+    }
+
     pub(crate) fn clear_all(&self) {
         // Bulk zero via raw pointer — stop-the-world guarantees
         // no concurrent access. CARD_CLEAN == 0, so memset to 0.
         let ptr = self.cards.as_ptr() as *mut u8;
         let len = self.cards.len();
         unsafe { std::ptr::write_bytes(ptr, 0, len); }
+        self.has_dirty.store(false, Ordering::Relaxed);
     }
 
     /// Iterate the card indices that are currently dirty. Useful for
