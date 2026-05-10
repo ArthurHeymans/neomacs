@@ -369,6 +369,9 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
 
     for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
+        if !card_table.has_dirty() {
+            continue;
+        }
         let dirty = card_table.dirty_card_indices();
         if dirty.is_empty() {
             continue;
@@ -431,6 +434,9 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
 
     for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
+        if !card_table.has_dirty() {
+            continue;
+        }
         let dirty = card_table.dirty_card_indices();
         if dirty.is_empty() {
             continue;
