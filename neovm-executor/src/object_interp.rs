@@ -1304,6 +1304,7 @@ impl Interpreter<'_, '_, '_> {
             }),
             "buffer-size" => Some(LispValue::expect_fixnum(0)),
             "current-buffer" => Some(LispValue::NIL),
+            "window-buffer" => Some(LispValue::NIL),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);
                 s.runtime_bool(result)
@@ -7264,6 +7265,7 @@ fn is_primitive_name(name: &str) -> bool {
             "vconcat",
             "vector",
             "vectorp",
+            "window-buffer",
             "wholenump",
             "windowp",
             "zerop",
