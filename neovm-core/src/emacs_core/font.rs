@@ -2923,7 +2923,7 @@ pub(crate) fn builtin_internal_lisp_face_p(args: Vec<Value>) -> EvalResult {
         if frame_designator {
             Ok(make_lisp_face_vector_for_domain(&face_name, false))
         } else {
-            Ok(make_lisp_face_vector())
+            Ok(make_lisp_face_vector_for_domain(&face_name, true))
         }
     } else {
         Ok(Value::NIL)

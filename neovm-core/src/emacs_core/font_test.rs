@@ -971,6 +971,44 @@ fn internal_make_lisp_face_creates_symbol_visible_to_internal_lisp_face_p() {
 }
 
 #[test]
+fn internal_lisp_face_p_without_frame_returns_global_lface_attributes() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+
+    let face_name = "__neovm_global_lface_attrs_unit_test";
+    let mut eval = Context::new();
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":weight"),
+            Value::symbol("bold"),
+            Value::fixnum(0),
+        ],
+    )
+    .unwrap();
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":slant"),
+            Value::symbol("italic"),
+            Value::fixnum(0),
+        ],
+    )
+    .unwrap();
+
+    let result = builtin_internal_lisp_face_p(vec![Value::symbol(face_name)]).unwrap();
+    let values = match result.kind() {
+        ValueKind::Veclike(VecLikeType::Vector) => result.as_vector_data().unwrap().clone(),
+        _ => panic!("expected vector"),
+    };
+    assert_eq!(values[5].as_symbol_name(), Some("bold"));
+    assert_eq!(values[6].as_symbol_name(), Some("italic"));
+}
+
+#[test]
 fn internal_make_lisp_face_publishes_known_face_id_property() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
