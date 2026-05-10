@@ -12482,6 +12482,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_plist_member_finds_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (eq (car (plist-member '(a 1 b 2 c 3) 'b)) 'b)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
