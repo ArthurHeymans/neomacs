@@ -690,6 +690,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).sin())),
             _ => None,
         },
+        "tan" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) => Some(SsaConst::Float(f.tan())),
+            SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).tan())),
+            _ => None,
+        },
         "cos" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) => Some(SsaConst::Float(f.cos())),
             SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).cos())),
