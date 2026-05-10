@@ -5,6 +5,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
@@ -322,6 +324,27 @@ fn route_captured_output_in_state(
     }
 }
 
+#[cfg(unix)]
+fn signal_description(signal: i32) -> String {
+    let ptr = unsafe { libc::strsignal(signal) };
+    if ptr.is_null() {
+        "unknown".to_string()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+fn call_process_status_value(status: std::process::ExitStatus) -> Value {
+    #[cfg(unix)]
+    if let Some(signal) = status.signal() {
+        return Value::string(signal_description(signal));
+    }
+
+    Value::fixnum(status.code().unwrap_or(-1) as i64)
+}
+
 fn configure_call_process_stdin(
     command: &mut Command,
     infile: Option<&LispString>,
@@ -401,14 +424,13 @@ fn run_process_command_in_state(
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
-    let exit_code = output.status.code().unwrap_or(-1);
     route_captured_output_in_state(
         &mut eval.buffers,
         &destination_spec,
         &output.stdout,
         &output.stderr,
     )?;
-    Ok(Value::fixnum(exit_code as i64))
+    Ok(call_process_status_value(output.status))
 }
 
 fn run_process_capture_output(
@@ -657,9 +679,8 @@ fn builtin_call_process_region_impl(buffers: &mut BufferManager, args: Vec<Value
         .wait_with_output()
         .map_err(|e| super::process::signal_process_io("Process error", None, e))?;
 
-    let exit_code = output.status.code().unwrap_or(-1);
     route_captured_output_in_state(buffers, &destination_spec, &output.stdout, &output.stderr)?;
-    Ok(Value::fixnum(exit_code as i64))
+    Ok(call_process_status_value(output.status))
 }
 
 pub(crate) fn builtin_call_process(
