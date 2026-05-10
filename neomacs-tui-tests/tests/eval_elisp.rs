@@ -4699,6 +4699,36 @@ fn save_excursion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn save_excursion_killed_buffer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "savekill:%S" (let ((orig (current-buffer)) (b (generate-new-buffer " *savekill*")) result current-live) (unwind-protect (progn (set-buffer b) (insert "abc") (goto-char 2) (setq result (save-excursion (kill-buffer b) (list :body (buffer-live-p b) (buffer-name (current-buffer))))) (setq current-live (buffer-live-p (current-buffer))) (list result current-live (buffer-live-p b) (eq (current-buffer) orig))) (when (buffer-live-p b) (kill-buffer b)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"savekill:((:body nil \"*Messages*\") t nil nil)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: save-excursion around a killed current buffer should follow GNU kill-buffer and unwind semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "save_excursion_killed_buffer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn save_mark_and_excursion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
