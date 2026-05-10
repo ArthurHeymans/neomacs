@@ -6215,6 +6215,44 @@ fn url_parse_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn url_network_support_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(progn (require 'url-expand) (require 'url-proxy) (require 'url-cookie) (require 'url-cache) (let* ((url-proxy-services '(("http" . "proxy.example:8080") ("no_proxy" . "\\.local\\'"))) (url-cache-directory (expand-file-name "url-cache-oracle/" temporary-file-directory)) (url-cookie-storage nil) (url-cookie-secure-storage nil) (expanded (list (url-expand-file-name "../c?z=3" "https://example.com/a/b/d.html?x=1") (url-expand-file-name "//cdn.example.org/lib.js" "https://example.com/a/b/") (url-expand-file-name "" "https://example.com/a/b/?q=1"))) (proxy (list (url-find-proxy-for-url (url-generic-parse-url "http://example.com/") "example.com") (url-find-proxy-for-url (url-generic-parse-url "http://host.local/") "host.local"))) cache plain-cookie secure-cookie) (url-cookie-store "sid" "one" "" ".example.com" "/a" nil) (url-cookie-store "root" "two" "" ".example.com" "/" nil) (url-cookie-store "sec" "three" "" ".example.com" "/a" t) (setq cache (list (equal (url-cache-create-filename "http://example.com:80/a") (url-cache-create-filename "http://example.com/a")) (equal (url-cache-create-filename "http://example.com:8080/a") (url-cache-create-filename "http://example.com/a")))) (setq plain-cookie (url-cookie-generate-header-lines "www.example.com" "/a/page" nil)) (setq secure-cookie (url-cookie-generate-header-lines "www.example.com" "/a/page" t)) (message "urlnet:%S" (list (equal expanded '("https://example.com/a/c?z=3" "https://cdn.example.org/lib.js" "https://example.com/a/b/?q=1")) (equal proxy '("http://proxy.example:8080/" nil)) (equal plain-cookie "Cookie: sid=one; root=two\r\n") (equal secure-cookie "Cookie: sid=one; sec=three; root=two\r\n") cache))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("urlnet:") && recent.contains("(t t t t (t nil))")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: URL expansion, proxy, cookie, and cache helpers should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "url_network_support_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_code_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
