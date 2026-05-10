@@ -1056,6 +1056,42 @@ fn sequence_mutation_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn aset_unibyte_string_non_byte_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "asetbyte:%S" (let ((s (string-as-unibyte "abc"))) (condition-case e (aset s 1 #x100) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("asetbyte:")
+                && row.contains("error")
+                && row.contains("Attempt to store non-byte value into unibyte string")
+                && !row.contains("wrong-type-argument")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: aset into unibyte string with non-byte char should match GNU error semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "aset_unibyte_string_non_byte_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn nconc_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
