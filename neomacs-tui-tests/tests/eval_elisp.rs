@@ -2354,6 +2354,41 @@ fn text_property_equality_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_copy_sequence_and_substring_independence_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpcopy:%S" (let* ((s (copy-sequence "abcd"))) (put-text-property 1 3 'face 'bold s) (let* ((c (copy-sequence s)) (sub (substring s 1 3)) (plain (substring-no-properties s 1 3))) (put-text-property 0 1 'face 'italic c) (list (text-properties-at 1 s) (text-properties-at 0 c) (text-properties-at 1 c) (text-properties-at 0 sub) (text-properties-at 1 sub) (text-properties-at 0 plain) (equal-including-properties s c)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("tpcopy:")
+                && row.contains("((face bold) (face italic) (face bold)")
+                && row.contains("(face bold) nil nil)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: copy-sequence and substring should copy string properties independently like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_copy_sequence_and_substring_independence_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn display_property_substring_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
