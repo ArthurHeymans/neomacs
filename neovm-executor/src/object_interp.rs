@@ -1264,6 +1264,12 @@ impl Interpreter<'_, '_, '_> {
                     Some(LispValue::NIL)
                 }
             }),
+            "setenv" => self.subr_2(name, args, |s| {
+                let var = s.runtime.string_contents(args[0]).ok()?;
+                let val = s.runtime.string_contents(args[1]).ok()?;
+                unsafe { std::env::set_var(&*var, &*val); }
+                Some(LispValue::NIL)
+            }),
             "gensym" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let prefix = args
                     .first()
@@ -7160,6 +7166,7 @@ fn is_primitive_name(name: &str) -> bool {
             "set-default",
             "setcar",
             "setcdr",
+            "setenv",
             "setplist",
             "signal",
             "sin",
