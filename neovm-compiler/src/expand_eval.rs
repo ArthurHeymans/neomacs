@@ -256,6 +256,26 @@ impl MacroEval {
                 env.set_throw(tag_name, value);
                 Err(())
             }
+            Some("cl-return") => {
+                let value = if items.len() >= 2 {
+                    self.eval(&items[1], env)?
+                } else {
+                    MacroValue::Nil
+                };
+                env.set_throw("--cl-block-nil--".to_string(), value);
+                Err(())
+            }
+            Some("cl-return-from") => {
+                if items.len() < 3 {
+                    self.error(span, "cl-return-from requires block and value");
+                    return Err(());
+                }
+                let tag_val = self.eval(&items[1], env)?;
+                let tag_name = tag_val.as_symbol_name().unwrap_or("").to_string();
+                let value = self.eval(&items[2], env)?;
+                env.set_throw(tag_name, value);
+                Err(())
+            }
 
             // Thread primitives — passed through to the HIR compiler.
             Some("make-thread") | Some("thread-yield") | Some("thread-join")

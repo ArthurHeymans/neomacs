@@ -2401,9 +2401,10 @@ mod tests {
         let HirExprKind::Progn(exprs) = &expr.kind else {
             panic!("expected progn");
         };
-        assert!(matches!(exprs[0].kind, HirExprKind::Progn(_)));
-        assert!(matches!(exprs[1].kind, HirExprKind::Progn(_)));
-        assert!(matches!(exprs[2].kind, HirExprKind::Progn(_)));
+        // Single-expression wrappers are unwrapped by lower_progn.
+        assert!(!matches!(exprs[0].kind, HirExprKind::Progn(_)));
+        assert!(!matches!(exprs[1].kind, HirExprKind::Progn(_)));
+        assert!(!matches!(exprs[2].kind, HirExprKind::Progn(_)));
         assert!(matches!(exprs[3].kind, HirExprKind::ConditionCase { .. }));
         assert!(matches!(exprs[4].kind, HirExprKind::ConditionCase { .. }));
     }
