@@ -981,6 +981,56 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
+        "string-prefix-p" if args.len() >= 2 => match (args[0], args[1]) {
+            (SsaConst::String(prefix), SsaConst::String(s)) => {
+                let ignore_case = args.get(2).map(|c| c.as_int() == Some(0)).unwrap_or(false);
+                if ignore_case {
+                    Some(if s.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                        SsaConst::True
+                    } else {
+                        SsaConst::Nil
+                    })
+                } else {
+                    Some(if s.starts_with(prefix.as_str()) {
+                        SsaConst::True
+                    } else {
+                        SsaConst::Nil
+                    })
+                }
+            }
+            _ => None,
+        },
+        "string-suffix-p" if args.len() >= 2 => match (args[0], args[1]) {
+            (SsaConst::String(suffix), SsaConst::String(s)) => {
+                let ignore_case = args.get(2).map(|c| c.as_int() == Some(0)).unwrap_or(false);
+                if ignore_case {
+                    Some(if s.to_lowercase().ends_with(&suffix.to_lowercase()) {
+                        SsaConst::True
+                    } else {
+                        SsaConst::Nil
+                    })
+                } else {
+                    Some(if s.ends_with(suffix.as_str()) {
+                        SsaConst::True
+                    } else {
+                        SsaConst::Nil
+                    })
+                }
+            }
+            _ => None,
+        },
+        "string-remove-prefix" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::String(prefix), SsaConst::String(s)) => {
+                Some(SsaConst::String(s.strip_prefix(prefix.as_str()).unwrap_or(s).to_string()))
+            }
+            _ => None,
+        },
+        "string-remove-suffix" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::String(suffix), SsaConst::String(s)) => {
+                Some(SsaConst::String(s.strip_suffix(suffix.as_str()).unwrap_or(s).to_string()))
+            }
+            _ => None,
+        },
         "zerop" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(if *a == 0 { SsaConst::True } else { SsaConst::Nil }),
             SsaConst::Float(f) => Some(if *f == 0.0 || *f == -0.0 { SsaConst::True } else { SsaConst::Nil }),
@@ -1126,6 +1176,19 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "number-or-marker-p" | "integer-or-marker-p" if args.len() == 1 => match args[0] {
             SsaConst::Int(_) | SsaConst::Float(_) => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
+        "always" if args.len() >= 1 => Some(SsaConst::True),
+        "bignump" if args.len() == 1 => Some(SsaConst::Nil),
+        "arrayp" | "bool-vector-p" | "recordp" | "char-table-p" | "autoloadp"
+            if args.len() == 1 => match args[0] {
+            // Strings are arrays in Emacs, but our SSA String is separate.
+            SsaConst::String(_) => Some(SsaConst::True),
+            // arrayp for string
+            _ => Some(SsaConst::Nil),
+        },
+        "bare-symbol-p" if args.len() == 1 => match args[0] {
+            SsaConst::Symbol(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
         },
         _ => None,
