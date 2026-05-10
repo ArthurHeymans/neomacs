@@ -13500,6 +13500,33 @@ mod tests {
     }
 
     #[test]
+    fn executes_char_or_string_p_recognizes_char() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-or-string-p ?a)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_char_or_string_p_recognizes_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-or-string-p \"hello\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_char_or_string_p_returns_nil_for_number() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-or-string-p 42)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_sqrt_of_perfect_square() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
