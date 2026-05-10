@@ -36,9 +36,9 @@ const CT_PARENT: usize = 2; // parent char-table or nil
 const CT_SUBTYPE: usize = 3; // sub-type symbol
 const CT_EXTRA_COUNT: usize = 4; // number of extra slots
 const CT_EXTRA_START: usize = 5; // first extra slot (if any)
-const CT_LOGICAL_LENGTH: i64 = 0x3F_FFFF;
 /// Maximum valid Unicode code point.
 const MAX_CHAR: i64 = 0x3F_FFFF;
+const CT_LOGICAL_LENGTH: i64 = MAX_CHAR + 1;
 const CT_ASCII_CACHE_LEN: usize = 128;
 const CT_ASCII_CACHE_MAGIC: i64 = -7_000_001;
 const CT_ASCII_CACHE_PREPARED_MAGIC: i64 = -7_000_002;

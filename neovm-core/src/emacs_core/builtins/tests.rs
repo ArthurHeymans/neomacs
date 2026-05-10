@@ -4117,14 +4117,14 @@ fn pure_dispatch_typed_length_family_uses_char_table_logical_length() {
     let len = dispatch_builtin_pure("length", vec![ct])
         .expect("builtin length should resolve")
         .expect("builtin length should evaluate");
-    assert_eq!(len, Value::fixnum(0x3F_FFFF));
+    assert_eq!(len, Value::fixnum(0x40_0000));
 
     let lt = dispatch_builtin_pure("length<", vec![ct, Value::fixnum(100)])
         .expect("builtin length< should resolve")
         .expect("builtin length< should evaluate");
     assert_eq!(lt, Value::NIL);
 
-    let eq = dispatch_builtin_pure("length=", vec![ct, Value::fixnum(0x3F_FFFF)])
+    let eq = dispatch_builtin_pure("length=", vec![ct, Value::fixnum(0x40_0000)])
         .expect("builtin length= should resolve")
         .expect("builtin length= should evaluate");
     assert_eq!(eq, Value::T);
