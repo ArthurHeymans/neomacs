@@ -644,7 +644,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "string-to-char" if args.len() == 1 => match args[0] {
-            SsaConst::String(s) if !s.is_empty() => Some(SsaConst::Char(s.chars().next()? as i64)),
+            SsaConst::String(s) if s.is_empty() => Some(SsaConst::Int(0)),
+            SsaConst::String(s) => Some(SsaConst::Char(s.chars().next()? as i64)),
             _ => None,
         },
         "char-to-string" if args.len() == 1 => match args[0] {
