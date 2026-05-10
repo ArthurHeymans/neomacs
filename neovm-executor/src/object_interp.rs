@@ -12557,12 +12557,12 @@ mod tests {
     }
 
     #[test]
-    fn executes_buffer_size_returns_zero() {
+    fn executes_point_min_max_return_one() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (buffer-size)",
+             (+ (point-min) (point-max))",
         );
-        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
