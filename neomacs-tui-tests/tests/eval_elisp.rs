@@ -7874,6 +7874,48 @@ fn replace_regexp_in_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn replace_regexp_in_string_text_properties_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "replregexprop:%S" (let* ((s (copy-sequence "abcde"))) (put-text-property 0 2 'face 'a s) (put-text-property 2 5 'face 'b s) (let ((r (replace-regexp-in-string "bc" (propertize "XY" 'face 'x) s t t))) (list r (mapcar (lambda (i) (text-properties-at i r)) (number-sequence 0 4)) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 4))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("replregexprop:")
+            && recent.contains("aXYde")
+            && recent.matches("(face a)").count() >= 3
+            && recent.matches("(face x)").count() >= 2
+            && recent.matches("(face b)").count() >= 5
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: replace-regexp-in-string should preserve replacement and source text properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_regexp_in_string_text_properties_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn equality_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
