@@ -169,6 +169,9 @@ impl CardTable {
     /// the minor-GC root scan that walks dirty cards to find old-to-
     /// young references.
     pub(crate) fn dirty_card_count(&self) -> usize {
+        if !self.has_dirty() {
+            return 0;
+        }
         self.cards
             .iter()
             .filter(|card| card.load(Ordering::Acquire) == CARD_DIRTY)
