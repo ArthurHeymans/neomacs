@@ -4990,6 +4990,46 @@ fn interactive_form_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn commandp_interactive_form_property_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/eval.c:commandp treats an interactive-form symbol property on a
+    // non-command as an error, while src/data.c:interactive-form still returns
+    // that property when queried directly.
+    let expr = r#"(message "cmdprop2:%S" (let ((s (make-symbol "neo-cmd-prop"))) (fset s (lambda () 1)) (put s 'interactive-form '(interactive "p")) (list (condition-case e (commandp s) (error (list (car e) (cadr e)))) (interactive-form s) (commandp (symbol-function s)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("cmdprop2:")
+                && row.contains("error")
+                && row.contains("interactive-form")
+                && row.contains("(interactive")
+                && row.contains("nil)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: commandp interactive-form property error should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "commandp_interactive_form_property_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn autoload_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
