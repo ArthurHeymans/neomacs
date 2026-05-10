@@ -5159,6 +5159,43 @@ fn commandp_interactive_form_property_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn interactive_form_command_alias_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c:interactive-form follows indirect_function for command
+    // aliases.  A no-argument `(interactive)' form is normalized and printed
+    // as `(interactive nil)`.
+    let expr = r#"(message "aliasiform:%S" (progn (defun neo-alias-target () (interactive) 1) (defalias 'neo-alias-command 'neo-alias-target "Alias doc.") (list (interactive-form 'neo-alias-command) (commandp 'neo-alias-command))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("aliasiform:") && row.contains("((interactive nil) t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: interactive-form for command aliases should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "interactive_form_command_alias_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn autoload_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
