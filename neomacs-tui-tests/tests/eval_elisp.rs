@@ -7301,6 +7301,40 @@ fn line_position_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn line_position_field_constraints_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "field-linepos:%S" (with-temp-buffer (insert "aa" (propertize "bb" 'field 'f) "cc\nxx") (goto-char 4) (list (pos-bol) (line-beginning-position) (pos-eol) (line-end-position) (let ((inhibit-field-text-motion t)) (list (line-beginning-position) (line-end-position))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("field-linepos:") && row.contains("(1 3 7 5 (1 7))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: line-beginning-position and line-end-position should respect fields and inhibit-field-text-motion like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "line_position_field_constraints_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_boundary_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
