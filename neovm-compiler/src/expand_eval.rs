@@ -485,6 +485,30 @@ impl MacroEval {
             Some("string=") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
                 a.as_string() == b.as_string() && a.is_string() && b.is_string()
             }),
+            Some("string<") | Some("string-lessp") => {
+                self.eval_binary_pred(span, &items[1..], env, |a, b| {
+                    match (a.as_string(), b.as_string()) {
+                        (Some(sa), Some(sb)) => sa < sb,
+                        _ => false,
+                    }
+                })
+            }
+            Some("string>") | Some("string-greaterp") => {
+                self.eval_binary_pred(span, &items[1..], env, |a, b| {
+                    match (a.as_string(), b.as_string()) {
+                        (Some(sa), Some(sb)) => sa > sb,
+                        _ => false,
+                    }
+                })
+            }
+            Some("string-equal") => {
+                self.eval_binary_pred(span, &items[1..], env, |a, b| {
+                    match (a.as_string(), b.as_string()) {
+                        (Some(sa), Some(sb)) => sa.eq_ignore_ascii_case(sb),
+                        _ => false,
+                    }
+                })
+            }
             Some("format") => self.eval_format(span, &items[1..], env),
 
             Some("error") => {
