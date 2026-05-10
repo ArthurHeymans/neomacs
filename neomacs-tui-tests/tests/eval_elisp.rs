@@ -5926,17 +5926,14 @@ fn buffer_disable_undo_elisp_functions_match_gnu_semantics() {
 fn column_motion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    let expr = "(message \"column:%S\" (with-temp-buffer (setq tab-width 8) (insert \"a\\tb\") (goto-char (point-min)) (list (current-column) (progn (forward-char 1) (current-column)) (progn (forward-char 1) (current-column)) (progn (move-to-column 4 t) (list (current-column) (buffer-string))))))";
+    let expr = r#"(let ((result (with-temp-buffer (setq tab-width 8 indent-tabs-mode nil) (insert "a\tb\n") (goto-char (point-min)) (list (current-column) (progn (forward-char 1) (current-column)) (progn (forward-char 1) (current-column)) (progn (goto-char (point-min)) (move-to-column 4) (list (point) (current-column))) (progn (goto-char (point-min)) (move-to-column 8) (list (point) (current-column))) (progn (goto-char (point-min)) (move-to-column 4 t) (list (buffer-string) (point) (current-column))))))) (write-region (prin1-to-string result) nil (expand-file-name "column-motion-result.txt" "~") nil 'silent) (message "column:done"))"#;
     support::eval_expression(&mut gnu, &mut neo, expr);
 
     let ready = |grid: &[String]| {
-        grid.iter().rev().take(4).any(|row| {
-            row.contains("column:")
-                && row.contains("(0 1 8")
-                && row.contains("(4")
-                && row.contains("a")
-                && row.contains("b")
-        })
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("column:done"))
     };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
@@ -5950,6 +5947,21 @@ fn column_motion_elisp_functions_match_gnu_semantics() {
             grid.join("\n")
         );
     }
+
+    let expected = r#"(0 1 8 (3 8) (3 8) ("a       b
+" 5 4))"#;
+    assert_eq!(
+        std::fs::read_to_string(gnu.home_dir().join("column-motion-result.txt"))
+            .expect("read GNU column motion result"),
+        expected,
+        "GNU column motion oracle should match the result studied in src/indent.c"
+    );
+    assert_eq!(
+        std::fs::read_to_string(neo.home_dir().join("column-motion-result.txt"))
+            .expect("read Neomacs column motion result"),
+        expected,
+        "Neomacs move-to-column FORCE inside a tab should replace the tab with spaces when indent-tabs-mode is nil"
+    );
 
     assert_pair_nearly_matches(
         "column_motion_elisp_functions_match_gnu_semantics",
