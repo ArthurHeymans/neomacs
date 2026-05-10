@@ -493,7 +493,7 @@ impl ObjectStore {
         chunks.push(Arc::clone(&chunk));
         ObjectPublishReservation {
             generation,
-            base_slot: chunk_index.saturating_mul(OBJECT_STORE_CHUNK_CAPACITY),
+            base_slot: chunk_index.wrapping_shl(OBJECT_STORE_CHUNK_SHIFT),
             next_offset: 0,
             next_slot: chunk.objects.as_ptr() as *mut MaybeUninit<ObjectRecord>,
             published_len: &chunk.published_len,
@@ -602,7 +602,7 @@ impl ObjectStore {
 
         for (shard_index, shard) in shard_raws.iter().enumerate() {
             for (chunk_index, chunk) in shard.chunks.iter().enumerate() {
-                let base_slot = chunk_index.saturating_mul(OBJECT_STORE_CHUNK_CAPACITY);
+                let base_slot = chunk_index.wrapping_shl(OBJECT_STORE_CHUNK_SHIFT);
                 for chunk_offset in 0..chunk.published_len {
                     let locator = ObjectLocator::new(shard_index, base_slot + chunk_offset);
                     let record = unsafe { &*chunk.objects_ptr.add(chunk_offset) };
