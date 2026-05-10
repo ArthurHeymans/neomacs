@@ -2706,6 +2706,43 @@ fn single_char_property_change_sees_overlay_boundaries_like_gnu() {
 }
 
 #[test]
+fn overlay_intangible_motion_matches_gnu_point_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/intervals.c:set_point_both uses Fget_char_property while
+    // inhibit-point-motion-hooks is nil, so overlay-backed intangible text
+    // prevents point from landing inside the protected region.
+    let expr = r#"(message "ovintang:%S" (with-temp-buffer (insert "abcdef") (let ((o (make-overlay 3 5))) (overlay-put o 'intangible 'zone) (let ((inhibit-point-motion-hooks nil)) (goto-char 2) (goto-char 4) (let ((forward (point))) (goto-char 6) (goto-char 4) (let ((backward (point))) (let ((inhibit-point-motion-hooks t)) (goto-char 4) (list forward backward (point)))))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("ovintang:") && row.contains("(5 3 4)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: overlay intangible should constrain point motion like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "overlay_intangible_motion_matches_gnu_point_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
