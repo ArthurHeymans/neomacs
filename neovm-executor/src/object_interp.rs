@@ -13489,4 +13489,31 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_princ_to_string_formats_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (princ-to-string 42)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_sqrt_of_perfect_square() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (sqrt 4) 2.0)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_sqrt_of_non_square() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (> (sqrt 2) 1.4)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
