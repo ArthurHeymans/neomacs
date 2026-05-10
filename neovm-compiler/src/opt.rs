@@ -1236,6 +1236,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Symbol(s) => Some(if s.starts_with(':') { SsaConst::True } else { SsaConst::Nil }),
             _ => Some(SsaConst::Nil),
         },
+        "ignore" => Some(SsaConst::Nil),
         _ => None,
     }
 }

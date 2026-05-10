@@ -1273,7 +1273,7 @@ impl SharedHeap {
         // semispace_bytes, so the capacity of the one active
         // half (which live_bytes is measured against) is half
         // of reserved_bytes.
-        let semispace = reserved / 2;
+        let semispace = reserved >> 1;
         if semispace == 0 {
             return Ok(0.0);
         }

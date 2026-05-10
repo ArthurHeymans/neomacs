@@ -32,7 +32,7 @@ impl<T> MarkWorklist<T> {
     }
 
     pub(crate) fn split_half(&mut self) -> Self {
-        let split_at = self.entries.len() / 2;
+        let split_at = self.entries.len() >> 1;
         let entries = self.entries.split_off(split_at);
         Self { entries }
     }
