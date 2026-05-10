@@ -13980,4 +13980,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_evenp_with_char() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (evenp ?b)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
