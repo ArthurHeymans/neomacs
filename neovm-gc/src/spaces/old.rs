@@ -72,6 +72,10 @@ pub(crate) struct OldBlock {
     buffer: Box<[u8]>,
     line_marks: Box<[AtomicU8]>,
     line_bytes: usize,
+    /// log2(line_bytes), cached for fast line-offset computations
+    /// in the allocator and sweep paths. Valid only when line_bytes
+    /// is a power of two (the common case).
+    line_shift: u32,
     /// Bump cursor into the backing buffer.  Atomic so `try_alloc`
     /// can run under `&self` — the fast hole-filling search and
     /// placement use CAS to claim space without a lock.
@@ -131,6 +135,7 @@ impl OldBlock {
     /// well-defined).
     pub(crate) fn new(capacity_bytes: usize, line_bytes: usize) -> Self {
         let line_bytes = line_bytes.max(1);
+        let line_shift = line_bytes.trailing_zeros();
         let line_count = capacity_bytes.div_ceil(line_bytes).max(1);
         let buffer_len = line_count.saturating_mul(line_bytes);
         let buffer: Box<[u8]> = vec![0u8; buffer_len].into_boxed_slice();
@@ -150,6 +155,7 @@ impl OldBlock {
             buffer,
             line_marks: marks.into_boxed_slice(),
             line_bytes,
+            line_shift,
             cursor: AtomicUsize::new(0),
             used_bytes: AtomicUsize::new(0),
             live_bytes: AtomicUsize::new(0),
@@ -210,9 +216,9 @@ impl OldBlock {
         if bounded_end > self.used_bytes() {
             *self.used_bytes.get_mut() = bounded_end;
         }
-        let first_line = offset / self.line_bytes;
+        let first_line = offset >> self.line_shift;
         let last_byte = end.saturating_sub(1);
-        let last_line = last_byte / self.line_bytes;
+        let last_line = last_byte >> self.line_shift;
         for line in first_line..=last_line {
             let Some(slot) = self.occupied_lines.get_mut(line) else {
                 continue;
@@ -247,9 +253,9 @@ impl OldBlock {
                 Err(next) => observed = next,
             }
         }
-        let first_line = offset / self.line_bytes;
+        let first_line = offset >> self.line_shift;
         let last_byte = end.saturating_sub(1);
-        let last_line = last_byte / self.line_bytes;
+        let last_line = last_byte >> self.line_shift;
         for line in first_line..=last_line {
             let Some(slot) = self.occupied_lines.get(line) else {
                 continue;
@@ -407,9 +413,9 @@ impl OldBlock {
         if size == 0 {
             return;
         }
-        let start_line = offset / self.line_bytes;
+        let start_line = offset >> self.line_shift;
         let end_byte = offset.saturating_add(size).saturating_sub(1);
-        let end_line = end_byte / self.line_bytes;
+        let end_line = end_byte >> self.line_shift;
         let last_line = self.line_count().saturating_sub(1);
         let end_line = end_line.min(last_line);
         for line in start_line..=end_line {
