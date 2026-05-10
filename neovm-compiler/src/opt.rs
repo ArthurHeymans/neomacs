@@ -383,11 +383,15 @@ fn fold_binary_arith(
     int_op: impl FnOnce(i64, i64) -> i64,
     float_op: impl FnOnce(f64, f64) -> f64,
 ) -> Option<SsaConst> {
-    match (a, b) {
-        (SsaConst::Int(a), SsaConst::Int(b)) => Some(SsaConst::Int(int_op(*a, *b))),
-        (SsaConst::Float(a), SsaConst::Float(b)) => Some(SsaConst::Float(float_op(*a, *b))),
-        (SsaConst::Int(a), SsaConst::Float(b)) => Some(SsaConst::Float(float_op(*a as f64, *b))),
-        (SsaConst::Float(a), SsaConst::Int(b)) => Some(SsaConst::Float(float_op(*a, *b as f64))),
+    let a_int = a.as_int();
+    let b_int = b.as_int();
+    let a_float = match a { SsaConst::Float(f) => Some(*f), _ => None };
+    let b_float = match b { SsaConst::Float(f) => Some(*f), _ => None };
+    match (a_int, b_int, a_float, b_float) {
+        (Some(a), Some(b), _, _) => Some(SsaConst::Int(int_op(a, b))),
+        (_, _, Some(a), Some(b)) => Some(SsaConst::Float(float_op(a, b))),
+        (Some(a), _, _, Some(b)) => Some(SsaConst::Float(float_op(a as f64, b))),
+        (_, Some(b), Some(a), _) => Some(SsaConst::Float(float_op(a, b as f64))),
         _ => None,
     }
 }
@@ -1113,7 +1117,7 @@ pub fn common_subexpression_elimination(function: &mut SsaFunction) -> OptOutput
 impl SsaConst {
     fn as_int(&self) -> Option<i64> {
         match self {
-            SsaConst::Int(n) => Some(*n),
+            SsaConst::Int(n) | SsaConst::Char(n) => Some(*n),
             _ => None,
         }
     }
