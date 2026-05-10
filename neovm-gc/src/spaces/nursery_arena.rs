@@ -96,7 +96,7 @@ impl NurseryArena {
         let align = layout.align().max(1);
         let buffer_base = self.buffer.as_ptr() as usize;
         let buffer_len = self.buffer.len();
-        let mut current = self.cursor.load(Ordering::Acquire);
+        let mut current = self.cursor.load(Ordering::Relaxed);
         // CAS loop for concurrent (mutator) allocation.
         loop {
             let current_addr = buffer_base.wrapping_add(current);
