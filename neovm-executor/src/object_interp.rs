@@ -13618,4 +13618,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_delete_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-delete 42 nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
