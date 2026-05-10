@@ -12461,6 +12461,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_make_string_with_integer_code() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (make-string 1 65) \"A\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_commandp_recognizes_function() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
