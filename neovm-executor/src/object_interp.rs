@@ -13349,4 +13349,31 @@ mod tests {
         assert!(value.is_some());
     }
 
+
+    #[test]
+    fn executes_split_string_splits_by_separator() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (split-string \"a,b,c\" \",\") '(\"a\" \"b\" \"c\"))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_split_string_with_omit_nulls() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (length (split-string \"a,,b\" \",\" t)) 2)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_join_joins_strings() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (string-join '(\"a\" \"b\" \"c\") \"-\") \"a-b-c\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
