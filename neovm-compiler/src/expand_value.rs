@@ -250,6 +250,19 @@ impl MacroValue {
         MacroValue::Nil
     }
 
+    pub fn rassq(&self, val: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            let entry = &cell.car;
+            if let MacroValue::Cons(pair) = entry
+                && pair.cdr.eq_value(val) {
+                    return entry.clone();
+                }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
     /// (butlast list n) — return list without last n elements
     pub fn butlast(&self, n: usize) -> MacroValue {
         let Some(vec) = self.to_vec() else {

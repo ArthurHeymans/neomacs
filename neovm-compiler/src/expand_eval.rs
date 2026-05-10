@@ -1390,6 +1390,15 @@ impl MacroEval {
                     Ok(MacroValue::Nil)
                 }
             }
+            Some("rassq") => {
+                if items.len() >= 3 {
+                    let val = self.eval(&items[1], env)?;
+                    let alist = self.eval(&items[2], env)?;
+                    Ok(alist.rassq(&val))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
 
             Some("macroexp-const-p") => {
                 // (macroexp-const-p FORM) — is form a constant?
