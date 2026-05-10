@@ -1305,6 +1305,18 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-intersection" | "cl-nintersection"
+        | "cl-union" | "cl-nunion"
+        | "cl-set-difference" | "cl-nset-difference"
+        | "cl-set-exclusive-or" | "cl-nset-exclusive-or"
+            if args.len() >= 2 => {
+            // (cl-intersection LIST1 LIST2) — if LIST1 is nil, result is nil
+            if matches!(args[0], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "cl-sublis" | "cl-nsublis" if args.len() >= 2 => {
             // (cl-sublis ALIST TREE) — tree is args[1]
             if matches!(args[1], SsaConst::Nil) {
