@@ -1440,6 +1440,9 @@ impl Interpreter<'_, '_, '_> {
             "downcase" => self
                 .exact_arity(name, args, 1)
                 .map(|_| self.downcase(args[0])),
+            "upcase-initials" => self.subr_1(name, args, |s| {
+                Some(s.upcase_initials(args[0]))
+            }),
             "upcase" => self
                 .exact_arity(name, args, 1)
                 .map(|_| self.upcase(args[0])),
@@ -6058,6 +6061,24 @@ impl Interpreter<'_, '_, '_> {
         }
     }
 
+    fn upcase_initials(&mut self, value: LispValue) -> LispValue {
+        let s = self.string_contents_owned(value).unwrap_or_default();
+        let mut result = String::with_capacity(s.len());
+        let mut capitalize_next = true;
+        for ch in s.chars() {
+            if capitalize_next && ch.is_alphabetic() {
+                result.push(ch.to_ascii_uppercase());
+                capitalize_next = false;
+            } else {
+                result.push(ch);
+                if ch == ' ' || ch == '-' || ch == '_' {
+                    capitalize_next = true;
+                }
+            }
+        }
+        self.runtime.string(result)
+    }
+
     fn string_contents_owned(&mut self, value: LispValue) -> Option<String> {
         match self.runtime.string_contents(value) {
             Ok(contents) => Some(contents.to_string()),
@@ -7177,6 +7198,7 @@ fn is_primitive_name(name: &str) -> bool {
             "truncate",
             "type-of",
             "upcase",
+            "upcase-initials",
             "user-error",
             "vconcat",
             "vector",
