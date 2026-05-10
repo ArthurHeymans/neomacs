@@ -1208,7 +1208,7 @@ impl Interpreter<'_, '_, '_> {
                     && a.unwrap().to_ascii_lowercase() == b.unwrap().to_ascii_lowercase()))
             }),
             "char-table-p" | "bool-vector-p" | "recordp"
-            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" | "processp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
             "char-valid-p" => self.exact_arity(name, args, 1).map(|_| {
                 let code = args[0].as_fixnum().unwrap_or(-1);
                 bool_value(code >= 0 && code <= 0x10FFFF && (code < 0xD800 || code > 0xDFFF))
@@ -7201,6 +7201,7 @@ fn is_primitive_name(name: &str) -> bool {
             "prin1-to-string",
             "princ-to-string",
             "print",
+            "processp",
             "prog1",
             "proper-list-p",
             "provide",
