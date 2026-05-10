@@ -2121,6 +2121,36 @@ fn delq_detects_circular_lists_like_gnu() {
 }
 
 #[test]
+fn delete_dups_detects_circular_lists_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/subr.el:delete-dups calls `length' before destructively
+    // removing duplicates, so circular inputs must signal `circular-list`
+    // instead of entering the duplicate-removal loop forever.
+    let expr = r#"(message "dupscycle:%S" (condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (delete-dups x)) (error (car e))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("dupscycle:") && row.contains("circular-list"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: delete-dups should detect circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("delete_dups_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn mapcar_detects_circular_lists_like_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
