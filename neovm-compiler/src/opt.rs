@@ -570,6 +570,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::String(s) => Some(SsaConst::Int(s.len() as i64)),
             _ => None,
         },
+        "string-width" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if s.is_ascii() => Some(SsaConst::Int(s.len() as i64)),
+            _ => None,
+        },
         "float" if args.len() == 1 => match args[0] {
             SsaConst::Int(n) => Some(SsaConst::Float(*n as f64)),
             SsaConst::Float(f) => Some(SsaConst::Float(*f)),
