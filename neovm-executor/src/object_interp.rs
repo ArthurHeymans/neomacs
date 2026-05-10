@@ -12292,6 +12292,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_bignump_returns_nil_for_fixnum() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (bignump 42)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_bare_symbol_p_on_regular_symbol() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
