@@ -455,9 +455,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
             (SsaConst::Float(a), SsaConst::Float(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
             (SsaConst::String(a), SsaConst::String(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-            (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
-            (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
+            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
             (SsaConst::Symbol(a), SsaConst::Symbol(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
+            // Different types are never equal.
+            (SsaConst::Nil, _) | (SsaConst::True, _)
+            | (_, SsaConst::Nil) | (_, SsaConst::True) => Some(SsaConst::Nil),
+            (SsaConst::Int(_), _) | (SsaConst::Float(_), _)
+            | (SsaConst::String(_), _) | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
             _ => None,
         },
         "1+" if args.len() == 1 => match args[0] {
