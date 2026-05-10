@@ -396,6 +396,36 @@ impl MacroEval {
                 |a, b| a.wrapping_add(b),
                 |a, b| a + b,
             ),
+            Some("1+") => {
+                if items.len() != 2 {
+                    self.error(span, "1+ requires exactly one argument");
+                    return Err(());
+                }
+                let val = self.eval(&items[1], env)?;
+                match val {
+                    MacroValue::Int(n) => Ok(MacroValue::Int(n.wrapping_add(1))),
+                    MacroValue::Float(f) => Ok(MacroValue::Float(f + 1.0)),
+                    other => {
+                        self.error(span, format!("1+: wrong type argument: {other:?}"));
+                        Err(())
+                    }
+                }
+            }
+            Some("1-") => {
+                if items.len() != 2 {
+                    self.error(span, "1- requires exactly one argument");
+                    return Err(());
+                }
+                let val = self.eval(&items[1], env)?;
+                match val {
+                    MacroValue::Int(n) => Ok(MacroValue::Int(n.wrapping_sub(1))),
+                    MacroValue::Float(f) => Ok(MacroValue::Float(f - 1.0)),
+                    other => {
+                        self.error(span, format!("1-: wrong type argument: {other:?}"));
+                        Err(())
+                    }
+                }
+            }
             Some("-") => self.eval_sub(span, &items[1..], env),
             Some("*") => self.eval_arithmetic(
                 span,
