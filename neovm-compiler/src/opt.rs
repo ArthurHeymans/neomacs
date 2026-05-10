@@ -418,10 +418,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Float(a / b))
             } else { None }
         }
+        "=" if args.len() == 1 => Some(SsaConst::True),
         "=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_eq()),
+        "<" if args.len() == 1 => Some(SsaConst::True),
         "<" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_lt()),
+        ">" if args.len() == 1 => Some(SsaConst::True),
         ">" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_gt()),
+        "<=" if args.len() == 1 => Some(SsaConst::True),
         "<=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_le()),
+        ">=" if args.len() == 1 => Some(SsaConst::True),
         ">=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_ge()),
         "eq" | "eql" if args.len() == 2 => match (args[0], args[1]) {
             (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b {
