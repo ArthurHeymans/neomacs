@@ -5064,6 +5064,50 @@ fn rename_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn set_visited_file_name_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "visfile:%S" (let ((f "/tmp/neomacs-visfile-oracle.txt")) (with-temp-buffer (rename-buffer "neo-vis" t) (let ((start (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name f t) (let ((set (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name "" t) (list start set (list (buffer-name) buffer-file-name buffer-file-truename buffer-auto-save-file-name)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("visfile:")
+            && recent.contains(r#"(\"neo-vis\" nil nil"#)
+            && recent.contains(r#"(\"neomacs-visfile-oracle.txt\""#)
+            && recent.contains(r#"\"/tmp/neomacs-visfile-oracle.txt\""#)
+            && recent.contains(r#"\"/tmp/\" t)"#)
+            && recent.contains(r#"\"neomacs-visfile-oracle.txt\" nil"#)
+            && recent.contains(r#"nil))"#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: set-visited-file-name buffer renaming and nil filename semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "set_visited_file_name_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn kill_buffer_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
