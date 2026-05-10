@@ -13853,4 +13853,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_substitute_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-substitute 'new 'old nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
