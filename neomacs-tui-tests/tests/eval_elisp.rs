@@ -2402,6 +2402,47 @@ fn reversed_text_property_ranges_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_plist_validation_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpplist:%S" (list (let ((s (copy-sequence "abcd"))) (condition-case e (progn (add-text-properties 0 2 '(face) s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 2))) (error (list (car e) (cadr e))))) (let ((s (copy-sequence "abcd"))) (condition-case e (progn (add-text-properties 0 2 'face s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 2))) (error (list (car e) (cadr e))))) (let ((s (copy-sequence "abcd"))) (put-text-property 0 2 'face nil s) (condition-case e (progn (remove-text-properties 0 2 'face s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 2))) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("tpplist:")
+            && recent.contains("error")
+            && recent.contains("Odd length text property list")
+            && recent.contains("((face nil) (face nil) nil)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property plist validation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_plist_validation_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_equality_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
