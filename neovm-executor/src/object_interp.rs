@@ -13470,4 +13470,23 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_define_error_creates_error_symbol() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (define-error 'my-test-error \"Test error\")\n\
+             (get 'my-test-error 'error-conditions)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_format_message_basic() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (format-message \"hello %s\" \"world\") \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
