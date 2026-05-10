@@ -441,6 +441,31 @@ impl MacroEval {
             Some("/") => self.eval_divide(span, &items[1..], env),
             Some("%") | Some("rem") => self.eval_rem(span, &items[1..], env, "%"),
             Some("mod") => self.eval_rem(span, &items[1..], env, "mod"),
+            Some("logand") => self.eval_bitwise(span, &items[1..], env, -1i64, |a, b| a & b),
+            Some("logior") => self.eval_bitwise(span, &items[1..], env, 0i64, |a, b| a | b),
+            Some("logxor") => self.eval_bitwise(span, &items[1..], env, 0i64, |a, b| a ^ b),
+            Some("lognot") => {
+                if items.len() != 2 {
+                    self.error(span, "lognot requires exactly one argument");
+                    return Err(());
+                }
+                let val = self.eval(&items[1], env)?.as_int().ok_or(())?;
+                Ok(MacroValue::Int(!val))
+            }
+            Some("lsh") | Some("ash") => {
+                if items.len() != 3 {
+                    self.error(span, "lsh/ash requires exactly two arguments");
+                    return Err(());
+                }
+                let value = self.eval(&items[1], env)?.as_int().ok_or(())?;
+                let count = self.eval(&items[2], env)?.as_int().ok_or(())?;
+                let result = if count >= 0 {
+                    value.wrapping_shl(count as u32)
+                } else {
+                    value.wrapping_shr((-count) as u32)
+                };
+                Ok(MacroValue::Int(result))
+            }
 
             Some("=") => {
                 self.eval_numeric_cmp(span, &items[1..], env, |a, b| a == b, |a, b| a == b)
@@ -2799,6 +2824,22 @@ impl MacroEval {
             };
             Ok(MacroValue::Int(result))
         }
+    }
+
+    fn eval_bitwise(
+        &mut self,
+        span: Span,
+        items: &[SurfaceForm],
+        env: &mut MacroEnv,
+        identity: i64,
+        op: impl Fn(i64, i64) -> i64,
+    ) -> Result<MacroValue, ()> {
+        let mut result = identity;
+        for item in items {
+            let val = self.eval(item, env)?.as_int().ok_or(())?;
+            result = op(result, val);
+        }
+        Ok(MacroValue::Int(result))
     }
 
     fn eval_substring(
