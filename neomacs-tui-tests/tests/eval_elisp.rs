@@ -8797,6 +8797,43 @@ fn invisible_p_buffer_invisibility_spec_matches_gnu_semantics() {
 }
 
 #[test]
+fn invisible_p_overlay_invisibility_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/xdisp.c: Finvisible_p reads the 'invisible character property
+    // at a buffer position via Fget_char_property, so overlay properties are
+    // part of the same semantic surface as text properties.
+    let expr = r#"(message "ovinvis:%S" (with-temp-buffer (insert "abcd") (let ((o (make-overlay 2 4))) (overlay-put o 'invisible 'hide) (list (let ((buffer-invisibility-spec '(hide))) (list (invisible-p 2) (invisible-p 3) (invisible-p 4))) (let ((buffer-invisibility-spec '((hide . t)))) (list (invisible-p 2) (invisible-p 3) (invisible-p 4))) (invisible-p 'hide)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("ovinvis:") && row.contains("((t t nil) (2 2 nil) t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invisible-p should see overlay invisible properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invisible_p_overlay_invisibility_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
