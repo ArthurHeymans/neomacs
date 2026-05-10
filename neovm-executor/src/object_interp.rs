@@ -12859,4 +12859,79 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(24)));
     }
+
+    #[test]
+    fn executes_copy_alist_creates_shallow_copy() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((alist '((a . 1) (b . 2))))\n\
+               (eq alist (copy-alist alist)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_copy_alist_preserves_elements() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (assoc 'b (copy-alist '((a . 1) (b . 2) (c . 3))))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_plist_get_extracts_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (plist-get '(a 1 b 2 c 3) 'b)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_plist_get_returns_nil_for_missing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (plist-get '(a 1 b 2) 'c)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_plist_put_sets_property() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((plist (list 'a 1)))\n\
+               (setq plist (plist-put plist 'b 2))\n\
+               (plist-get plist 'b))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_cl_rassoc_if_finds_by_predicate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-rassoc-if #'evenp '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_cl_rassoc_if_not_excludes_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-rassoc-if-not #'evenp '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_cl_maplist_returns_results_of_successive_cdrs() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cl-maplist #'car (list 1 2 3))",
+        );
+        assert!(value.is_some());
+    }
 }
