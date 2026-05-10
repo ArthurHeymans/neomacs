@@ -12387,6 +12387,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_make_string_creates_char_repeat() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (make-string 3 ?x) \"xxx\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
