@@ -570,16 +570,43 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int(value >> (-count)))
             }
         }
-        "string-trim" if args.len() == 1 => match args[0] {
-            SsaConst::String(s) => Some(SsaConst::String(s.trim().to_string())),
+        "string-trim" if args.len() >= 1 => match args[0] {
+            SsaConst::String(s) => {
+                let chars: &[char] = &[' ', '\t', '\n', '\r'];
+                let trimmed = if let Some(SsaConst::String(trim_chars)) = args.get(1) {
+                    let set: Vec<char> = trim_chars.chars().collect();
+                    s.trim_matches(set.as_slice()).to_string()
+                } else {
+                    s.trim_matches(chars).to_string()
+                };
+                Some(SsaConst::String(trimmed))
+            }
             _ => None,
         },
-        "string-trim-left" if args.len() == 1 => match args[0] {
-            SsaConst::String(s) => Some(SsaConst::String(s.trim_start().to_string())),
+        "string-trim-left" if args.len() >= 1 => match args[0] {
+            SsaConst::String(s) => {
+                let chars: &[char] = &[' ', '\t', '\n', '\r'];
+                let trimmed = if let Some(SsaConst::String(trim_chars)) = args.get(1) {
+                    let set: Vec<char> = trim_chars.chars().collect();
+                    s.trim_start_matches(set.as_slice()).to_string()
+                } else {
+                    s.trim_start_matches(chars).to_string()
+                };
+                Some(SsaConst::String(trimmed))
+            }
             _ => None,
         },
-        "string-trim-right" if args.len() == 1 => match args[0] {
-            SsaConst::String(s) => Some(SsaConst::String(s.trim_end().to_string())),
+        "string-trim-right" if args.len() >= 1 => match args[0] {
+            SsaConst::String(s) => {
+                let chars: &[char] = &[' ', '\t', '\n', '\r'];
+                let trimmed = if let Some(SsaConst::String(trim_chars)) = args.get(1) {
+                    let set: Vec<char> = trim_chars.chars().collect();
+                    s.trim_end_matches(set.as_slice()).to_string()
+                } else {
+                    s.trim_end_matches(chars).to_string()
+                };
+                Some(SsaConst::String(trimmed))
+            }
             _ => None,
         },
         "downcase" if args.len() == 1 => match args[0] {
