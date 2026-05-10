@@ -5109,6 +5109,43 @@ fn obarray_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn vector_obarray_slot_zero_conversion_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:check_obarray_slow accepts a nonempty vector whose first
+    // element is 0 for compatibility, installs a real obarray object in slot
+    // 0, and then uses that object for symbol lookup.
+    let expr = r#"(message "obslot:%S" (let ((ob (make-vector 7 0))) (list (obarrayp ob) (aref ob 0) (symbol-name (intern "x" ob)) (obarrayp (aref ob 0)) (eq (intern-soft "x" ob) (intern-soft "x" (aref ob 0))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("obslot:(nil 0 \\\"x\\\" t t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: vector obarray slot-zero conversion should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "vector_obarray_slot_zero_conversion_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn invalid_obarray_argument_errors_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
