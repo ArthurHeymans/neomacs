@@ -6154,6 +6154,37 @@ fn parse_partial_sexp_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn parse_partial_sexp_comment_stop_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "ppstop:%S" (with-temp-buffer (emacs-lisp-mode) (insert "abc ; comment\n(def)") (list (parse-partial-sexp 1 (point-max) nil nil nil t) (parse-partial-sexp 1 (point-max) nil nil nil 'syntax-table))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected =
+        "ppstop:((0 nil 1 nil t nil 0 nil 5 nil nil) (0 nil 1 nil t nil 0 nil 5 nil nil))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: parse-partial-sexp comment stop behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "parse_partial_sexp_comment_stop_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn emacs_lisp_indent_region_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
