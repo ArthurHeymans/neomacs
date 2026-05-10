@@ -2911,6 +2911,49 @@ fn text_property_equality_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn case_conversion_preserves_string_text_properties_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "caseprop:%S" (let* ((s (copy-sequence "abC"))) (put-text-property 0 2 'face 'bold s) (let ((u (upcase s)) (d (downcase s)) (c (capitalize s))) (list u (mapcar (lambda (i) (text-properties-at i u)) (number-sequence 0 2)) d (mapcar (lambda (i) (text-properties-at i d)) (number-sequence 0 2)) c (mapcar (lambda (i) (text-properties-at i c)) (number-sequence 0 2)) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 2))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("caseprop:")
+            && recent.matches("#(").count() >= 3
+            && recent.contains("ABC")
+            && recent.contains("abc")
+            && recent.contains("Abc")
+            && recent.matches("face").count() >= 6
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: upcase/downcase/capitalize should preserve string text properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "case_conversion_preserves_string_text_properties_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn sxhash_equal_including_properties_hashes_string_intervals_like_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
