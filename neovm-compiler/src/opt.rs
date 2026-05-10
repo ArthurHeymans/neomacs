@@ -607,6 +607,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::True => Some(SsaConst::String("t".into())),
             _ => None,
         },
+        "make-string" if args.len() == 2 => {
+            let count = args[0].as_int()? as usize;
+            let ch = match args[1] {
+                SsaConst::Char(c) => char::from_u32(*c as u32).unwrap_or(' '),
+                SsaConst::Int(n) => char::from_u32(*n as u32).unwrap_or(' '),
+                _ => return None,
+            };
+            let s: String = std::iter::repeat(ch).take(count.min(4096)).collect();
+            Some(SsaConst::String(s))
+        }
         "copy-sequence" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::String(s.clone())),
             _ => None,
