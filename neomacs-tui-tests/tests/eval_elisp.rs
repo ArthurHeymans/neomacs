@@ -10798,6 +10798,44 @@ fn print_circle_nil_bounded_cycle_matches_gnu_semantics() {
 }
 
 #[test]
+fn print_level_vectorlike_notation_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/print.c handles vectorlike objects separately from conses:
+    // nested vectors at print-level 1 remain printed, while nested cons
+    // structure inside a record is truncated as "...".
+    let expr = r#"(message "printvec:%S" (list (let ((print-level 1)) (prin1-to-string [[a b] [c d]])) (let ((print-level 1)) (prin1-to-string '#s(foo (a b) [c d]))) (let ((print-length 2)) (prin1-to-string [1 2 3 4]))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid.join("\n");
+        recent.contains("printvec:")
+            && recent.contains(r##"\"[[a b] [c d]]\""##)
+            && recent.contains(r##"\"#s(foo ... [c d])\""##)
+            && recent.contains(r##"\"[1 2 ...]\""##)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: vectorlike print-level and print-length notation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "print_level_vectorlike_notation_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn process_output_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
