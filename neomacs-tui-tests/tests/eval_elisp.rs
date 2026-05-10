@@ -5612,6 +5612,36 @@ fn buffer_modified_tick_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_modified_tick_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpropmodtick:%S" (with-temp-buffer (insert "abc") (let ((m0 (buffer-modified-tick)) (c0 (buffer-chars-modified-tick))) (put-text-property 1 2 'face 'bold) (list (buffer-modified-p) (> (buffer-modified-tick) m0) (= (buffer-chars-modified-tick) c0) (text-properties-at 1)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "tpropmodtick:(t t t (face bold))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text property modified tick behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_modified_tick_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
