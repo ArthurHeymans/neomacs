@@ -27,7 +27,7 @@ use super::keymap::{
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
     current_active_maps_for_position, current_active_maps_for_position_read_only,
     expand_meta_prefix_char_events_in_obarray, format_key_event, format_key_sequence,
-    is_list_keymap, key_event_to_emacs_event, list_keymap_for_each_binding,
+    get_keymap_in_obarray, is_list_keymap, key_event_to_emacs_event, list_keymap_for_each_binding,
     lookup_keymap_with_partial, make_sparse_list_keymap, minor_mode_key_binding_in_context,
     resolve_active_key_binding, where_is_keymaps_in_context,
 };
@@ -716,10 +716,12 @@ pub(crate) fn builtin_command_remapping_impl(
     if let Some(keymap_arg) = args.get(2) {
         match keymap_arg.kind() {
             ValueKind::Cons => {
-                if let Some(target) =
-                    command_remapping_lookup_in_lisp_keymap(keymap_arg, command_name)
-                {
-                    return Ok(command_remapping_normalize_target(target));
+                for keymap in command_remapping_explicit_keymaps(ctx, keymap_arg) {
+                    if let Some(target) =
+                        command_remapping_lookup_in_lisp_keymap(&keymap, command_name)
+                    {
+                        return Ok(command_remapping_normalize_target(target));
+                    }
                 }
                 return Ok(Value::NIL);
             }
@@ -3594,6 +3596,35 @@ fn command_remapping_keymap_arg_valid(value: &Value) -> bool {
     // Oracle accepts cons/list keymap-like objects in this slot, not just valid keymaps.
     // Non-keymap cons cells are silently treated as "no remap found".
     value.is_cons() || is_list_keymap(value)
+}
+
+fn command_remapping_explicit_keymaps(ctx: &Context, value: &Value) -> Vec<Value> {
+    if is_list_keymap(value) {
+        return vec![*value];
+    }
+
+    let Some(items) = list_to_vec(value) else {
+        return Vec::new();
+    };
+    if items.is_empty() {
+        return Vec::new();
+    }
+    if get_keymap_in_obarray(&ctx.obarray, &items[0], false)
+        .ok()
+        .filter(is_list_keymap)
+        .is_none()
+    {
+        return Vec::new();
+    }
+
+    items
+        .into_iter()
+        .filter_map(|item| {
+            get_keymap_in_obarray(&ctx.obarray, &item, false)
+                .ok()
+                .filter(is_list_keymap)
+        })
+        .collect()
 }
 
 fn command_remapping_lookup_in_keymaps(keymaps: &[Value], command_name: SymId) -> Option<Value> {

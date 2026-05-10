@@ -5158,6 +5158,12 @@ fn command_remapping_resolves_remap_bindings_on_lisp_keymaps() {
     );
     assert_eq!(
         eval_one(
+            "(let ((m '(keymap (remap keymap (ignore . self-insert-command))))) (command-remapping 'ignore nil (list m)))"
+        ),
+        "OK self-insert-command"
+    );
+    assert_eq!(
+        eval_one(
             "(command-remapping 'ignore nil '(keymap (remap keymap (ignore menu-item \"x\" ignore))))"
         ),
         "OK ignore"
