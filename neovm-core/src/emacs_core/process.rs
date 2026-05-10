@@ -26,6 +26,7 @@ use std::io::Read as IoRead;
 use std::net::IpAddr;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -68,6 +69,7 @@ pub struct Process {
     pub id: ProcessId,
     pub name: Value,
     pub command: Value,
+    pub executable: Option<LispString>,
     pub kind: ProcessKind,
     pub proc_type: Value,
     pub status: Value,
@@ -230,6 +232,14 @@ fn process_command_lisp_argv(command: Value) -> Option<Vec<LispString>> {
         .collect::<Option<Vec<_>>>()
 }
 
+fn process_spawn_lisp_argv(proc: &Process) -> Option<Vec<LispString>> {
+    let mut argv = process_command_lisp_argv(proc.command)?;
+    if let (Some(executable), Some(program)) = (&proc.executable, argv.first_mut()) {
+        *program = executable.clone();
+    }
+    Some(argv)
+}
+
 fn lisp_string_from_bytes(bytes: &[u8], multibyte: bool) -> LispString {
     if multibyte {
         LispString::from_emacs_bytes(bytes.to_vec())
@@ -260,6 +270,118 @@ fn lisp_bytes_to_os_string(bytes: &[u8], multibyte: bool) -> OsString {
 
 fn lisp_string_to_os_string(string: &LispString) -> OsString {
     lisp_bytes_to_os_string(string.as_bytes(), string.is_multibyte())
+}
+
+fn executable_path_exists(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
+    }
+
+    #[cfg(not(unix))]
+    {
+        path.exists()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ProcessExecLookup<'a> {
+    exec_path: Value,
+    exec_suffixes: Value,
+    default_directory: Option<&'a LispString>,
+}
+
+fn process_lookup_error(program: &LispString) -> Flow {
+    signal(
+        "file-missing",
+        vec![
+            Value::string("Searching for program"),
+            Value::string(crate::emacs_core::emacs_char::to_utf8_lossy(
+                program.as_bytes(),
+            )),
+        ],
+    )
+}
+
+fn process_exec_suffixes(lookup: ProcessExecLookup<'_>) -> Result<Vec<LispString>, Flow> {
+    if lookup.exec_suffixes.is_nil() {
+        return Ok(vec![LispString::from_unibyte(Vec::new())]);
+    }
+
+    let suffix_values = list_to_vec(&lookup.exec_suffixes)
+        .ok_or_else(|| signal_wrong_type_string(lookup.exec_suffixes))?;
+    suffix_values
+        .iter()
+        .map(|value| super::builtins::expect_lisp_string(value).cloned())
+        .collect()
+}
+
+fn process_program_is_absolute(program: &LispString) -> bool {
+    Path::new(&lisp_string_to_os_string(program)).is_absolute()
+}
+
+fn resolve_async_process_program(
+    lookup: ProcessExecLookup<'_>,
+    program: &LispString,
+) -> Result<LispString, Flow> {
+    if process_program_is_absolute(program) {
+        let path = PathBuf::from(lisp_string_to_os_string(program));
+        if path.is_dir() {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Specified program for new process is a directory",
+                )],
+            ));
+        }
+        return Ok(program.clone());
+    }
+
+    let path_entries = if lookup.exec_path.is_nil() {
+        Vec::new()
+    } else {
+        list_to_vec(&lookup.exec_path).ok_or_else(|| process_lookup_error(program))?
+    };
+    let suffixes = process_exec_suffixes(lookup)?;
+    let program_path = super::fileio::lisp_file_name_to_path_buf(program);
+
+    for entry in path_entries {
+        let Some(directory) = (match entry.kind() {
+            ValueKind::Nil => lookup
+                .default_directory
+                .map(super::fileio::lisp_file_name_to_path_buf),
+            ValueKind::String => entry
+                .as_lisp_string()
+                .map(super::fileio::lisp_file_name_to_path_buf),
+            _ => None,
+        }) else {
+            continue;
+        };
+
+        for suffix in &suffixes {
+            let mut candidate = directory.join(&program_path);
+            if !suffix.as_bytes().is_empty() {
+                let mut os = candidate.into_os_string();
+                #[cfg(unix)]
+                {
+                    os.push(std::ffi::OsStr::from_bytes(suffix.as_bytes()));
+                }
+                #[cfg(not(unix))]
+                {
+                    os.push(super::builtins::runtime_string_from_lisp_string(suffix));
+                }
+                candidate = PathBuf::from(os);
+            }
+            if executable_path_exists(&candidate) {
+                return Ok(os_str_to_lisp_string(candidate.as_os_str()));
+            }
+        }
+    }
+
+    Err(process_lookup_error(program))
 }
 
 fn os_str_to_lisp_string(value: &OsStr) -> LispString {
@@ -435,6 +557,24 @@ impl ProcessManager {
         self.create_process_with_kind_lisp(name, buffer, command, args, ProcessKind::Real)
     }
 
+    pub fn create_process_lisp_resolved(
+        &mut self,
+        name: LispString,
+        buffer: Value,
+        command: LispString,
+        args: Vec<LispString>,
+        executable: Option<LispString>,
+    ) -> ProcessId {
+        self.create_process_with_kind_lisp_resolved(
+            name,
+            buffer,
+            command,
+            args,
+            ProcessKind::Real,
+            executable,
+        )
+    }
+
     /// Create a new process record with an explicit process kind.
     pub fn create_process_with_kind(
         &mut self,
@@ -463,6 +603,18 @@ impl ProcessManager {
         args: Vec<LispString>,
         kind: ProcessKind,
     ) -> ProcessId {
+        self.create_process_with_kind_lisp_resolved(name, buffer, command, args, kind, None)
+    }
+
+    pub fn create_process_with_kind_lisp_resolved(
+        &mut self,
+        name: LispString,
+        buffer: Value,
+        command: LispString,
+        args: Vec<LispString>,
+        kind: ProcessKind,
+        executable: Option<LispString>,
+    ) -> ProcessId {
         let id = self.next_id;
         self.next_id += 1;
         let (tty_name, tty_stdin, tty_stdout, tty_stderr) = match kind {
@@ -484,6 +636,7 @@ impl ProcessManager {
             id,
             name: process_name_lisp_value(&name),
             command: make_process_command_lisp_value(&kind, &command, &args),
+            executable,
             kind,
             proc_type,
             status: process_status_run_value(),
@@ -560,7 +713,7 @@ impl ProcessManager {
             return Ok(());
         }
 
-        let Some(argv) = process_command_lisp_argv(proc.command) else {
+        let Some(argv) = process_spawn_lisp_argv(proc) else {
             return Ok(()); // No program to run
         };
         if argv.is_empty()
@@ -600,7 +753,7 @@ impl ProcessManager {
             .get_mut(&id)
             .ok_or_else(|| "Process not found".to_string())?;
 
-        let Some(argv) = process_command_lisp_argv(proc.command) else {
+        let Some(argv) = process_spawn_lisp_argv(proc) else {
             return Ok(());
         };
         if argv.is_empty() {
@@ -716,7 +869,7 @@ impl ProcessManager {
             .openpty(pty_size)
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
-        let Some(argv) = process_command_lisp_argv(proc.command) else {
+        let Some(argv) = process_spawn_lisp_argv(proc) else {
             return Ok(());
         };
         if argv.is_empty() {
@@ -4320,23 +4473,35 @@ pub(crate) fn builtin_start_process(
         super::builtins::expect_lisp_string(&args[2])?.clone()
     };
     let proc_args = parse_lisp_string_args_strict(&args[3..])?;
+    let default_directory =
+        super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers);
+    let lookup = ProcessExecLookup {
+        exec_path: eval.visible_variable_value_or_nil("exec-path"),
+        exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
+        default_directory: default_directory.as_ref(),
+    };
+    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
+    let executable = if args[2].is_nil() {
+        None
+    } else {
+        Some(resolve_async_process_program(lookup, &program)?)
+    };
 
     let use_pty = process_connection_type_is_pty(&eval.obarray);
     let id = eval
         .processes
-        .create_process_lisp(name, buffer, program, proc_args);
+        .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
     // Actually spawn the OS process.
-    if let Err(e) = eval.processes.spawn_child_with_environment(
-        id,
-        use_pty,
-        eval.obarray.symbol_value("process-environment").copied(),
-    ) {
+    if let Err(e) = eval
+        .processes
+        .spawn_child_with_environment(id, use_pty, process_environment)
+    {
         // Process creation failed — mark as exited but still return the id
         // (GNU Emacs signals file-error for missing programs)
         return Err(signal(
-            "file-error",
+            "file-missing",
             vec![
                 Value::string("Searching for program"),
                 Value::string(e),
@@ -4986,13 +5151,22 @@ pub(crate) fn builtin_make_process(
     args: Vec<Value>,
 ) -> EvalResult {
     let use_pty = process_connection_type_is_pty(&eval.obarray);
+    let default_directory =
+        super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers);
+    let lookup = ProcessExecLookup {
+        exec_path: eval.visible_variable_value_or_nil("exec-path"),
+        exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
+        default_directory: default_directory.as_ref(),
+    };
+    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     builtin_make_process_impl_with_environment(
         &mut eval.processes,
         &mut eval.buffers,
         &eval.threads,
         args,
         use_pty,
-        eval.obarray.symbol_value("process-environment").copied(),
+        process_environment,
+        Some(lookup),
     )
 }
 
@@ -5010,6 +5184,7 @@ pub(crate) fn builtin_make_process_impl(
         args,
         default_use_pty,
         None,
+        None,
     )
 }
 
@@ -5020,6 +5195,7 @@ fn builtin_make_process_impl_with_environment(
     args: Vec<Value>,
     default_use_pty: bool,
     process_environment: Option<Value>,
+    lookup: Option<ProcessExecLookup<'_>>,
 ) -> EvalResult {
     if args.is_empty() {
         return Ok(Value::NIL);
@@ -5077,6 +5253,13 @@ fn builtin_make_process_impl_with_environment(
     } else {
         (command[0].clone(), command[1..].to_vec())
     };
+    let executable = if program.is_empty() {
+        None
+    } else if let Some(lookup) = lookup {
+        Some(resolve_async_process_program(lookup, &program)?)
+    } else {
+        None
+    };
     let stderrproc = match stderr_target.kind() {
         ValueKind::Nil => Value::NIL,
         ValueKind::Fixnum(_) => {
@@ -5105,7 +5288,13 @@ fn builtin_make_process_impl_with_environment(
             ],
         )?,
     };
-    let id = processes.create_process_lisp(name, buffer.unwrap_or(Value::NIL), program, argv);
+    let id = processes.create_process_lisp_resolved(
+        name,
+        buffer.unwrap_or(Value::NIL),
+        program,
+        argv,
+        executable,
+    );
     processes.sync_process_mark(buffers, id)?;
 
     // Set filter and sentinel if provided.
@@ -5128,7 +5317,7 @@ fn builtin_make_process_impl_with_environment(
     // Spawn the actual OS child process.
     if let Err(e) = processes.spawn_child_with_environment(id, use_pty, process_environment) {
         return Err(signal(
-            "file-error",
+            "file-missing",
             vec![Value::string("Searching for program"), Value::string(e)],
         ));
     }

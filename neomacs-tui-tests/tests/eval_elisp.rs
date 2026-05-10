@@ -6565,6 +6565,43 @@ fn call_process_exec_path_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn async_process_exec_path_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(let ((cat-dir (file-name-directory (executable-find "cat")))) (message "aexec:%S" (list (condition-case err (let ((exec-path nil)) (start-process "aexec-start-nil" nil "printf" "ok") 'ok) (error (list (car err) (cadr err)))) (condition-case err (let ((exec-path (list 42))) (start-process "aexec-start-bad-path" nil "printf" "ok") 'ok) (error (list (car err) (cadr err)))) (condition-case err (let ((exec-path (list cat-dir)) (exec-suffixes (list 42))) (start-process "aexec-start-bad-suffix" nil "cat") 'ok) (error (list (car err) (cadr err)))) (condition-case err (let ((exec-path (list cat-dir))) (let ((p (start-process "aexec-start-ok" nil "cat"))) (prog1 (list (processp p) (process-command p)) (delete-process p)))) (error (list (car err) (cadr err)))) (condition-case err (let ((exec-path nil)) (make-process :name "aexec-make-nil" :command '("printf" "ok")) 'ok) (error (list (car err) (cadr err)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains("aexec:")
+            && text.contains("file-missing")
+            && text.contains("Searching for program")
+            && text.contains("wrong-type-argument")
+            && text.contains("stringp")
+            && text.contains(r#"(t (\"cat\"))"#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: async process executable lookup should match GNU exec-path semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "async_process_exec_path_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_base64_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
