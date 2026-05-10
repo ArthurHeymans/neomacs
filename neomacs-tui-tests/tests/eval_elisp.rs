@@ -5172,6 +5172,40 @@ fn indirect_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn killed_buffer_local_value_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "killlocals:%S" (let ((b (generate-new-buffer "neo-locals"))) (with-current-buffer b (setq-local fill-column 33) (setq-local neo-kill-local 44)) (let ((before (list (local-variable-p 'fill-column b) (buffer-local-value 'fill-column b) (buffer-local-value 'neo-kill-local b)))) (kill-buffer b) (list before (buffer-live-p b) (condition-case e (buffer-local-value 'fill-column b) (error (car e))) (boundp 'neo-kill-local)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("killlocals:((t 33 44) nil 70 nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: buffer-local-value after kill should fall back to defaults like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "killed_buffer_local_value_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn kill_buffer_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
