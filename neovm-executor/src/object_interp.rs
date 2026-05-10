@@ -12250,6 +12250,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_prefix_p_returns_nil_for_non_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-prefix-p \"xyz\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_delete_dups_removes_adjacent_duplicates() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
