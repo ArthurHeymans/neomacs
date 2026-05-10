@@ -755,6 +755,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         }
         "copy-sequence" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::String(s.clone())),
+            SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
         "string-to-char" if args.len() == 1 => match args[0] {
