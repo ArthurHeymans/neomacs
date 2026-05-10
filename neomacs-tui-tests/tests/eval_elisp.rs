@@ -2344,6 +2344,40 @@ fn text_property_search_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn text_property_change_limit_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tproplimit:%S" (let ((s (copy-sequence "abcdef"))) (put-text-property 1 5 'face 'bold s) (list (next-single-property-change 1 'face s 3) (next-single-property-change 1 'face s 6) (previous-single-property-change 5 'face s 3) (previous-single-property-change 5 'face s 0) (previous-single-property-change 1 'face s 0) (next-single-property-change 5 'face s 6))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("tproplimit:(3 5 3 1 0 6)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property change LIMIT behavior should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_change_limit_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn button_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
