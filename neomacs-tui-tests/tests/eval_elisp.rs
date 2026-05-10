@@ -5792,6 +5792,36 @@ fn delete_and_extract_region_narrowing_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn erase_buffer_narrowing_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "erasenarrow:%S" (with-temp-buffer (insert "abcdef") (narrow-to-region 3 5) (erase-buffer) (list (buffer-string) (point-min) (point-max) (buffer-size) (point))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"erasenarrow:(\"\" 1 1 0 1)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: erase-buffer should widen before deleting like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "erase_buffer_narrowing_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
