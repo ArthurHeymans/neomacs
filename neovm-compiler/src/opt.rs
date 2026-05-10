@@ -780,13 +780,18 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "expt" if args.len() == 2 => {
-            let base = args[0].as_int()?;
-            let exp = args[1].as_int()?;
-            if exp >= 0 {
-                base.checked_pow(exp as u32).map(SsaConst::Int)
-            } else if exp >= i32::MIN as i64 {
-                Some(SsaConst::Float((base as f64).powi(exp as i32)))
-            } else { None }
+            // If both are integers, try exact integer pow
+            if let (Some(base), Some(exp)) = (args[0].as_int(), args[1].as_int()) {
+                if exp >= 0 {
+                    return base.checked_pow(exp as u32).map(SsaConst::Int);
+                } else if exp >= i32::MIN as i64 {
+                    return Some(SsaConst::Float((base as f64).powi(exp as i32)));
+                }
+            }
+            // Float path
+            let base = to_f64(args[0])?;
+            let exp = to_f64(args[1])?;
+            Some(SsaConst::Float(base.powf(exp)))
         }
         "abs" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_abs())),
