@@ -482,7 +482,7 @@ impl OldBlock {
             return None;
         }
 
-        let mut cursor = self.cursor.load(Ordering::Acquire);
+        let mut cursor = self.cursor.load(Ordering::Relaxed);
         loop {
             let cursor_line = (cursor + self.line_bytes - 1) >> self.line_shift;
             let mut search_line = cursor_line;
