@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -97,6 +97,93 @@ fn lisp_string_to_os_string(string: &LispString) -> OsString {
 
 fn lisp_string_to_output_path(string: &LispString) -> std::path::PathBuf {
     super::fileio::lisp_file_name_to_path_buf(string)
+}
+
+fn executable_path_exists(path: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
+    }
+
+    #[cfg(not(unix))]
+    {
+        path.exists()
+    }
+}
+
+fn call_process_lookup_error(program: &LispString) -> Flow {
+    signal(
+        "file-missing",
+        vec![
+            Value::string("Searching for program"),
+            Value::string(crate::emacs_core::emacs_char::to_utf8_lossy(
+                program.as_bytes(),
+            )),
+        ],
+    )
+}
+
+fn exec_suffixes(eval: &super::eval::Context) -> Result<Vec<LispString>, Flow> {
+    let value = eval.visible_variable_value_or_nil("exec-suffixes");
+    if value.is_nil() {
+        return Ok(vec![LispString::from_unibyte(Vec::new())]);
+    }
+
+    let suffix_values = list_to_vec(&value).ok_or_else(|| signal_wrong_type_string(value))?;
+    suffix_values
+        .iter()
+        .map(|value| super::builtins::expect_lisp_string(value).cloned())
+        .collect()
+}
+
+fn resolve_call_process_program(
+    eval: &super::eval::Context,
+    program: &LispString,
+) -> Result<OsString, Flow> {
+    let exec_path = eval.visible_variable_value_or_nil("exec-path");
+    let path_entries = if exec_path.is_nil() {
+        Vec::new()
+    } else {
+        list_to_vec(&exec_path).ok_or_else(|| call_process_lookup_error(program))?
+    };
+    let suffixes = exec_suffixes(eval)?;
+    let program_path = lisp_string_to_output_path(program);
+
+    for entry in path_entries {
+        let Some(directory) = (match entry.kind() {
+            ValueKind::Nil => subprocess_default_directory(eval),
+            ValueKind::String => entry
+                .as_lisp_string()
+                .map(super::fileio::lisp_file_name_to_path_buf),
+            _ => None,
+        }) else {
+            continue;
+        };
+
+        for suffix in &suffixes {
+            let mut candidate = directory.join(&program_path);
+            if !suffix.as_bytes().is_empty() {
+                let mut os = candidate.into_os_string();
+                #[cfg(unix)]
+                {
+                    os.push(std::ffi::OsStr::from_bytes(suffix.as_bytes()));
+                }
+                #[cfg(not(unix))]
+                {
+                    os.push(super::builtins::runtime_string_from_lisp_string(suffix));
+                }
+                candidate = PathBuf::from(os);
+            }
+            if executable_path_exists(&candidate) {
+                return Ok(candidate.into_os_string());
+            }
+        }
+    }
+
+    Err(call_process_lookup_error(program))
 }
 
 fn fallback_subprocess_directory() -> Option<PathBuf> {
@@ -372,7 +459,7 @@ fn run_process_command_in_state(
     cmd_args: &[LispString],
 ) -> EvalResult {
     let destination_spec = parse_call_process_destination(&mut eval.buffers, destination)?;
-    let program_os = lisp_string_to_os_string(program);
+    let program_os = resolve_call_process_program(eval, program)?;
     let cmd_args_os = cmd_args
         .iter()
         .map(lisp_string_to_os_string)
@@ -438,7 +525,7 @@ fn run_process_capture_output(
     program: &LispString,
     cmd_args: &[LispString],
 ) -> Result<(i32, Vec<u8>), Flow> {
-    let mut command = Command::new(lisp_string_to_os_string(program));
+    let mut command = Command::new(resolve_call_process_program(eval, program)?);
     command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
         .stdin(Stdio::null())
@@ -543,9 +630,14 @@ fn builtin_call_process_impl(eval: &mut super::eval::Context, args: Vec<Value>) 
     run_process_command_in_state(eval, &program, infile, destination, &cmd_args)
 }
 
-fn builtin_call_process_region_impl(buffers: &mut BufferManager, args: Vec<Value>) -> EvalResult {
+fn builtin_call_process_region_impl(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("call-process-region", &args, 3)?;
     let program = super::builtins::expect_lisp_string(&args[2])?.clone();
+    let program_os = resolve_call_process_program(eval, &program)?;
+    let buffers = &mut eval.buffers;
 
     let delete = args.len() > 3 && args[3].is_truthy();
     let destination = if args.len() > 4 {
@@ -623,7 +715,7 @@ fn builtin_call_process_region_impl(buffers: &mut BufferManager, args: Vec<Value
     };
 
     if destination_spec.no_wait {
-        let mut command = Command::new(lisp_string_to_os_string(&program));
+        let mut command = Command::new(&program_os);
         command
             .args(cmd_args.iter().map(lisp_string_to_os_string))
             .stdin(Stdio::piped())
@@ -663,7 +755,7 @@ fn builtin_call_process_region_impl(buffers: &mut BufferManager, args: Vec<Value
         return Ok(Value::NIL);
     }
 
-    let mut child = Command::new(lisp_string_to_os_string(&program))
+    let mut child = Command::new(&program_os)
         .args(cmd_args.iter().map(lisp_string_to_os_string))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -801,7 +893,7 @@ pub(crate) fn builtin_call_process_region(
     expect_min_args("call-process-region", &args, 3)?;
     let destination = args.get(4).copied().unwrap_or(Value::NIL);
     let display = args.get(5).is_some_and(|v| v.is_truthy());
-    let result = builtin_call_process_region_impl(&mut eval.buffers, args)?;
+    let result = builtin_call_process_region_impl(eval, args)?;
     maybe_redisplay_sync_output(eval, &destination, display)?;
     Ok(result)
 }

@@ -3713,6 +3713,8 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         eval.set_variable("exec-path", Value::list(path_dirs));
         eval.set_variable("exec-suffixes", Value::NIL);
         eval.set_variable("exec-directory", Value::NIL);
+        eval.obarray.make_special("exec-path");
+        eval.obarray.make_special("exec-suffixes");
         // GNU callproc.c: syms_of_callproc defines these Lisp variables
         // before Lisp files read them as defcustom defaults.
         for (name, program) in [

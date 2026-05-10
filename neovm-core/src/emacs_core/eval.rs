@@ -3414,6 +3414,7 @@ impl Context {
             .map(|s| Value::unibyte_string(s.to_string()))
             .collect();
         obarray.set_symbol_value("exec-path", Value::list(exec_path));
+        obarray.make_special("exec-path");
         obarray.set_symbol_value(
             "exec-directory",
             Value::unibyte_string(
@@ -3427,6 +3428,7 @@ impl Context {
             "exec-suffixes",
             Value::list(vec![Value::unibyte_string("")]),
         );
+        obarray.make_special("exec-suffixes");
         obarray.set_symbol_value("buffer-read-only", Value::NIL);
         obarray.set_symbol_value("left-margin-width", Value::NIL);
         obarray.set_symbol_value("right-margin-width", Value::NIL);
