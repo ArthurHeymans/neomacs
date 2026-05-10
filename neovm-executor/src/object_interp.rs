@@ -12506,6 +12506,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_buffer_size_returns_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (buffer-size)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
