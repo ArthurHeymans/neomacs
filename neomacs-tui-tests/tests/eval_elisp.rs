@@ -5206,6 +5206,36 @@ fn killed_buffer_local_value_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn killed_buffer_file_name_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "deadbuf:%S" (let ((b (generate-new-buffer "neo-dead"))) (with-current-buffer b (setq buffer-file-name "/tmp/dead.txt" buffer-file-truename "/tmp/dead.txt")) (kill-buffer b) (list (buffer-live-p b) (buffer-name b) (buffer-last-name b) (buffer-file-name b) (buffer-base-buffer b) (condition-case e (with-current-buffer b (current-buffer)) (error (car e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"deadbuf:(nil nil \"neo-dead\" \"/tmp/dead.txt\" nil error)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: killed buffer name and file-name slots should remain queryable like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "killed_buffer_file_name_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn kill_buffer_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
