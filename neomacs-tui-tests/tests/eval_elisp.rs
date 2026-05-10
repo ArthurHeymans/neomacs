@@ -6637,6 +6637,43 @@ fn async_shell_process_wrappers_use_dynamic_shell_file_name_like_gnu() {
 }
 
 #[test]
+fn callproc_directory_variables_are_special_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "cpspecial:%S" (mapcar (lambda (s) (list s (boundp s) (special-variable-p s))) '(exec-directory data-directory doc-directory configure-info-directory shared-game-score-directory)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains("cpspecial:")
+            && text.contains("(exec-directory t t)")
+            && text.contains("(data-directory t t)")
+            && text.contains("(doc-directory t t)")
+            && text.contains("(configure-info-directory t t)")
+            && text.contains("(shared-game-score-directory t t)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: callproc DEFVAR directory variables should be bound and special\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "callproc_directory_variables_are_special_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_base64_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

@@ -2554,6 +2554,15 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
             eval.set_variable(name, value);
         }
     }
+    for name in [
+        "data-directory",
+        "doc-directory",
+        "exec-directory",
+        "configure-info-directory",
+        "shared-game-score-directory",
+    ] {
+        eval.obarray.make_special(name);
+    }
     crate::emacs_core::xfaces::ensure_startup_compat_variables(eval);
 }
 
@@ -3715,6 +3724,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         eval.set_variable("exec-directory", Value::NIL);
         eval.obarray.make_special("exec-path");
         eval.obarray.make_special("exec-suffixes");
+        eval.obarray.make_special("exec-directory");
         // GNU callproc.c: syms_of_callproc defines these Lisp variables
         // before Lisp files read them as defcustom defaults.
         for (name, program) in [
