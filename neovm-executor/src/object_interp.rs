@@ -13727,4 +13727,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_stable_sort_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-stable-sort nil '<)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
