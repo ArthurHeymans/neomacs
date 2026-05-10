@@ -1289,6 +1289,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-endp" if args.len() == 1 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::True),
+            _ => None, // non-nil may signal error, let runtime handle
+        },
         "sort" | "cl-sort" | "cl-stable-sort" if args.len() == 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
