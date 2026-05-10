@@ -2616,6 +2616,40 @@ fn sxhash_equal_including_properties_hashes_string_intervals_like_gnu() {
 }
 
 #[test]
+fn marker_and_overlay_equal_hash_semantics_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "eqhashobj:%S" (list (with-temp-buffer (insert "abc") (let ((m1 (copy-marker 2)) (m2 (copy-marker 2)) (m3 (copy-marker 3))) (list (= (sxhash-equal m1) (sxhash-equal m2)) (= (sxhash-equal m1) (sxhash-equal m3))))) (with-temp-buffer (insert "abc") (let ((o1 (make-overlay 1 2)) (o2 (make-overlay 1 2))) (overlay-put o1 'face 'bold) (let ((before (list (equal o1 o2) (= (sxhash-equal o1) (sxhash-equal o2))))) (overlay-put o2 'face 'bold) (append before (list (equal o1 o2) (= (sxhash-equal o1) (sxhash-equal o2)))))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("eqhashobj:((t nil) (nil nil t t))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: marker and overlay equal/sxhash behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "marker_and_overlay_equal_hash_semantics_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_copy_sequence_and_substring_independence_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
