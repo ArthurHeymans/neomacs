@@ -1868,6 +1868,43 @@ fn append_circular_list_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn vconcat_circular_list_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:vconcat uses concat_to_vector, which computes argument
+    // lengths through Flength before allocation.  Circular list inputs signal
+    // `circular-list`; they must not loop while building the vector.
+    let expr = r#"(message "vconcatcycle:%S" (condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (vconcat x)) (error (list (car e)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("vconcatcycle:(circular-list)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: vconcat circular-list error should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "vconcat_circular_list_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn vector_array_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
