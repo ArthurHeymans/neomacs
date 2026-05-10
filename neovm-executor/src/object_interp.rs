@@ -12602,6 +12602,24 @@ mod tests {
     }
 
     #[test]
+    fn executes_char_valid_p_for_ascii() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-valid-p 65)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_char_valid_p_for_surrogate() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-valid-p #xD800)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_buffer_modified_p_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
