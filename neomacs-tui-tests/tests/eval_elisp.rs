@@ -7015,6 +7015,38 @@ fn case_table_fillarray_preserves_gnu_extra_slot_semantics() {
 }
 
 #[test]
+fn char_table_extra_slots_initialize_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/chartab.c:make-char-table sizes custom extra slots from the
+    // PURPOSE symbol's char-table-extra-slots property and initializes the
+    // whole backing vector, including extras, to INIT.
+    let expr = r#"(message "chartabextra:%S" (progn (put 'neo-extra-purpose 'char-table-extra-slots 2) (unwind-protect (let ((ct (make-char-table 'neo-extra-purpose 0))) (set-char-table-extra-slot ct 0 'slot0) (list (char-table-subtype ct) (char-table-extra-slot ct 0) (char-table-extra-slot ct 1) (condition-case e (char-table-extra-slot ct 2) (error (car e))))) (put 'neo-extra-purpose 'char-table-extra-slots nil))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("chartabextra:(neo-extra-purpose slot0 0 args-out-of-range)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: custom char-table extra slots should initialize to INIT like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("char_table_extra_slots_initialize_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn char_table_map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
