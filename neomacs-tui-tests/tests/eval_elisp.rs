@@ -5064,6 +5064,45 @@ fn autoload_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn interactive_form_unloaded_autoload_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c:interactive-form follows indirect_function, so querying
+    // an unloaded autoload attempts to load its file before returning an
+    // interactive form.
+    let expr = r#"(message "autoload3:%S" (let ((cmd (make-symbol "neo-auto-cmd")) (fun (make-symbol "neo-auto-fun"))) (autoload cmd "nofile" "doc" t) (autoload fun "nofile" "doc" nil) (list (commandp cmd) (condition-case e (interactive-form cmd) (error (list (car e) (cadr e)))) (commandp fun) (condition-case e (interactive-form fun) (error (list (car e) (cadr e)))) (autoloadp (symbol-function cmd)) (autoloadp (symbol-function fun)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("autoload3:")
+                && row.contains("(t (file-missing")
+                && row.contains("nil (file-missing")
+                && row.contains("t t)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: interactive-form on unloaded autoloads should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "interactive_form_unloaded_autoload_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn documentation_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
