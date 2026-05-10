@@ -5702,6 +5702,36 @@ fn subst_char_in_region_noundo_tick_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn delete_and_extract_empty_region_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "delxempty:%S" (with-temp-buffer (insert "abc") (restore-buffer-modified-p nil) (let ((m0 (buffer-modified-tick)) (c0 (buffer-chars-modified-tick))) (let ((s (delete-and-extract-region 2 2))) (list s (multibyte-string-p s) (string-bytes s) (buffer-string) (buffer-modified-p) (= (buffer-modified-tick) m0) (= (buffer-chars-modified-tick) c0))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"delxempty:(\"\" nil 0 \"abc\" nil t t)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: empty delete-and-extract-region behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "delete_and_extract_empty_region_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
