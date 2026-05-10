@@ -1502,6 +1502,7 @@ impl Interpreter<'_, '_, '_> {
             "subrp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_function(args[0]))),
+            "color-defined-p" => Some(LispValue::NIL),
             "commandp" => self.subr_1(name, args, |s| {
                 // Any callable function can be used as a command
                 let obj = args[0];
@@ -7063,6 +7064,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-sort",
             "cl-stable-sort",
             "clrhash",
+            "color-defined-p",
             "commandp",
             "compiled-function-p",
             "concat",
