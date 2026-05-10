@@ -1209,6 +1209,10 @@ impl Interpreter<'_, '_, '_> {
             }),
             "char-table-p" | "bool-vector-p" | "recordp"
             | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "char-code" => self.subr_1(name, args, |s| {
+                let ch = args[0].as_char()?;
+                s.fixnum(ch as i64, "char-code")
+            }),
             "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(
                     args[0].as_char().is_some()
@@ -6934,6 +6938,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cdr",
             "cdr-safe",
             "ceiling",
+            "char-code",
             "char-equal",
             "char-or-string-p",
             "char-table-p",
