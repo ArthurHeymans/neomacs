@@ -107,7 +107,17 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-second (list) (list 'cadr list))
 (defmacro cl-third (list) (list 'caddr list))
 (defmacro cl-fourth (list) (list 'cadddr list))
+(defmacro cl-fifth (list) (list 'nth 4 list))
+(defmacro cl-sixth (list) (list 'nth 5 list))
 
+(defmacro cl-psetq (&rest args)
+  (let ((temps nil) (sets nil))
+    (while args
+      (let ((v (make-symbol \"--psetq--\")))
+        (push (list v (cadr args)) temps)
+        (push (list 'setq (car args) v) sets)
+        (setq args (cddr args))))
+    (list 'let (nreverse temps) (cons 'progn (nreverse sets)))))
 
 (provide 'cl-lib)
 "#;
