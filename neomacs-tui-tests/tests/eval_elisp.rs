@@ -2026,6 +2026,40 @@ fn narrowing_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn narrowing_point_clamp_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "narrowpt:%S" (with-temp-buffer (insert "abcdef") (goto-char 1) (let ((a (progn (narrow-to-region 3 5) (list (point-min) (point-max) (point)))) b) (setq b (save-restriction (goto-char 5) (narrow-to-region 2 4) (list (point-min) (point-max) (point)))) (list a b (point-min) (point-max) (point)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("narrowpt:((3 5 3) (2 4 4) 3 5 4)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: narrow-to-region and save-restriction point clamping should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "narrowing_point_clamp_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn overlay_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
