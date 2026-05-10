@@ -12427,6 +12427,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_subr_arity_returns_cons() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (subr-arity #'car)",
+        );
+        assert!(rt.is_cons(value.unwrap()));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
