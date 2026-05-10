@@ -2690,6 +2690,36 @@ fn condition_object_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn condition_case_success_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "condsucc:%S" (list (condition-case v (+ 1 2) (:success (list :ok v)) (error (list :err v))) (condition-case v (error "bad") (:success (list :ok v)) (error (list :err (car v) (cdr v)))) (condition-case nil (+ 3 4) (:success :ok) (error :err))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"condsucc:((:ok 3) (:err error (\"bad\")) :ok)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: condition-case :success binding and error bypass behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "condition_case_success_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn nonlocal_exit_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
