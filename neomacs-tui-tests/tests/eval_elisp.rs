@@ -5762,6 +5762,36 @@ fn delete_and_extract_region_properties_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn delete_and_extract_region_narrowing_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "delxnarrow:%S" (with-temp-buffer (insert "abcdef") (narrow-to-region 3 5) (let ((err (condition-case e (delete-and-extract-region 2 4) (error (list (car e) (length (cdr e))))))) (list err (buffer-string) (point-min) (point-max)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"delxnarrow:((args-out-of-range 3) \"cd\" 3 5)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: narrowed delete-and-extract-region range validation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "delete_and_extract_region_narrowing_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
