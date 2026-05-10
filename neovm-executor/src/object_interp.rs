@@ -12559,6 +12559,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_color_defined_p_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (color-defined-p \"red\")",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_make_string_creates_char_repeat() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
