@@ -2123,6 +2123,40 @@ fn overlay_move_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn overlay_advance_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "ovadv:%S" (with-temp-buffer (insert "ab") (let ((a (make-overlay 2 2 nil nil nil)) (b (make-overlay 2 2 nil t t))) (goto-char 2) (insert "X") (list (buffer-string) (list (overlay-start a) (overlay-end a) (overlays-at 2) (overlays-at 3)) (list (overlay-start b) (overlay-end b) (memq b (overlays-at 2)) (memq b (overlays-at 3)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains(r#"ovadv:(\"aXb\" (2 2 nil nil) (3 3 nil nil))"#))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: overlay front/rear advance and zero-length overlays-at behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "overlay_advance_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn overlay_overlap_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
