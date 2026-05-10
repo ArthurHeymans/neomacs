@@ -97,9 +97,8 @@ impl NurseryArena {
         let buffer_base = self.buffer.as_ptr() as usize;
         let buffer_len = self.buffer.len();
         let mut current = self.cursor.load(Ordering::Acquire);
+        // CAS loop for concurrent (mutator) allocation.
         loop {
-            // Overflow is impossible: buffer_base is a heap allocation,
-            // current is bounded by buffer_len, and both fit in usize.
             let current_addr = buffer_base.wrapping_add(current);
             let aligned = align_up(current_addr, align);
             let offset = aligned.wrapping_sub(buffer_base);
@@ -113,12 +112,28 @@ impl NurseryArena {
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
-                Ok(_) => {
-                    return NonNull::new(aligned as *mut u8);
-                }
+                Ok(_) => return NonNull::new(aligned as *mut u8),
                 Err(actual) => current = actual,
             }
         }
+    }
+
+    /// Non-atomic bump allocation for exclusive-access (GC evacuator).
+    pub(crate) fn try_alloc_mut(&mut self, layout: Layout) -> Option<NonNull<u8>> {
+        let size = layout.size();
+        let align = layout.align().max(1);
+        let buffer_base = self.buffer.as_ptr() as usize;
+        let buffer_len = self.buffer.len();
+        let current = *self.cursor.get_mut();
+        let current_addr = buffer_base.wrapping_add(current);
+        let aligned = align_up(current_addr, align);
+        let offset = aligned.wrapping_sub(buffer_base);
+        let end = offset.wrapping_add(size);
+        if end > buffer_len {
+            return None;
+        }
+        *self.cursor.get_mut() = end;
+        NonNull::new(aligned as *mut u8)
     }
 
     /// Returns true if `ptr` points inside this arena's backing buffer.
@@ -442,7 +457,7 @@ impl NurseryState {
     /// Allocate one survivor copy into the to-space during minor GC.
     /// Takes `&mut self` — only called during stop-the-world GC.
     pub(crate) fn try_alloc_in_to_space(&mut self, layout: Layout) -> Option<NonNull<u8>> {
-        self.to_space.try_alloc(layout)
+        self.to_space.try_alloc_mut(layout)
     }
 
     /// Swap from-space and to-space, then reset the new to-space (the
