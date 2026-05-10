@@ -2139,6 +2139,42 @@ fn make_hash_table_invalid_keyword_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn make_hash_table_obsolete_keywords_and_odd_args_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "hashargs:%S" (list (condition-case e (hash-table-p (make-hash-table :rehash-size 0 :rehash-threshold 0 :purecopy t)) (error (list (car e) (cadr e)))) (condition-case e (make-hash-table :test) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("hashargs:")
+                && row.contains("(t (error")
+                && row.contains("Odd number of arguments")
+                && !row.contains("Invalid argument list")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: make-hash-table obsolete keywords and odd argument errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "make_hash_table_obsolete_keywords_and_odd_args_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn marker_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
