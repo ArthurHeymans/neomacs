@@ -20,8 +20,10 @@ pub struct Runtime {
     /// on allocation; cleared objects are removed lazily (the lookup
     /// tolerates stale entries by falling back to Vec scans).
     object_index: HashMap<usize, HeapKind>,
-    /// O(1) addr → cons_cells index for cons_by_addr lookups.
+    /// O(1) addr → Vec index lookups for _by_addr methods.
     cons_index: HashMap<usize, usize>,
+    string_index: HashMap<usize, usize>,
+    symbol_index: HashMap<usize, usize>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -68,6 +70,8 @@ impl Default for Runtime {
             agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
             cons_index: HashMap::new(),
+            string_index: HashMap::new(),
+            symbol_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -129,6 +133,8 @@ impl Runtime {
             agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
             cons_index: HashMap::new(),
+            string_index: HashMap::new(),
+            symbol_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -199,6 +205,7 @@ impl Runtime {
         });
         let addr = (&mut *string as *mut LispString) as usize;
         self.object_index.insert(addr, HeapKind::String);
+        self.string_index.insert(addr, self.strings.len());
         self.strings.push(string);
         LispValue::from_heap_addr(addr)
     }
@@ -284,6 +291,7 @@ impl Runtime {
         let addr = (&mut *symbol as *mut Symbol) as usize;
         let value = LispValue::from_heap_addr(addr);
         self.object_index.insert(addr, HeapKind::Symbol);
+        self.symbol_index.insert(addr, self.symbols.len());
         self.symbols.push(symbol);
         self.interned_symbols.insert(name, value);
         value
@@ -303,6 +311,7 @@ impl Runtime {
         let addr = (&mut *symbol as *mut Symbol) as usize;
         let value = LispValue::from_heap_addr(addr);
         self.object_index.insert(addr, HeapKind::Symbol);
+        self.symbol_index.insert(addr, self.symbols.len());
         self.symbols.push(symbol);
         value
     }
@@ -1743,19 +1752,26 @@ impl Runtime {
     }
 
     fn symbol_by_addr(&self, addr: usize) -> Option<&Symbol> {
-        for symbol in &self.symbols {
-            let symbol_addr = (&**symbol as *const Symbol) as usize;
-            if symbol_addr == addr && symbol.header.kind == HeapKind::Symbol {
-                return Some(symbol);
-            }
+        let idx = self.symbol_index.get(&addr)?;
+        let sym = self.symbols.get(*idx)?;
+        if (&**sym as *const Symbol) as usize == addr {
+            return Some(sym);
         }
-        None
+        self.symbols.iter().find(|s| (&***s as *const Symbol) as usize == addr).map(|s| &**s)
     }
 
     fn symbol_by_addr_mut(&mut self, addr: usize) -> Option<&mut Symbol> {
+        let idx_val = self.symbol_index.get(&addr).copied();
+        if let Some(idx) = idx_val {
+            if idx < self.symbols.len() {
+                let ptr = &mut *self.symbols[idx] as *mut Symbol;
+                if ptr as usize == addr {
+                    return Some(unsafe { &mut *ptr });
+                }
+            }
+        }
         for symbol in &mut self.symbols {
-            let symbol_addr = (&**symbol as *const Symbol) as usize;
-            if symbol_addr == addr && symbol.header.kind == HeapKind::Symbol {
+            if (&**symbol as *const Symbol) as usize == addr {
                 return Some(symbol);
             }
         }
@@ -1763,13 +1779,12 @@ impl Runtime {
     }
 
     fn string_by_addr(&self, addr: usize) -> Option<&LispString> {
-        for string in &self.strings {
-            let string_addr = (&**string as *const LispString) as usize;
-            if string_addr == addr && string.header.kind == HeapKind::String {
-                return Some(string);
-            }
+        let idx = self.string_index.get(&addr)?;
+        let s = self.strings.get(*idx)?;
+        if (&**s as *const LispString) as usize == addr {
+            return Some(s);
         }
-        None
+        self.strings.iter().find(|s| (&***s as *const LispString) as usize == addr).map(|s| &**s)
     }
 
     pub fn string_set_char(
