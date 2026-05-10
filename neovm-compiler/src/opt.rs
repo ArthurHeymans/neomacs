@@ -779,6 +779,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
+        "char-or-string-p" if args.len() == 1 => Some(match args[0] {
+            SsaConst::Char(_) | SsaConst::String(_) => SsaConst::True,
+            SsaConst::Value(_) => return None,
+            _ => SsaConst::Nil,
+        }),
         "natnump" | "wholenump" if args.len() == 1 => {
             let n = args[0].as_int()?;
             Some(if n >= 0 { SsaConst::True } else { SsaConst::Nil })
