@@ -157,6 +157,9 @@ impl CardTable {
     }
 
     pub(crate) fn clear_all(&self) {
+        if !self.has_dirty() {
+            return;
+        }
         // Bulk zero via raw pointer — stop-the-world guarantees
         // no concurrent access. CARD_CLEAN == 0, so memset to 0.
         let ptr = self.cards.as_ptr() as *mut u8;
