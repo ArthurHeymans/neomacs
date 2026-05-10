@@ -7053,6 +7053,43 @@ fn display_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn display_table_width_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/character.c consults `buffer-display-table' in char-width and
+    // string-width; lisp/international/mule-util.el's truncate-string-to-width
+    // is built on those same width semantics.
+    let expr = r#"(message "dispwidth:%S" (let ((dt (make-display-table))) (aset dt ?x [?A ?B ?C]) (with-temp-buffer (setq buffer-display-table dt) (list (char-width ?x) (string-width "xox") (truncate-string-to-width "xox" 4 0 ?.)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains(r#"dispwidth:(3 7 \"xo\")"#))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: display-table replacements should affect width functions like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "display_table_width_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn save_excursion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
