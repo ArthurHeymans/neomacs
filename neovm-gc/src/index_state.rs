@@ -143,7 +143,7 @@ pub(crate) type ForwardingMap = HashMap<ObjectKey, GcErased, ObjectKeyBuildHashe
 #[derive(Debug)]
 pub(crate) struct RememberedSetState {
     pub(crate) owners: Vec<ObjectKey>,
-    owner_set: HashSet<ObjectKey>,
+    owner_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
     /// Owners the barrier hot path appended without the
     /// `HeapCore` write lock. Drained into `owners`/`owner_set`
     /// by the next GC-time consumer via `merge_pending_owners`.
@@ -159,7 +159,7 @@ impl Default for RememberedSetState {
     fn default() -> Self {
         Self {
             owners: Vec::new(),
-            owner_set: HashSet::new(),
+            owner_set: HashSet::with_hasher(ObjectKeyBuildHasher),
             pending_inserts: Mutex::new(Vec::new()),
             pending_count: AtomicUsize::new(0),
         }
@@ -187,7 +187,7 @@ pub(crate) struct PreparedIndexReclaim {
 
 #[derive(Debug, Default)]
 pub(crate) struct PostSweepIndexRebuild {
-    finalizable_candidates: HashSet<ObjectKey>,
+    finalizable_candidates: HashSet<ObjectKey, ObjectKeyBuildHasher>,
 }
 
 impl RememberedSetState {
@@ -253,7 +253,7 @@ impl RememberedSetState {
         // allocating a full combined `Vec`.
         let pending = self.pending_inserts.lock();
         let mut extra = 0usize;
-        let mut seen: HashSet<ObjectKey> = HashSet::new();
+        let mut seen: HashSet<ObjectKey, ObjectKeyBuildHasher> = HashSet::with_hasher(ObjectKeyBuildHasher);
         for key in pending.iter().copied() {
             if !self.owner_set.contains(&key) && seen.insert(key) {
                 extra = extra.saturating_add(1);
@@ -301,7 +301,7 @@ impl RememberedSetState {
     ) {
         self.merge_pending_owners();
         let mut next_owners = Vec::with_capacity(self.owners.len());
-        let mut next_set = HashSet::with_capacity(self.owners.len());
+        let mut next_set = HashSet::with_capacity_and_hasher(self.owners.len(), ObjectKeyBuildHasher);
         for owner_key in &self.owners {
             let Some(&owner_locator) = object_index.get(owner_key) else {
                 continue;
