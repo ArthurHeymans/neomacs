@@ -940,11 +940,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "rem" | "%" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 {
-                return None;
+            if let (Some(a), Some(b)) = (args[0].as_int(), args[1].as_int()) {
+                if b == 0 { return None; }
+                return Some(SsaConst::Int(a.wrapping_rem(b)));
             }
-            Some(SsaConst::Int(a.wrapping_rem(b)))
+            let a = to_f64(args[0])?;
+            let b = to_f64(args[1])?;
+            if b == 0.0 { return None; }
+            Some(SsaConst::Float(a % b))
         }
         "mod" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
