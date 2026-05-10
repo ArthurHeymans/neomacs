@@ -614,6 +614,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             if start > end || start > s.len() || end > s.len() { return None; }
             Some(SsaConst::String(s[start..end].to_string()))
         }
+        "aref" if args.len() == 2 => {
+            let index = args[1].as_int()? as usize;
+            match args[0] {
+                SsaConst::String(s) => s.chars().nth(index).map(|c| SsaConst::Char(c as i64)),
+                _ => None,
+            }
+        }
         "identity" if args.len() == 1 => Some(args[0].clone()),
         "symbol-name" if args.len() == 1 => match args[0] {
             SsaConst::Symbol(s) => Some(SsaConst::String(s.clone())),
