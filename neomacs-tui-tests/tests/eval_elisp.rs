@@ -7965,6 +7965,44 @@ fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics()
 }
 
 #[test]
+fn format_numeric_precision_and_prefixes_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fmtnum:%S" (list (format "%#o" 0) (format "%#.0o" 0) (format "%.0d" 0) (format "%05.3d" 7) (format "%-05d" 7) (format "%+05d" 7) (format "% 05d" 7) (format "%#08x" 31) (format "%#08b" 5)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains(r#"fmtnum:(\"0\" \"0\" \"\" \"  007\" \"7    \" \"+0007\" \" 0007\" \"0x00001f\" \"0b000101\")"#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: numeric format precision, padding, and alternate prefixes should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_numeric_precision_and_prefixes_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn with_output_to_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
