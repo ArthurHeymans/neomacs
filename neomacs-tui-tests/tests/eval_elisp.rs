@@ -2580,6 +2580,48 @@ fn text_properties_at_out_of_range_matches_gnu_semantics() {
 }
 
 #[test]
+fn text_property_mutation_out_of_range_errors_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpmutrange:%S" (let ((s (copy-sequence "abc"))) (list (condition-case e (add-text-properties -1 1 '(face bold) s) (error (list (car e) (cadr e) (caddr e)))) (condition-case e (put-text-property 1 9 'face 'bold s) (error (list (car e) (cadr e) (caddr e)))) (condition-case e (set-text-properties 9 1 '(face bold) s) (error (list (car e) (cadr e) (caddr e)))) (condition-case e (remove-text-properties -1 1 '(face nil) s) (error (list (car e) (cadr e) (caddr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("tpmutrange:")
+            && recent.matches("args-out-of-range").count() >= 4
+            && recent.contains("(args-out-of-range -1 1)")
+            && recent.contains("(args-out-of-range 1 9)")
+            && recent.contains("(args-out-of-range 9 1)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: text-property mutation out-of-range errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "text_property_mutation_out_of_range_errors_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_equality_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
