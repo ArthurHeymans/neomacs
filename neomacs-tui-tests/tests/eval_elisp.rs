@@ -2256,6 +2256,43 @@ fn make_bool_vector_negative_length_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn bool_vector_destination_return_value_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c:bool_vector_binop_driver returns nil when an explicit
+    // destination already contains the requested result; otherwise it mutates
+    // and returns the destination vector.
+    let expr = r#"(message "boolopret:%S" (let* ((a (bool-vector t nil t)) (b (bool-vector nil t t)) (same (bool-vector t t t)) (changed (bool-vector nil nil nil)) (r1 (bool-vector-union a b same)) (r2 (bool-vector-union a b changed))) (list r1 (eq r2 changed) (vconcat same) (vconcat changed))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("boolopret:") && row.contains("(nil t [t t t] [t t t])"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: bool-vector destination return value should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "bool_vector_destination_return_value_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn record_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
