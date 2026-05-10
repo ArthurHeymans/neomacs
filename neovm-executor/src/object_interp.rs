@@ -13804,4 +13804,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_copy_sequence_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (copy-sequence nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
