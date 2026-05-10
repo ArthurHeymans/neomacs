@@ -3259,6 +3259,36 @@ fn looking_at_p_match_data_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn posix_looking_at_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "poslook:%S" (with-temp-buffer (insert "aaaa") (goto-char 1) (let ((ordinary (looking-at "a\\|aa\\|aaa")) (ordinary-text (match-string 0)) (ordinary-end (match-end 0))) (goto-char 1) (let ((posix (posix-looking-at "a\\|aa\\|aaa")) (posix-text (match-string 0)) (posix-end (match-end 0))) (list ordinary ordinary-text ordinary-end posix posix-text posix-end)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"poslook:(t \"a\" 2 t \"aaa\" 4)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: posix-looking-at should choose the longest match like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "posix_looking_at_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn optional_submatch_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
