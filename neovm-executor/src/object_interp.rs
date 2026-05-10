@@ -13051,4 +13051,140 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
+
+    #[test]
+    fn executes_upcase_converts_to_upper() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (upcase \"hello\") \"HELLO\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_downcase_converts_to_lower() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (downcase \"HELLO\") \"hello\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_capitalize_capitalizes_first_char() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (capitalize \"hello\") \"Hello\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_reverse_reverses_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (reverse '(1 2 3)) '(3 2 1))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_nconc_concatenates_lists() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (nconc (list 1 2) (list 3 4)) '(1 2 3 4))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_memq_returns_tail_when_found() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (memq 'b '(a b c)) '(b c))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_memq_returns_nil_when_not_found() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (memq 'z '(a b c))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_member_returns_tail_when_equal_found() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (member 20 '(10 20 30)) '(20 30))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_delq_removes_element_by_identity() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (delq 'a '(a b c a)) '(b c))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_last_returns_last_cons() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (last '(1 2 3)) '(3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_nthcdr_returns_nth_cdr() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (nthcdr 2 '(a b c d)) '(c d))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_elt_gets_element_by_index() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (elt '(10 20 30) 1) 20)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_char_equal_case_insensitive_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-equal ?a ?A)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_char_equal_different_chars_return_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-equal ?a ?b)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_copy_sequence_yields_new_object() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((orig (list 1 2 3)))\n\
+               (eq orig (copy-sequence orig)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
