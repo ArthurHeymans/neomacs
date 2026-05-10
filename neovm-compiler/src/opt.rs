@@ -504,10 +504,24 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Float(floats.into_iter().fold(f64::INFINITY, f64::min)))
         }
+        "+" if args.is_empty() => Some(SsaConst::Int(0)),
+        "+" if args.len() == 1 => match args[0] {
+            SsaConst::Int(n) => Some(SsaConst::Int(*n)),
+            SsaConst::Float(f) => Some(SsaConst::Float(*f)),
+            SsaConst::Char(c) => Some(SsaConst::Int(*c)),
+            _ => None,
+        },
         "+" if args.len() >= 2 => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().sum()))
         }
+        "*" if args.is_empty() => Some(SsaConst::Int(1)),
+        "*" if args.len() == 1 => match args[0] {
+            SsaConst::Int(n) => Some(SsaConst::Int(*n)),
+            SsaConst::Float(f) => Some(SsaConst::Float(*f)),
+            SsaConst::Char(c) => Some(SsaConst::Int(*c)),
+            _ => None,
+        },
         "*" if args.len() >= 2 => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().product()))
