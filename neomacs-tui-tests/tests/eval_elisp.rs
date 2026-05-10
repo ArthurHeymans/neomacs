@@ -1085,6 +1085,40 @@ fn nconc_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn equal_circular_list_behavior_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "equalcycle:%S" (list (let ((x (list 1))) (setcdr x x) (equal x x)) (condition-case e (let ((x (list 1)) (y (list 1))) (setcdr x x) (setcdr y y) (equal x y)) (error (list (car e)))) (condition-case e (let ((x (list 1 2)) (y (list 1 2))) (setcdr (cdr x) x) (setcdr (cdr y) (cdr y)) (equal x y)) (error (list (car e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("equalcycle:(t (circular-list) nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: equal should match GNU circular-list behavior\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "equal_circular_list_behavior_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn vector_sort_compare_strings_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
