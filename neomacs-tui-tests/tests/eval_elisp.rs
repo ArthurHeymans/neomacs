@@ -5397,6 +5397,40 @@ fn window_visibility_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn split_window_order_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "winsplit:%S" (progn (delete-other-windows) (let* ((w0 (selected-window)) (w1 (split-window-right))) (list (eq (selected-window) w0) (eq (next-window w0 nil nil) w1) (eq (next-window w1 nil nil) w0) (mapcar (lambda (w) (eq w w0)) (window-list nil nil w0)) (mapcar (lambda (w) (eq w w1)) (window-list nil nil w0)) (length (window-list nil nil)) (length (window-list nil t))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("winsplit:(t t t (t nil) (nil t) 2 3)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: split-window ordering and next-window traversal should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "split_window_order_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_position_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
