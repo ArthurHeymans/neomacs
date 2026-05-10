@@ -9029,6 +9029,47 @@ fn format_preserves_format_and_string_argument_properties_like_gnu() {
 }
 
 #[test]
+fn format_message_preserves_text_properties_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fmtmsgprop:%S" (let* ((fmt (propertize "A:%s:Z" 'face 'fmt)) (arg (propertize "xx" 'face 'arg)) (r (format-message fmt arg))) (list r (mapcar (lambda (i) (text-properties-at i r)) (number-sequence 0 (1- (length r)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fmtmsgprop:")
+            && recent.contains("A:xx:Z")
+            && recent.matches("(face fmt)").count() >= 4
+            && recent.matches("(face arg)").count() >= 2
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format-message should preserve format-string and %s argument text properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_message_preserves_text_properties_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
