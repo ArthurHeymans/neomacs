@@ -646,6 +646,59 @@ fn next_line_from_fifth_scratch_character_preserves_column() {
 }
 
 #[test]
+fn repeated_next_line_restores_goal_column_after_short_line() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "C-x h C-w");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"abcdef\rxy\r123456");
+    }
+    let text_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.trim_end() == "abcdef")
+            && grid.iter().any(|row| row.trim_end() == "xy")
+            && grid.iter().any(|row| row.trim_end() == "123456")
+    };
+    gnu.read_until(Duration::from_secs(6), text_ready);
+    neo.read_until(Duration::from_secs(8), text_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    send_both(&mut gnu, &mut neo, "M-< C-f C-f C-f C-f C-n C-n M-:");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    for session in [&mut gnu, &mut neo] {
+        session.send(
+            br#"(message "scratch-c-n-short:%S" (list (line-number-at-pos) (current-column) temporary-goal-column (point)))"#,
+        );
+    }
+    send_both(&mut gnu, &mut neo, "RET");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("scratch-c-n-short:(3 4") || row.contains("scratch-c-n-short: (3 4")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: repeated C-n should preserve the original goal column through a short line\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "repeated_next_line_restores_goal_column_after_short_line",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn set_goal_column_via_cx_cn_guides_vertical_motion() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
