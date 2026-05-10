@@ -319,17 +319,10 @@ fn align_up_to(value: usize, align: usize) -> usize {
     if align <= 1 {
         return value;
     }
-    // Fast path: bitmask when alignment is a power of two (line_bytes always is).
-    if align.is_power_of_two() {
-        let mask = align - 1;
-        return (value + mask) & !mask;
-    }
-    let rem = value % align;
-    if rem == 0 {
-        value
-    } else {
-        value.saturating_add(align - rem)
-    }
+    // All callers pass line_bytes (always power-of-two).
+    debug_assert!(align.is_power_of_two(), "align_up_to alignment must be power of two");
+    let mask = align - 1;
+    (value + mask) & !mask
 }
 
 /// Walk every old-gen block, enumerate dirty cards, and gather the
