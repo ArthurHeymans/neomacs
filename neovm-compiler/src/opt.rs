@@ -1286,6 +1286,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "nconc" if args.len() >= 1 => {
+            // (nconc) → nil, (nconc nil ...) → nil
+            // If all args are nil, result is nil
+            if args.iter().all(|a| matches!(a, SsaConst::Nil)) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr"
         | "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
         | "nth" | "nthcdr" | "last" | "butlast" | "nbutlast"
