@@ -9969,6 +9969,40 @@ fn with_output_to_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn print_circle_nil_bounded_cycle_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "printcycle:%S" (let ((x (list 1 2))) (setcdr (last x) x) (list (let ((print-circle t)) (prin1-to-string x)) (let ((print-circle nil) (print-length 6) (print-level nil)) (prin1-to-string x)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid.join("\n");
+        recent.contains("printcycle:")
+            && recent.contains(r##"\"#1=(1 2 . #1#)\""##)
+            && recent.contains(r##"\"(1 2 1 2 . #2)\""##)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: print-circle nil with print-length should recurse and truncate circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "print_circle_nil_bounded_cycle_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn process_output_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
