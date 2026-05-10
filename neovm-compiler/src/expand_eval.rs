@@ -952,6 +952,15 @@ impl MacroEval {
                     Ok(MacroValue::Nil)
                 }
             }
+            Some("memql") => {
+                if items.len() >= 3 {
+                    let el = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    Ok(list.memql(&el))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
 
             Some("eval") => {
                 // (eval form) — evaluate a form

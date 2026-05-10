@@ -212,6 +212,18 @@ impl MacroValue {
         MacroValue::Nil
     }
 
+    /// (memql element list) — find elt in list using eql.
+    pub fn memql(&self, el: &MacroValue) -> MacroValue {
+        let mut current = self.clone();
+        while let MacroValue::Cons(cell) = &current {
+            if cell.car.eql(el) {
+                return current.clone();
+            }
+            current = cell.cdr.clone();
+        }
+        MacroValue::Nil
+    }
+
     /// (member elt list) — find elt in list using structural equal.
     pub fn member(&self, el: &MacroValue) -> MacroValue {
         let mut current = self.clone();
