@@ -3771,26 +3771,19 @@ impl Interpreter<'_, '_, '_> {
 
     fn cl_list_length(&mut self, list: LispValue) -> Option<LispValue> {
         // Returns length of a proper list, or nil if circular or dotted.
-        let mut slow = list;
-        let mut fast = list;
+        let mut current = list;
         let mut len = 0i64;
         loop {
-            if slow.is_nil() {
+            if current.is_nil() {
                 return self.fixnum(len, "cl-list-length");
             }
-            if !self.runtime.is_cons(slow) {
-                return Some(LispValue::NIL);
+            if !self.runtime.is_cons(current) {
+                return Some(LispValue::NIL); // dotted list
             }
+            current = self.runtime.cdr(current).ok()?;
             len += 1;
-            // Advance fast by 2, slow by 1
-            for _ in 0..2 {
-                if !self.runtime.is_cons(fast) {
-                    return if fast.is_nil() { self.fixnum(len, "cl-list-length") } else { Some(LispValue::NIL) };
-                }
-                fast = self.runtime.cdr(fast).ok()?;
-            }
-            slow = self.runtime.cdr(slow).ok()?;
-            if slow == fast {
+            // Safety limit against infinite loops, matching Emacs
+            if len > (isize::MAX as i64) / 2 {
                 return Some(LispValue::NIL);
             }
         }
@@ -12350,6 +12343,15 @@ mod tests {
              (defvar sd-var 10) (progn (set-default 'sd-var 99) (default-value 'sd-var))",
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
+    fn executes_proper_list_p_returns_length() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (proper-list-p '(a b c))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
