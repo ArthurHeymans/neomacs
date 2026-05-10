@@ -1257,9 +1257,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "ignore" => Some(SsaConst::Nil),
         "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr"
         | "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
-            if args.len() == 1 => match args[0] {
-            SsaConst::Nil => Some(SsaConst::Nil),
-            _ => None,
+        | "nth" | "nthcdr" | "last" | "butlast" | "nbutlast"
+            if args.len() >= 1 => {
+            // All list-access primitives return nil when the list is nil
+            // (regardless of the index/count argument).
+            if matches!(args[0], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
         },
         "prin1-to-string" | "princ-to-string" if args.len() == 1 => match args[0] {
             SsaConst::Int(n) => Some(SsaConst::String(n.to_string())),
