@@ -630,6 +630,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "length" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::Int(s.len() as i64)),
+            SsaConst::Nil => Some(SsaConst::Int(0)),
             _ => None,
         },
         "length=" if args.len() == 2 => match (args[0], args[1].as_int()) {
