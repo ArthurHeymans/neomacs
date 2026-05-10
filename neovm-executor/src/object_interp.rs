@@ -12934,4 +12934,94 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_string_prefix_p_returns_true_for_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-prefix-p \"hello\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_suffix_p_returns_true() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-suffix-p \"world\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_string_suffix_p_returns_nil_when_not_suffix() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-suffix-p \"hello\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_string_remove_prefix_leaves_string_unchanged_without_prefix() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-remove-prefix \"xyz\" \"foobar\")",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "\"foobar\"");
+    }
+
+    #[test]
+    fn executes_string_remove_suffix_leaves_string_unchanged_without_suffix() {
+        let (value, rt) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-remove-suffix \"xyz\" \"foobar\")",
+        );
+        assert_eq!(rt.format_value(value.unwrap()), "\"foobar\"");
+    }
+
+    #[test]
+    fn executes_split_string_by_separator() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (length (split-string \"a,b,c\" \",\")) 3)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_butlast_returns_all_but_last() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (butlast '(1 2 3 4)) '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_alist_get_retrieves_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'b '((a . 1) (b . 2) (c . 3)))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+    }
+
+    #[test]
+    fn executes_alist_get_returns_nil_for_missing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'z '((a . 1) (b . 2)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_make_list_creates_list_of_length() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (length (make-list 5 nil)) 5)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
