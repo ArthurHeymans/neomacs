@@ -1423,6 +1423,14 @@ impl MacroEval {
 
             Some("cl-loop") => self.eval_cl_loop(span, &items[1..], env),
 
+            Some("identity") => {
+                if items.len() != 2 {
+                    self.error(span, "identity requires exactly one argument");
+                    return Err(());
+                }
+                self.eval(&items[1], env)
+            }
+
             _ => {
                 // Pass through: unknown function calls are handled by the
                 // compiler at HIR level, not the macro expander.
