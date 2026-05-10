@@ -12575,12 +12575,20 @@ mod tests {
     }
 
     #[test]
+    fn executes_char_code_returns_integer() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-code ?A)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(65)));
+    }
+
+    #[test]
     fn executes_indirect_function_on_symbol() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (defun test-fn () 42) (indirect-function 'test-fn)",
+             (defun indirect-fn-test () 42) (indirect-function 'indirect-fn-test)",
         );
-        // Should return the function object (non-nil)
         assert!(!value.unwrap().is_nil());
     }
 
