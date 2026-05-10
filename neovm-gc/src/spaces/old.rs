@@ -467,7 +467,7 @@ impl OldBlock {
         if size > self.buffer.len() {
             return None;
         }
-        let lines_needed = size.div_ceil(self.line_bytes).max(1);
+        let lines_needed = ((size + self.line_bytes - 1) >> self.line_shift).max(1);
         let line_count = self.line_count();
         if lines_needed > line_count {
             return None;
@@ -475,7 +475,7 @@ impl OldBlock {
 
         let mut cursor = self.cursor.load(Ordering::Acquire);
         loop {
-            let cursor_line = cursor.div_ceil(self.line_bytes);
+            let cursor_line = (cursor + self.line_bytes - 1) >> self.line_shift;
             let mut search_line = cursor_line;
             // Find a free run of `lines_needed` consecutive lines.
             let mut found = false;
