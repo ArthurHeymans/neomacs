@@ -13718,4 +13718,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_sort_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (sort nil '<)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
