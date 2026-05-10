@@ -1895,6 +1895,40 @@ fn hash_table_key_test_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn equal_hash_table_overlay_keys_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "hashoverlay:%S" (with-temp-buffer (insert "abc") (let ((h (make-hash-table :test 'equal)) (o1 (make-overlay 1 2)) (o2 (make-overlay 1 2))) (overlay-put o1 'face 'bold) (overlay-put o2 'face 'bold) (puthash o1 'overlay-hit h) (list (gethash o2 h 'missing) (hash-table-count h)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("hashoverlay:(overlay-hit 1)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: equal hash tables should find matching overlay keys like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "equal_hash_table_overlay_keys_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_table_custom_test_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
