@@ -5225,6 +5225,40 @@ fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn buffer_disable_undo_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "undodisable:%S" (with-temp-buffer (buffer-enable-undo) (insert "a") (let ((before (consp buffer-undo-list))) (buffer-disable-undo) (let ((disabled buffer-undo-list)) (insert "b") (undo-boundary) (list before disabled buffer-undo-list (buffer-string))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains(r#"undodisable:(t t t \"ab\")"#))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: buffer-disable-undo should leave buffer-undo-list disabled like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "buffer_disable_undo_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn column_motion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
