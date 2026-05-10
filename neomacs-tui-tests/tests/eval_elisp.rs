@@ -1831,6 +1831,43 @@ fn copy_sequence_circular_list_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn append_circular_list_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:append copies non-final list arguments through
+    // concat_to_list, which validates list termination.  Circular inputs must
+    // signal `circular-list`; they must not hang.
+    let expr = r#"(message "appendcycle:%S" (condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (append x nil)) (error (list (car e)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("appendcycle:(circular-list)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: append circular-list error should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "append_circular_list_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn vector_array_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
