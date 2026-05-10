@@ -880,6 +880,37 @@ fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
     }
 }
 
+fn message_truncate_lines(evaluator: &Context) -> bool {
+    evaluator
+        .obarray()
+        .symbol_value("message-truncate-lines")
+        .is_some_and(|value| !value.is_nil())
+}
+
+fn plain_echo_display_rows(
+    message: &str,
+    text_width: f32,
+    char_width: f32,
+    truncate_lines: bool,
+) -> usize {
+    let cell_width = char_width.max(1.0);
+    let max_cells = (text_width / cell_width).floor().max(1.0) as usize;
+    message
+        .split(|ch| ch == '\n' || ch == '\r')
+        .map(|line| {
+            if truncate_lines {
+                return 1;
+            }
+            let cells = line
+                .chars()
+                .map(|ch| neovm_core::encoding::char_width(ch).max(1) as usize)
+                .sum::<usize>();
+            cells.div_ceil(max_cells).max(1)
+        })
+        .sum::<usize>()
+        .max(1)
+}
+
 fn minibuffer_echo_message_for_window(
     is_minibuffer_window: bool,
     minibuffer_active: bool,
@@ -2903,12 +2934,15 @@ impl LayoutEngine {
             // GNU `display_echo_area_1` displays the current message by
             // temporarily making the echo-area buffer current, calling
             // `resize_mini_window`, then redisplaying the minibuffer window.
-            // Count logical echo rows here so the existing minibuffer resize
-            // retry can grow the mini-window and relayout the root window.
-            let echo_lines = echo_message
-                .split(|ch| ch == '\n' || ch == '\r')
-                .count()
-                .max(1);
+            // GNU measures the displayed height, not just literal newlines:
+            // a long one-line message grows the echo area when
+            // `message-truncate-lines' is nil.
+            let echo_lines = plain_echo_display_rows(
+                &echo_message,
+                text_width,
+                char_w,
+                message_truncate_lines(evaluator),
+            );
             let frame_rows = _frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
             let max_rows_echo = echo_lines.clamp(1, max_mini);
@@ -6141,9 +6175,7 @@ impl LayoutEngine {
         neomacs_display_protocol::face::Face,
         Vec<Vec<neomacs_display_protocol::glyph_matrix::Glyph>>,
     ) {
-        use crate::display_backend::{
-            DisplayBackend, GuiDisplayBackend, TtyDisplayBackend, display_text_plain_via_backend,
-        };
+        use crate::display_backend::{DisplayBackend, GuiDisplayBackend, TtyDisplayBackend};
         use neomacs_display_protocol::glyph_matrix::GlyphRow;
 
         // Reuse the shared face realization so GUI and TTY echo text use the
@@ -6153,33 +6185,65 @@ impl LayoutEngine {
         let rendered_face = sl_face.render_face();
         let char_width = self.status_line_char_width(&sl_face, char_w);
 
-        // GNU's echo area displays internal newlines as minibuffer row
-        // breaks. Keep the shared plain-text helper single-row for status
-        // line callers, and split echo text before walking each row.
         let mut rows = Vec::new();
-        for line in echo_message
-            .split(|ch| ch == '\n' || ch == '\r')
-            .take(max_rows.max(1))
-        {
-            let mut tty_backend = TtyDisplayBackend::new();
-            let mut gui_backend = self.font_metrics.as_mut().map(GuiDisplayBackend::new);
-            let backend: &mut dyn DisplayBackend = match gui_backend {
-                Some(ref mut g) => g,
-                None => &mut tty_backend,
-            };
-            display_text_plain_via_backend(backend, line, &rendered_face, char_width, text_width);
-
-            let mut flush_row =
-                GlyphRow::new(neomacs_display_protocol::frame_glyphs::GlyphRowRole::Minibuffer);
-            flush_row.enabled = true;
-            backend.finish_row(flush_row);
-            let glyphs = backend
-                .take_rows()
-                .into_iter()
-                .next()
-                .map(|mut row| std::mem::take(&mut row.glyphs[1]))
-                .unwrap_or_default();
-            rows.push(glyphs);
+        let max_rows = max_rows.max(1);
+        for line in echo_message.split(|ch| ch == '\n' || ch == '\r') {
+            if rows.len() >= max_rows {
+                break;
+            }
+            let chars = line.chars().collect::<Vec<_>>();
+            let mut offset = 0usize;
+            loop {
+                if rows.len() >= max_rows {
+                    break;
+                }
+                let mut tty_backend = TtyDisplayBackend::new();
+                let mut gui_backend = self.font_metrics.as_mut().map(GuiDisplayBackend::new);
+                let backend: &mut dyn DisplayBackend = match gui_backend {
+                    Some(ref mut g) => g,
+                    None => &mut tty_backend,
+                };
+                let mut x_offset = 0.0f32;
+                let row_start = offset;
+                while offset < chars.len() {
+                    let ch = chars[offset];
+                    let advance = {
+                        let measured = backend.char_advance(&rendered_face, ch);
+                        if measured > 0.0 {
+                            measured
+                        } else {
+                            char_width.max(1.0)
+                        }
+                    };
+                    if offset > row_start && x_offset + advance > text_width {
+                        break;
+                    }
+                    backend.produce_glyph(
+                        crate::display_backend::GlyphKind::Char(ch),
+                        &rendered_face,
+                        offset,
+                    );
+                    x_offset += advance;
+                    offset += 1;
+                    if x_offset >= text_width {
+                        break;
+                    }
+                }
+                let mut flush_row =
+                    GlyphRow::new(neomacs_display_protocol::frame_glyphs::GlyphRowRole::Minibuffer);
+                flush_row.enabled = true;
+                backend.finish_row(flush_row);
+                let glyphs = backend
+                    .take_rows()
+                    .into_iter()
+                    .next()
+                    .map(|mut row| std::mem::take(&mut row.glyphs[1]))
+                    .unwrap_or_default();
+                rows.push(glyphs);
+                if offset >= chars.len() {
+                    break;
+                }
+            }
         }
         if rows.is_empty() {
             rows.push(Vec::new());
