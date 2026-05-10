@@ -12575,6 +12575,16 @@ mod tests {
     }
 
     #[test]
+    fn executes_indirect_function_on_symbol() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defun test-fn () 42) (indirect-function 'test-fn)",
+        );
+        // Should return the function object (non-nil)
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
     fn executes_current_buffer_returns_nil() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
