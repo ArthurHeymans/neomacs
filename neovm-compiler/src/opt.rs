@@ -1007,7 +1007,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             Some(SsaConst::Int(!args[0].as_int()?))
         }
         "integerp" if args.len() == 1 => Some(match args[0] {
-            SsaConst::Int(_) => SsaConst::True,
+            SsaConst::Int(_) | SsaConst::Char(_) => SsaConst::True,
             _ => SsaConst::Nil,
         }),
         "floatp" if args.len() == 1 => Some(match args[0] {
@@ -1132,7 +1132,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => SsaConst::True,
         }),
         "numberp" if args.len() == 1 => Some(match args[0] {
-            SsaConst::Int(_) | SsaConst::Float(_) => SsaConst::True,
+            SsaConst::Int(_) | SsaConst::Float(_) | SsaConst::Char(_) => SsaConst::True,
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
