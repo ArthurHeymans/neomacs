@@ -13,45 +13,47 @@ concurrency:
 jobs:
   build-and-test:
     name: build & test (linux)
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Install system dependencies (pacman)
+      - name: Install system dependencies (apt)
         run: |
-          sudo pacman -Syu --noconfirm --needed \
-            base-devel \
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
             git \
-            pkgconf \
+            pkg-config \
             cmake \
             m4 \
-            gmp \
-            openssl \
+            libgmp-dev \
+            libssl-dev \
             fontconfig \
-            freetype2 \
-            harfbuzz \
-            libxkbcommon \
-            libxkbcommon-x11 \
-            wayland \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libharfbuzz-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
             wayland-protocols \
-            libxcb \
-            libxrandr \
-            libxinerama \
-            libxi \
-            libxcursor \
-            mesa \
-            vulkan-headers \
-            vulkan-icd-loader \
-            dbus \
-            systemd-libs \
-            sqlite \
-            libxml2 \
-            gnutls
+            libxcb1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxi-dev \
+            libxcursor-dev \
+            mesa-vulkan-drivers \
+            libvulkan-dev \
+            libdbus-1-dev \
+            libsystemd-dev \
+            libsqlite3-dev \
+            libxml2-dev \
+            gnutls-bin \
+            libgnutls28-dev
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
