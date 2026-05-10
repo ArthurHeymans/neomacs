@@ -1267,8 +1267,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => Some(SsaConst::Nil),
         },
         "ignore" => Some(SsaConst::Nil),
-        "delete" | "delq" | "remove" | "remq" if args.len() == 2 => {
-            if matches!(args[1], SsaConst::Nil) {
+        "delete" | "delq" | "remove" | "remq" | "delete-dups" if args.len() >= 1 => {
+            // delete/remove/delq/remq: list is args[1]
+            // delete-dups: list is args[0]
+            if matches!(args.last()?, SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
