@@ -13678,4 +13678,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_set_difference_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-set-difference nil '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
