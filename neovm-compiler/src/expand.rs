@@ -526,7 +526,7 @@ impl Expander {
             // declare-function is a compile-time declaration — discard
             "declare-function" => nil_form(span),
             // pcase-let* -> let* with destructuring support
-            "pcase-let*" => {
+            "pcase-let*" | "pcase-let" => {
                 if items.len() >= 3 {
                     let bindings_form = &items[1];
                     let body: Vec<SurfaceForm> = items[2..]
