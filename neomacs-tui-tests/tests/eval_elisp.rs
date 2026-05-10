@@ -6602,6 +6602,41 @@ fn async_process_exec_path_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn async_shell_process_wrappers_use_dynamic_shell_file_name_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "ashell:%S" (list (special-variable-p 'shell-file-name) (condition-case err (let ((exec-path nil) (shell-file-name "sh")) (start-process-shell-command "ashell-start" nil "printf ok") 'ok) (error (list (car err) (cadr err)))) (condition-case err (let ((exec-path nil) (shell-file-name "sh")) (start-file-process-shell-command "ashell-file" nil "printf ok") 'ok) (error (list (car err) (cadr err))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains("ashell:")
+            && text.contains("t")
+            && text.contains("file-missing")
+            && text.contains("Searching for program")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: async shell process wrappers should use dynamic shell-file-name\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "async_shell_process_wrappers_use_dynamic_shell_file_name_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_base64_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

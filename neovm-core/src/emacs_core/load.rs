@@ -3733,6 +3733,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         // shell-file-name: GNU callproc.c:2041 — $SHELL or /bin/sh
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
         eval.set_variable("shell-file-name", Value::unibyte_string(shell));
+        eval.obarray.make_special("shell-file-name");
         // shell-command-switch: GNU simple.el — defaults to "-c"
         eval.set_variable("shell-command-switch", Value::unibyte_string("-c"));
 
