@@ -2669,6 +2669,43 @@ fn get_char_property_window_object_matches_gnu_overlay_semantics() {
 }
 
 #[test]
+fn single_char_property_change_sees_overlay_boundaries_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/textprop.c:next-single-char-property-change advances through
+    // next-char-property-change, which includes overlay boundaries before it
+    // compares the selected char property with get-char-property.
+    let expr = r#"(message "singlecharprop:%S" (with-temp-buffer (insert "abcdef") (put-text-property 2 4 'face 'text-face) (let ((o (make-overlay 4 6))) (overlay-put o 'face 'overlay-face) (list (next-single-char-property-change 1 'face) (next-single-char-property-change 2 'face) (next-single-char-property-change 4 'face) (previous-single-char-property-change 7 'face) (previous-single-char-property-change 6 'face) (previous-single-char-property-change 4 'face)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("singlecharprop:") && row.contains("(2 4 6 6 4 2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: single char property changes should include overlay boundaries like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "single_char_property_change_sees_overlay_boundaries_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
