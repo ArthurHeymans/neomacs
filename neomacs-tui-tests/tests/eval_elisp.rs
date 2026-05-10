@@ -4949,6 +4949,40 @@ fn point_character_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn save_window_excursion_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "savewin:%S" (progn (delete-other-windows) (let ((orig (current-buffer)) (b (generate-new-buffer " *neo-savewin*")) inside after) (unwind-protect (progn (setq inside (save-window-excursion (split-window-right) (other-window 1) (set-buffer b) (list (length (window-list)) (eq (current-buffer) b) (eq (selected-window) (next-window))))) (setq after (list (length (window-list)) (eq (current-buffer) orig))) (list inside after)) (kill-buffer b)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("savewin:") && row.contains("((2 t nil) (1 t))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: save-window-excursion should restore window configuration and current buffer like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "save_window_excursion_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_position_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
