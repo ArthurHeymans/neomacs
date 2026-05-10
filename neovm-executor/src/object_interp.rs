@@ -12534,6 +12534,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_cdr_safe_on_non_cons_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (cdr-safe 99)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_make_string_creates_char_repeat() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
