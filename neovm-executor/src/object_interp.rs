@@ -14029,4 +14029,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_count_if_returns_zero_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (= (cl-count-if #'evenp nil) 0)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
