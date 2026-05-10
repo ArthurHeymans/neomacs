@@ -1293,6 +1293,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
+        "cl-subst" | "cl-subst-if" | "cl-subst-if-not"
+        | "cl-nsubst" | "cl-nsubst-if" | "cl-nsubst-if-not"
+            if args.len() >= 3 => {
+            // (cl-subst NEW OLD TREE) — tree is args[2]
+            if matches!(args[2], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "mapcar" | "mapc" | "cl-mapcar" | "cl-mapc" | "mapconcat"
             if args.len() >= 2 => {
             // (mapcar FN nil) → nil, (mapconcat FN nil SEP) → ""
