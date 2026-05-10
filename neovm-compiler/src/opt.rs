@@ -1321,6 +1321,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-find" | "cl-position" | "cl-find-if" | "cl-position-if"
+        | "cl-find-if-not" | "cl-position-if-not"
+            if args.len() >= 2 => {
+            // (cl-find ITEM SEQ) — seq is args[1]; nil seq → nil
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "cl-sublis" | "cl-nsublis" if args.len() >= 2 => {
             // (cl-sublis ALIST TREE) — tree is args[1]
             if matches!(args[1], SsaConst::Nil) {
