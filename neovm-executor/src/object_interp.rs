@@ -13441,4 +13441,15 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_puthash_stores_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'key 99 ht)\n\
+               (gethash 'key ht))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
 }

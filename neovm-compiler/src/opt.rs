@@ -1237,6 +1237,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => Some(SsaConst::Nil),
         },
         "ignore" => Some(SsaConst::Nil),
+        "prin1-to-string" | "princ-to-string" if args.len() == 1 => match args[0] {
+            SsaConst::Int(n) => Some(SsaConst::String(n.to_string())),
+            SsaConst::Float(f) => Some(SsaConst::String(f.to_string())),
+            SsaConst::Char(c) => Some(SsaConst::String(char::from_u32(*c as u32)?.to_string())),
+            SsaConst::String(s) => Some(SsaConst::String(format!("\"{s}\""))),
+            SsaConst::Symbol(s) => Some(SsaConst::String(s.clone())),
+            SsaConst::Nil => Some(SsaConst::String("nil".into())),
+            SsaConst::True => Some(SsaConst::String("t".into())),
+            _ => None,
+        },
         _ => None,
     }
 }
