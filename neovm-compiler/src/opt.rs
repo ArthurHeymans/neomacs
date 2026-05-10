@@ -477,6 +477,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             Some(true) => Some(SsaConst::Nil),
             None => None,
         },
+        "/=" if args.len() == 1 => Some(SsaConst::True),
         "/=" if args.len() >= 2 => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
             let mut seen = std::collections::HashSet::new();
