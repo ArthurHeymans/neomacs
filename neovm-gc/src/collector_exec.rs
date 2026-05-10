@@ -355,7 +355,7 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
     counter: &mut usize,
 ) -> Vec<usize> {
     let mut roots = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = vec![false; objects.len()];
 
     // One-shot header-pointer -> objects-index map. Built once and
     // shared across every dirty card so the per-card walk only pays a
@@ -389,7 +389,8 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                     *counter += 1;
                     let record = &objects[object_index];
                     let total_size = record.total_size().max(1);
-                    if seen.insert(object_index) {
+                    if !seen[object_index] {
+                        seen[object_index] = true;
                         roots.push(object_index);
                     }
                     let next_offset = offset.saturating_add(total_size);
