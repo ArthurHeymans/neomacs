@@ -950,12 +950,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             Some(SsaConst::Float(a % b))
         }
         "mod" if args.len() == 2 => {
-            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 {
-                return None;
+            if let (Some(a), Some(b)) = (args[0].as_int(), args[1].as_int()) {
+                if b == 0 { return None; }
+                let r = a.wrapping_rem(b);
+                return Some(SsaConst::Int(if r == 0 || (a ^ b) >= 0 { r } else { r.wrapping_add(b) }));
             }
-            let r = a.wrapping_rem(b);
-            Some(SsaConst::Int(if r == 0 || (a ^ b) >= 0 { r } else { r.wrapping_add(b) }))
+            let a = to_f64(args[0])?;
+            let b = to_f64(args[1])?;
+            if b == 0.0 { return None; }
+            Some(SsaConst::Float(a - b * (a / b).floor()))
         }
         "consp" if args.len() == 1 => Some(match args[0] {
             SsaConst::Value(_) => return None,
