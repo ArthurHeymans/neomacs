@@ -1180,13 +1180,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "always" if args.len() >= 1 => Some(SsaConst::True),
         "bignump" if args.len() == 1 => Some(SsaConst::Nil),
-        "arrayp" | "bool-vector-p" | "recordp" | "char-table-p" | "autoloadp"
-            if args.len() == 1 => match args[0] {
-            // Strings are arrays in Emacs, but our SSA String is separate.
+        "arrayp" if args.len() == 1 => match args[0] {
             SsaConst::String(_) => Some(SsaConst::True),
-            // arrayp for string
             _ => Some(SsaConst::Nil),
         },
+        "bool-vector-p" | "recordp" | "char-table-p" | "autoloadp"
+            if args.len() == 1 => Some(SsaConst::Nil),
         "bare-symbol-p" if args.len() == 1 => match args[0] {
             SsaConst::Symbol(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
