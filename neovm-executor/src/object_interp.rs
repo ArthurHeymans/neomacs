@@ -12248,6 +12248,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_length_equals_true_for_correct_length() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length= '(1 2 3) 3)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
