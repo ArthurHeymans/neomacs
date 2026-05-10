@@ -429,6 +429,19 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Float(a / b))
             } else { None }
         }
+        "/" if args.len() >= 2 => {
+            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+                let first = ints[0];
+                if ints[1..].iter().any(|&b| b == 0) { return None; }
+                return Some(SsaConst::Int(ints[1..].iter().fold(first, |a, &b| a.wrapping_div(b))));
+            }
+            if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
+                let first = floats[0];
+                if floats[1..].iter().any(|&b| b == 0.0) { return None; }
+                return Some(SsaConst::Float(floats[1..].iter().fold(first, |a, &b| a / b)));
+            }
+            None
+        }
         "=" if args.len() == 1 => Some(SsaConst::True),
         "=" if args.len() == 2 => fold_cmp(args[0], args[1], |o| o.is_eq()),
         "<" if args.len() == 1 => Some(SsaConst::True),
