@@ -5367,6 +5367,36 @@ fn save_window_excursion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn window_visibility_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "winvis:%S" (progn (delete-other-windows) (let ((orig (current-buffer)) (b (generate-new-buffer " *winvis*"))) (unwind-protect (progn (set-buffer b) (list (buffer-name (window-buffer (selected-window))) (eq (get-buffer-window b) nil) (eq (get-buffer-window orig) (selected-window)) (length (window-list nil nil)) (length (window-list nil t)))) (when (buffer-live-p b) (kill-buffer b))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"winvis:(\"*scratch*\" t t 1 2)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: set-buffer visibility and window-list minibuffer inclusion should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "window_visibility_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_position_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
