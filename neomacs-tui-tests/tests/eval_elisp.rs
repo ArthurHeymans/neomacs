@@ -1873,6 +1873,36 @@ fn reverse_circular_list_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn delq_detects_circular_lists_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:delq walks tails with FOR_EACH_TAIL and validates the
+    // terminal tail with CHECK_LIST_END.  Circular inputs must signal
+    // `circular-list`; they must not spin.
+    let expr = r#"(message "delqcycle:%S" (condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (delq 9 x)) (error (car e))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("delqcycle:") && row.contains("circular-list"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: delq should detect circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("delq_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn bool_vector_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
