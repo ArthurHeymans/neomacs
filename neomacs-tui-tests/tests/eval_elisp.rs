@@ -7925,6 +7925,46 @@ fn format_copies_format_string_text_properties_match_gnu_semantics() {
 }
 
 #[test]
+fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fmtleftprop:%S" (let* ((s (copy-sequence "abcdef"))) (put-text-property 1 5 'face 'bold s) (let ((r (format "%-6.3s" s))) (list r (mapcar (lambda (i) (text-properties-at i r)) '(0 1 2 3 4 5))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fmtleftprop:")
+            && recent.contains("abc")
+            && recent.contains("(nil (face bold) (face bold) (face bold) (face bold) nil)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: left-aligned format precision should extend string text properties over right padding like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_left_aligned_precision_extends_string_properties_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn with_output_to_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
