@@ -12607,6 +12607,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_log_with_base_returns_correct_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (< (abs (- (log 100 10) 2.0)) 0.0001)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_plist_member_finds_key() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
