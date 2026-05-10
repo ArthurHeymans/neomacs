@@ -13873,4 +13873,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_endp_returns_t_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-endp nil)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
