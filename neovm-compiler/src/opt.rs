@@ -627,7 +627,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             None
         },
-        "substring" if args.len() >= 2 => {
+        "substring" | "substring-no-properties" if args.len() >= 2 => {
             let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
             let start = args[1].as_int()? as usize;
             let end = if args.len() >= 3 {
@@ -1087,6 +1087,22 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             if start > end || start > s.len() || end > s.len() { return None; }
             Some(SsaConst::String(s[start..end].to_string()))
         }
+        "booleanp" if args.len() == 1 => match args[0] {
+            SsaConst::Nil | SsaConst::True => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
+        "fixnump" if args.len() == 1 => match args[0] {
+            SsaConst::Int(_) => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
+        "string-or-null-p" if args.len() == 1 => match args[0] {
+            SsaConst::Nil | SsaConst::String(_) => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
+        "number-or-marker-p" | "integer-or-marker-p" if args.len() == 1 => match args[0] {
+            SsaConst::Int(_) | SsaConst::Float(_) => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
         _ => None,
     }
 }
