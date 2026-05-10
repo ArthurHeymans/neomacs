@@ -12386,6 +12386,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_aref_out_of_bounds_signals_error() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (condition-case nil (aref [1 2] 5) (args-out-of-range nil))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_length_equals_true_for_correct_length() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
