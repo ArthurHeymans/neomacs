@@ -13767,4 +13767,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_delete_dups_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (delete-dups nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
