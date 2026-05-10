@@ -9099,6 +9099,45 @@ fn string_number_conversion_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn string_to_number_special_float_exponents_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:string_to_number accepts e+INF/e+NaN spellings in
+    // decimal exponent syntax.  These are special floats, not ordinary
+    // numbers parsed only up to the `e`.
+    let expr = r#"(message "numparse:%S" (list (number-to-string (string-to-number "1.2e+INF")) (number-to-string (string-to-number "12e+NaN")) (string-to-number "1.") (string-to-number "1.e2") (string-to-number "1.9" 16)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("numparse:")
+                && row.contains("\\\"1.0e+INF\\\"")
+                && row.contains("\\\"12.0e+NaN\\\"")
+                && row.contains("1 100.0 1)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: string-to-number special float exponent parsing should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_to_number_special_float_exponents_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn integer_bit_arithmetic_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
