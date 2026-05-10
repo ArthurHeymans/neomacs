@@ -12586,6 +12586,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_buffer_modified_p_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (buffer-modified-p)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_indirect_function_on_symbol() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
