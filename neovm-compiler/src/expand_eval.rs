@@ -962,6 +962,50 @@ impl MacroEval {
                 }
             }
 
+            Some("cl-endp") => {
+                if items.len() >= 2 {
+                    let val = self.eval(&items[1], env)?;
+                    Ok(MacroValue::from_bool(val.is_nil()))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            Some("cl-tailp") => {
+                // (cl-tailp SUBLIST LIST) — true if SUBLIST is a tail of LIST
+                if items.len() >= 3 {
+                    let sublist = self.eval(&items[1], env)?;
+                    let list = self.eval(&items[2], env)?;
+                    let mut current = list;
+                    while let MacroValue::Cons(cell) = current.clone() {
+                        if current.eq(&sublist) {
+                            return Ok(MacroValue::from_bool(true));
+                        }
+                        current = cell.cdr.clone();
+                    }
+                    Ok(MacroValue::from_bool(sublist.is_nil()))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            Some("cl-ldiff") => {
+                // (cl-ldiff LIST SUBLIST) — return elements before SUBLIST in LIST
+                if items.len() >= 3 {
+                    let list = self.eval(&items[1], env)?;
+                    let sublist = self.eval(&items[2], env)?;
+                    let mut result = Vec::new();
+                    let mut current = list;
+                    while let MacroValue::Cons(cell) = current.clone() {
+                        if current.eq(&sublist) {
+                            break;
+                        }
+                        result.push(cell.car.clone());
+                        current = cell.cdr.clone();
+                    }
+                    Ok(MacroValue::list(result))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
             Some("eval") => {
                 // (eval form) — evaluate a form
                 // At macro time, evaluate the argument as a form
