@@ -2267,6 +2267,34 @@ fn mapcan_detects_circular_lists_like_gnu() {
 }
 
 #[test]
+fn mapcar_rejects_char_tables_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:mapcar explicitly rejects char-tables with `listp' after
+    // its Flength preflight.  Char-table internals must not be exposed as
+    // mappable sequence elements.
+    let expr = r#"(message "mct:%S" (let ((c (make-char-table nil 0))) (condition-case e (mapcar #'identity c) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "mct:(wrong-type-argument listp)";
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: mapcar should reject char-tables like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("mapcar_rejects_char_tables_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn length_predicates_large_circular_lists_match_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
