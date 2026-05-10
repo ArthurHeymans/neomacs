@@ -1292,6 +1292,19 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
+        "mapcar" | "mapc" | "cl-mapcar" | "cl-mapc" | "mapconcat"
+            if args.len() >= 2 => {
+            // (mapcar FN nil) → nil, (mapconcat FN nil SEP) → ""
+            if matches!(args[1], SsaConst::Nil) {
+                if name == "mapconcat" {
+                    Some(SsaConst::String(String::new()))
+                } else {
+                    Some(SsaConst::Nil)
+                }
+            } else {
+                None
+            }
+        },
         "nconc" if args.len() >= 1 => {
             // (nconc) → nil, (nconc nil ...) → nil
             // If all args are nil, result is nil
