@@ -4531,14 +4531,14 @@ fn display_table_elisp_functions_match_gnu_semantics() {
 fn save_excursion_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    let expr = "(message \"saveexc:%S\" (with-temp-buffer (insert \"abc\") (goto-char 2) (let ((before (point)) inside after) (setq inside (save-excursion (goto-char (point-max)) (insert \"Z\") (point))) (setq after (point)) (list before inside after (buffer-string)))))";
+    let expr = r#"(message "saveexc:%S" (with-temp-buffer (insert "abc") (goto-char 2) (let ((before (point)) inside after at-point) (setq inside (save-excursion (goto-char (point-max)) (insert "Z") (point))) (setq after (point)) (erase-buffer) (insert "ab") (goto-char 2) (setq at-point (list (save-excursion (insert "X") (point)) (point) (buffer-string))) (list before inside after at-point))))"#;
     support::eval_expression(&mut gnu, &mut neo, expr);
 
     let ready = |grid: &[String]| {
         grid.iter()
             .rev()
             .take(4)
-            .any(|row| row.contains("saveexc:") && row.contains("(2 5 2"))
+            .any(|row| row.contains("saveexc:") && row.contains(r#"(2 5 2 (3 2 \"aXb\"))"#))
     };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
@@ -4555,6 +4555,40 @@ fn save_excursion_elisp_functions_match_gnu_semantics() {
 
     assert_pair_nearly_matches(
         "save_excursion_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
+fn save_mark_and_excursion_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "savemark:%S" (with-temp-buffer (insert "abcd") (goto-char 2) (set-mark 4) (setq mark-active t) (let ((inside (save-mark-and-excursion (goto-char 1) (set-mark 3) (setq mark-active nil) (list (point) (mark t) mark-active)))) (list inside (point) (mark t) mark-active))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("savemark:") && row.contains("((1 3 nil) 2 4 t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: save-mark-and-excursion should restore point, mark, and mark-active like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "save_mark_and_excursion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
         2,
