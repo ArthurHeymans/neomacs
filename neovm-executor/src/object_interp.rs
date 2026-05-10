@@ -12491,6 +12491,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_plist_member_returns_nil_for_missing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (null (plist-member '(a 1 b 2) 'c))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
