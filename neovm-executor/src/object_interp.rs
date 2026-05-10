@@ -13863,4 +13863,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_rassoc_if_returns_nil_for_nil_alist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-rassoc-if #'evenp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
