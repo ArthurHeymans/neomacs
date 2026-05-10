@@ -1548,6 +1548,7 @@ impl Interpreter<'_, '_, '_> {
             "cl-delete-if-not" => self.subr_2(name, args, |s| {
                 s.cl_delete_if(args[0], args[1], true)
             }),
+            "display-graphic-p" => Some(LispValue::NIL),
             "delete-dups" => self.subr_1(name, args, |s| {
                 Some(s.delete_dups(args[0]))
             }),
@@ -7080,6 +7081,7 @@ fn is_primitive_name(name: &str) -> bool {
             "delete",
             "delete-dups",
             "delq",
+            "display-graphic-p",
             "downcase",
             "elt",
             "emacs-pid",
