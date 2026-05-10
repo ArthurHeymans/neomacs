@@ -595,15 +595,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Char(c) => Some(SsaConst::String(char::from_u32(*c as u32)?.to_string())),
             _ => None,
         },
-        "string-to-number" if args.len() >= 1 => match args[0] {
-            SsaConst::String(s) => {
+        "string-to-number" if args.len() >= 1 => {
+            let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
+            let base = args.get(1).map(|b| match b { SsaConst::Int(n) => *n, _ => 0 }).unwrap_or(10);
+            if base == 10 {
                 if let Ok(n) = s.parse::<i64>() {
-                    Some(SsaConst::Int(n))
+                    return Some(SsaConst::Int(n));
                 } else if let Ok(f) = s.parse::<f64>() {
-                    Some(SsaConst::Float(f))
-                } else { None }
+                    return Some(SsaConst::Float(f));
+                }
+            } else if (2..=36).contains(&base) {
+                if let Ok(n) = i64::from_str_radix(s, base as u32) {
+                    return Some(SsaConst::Int(n));
+                }
             }
-            _ => None,
+            None
         },
         "concat" if !args.is_empty() => {
             if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
