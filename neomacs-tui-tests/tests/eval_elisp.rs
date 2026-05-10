@@ -4884,6 +4884,45 @@ fn match_data_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn match_data_reuse_and_reseat_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/search.c:match-data destructively fills a supplied REUSE list.
+    // When RESEAT is non-nil, old marker elements are made to point nowhere;
+    // if REUSE is longer than needed, the extra cells remain and are set nil.
+    let expr = r#"(message "matchreuse:%S" (with-temp-buffer (insert "abc") (goto-char 1) (re-search-forward "b") (let* ((reuse (list (point-marker) (point-marker) (point-marker) (point-marker) (point-marker))) (m0 (car reuse)) (r1 (match-data t reuse t)) (pos0 (marker-position m0)) (r2 (match-data t reuse nil))) (list (eq r1 reuse) (length r1) pos0 r1 (eq r2 reuse) (length r2)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("matchreuse:")
+                && row.contains("(t 5 nil")
+                && row.contains("nil nil)")
+                && row.contains(" t 5)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: match-data REUSE/RESEAT behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "match_data_reuse_and_reseat_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn inhibit_changing_match_data_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
