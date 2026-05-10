@@ -710,6 +710,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).exp())),
             _ => None,
         },
+        "asin" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) if (-1.0..=1.0).contains(f) => Some(SsaConst::Float(f.asin())),
+            SsaConst::Int(n) if *n >= -1 && *n <= 1 => Some(SsaConst::Float((*n as f64).asin())),
+            _ => None,
+        },
+        "acos" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) if (-1.0..=1.0).contains(f) => Some(SsaConst::Float(f.acos())),
+            SsaConst::Int(n) if *n >= -1 && *n <= 1 => Some(SsaConst::Float((*n as f64).acos())),
+            _ => None,
+        },
+        "atan" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) => Some(SsaConst::Float(f.atan())),
+            SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).atan())),
+            _ => None,
+        },
         "sqrt" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) if *f >= 0.0 => Some(SsaConst::Float(f.sqrt())),
             SsaConst::Int(n) if *n >= 0 => Some(SsaConst::Float((*n as f64).sqrt())),
