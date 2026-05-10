@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 use crate::card_table::CardTable;
 use crate::object::{ObjectRecord, OldBlockPlacement};
@@ -71,6 +71,9 @@ impl Default for OldGenConfig {
 pub(crate) struct OldBlock {
     buffer: Box<[u8]>,
     line_marks: Box<[AtomicU8]>,
+    /// Set to true when any line is marked, reset on clear_line_marks.
+    /// Avoids O(lines) scan in `is_empty()` for freshly-cleared blocks.
+    has_marks: AtomicBool,
     line_bytes: usize,
     /// log2(line_bytes), cached for fast line-offset computations
     /// in the allocator and sweep paths. Valid only when line_bytes
@@ -154,6 +157,7 @@ impl OldBlock {
         Self {
             buffer,
             line_marks: marks.into_boxed_slice(),
+            has_marks: AtomicBool::new(false),
             line_bytes,
             line_shift,
             cursor: AtomicUsize::new(0),
@@ -395,6 +399,7 @@ impl OldBlock {
     pub(crate) fn mark_line(&self, index: usize) {
         if let Some(slot) = self.line_marks.get(index) {
             slot.store(1, Ordering::Relaxed);
+            self.has_marks.store(true, Ordering::Relaxed);
         }
     }
 
@@ -430,11 +435,15 @@ impl OldBlock {
         let ptr = self.line_marks.as_ptr() as *mut u8;
         let len = self.line_marks.len();
         unsafe { std::ptr::write_bytes(ptr, 0, len); }
+        self.has_marks.store(false, Ordering::Relaxed);
     }
 
     /// True when no line is marked as occupied. Empty blocks are reclaimed
     /// after the sweep.
     pub(crate) fn is_empty(&self) -> bool {
+        if !self.has_marks.load(Ordering::Relaxed) {
+            return true;
+        }
         self.line_marks
             .iter()
             .all(|slot| slot.load(Ordering::Relaxed) == 0)
