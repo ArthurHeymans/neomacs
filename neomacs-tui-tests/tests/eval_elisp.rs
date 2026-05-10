@@ -8981,6 +8981,44 @@ fn invisible_p_category_invisibility_matches_gnu_semantics() {
 }
 
 #[test]
+fn invisible_p_default_text_properties_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/intervals.c:lookup_char_property checks
+    // default-text-properties after direct/category/alias lookup, so
+    // invisible-p must treat default invisible properties as effective
+    // character properties.
+    let expr = r#"(message "defaultprops:%S" (let ((default-text-properties '(foo dfault invisible hide))) (with-temp-buffer (insert "abc") (list (get-text-property 1 'foo) (get-char-property 1 'foo) (let ((buffer-invisibility-spec '(hide))) (invisible-p 1)) (let ((buffer-invisibility-spec '((hide . t)))) (invisible-p 1))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("defaultprops:") && row.contains("(dfault dfault t 2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invisible-p should honor default-text-properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invisible_p_default_text_properties_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
