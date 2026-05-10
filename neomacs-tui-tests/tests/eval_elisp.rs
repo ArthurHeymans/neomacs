@@ -2787,6 +2787,36 @@ fn timer_object_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn unwind_protect_cleanup_error_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "unwinderr:%S" (list (condition-case e (unwind-protect :body (error "cleanup")) (error (list (car e) (cdr e)))) (catch 'tag (condition-case e (unwind-protect (throw 'tag :body) (error "cleanup")) (error (list :caught (car e) (cdr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"unwinderr:((error (\"cleanup\")) (:caught error (\"cleanup\")))"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: unwind-protect cleanup errors should override body return and body throw like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "unwind_protect_cleanup_error_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn define_error_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
