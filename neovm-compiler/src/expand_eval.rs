@@ -426,6 +426,8 @@ impl MacroEval {
                     }
                 }
             }
+            Some("max") => self.eval_min_max(span, &items[1..], env, true),
+            Some("min") => self.eval_min_max(span, &items[1..], env, false),
             Some("-") => self.eval_sub(span, &items[1..], env),
             Some("*") => self.eval_arithmetic(
                 span,
@@ -2693,6 +2695,54 @@ impl MacroEval {
             }
         }
         Ok(MacroValue::String(result))
+    }
+
+    fn eval_min_max(
+        &mut self,
+        span: Span,
+        items: &[SurfaceForm],
+        env: &mut MacroEnv,
+        is_max: bool,
+    ) -> Result<MacroValue, ()> {
+        if items.is_empty() {
+            self.error(span, "max/min requires at least one argument");
+            return Err(());
+        }
+        let mut has_float = false;
+        let mut values = Vec::with_capacity(items.len());
+        for item in items {
+            let val = self.eval(item, env)?;
+            if matches!(val, MacroValue::Float(_)) {
+                has_float = true;
+            }
+            values.push(val);
+        }
+        if has_float {
+            let mut result = if is_max { f64::NEG_INFINITY } else { f64::INFINITY };
+            for v in &values {
+                let f = match v {
+                    MacroValue::Float(f) => *f,
+                    MacroValue::Int(n) => *n as f64,
+                    _ => {
+                        self.error(span, "max/min: arguments must be numbers");
+                        return Err(());
+                    }
+                };
+                result = if is_max { result.max(f) } else { result.min(f) };
+            }
+            Ok(MacroValue::Float(result))
+        } else {
+            let ints: Vec<i64> = values
+                .iter()
+                .map(|v| v.as_int().ok_or(()))
+                .collect::<Result<Vec<_>, _>>()?;
+            let result = if is_max {
+                ints.into_iter().max().unwrap()
+            } else {
+                ints.into_iter().min().unwrap()
+            };
+            Ok(MacroValue::Int(result))
+        }
     }
 
     fn eval_substring(
