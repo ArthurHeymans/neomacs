@@ -1258,6 +1258,39 @@ fn vector_sort_compare_strings_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn sort_keyword_error_semantics_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:sort parses keyword pairs only for odd argument counts.
+    // Unknown keywords signal `error`; a two-argument call is the legacy
+    // `(sort SEQ LESSP)` form, so :lessp is called as a predicate and signals
+    // `void-function`.
+    let expr = r#"(message "sortkwerr:%S" (list (condition-case e (sort [3 1] :bad t) (error (list (car e) (cadr e)))) (condition-case e (sort [3 1] :lessp) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("sortkwerr:")
+                && row.contains(r#"((error \"Invalid keyword argument\") (void-function :lessp))"#)
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: sort keyword error behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("sort_keyword_error_semantics_match_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn copy_tree_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
