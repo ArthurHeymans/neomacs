@@ -7660,6 +7660,36 @@ fn url_file_handler_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn split_string_trim_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "splittrim:%S" (list (split-string " <a> , <> , <b> " "," nil "[ <>]+") (split-string " <a> , <> , <b> " "," t "[ <>]+") (split-string "" "," nil "[ ]+") (split-string "" "," t "[ ]+")))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"splittrim:((\"a\" \"\" \"b\") (\"a\" \"b\") (\"\") nil)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: split-string trim and empty-field behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "split_string_trim_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_code_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
