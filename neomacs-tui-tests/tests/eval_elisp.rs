@@ -7768,6 +7768,47 @@ fn change_hook_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn combine_after_change_calls_coalesces_events_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/insdel.c defers after-change-functions while
+    // combine-after-change-calls is active, then
+    // combine-after-change-execute merges the recorded changes into one
+    // after-change notification.
+    let expr = r#"(message "combineafter:%S" (with-temp-buffer (let ((events nil)) (add-hook 'after-change-functions (lambda (b e l) (push (list b e l (substring-no-properties (buffer-string))) events)) nil t) (combine-after-change-calls (insert "ab") (goto-char 2) (insert "X") (delete-region 1 2)) (list (substring-no-properties (buffer-string)) (nreverse events)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("combineafter:")
+                && row.contains("Xb")
+                && row.contains("((1 3 0")
+                && !row.contains("(2 3 0")
+                && !row.contains("(1 1 1")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: combine-after-change-calls should coalesce after-change events like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "combine_after_change_calls_coalesces_events_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_at_point_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
