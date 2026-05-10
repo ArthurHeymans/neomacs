@@ -503,7 +503,7 @@ impl OldBlock {
                     run_end += 1;
                 }
                 if run_end - search_line >= lines_needed {
-                    let offset = search_line * self.line_bytes;
+                    let offset = search_line << self.line_shift;
                     let alloc_end = offset + size;
                     if alloc_end > self.buffer.len() {
                         return None;
@@ -514,7 +514,7 @@ impl OldBlock {
                         search_line = run_end;
                         continue;
                     }
-                    let after_lines = offset + lines_needed * self.line_bytes;
+                    let after_lines = offset + (lines_needed << self.line_shift);
                     let next_cursor = after_lines.min(self.buffer.len());
                     match self.cursor.compare_exchange_weak(
                         cursor,
