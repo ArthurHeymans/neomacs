@@ -568,6 +568,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             Some(SsaConst::String(s[start..end].to_string()))
         }
         "identity" if args.len() == 1 => Some(args[0].clone()),
+        "symbol-name" if args.len() == 1 => match args[0] {
+            SsaConst::Symbol(s) => Some(SsaConst::String(s.clone())),
+            SsaConst::Nil => Some(SsaConst::String("nil".into())),
+            SsaConst::True => Some(SsaConst::String("t".into())),
+            _ => None,
+        },
         "copy-sequence" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::String(s.clone())),
             _ => None,
