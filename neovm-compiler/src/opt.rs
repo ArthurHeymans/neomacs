@@ -561,9 +561,33 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Float(f) => Some(SsaConst::Float(*f)),
             _ => None,
         },
-        "number-to-string" if args.len() == 1 => match args[0] {
-            SsaConst::Int(n) => Some(SsaConst::String(n.to_string())),
-            _ => None,
+        "number-to-string" if args.len() >= 1 => {
+            let n = args[0].as_int()?;
+            let base = args.get(1).map(|b| b.as_int().unwrap_or(10)).unwrap_or(10);
+            if base == 10 {
+                return Some(SsaConst::String(n.to_string()));
+            }
+            if (2..=36).contains(&base) {
+                // Use manual radix conversion (Rust std doesn't have i64::to_str_radix)
+                let mut result = String::new();
+                let mut remaining = n.abs();
+                let neg = n < 0;
+                let base = base as u32;
+                let digits = b"0123456789abcdefghijklmnopqrstuvwxyz";
+                if remaining == 0 {
+                    result.push('0');
+                } else {
+                    while remaining > 0 {
+                        let digit = (remaining % base as i64) as usize;
+                        result.push(digits[digit] as char);
+                        remaining /= base as i64;
+                    }
+                    if neg { result.push('-'); }
+                    result = result.chars().rev().collect();
+                }
+                return Some(SsaConst::String(result));
+            }
+            None
         },
         "substring" if args.len() >= 2 => {
             let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
