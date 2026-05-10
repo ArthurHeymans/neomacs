@@ -179,6 +179,9 @@ impl CardTable {
     }
 
     pub(crate) fn dirty_card_indices(&self) -> Vec<usize> {
+        if !self.has_dirty() {
+            return Vec::new();
+        }
         self.cards
             .iter()
             .enumerate()
