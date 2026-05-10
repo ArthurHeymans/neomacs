@@ -13883,4 +13883,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_cl_assoc_if_returns_nil_for_nil_alist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-assoc-if #'evenp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
