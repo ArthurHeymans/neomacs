@@ -628,8 +628,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
-        "length" if args.len() == 1 => match args[0] {
+        "length" | "safe-length" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::Int(s.len() as i64)),
+            SsaConst::Nil => Some(SsaConst::Int(0)),
+            _ => None,
+        },
+        "proper-list-p" if args.len() == 1 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Int(0)),
             _ => None,
         },
@@ -1268,10 +1272,6 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
-        "safe-length" if args.len() == 1 => match args[0] {
-            SsaConst::Nil => Some(SsaConst::Int(0)),
-            _ => None,
         },
         "format" | "format-message" if args.len() == 1 => match args[0] {
             SsaConst::String(s) if !s.contains('%') => Some(SsaConst::String(s.clone())),
