@@ -685,6 +685,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 Some(SsaConst::Int((u.wrapping_shr((-count) as u32)) as i64))
             }
         }
+        "sin" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) => Some(SsaConst::Float(f.sin())),
+            SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).sin())),
+            _ => None,
+        },
+        "cos" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) => Some(SsaConst::Float(f.cos())),
+            SsaConst::Int(n) => Some(SsaConst::Float((*n as f64).cos())),
+            _ => None,
+        },
+        "sqrt" if args.len() == 1 => match args[0] {
+            SsaConst::Float(f) if *f >= 0.0 => Some(SsaConst::Float(f.sqrt())),
+            SsaConst::Int(n) if *n >= 0 => Some(SsaConst::Float((*n as f64).sqrt())),
+            _ => None,
+        },
         "expt" if args.len() == 2 => {
             let base = args[0].as_int()?;
             let exp = args[1].as_int()?;
