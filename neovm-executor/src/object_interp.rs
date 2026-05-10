@@ -13187,4 +13187,23 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_get_retrieves_symbol_property() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (put 'my-sym 'my-prop 42) (get 'my-sym 'my-prop))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_plist_member_finds_property() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (plist-member '(a 1 b 2 c 3) 'b)",
+        );
+        assert!(value.is_some());
+    }
+
 }
