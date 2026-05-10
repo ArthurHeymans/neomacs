@@ -4963,6 +4963,36 @@ fn other_buffer_visible_preference_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn buffer_list_startup_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "buflist:%S" (let ((names (mapcar (function buffer-name) (buffer-list)))) (list (member " *code-converting-work*" names) names)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"buflist:(nil (\"*scratch*\" \" *Minibuf-1*\" \" *Minibuf-0*\" \"*Messages*\" \" *Echo Area 0*\" \" *Echo Area 1*\"))"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: startup buffer-list should expose the same live buffers and ordering as GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "buffer_list_startup_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_modified_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
