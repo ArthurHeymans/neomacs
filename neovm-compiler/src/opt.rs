@@ -617,6 +617,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let s: String = std::iter::repeat(ch).take(count.min(4096)).collect();
             Some(SsaConst::String(s))
         }
+        "make-list" if args.len() == 2 => {
+            let _count = args[0].as_int()?;
+            // Can't represent a repeated list constant in SsaConst.
+            // Only fold the 0-length case (returns nil).
+            if _count == 0 {
+                Some(SsaConst::Nil)
+            } else { None }
+        }
         "copy-sequence" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::String(s.clone())),
             _ => None,
