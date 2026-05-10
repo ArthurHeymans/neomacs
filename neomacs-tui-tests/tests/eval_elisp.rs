@@ -8944,6 +8944,43 @@ fn invisible_p_overlay_invisibility_matches_gnu_semantics() {
 }
 
 #[test]
+fn invisible_p_category_invisibility_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/intervals.c:textget falls back through the interval category
+    // symbol, and src/xdisp.c:Finvisible_p applies buffer-invisibility-spec
+    // to that effective invisible property.
+    let expr = r#"(message "catinvis:%S" (with-temp-buffer (insert "abcd") (put 'catinvis 'invisible 'hide) (put-text-property 2 4 'category 'catinvis) (list (get-text-property 2 'invisible) (let ((buffer-invisibility-spec '(hide))) (list (invisible-p 2) (invisible-p 4))) (let ((buffer-invisibility-spec '((hide . t)))) (invisible-p 2)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("catinvis:") && row.contains("(hide (t nil) 2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invisible-p should honor category-backed invisible properties like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invisible_p_category_invisibility_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
