@@ -742,6 +742,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Int(n) if *n > 0 => Some(SsaConst::Float((*n as f64).ln())),
             _ => None,
         },
+        "log" if args.len() == 2 => {
+            let x = to_f64(args[0])?;
+            let base = to_f64(args[1])?;
+            if x > 0.0 && base > 0.0 && base != 1.0 {
+                Some(SsaConst::Float(x.ln() / base.ln()))
+            } else { None }
+        },
         "log10" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) if *f > 0.0 => Some(SsaConst::Float(f.log10())),
             SsaConst::Int(n) if *n > 0 => Some(SsaConst::Float((*n as f64).log10())),
