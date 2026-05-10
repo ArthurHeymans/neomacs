@@ -366,6 +366,9 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
 fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> bool) -> Option<SsaConst> {
     let ordering = match (a, b) {
         (SsaConst::Int(a), SsaConst::Int(b)) => a.cmp(b),
+        (SsaConst::Char(a), SsaConst::Char(b)) => a.cmp(b),
+        (SsaConst::Int(a), SsaConst::Char(b)) => a.cmp(b),
+        (SsaConst::Char(a), SsaConst::Int(b)) => a.cmp(b),
         (SsaConst::Float(a), SsaConst::Float(b)) => f64::total_cmp(a, b),
         (SsaConst::Int(a), SsaConst::Float(b)) => f64::total_cmp(&(*a as f64), b),
         (SsaConst::Float(a), SsaConst::Int(b)) => f64::total_cmp(a, &(*b as f64)),
