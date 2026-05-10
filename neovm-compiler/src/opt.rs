@@ -1247,6 +1247,17 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "always" if args.len() >= 1 => Some(SsaConst::True),
         "bignump" if args.len() == 1 => Some(SsaConst::Nil),
+        "type-of" if args.len() == 1 => match args[0] {
+            SsaConst::Int(_) => Some(SsaConst::Symbol("integer".into())),
+            SsaConst::Float(_) => Some(SsaConst::Symbol("float".into())),
+            SsaConst::String(_) => Some(SsaConst::Symbol("string".into())),
+            SsaConst::Char(_) => Some(SsaConst::Symbol("integer".into())),
+            SsaConst::Symbol(_) => Some(SsaConst::Symbol("symbol".into())),
+            SsaConst::Nil => Some(SsaConst::Symbol("null".into())),
+            SsaConst::True => Some(SsaConst::Symbol("symbol".into())),
+            SsaConst::Value(_) => None,
+            _ => None,
+        },
         "arrayp" if args.len() == 1 => match args[0] {
             SsaConst::String(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
