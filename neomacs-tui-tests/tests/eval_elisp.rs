@@ -1654,6 +1654,49 @@ fn fillarray_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn fillarray_and_clear_string_multibyte_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fillclear:%S" (let ((s1 (copy-sequence "éé")) (s2 (copy-sequence "éé")) (s3 (copy-sequence "é"))) (put-text-property 0 1 'face 'bold s3) (list (condition-case e (progn (fillarray s1 ?x) (string-to-list s1)) (error (list (car e) (cadr e)))) (condition-case e (progn (fillarray s2 ?🙂) (string-to-list s2)) (error (list (car e) (cadr e)))) (progn (clear-string s3) (list (string-to-list s3) (multibyte-string-p s3) (length s3) (string-bytes s3) (text-properties-at 0 s3))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fillclear:")
+            && recent
+                .matches("Attempt to change byte length of a string")
+                .count()
+                == 2
+            && recent.contains("((0 0) nil 2 2 nil)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: fillarray and clear-string multibyte string behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "fillarray_and_clear_string_multibyte_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn bool_vector_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
