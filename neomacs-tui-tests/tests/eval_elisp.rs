@@ -1884,6 +1884,40 @@ fn marker_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn marker_cross_buffer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "markx:%S" (let ((a (generate-new-buffer " *neo-marker-a*")) (b (generate-new-buffer " *neo-marker-b*")) (m (make-marker))) (unwind-protect (progn (with-current-buffer b (insert "hello")) (set-marker m 3 b) (list (eq (marker-buffer m) b) (marker-position m) (with-current-buffer b (goto-char 3) (insert "X") (list (buffer-string) (marker-position m))) (eq (set-marker m nil) m) (marker-position m) (marker-buffer m))) (kill-buffer a) (kill-buffer b))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("markx:") && row.contains(r#"(t 3 (\"heXllo\" 3) t nil nil)"#))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: cross-buffer set-marker and detach semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "marker_cross_buffer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn marker_insertion_type_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
