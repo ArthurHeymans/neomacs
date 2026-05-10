@@ -509,6 +509,30 @@ impl MacroEval {
                     }
                 })
             }
+            Some("string-prefix-p") => {
+                if items.len() < 3 {
+                    self.error(span, "string-prefix-p requires at least two arguments");
+                    return Err(());
+                }
+                let prefix = self.eval(&items[1], env)?;
+                let string = self.eval(&items[2], env)?;
+                match (prefix.as_string(), string.as_string()) {
+                    (Some(p), Some(s)) => Ok(MacroValue::from_bool(s.starts_with(p))),
+                    _ => Ok(MacroValue::Nil),
+                }
+            }
+            Some("string-suffix-p") => {
+                if items.len() < 3 {
+                    self.error(span, "string-suffix-p requires at least two arguments");
+                    return Err(());
+                }
+                let suffix = self.eval(&items[1], env)?;
+                let string = self.eval(&items[2], env)?;
+                match (suffix.as_string(), string.as_string()) {
+                    (Some(suf), Some(s)) => Ok(MacroValue::from_bool(s.ends_with(suf))),
+                    _ => Ok(MacroValue::Nil),
+                }
+            }
             Some("format") => self.eval_format(span, &items[1..], env),
 
             Some("error") => {
