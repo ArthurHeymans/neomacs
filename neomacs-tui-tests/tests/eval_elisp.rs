@@ -4656,6 +4656,40 @@ fn syntax_table_regexp_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn syntax_property_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "synprop:%S" (with-temp-buffer (insert "_") (put-text-property 1 2 'syntax-table (string-to-syntax "w")) (list (let ((parse-sexp-lookup-properties t)) (syntax-class (syntax-after 1))) (let ((parse-sexp-lookup-properties nil)) (syntax-class (syntax-after 1))) (char-syntax ?_))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("synprop:(2 3 95)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: syntax-after text property lookup should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "syntax_property_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn syntax_table_comment_flags_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
