@@ -637,18 +637,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             (SsaConst::String(s), Some(n)) => {
                 Some(if s.len() as i64 == n { SsaConst::True } else { SsaConst::Nil })
             }
+            (SsaConst::Nil, Some(n)) => Some(if 0 == n { SsaConst::True } else { SsaConst::Nil }),
             _ => None,
         },
         "length<" if args.len() == 2 => match (args[0], args[1].as_int()) {
             (SsaConst::String(s), Some(n)) => {
                 Some(if (s.len() as i64) < n { SsaConst::True } else { SsaConst::Nil })
             }
+            (SsaConst::Nil, Some(n)) => Some(if 0 < n { SsaConst::True } else { SsaConst::Nil }),
             _ => None,
         },
         "length>" if args.len() == 2 => match (args[0], args[1].as_int()) {
             (SsaConst::String(s), Some(n)) => {
                 Some(if (s.len() as i64) > n { SsaConst::True } else { SsaConst::Nil })
             }
+            (SsaConst::Nil, Some(n)) => Some(if 0 > n { SsaConst::True } else { SsaConst::Nil }),
             _ => None,
         },
         "string-bytes" if args.len() == 1 => match args[0] {
