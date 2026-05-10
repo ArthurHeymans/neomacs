@@ -966,6 +966,53 @@ fn equal_including_properties_strings() {
 }
 
 #[test]
+fn equal_including_properties_distinguishes_string_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let with_props = Value::string("abcd");
+    crate::emacs_core::value::set_string_text_properties_for_value(
+        with_props,
+        vec![crate::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 3,
+            plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        }],
+    );
+    let plain = Value::string("abcd");
+
+    assert!(crate::emacs_core::value::equal_value(
+        &with_props,
+        &plain,
+        0
+    ));
+
+    let equal_props = builtin_equal_including_properties(vec![with_props, plain])
+        .expect("equal-including-properties");
+    assert!(equal_props.is_nil());
+}
+
+#[test]
+fn equal_including_properties_recurses_into_cons_string_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let with_props = Value::string("abcd");
+    crate::emacs_core::value::set_string_text_properties_for_value(
+        with_props,
+        vec![crate::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 3,
+            plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        }],
+    );
+    let left = Value::cons(with_props, Value::NIL);
+    let right = Value::cons(Value::string("abcd"), Value::NIL);
+
+    assert!(crate::emacs_core::value::equal_value(&left, &right, 0));
+
+    let equal_props =
+        builtin_equal_including_properties(vec![left, right]).expect("equal-including-properties");
+    assert!(equal_props.is_nil());
+}
+
+#[test]
 fn string_make_multibyte_passthrough_ascii() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("abc");

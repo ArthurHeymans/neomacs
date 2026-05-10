@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::emacs_core::value::{Value, eq_value};
+use crate::emacs_core::value::{Value, eq_value, equal_value};
 use crate::gc_trace::GcTrace;
 
 // ---------------------------------------------------------------------------
@@ -227,6 +227,17 @@ fn plists_equal_eq(left: &[(Value, Value)], right: &[(Value, Value)]) -> bool {
     left.iter().all(|(left_key, left_value)| {
         right.iter().any(|(right_key, right_value)| {
             eq_value(left_key, right_key) && eq_value(left_value, right_value)
+        })
+    })
+}
+
+fn plists_equal_values_equal(left: &[(Value, Value)], right: &[(Value, Value)]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    left.iter().all(|(left_key, left_value)| {
+        right.iter().any(|(right_key, right_value)| {
+            eq_value(left_key, right_key) && equal_value(left_value, right_value, 0)
         })
     })
 }
@@ -686,6 +697,55 @@ impl TextPropertyTable {
 
     pub fn is_empty(&self) -> bool {
         self.intervals.is_empty()
+    }
+
+    fn plist_at(&self, pos: usize) -> Option<&[(Value, Value)]> {
+        let (_, node) = self.find_interval(pos)?;
+        Some(&node.plist)
+    }
+
+    fn next_interval_boundary_after(&self, pos: usize, end: usize) -> usize {
+        let containing_end = self
+            .find_interval(pos)
+            .map(|(_, node)| node.end)
+            .unwrap_or(end);
+        let next_start = self
+            .intervals
+            .range((pos + 1)..)
+            .next()
+            .map(|(start, _)| *start)
+            .unwrap_or(end);
+        containing_end.min(next_start).min(end)
+    }
+
+    /// Compare string text-property intervals the way GNU
+    /// `compare_string_intervals` does for `equal-including-properties`.
+    ///
+    /// Missing intervals are default intervals.  Property names compare by
+    /// `eq`, while property values compare by ordinary `equal`.
+    pub fn equal_including_property_values(
+        left: Option<&TextPropertyTable>,
+        right: Option<&TextPropertyTable>,
+        len: usize,
+    ) -> bool {
+        let mut pos = 0;
+        while pos < len {
+            let left_plist = left.and_then(|table| table.plist_at(pos)).unwrap_or(&[]);
+            let right_plist = right.and_then(|table| table.plist_at(pos)).unwrap_or(&[]);
+            if !plists_equal_values_equal(left_plist, right_plist) {
+                return false;
+            }
+
+            let left_next = left
+                .map(|table| table.next_interval_boundary_after(pos, len))
+                .unwrap_or(len);
+            let right_next = right
+                .map(|table| table.next_interval_boundary_after(pos, len))
+                .unwrap_or(len);
+            let next = left_next.min(right_next).max(pos + 1);
+            pos = next;
+        }
+        true
     }
 
     pub fn slice(&self, start: usize, end: usize) -> TextPropertyTable {

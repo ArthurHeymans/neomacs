@@ -1755,7 +1755,22 @@ pub fn eql_value_swp(left: &Value, right: &Value, symbols_with_pos_enabled: bool
 /// `equal` — structural comparison.
 pub fn equal_value(left: &Value, right: &Value, depth: usize) -> bool {
     let mut seen = None;
-    equal_value_inner(left, right, depth, &mut seen, false)
+    equal_value_inner(left, right, depth, &mut seen, false, EqualKind::Plain)
+}
+
+/// `equal-including-properties` — structural comparison that also compares
+/// string text-property intervals.  This mirrors GNU Emacs `internal_equal`
+/// carrying its comparison mode recursively into compound objects.
+pub fn equal_value_including_properties(left: &Value, right: &Value, depth: usize) -> bool {
+    let mut seen = None;
+    equal_value_inner(
+        left,
+        right,
+        depth,
+        &mut seen,
+        false,
+        EqualKind::IncludingProperties,
+    )
 }
 
 /// `equal` — structural comparison with optional symbol-with-pos transparency.
@@ -1766,7 +1781,20 @@ pub fn equal_value_swp(
     symbols_with_pos_enabled: bool,
 ) -> bool {
     let mut seen = None;
-    equal_value_inner(left, right, depth, &mut seen, symbols_with_pos_enabled)
+    equal_value_inner(
+        left,
+        right,
+        depth,
+        &mut seen,
+        symbols_with_pos_enabled,
+        EqualKind::Plain,
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EqualKind {
+    Plain,
+    IncludingProperties,
 }
 
 fn equal_value_inner(
@@ -1775,6 +1803,7 @@ fn equal_value_inner(
     depth: usize,
     seen: &mut Option<HashSet<(usize, usize)>>,
     symbols_with_pos_enabled: bool,
+    kind: EqualKind,
 ) -> bool {
     if depth > 200 {
         return false;
@@ -1809,6 +1838,12 @@ fn equal_value_inner(
                     left_string.schars() == right_string.schars()
                         && left_string.sbytes() == right_string.sbytes()
                         && left_string.as_bytes() == right_string.as_bytes()
+                        && (kind == EqualKind::Plain
+                            || TextPropertyTable::equal_including_property_values(
+                                get_string_text_properties_table_for_value(left).as_ref(),
+                                get_string_text_properties_table_for_value(right).as_ref(),
+                                left_string.schars(),
+                            ))
                 }
                 _ => false,
             }
@@ -1830,8 +1865,21 @@ fn equal_value_inner(
         let a_cdr = left.cons_cdr();
         let b_car = right.cons_car();
         let b_cdr = right.cons_cdr();
-        return equal_value_inner(&a_car, &b_car, depth + 1, seen, symbols_with_pos_enabled)
-            && equal_value_inner(&a_cdr, &b_cdr, depth + 1, seen, symbols_with_pos_enabled);
+        return equal_value_inner(
+            &a_car,
+            &b_car,
+            depth + 1,
+            seen,
+            symbols_with_pos_enabled,
+            kind,
+        ) && equal_value_inner(
+            &a_cdr,
+            &b_cdr,
+            depth + 1,
+            seen,
+            symbols_with_pos_enabled,
+            kind,
+        );
     }
 
     if !left.is_veclike() || !right.is_veclike() {
@@ -1868,7 +1916,7 @@ fn equal_value_inner(
                         return false;
                     }
                     a.iter().zip(b.iter()).all(|(x, y)| {
-                        equal_value_inner(x, y, depth + 1, seen, symbols_with_pos_enabled)
+                        equal_value_inner(x, y, depth + 1, seen, symbols_with_pos_enabled, kind)
                     })
                 }
                 _ => false,
@@ -1882,7 +1930,14 @@ fn equal_value_inner(
                     return true;
                 }
             }
-            closure_equal(&left, &right, depth + 1, seen, symbols_with_pos_enabled)
+            closure_equal(
+                &left,
+                &right,
+                depth + 1,
+                seen,
+                symbols_with_pos_enabled,
+                kind,
+            )
         }
         VecLikeType::SymbolWithPos => {
             if symbols_with_pos_enabled {
@@ -1964,6 +2019,7 @@ fn closure_equal(
     depth: usize,
     seen: &mut Option<HashSet<(usize, usize)>>,
     symbols_with_pos_enabled: bool,
+    kind: EqualKind,
 ) -> bool {
     let (Some(left_params), Some(right_params)) = (left.closure_params(), right.closure_params())
     else {
@@ -1980,6 +2036,7 @@ fn closure_equal(
             depth + 1,
             seen,
             symbols_with_pos_enabled,
+            kind,
         ),
         (None, None) => true,
         _ => false,
@@ -1993,7 +2050,9 @@ fn closure_equal(
         right.closure_env().unwrap_or(None),
     ) {
         (None, None) => true,
-        (Some(l), Some(r)) => equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled),
+        (Some(l), Some(r)) => {
+            equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled, kind)
+        }
         _ => false,
     };
     if !env_equal || left.closure_docstring().flatten() != right.closure_docstring().flatten() {
@@ -2005,7 +2064,9 @@ fn closure_equal(
         right.closure_doc_form().flatten(),
     ) {
         (None, None) => true,
-        (Some(l), Some(r)) => equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled),
+        (Some(l), Some(r)) => {
+            equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled, kind)
+        }
         _ => false,
     }
 }
