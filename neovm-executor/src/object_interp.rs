@@ -12344,6 +12344,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_set_default_overrides_variable() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defvar sd-var 10) (progn (set-default 'sd-var 99) (default-value 'sd-var))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(99)));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
