@@ -407,6 +407,7 @@ src/macuvs.h
 
 # Rust build artifacts
 /target/
+/dist/
 rust/target/
 neomacs-display/target/
 neomacs-bin/target/

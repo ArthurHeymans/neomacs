@@ -1,0 +1,90 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x86_64:
+    name: package linux-x86_64
+    runs-on: self-hosted
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies (pacman)
+        run: |
+          sudo pacman -Syu --noconfirm --needed \
+            base-devel \
+            git \
+            pkgconf \
+            cmake \
+            m4 \
+            gmp \
+            openssl \
+            fontconfig \
+            freetype2 \
+            harfbuzz \
+            libxkbcommon \
+            libxkbcommon-x11 \
+            wayland \
+            wayland-protocols \
+            libxcb \
+            libxrandr \
+            libxinerama \
+            libxi \
+            libxcursor \
+            mesa \
+            vulkan-headers \
+            vulkan-icd-loader \
+            dbus \
+            systemd-libs \
+            sqlite \
+            libxml2 \
+            gnutls
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain-file: rust-toolchain.toml
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ startsWith(github.ref, 'refs/tags/') }}
+          cache-on-failure: true
+
+      - name: Package release archive
+        run: scripts/package-release.sh --target linux-x86_64
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neomacs-linux-x86_64
+          path: |
+            dist/neomacs-linux-x86_64.tar.gz
+            dist/SHA256SUMS
+
+      - name: Upload GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/neomacs-linux-x86_64.tar.gz
+            dist/SHA256SUMS
