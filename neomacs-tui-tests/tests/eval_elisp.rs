@@ -5154,6 +5154,40 @@ fn buffer_modified_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn buffer_modified_tick_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "modtick:%S" (with-temp-buffer (let ((m0 (buffer-modified-tick)) (c0 (buffer-chars-modified-tick))) (insert "x") (let ((m1 (buffer-modified-tick)) (c1 (buffer-chars-modified-tick))) (restore-buffer-modified-p 'autosaved) (list (buffer-modified-p) (> m1 m0) (> c1 c0) (= (buffer-modified-tick) m1) (= (buffer-chars-modified-tick) c1) (progn (restore-buffer-modified-p nil) (buffer-modified-p)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("modtick:(autosaved t t t t nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: buffer modified tick and autosaved state should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "buffer_modified_tick_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
