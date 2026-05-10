@@ -14,6 +14,7 @@ use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord};
 
 pub(crate) const OBJECT_STORE_SHARDS: usize = 4;
 const OBJECT_STORE_CHUNK_CAPACITY: usize = 1024;
+const OBJECT_STORE_CHUNK_SHIFT: u32 = OBJECT_STORE_CHUNK_CAPACITY.trailing_zeros();
 const OBJECT_STORE_CHUNK_CAPACITY_U16: u16 = OBJECT_STORE_CHUNK_CAPACITY as u16;
 const OBJECT_STORE_SHARD_MASK: usize = OBJECT_STORE_SHARDS - 1;
 
@@ -121,8 +122,8 @@ impl<'a> ObjectReadRaw<'a> {
     #[inline]
     pub(crate) fn get(&self, locator: ObjectLocator) -> &'a ObjectRecord {
         let shard = &self.shards[locator.shard];
-        let chunk_index = locator.slot / OBJECT_STORE_CHUNK_CAPACITY;
-        let chunk_offset = locator.slot % OBJECT_STORE_CHUNK_CAPACITY;
+        let chunk_index = locator.slot >> OBJECT_STORE_CHUNK_SHIFT;
+        let chunk_offset = locator.slot & (OBJECT_STORE_CHUNK_CAPACITY - 1);
         debug_assert!(chunk_index < shard.chunks.len());
         let chunk = &shard.chunks[chunk_index];
         debug_assert!(chunk_offset < chunk.published_len);
