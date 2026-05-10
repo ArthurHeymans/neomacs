@@ -12375,6 +12375,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_aref_on_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (aref [10 20 30] 1)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(20)));
+    }
+
+    #[test]
     fn executes_length_equals_true_for_correct_length() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
