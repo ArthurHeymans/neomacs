@@ -1324,6 +1324,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-reduce" if args.len() == 2 => {
+            // Only fold without :initial-value keyword; (cl-reduce FN nil) → nil
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "cl-find" | "cl-position" | "cl-find-if" | "cl-position-if"
         | "cl-find-if-not" | "cl-position-if-not"
             if args.len() >= 2 => {
