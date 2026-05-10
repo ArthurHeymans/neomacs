@@ -109,6 +109,10 @@ pub const CL_LIB_SOURCE: &str = r#"
 (defmacro cl-fourth (list) (list 'cadddr list))
 (defmacro cl-fifth (list) (list 'nth 4 list))
 (defmacro cl-sixth (list) (list 'nth 5 list))
+(defmacro cl-seventh (list) (list 'nth 6 list))
+(defmacro cl-eighth (list) (list 'nth 7 list))
+(defmacro cl-ninth (list) (list 'nth 8 list))
+(defmacro cl-tenth (list) (list 'nth 9 list))
 
 (defmacro cl-psetq (&rest args)
   (let ((temps nil) (sets nil))
