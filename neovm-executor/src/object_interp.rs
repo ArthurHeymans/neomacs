@@ -1745,6 +1745,7 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))
                 .and_then(|v| self.fixnum(v.round() as i64, name)),
+            "standard-syntax-table" => Some(LispValue::NIL),
             "sqrt" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))
@@ -7232,6 +7233,7 @@ fn is_primitive_name(name: &str) -> bool {
             "special-variable-p",
             "split-string",
             "sqrt",
+            "standard-syntax-table",
             "string-bytes",
             "string-equal",
             "string-greaterp",
