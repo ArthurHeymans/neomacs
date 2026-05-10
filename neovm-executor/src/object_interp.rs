@@ -1254,6 +1254,16 @@ impl Interpreter<'_, '_, '_> {
                     .wrapping_add(1);
                 self.fixnum((val % limit as u64) as i64, name)
             }),
+            "getenv" => self.subr_1(name, args, |s| {
+                if let Ok(var_name) = s.runtime.string_contents(args[0]) {
+                    match std::env::var(&*var_name) {
+                        Ok(val) => Some(s.runtime.string(val)),
+                        Err(_) => Some(LispValue::NIL),
+                    }
+                } else {
+                    Some(LispValue::NIL)
+                }
+            }),
             "gensym" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let prefix = args
                     .first()
@@ -7039,6 +7049,7 @@ fn is_primitive_name(name: &str) -> bool {
             "functionp",
             "garbage-collect",
             "gensym",
+            "getenv",
             "get",
             "gethash",
             "hash-table-count",
