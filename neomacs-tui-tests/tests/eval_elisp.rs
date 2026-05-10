@@ -2929,6 +2929,43 @@ fn overlay_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn overlay_accessors_after_buffer_kill_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/buffer.c:overlay-start/end/buffer return nil after an overlay's
+    // buffer has been killed or the overlay has been deleted.  Accessors must
+    // not signal a dead-buffer error.
+    let expr = r#"(message "ovdead:%S" (let ((o (with-temp-buffer (insert "abc") (make-overlay 1 2)))) (list (condition-case e (overlay-start o) (error (list (car e) (cadr e)))) (condition-case e (overlay-end o) (error (list (car e) (cadr e)))) (condition-case e (overlay-buffer o) (error (list (car e) (cadr e)))) (condition-case e (delete-overlay o) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("ovdead:(nil nil nil nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: overlay accessors after buffer kill should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "overlay_accessors_after_buffer_kill_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn overlay_move_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
