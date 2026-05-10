@@ -12566,12 +12566,12 @@ mod tests {
     }
 
     #[test]
-    fn executes_point_min_max_return_one() {
+    fn executes_bobp_and_eobp_are_true() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
-             (+ (point-min) (point-max))",
+             (and (bobp) (eobp))",
         );
-        assert_eq!(value, Some(LispValue::expect_fixnum(2)));
+        assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
