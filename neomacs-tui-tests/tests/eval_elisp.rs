@@ -2604,6 +2604,35 @@ fn overlay_overlap_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn overlay_change_respects_narrowing_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "ovchangenarrow:%S" (with-temp-buffer (insert "abcdef") (let ((o1 (make-overlay 2 2)) (o2 (make-overlay 4 4)) (o3 (make-overlay 7 7))) (narrow-to-region 2 6) (let ((ovs (overlays-in 2 6))) (list (length ovs) (not (null (memq o1 ovs))) (not (null (memq o2 ovs))) (not (null (memq o3 ovs))) (next-overlay-change 1) (next-overlay-change 2) (next-overlay-change 6) (previous-overlay-change 7) (previous-overlay-change 6) (previous-overlay-change 2))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("ovchangenarrow:") && row.contains("(2 t t nil 2 4 6 4 4 2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: overlay change functions should respect the narrowed accessible range like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("overlay_change_respects_narrowing_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn text_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
