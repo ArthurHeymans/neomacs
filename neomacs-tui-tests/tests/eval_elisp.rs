@@ -10616,6 +10616,46 @@ fn format_numeric_precision_and_prefixes_match_gnu_semantics() {
 }
 
 #[test]
+fn format_print_level_notation_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/editfns.c routes `%S' through prin1-style printing; src/print.c
+    // uses "..." when `print-level' truncates nested list objects.
+    let expr = r#"(message "fmtlevel:%S" (let ((print-level 1)) (format "%S" '((a b) (c d)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains(r#"fmtlevel:\"(... ...)\""#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format %S should use GNU print-level ellipsis notation\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_print_level_notation_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn with_output_to_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
