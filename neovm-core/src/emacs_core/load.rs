@@ -3539,6 +3539,11 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
     clear_transient_runtime_features(eval);
     eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
     eval.clear_top_level_eval_state();
+    // GNU startup evaluates command-line --eval forms with lexical=t
+    // (startup.el: command-line-1), and the post-startup *scratch* surface is
+    // lexical. Set this after unwinding transient specpdl bindings so the
+    // runtime top-level surface persists.
+    eval.set_lexical_binding(true);
 
     Ok(())
 }
