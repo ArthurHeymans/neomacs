@@ -13708,4 +13708,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_nsublis_returns_nil_for_nil_tree() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-nsublis '((a . 1)) nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
