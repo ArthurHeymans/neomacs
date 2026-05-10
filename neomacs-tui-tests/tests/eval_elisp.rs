@@ -2443,6 +2443,40 @@ fn text_property_plist_validation_matches_gnu_semantics() {
 }
 
 #[test]
+fn next_property_change_limit_t_matches_gnu_interval_boundary_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpnextt:%S" (let ((s (copy-sequence "abcdef"))) (put-text-property 1 3 'face 'bold s) (put-text-property 3 5 'face 'bold s) (list (next-property-change 1 s) (next-property-change 1 s t) (next-single-property-change 1 'face s) (next-single-property-change 1 'face s 4) (previous-property-change 5 s) (previous-single-property-change 5 'face s) (previous-property-change 5 s 2) (previous-single-property-change 5 'face s 2))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("tpnextt:") && row.contains("(5 3 5 4 1 1 2 2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: next-property-change with LIMIT=t should expose the next interval boundary like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "next_property_change_limit_t_matches_gnu_interval_boundary_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_equality_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
