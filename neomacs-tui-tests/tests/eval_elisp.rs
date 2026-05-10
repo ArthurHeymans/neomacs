@@ -7335,6 +7335,40 @@ fn line_position_field_constraints_match_gnu_semantics() {
 }
 
 #[test]
+fn move_beginning_of_line_field_constraints_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "field-mbol:%S" (with-temp-buffer (insert "aa" (propertize "bb" 'field 'f) "cc\nxx") (goto-char 4) (let ((a (progn (move-beginning-of-line nil) (point))) (b (progn (goto-char 4) (move-end-of-line nil) (point))) (c (let ((inhibit-field-text-motion t)) (goto-char 4) (move-beginning-of-line nil) (point))) (d (let ((inhibit-field-text-motion t)) (goto-char 4) (move-end-of-line nil) (point)))) (list a b c d))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("field-mbol:") && row.contains("(3 7 1 7)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: move-beginning-of-line should honor inhibit-field-text-motion like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "move_beginning_of_line_field_constraints_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_boundary_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
