@@ -1302,6 +1302,7 @@ impl Interpreter<'_, '_, '_> {
                 let result = s.runtime.set_symbol_value(args[0], args[1]);
                 s.runtime_value(result)
             }),
+            "bobp" | "eobp" => Some(LispValue::TRUE),
             "buffer-size" => Some(LispValue::expect_fixnum(0)),
             "current-buffer" => Some(LispValue::NIL),
             "window-buffer" => Some(LispValue::NIL),
@@ -6939,6 +6940,7 @@ fn is_primitive_name(name: &str) -> bool {
             "autoloadp",
             "bare-symbol-p",
             "bignump",
+            "bobp",
             "bool-vector-p",
             "booleanp",
             "boundp",
@@ -7070,6 +7072,7 @@ fn is_primitive_name(name: &str) -> bool {
             "downcase",
             "elt",
             "emacs-pid",
+            "eobp",
             "eql",
             "eq",
             "equal",
