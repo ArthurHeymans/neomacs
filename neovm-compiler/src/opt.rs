@@ -511,9 +511,21 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Char(c) => Some(SsaConst::Int(*c)),
             _ => None,
         },
+        "+" if args.is_empty() => Some(SsaConst::Int(0)),
+        "+" if args.len() == 1 => match args[0] {
+            SsaConst::Int(n) => Some(SsaConst::Int(*n)),
+            SsaConst::Float(f) => Some(SsaConst::Float(*f)),
+            SsaConst::Char(c) => Some(SsaConst::Int(*c)),
+            _ => None,
+        },
         "+" if args.len() >= 2 => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
-            Some(SsaConst::Int(ints.into_iter().sum()))
+            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+                return Some(SsaConst::Int(ints.into_iter().sum()));
+            }
+            if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
+                return Some(SsaConst::Float(floats.into_iter().sum()));
+            }
+            None
         }
         "*" if args.is_empty() => Some(SsaConst::Int(1)),
         "*" if args.len() == 1 => match args[0] {
@@ -523,8 +535,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "*" if args.len() >= 2 => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
-            Some(SsaConst::Int(ints.into_iter().product()))
+            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+                return Some(SsaConst::Int(ints.into_iter().product()));
+            }
+            if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
+                return Some(SsaConst::Float(floats.into_iter().product()));
+            }
+            None
         }
         "logand" if !args.is_empty() => {
             let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
