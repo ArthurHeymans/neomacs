@@ -6878,6 +6878,40 @@ fn file_name_edge_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn file_name_handler_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "handler:%S" (progn (fset 'neo-h1 (lambda (&rest _) :h1)) (fset 'neo-h2 (lambda (&rest _) :h2)) (put 'neo-h1 'operations '(op-a)) (let ((file-name-handler-alist '(("foo" . neo-h1) ("/foo" . neo-h2)))) (prog1 (list (eq (find-file-name-handler "/tmp/foo" 'op-a) 'neo-h2) (eq (find-file-name-handler "/tmp/foo" 'op-b) 'neo-h2) (let ((inhibit-file-name-operation 'op-a) (inhibit-file-name-handlers (list 'neo-h2))) (eq (find-file-name-handler "/tmp/foo" 'op-a) 'neo-h1)) (let ((inhibit-file-name-operation 'op-b) (inhibit-file-name-handlers (list 'neo-h2))) (eq (find-file-name-handler "/tmp/foo" 'op-a) 'neo-h2))) (fmakunbound 'neo-h1) (fmakunbound 'neo-h2) (put 'neo-h1 'operations nil)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("handler:(nil t t nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: file-name handler selection and inhibition should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "file_name_handler_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_mode_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
