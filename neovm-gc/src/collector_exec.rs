@@ -354,6 +354,11 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
     old_gen: &OldGenState,
     counter: &mut usize,
 ) -> Vec<usize> {
+    // Fast path: skip the header-index build when no block has dirty cards.
+    if !old_gen.blocks().iter().any(|b| b.card_table().has_dirty()) {
+        return Vec::new();
+    }
+
     let mut roots = Vec::new();
     let mut seen = vec![false; objects.len()];
 
@@ -428,14 +433,15 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
         return Vec::new();
     }
 
+    let all_locators = objects.all_locators();
     let mut roots = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = vec![false; all_locators.len()];
 
-    let mut header_index: std::collections::HashMap<usize, crate::index_state::ObjectLocator> =
-        std::collections::HashMap::with_capacity(objects.len());
-    for locator in objects.all_locators() {
+    let mut header_index: std::collections::HashMap<usize, (usize, crate::index_state::ObjectLocator)> =
+        std::collections::HashMap::with_capacity(all_locators.len());
+    for (idx, &locator) in all_locators.iter().enumerate() {
         let header_addr = objects.get(locator).erased().header().as_ptr() as usize;
-        header_index.insert(header_addr, locator);
+        header_index.insert(header_addr, (idx, locator));
     }
 
     for block in old_gen.blocks().iter() {
@@ -459,11 +465,12 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
             let mut offset = start_offset as usize;
             while offset < card_end_offset {
                 let header_addr = block_base + offset;
-                if let Some(locator) = header_index.get(&header_addr).copied() {
+                if let Some(&(idx, locator)) = header_index.get(&header_addr) {
                     *counter += 1;
                     let record = objects.get(locator);
                     let total_size = record.total_size().max(1);
-                    if seen.insert(locator) {
+                    if !seen[idx] {
+                        seen[idx] = true;
                         roots.push(locator);
                     }
                     offset = align_up_to(offset.saturating_add(total_size), line_bytes);
