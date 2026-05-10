@@ -659,6 +659,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::True => Some(SsaConst::String("t".into())),
             _ => None,
         },
+        "intern" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if s == "nil" => Some(SsaConst::Nil),
+            SsaConst::String(s) if s == "t" => Some(SsaConst::True),
+            SsaConst::String(s) => Some(SsaConst::Symbol(s.clone())),
+            _ => None,
+        },
         "make-string" if args.len() == 2 => {
             let count = args[0].as_int()? as usize;
             let ch = match args[1] {
