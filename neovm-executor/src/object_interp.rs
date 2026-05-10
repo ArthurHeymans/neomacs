@@ -1345,6 +1345,9 @@ impl Interpreter<'_, '_, '_> {
             "plist-get" => self.subr_2(name, args, |s| {
                 Some(s.runtime.plist_get(args[0], args[1]))
             }),
+            "plist-member" => self.subr_2(name, args, |s| {
+                s.plist_member(args[0], args[1])
+            }),
             "plist-put" => self.subr_3(name, args, |s| {
                 Some(s.runtime.plist_put(args[0], args[1], args[2]))
             }),
@@ -3830,6 +3833,19 @@ impl Interpreter<'_, '_, '_> {
             let car = self.runtime.car(current).ok()?;
             result.push(car);
             current = self.runtime.cdr(current).ok()?;
+        }
+    }
+
+    fn plist_member(&mut self, plist: LispValue, prop: LispValue) -> Option<LispValue> {
+        let mut current = plist;
+        loop {
+            if current.is_nil() { return Some(LispValue::NIL); }
+            if !self.runtime.is_cons(current) { return Some(LispValue::NIL); }
+            let key = self.runtime.car(current).ok()?;
+            if key == prop { return Some(current); }
+            let next = self.runtime.cdr(current).ok()?;
+            if next.is_nil() || !self.runtime.is_cons(next) { return Some(LispValue::NIL); }
+            current = self.runtime.cdr(next).ok()?;
         }
     }
 
@@ -7157,6 +7173,7 @@ fn is_primitive_name(name: &str) -> bool {
             "numberp",
             "pairlis",
             "plist-get",
+            "plist-member",
             "plist-put",
             "prin1",
             "prin1-to-string",
