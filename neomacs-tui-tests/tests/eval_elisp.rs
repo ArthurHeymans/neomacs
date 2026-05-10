@@ -9070,6 +9070,44 @@ fn format_message_preserves_text_properties_like_gnu() {
 }
 
 #[test]
+fn format_message_text_quoting_style_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fmtquote:%S" (list (format-message "`x'") (let ((text-quoting-style 'straight)) (format-message "`x'")) (let ((text-quoting-style 'curve)) (format-message "`x'"))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fmtquote:") && recent.contains("'x'") && recent.matches("‘x’").count() >= 2
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format-message should honor text-quoting-style like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_message_text_quoting_style_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
