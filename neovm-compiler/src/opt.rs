@@ -407,6 +407,17 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Float(f) => Some(SsaConst::Float(-f)),
             _ => None,
         },
+        "-" if args.len() >= 2 => {
+            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+                let first = ints[0];
+                return Some(SsaConst::Int(ints[1..].iter().fold(first, |a, &b| a.wrapping_sub(b))));
+            }
+            if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
+                let first = floats[0];
+                return Some(SsaConst::Float(floats[1..].iter().fold(first, |a, &b| a - b)));
+            }
+            None
+        },
         "*" if args.len() == 2 => fold_binary_arith(args[0], args[1],
             |a, b| a.wrapping_mul(b), |a, b| a * b),
         "/" if args.len() == 2 => {
