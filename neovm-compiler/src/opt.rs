@@ -1232,6 +1232,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Symbol(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
         },
+        "keywordp" if args.len() == 1 => match args[0] {
+            SsaConst::Symbol(s) => Some(if s.starts_with(':') { SsaConst::True } else { SsaConst::Nil }),
+            _ => Some(SsaConst::Nil),
+        },
         _ => None,
     }
 }
