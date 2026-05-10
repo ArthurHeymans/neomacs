@@ -2180,6 +2180,14 @@ impl Interpreter<'_, '_, '_> {
             "copy-list" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_list(args[0])),
+            "make-string" => self.subr_2(name, args, |s| {
+                let count = s.fixnum_arg("make-string", args[0])?;
+                let ch = args[1].as_char()
+                    .or_else(|| args[1].as_fixnum().and_then(|n| char::from_u32(n as u32)))
+                    .unwrap_or(' ');
+                let s_str: String = std::iter::repeat(ch).take(count as usize).collect();
+                Some(s.runtime.string(s_str))
+            }),
             "make-list" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.make_list(args[0], args[1])),
@@ -7088,6 +7096,7 @@ fn is_primitive_name(name: &str) -> bool {
             "make-vector",
             "make-hash-table",
             "make-list",
+            "make-string",
             "make-symbol",
             "mapl",
             "maplist",
