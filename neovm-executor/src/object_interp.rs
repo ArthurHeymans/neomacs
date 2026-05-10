@@ -12350,6 +12350,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_floatp_recognizes_float() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (floatp 3.14)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_bignump_returns_nil_for_fixnum() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
