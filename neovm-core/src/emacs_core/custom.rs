@@ -403,6 +403,47 @@ pub(crate) fn builtin_kill_local_variable_impl(
     let mut removed = false;
     let buffer_id = ctx.buffers.current_buffer_id();
 
+    // GNU `Fkill_local_variable` handles SYMBOL_FORWARDED BUFFER_OBJFWD
+    // variables before watcher notification (`data.c:2328-2345`):
+    // conditional per-buffer slots clear their local flag and reload the
+    // current default value; always-local slots are left alone.
+    {
+        use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
+        use crate::emacs_core::symbol::SymbolRedirect;
+        let forwarded_slot = ctx
+            .obarray
+            .get_by_id(resolved)
+            .filter(|s| s.redirect() == SymbolRedirect::Forwarded)
+            .and_then(|s| {
+                let fwd = unsafe { &*s.val.fwd };
+                if matches!(fwd.ty, LispFwdType::BufferObj) {
+                    let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
+                    crate::buffer::buffer::lookup_buffer_slot(resolved_name)
+                        .map(|info| (info, buf_fwd.offset as usize))
+                } else {
+                    None
+                }
+            });
+        if let Some((info, offset)) = forwarded_slot {
+            let default_value = ctx.buffers.buffer_defaults.get(offset).copied();
+            if info.local_flags_idx >= 0
+                && let Some(buffer_id) = buffer_id
+                && let Some(buf) = ctx.buffers.get_mut(buffer_id)
+            {
+                buf.set_slot_local_flag(offset, false);
+                if let Some(default_value) = default_value {
+                    buf.slots[offset] = default_value;
+                }
+            }
+            return Ok(KillLocalVariableOutcome {
+                result: args[0],
+                removed: false,
+                resolved_id: resolved,
+                buffer_id,
+            });
+        }
+    }
+
     // Phase 10E: for LOCALIZED symbols, remove the entry from
     // `Buffer::local_var_alist` and reset the BLV cache. Mirrors
     // GNU `Fkill_local_variable` SYMBOL_LOCALIZED arm at

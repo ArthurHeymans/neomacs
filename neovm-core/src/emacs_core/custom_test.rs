@@ -1016,6 +1016,26 @@ fn kill_local_variable_resolves_alias_bindings() {
 }
 
 #[test]
+fn kill_local_variable_resets_forwarded_buffer_slot_to_default() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let ((orig (default-value 'fill-column)))
+             (unwind-protect
+                 (with-temp-buffer
+                   (setq-default fill-column 71)
+                   (setq-local fill-column 33)
+                   (list fill-column
+                         (default-value 'fill-column)
+                         (progn
+                           (kill-local-variable 'fill-column)
+                           fill-column)
+                         (local-variable-p 'fill-column)))
+               (setq-default fill-column orig)))"#,
+    );
+    assert_eq!(results[0], "OK (33 71 71 nil)");
+}
+
+#[test]
 fn kill_local_variable_accepts_keywords_like_oracle() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_all(
