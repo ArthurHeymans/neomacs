@@ -12445,6 +12445,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_sqrt_returns_correct_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (< (abs (- (sqrt 4.0) 2.0)) 0.0001)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
