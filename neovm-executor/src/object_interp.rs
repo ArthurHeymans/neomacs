@@ -12351,6 +12351,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_char_equal_different_chars_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (char-equal ?a ?b)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_length_equals_true_for_correct_length() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
