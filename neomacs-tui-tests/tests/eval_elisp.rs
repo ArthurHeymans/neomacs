@@ -2361,6 +2361,47 @@ fn text_property_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn reversed_text_property_ranges_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpreverse:%S" (list (let ((s (copy-sequence "abcd"))) (put-text-property 3 1 'face 'bold s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 3))) (let ((s (copy-sequence "abcd"))) (add-text-properties 3 1 '(mouse-face highlight) s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 3))) (let ((s (copy-sequence "abcd"))) (put-text-property 0 4 'face 'bold s) (remove-text-properties 3 1 '(face nil) s) (mapcar (lambda (i) (text-properties-at i s)) (number-sequence 0 3)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("tpreverse:")
+            && recent.contains("(nil (face bold) (face bold) nil)")
+            && recent.contains("(nil (mouse-face highlight) (mouse-face highlight) nil)")
+            && recent.contains("((face bold) nil nil (face bold))")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: reversed text-property ranges should be normalized like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "reversed_text_property_ranges_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_equality_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
