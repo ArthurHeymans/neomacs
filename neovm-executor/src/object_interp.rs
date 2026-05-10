@@ -13452,4 +13452,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
+
+    #[test]
+    fn executes_vectorp_recognizes_vector() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (vectorp [1 2 3])",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_vectorp_returns_nil_for_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (vectorp '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
