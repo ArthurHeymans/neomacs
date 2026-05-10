@@ -13953,4 +13953,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_multi_arg_subtraction() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (- 10 1 2 3) 4)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
