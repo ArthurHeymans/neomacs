@@ -496,20 +496,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>() {
                 return Some(SsaConst::Int(ints.into_iter().max().unwrap()));
             }
-            let floats: Vec<f64> = args.iter().map(|a| match a {
-                SsaConst::Float(f) => Some(*f),
-                _ => None,
-            }).collect::<Option<Vec<_>>>()?;
+            let floats: Vec<f64> = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Float(floats.into_iter().fold(f64::NEG_INFINITY, f64::max)))
         }
         "min" if !args.is_empty() => {
             if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>() {
                 return Some(SsaConst::Int(ints.into_iter().min().unwrap()));
             }
-            let floats: Vec<f64> = args.iter().map(|a| match a {
-                SsaConst::Float(f) => Some(*f),
-                _ => None,
-            }).collect::<Option<Vec<_>>>()?;
+            let floats: Vec<f64> = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Float(floats.into_iter().fold(f64::INFINITY, f64::min)))
         }
         "+" if args.is_empty() => Some(SsaConst::Int(0)),
