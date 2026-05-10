@@ -12524,6 +12524,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_concat_empty_is_empty_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (concat) \"\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
