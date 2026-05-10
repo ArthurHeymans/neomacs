@@ -8722,6 +8722,40 @@ fn file_mode_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn invisible_p_buffer_invisibility_spec_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "invis:%S" (list buffer-invisibility-spec (invisible-p t) (invisible-p 'hide) (let ((buffer-invisibility-spec '(hide))) (list (invisible-p t) (invisible-p 'hide) (invisible-p '(hide other)))) (let ((buffer-invisibility-spec '((hide . t)))) (invisible-p 'hide)) (with-temp-buffer (insert "a" (propertize "bc" 'invisible t) "d") (invisible-p 2))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("invis:") && row.contains("(t t t (nil t t) 2 t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invisible-p should interpret buffer-invisibility-spec like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invisible_p_buffer_invisibility_spec_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn character_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
