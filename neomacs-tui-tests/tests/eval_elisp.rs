@@ -1836,6 +1836,43 @@ fn fillarray_and_clear_string_multibyte_match_gnu_semantics() {
 }
 
 #[test]
+fn reverse_circular_list_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:reverse walks list tails with FOR_EACH_TAIL and then
+    // CHECK_LIST_END, so circular lists signal circular-list rather than a
+    // generic listp type error.
+    let expr = r#"(message "revcycle:%S" (let ((x (list 1 2 3))) (setcdr (last x) x) (list (safe-length x) (proper-list-p x) (condition-case e (reverse x) (error (car e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("revcycle:") && row.contains("(5 nil circular-list)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: reverse circular-list error should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "reverse_circular_list_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn bool_vector_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
