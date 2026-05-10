@@ -1454,6 +1454,7 @@ impl Interpreter<'_, '_, '_> {
                     };
                 bool_value(is_keyword)
             }),
+            "subr-native-elisp-p" => self.exact_arity(name, args, 1).map(|_| LispValue::NIL),
             "subrp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_function(args[0]))),
@@ -7155,6 +7156,7 @@ fn is_primitive_name(name: &str) -> bool {
             "string=",
             "string>",
             "stringp",
+            "subr-native-elisp-p",
             "subrp",
             "cl-tailp",
             "cl-subseq",
