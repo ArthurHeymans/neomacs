@@ -12369,6 +12369,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_to_number_with_hex_base() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-to-number \"ff\" 16)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(255)));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
