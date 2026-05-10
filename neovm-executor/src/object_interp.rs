@@ -13206,4 +13206,66 @@ mod tests {
         assert!(value.is_some());
     }
 
+    #[test]
+    fn executes_make_hash_table_creates_table() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (hash-table-p (make-hash-table))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_gethash_retrieves_value() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'key 42 ht)\n\
+               (gethash 'key ht))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(42)));
+    }
+
+    #[test]
+    fn executes_gethash_returns_nil_for_missing_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (gethash 'missing (make-hash-table))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_remhash_removes_key() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'key 42 ht)\n\
+               (remhash 'key ht)\n\
+               (hash-table-count ht))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
+    fn executes_hash_table_count_returns_entry_count() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'a 1 ht)\n\
+               (puthash 'b 2 ht)\n\
+               (= (hash-table-count ht) 2))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_copy_tree_deep_copies_nested_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((orig '((a) (b c))))\n\
+               (eq (car orig) (car (copy-tree orig))))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
