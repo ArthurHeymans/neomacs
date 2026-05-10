@@ -13376,4 +13376,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_string_match_p_finds_pattern() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-match-p \"hello\" \"hello world\")",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_string_match_p_returns_nil_for_no_match() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-match-p \"xyz\" \"hello world\")",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
