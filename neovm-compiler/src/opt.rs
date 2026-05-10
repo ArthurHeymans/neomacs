@@ -626,7 +626,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Int(0)),
             _ => None,
         },
-        "copy-list" if args.len() == 1 => match args[0] {
+        "copy-list" | "cl-copy-list" if args.len() == 1 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
