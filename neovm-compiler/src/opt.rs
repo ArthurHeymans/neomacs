@@ -1270,6 +1270,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Int(0)),
             _ => None,
         },
+        "format" | "format-message" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) if !s.contains('%') => Some(SsaConst::String(s.clone())),
+            _ => None,
+        },
         "prin1-to-string" | "princ-to-string" if args.len() == 1 => match args[0] {
             SsaConst::Int(n) => Some(SsaConst::String(n.to_string())),
             SsaConst::Float(f) => Some(SsaConst::String(f.to_string())),
