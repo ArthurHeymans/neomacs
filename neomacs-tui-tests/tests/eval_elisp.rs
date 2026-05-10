@@ -2798,6 +2798,47 @@ fn text_property_change_out_of_range_errors_match_gnu_semantics() {
 }
 
 #[test]
+fn buffer_text_property_change_respects_narrowing_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "tpchangenarrow:%S" (with-temp-buffer (insert "abcdef") (put-text-property 2 4 'face 'bold) (narrow-to-region 2 6) (list (condition-case e (next-property-change 1 nil) (error (list (car e) (cadr e)))) (condition-case e (next-single-property-change 1 'face nil) (error (list (car e) (cadr e)))) (condition-case e (previous-property-change 7 nil) (error (list (car e) (cadr e)))) (condition-case e (previous-single-property-change 7 'face nil) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("tpchangenarrow:")
+            && recent.matches("args-out-of-range").count() >= 4
+            && recent.contains("(args-out-of-range 1)")
+            && recent.contains("(args-out-of-range 7)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: buffer text-property change functions should reject positions outside the narrowed accessible range like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "buffer_text_property_change_respects_narrowing_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_properties_at_out_of_range_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
