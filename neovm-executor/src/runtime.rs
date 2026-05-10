@@ -20,6 +20,8 @@ pub struct Runtime {
     /// on allocation; cleared objects are removed lazily (the lookup
     /// tolerates stale entries by falling back to Vec scans).
     object_index: HashMap<usize, HeapKind>,
+    /// O(1) addr → cons_cells index for cons_by_addr lookups.
+    cons_index: HashMap<usize, usize>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -65,6 +67,7 @@ impl Default for Runtime {
             scheduler,
             agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
+            cons_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -125,6 +128,7 @@ impl Runtime {
             scheduler: self.scheduler.clone(),
             agent_pool: AgentPool::new(),
             object_index: HashMap::new(),
+            cons_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -163,6 +167,7 @@ impl Runtime {
         });
         let addr = (&mut *cell as *mut Cons) as usize;
         self.object_index.insert(addr, HeapKind::Cons);
+        self.cons_index.insert(addr, self.cons_cells.len());
         self.cons_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
@@ -1699,9 +1704,15 @@ impl Runtime {
     }
 
     fn cons_by_addr(&self, addr: usize) -> Option<&Cons> {
+        let idx = self.cons_index.get(&addr)?;
+        let cell = self.cons_cells.get(*idx)?;
+        let cell_ptr: *const Cons = &**cell;
+        if cell_ptr as usize == addr {
+            return Some(cell);
+        }
+        // Fallback: stale index, scan (rare after GC sweep)
         for cell in &self.cons_cells {
-            let cell_addr = (&**cell as *const Cons) as usize;
-            if cell_addr == addr && cell.header.kind == HeapKind::Cons {
+            if (&**cell as *const Cons) as usize == addr {
                 return Some(cell);
             }
         }
@@ -1709,9 +1720,22 @@ impl Runtime {
     }
 
     fn cons_by_addr_mut(&mut self, addr: usize) -> Option<&mut Cons> {
+        let idx_val = self.cons_index.get(&addr).copied();
+        // Use the index for O(1) lookup; fall back to O(n) scan if stale.
+        if let Some(idx) = idx_val {
+            if idx < self.cons_cells.len() {
+                // SAFETY: idx is in bounds, and we return a reference with
+                // the correct lifetime tied to &mut self.
+                let cell_ptr = &mut *self.cons_cells[idx] as *mut Cons;
+                if cell_ptr as usize == addr {
+                    return Some(unsafe { &mut *cell_ptr });
+                }
+            }
+        }
+        // Fallback scan
         for cell in &mut self.cons_cells {
-            let cell_addr = (&**cell as *const Cons) as usize;
-            if cell_addr == addr && cell.header.kind == HeapKind::Cons {
+            let cell_ptr: *const Cons = &**cell;
+            if cell_ptr as usize == addr {
                 return Some(cell);
             }
         }
