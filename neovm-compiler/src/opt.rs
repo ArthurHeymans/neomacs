@@ -1218,7 +1218,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 SsaConst::Nil
             })
         }
-        "reverse" | "nreverse" if args.len() == 1 => match args[0] {
+        "reverse" | "nreverse" | "cl-reverse" | "cl-nreverse" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => {
                 Some(SsaConst::String(s.chars().rev().collect()))
             }
