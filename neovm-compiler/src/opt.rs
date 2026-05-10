@@ -707,6 +707,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
+        "string-equal" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::String(a), SsaConst::String(b)) if a == b => {
+                Some(SsaConst::True)
+            }
+            _ => None,
+        },
         "string<" | "string-lessp" if args.len() == 2 => match (args[0], args[1]) {
             (SsaConst::String(a), SsaConst::String(b)) => {
                 Some(if a < b { SsaConst::True } else { SsaConst::Nil })
