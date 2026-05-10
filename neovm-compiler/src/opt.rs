@@ -999,10 +999,6 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::String(_) => SsaConst::True,
             _ => SsaConst::Nil,
         }),
-        "symbolp" if args.len() == 1 => Some(match args[0] {
-            SsaConst::Symbol(_) | SsaConst::Nil | SsaConst::True => SsaConst::True,
-            _ => SsaConst::Nil,
-        }),
         "string=" if args.len() == 2 => match (args[0], args[1]) {
             (SsaConst::String(a), SsaConst::String(b)) => {
                 Some(if a == b { SsaConst::True } else { SsaConst::Nil })
