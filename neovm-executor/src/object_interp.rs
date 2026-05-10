@@ -13795,4 +13795,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_mapconcat_returns_empty_string_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (mapconcat #'identity nil \"-\") \"\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
