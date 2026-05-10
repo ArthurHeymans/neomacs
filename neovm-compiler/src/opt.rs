@@ -765,21 +765,54 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Float(f) => Some(SsaConst::Int(f.trunc() as i64)),
             _ => None,
         },
+        "truncate" if args.len() == 2 => {
+            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
+            if b == 0 { return None; }
+            Some(SsaConst::Int(a / b))
+        }
         "floor" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(*a)),
             SsaConst::Float(f) => Some(SsaConst::Int(f.floor() as i64)),
             _ => None,
         },
+        "floor" if args.len() == 2 => {
+            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
+            if b == 0 { return None; }
+            let q = a / b;
+            let r = a % b;
+            Some(SsaConst::Int(if r != 0 && (a ^ b) < 0 { q - 1 } else { q }))
+        }
         "ceiling" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(*a)),
             SsaConst::Float(f) => Some(SsaConst::Int(f.ceil() as i64)),
             _ => None,
         },
+        "ceiling" if args.len() == 2 => {
+            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
+            if b == 0 { return None; }
+            let q = a / b;
+            let r = a % b;
+            Some(SsaConst::Int(if r != 0 && (a ^ b) >= 0 { q + 1 } else { q }))
+        }
         "round" | "fround" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(*a)),
             SsaConst::Float(f) => Some(SsaConst::Int(f.round() as i64)),
             _ => None,
         },
+        "round" if args.len() == 2 => {
+            let (a, b) = (args[0].as_int()?, args[1].as_int()?);
+            if b == 0 { return None; }
+            // Round to nearest, ties to even (banker's rounding)
+            let q = a / b;
+            let r = a % b;
+            let half = b.abs() / 2;
+            let r_abs = r.abs();
+            if r_abs > half || (r_abs == half && q % 2 != 0) {
+                Some(SsaConst::Int(if (a ^ b) >= 0 { q + 1 } else { q - 1 }))
+            } else {
+                Some(SsaConst::Int(q))
+            }
+        }
         "ffloor" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) => Some(SsaConst::Float(f.floor())),
             SsaConst::Int(n) => Some(SsaConst::Float(*n as f64)),
