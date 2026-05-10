@@ -1478,6 +1478,9 @@ impl MacroEval {
             Some("macroexp--accumulate-vars") => Ok(MacroValue::Nil),
             Some("macroexp-unwrap-cookie") => Ok(MacroValue::Nil),
             Some("cl--defsubst-expander") => Ok(MacroValue::Nil),
+            Some("cl-some") | Some("cl-every") | Some("cl-notany") | Some("cl-notevery") => {
+                Ok(MacroValue::Nil)
+            }
             Some("internal--format-docstring-line") => Ok(MacroValue::Nil),
             Some("internal--format-docstring") => Ok(MacroValue::Nil),
             Some("remq") => Ok(MacroValue::Nil),
