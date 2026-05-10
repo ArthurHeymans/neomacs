@@ -720,6 +720,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             None
         },
+        "append" if args.is_empty() => Some(SsaConst::Nil),
+        "concat" if args.is_empty() => Some(SsaConst::String(String::new())),
         "concat" if !args.is_empty() => {
             if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
                 let s: String = args.iter()
