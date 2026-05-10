@@ -1302,6 +1302,7 @@ impl Interpreter<'_, '_, '_> {
                 let result = s.runtime.set_symbol_value(args[0], args[1]);
                 s.runtime_value(result)
             }),
+            "buffer-size" => Some(LispValue::expect_fixnum(0)),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);
                 s.runtime_bool(result)
@@ -6939,6 +6940,7 @@ fn is_primitive_name(name: &str) -> bool {
             "bool-vector-p",
             "booleanp",
             "boundp",
+            "buffer-size",
             "bufferp",
             "butlast",
             "caaaar",
