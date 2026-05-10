@@ -5064,6 +5064,36 @@ fn rename_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn buffer_last_name_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "buflast:%S" (let ((b (generate-new-buffer "neo-last"))) (with-current-buffer b (rename-buffer "neo-last-renamed" t)) (let ((before (list (buffer-name b) (buffer-last-name b)))) (kill-buffer b) (list before (buffer-live-p b) (buffer-name b) (buffer-last-name b)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"buflast:((\"neo-last-renamed\" \"neo-last\") nil nil \"neo-last-renamed\")"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: buffer-last-name after rename and kill should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "buffer_last_name_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn set_visited_file_name_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
