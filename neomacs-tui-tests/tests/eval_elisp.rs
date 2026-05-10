@@ -6482,6 +6482,47 @@ fn process_signal_status_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn call_process_region_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = "(message \"cpr:%S\" (list (with-temp-buffer (insert \"abc\") (call-process-region (point-min) (point-max) \"cat\" nil t nil) (buffer-string)) (with-temp-buffer (insert \"abc\") (list (call-process-region (point-min) (point-max) shell-file-name t t nil shell-command-switch \"cat; kill -TERM $$\") (buffer-string)))))";
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("cpr:")
+            && recent.contains("abcabc")
+            && recent.contains("Terminated")
+            && recent.contains("abc")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: call-process-region should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "call_process_region_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_base64_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
