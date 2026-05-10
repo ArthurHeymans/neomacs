@@ -818,16 +818,34 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Int(n) => Some(SsaConst::Float(*n as f64)),
             _ => None,
         },
+        "ffloor" if args.len() == 2 => {
+            let a = args[0].as_int()? as f64;
+            let b = args[1].as_int()? as f64;
+            if b == 0.0 { return None; }
+            Some(SsaConst::Float((a / b).floor()))
+        }
         "fceiling" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) => Some(SsaConst::Float(f.ceil())),
             SsaConst::Int(n) => Some(SsaConst::Float(*n as f64)),
             _ => None,
         },
+        "fceiling" if args.len() == 2 => {
+            let a = args[0].as_int()? as f64;
+            let b = args[1].as_int()? as f64;
+            if b == 0.0 { return None; }
+            Some(SsaConst::Float((a / b).ceil()))
+        }
         "ftruncate" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) => Some(SsaConst::Float(f.trunc())),
             SsaConst::Int(n) => Some(SsaConst::Float(*n as f64)),
             _ => None,
         },
+        "ftruncate" if args.len() == 2 => {
+            let a = args[0].as_int()? as f64;
+            let b = args[1].as_int()? as f64;
+            if b == 0.0 { return None; }
+            Some(SsaConst::Float((a / b).trunc()))
+        }
         "lognot" if args.len() == 1 => {
             Some(SsaConst::Int(!args[0].as_int()?))
         }
