@@ -2582,6 +2582,40 @@ fn text_property_equality_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn sxhash_equal_including_properties_hashes_string_intervals_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "sxhashprop:%S" (let ((s1 (copy-sequence "ab")) (s2 (copy-sequence "ab"))) (put-text-property 0 1 'face 'bold s1) (list (= (sxhash-equal s1) (sxhash-equal s2)) (= (sxhash-equal-including-properties s1) (sxhash-equal-including-properties s2)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("sxhashprop:(t nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: sxhash-equal-including-properties should include string intervals like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "sxhash_equal_including_properties_hashes_string_intervals_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_copy_sequence_and_substring_independence_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
