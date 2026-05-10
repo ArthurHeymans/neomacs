@@ -1342,6 +1342,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-merge" if args.len() >= 4 => {
+            // (cl-merge TYPE SEQ1 SEQ2 PRED) — if both seqs nil, return nil
+            if matches!(args[1], SsaConst::Nil) && matches!(args[2], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "cl-count" | "cl-count-if" | "cl-count-if-not" if args.len() >= 2 => {
             // (cl-count ITEM SEQ) — seq is args[1]; nil seq → 0
             if matches!(args[1], SsaConst::Nil) {
