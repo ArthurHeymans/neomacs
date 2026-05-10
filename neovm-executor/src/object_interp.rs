@@ -13268,4 +13268,48 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_maphash_iterates_over_entries() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)) (count 0))\n\
+               (puthash 'a 1 ht)\n\
+               (puthash 'b 2 ht)\n\
+               (maphash (lambda (_k _v) (setq count (1+ count))) ht)\n\
+               (= count 2))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_copy_hash_table_creates_independent_copy() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'a 1 ht)\n\
+               (let ((ht2 (copy-hash-table ht)))\n\
+                 (puthash 'b 2 ht2)\n\
+                 (= (hash-table-count ht) 1)))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_safe_length_handles_proper_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (safe-length '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(3)));
+    }
+
+    #[test]
+    fn executes_safe_length_returns_zero_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (safe-length nil)",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
 }
