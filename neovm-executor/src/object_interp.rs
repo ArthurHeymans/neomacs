@@ -13421,4 +13421,24 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_cl_fifth_returns_fifth_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (= (cl-fifth '(1 2 3 4 5 6)) 5)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_cl_sixth_returns_sixth_element() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (= (cl-sixth '(1 2 3 4 5 6)) 6)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
