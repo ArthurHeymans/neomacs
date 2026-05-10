@@ -13608,4 +13608,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_copy_list_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-copy-list nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
