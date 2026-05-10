@@ -1474,6 +1474,7 @@ impl Interpreter<'_, '_, '_> {
             "downcase" => self
                 .exact_arity(name, args, 1)
                 .map(|_| self.downcase(args[0])),
+            "use-region-p" => Some(LispValue::NIL),
             "upcase-initials" => self.subr_1(name, args, |s| {
                 Some(s.upcase_initials(args[0]))
             }),
@@ -7283,6 +7284,7 @@ fn is_primitive_name(name: &str) -> bool {
             "type-of",
             "upcase",
             "upcase-initials",
+            "use-region-p",
             "user-error",
             "vconcat",
             "vector",
