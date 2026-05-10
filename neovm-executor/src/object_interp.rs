@@ -13312,4 +13312,41 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
+
+    #[test]
+    fn executes_clrhash_clears_all_entries() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'a 1 ht)\n\
+               (clrhash ht)\n\
+               (= (hash-table-count ht) 0))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_hash_table_keys_returns_list_of_keys() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'a 1 ht)\n\
+               (puthash 'b 2 ht)\n\
+               (memq 'a (hash-table-keys ht)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_hash_table_values_returns_list_of_values() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (let ((ht (make-hash-table)))\n\
+               (puthash 'a 1 ht)\n\
+               (puthash 'b 2 ht)\n\
+               (memq 2 (hash-table-values ht)))",
+        );
+        assert!(value.is_some());
+    }
+
 }
