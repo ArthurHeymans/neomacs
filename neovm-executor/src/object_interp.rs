@@ -12436,6 +12436,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_sin_on_float() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (< (abs (- (sin 0.0) 0.0)) 0.0001)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
