@@ -1303,6 +1303,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-sublis" | "cl-nsublis" if args.len() >= 2 => {
+            // (cl-sublis ALIST TREE) — tree is args[1]
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "mapcar" | "mapc" | "cl-mapcar" | "cl-mapc" | "mapconcat"
             if args.len() >= 2 => {
             // (mapcar FN nil) → nil, (mapconcat FN nil SEP) → ""
