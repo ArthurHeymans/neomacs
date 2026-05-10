@@ -1303,6 +1303,7 @@ impl Interpreter<'_, '_, '_> {
                 s.runtime_value(result)
             }),
             "bobp" | "eobp" => Some(LispValue::TRUE),
+            "point-min" | "point-max" => Some(LispValue::expect_fixnum(1)),
             "buffer-size" => Some(LispValue::expect_fixnum(0)),
             "current-buffer" => Some(LispValue::NIL),
             "window-buffer" => Some(LispValue::NIL),
@@ -7183,6 +7184,8 @@ fn is_primitive_name(name: &str) -> bool {
             "plist-get",
             "plist-member",
             "plist-put",
+            "point-max",
+            "point-min",
             "prin1",
             "prin1-to-string",
             "princ-to-string",
