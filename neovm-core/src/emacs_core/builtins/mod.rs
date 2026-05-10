@@ -4702,7 +4702,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "unhandled-file-name-directory",
-        |_ctx, args| super::fileio::builtin_unhandled_file_name_directory(args),
+        |ctx, args| super::fileio::builtin_unhandled_file_name_directory_eval(ctx, args),
         1,
         Some(1),
     );

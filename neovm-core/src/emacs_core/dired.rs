@@ -564,6 +564,29 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
 /// This supports arbitrary callable predicates and matches Emacs behavior of
 /// binding `default-directory` to DIRECTORY while predicate is invoked.
 pub(crate) fn builtin_file_name_completion(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_range_args("file-name-completion", &args, 2, 3)?;
+    let file = expect_lisp_string("file-name-completion", &args[0])?;
+    let directory_arg = expect_lisp_string("file-name-completion", &args[1])?;
+    let directory = expand_file_completion_directory(eval, directory_arg)?;
+    if let Some(result) = dispatch_file_completion_handler(
+        eval,
+        "file-name-completion",
+        &file,
+        &directory,
+        &[
+            args[0],
+            Value::heap_string(directory.clone()),
+            args.get(2).copied().unwrap_or(Value::NIL),
+        ],
+    )? {
+        return Ok(result);
+    }
+
+    let args = vec![
+        args[0],
+        Value::heap_string(directory),
+        args.get(2).copied().unwrap_or(Value::NIL),
+    ];
     let plan = prepare_file_name_completion_in_state(&eval.obarray, &[], &eval.buffers, &args)?;
     let predicate = args.get(2);
     finish_file_name_completion_with_eval_predicate(
@@ -585,14 +608,20 @@ pub(crate) fn builtin_file_name_all_completions(
     expect_range_args("file-name-all-completions", &args, 2, 2)?;
 
     let file = expect_lisp_string("file-name-all-completions", &args[0])?;
+    let directory_arg = expect_lisp_string("file-name-all-completions", &args[1])?;
+    let directory = expand_file_completion_directory(eval, directory_arg)?;
+    if let Some(result) = dispatch_file_completion_handler(
+        eval,
+        "file-name-all-completions",
+        &file,
+        &directory,
+        &[args[0], Value::heap_string(directory.clone())],
+    )? {
+        return Ok(result);
+    }
+
     let file_runtime = dired_runtime_string(&file);
-    let directory = expect_lisp_string("file-name-all-completions", &args[1])?;
-    let directory = super::fileio::resolve_filename_in_state(
-        &eval.obarray,
-        &[],
-        &eval.buffers,
-        &dired_runtime_string(&directory),
-    );
+    let directory = dired_runtime_string(&directory);
     if file_runtime.contains('/') {
         return Ok(Value::NIL);
     }
@@ -606,6 +635,46 @@ pub(crate) fn builtin_file_name_all_completions(
             .map(|completion| runtime_file_name_value(&completion))
             .collect(),
     ))
+}
+
+fn expand_file_completion_directory(
+    eval: &mut Context,
+    directory: LispString,
+) -> Result<LispString, Flow> {
+    let expanded = super::fileio::builtin_expand_file_name(
+        eval,
+        vec![Value::heap_string(directory), Value::NIL],
+    )?;
+    expect_lisp_string("expand-file-name", &expanded)
+}
+
+fn dispatch_file_completion_handler(
+    eval: &mut Context,
+    operation_name: &str,
+    file: &LispString,
+    directory: &LispString,
+    call_args: &[Value],
+) -> Result<Option<Value>, Flow> {
+    let operation = Value::symbol(operation_name);
+
+    // GNU dired.c first consults the expanded DIRECTORY, then FILE.
+    let handler = super::fileio::find_file_name_handler_lisp_for_eval(eval, directory, operation);
+    if !handler.is_nil() {
+        let mut args = Vec::with_capacity(call_args.len() + 1);
+        args.push(operation);
+        args.extend_from_slice(call_args);
+        return Ok(Some(eval.funcall_general(handler, args)?));
+    }
+
+    let handler = super::fileio::find_file_name_handler_lisp_for_eval(eval, file, operation);
+    if !handler.is_nil() {
+        let mut args = Vec::with_capacity(call_args.len() + 1);
+        args.push(operation);
+        args.extend_from_slice(call_args);
+        return Ok(Some(eval.funcall_general(handler, args)?));
+    }
+
+    Ok(None)
 }
 
 fn collect_file_name_completions(

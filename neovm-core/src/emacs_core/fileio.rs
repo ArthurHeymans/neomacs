@@ -1732,6 +1732,18 @@ pub(crate) fn builtin_unhandled_file_name_directory(args: Vec<Value>) -> EvalRes
     ))
 }
 
+/// (unhandled-file-name-directory FILENAME) -> directory string
+pub(crate) fn builtin_unhandled_file_name_directory_eval(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("unhandled-file-name-directory", &args, 1)?;
+    if let Some(result) = dispatch_file_handler(eval, "unhandled-file-name-directory", &args)? {
+        return Ok(result);
+    }
+    builtin_unhandled_file_name_directory(args)
+}
+
 /// (get-truename-buffer FILENAME) -> buffer or nil
 pub(crate) fn builtin_get_truename_buffer(args: Vec<Value>) -> EvalResult {
     expect_args("get-truename-buffer", &args, 1)?;
@@ -2109,14 +2121,14 @@ fn maybe_dispatch_resolved_file_handler(
 ) -> Result<Option<Value>, Flow> {
     let operation_sym = Value::symbol(operation_name);
     if let Some(first) = first_lookup {
-        let handler = find_file_name_handler_lisp(&eval.obarray, first, operation_sym);
+        let handler = find_file_name_handler_lisp_for_eval(eval, first, operation_sym);
         if !handler.is_nil() {
             call_args.insert(0, operation_sym);
             return Ok(Some(eval.funcall_general(handler, call_args)?));
         }
     }
     if let Some(second) = second_lookup {
-        let handler = find_file_name_handler_lisp(&eval.obarray, second, operation_sym);
+        let handler = find_file_name_handler_lisp_for_eval(eval, second, operation_sym);
         if !handler.is_nil() {
             call_args.insert(0, operation_sym);
             return Ok(Some(eval.funcall_general(handler, call_args)?));
@@ -3377,10 +3389,8 @@ pub(crate) fn builtin_find_file_name_handler(eval: &mut Context, args: Vec<Value
         }
     };
     let operation = args[1];
-    Ok(find_file_name_handler_lisp(
-        &eval.obarray,
-        filename,
-        operation,
+    Ok(find_file_name_handler_lisp_for_eval(
+        eval, filename, operation,
     ))
 }
 
@@ -3409,17 +3419,54 @@ pub(crate) fn find_file_name_handler_lisp(
     filename: &crate::heap_types::LispString,
     operation: Value,
 ) -> Value {
+    find_file_name_handler_lisp_with_values(
+        obarray,
+        filename,
+        operation,
+        obarray.symbol_value("file-name-handler-alist").copied(),
+        obarray.symbol_value("inhibit-file-name-operation").copied(),
+        obarray.symbol_value("inhibit-file-name-handlers").copied(),
+    )
+}
+
+fn dynamic_or_global_symbol_value(eval: &Context, name: &str) -> Option<Value> {
+    eval.eval_symbol_by_id(intern(name)).ok()
+}
+
+pub(crate) fn find_file_name_handler_lisp_for_eval(
+    eval: &Context,
+    filename: &crate::heap_types::LispString,
+    operation: Value,
+) -> Value {
+    find_file_name_handler_lisp_with_values(
+        &eval.obarray,
+        filename,
+        operation,
+        dynamic_or_global_symbol_value(eval, "file-name-handler-alist"),
+        dynamic_or_global_symbol_value(eval, "inhibit-file-name-operation"),
+        dynamic_or_global_symbol_value(eval, "inhibit-file-name-handlers"),
+    )
+}
+
+fn find_file_name_handler_lisp_with_values(
+    obarray: &Obarray,
+    filename: &crate::heap_types::LispString,
+    operation: Value,
+    handler_alist: Option<Value>,
+    inhibit_operation: Option<Value>,
+    inhibit_handlers: Option<Value>,
+) -> Value {
     // Read the alist. If unbound or non-list, no handlers apply.
-    let alist = match obarray.symbol_value("file-name-handler-alist") {
-        Some(v) if v.is_cons() => *v,
+    let alist = match handler_alist {
+        Some(v) if v.is_cons() => v,
         _ => return Value::NIL,
     };
     // Compute the inhibit list lazily — only consulted when operation
     // matches inhibit-file-name-operation.
     let mut inhibited: Option<Value> = None;
-    if let Some(inh_op) = obarray.symbol_value("inhibit-file-name-operation").copied() {
+    if let Some(inh_op) = inhibit_operation {
         if !inh_op.is_nil() && super::value::eq_value(&inh_op, &operation) {
-            inhibited = obarray.symbol_value("inhibit-file-name-handlers").copied();
+            inhibited = inhibit_handlers;
         }
     }
 
@@ -3529,7 +3576,7 @@ pub(crate) fn dispatch_file_handler(
         return Ok(None);
     };
     let operation_sym = Value::symbol(operation_name);
-    let handler = find_file_name_handler_lisp(&eval.obarray, filename, operation_sym);
+    let handler = find_file_name_handler_lisp_for_eval(eval, filename, operation_sym);
     if handler.is_nil() {
         return Ok(None);
     }
@@ -3555,7 +3602,7 @@ pub(crate) fn dispatch_file_handler_two_arg(
     let operation_sym = Value::symbol(operation_name);
     // Source file first.
     if let Some(src) = args[0].as_lisp_string() {
-        let handler = find_file_name_handler_lisp(&eval.obarray, src, operation_sym);
+        let handler = find_file_name_handler_lisp_for_eval(eval, src, operation_sym);
         if !handler.is_nil() {
             let mut call_args = Vec::with_capacity(args.len() + 1);
             call_args.push(operation_sym);
@@ -3565,7 +3612,7 @@ pub(crate) fn dispatch_file_handler_two_arg(
     }
     // Destination file second.
     if let Some(dst) = args[1].as_lisp_string() {
-        let handler = find_file_name_handler_lisp(&eval.obarray, dst, operation_sym);
+        let handler = find_file_name_handler_lisp_for_eval(eval, dst, operation_sym);
         if !handler.is_nil() {
             let mut call_args = Vec::with_capacity(args.len() + 1);
             call_args.push(operation_sym);
@@ -4425,7 +4472,7 @@ pub(crate) fn builtin_write_region(
     };
 
     let op = Value::symbol("write-region");
-    let handler = find_file_name_handler_lisp(&eval.obarray, &resolved, op);
+    let handler = find_file_name_handler_lisp_for_eval(eval, &resolved, op);
     if !handler.is_nil() {
         let mut call_args = Vec::with_capacity(args.len() + 1);
         call_args.push(op);
@@ -4435,7 +4482,7 @@ pub(crate) fn builtin_write_region(
     }
     if handler.is_nil() {
         if let Some(visit_arg) = args.get(4).and_then(|value| value.as_lisp_string()) {
-            let visit_handler = find_file_name_handler_lisp(&eval.obarray, visit_arg, op);
+            let visit_handler = find_file_name_handler_lisp_for_eval(eval, visit_arg, op);
             if !visit_handler.is_nil() {
                 let mut call_args = Vec::with_capacity(args.len() + 1);
                 call_args.push(op);
@@ -4673,7 +4720,7 @@ pub(crate) fn builtin_make_auto_save_file_name(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         if let Some(file_name) = buf.file_name_lisp_string() {
             let op = Value::symbol("make-auto-save-file-name");
-            let handler = find_file_name_handler_lisp(&eval.obarray, file_name, op);
+            let handler = find_file_name_handler_lisp_for_eval(eval, file_name, op);
             if !handler.is_nil() {
                 let result = eval.funcall_general(handler, vec![op])?;
                 if result.is_string() {
@@ -4840,15 +4887,19 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("default-file-name-coding-system", Value::NIL);
     obarray.set_symbol_value("set-auto-coding-for-load", Value::NIL);
     obarray.set_symbol_value("file-name-handler-alist", Value::NIL);
+    obarray.make_special("file-name-handler-alist");
     obarray.set_symbol_value("set-auto-coding-function", Value::NIL);
     obarray.set_symbol_value("after-insert-file-functions", Value::NIL);
     obarray.set_symbol_value("write-region-annotate-functions", Value::NIL);
     obarray.set_symbol_value("write-region-post-annotation-function", Value::NIL);
     obarray.set_symbol_value("write-region-annotations-so-far", Value::NIL);
     obarray.set_symbol_value("inhibit-file-name-handlers", Value::NIL);
+    obarray.make_special("inhibit-file-name-handlers");
     obarray.set_symbol_value("inhibit-file-name-operation", Value::NIL);
+    obarray.make_special("inhibit-file-name-operation");
     obarray.set_symbol_value("directory-abbrev-alist", Value::NIL);
     obarray.set_symbol_value("auto-save-list-file-name", Value::NIL);
+    obarray.make_special("auto-save-list-file-name");
     obarray.set_symbol_value("auto-save-list-file-prefix", Value::NIL);
     obarray.set_symbol_value("auto-save-visited-file-name", Value::NIL);
     obarray.set_symbol_value("auto-save-include-big-deletions", Value::NIL);
