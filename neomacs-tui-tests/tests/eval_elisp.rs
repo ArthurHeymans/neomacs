@@ -5054,6 +5054,40 @@ fn char_table_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn case_table_fillarray_preserves_gnu_extra_slot_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "casefill:%S" (let ((ct (make-char-table 'case-table 'base))) (fillarray ct 'x) (list (char-table-p ct) (aref ct ?a) (aref ct 999999) (condition-case e (aref ct nil) (error (car e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("casefill:") && row.contains("(t base x wrong-type-argument)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: fillarray on case-table char-tables should match GNU extra-slot semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "case_table_fillarray_preserves_gnu_extra_slot_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_table_map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
