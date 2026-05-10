@@ -873,6 +873,40 @@ fn lisp_environment_variables_match_gnu_emacs_semantics() {
     }
 }
 
+#[test]
+fn defconst_sets_local_binding_like_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "defconstlocal:%S" (list (let ((x 1)) (defvar x 2) x) (let ((x 1)) (defconst x 3) x)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("defconstlocal:") && row.contains("(1 3)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: defconst should set the current local binding while defvar should not\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "defconst_sets_local_binding_like_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
 // ── Face inheritance tests ──────────────────────────────────
 
 #[test]
