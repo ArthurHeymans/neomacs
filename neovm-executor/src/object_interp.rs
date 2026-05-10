@@ -13971,4 +13971,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_multi_arg_product() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (* 2 3 4) 24)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
