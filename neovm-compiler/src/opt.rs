@@ -690,6 +690,31 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Char(c) => Some(SsaConst::String(char::from_u32(*c as u32)?.to_string())),
             _ => None,
         },
+        "char-code" if args.len() == 1 => match args[0] {
+            SsaConst::Char(c) => Some(SsaConst::Int(*c)),
+            SsaConst::String(s) => s.chars().next().map(|ch| SsaConst::Int(ch as i64)),
+            _ => None,
+        },
+        "upcase-initials" if args.len() == 1 => match args[0] {
+            SsaConst::String(s) => {
+                let mut result = String::with_capacity(s.len());
+                let mut at_word_start = true;
+                for ch in s.chars() {
+                    if at_word_start && ch.is_lowercase() {
+                        result.extend(ch.to_uppercase());
+                    } else {
+                        result.push(ch);
+                    }
+                    at_word_start = !ch.is_alphanumeric();
+                }
+                Some(SsaConst::String(result))
+            }
+            _ => None,
+        },
+        "sequencep" if args.len() == 1 => match args[0] {
+            SsaConst::String(_) => Some(SsaConst::True),
+            _ => Some(SsaConst::Nil),
+        },
         "string-to-number" if args.len() >= 1 => {
             let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
             let base = args.get(1).map(|b| match b { SsaConst::Int(n) => *n, _ => 0 }).unwrap_or(10);
