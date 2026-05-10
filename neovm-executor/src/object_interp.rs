@@ -12560,6 +12560,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_elt_on_string_returns_char() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (elt \"ABC\" 1) ?B)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_cl_coerce_list_to_vector() {
         let (value, rt) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
