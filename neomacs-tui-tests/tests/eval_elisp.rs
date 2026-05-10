@@ -4345,6 +4345,38 @@ fn invalid_read_label_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn read_circle_nil_rejects_read_label_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c gates #N=/#N# recursive structure syntax on
+    // `read-circle`.  With read-circle nil, #N= is invalid read syntax and
+    // must not construct a circular object.
+    let expr = r##"(message "readlabelnil:%S" (let ((read-circle nil)) (condition-case e (read-from-string "#1=(a . #1#)") (error (list (car e) (cadr e))))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("readlabelnil:(invalid-read-syntax \\\"#1=\\\")"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: read-circle nil should reject read-label syntax like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("read_circle_nil_rejects_read_label_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn radix_reader_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
