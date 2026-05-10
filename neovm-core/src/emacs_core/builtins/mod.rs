@@ -21,8 +21,9 @@ pub(super) use super::error::{EvalResult, Flow, signal};
 pub(super) use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
 pub(super) use super::keyboard::pure::{
     KEY_CHAR_ALT, KEY_CHAR_CODE_MASK, KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_SHIFT,
-    KEY_CHAR_SUPER, basic_char_code, describe_single_key_value, event_modifier_bit,
-    event_modifier_prefix, key_sequence_values, resolve_control_code, symbol_has_modifier_prefix,
+    KEY_CHAR_SUPER, basic_char_code, convert_lucid_event_list, describe_single_key_value,
+    event_modifier_bit, event_modifier_prefix, key_sequence_values, resolve_control_code,
+    symbol_has_modifier_prefix,
 };
 pub(super) use super::value::*;
 pub(super) use ::regex::Regex;

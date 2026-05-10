@@ -330,13 +330,23 @@ pub(crate) fn resolve_control_code(code: i64) -> Option<i64> {
 
 pub(crate) fn event_modifier_bit(symbol: &str) -> Option<i64> {
     match symbol {
-        "control" => Some(KEY_CHAR_CTRL),
-        "meta" => Some(KEY_CHAR_META),
-        "shift" => Some(KEY_CHAR_SHIFT),
-        "super" => Some(KEY_CHAR_SUPER),
-        "hyper" => Some(KEY_CHAR_HYPER),
-        "alt" => Some(KEY_CHAR_ALT),
+        "C" | "ctrl" | "control" => Some(KEY_CHAR_CTRL),
+        "M" | "meta" => Some(KEY_CHAR_META),
+        "S" | "shift" => Some(KEY_CHAR_SHIFT),
+        "s" | "super" => Some(KEY_CHAR_SUPER),
+        "H" | "hyper" => Some(KEY_CHAR_HYPER),
+        "A" | "alt" => Some(KEY_CHAR_ALT),
         _ => None,
+    }
+}
+
+fn lucid_symbol_char_base(symbol: &str) -> Option<i64> {
+    let mut chars = symbol.chars();
+    let ch = chars.next()?;
+    if chars.next().is_none() {
+        Some(ch as i64)
+    } else {
+        None
     }
 }
 
@@ -348,16 +358,15 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
     if items.is_empty() {
         return None;
     }
-    if items.len() == 1 {
-        return Some(items[0]);
-    }
 
     let mut mod_bits = 0i64;
     let mut base: Option<Value> = None;
-    for item in items {
+    for (idx, item) in items.iter().enumerate() {
         if base.is_none() {
             if let Some(sym) = item.as_symbol_name() {
-                if let Some(bit) = event_modifier_bit(sym) {
+                if idx + 1 < items.len()
+                    && let Some(bit) = event_modifier_bit(sym)
+                {
                     mod_bits |= bit;
                     continue;
                 }
@@ -369,7 +378,13 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
         }
     }
 
-    let base = base?;
+    let mut base = base?;
+
+    if let ValueKind::Symbol(id) = base.kind() {
+        if let Some(code) = lucid_symbol_char_base(resolve_sym(id)) {
+            base = Value::fixnum(code);
+        }
+    }
 
     match base.kind() {
         ValueKind::Fixnum(_) => {

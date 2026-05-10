@@ -141,13 +141,37 @@ fn resolve_control_code_none() {
 #[test]
 fn event_modifier_bit_all() {
     crate::test_utils::init_test_tracing();
+    assert_eq!(event_modifier_bit("C"), Some(KEY_CHAR_CTRL));
+    assert_eq!(event_modifier_bit("ctrl"), Some(KEY_CHAR_CTRL));
     assert_eq!(event_modifier_bit("control"), Some(KEY_CHAR_CTRL));
+    assert_eq!(event_modifier_bit("M"), Some(KEY_CHAR_META));
     assert_eq!(event_modifier_bit("meta"), Some(KEY_CHAR_META));
     assert_eq!(event_modifier_bit("shift"), Some(KEY_CHAR_SHIFT));
     assert_eq!(event_modifier_bit("super"), Some(KEY_CHAR_SUPER));
     assert_eq!(event_modifier_bit("hyper"), Some(KEY_CHAR_HYPER));
     assert_eq!(event_modifier_bit("alt"), Some(KEY_CHAR_ALT));
     assert_eq!(event_modifier_bit("unknown"), None);
+}
+
+// --- convert_lucid_event_list ---
+
+#[test]
+fn convert_lucid_event_list_single_char_symbol_base_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let event = convert_lucid_event_list(&[
+        Value::symbol("control"),
+        Value::symbol("meta"),
+        Value::symbol("a"),
+    ]);
+    assert_eq!(event, Some(Value::fixnum(KEY_CHAR_META | 1)));
+}
+
+#[test]
+fn convert_lucid_event_list_modifier_aliases_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let event =
+        convert_lucid_event_list(&[Value::symbol("C"), Value::symbol("M"), Value::symbol("a")]);
+    assert_eq!(event, Some(Value::fixnum(KEY_CHAR_META | 1)));
 }
 
 // --- event_modifier_prefix ---
