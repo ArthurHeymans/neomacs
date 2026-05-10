@@ -1478,6 +1478,12 @@ impl Interpreter<'_, '_, '_> {
                 bool_value(is_keyword)
             }),
             "subr-native-elisp-p" => self.exact_arity(name, args, 1).map(|_| LispValue::NIL),
+            "subr-arity" => self.subr_1(name, args, |s| {
+                // Returns (MIN . MAX) for any subr. Use (0 . many) as default.
+                let min_arity = LispValue::expect_fixnum(0);
+                let many = s.runtime.bignum(rug::Integer::from(i64::MAX));
+                Some(s.runtime.cons(min_arity, many))
+            }),
             "subrp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_function(args[0]))),
@@ -7208,6 +7214,7 @@ fn is_primitive_name(name: &str) -> bool {
             "string=",
             "string>",
             "stringp",
+            "subr-arity",
             "subr-native-elisp-p",
             "subrp",
             "cl-tailp",
