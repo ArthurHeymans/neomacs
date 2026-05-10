@@ -7,7 +7,7 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 
 #[test]
 fn channel_capacity_constants() {
-    assert_eq!(INPUT_CHANNEL_CAPACITY, 256);
+    assert_eq!(INPUT_CHANNEL_CAPACITY, 4096);
     assert_eq!(COMMAND_CHANNEL_CAPACITY, 64);
 }
 

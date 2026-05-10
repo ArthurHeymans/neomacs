@@ -723,7 +723,12 @@ unsafe impl Sync for WakeupPipe {}
 // Frame channel: unbounded so try_send never drops frames.
 // The render thread drains all queued frames and keeps only the latest
 // (see poll_frame()), so memory stays bounded in practice.
-const INPUT_CHANNEL_CAPACITY: usize = 256;
+//
+// GNU Emacs' `kbd_buffer` holds 4096 input events and `tty_read_avail_input`
+// stops reading terminal bytes when the buffer is under pressure rather than
+// silently dropping command input.  Keep Neomacs' render-to-evaluator input
+// queue at the same scale and use backpressure for durable user input below.
+const INPUT_CHANNEL_CAPACITY: usize = 4096;
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
 
 /// Communication channels between threads
@@ -880,6 +885,22 @@ pub struct RenderComms {
 }
 
 impl RenderComms {
+    fn is_lossy_input_event(event: &InputEvent) -> bool {
+        matches!(
+            event,
+            InputEvent::MouseMove { .. } | InputEvent::MenuSelection { index: -1 }
+        ) || {
+            #[cfg(feature = "wpe-webkit")]
+            {
+                matches!(event, InputEvent::WebKitProgressChanged { .. })
+            }
+            #[cfg(not(feature = "wpe-webkit"))]
+            {
+                false
+            }
+        }
+    }
+
     fn should_log_delivery(event: &InputEvent) -> bool {
         matches!(
             event,
@@ -925,23 +946,41 @@ impl RenderComms {
     pub fn send_input(&self, event: InputEvent) {
         let log_delivery = Self::should_log_delivery(&event);
         let event_name = Self::event_name(&event);
-        match self.input_tx.try_send(event) {
+        if Self::is_lossy_input_event(&event) {
+            match self.input_tx.try_send(event) {
+                Ok(()) => {
+                    if log_delivery {
+                        tracing::debug!("send_input: queued {}", event_name);
+                    }
+                    self.wakeup.wake();
+                }
+                Err(TrySendError::Full(event)) => {
+                    tracing::debug!(
+                        "send_input: dropped lossy {} because the input queue is full",
+                        Self::event_name(&event)
+                    );
+                }
+                Err(TrySendError::Disconnected(event)) => {
+                    tracing::warn!(
+                        "send_input: dropped {} because the input queue is disconnected",
+                        Self::event_name(&event)
+                    );
+                }
+            }
+            return;
+        }
+
+        match self.input_tx.send(event) {
             Ok(()) => {
                 if log_delivery {
                     tracing::debug!("send_input: queued {}", event_name);
                 }
                 self.wakeup.wake();
             }
-            Err(TrySendError::Full(event)) => {
-                tracing::warn!(
-                    "send_input: dropped {} because the input queue is full",
-                    Self::event_name(&event)
-                );
-            }
-            Err(TrySendError::Disconnected(event)) => {
+            Err(err) => {
                 tracing::warn!(
                     "send_input: dropped {} because the input queue is disconnected",
-                    Self::event_name(&event)
+                    Self::event_name(&err.0)
                 );
             }
         }
