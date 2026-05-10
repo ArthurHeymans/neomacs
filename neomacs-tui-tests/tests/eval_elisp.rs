@@ -2293,6 +2293,45 @@ fn bool_vector_destination_return_value_matches_gnu_semantics() {
 }
 
 #[test]
+fn bool_vector_reader_size_validation_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:read_bool_vector requires the string literal to contain
+    // exactly the bytes needed for the declared bit length, except for the
+    // documented old Emacs multiple-of-8 compatibility case.
+    let expr = r##"(message "boolread:%S" (list (vconcat (read "#&3\"\005\"")) (condition-case e (read "#&3\"\"") (error (list (car e) (cadr e)))) (condition-case e (read "#&x\"a\"") (error (list (car e) (cadr e))))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("boolread:")
+                && row.contains("([t nil t]")
+                && row.contains("(invalid-read-syntax \\\"#&...\\\")")
+                && row.contains("(invalid-read-syntax \\\"#&\\\")")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: bool-vector reader size validation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "bool_vector_reader_size_validation_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn record_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
