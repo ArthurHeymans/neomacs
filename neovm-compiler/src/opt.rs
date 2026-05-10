@@ -444,11 +444,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 SsaConst::Nil
             }),
-            (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
-            (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
+            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
             (SsaConst::Float(a), SsaConst::Float(b)) => {
                 Some(if a.to_bits() == b.to_bits() { SsaConst::True } else { SsaConst::Nil })
             }
+            // Different types are never eq.
+            (SsaConst::Nil, _) | (SsaConst::True, _)
+            | (_, SsaConst::Nil) | (_, SsaConst::True)
+            | (SsaConst::Int(_), _) | (SsaConst::Float(_), _)
+            | (SsaConst::Char(_), _) | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
             _ => None,
         },
         "equal" if args.len() == 2 => match (args[0], args[1]) {
