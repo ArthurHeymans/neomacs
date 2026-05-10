@@ -1965,6 +1965,43 @@ fn mapcar_detects_circular_lists_like_gnu() {
 }
 
 #[test]
+fn length_predicates_large_circular_lists_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:length_internal uses a fast unchecked path only below
+    // 0xffff.  At larger thresholds it walks with FOR_EACH_TAIL and signals
+    // `circular-list` for cyclic lists.
+    let expr = r#"(message "lenpredbig:%S" (let ((x (list 1 2))) (setcdr (cdr x) x) (list (condition-case e (length< x 100000) (error (car e))) (condition-case e (length> x 100000) (error (car e))) (condition-case e (length= x 100000) (error (car e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("lenpredbig:")
+                && row.contains("(circular-list circular-list circular-list)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: large length predicates should detect circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "length_predicates_large_circular_lists_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn bool_vector_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
