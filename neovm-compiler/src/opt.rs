@@ -848,8 +848,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "ffloor" if args.len() == 2 => {
-            let a = args[0].as_int()? as f64;
-            let b = args[1].as_int()? as f64;
+            let a = to_f64(args[0])?;
+            let b = to_f64(args[1])?;
             if b == 0.0 { return None; }
             Some(SsaConst::Float((a / b).floor()))
         }
@@ -859,8 +859,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "fceiling" if args.len() == 2 => {
-            let a = args[0].as_int()? as f64;
-            let b = args[1].as_int()? as f64;
+            let a = to_f64(args[0])?;
+            let b = to_f64(args[1])?;
             if b == 0.0 { return None; }
             Some(SsaConst::Float((a / b).ceil()))
         }
@@ -870,8 +870,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "ftruncate" if args.len() == 2 => {
-            let a = args[0].as_int()? as f64;
-            let b = args[1].as_int()? as f64;
+            let a = to_f64(args[0])?;
+            let b = to_f64(args[1])?;
             if b == 0.0 { return None; }
             Some(SsaConst::Float((a / b).trunc()))
         }
@@ -1200,6 +1200,14 @@ impl SsaConst {
             SsaConst::Int(n) | SsaConst::Char(n) => Some(*n),
             _ => None,
         }
+    }
+}
+
+fn to_f64(c: &SsaConst) -> Option<f64> {
+    match c {
+        SsaConst::Float(f) => Some(*f),
+        SsaConst::Int(n) | SsaConst::Char(n) => Some(*n as f64),
+        _ => None,
     }
 }
 
