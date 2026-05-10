@@ -803,6 +803,18 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
         }),
+        "char-equal" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::Char(a), SsaConst::Char(b)) => {
+                let ca = char::from_u32(*a as u32)?;
+                let cb = char::from_u32(*b as u32)?;
+                Some(if ca == cb || ca.to_ascii_lowercase() == cb.to_ascii_lowercase() {
+                    SsaConst::True
+                } else {
+                    SsaConst::Nil
+                })
+            }
+            _ => None,
+        },
         "char-or-string-p" if args.len() == 1 => Some(match args[0] {
             SsaConst::Char(_) | SsaConst::String(_) => SsaConst::True,
             SsaConst::Value(_) => return None,
