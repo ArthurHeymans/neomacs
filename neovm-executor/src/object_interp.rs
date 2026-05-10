@@ -12360,6 +12360,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_numeric_equality_of_chars() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= ?a 97)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_length_equals_true_for_correct_length() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
