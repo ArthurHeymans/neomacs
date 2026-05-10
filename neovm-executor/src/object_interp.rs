@@ -13893,4 +13893,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_member_if_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-member-if #'evenp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
