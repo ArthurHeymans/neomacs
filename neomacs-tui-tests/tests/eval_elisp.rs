@@ -3513,6 +3513,40 @@ fn circular_read_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn invalid_read_label_error_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r##"(message "readlabel:%S" (condition-case e (read-from-string "#1#") (error (list (car e) (cadr e)))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("readlabel:(invalid-read-syntax \\\"#1#\\\")"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invalid read-label error data should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invalid_read_label_error_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn radix_reader_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
