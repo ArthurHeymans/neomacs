@@ -127,6 +127,66 @@ fn electric_return_newline_and_indent_in_lisp_buffer() {
 }
 
 #[test]
+fn next_line_preserves_interactive_goal_column_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/simple.el:next-line records `temporary-goal-column' from
+    // `current-column' in line-move-1, then line-move-finish moves to that
+    // column on the target logical line.
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(with-current-buffer "*scratch*" (erase-buffer) (insert "abcdef\n123456\nuvwxyz") (goto-char 5))"#,
+    );
+    let prepared = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("abcdef"))
+            && grid.iter().any(|row| row.contains("123456"))
+            && grid.iter().any(|row| row.contains("uvwxyz"))
+    };
+    gnu.read_until(Duration::from_secs(6), prepared);
+    neo.read_until(Duration::from_secs(8), prepared);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "C-n");
+    let moved = |grid: &[String]| grid.iter().any(|row| row.contains("123456"));
+    gnu.read_until(Duration::from_secs(6), moved);
+    neo.read_until(Duration::from_secs(8), moved);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(with-current-buffer "*scratch*" (message "linegoal:%S" (list (point) (current-column))))"#,
+    );
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("linegoal:(12 4)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: interactive C-n should preserve the starting goal column like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "next_line_preserves_interactive_goal_column_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn delete_char_via_cd_removes_character_after_point() {
     let (mut gnu, mut neo) = boot_pair("");
     let name = "delete-char.txt";
