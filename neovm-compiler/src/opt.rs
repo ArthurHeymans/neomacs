@@ -719,6 +719,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             }
             _ => None,
         },
+        "string>" | "string-greaterp" if args.len() == 2 => match (args[0], args[1]) {
+            (SsaConst::String(a), SsaConst::String(b)) => {
+                Some(if a > b { SsaConst::True } else { SsaConst::Nil })
+            }
+            _ => None,
+        },
         "zerop" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(if *a == 0 { SsaConst::True } else { SsaConst::Nil }),
             SsaConst::Float(f) => Some(if *f == 0.0 || *f == -0.0 { SsaConst::True } else { SsaConst::Nil }),
