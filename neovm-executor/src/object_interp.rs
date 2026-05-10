@@ -12512,6 +12512,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_string_to_number_empty_string_is_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-to-number \"\")",
+        );
+        assert_eq!(value, Some(LispValue::expect_fixnum(0)));
+    }
+
+    #[test]
     fn executes_make_string_creates_char_repeat() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
