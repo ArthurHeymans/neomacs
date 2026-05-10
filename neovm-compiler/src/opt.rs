@@ -1342,6 +1342,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-count" | "cl-count-if" | "cl-count-if-not" if args.len() >= 2 => {
+            // (cl-count ITEM SEQ) — seq is args[1]; nil seq → 0
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Int(0))
+            } else {
+                None
+            }
+        },
         "nconc" if args.len() >= 1 => {
             // (nconc) → nil, (nconc nil ...) → nil
             // If all args are nil, result is nil
