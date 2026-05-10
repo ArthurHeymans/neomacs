@@ -3204,6 +3204,47 @@ fn text_read_only_property_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn category_read_only_property_protects_text_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "catlock:%S" (with-temp-buffer (insert "abcd") (put 'neomacs-tui-ro-category 'read-only t) (put-text-property 2 3 'category 'neomacs-tui-ro-category) (let ((blocked (condition-case e (delete-region 2 3) (error (list (car e) (cadr e))))) (after-blocked (buffer-string))) (let ((inhibit-read-only t)) (delete-region 2 3) (list (get-text-property 2 'read-only) blocked after-blocked (buffer-string))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("catlock:")
+            && recent.contains("(nil (text-read-only nil)")
+            && recent.contains("abcd")
+            && recent.contains("acd")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: category read-only property should protect text from edits like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "category_read_only_property_protects_text_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn text_property_removal_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
