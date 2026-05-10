@@ -1255,7 +1255,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => Some(SsaConst::Nil),
         },
         "ignore" => Some(SsaConst::Nil),
-        "car" | "cdr" if args.len() == 1 => match args[0] {
+        "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr"
+        | "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
+            if args.len() == 1 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
