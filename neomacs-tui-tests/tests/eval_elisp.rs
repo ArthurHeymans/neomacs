@@ -2238,6 +2238,35 @@ fn mapc_detects_circular_lists_like_gnu() {
 }
 
 #[test]
+fn mapcan_detects_circular_lists_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:mapcan computes Flength before mapcar1 and nconc, so
+    // cyclic input sequences must signal `circular-list`.
+    let expr = r#"(message "mapcancycle:%S" (condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (mapcan (lambda (v) (list v)) x)) (error (car e))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("mapcancycle:") && row.contains("circular-list"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: mapcan should detect circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("mapcan_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn length_predicates_large_circular_lists_match_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
