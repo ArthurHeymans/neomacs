@@ -1286,7 +1286,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
-        "sort" if args.len() == 2 => match args[0] {
+        "sort" | "cl-sort" | "cl-stable-sort" if args.len() == 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
