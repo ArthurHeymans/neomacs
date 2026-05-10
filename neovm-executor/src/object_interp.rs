@@ -1746,6 +1746,7 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.number_arg(name, args[0]))
                 .and_then(|v| self.fixnum(v.round() as i64, name)),
             "standard-syntax-table" => Some(LispValue::NIL),
+            "syntax-table-p" => Some(LispValue::NIL),
             "sqrt" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))
@@ -7269,6 +7270,7 @@ fn is_primitive_name(name: &str) -> bool {
             "symbol-plist",
             "symbol-value",
             "symbolp",
+            "syntax-table-p",
             "tan",
             "terpri",
             "threadp",
