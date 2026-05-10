@@ -1348,6 +1348,7 @@ impl Interpreter<'_, '_, '_> {
             "plist-put" => self.subr_3(name, args, |s| {
                 Some(s.runtime.plist_put(args[0], args[1], args[2]))
             }),
+            "autoloadp" => self.exact_arity(name, args, 1).map(|_| LispValue::NIL),
             "autoload" => self
                 .min_max_arity(name, args, 2, 5)
                 .and_then(|_| self.autoload(args)),
@@ -6916,6 +6917,7 @@ fn is_primitive_name(name: &str) -> bool {
             "cl-assq",
             "atom",
             "autoload",
+            "autoloadp",
             "bare-symbol-p",
             "bignump",
             "bool-vector-p",
