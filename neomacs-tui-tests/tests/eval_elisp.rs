@@ -6748,6 +6748,36 @@ fn replace_match_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn replace_match_case_transfer_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "replmatchcase:%S" (list (progn (string-match "foo" "foo") (replace-match "bar" nil nil "foo")) (progn (string-match "foo" "Foo") (replace-match "bar" nil nil "Foo")) (progn (string-match "foo" "FOO") (replace-match "bar" nil nil "FOO")) (progn (string-match "foo" "FOO") (replace-match "bar" t nil "FOO"))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"replmatchcase:(\"bar\" \"Bar\" \"BAR\" \"bar\")"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: replace-match case transfer and fixedcase behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_match_case_transfer_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn replace_match_subexp_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
