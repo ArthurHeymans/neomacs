@@ -13747,4 +13747,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_nset_exclusive_or_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-nset-exclusive-or nil nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
