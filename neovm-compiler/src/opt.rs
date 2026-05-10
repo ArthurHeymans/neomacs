@@ -427,6 +427,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 SsaConst::Nil
             }),
+            (SsaConst::Char(a), SsaConst::Char(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             (SsaConst::Nil, SsaConst::Nil) => Some(SsaConst::True),
             (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
             (SsaConst::Float(a), SsaConst::Float(b)) => {
