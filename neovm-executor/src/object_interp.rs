@@ -12288,6 +12288,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_upcase_initials_capitalizes_words() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string= (upcase-initials \"hello world\") \"Hello World\")",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
     fn executes_memql_finds_float_by_value() {
         // memql uses eql, so floats compare by value (bit pattern)
         let (value, _) = execute(
