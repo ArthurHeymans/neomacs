@@ -5674,6 +5674,36 @@ fn replace_match_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn replace_match_subexp_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "subrepl:%S" (list (progn (string-match "\\([a-z]+\\)-\\([0-9]+\\)-\\([a-z]+\\)" "foo-123-bar") (list (replace-match "X" nil nil "foo-123-bar" 2) (match-data))) (with-temp-buffer (insert "foo-123-bar") (goto-char 1) (re-search-forward "\\([a-z]+\\)-\\([0-9]+\\)-\\([a-z]+\\)") (replace-match "XX" nil nil nil 2) (list (buffer-string) (match-beginning 0) (match-end 0) (match-beginning 1) (match-end 1) (match-beginning 2) (match-end 2) (match-beginning 3) (match-end 3))) (condition-case e (progn (string-match "\\(a\\)?b" "b") (replace-match "X" nil nil "b" 1)) (error (car e))) (progn (string-match "\\(a\\)?b" "b") (replace-match "[\\1]" nil nil "b"))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"subrepl:((\"foo-X-bar\" (0 11 0 3 4 7 8 11)) (\"foo-XX-bar\" 1 11 1 4 5 7 8 11) error \"[]\")"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: replace-match SUBEXP, match-data repair, and unmatched subexp behavior should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "replace_match_subexp_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn replace_regexp_in_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
