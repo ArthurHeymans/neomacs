@@ -5732,6 +5732,36 @@ fn delete_and_extract_empty_region_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn delete_and_extract_region_properties_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "delxprop:%S" (with-temp-buffer (insert "abcd") (put-text-property 2 4 'face 'bold) (let ((s (delete-and-extract-region 2 4))) (list s (text-properties-at 0 s) (text-properties-at 1 s) (buffer-string) (buffer-modified-p)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"delxprop:(#(\"bc\" 0 2 (face bold)) (face bold) (face bold) \"ad\" t)"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: delete-and-extract-region text property preservation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "delete_and_extract_region_properties_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
