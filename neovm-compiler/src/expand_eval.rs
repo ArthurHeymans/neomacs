@@ -439,7 +439,7 @@ impl MacroEval {
                 |a, b| a * b,
             ),
             Some("/") => self.eval_divide(span, &items[1..], env),
-            Some("%") => self.eval_rem(span, &items[1..], env, "%"),
+            Some("%") | Some("rem") => self.eval_rem(span, &items[1..], env, "%"),
             Some("mod") => self.eval_rem(span, &items[1..], env, "mod"),
 
             Some("=") => {
