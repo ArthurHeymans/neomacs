@@ -13658,4 +13658,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_intersection_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-intersection nil '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
