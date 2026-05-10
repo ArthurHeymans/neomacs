@@ -7883,6 +7883,48 @@ fn format_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn format_copies_format_string_text_properties_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "fmtprop:%S" (let* ((fmt (copy-sequence "A:%s:B"))) (put-text-property 0 2 'face 'bold fmt) (put-text-property 4 6 'face 'italic fmt) (let ((r (format fmt "xx"))) (list r (text-properties-at 0 r) (text-properties-at 1 r) (text-properties-at 2 r) (text-properties-at 3 r) (text-properties-at 4 r) (text-properties-at 5 r)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fmtprop:")
+            && recent.contains("A:xx:B")
+            && recent.contains("(face bold)")
+            && recent.contains("(face italic)")
+            && recent.contains("nil nil")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format should copy text properties from literal format-string spans like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_copies_format_string_text_properties_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn with_output_to_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
