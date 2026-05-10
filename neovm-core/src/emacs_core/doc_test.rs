@@ -60,6 +60,32 @@ fn runtime_documentation_property_uses_gnu_substitute_command_keys() {
     assert!(!text.contains("\\["));
 }
 
+#[test]
+fn documentation_preserves_uninterned_autoload_symbol_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    load_minimal_gnu_help_runtime(&mut eval);
+    let sym = eval
+        .eval_str(r#"(make-symbol "neo-auto")"#)
+        .expect("make uninterned symbol");
+
+    crate::emacs_core::autoload::builtin_autoload(
+        &mut eval,
+        vec![
+            sym,
+            Value::string("nofile"),
+            Value::string("doc"),
+            Value::T,
+            Value::NIL,
+        ],
+    )
+    .expect("autoload uninterned symbol");
+
+    let function = resolve_documentation_function_value(eval.obarray(), sym)
+        .expect("documentation resolver should find uninterned symbol function");
+    assert!(crate::emacs_core::autoload::is_autoload_value(&function));
+}
+
 // =======================================================================
 // documentation-property (stub)
 // =======================================================================

@@ -226,9 +226,8 @@ fn resolve_documentation_function_value(
     obarray: &super::symbol::Obarray,
     function: Value,
 ) -> EvalResult {
-    let mut resolved = if let Some(name) = function.as_symbol_name() {
-        let func =
-            super::builtins::symbols::symbol_function_impl(obarray, vec![Value::symbol(name)])?;
+    let mut resolved = if super::builtins::symbols::symbol_id(&function).is_some() {
+        let func = super::builtins::symbols::symbol_function_impl_1(obarray, function)?;
         if func.is_nil() {
             return Err(signal("void-function", vec![function]));
         }
@@ -237,12 +236,8 @@ fn resolve_documentation_function_value(
         function
     };
 
-    if let Some(alias_name) = resolved.as_symbol_name() {
-        let indirect = super::builtins::symbols::indirect_function_impl(
-            obarray,
-            vec![Value::symbol(alias_name)],
-        )?;
-        if !indirect.is_nil() {
+    if let Some(alias_symbol) = super::builtins::symbols::symbol_id(&resolved) {
+        if let Some(indirect) = obarray.indirect_function_id(alias_symbol) {
             resolved = indirect;
         }
     }

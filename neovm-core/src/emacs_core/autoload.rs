@@ -604,7 +604,7 @@ pub(crate) fn register_autoload_in_state(
     // GNU Emacs eval.c:Fautoload — "If function is defined and not as an
     // autoload, don't override."  If the symbol already has a real (non-
     // autoload) function definition, return nil without touching it.
-    if let Some(current) = obarray.symbol_function(resolve_sym(name)) {
+    if let Some(current) = obarray.symbol_function_id(name) {
         if !is_autoload_value(&current) {
             return Ok(Value::NIL);
         }
@@ -638,7 +638,7 @@ pub(crate) fn register_autoload_in_state(
         type_val,
     ]);
 
-    obarray.set_symbol_function(resolve_sym(name), autoload_form);
+    obarray.set_symbol_function_id(name, autoload_form);
     autoloads.register_symbol(
         name,
         AutoloadEntry {

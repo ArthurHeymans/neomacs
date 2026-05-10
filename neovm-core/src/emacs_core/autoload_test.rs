@@ -782,6 +782,37 @@ fn autoload_registers_in_autoload_manager() {
 }
 
 #[test]
+fn autoload_sets_uninterned_symbol_function_cell_by_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let sym = ev
+        .eval_str(r#"(make-symbol "neo-auto")"#)
+        .expect("make uninterned symbol");
+
+    builtin_autoload(
+        &mut ev,
+        vec![
+            sym,
+            Value::string("nofile"),
+            Value::string("doc"),
+            Value::T,
+            Value::NIL,
+        ],
+    )
+    .expect("autoload uninterned symbol");
+
+    let function = ev
+        .obarray
+        .symbol_function_of_value(&sym)
+        .expect("uninterned symbol function cell");
+    assert!(is_autoload_value(&function));
+    assert_eq!(
+        builtin_symbol_file(&mut ev, vec![sym]).expect("symbol-file"),
+        Value::string("nofile")
+    );
+}
+
+#[test]
 fn autoload_accepts_symbol_with_pos_only_when_enabled() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
