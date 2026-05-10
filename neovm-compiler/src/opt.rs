@@ -1221,6 +1221,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::String(s) => {
                 Some(SsaConst::String(s.chars().rev().collect()))
             }
+            SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
         "subseq" | "cl-subseq" if args.len() >= 2 => {
