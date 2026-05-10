@@ -1392,7 +1392,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
-        "format" | "format-message" if args.len() == 1 => match args[0] {
+        "format" | "format-message" if !args.is_empty() => match args[0] {
             SsaConst::String(s) if !s.contains('%') => Some(SsaConst::String(s.clone())),
             _ => None,
         },
