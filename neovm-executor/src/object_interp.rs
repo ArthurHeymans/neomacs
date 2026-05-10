@@ -13786,4 +13786,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_mapcar_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcar #'1+ nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
