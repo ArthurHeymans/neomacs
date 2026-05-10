@@ -1276,6 +1276,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "assoc" | "assq" | "rassoc" | "rassq" | "member" | "memq" | "memql"
+            if args.len() >= 2 => {
+            // All alist/list search functions return nil when the list/alist is nil
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr"
         | "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
         | "nth" | "nthcdr" | "last" | "butlast" | "nbutlast"
