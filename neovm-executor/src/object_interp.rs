@@ -2002,6 +2002,7 @@ impl Interpreter<'_, '_, '_> {
             "last" => self
                 .min_arity(name, args, 1)
                 .and_then(|_| self.last(args[0])),
+            "minibuffer-window" => Some(LispValue::NIL),
             "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
             "memql" => self.subr_2(name, args, |s| s.memql(args[0], args[1])),
             "member" | "cl-member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
@@ -7171,6 +7172,7 @@ fn is_primitive_name(name: &str) -> bool {
             "memql",
             "message",
             "min",
+            "minibuffer-window",
             "mod",
             "natnump",
             "mutexp",
