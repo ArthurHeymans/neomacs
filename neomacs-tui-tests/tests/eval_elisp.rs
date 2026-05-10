@@ -4377,6 +4377,47 @@ fn read_circle_nil_rejects_read_label_like_gnu() {
 }
 
 #[test]
+fn hash_table_reader_constructor_errors_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:hash_table_from_plist validates #s(hash-table ...)
+    // constructor data before creating the table.  Malformed data must signal
+    // the same reader/hash-table errors; it must not be accepted as an empty
+    // or partially initialized hash table.
+    let expr = r##"(message "hashread:%S" (list (condition-case e (read "#s(hash-table data (a))") (error (list (car e) (cadr e)))) (condition-case e (read "#s(hash-table data . a)") (error (list (car e) (cadr e)))) (condition-case e (read "#s(hash-table test bogus data (a 1))") (error (list (car e) (cadr e)))) (let ((h (read "#s(hash-table test equal data (a 1 a 2))"))) (list (hash-table-test h) (hash-table-count h) (gethash 'a h)))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("hashread:")
+                && row.contains("Hash table data length is odd")
+                && row.contains("(invalid-read-syntax \\\".\\\")")
+                && row.contains("Invalid hash table test")
+                && row.contains("(equal 1 2)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: #s(hash-table ...) reader constructor errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "hash_table_reader_constructor_errors_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn radix_reader_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
