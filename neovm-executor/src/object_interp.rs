@@ -13516,4 +13516,41 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+
+    #[test]
+    fn executes_asin_returns_arcsine() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (> (asin 0.5) 0.5)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_acos_returns_arccosine() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (< (acos 0.5) 1.1)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_atan_returns_arctangent() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (> (atan 1.0) 0.7)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_log10_returns_base_10_log() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (= (log10 100) 2.0)",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
 }
