@@ -12669,6 +12669,15 @@ mod tests {
     }
 
     #[test]
+    fn executes_syntax_table_p_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (syntax-table-p 'anything)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
     fn executes_indirect_function_on_symbol() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
