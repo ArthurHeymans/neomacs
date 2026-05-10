@@ -1952,6 +1952,39 @@ fn marker_insertion_type_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn marker_last_position_after_kill_elisp_functions_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "marklast:%S" (let ((b (generate-new-buffer " *marklast*")) m before) (with-current-buffer b (insert "abc") (setq m (copy-marker 3 t)) (setq before (list (marker-position m) (marker-last-position m) (marker-buffer m)))) (kill-buffer b) (list before (marker-position m) (marker-last-position m) (marker-buffer m))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("marklast:") && row.contains("((3 3 #<killed buffer>) nil 3 nil)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: marker-last-position after buffer kill should match GNU semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "marker_last_position_after_kill_elisp_functions_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn narrowing_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
