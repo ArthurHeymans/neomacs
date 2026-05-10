@@ -1295,6 +1295,8 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "cl-subst" | "cl-subst-if" | "cl-subst-if-not"
         | "cl-nsubst" | "cl-nsubst-if" | "cl-nsubst-if-not"
+        | "cl-substitute" | "cl-substitute-if" | "cl-substitute-if-not"
+        | "cl-nsubstitute" | "cl-nsubstitute-if" | "cl-nsubstitute-if-not"
             if args.len() >= 3 => {
             // (cl-subst NEW OLD TREE) — tree is args[2]
             if matches!(args[2], SsaConst::Nil) {
