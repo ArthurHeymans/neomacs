@@ -5999,6 +5999,42 @@ fn subst_char_in_region_noundo_tick_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn transpose_regions_moves_text_properties_and_markers_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(message "transpose:%S" (with-temp-buffer (insert "abcdef") (put-text-property 1 3 'face 'r1) (put-text-property 5 7 'face 'r2) (let ((m1 (copy-marker 2)) (m2 (copy-marker 6))) (transpose-regions 1 3 5 7 nil) (list (buffer-string) (marker-position m1) (marker-position m2) (mapcar (lambda (p) (text-properties-at p)) (number-sequence 1 6))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("transpose:")
+                && row.contains(r#"\"efcdab\""#)
+                && row.contains("6 2")
+                && row.contains("((face r2) (face r2) nil nil (face r1) (face r1))")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: transpose-regions should move text, properties, and markers like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "transpose_regions_moves_text_properties_and_markers_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn delete_and_extract_empty_region_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
