@@ -13580,4 +13580,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
+
+    #[test]
+    fn executes_rassq_finds_entry_by_cdr_eq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal (rassq 2 '((a . 1) (b . 2) (c . 3))) '(b . 2))",
+        );
+        assert_eq!(value, Some(LispValue::TRUE));
+    }
+
+    #[test]
+    fn executes_rassq_returns_nil_when_not_found() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (rassq 99 '((a . 1) (b . 2)))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
