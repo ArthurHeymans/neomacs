@@ -24,6 +24,7 @@ pub struct Runtime {
     cons_index: HashMap<usize, usize>,
     string_index: HashMap<usize, usize>,
     symbol_index: HashMap<usize, usize>,
+    float_index: HashMap<usize, usize>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -72,6 +73,7 @@ impl Default for Runtime {
             cons_index: HashMap::new(),
             string_index: HashMap::new(),
             symbol_index: HashMap::new(),
+            float_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -135,6 +137,7 @@ impl Runtime {
             cons_index: HashMap::new(),
             string_index: HashMap::new(),
             symbol_index: HashMap::new(),
+            float_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -398,6 +401,7 @@ impl Runtime {
         });
         let addr = (&mut *obj as *mut FloatObj) as usize;
         self.object_index.insert(addr, HeapKind::Float);
+        self.float_index.insert(addr, self.floats.len());
         self.floats.push(obj);
         LispValue::from_heap_addr(addr)
     }
@@ -1899,13 +1903,12 @@ impl Runtime {
     }
 
     fn float_by_addr(&self, addr: usize) -> Option<&FloatObj> {
-        for obj in &self.floats {
-            let obj_addr = (&**obj as *const FloatObj) as usize;
-            if obj_addr == addr && obj.header.kind == HeapKind::Float {
-                return Some(obj);
-            }
+        let idx = self.float_index.get(&addr)?;
+        let obj = self.floats.get(*idx)?;
+        if (&**obj as *const FloatObj) as usize == addr {
+            return Some(obj);
         }
-        None
+        self.floats.iter().find(|o| (&***o as *const FloatObj) as usize == addr).map(|o| &**o)
     }
 
     fn plist_pair(&self, pair_cell: LispValue) -> Option<(LispValue, LispValue, LispValue)> {
