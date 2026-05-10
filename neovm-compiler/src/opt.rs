@@ -513,13 +513,6 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Char(c) => Some(SsaConst::Int(*c)),
             _ => None,
         },
-        "+" if args.is_empty() => Some(SsaConst::Int(0)),
-        "+" if args.len() == 1 => match args[0] {
-            SsaConst::Int(n) => Some(SsaConst::Int(*n)),
-            SsaConst::Float(f) => Some(SsaConst::Float(*f)),
-            SsaConst::Char(c) => Some(SsaConst::Int(*c)),
-            _ => None,
-        },
         "+" if args.len() >= 2 => {
             if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
                 return Some(SsaConst::Int(ints.into_iter().sum()));
