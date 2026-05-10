@@ -654,14 +654,28 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "string-to-number" if args.len() >= 1 => {
             let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
             let base = args.get(1).map(|b| match b { SsaConst::Int(n) => *n, _ => 0 }).unwrap_or(10);
-            if base == 10 {
-                if let Ok(n) = s.parse::<i64>() {
+            // Auto-detect #x #o #b prefixes when base is 10 (default).
+            let (effective_base, digits) = if base == 10 {
+                if let Some(hex) = s.strip_prefix("#x") {
+                    (16, hex)
+                } else if let Some(oct) = s.strip_prefix("#o") {
+                    (8, oct)
+                } else if let Some(bin) = s.strip_prefix("#b") {
+                    (2, bin)
+                } else {
+                    (10, s)
+                }
+            } else {
+                (base, s)
+            };
+            if effective_base == 10 {
+                if let Ok(n) = digits.parse::<i64>() {
                     return Some(SsaConst::Int(n));
-                } else if let Ok(f) = s.parse::<f64>() {
+                } else if let Ok(f) = digits.parse::<f64>() {
                     return Some(SsaConst::Float(f));
                 }
-            } else if (2..=36).contains(&base) {
-                if let Ok(n) = i64::from_str_radix(s, base as u32) {
+            } else if (2..=36).contains(&effective_base) {
+                if let Ok(n) = i64::from_str_radix(digits, effective_base as u32) {
                     return Some(SsaConst::Int(n));
                 }
             }
