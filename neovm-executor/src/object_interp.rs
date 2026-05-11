@@ -1358,6 +1358,62 @@ impl Interpreter<'_, '_, '_> {
                     Err(_) => None,
                 }
             }),
+            "regexp-quote" => self.subr_1(name, args, |s| {
+                let input = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let mut result = String::with_capacity(input.len());
+                for ch in input.chars() {
+                    match ch { '\\'|'^'|'$'|'.'|'['|']'|'*'|'+'|'?'|'{'|'}'|'|'|'('|')' => {
+                        result.push('\\');
+                        result.push(ch);
+                    }
+                    _ => result.push(ch),
+                    }
+                }
+                Some(s.runtime.string(result))
+            }),
+            "split-string" => self.subr_1_3(name, args, |s| {
+                let input = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let sep = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
+                let omit_nulls = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
+                let sep_ref = sep.as_deref();
+                let split: Vec<String> = if let Some(s) = sep_ref {
+                    if s.is_empty() {
+                        input.split(char::is_whitespace).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                    } else {
+                        input.split(s).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                    }
+                } else {
+                    input.split(char::is_whitespace).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                };
+                let mut list = LispValue::NIL;
+                for part in split.into_iter().rev() {
+                    let sval = s.runtime.string(part);
+                    list = s.runtime.cons(sval, list);
+                }
+                Some(list)
+            }),
+            "string-collate-lessp" => self.subr_2_3(name, args, |s| {
+                let a = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let b = s.runtime.string_contents(args[1]).ok()?.to_string();
+                Some(bool_value(a < b))
+            }),
+            "delete-directory" => self.subr_1_2(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let recursive = args.get(1).map(|v| !v.is_nil()).unwrap_or(false);
+                let result = if recursive {
+                    std::fs::remove_dir_all(&path)
+                } else {
+                    std::fs::remove_dir(&path)
+                };
+                match result { Ok(()) => Some(LispValue::NIL), Err(_) => None }
+            }),
+            "file-symlink-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(std::fs::symlink_metadata(&path).map(|m| m.file_type().is_symlink()).unwrap_or(false)))
+            }),
+            "emacs-pid" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                LispValue::expect_fixnum(std::process::id() as i64)
+            }),
             "make-directory" => self.subr_1_2(name, args, |s| {
                 let path = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let parents = args.get(1).map(|v| !v.is_nil()).unwrap_or(false);
