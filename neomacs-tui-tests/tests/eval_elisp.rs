@@ -161,6 +161,66 @@ fn eval_expression_minibuffer_del_deletes_previous_character() {
 }
 
 #[test]
+fn next_line_key_preserves_goal_column_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/simple.el:next-line delegates to line-move, which records
+    // temporary-goal-column and finishes on the same logical column.
+    let setup = r#"(progn(switch-to-buffer"*nl*")(erase-buffer)(insert"abcdef\nuvwxyz\n")(goto-char 5)(setq line-move-visual nil)(message"nlready:%S"(list(line-number-at-pos)(current-column))))"#;
+    support::eval_expression(&mut gnu, &mut neo, setup);
+
+    let setup_ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("nlready:(1 4)"))
+    };
+    gnu.read_until(Duration::from_secs(6), setup_ready);
+    neo.read_until(Duration::from_secs(8), setup_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            setup_ready(&grid),
+            "{label}: next-line setup should place point on first line column 4\n{}",
+            grid.join("\n")
+        );
+    }
+
+    send_both(&mut gnu, &mut neo, "C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    let probe = r#"(message"nextkey:%S"(list(buffer-name)(line-number-at-pos)(current-column)(char-after)))"#;
+    support::eval_expression(&mut gnu, &mut neo, probe);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("nextkey:") && row.contains(r#"\"*nl*\""#) && row.contains("2 4 121")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: C-n should land on the same logical column like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "next_line_key_preserves_goal_column_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_expression_empty_minibuffer_multiple_del_keeps_prompt() {
     let (mut gnu, mut neo) = boot_pair("");
 
