@@ -14337,4 +14337,31 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_nbutlast_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nbutlast nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_butlast_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (butlast nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_nthcdr_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nthcdr 2 nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
