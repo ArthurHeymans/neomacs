@@ -1328,6 +1328,35 @@ fn sort_keyword_error_semantics_match_gnu() {
 }
 
 #[test]
+fn sort_detects_circular_lists_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:sort_list computes list_length before sorting, so cyclic
+    // list input must signal `circular-list` instead of entering sort setup.
+    let expr = r#"(message "sortcycle:%S" (condition-case e (let ((x (list 2 1))) (setcdr (cdr x) x) (sort x (function <))) (error (car e))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("sortcycle:") && row.contains("circular-list"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: sort should detect circular lists like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("sort_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn copy_tree_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
