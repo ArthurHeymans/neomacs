@@ -27,6 +27,7 @@ impl<T: ?Sized> Weak<T> {
     }
 
     /// Return the underlying weak target when still known.
+    #[inline]
     pub fn target(&self) -> Option<Gc<T>> {
         self.target
     }
@@ -77,6 +78,7 @@ impl<T: ?Sized> WeakCell<T> {
     }
 
     /// Read the current weak value.
+    #[inline]
     pub fn get(&self) -> Weak<T> {
         match self.load_target() {
             Some(target) => Weak::new(target),
@@ -85,11 +87,13 @@ impl<T: ?Sized> WeakCell<T> {
     }
 
     /// Return the current weak target when still known.
+    #[inline]
     pub fn target(&self) -> Option<Gc<T>> {
         self.load_target()
     }
 
     /// Overwrite the current weak value.
+    #[inline]
     pub fn set(&self, value: Weak<T>) {
         self.value.store(Self::raw_value(value), Ordering::Release);
     }
@@ -118,6 +122,7 @@ impl<T: ?Sized> WeakCell<T> {
         }
     }
 
+    #[inline]
     fn load_target(&self) -> Option<Gc<T>> {
         let raw = self.value.load(Ordering::Acquire);
         unsafe { GcErased::from_raw(raw).map(|value| Gc::from_erased(value)) }
