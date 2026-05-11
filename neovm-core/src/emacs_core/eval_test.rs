@@ -8013,6 +8013,18 @@ fn inhibit_modification_hooks_is_bound_to_nil_by_default() {
 }
 
 #[test]
+fn combine_after_change_calls_is_gnu_defvar_style_dynamic_variable() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(list (boundp 'combine-after-change-calls)
+               combine-after-change-calls
+               (let ((combine-after-change-calls t))
+                 combine-after-change-calls))",
+    );
+    assert_eq!(result, "OK (t nil t)");
+}
+
+#[test]
 fn after_change_functions_receive_character_old_len() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

@@ -10,7 +10,17 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("first-change-hook", Value::NIL);
     obarray.set_symbol_value("before-change-functions", Value::NIL);
     obarray.set_symbol_value("after-change-functions", Value::NIL);
+    obarray.set_symbol_value("combine-after-change-calls", Value::NIL);
     obarray.set_symbol_value("inhibit-modification-hooks", Value::NIL);
+    for name in [
+        "first-change-hook",
+        "before-change-functions",
+        "after-change-functions",
+        "combine-after-change-calls",
+        "inhibit-modification-hooks",
+    ] {
+        obarray.make_special(name);
+    }
     obarray.set_symbol_value("buffer-access-fontify-functions", Value::NIL);
     obarray.set_symbol_value("buffer-access-fontified-property", Value::NIL);
     obarray.set_symbol_value("buffer-file-coding-system", Value::NIL);
