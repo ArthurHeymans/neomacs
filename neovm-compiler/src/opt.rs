@@ -364,6 +364,7 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
     }
 }
 
+#[inline]
 fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> bool) -> Option<SsaConst> {
     let ordering = match (a, b) {
         (SsaConst::Int(a), SsaConst::Int(b)) => a.cmp(b),
@@ -378,6 +379,7 @@ fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> 
     Some(if cmp(ordering) { SsaConst::True } else { SsaConst::Nil })
 }
 
+#[inline]
 fn fold_binary_arith(
     a: &SsaConst,
     b: &SsaConst,
