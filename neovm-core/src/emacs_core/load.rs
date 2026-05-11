@@ -29,6 +29,17 @@ fn load_display_string(value: &LispString) -> String {
     crate::emacs_core::emacs_char::to_utf8_lossy(value.as_bytes())
 }
 
+pub(crate) fn cannot_open_load_file_signal(file: &LispString) -> Flow {
+    signal(
+        "file-missing",
+        vec![
+            Value::string("Cannot open load file"),
+            Value::string("No such file or directory"),
+            Value::heap_string(file.clone()),
+        ],
+    )
+}
+
 fn load_name_equal(left: &LispString, right: &LispString) -> bool {
     crate::emacs_core::value::equal_value(
         &Value::heap_string(left.clone()),
@@ -769,15 +780,25 @@ pub(crate) fn plan_load_in_state(
             if noerror {
                 Ok(LoadPlan::Return(Value::NIL))
             } else {
-                Err(signal(
-                    "file-missing",
-                    vec![Value::string(format!(
-                        "Cannot open load file: {}",
-                        load_display_string(&file)
-                    ))],
-                ))
+                Err(cannot_open_load_file_signal(&file))
             }
         }
+    }
+}
+
+pub(crate) fn resolve_autoload_load_path_in_state(
+    obarray: &super::symbol::Obarray,
+    file: &LispString,
+) -> Result<PathBuf, Flow> {
+    match plan_load_in_state(
+        obarray,
+        Value::heap_string(file.clone()),
+        None,
+        None,
+        Some(Value::T),
+    )? {
+        LoadPlan::Load { found, .. } => Ok(load_path_buf(&found)),
+        LoadPlan::Return(_) => unreachable!("autoload load planning used noerror=nil"),
     }
 }
 

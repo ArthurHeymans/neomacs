@@ -499,9 +499,6 @@ impl LambdaData {
             None => Value::NIL,
         };
 
-        // Slot 3: stack depth (nil for interpreted)
-        let depth = Value::NIL;
-
         // Slot 4: docstring
         let doc = self
             .doc_form
@@ -512,10 +509,18 @@ impl LambdaData {
             })
             .unwrap_or(Value::NIL);
 
-        // Slot 5: interactive spec
-        let interactive = self.interactive.unwrap_or(Value::NIL);
-
-        vec![arglist, body, env, depth, doc, interactive]
+        let mut slots = vec![arglist, body, env];
+        if self.interactive.is_some() || !doc.is_nil() {
+            // Slot 3: stack depth (nil for interpreted)
+            slots.push(Value::NIL);
+            slots.push(doc);
+            if let Some(interactive) = self.interactive {
+                // Slot 5: interactive spec.  Presence is significant even
+                // when the value is nil.
+                slots.push(interactive);
+            }
+        }
+        slots
     }
 }
 
@@ -1324,8 +1329,7 @@ impl TaggedValue {
     }
 
     pub fn closure_interactive(self) -> Option<Option<Value>> {
-        self.closure_slot(CLOSURE_INTERACTIVE)
-            .map(|interactive| (!interactive.is_nil()).then_some(interactive))
+        self.closure_slot(CLOSURE_INTERACTIVE).map(Some)
     }
 
     /// Borrow the ByteCodeFunction from a ByteCode value.

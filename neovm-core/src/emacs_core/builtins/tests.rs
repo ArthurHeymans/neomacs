@@ -674,6 +674,39 @@ fn pure_dispatch_typed_length_tracks_interpreted_closure_slot_count() {
 }
 
 #[test]
+fn make_interpreted_closure_preserves_nil_interactive_slot_presence() {
+    crate::test_utils::init_test_tracing();
+    let params = Value::NIL;
+    let body = Value::list(vec![Value::fixnum(1)]);
+    let env = Value::list(vec![Value::T]);
+    let iform = Value::list(vec![Value::symbol("interactive")]);
+
+    let closure = super::symbols::make_interpreted_closure_from_parts(
+        &params,
+        &body,
+        &env,
+        None,
+        Some(&iform),
+    )
+    .expect("make-interpreted-closure should accept no-arg interactive form");
+
+    assert_eq!(
+        dispatch_builtin_pure("length", vec![closure])
+            .expect("builtin length should resolve")
+            .expect("builtin length should evaluate"),
+        Value::fixnum(6)
+    );
+    assert_eq!(closure.closure_interactive().flatten(), Some(Value::NIL));
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        super::symbols::builtin_interactive_form(&mut eval, vec![closure])
+            .expect("interactive-form should see nil slot"),
+        Value::list(vec![Value::symbol("interactive"), Value::NIL])
+    );
+}
+
+#[test]
 fn compiled_literal_reifier_preserves_ordinary_vectors() {
     crate::test_utils::init_test_tracing();
     let closure_vec = Value::vector(vec![

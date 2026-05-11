@@ -461,40 +461,53 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>)
         return Ok(Value::T);
     }
 
-    // Slow path: call `(interactive-form fun)` which handles genfun
-    // dispatch (oclosures, advice wrappers, etc.)
-    //
-    // GNU Emacs (eval.c:2348-2364): the genfun path calls
-    // interactive-form ONLY for closures/bytecode whose doc slot
-    // indicates an oclosure. It NEVER calls interactive-form for
-    // autoloads — autoloads are handled entirely by the fast path
-    // via the 4th element check. Calling interactive-form for
-    // autoloads triggers autoload-do-load which loads the file,
-    // causing a massive cascade during M-x completion when every
-    // non-interactive autoload in the obarray gets loaded.
-    //
-    // Guard: skip the slow path if the resolved function is an
-    // autoload. The fast path already checked the interactive flag;
-    // if it returned false, the autoload is genuinely not a command.
-    let resolved_fun = args[0]
-        .as_symbol_name()
-        .and_then(|name| {
+    let resolved_fun = if let Some(symbol) = args[0].as_symbol_id() {
+        let Some((_, fun)) =
             crate::emacs_core::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray(
                 &eval.obarray,
-                super::intern::intern(name),
+                symbol,
             )
-        })
-        .map(|(_, v)| v)
-        .unwrap_or(args[0]);
-    if !super::autoload::is_autoload_value(&resolved_fun) {
-        if let Ok(iform) = eval.apply(Value::symbol("interactive-form"), vec![args[0]]) {
-            if !iform.is_nil() {
-                return Ok(if for_call_interactively {
-                    Value::NIL
-                } else {
-                    Value::T
-                });
-            }
+        else {
+            return Ok(Value::NIL);
+        };
+        fun
+    } else {
+        args[0]
+    };
+    if resolved_fun.is_nil() {
+        return Ok(Value::NIL);
+    }
+
+    // GNU Emacs eval.c:Fcommandp checks `interactive-form' properties after
+    // ordinary command checks fail.  The property is not accepted as making a
+    // function interactive; it is a hard error.
+    let mut fun = args[0];
+    while let Some(symbol) = fun.as_symbol_id() {
+        if eval
+            .obarray
+            .get_property_id(symbol, intern("interactive-form"))
+            .is_some_and(|value| !value.is_nil())
+        {
+            return Err(signal(
+                "error",
+                vec![Value::string("Found an 'interactive-form' property!")],
+            ));
+        }
+        let Some(next) = crate::emacs_core::builtins::symbols::symbol_function_cell_in_obarray(
+            &eval.obarray,
+            symbol,
+        ) else {
+            return Ok(Value::NIL);
+        };
+        fun = next;
+    }
+
+    // GNU only calls `interactive-form' here for the generic-function
+    // (oclosure/advice) path indicated by an invalid doc slot.
+    if command_object_needs_interactive_form_dispatch(resolved_fun) {
+        let iform = eval.apply(Value::symbol("interactive-form"), vec![resolved_fun])?;
+        if !iform.is_nil() {
+            return Ok(Value::T);
         }
     }
 
@@ -961,6 +974,18 @@ fn value_is_interactive_autoload(value: &Value) -> bool {
         return false;
     };
     items.get(3).is_some_and(|v| !v.is_nil())
+}
+
+fn command_object_needs_interactive_form_dispatch(value: Value) -> bool {
+    match value.kind() {
+        ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
+            value.closure_interactive().is_none() && value.closure_doc_form().flatten().is_some()
+        }
+        ValueKind::Veclike(VecLikeType::ByteCode) => value
+            .get_bytecode_data()
+            .is_some_and(|bc| bc.observable_closure_slot_count() <= 5 && bc.doc_form.is_some()),
+        _ => false,
+    }
 }
 
 fn quoted_lambda_has_interactive_form(value: &Value) -> bool {

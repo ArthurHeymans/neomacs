@@ -970,29 +970,12 @@ fn write_closure_body_forms_stateful(body: Value, out: &mut String, state: &mut 
 
 fn write_interpreted_closure_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     out.push_str("#[");
-    write_params_stateful(value.closure_params(), out, state);
-    out.push(' ');
-    if let Some(body) = value.closure_body_value() {
-        write_value_stateful(&body, out, state);
-    } else {
-        out.push_str("nil");
-    }
-    out.push(' ');
-    let env = value.closure_env().flatten().expect("closure env");
-    if env == Value::NIL {
-        out.push_str("(t)");
-    } else {
-        write_value_stateful(&env, out, state);
-    }
-    if let Some(doc_value) = value.closure_doc_value()
-        && !doc_value.is_nil()
-    {
-        out.push_str(" nil ");
-        if doc_value.is_string() {
-            let ls = doc_value.as_lisp_string().unwrap();
-            out.push_str(&format_lisp_string_emacs(ls, &PrintOptions::default()));
-        } else {
-            write_value_stateful(&doc_value, out, state);
+    if let Some(slots) = value.closure_slots() {
+        for (idx, item) in slots.iter().enumerate() {
+            if idx > 0 {
+                out.push(' ');
+            }
+            write_value_stateful(item, out, state);
         }
     }
     out.push(']');

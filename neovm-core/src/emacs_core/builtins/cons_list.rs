@@ -212,21 +212,13 @@ pub(crate) fn lambda_to_cons_list(value: &Value) -> Option<Value> {
 
 pub(crate) fn lambda_closure_length(value: &Value) -> Option<i64> {
     let slots = value.closure_slots()?;
-    let mut logical_len = slots.len();
-    while logical_len > 3
-        && slots
-            .get(logical_len - 1)
-            .is_some_and(|value| value.is_nil())
-    {
-        logical_len -= 1;
-    }
-    Some(logical_len as i64)
+    Some(slots.len() as i64)
 }
 
 /// Convert a Lambda value to the GNU Emacs closure vector layout:
-///   [0]=ARGS  [1]=BODY  [2]=ENV  [(3)=nil, (4)=DOCSTRING/TYPE]
-/// NeoVM does not currently store the optional interactive slot.
-/// This is used by `aref` on closures for oclosure slot access.
+///   [0]=ARGS  [1]=BODY  [2]=ENV  [(3)=nil, (4)=DOCSTRING/TYPE, (5)=INTERACTIVE]
+/// Slot count is observable and slot 5's presence is significant even when
+/// its value is nil.
 pub fn lambda_to_closure_vector(value: &Value) -> Vec<Value> {
     value
         .closure_slots()

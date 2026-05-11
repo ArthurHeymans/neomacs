@@ -3312,12 +3312,8 @@ fn stored_interactive_spec_value(spec: Value) -> Value {
 }
 
 fn interactive_form_from_stored_closure_spec(spec: Value) -> Value {
-    if spec.is_cons() && spec.cons_car().as_symbol_name() == Some("interactive") {
-        spec
-    } else {
-        let spec = stored_interactive_spec_value(spec);
-        Value::list(vec![Value::symbol("interactive"), spec])
-    }
+    let spec = stored_interactive_spec_value(spec);
+    Value::list(vec![Value::symbol("interactive"), spec])
 }
 
 fn interactive_form_from_quoted_interactive_form(form: &Value) -> Result<Option<Value>, Flow> {
@@ -3416,7 +3412,7 @@ pub(crate) fn plan_interactive_form_in_state(
 ) -> Result<InteractiveFormPlan, Flow> {
     let mut function = cmd;
 
-    if let Some(mut current) = symbol_id(&cmd) {
+    if let Some(mut current) = cmd.as_symbol_id() {
         let Some((_, indirect_function)) =
             resolve_indirect_symbol_by_id_in_obarray(obarray, current)
         else {
@@ -3437,7 +3433,7 @@ pub(crate) fn plan_interactive_form_in_state(
                 return Ok(InteractiveFormPlan::Return(Value::NIL));
             };
             function = next_function;
-            let Some(next_symbol) = symbol_id(&function) else {
+            let Some(next_symbol) = function.as_symbol_id() else {
                 break;
             };
             current = next_symbol;
@@ -3485,7 +3481,7 @@ pub(crate) fn plan_interactive_form_in_state(
         ValueKind::Cons if super::autoload::is_autoload_value(&function) => {
             Ok(InteractiveFormPlan::Autoload {
                 fundef: function,
-                funname: if symbol_id(&cmd).is_some() {
+                funname: if cmd.as_symbol_id().is_some() {
                     cmd
                 } else {
                     Value::NIL
@@ -3513,24 +3509,26 @@ pub(crate) fn builtin_interactive_form(
     let cmd = args[0];
 
     // GNU (data.c:1133): Check indirect-function first for nil.
-    let indirect = resolve_indirect_symbol(eval, &format!("{}", cmd));
-    if indirect.is_none() && cmd.as_symbol_name().is_some() {
-        return Ok(Value::NIL);
+    if let Some(cmd_id) = cmd.as_symbol_id() {
+        match resolve_indirect_symbol_by_id(eval, cmd_id) {
+            Some((_, indirect)) if !indirect.is_nil() => {}
+            _ => return Ok(Value::NIL),
+        }
     }
 
-    // GNU (data.c:1141-1149): Walk symbol chain checking `interactive-form`
-    // property on each symbol in the chain.
+    // GNU (data.c:1141-1149): Walk the original symbol chain, by symbol
+    // identity, checking `interactive-form` on each symbol in the chain.
     let mut fun = cmd;
     let mut genfun = false;
-    while let Some(name) = fun.as_symbol_name() {
+    while let Some(symbol) = fun.as_symbol_id() {
         if let Some(prop) = eval
             .obarray
-            .get_property(name, "interactive-form")
-            .filter(|v| !v.is_nil())
+            .get_property_id(symbol, intern("interactive-form"))
+            .filter(|value| !value.is_nil())
         {
             return Ok(prop);
         }
-        match symbol_function_cell_in_obarray(&eval.obarray, intern(name)) {
+        match symbol_function_cell_in_obarray(&eval.obarray, symbol) {
             Some(next) => fun = next,
             None => return Ok(Value::NIL),
         }
@@ -3637,7 +3635,7 @@ pub(crate) fn builtin_interactive_form(
 
         // GNU (data.c:1188-1189): autoload → load then retry
         ValueKind::Cons if super::autoload::is_autoload_value(&fun) => {
-            let funname = if cmd.as_symbol_name().is_some() {
+            let funname = if cmd.as_symbol_id().is_some() {
                 cmd
             } else {
                 Value::NIL
@@ -4747,6 +4745,33 @@ fn valid_bytecode_stack_depth(value: Value) -> bool {
     value.as_fixnum().is_some_and(|n| n >= 0)
 }
 
+fn check_interpreted_closure_args(params_value: &Value) -> EvalResult {
+    if list_length(params_value).is_none() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), *params_value],
+        ));
+    }
+    parse_lambda_params_from_value(params_value)?;
+    Ok(Value::NIL)
+}
+
+fn check_interpreted_closure_body(body_value: &Value) -> EvalResult {
+    if !body_value.is_cons() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("consp"), *body_value],
+        ));
+    }
+    Ok(Value::NIL)
+}
+
+fn make_interpreted_closure_from_gnu_slots(slots: &[Value]) -> EvalResult {
+    check_interpreted_closure_args(&slots[0])?;
+    check_interpreted_closure_body(&slots[1])?;
+    Ok(Value::make_lambda_with_slots(slots.to_vec()))
+}
+
 pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
     if !(3..=6).contains(&slots.len()) || !valid_closure_arglist(slots[0]) {
         return Err(signal(
@@ -4771,14 +4796,7 @@ pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
     }
 
     if slots[1].is_cons() && (slots[2].is_cons() || slots[2].is_nil()) {
-        return make_interpreted_closure_from_parts(
-            &slots[0],
-            &slots[1],
-            &slots[2],
-            slots.get(4),
-            slots.get(5),
-        )
-        .map_err(|_| {
+        return make_interpreted_closure_from_gnu_slots(slots).map_err(|_| {
             signal(
                 "invalid-read-syntax",
                 vec![Value::string("Invalid byte-code object")],
@@ -4951,63 +4969,48 @@ pub(crate) fn make_interpreted_closure_from_parts(
     let docstring_value = docstring.copied().unwrap_or(Value::NIL);
     let iform = interactive.copied().unwrap_or(Value::NIL);
 
-    parse_lambda_params_from_value(params_value)?;
-    if !body_value.is_nil() && list_length(body_value).is_none() {
+    check_interpreted_closure_args(params_value)?;
+    check_interpreted_closure_body(body_value)?;
+    if list_length(&iform).is_none() {
         return Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("listp"), *body_value],
+            vec![Value::symbol("listp"), iform],
         ));
     }
 
-    let (docstring, doc_form) = match docstring_value.kind() {
-        ValueKind::String => (
-            Some(
-                docstring_value
-                    .as_lisp_string()
-                    .expect("ValueKind::String must carry LispString payload")
-                    .clone(),
-            ),
-            None,
-        ),
-        ValueKind::Nil => (None, None),
-        _other => (None, Some(docstring_value)),
-    };
-
     // GNU Emacs (eval.c:535-555): Fmake_interpreted_closure stores the
-    // interactive spec in slot 5 of the closure vector.  We mirror this
-    // by storing it in LambdaData.interactive.
+    // interactive spec in slot 5 of the closure vector.  The vector length is
+    // observable: nil IFORM means slot 5 is absent; `(interactive)' and
+    // `(interactive nil)' mean slot 5 is present with nil.
     //
-    // GNU processes iform: (interactive SPEC) → SPEC (single arg)
-    //                      (interactive S1 S2 ...) → #[S1 S2 ...]  (vector)
+    // GNU processes iform by CDR only:
+    //   nil                      → no slot
+    //   (interactive)            → nil slot
+    //   (interactive SPEC)       → SPEC
+    //   (interactive S1 S2 ...)  → #[S1 S2 ...]
     let interactive_spec = if iform.is_nil() {
         None
     } else if let Some(items) = list_to_vec(&iform) {
-        if items.len() >= 2 && items[0].as_symbol_name() == Some("interactive") {
-            let ifcdr = &items[1..];
-            if ifcdr.len() == 1 {
-                Some(ifcdr[0])
-            } else {
-                Some(Value::vector(ifcdr.to_vec()))
-            }
+        let ifcdr = &items[1..];
+        if ifcdr.len() <= 1 {
+            Some(ifcdr.first().copied().unwrap_or(Value::NIL))
         } else {
-            Some(iform)
+            Some(Value::vector(ifcdr.to_vec()))
         }
     } else {
-        Some(iform)
+        unreachable!("CHECK_LIST for IFORM succeeded")
     };
 
-    // Store GNU closure slots directly so interpreted closures do not pay a
-    // Value -> Expr -> Value round-trip for their runtime bodies.
-    Ok(Value::make_lambda_with_slots(vec![
-        *params_value,
-        *body_value,
-        *env_value,
-        Value::NIL,
-        doc_form
-            .or_else(|| docstring.as_ref().map(|d| Value::heap_string(d.clone())))
-            .unwrap_or(Value::NIL),
-        interactive_spec.unwrap_or(Value::NIL),
-    ]))
+    let mut slots = vec![*params_value, *body_value, *env_value];
+    if interactive_spec.is_some() || !docstring_value.is_nil() {
+        slots.push(Value::NIL);
+        slots.push(docstring_value);
+        if let Some(spec) = interactive_spec {
+            slots.push(spec);
+        }
+    }
+
+    Ok(Value::make_lambda_with_slots(slots))
 }
 
 /// Reify nested compiled literals embedded in `.elc` constant vectors.

@@ -446,18 +446,7 @@ pub(crate) fn resolve_autoload_load_path(
     obarray: &Obarray,
     file: &LispString,
 ) -> Result<PathBuf, Flow> {
-    let load_path = super::load::get_load_path(obarray);
-    let file_runtime = autoload_string_to_runtime_string(file);
-    match super::load::find_file_in_load_path(&file_runtime, &load_path) {
-        Some(path) => Ok(path),
-        None => Err(signal(
-            "file-missing",
-            vec![Value::string(format!(
-                "Cannot open load file: no such file or directory, {}",
-                file_runtime
-            ))],
-        )),
-    }
+    super::load::resolve_autoload_load_path_in_state(obarray, file)
 }
 
 /// After loading an autoload file, check whether the function was defined.

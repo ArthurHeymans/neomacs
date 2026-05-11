@@ -7063,6 +7063,70 @@ fn plan_load_accepts_raw_unibyte_filename_values() {
     assert!(matches!(plan, LoadPlan::Return(value) if value.is_nil()));
 }
 
+#[test]
+fn plan_load_missing_uses_gnu_file_missing_condition_data() {
+    crate::test_utils::init_test_tracing();
+    let ob = super::super::symbol::Obarray::new();
+    let err = match plan_load_in_state(&ob, Value::string("nofile"), None, None, None) {
+        Ok(_) => panic!("missing load should signal"),
+        Err(err) => err,
+    };
+
+    match err {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "file-missing");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::string("Cannot open load file"),
+                    Value::string("No such file or directory"),
+                    Value::string("nofile"),
+                ]
+            );
+        }
+        other => panic!("expected file-missing signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn resolve_autoload_load_path_requires_load_suffix_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("neovm-autoload-must-suffix-{unique}"));
+    fs::create_dir_all(&root).expect("create temp root");
+    fs::write(root.join("probe"), "(setq bare-probe-loaded t)\n").expect("write bare fixture");
+
+    let mut ob = super::super::symbol::Obarray::new();
+    ob.set_symbol_value(
+        "load-path",
+        Value::list(vec![Value::heap_string(load_path_lisp_string(&root))]),
+    );
+    let file = crate::heap_types::LispString::from_utf8("probe");
+    let err = resolve_autoload_load_path_in_state(&ob, &file)
+        .expect_err("autoload should not load a bare suffixless file");
+    match err {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "file-missing");
+            assert_eq!(
+                sig.data.first().copied(),
+                Some(Value::string("Cannot open load file"))
+            );
+        }
+        other => panic!("expected file-missing signal, got {other:?}"),
+    }
+
+    let suffixed = root.join("probe.el");
+    fs::write(&suffixed, "(setq suffixed-probe-loaded t)\n").expect("write .el fixture");
+    let resolved = resolve_autoload_load_path_in_state(&ob, &file)
+        .expect("autoload should resolve suffixed load file");
+    assert_eq!(resolved, suffixed);
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 #[cfg(unix)]
 #[test]
 fn builtin_load_accepts_raw_unibyte_absolute_filename_values() {

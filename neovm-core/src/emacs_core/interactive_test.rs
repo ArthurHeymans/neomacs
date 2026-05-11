@@ -559,6 +559,26 @@ fn commandp_non_interactive() {
 }
 
 #[test]
+fn commandp_errors_on_uninterned_interactive_form_property_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let ((s (make-symbol "neo-cmd-prop")))
+                 (fset s (lambda () 1))
+                 (put s 'interactive-form '(interactive "p"))
+                 (list (condition-case e
+                           (commandp s)
+                         (error (list (car e)
+                                      (equal (car (cdr e))
+                                             "Found an 'interactive-form' property!"))))
+                       (interactive-form s)
+                       (commandp (symbol-function s))))"#
+        ),
+        r#"OK ((error t) (interactive "p") nil)"#
+    );
+}
+
+#[test]
 fn commandp_true_for_builtin_ignore() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
