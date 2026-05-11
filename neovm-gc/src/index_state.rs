@@ -110,6 +110,7 @@ impl BuildHasher for ObjectKeyBuildHasher {
 
 pub(crate) type ObjectIndex = HashMap<ObjectKey, ObjectLocator, ObjectKeyBuildHasher>;
 pub(crate) type ForwardingMap = HashMap<ObjectKey, GcErased, ObjectKeyBuildHasher>;
+pub(crate) type ObjectKeySet = HashSet<ObjectKey, ObjectKeyBuildHasher>;
 
 /// Explicit-edge fallback remembered set, owner-only model.
 ///
@@ -143,7 +144,7 @@ pub(crate) type ForwardingMap = HashMap<ObjectKey, GcErased, ObjectKeyBuildHashe
 #[derive(Debug)]
 pub(crate) struct RememberedSetState {
     pub(crate) owners: Vec<ObjectKey>,
-    owner_set: HashSet<ObjectKey, ObjectKeyBuildHasher>,
+    owner_set: ObjectKeySet,
     /// Owners the barrier hot path appended without the
     /// `HeapCore` write lock. Drained into `owners`/`owner_set`
     /// by the next GC-time consumer via `merge_pending_owners`.
@@ -187,7 +188,7 @@ pub(crate) struct PreparedIndexReclaim {
 
 #[derive(Debug, Default)]
 pub(crate) struct PostSweepIndexRebuild {
-    finalizable_candidates: HashSet<ObjectKey, ObjectKeyBuildHasher>,
+    finalizable_candidates: ObjectKeySet,
 }
 
 impl RememberedSetState {
@@ -253,7 +254,7 @@ impl RememberedSetState {
         // allocating a full combined `Vec`.
         let pending = self.pending_inserts.lock();
         let mut extra = 0usize;
-        let mut seen: HashSet<ObjectKey, ObjectKeyBuildHasher> = HashSet::with_hasher(ObjectKeyBuildHasher);
+        let mut seen: ObjectKeySet = HashSet::with_hasher(ObjectKeyBuildHasher);
         for key in pending.iter().copied() {
             if !self.owner_set.contains(&key) && seen.insert(key) {
                 extra = extra.saturating_add(1);
@@ -584,15 +585,15 @@ impl HeapIndexState {
         survivors: &[PreparedReclaimSurvivor],
         kind: CollectionKind,
     ) -> PreparedIndexReclaim {
-        let finalizable_candidate_set: HashSet<_> =
+        let finalizable_candidate_set: ObjectKeySet =
             self.finalizable_candidates.iter().copied().collect();
-        let weak_candidate_set: HashSet<_> = self.weak_candidates.iter().copied().collect();
-        let ephemeron_candidate_set: HashSet<_> =
+        let weak_candidate_set: ObjectKeySet = self.weak_candidates.iter().copied().collect();
+        let ephemeron_candidate_set: ObjectKeySet =
             self.ephemeron_candidates.iter().copied().collect();
 
         let mut rebuilt_object_index =
             ObjectIndex::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
-        let mut survivor_keys = HashSet::with_capacity(survivors.len());
+        let mut survivor_keys = ObjectKeySet::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
         let mut ephemeron_candidates = Vec::new();
