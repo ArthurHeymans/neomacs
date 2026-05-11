@@ -91,6 +91,7 @@ impl NurseryArena {
     /// Safety/ownership: the returned pointer is valid for the lifetime
     /// of the arena (until `reset` is called). The caller must not free
     /// the memory with `dealloc` — the arena owns it.
+    #[inline]
     pub(crate) fn try_alloc(&self, layout: Layout) -> Option<NonNull<u8>> {
         let size = layout.size();
         let align = layout.align().max(1);
