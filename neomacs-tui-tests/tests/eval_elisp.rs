@@ -10676,6 +10676,38 @@ fn file_name_edge_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn expand_file_name_preserves_double_slash_root_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fileio.c:expand-file-name canonicalization collapses repeated
+    // slashes except it deliberately leaves an initial '//' root alone.
+    let expr = r#"(message "expanddbl:%S" (list (expand-file-name "//server/share/../x") (expand-file-name "///server/share/../x")))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"expanddbl:(\"//server/x\" \"/server/x\")"#;
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: expand-file-name should preserve an initial double-slash root like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "expand_file_name_preserves_double_slash_root_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_handler_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
