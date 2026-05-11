@@ -7943,6 +7943,41 @@ fn make_char_table_purpose_type_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn make_char_table_extra_slots_property_type_error_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/chartab.c:Fmake_char_table reads PURPOSE's
+    // `char-table-extra-slots' property and validates it with CHECK_FIXNAT.
+    // Negative integers and floats must signal wholenump instead of being
+    // silently treated as zero extra slots.
+    let expr = r#"(message "chartabextraslots:%S" (list (let ((sym (make-symbol "x"))) (put sym 'char-table-extra-slots -1) (condition-case e (make-char-table sym nil) (error (list (car e) (cadr e))))) (let ((sym (make-symbol "x"))) (put sym 'char-table-extra-slots 1.0) (condition-case e (make-char-table sym nil) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected =
+        "chartabextraslots:((wrong-type-argument wholenump) (wrong-type-argument wholenump))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: make-char-table should validate char-table-extra-slots like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "make_char_table_extra_slots_property_type_error_matches_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn case_table_fillarray_preserves_gnu_extra_slot_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
