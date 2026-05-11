@@ -663,6 +663,7 @@ impl Heap {
     }
 
     #[inline(always)]
+    #[inline]
     pub(crate) fn commit_allocated_record_shared_prepared_nursery(
         &self,
         record: ObjectRecord,
@@ -867,6 +868,7 @@ impl Heap {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
+    #[inline]
     #[inline]
     pub(crate) fn mark_collector_plans_dirty_if_needed(&self, last_refresh_epoch: &mut u64) {
         let refresh_epoch = self
