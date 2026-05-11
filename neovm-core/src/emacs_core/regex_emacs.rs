@@ -2111,7 +2111,7 @@ pub(crate) trait SyntaxLookup {
     fn char_has_category(&self, c: char, cat: u8) -> bool;
 }
 
-/// Default syntax lookup — uses ASCII-based definitions.
+/// Default syntax lookup — uses GNU's standard syntax-table definitions.
 /// This is used when no buffer-specific syntax table is available
 /// (e.g. in unit tests or string-only matching).
 pub(crate) struct DefaultSyntaxLookup;
@@ -2124,21 +2124,7 @@ pub(crate) struct BufferSyntaxLookup {
 
 impl SyntaxLookup for DefaultSyntaxLookup {
     fn char_syntax(&self, c: char) -> SyntaxClass {
-        if c.is_alphanumeric() || c == '_' {
-            SyntaxClass::Word
-        } else if c.is_whitespace() {
-            SyntaxClass::Whitespace
-        } else if c.is_ascii_punctuation() {
-            SyntaxClass::Punctuation
-        } else if matches!(c, '(' | '[' | '{') {
-            SyntaxClass::Open
-        } else if matches!(c, ')' | ']' | '}') {
-            SyntaxClass::Close
-        } else if c == '"' || c == '\'' {
-            SyntaxClass::StringDelim
-        } else {
-            SyntaxClass::Symbol
-        }
+        crate::emacs_core::syntax::standard_syntax_class_for_char(c)
     }
 
     fn char_has_category(&self, c: char, cat: u8) -> bool {

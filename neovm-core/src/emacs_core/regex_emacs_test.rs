@@ -88,6 +88,36 @@ fn test_syntax_word() {
 }
 
 #[test]
+fn default_syntax_lookup_uses_gnu_standard_classes() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    assert_eq!(
+        syn.char_syntax('a'),
+        crate::emacs_core::syntax::SyntaxClass::Word
+    );
+    assert_eq!(
+        syn.char_syntax('$'),
+        crate::emacs_core::syntax::SyntaxClass::Word
+    );
+    assert_eq!(
+        syn.char_syntax('_'),
+        crate::emacs_core::syntax::SyntaxClass::Symbol
+    );
+    assert_eq!(
+        syn.char_syntax('-'),
+        crate::emacs_core::syntax::SyntaxClass::Symbol
+    );
+    assert_eq!(
+        syn.char_syntax(' '),
+        crate::emacs_core::syntax::SyntaxClass::Whitespace
+    );
+    assert_eq!(
+        syn.char_syntax('\u{4e2d}'),
+        crate::emacs_core::syntax::SyntaxClass::Word
+    );
+}
+
+#[test]
 fn test_backreference() {
     crate::test_utils::init_test_tracing();
     let syn = DefaultSyntaxLookup;

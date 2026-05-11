@@ -224,6 +224,31 @@ impl SyntaxClass {
     }
 }
 
+/// Return the GNU standard syntax-table class for an Emacs character
+/// code, mirroring GNU `src/syntax.c:init_syntax_once`.
+pub(crate) fn standard_syntax_class_for_code(code: u32) -> SyntaxClass {
+    match code {
+        0x00..=0x08 | 0x0b | 0x0e..=0x1f | 0x7f => SyntaxClass::Punctuation,
+        0x09 | 0x0a | 0x0c | 0x0d | 0x20 => SyntaxClass::Whitespace,
+        0x30..=0x39 | 0x41..=0x5a | 0x61..=0x7a | 0x24 | 0x25 => SyntaxClass::Word,
+        0x28 | 0x5b | 0x7b => SyntaxClass::Open,
+        0x29 | 0x5d | 0x7d => SyntaxClass::Close,
+        0x22 => SyntaxClass::StringDelim,
+        0x5c => SyntaxClass::Escape,
+        0x26 | 0x2a | 0x2b | 0x2d | 0x2f | 0x3c | 0x3d | 0x3e | 0x5f | 0x7c => SyntaxClass::Symbol,
+        0x21 | 0x23 | 0x27 | 0x2c | 0x2e | 0x3a | 0x3b | 0x3f | 0x40 | 0x5e | 0x60 | 0x7e => {
+            SyntaxClass::Punctuation
+        }
+        0x80..=0x3F_FFFF => SyntaxClass::Word,
+        _ => SyntaxClass::Whitespace,
+    }
+}
+
+#[inline]
+pub(crate) fn standard_syntax_class_for_char(ch: char) -> SyntaxClass {
+    standard_syntax_class_for_code(ch as u32)
+}
+
 // ===========================================================================
 // Syntax flags
 // ===========================================================================
