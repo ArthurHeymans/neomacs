@@ -14586,4 +14586,22 @@ mod tests {
         );
         assert!(!value.unwrap().is_nil());
     }
+
+    #[test]
+    fn executes_fboundp_nil_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (fboundp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_boundp_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (boundp nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
 }
