@@ -6452,6 +6452,39 @@ fn symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu() {
 }
 
 #[test]
+fn symbol_with_pos_print_symbols_bare_semantics_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/print.c:PVEC_SYMBOL_WITH_POS prints an unreadable
+    // `#<symbol NAME at POS>' object unless print-symbols-bare is non-nil.
+    // Therefore the default printed form is not readable.
+    let expr = r##"(message "symposprint:%S" (let* ((s (position-symbol 'foo 12)) (printed (prin1-to-string s))) (list (eq (type-of s) 'symbol-with-pos) (equal printed "#<symbol foo at 12>") (equal (let ((print-symbols-bare t)) (prin1-to-string s)) "foo") (equal (let ((print-symbols-bare nil)) (prin1-to-string s)) "#<symbol foo at 12>") (equal (condition-case e (read printed) (error (list (car e) (cadr e)))) '(invalid-read-syntax "#<")))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "symposprint:(t t t t t)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: symbol-with-pos print-symbols-bare semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "symbol_with_pos_print_symbols_bare_semantics_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn function_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
