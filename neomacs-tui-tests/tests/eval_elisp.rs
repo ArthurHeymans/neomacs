@@ -1329,6 +1329,51 @@ fn aset_multibyte_string_non_ascii_replacement_error_matches_gnu_semantics() {
 }
 
 #[test]
+fn store_substring_preserves_aset_multibyte_errors_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/international/mule-util.el:store-substring is a thin loop over
+    // `aset'.  It must inherit aset's refusal to replace a non-ASCII
+    // multibyte character with a different byte-length character.
+    let expr = r#"(progn (require 'mule-util) (message "storemb:%S" (list (condition-case e (let ((s (copy-sequence "éé"))) (store-substring s 0 "xx") s) (error (list (car e) (cadr e)))) (condition-case e (let ((s (copy-sequence "éé"))) (store-substring s 0 "x") s) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("storemb:")
+            && recent
+                .matches("Attempt to replace non-ASCII char in multibyte string")
+                .count()
+                >= 2
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: store-substring should preserve GNU aset multibyte replacement errors\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "store_substring_preserves_aset_multibyte_errors_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn nconc_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
