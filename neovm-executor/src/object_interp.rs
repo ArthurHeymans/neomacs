@@ -14136,4 +14136,31 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_mapcan_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcan #'identity nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_mapcon_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (mapcon #'identity nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_maplist_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (maplist #'identity nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
