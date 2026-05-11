@@ -4144,7 +4144,7 @@ pub(crate) fn builtin_set_window_buffer(
 ) -> EvalResult {
     expect_min_args("set-window-buffer", &args, 2)?;
     expect_max_args("set-window-buffer", &args, 3)?;
-    let run_buffer_list_hook = {
+    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);
         let (fid, wid) = resolve_window_id_in_state(frames, buffers, args.first())?;
@@ -4178,47 +4178,6 @@ pub(crate) fn builtin_set_window_buffer(
 
         let keep_margins = args.get(2).is_some_and(|arg| !arg.is_nil());
         let selected_fid = ensure_selected_frame_id_in_state(frames, buffers);
-        let next_margins = if keep_margins {
-            None
-        } else {
-            Some((
-                buffer_margin_width(buffers, buf_id, "left-margin-width")?,
-                buffer_margin_width(buffers, buf_id, "right-margin-width")?,
-            ))
-        };
-        let next_fringes = if keep_margins {
-            None
-        } else {
-            Some((
-                buffer_local_optional_dimension(buffers, buf_id, "left-fringe-width")?,
-                buffer_local_optional_dimension(buffers, buf_id, "right-fringe-width")?,
-                buffer_local_value(buffers, buf_id, "fringes-outside-margins").is_truthy(),
-            ))
-        };
-        let next_scroll_bars = if keep_margins {
-            None
-        } else {
-            let vertical_type = buffer_local_value(buffers, buf_id, "vertical-scroll-bar");
-            if !valid_vertical_scroll_bar_type(vertical_type) {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Invalid type of vertical scroll bar")],
-                ));
-            }
-            let horizontal_type = buffer_local_value(buffers, buf_id, "horizontal-scroll-bar");
-            if !valid_horizontal_scroll_bar_type(horizontal_type) {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Invalid type of horizontal scroll bar")],
-                ));
-            }
-            Some((
-                buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-width")?,
-                vertical_type,
-                buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-height")?,
-                horizontal_type,
-            ))
-        };
         let mut old_state = None;
         if let Some(Window::Leaf {
             buffer_id,
@@ -4230,6 +4189,7 @@ pub(crate) fn builtin_set_window_buffer(
         {
             old_state = Some((*buffer_id, *window_start, *point, *dedicated));
         }
+        let mut run_buffer_list_hook = false;
         if let Some((old_buffer_id, old_window_start, old_point, dedicated)) = old_state {
             if dedicated && old_buffer_id != buf_id {
                 let old_buffer_name = buffers
@@ -4289,14 +4249,15 @@ pub(crate) fn builtin_set_window_buffer(
                     &[old_buffer_value],
                 )?;
                 frames.set_window_next_buffers(wid, Value::NIL);
-                if should_record_window_history_buffer(
+                let record_window_history = should_record_window_history_buffer(
                     frames,
                     minibuffers,
                     buffers,
                     fid,
                     wid,
                     old_buffer_id,
-                ) {
+                );
+                if record_window_history {
                     let mut next_prev = Vec::with_capacity(filtered_prev.len() + 1);
                     next_prev.push(history_entry);
                     next_prev.extend(filtered_prev);
@@ -4304,11 +4265,79 @@ pub(crate) fn builtin_set_window_buffer(
                 } else {
                     frames.set_window_prev_buffers(wid, Value::list(filtered_prev));
                 }
+                run_buffer_list_hook =
+                    record_window_history && !is_minibuffer_window(frames, fid, wid);
             } else {
                 discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buf_id)])?;
             }
         }
-
+        (fid, wid, buf_id, keep_margins, run_buffer_list_hook)
+    };
+    if run_buffer_list_hook {
+        super::builtins::run_buffer_list_update_hook(eval)?;
+    }
+    {
+        let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+        if buffers.get(buf_id).is_none() {
+            return Err(signal(
+                "error",
+                vec![Value::string("Attempt to display deleted buffer")],
+            ));
+        }
+        let next_margins = if keep_margins {
+            None
+        } else {
+            Some((
+                buffer_margin_width(buffers, buf_id, "left-margin-width")?,
+                buffer_margin_width(buffers, buf_id, "right-margin-width")?,
+            ))
+        };
+        let next_fringes = if keep_margins {
+            None
+        } else {
+            Some((
+                buffer_local_optional_dimension(buffers, buf_id, "left-fringe-width")?,
+                buffer_local_optional_dimension(buffers, buf_id, "right-fringe-width")?,
+                buffer_local_value(buffers, buf_id, "fringes-outside-margins").is_truthy(),
+            ))
+        };
+        let next_scroll_bars = if keep_margins {
+            None
+        } else {
+            let vertical_type = buffer_local_value(buffers, buf_id, "vertical-scroll-bar");
+            if !valid_vertical_scroll_bar_type(vertical_type) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid type of vertical scroll bar")],
+                ));
+            }
+            let horizontal_type = buffer_local_value(buffers, buf_id, "horizontal-scroll-bar");
+            if !valid_horizontal_scroll_bar_type(horizontal_type) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid type of horizontal scroll bar")],
+                ));
+            }
+            Some((
+                buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-width")?,
+                vertical_type,
+                buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-height")?,
+                horizontal_type,
+            ))
+        };
+        let old_state = frames
+            .get(fid)
+            .and_then(|frame| frame.find_window(wid))
+            .and_then(|window| match window {
+                Window::Leaf {
+                    buffer_id,
+                    window_start,
+                    point,
+                    dedicated,
+                    ..
+                } => Some((*buffer_id, *window_start, *point, *dedicated)),
+                _ => None,
+            });
         let selected_window = frames.get(fid).map(|frame| frame.selected_window);
         let same_buffer = old_state.is_some_and(|(old_buffer_id, _, _, _)| old_buffer_id == buf_id);
         let (next_window_start, next_point) = if same_buffer && keep_margins {
@@ -4344,10 +4373,6 @@ pub(crate) fn builtin_set_window_buffer(
         {
             buffer.last_selected_window = Some(wid);
         }
-        false
-    };
-    if run_buffer_list_hook {
-        super::builtins::run_buffer_list_update_hook(eval)?;
     }
     Ok(Value::NIL)
 }

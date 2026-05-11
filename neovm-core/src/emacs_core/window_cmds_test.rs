@@ -610,7 +610,7 @@ fn set_window_point_preserves_window_old_point_like_gnu() {
                    (set-window-buffer w b)
                    (set-window-point w 13)
                    (list (window-point w) (window-old-point w)))
-               (when (buffer-live-p b) (kill-buffer b))))"#,
+               (if (buffer-live-p b) (kill-buffer b))))"#,
     );
     assert_eq!(r, "OK (13 7)");
 }
@@ -4869,13 +4869,19 @@ fn set_window_buffer_runs_buffer_list_update_hook_for_normal_windows() {
                (b (get-buffer-create \"swb-hook-target\")))
            (setq buffer-list-update-hook
                  (list (lambda ()
-                         (setq swb-log (cons (buffer-name) swb-log)))))
+                         (setq swb-log
+                               (cons (list (buffer-name)
+                                           (buffer-name (window-buffer w)))
+                                     swb-log)))))
            (set-window-buffer w b)
-           (list (length swb-log)
+           (list swb-log
                  (buffer-name)
                  (buffer-name (window-buffer w))))",
     );
-    assert_eq!(result, "OK (1 \"*scratch*\" \"swb-hook-target\")");
+    assert_eq!(
+        result,
+        "OK (((\"*scratch*\" \"*scratch*\")) \"*scratch*\" \"swb-hook-target\")"
+    );
 }
 
 #[test]
