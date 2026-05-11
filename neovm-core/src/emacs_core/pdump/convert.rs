@@ -2273,6 +2273,8 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         id: DumpBufferId(buf.id.0),
         name_lisp: buf.name_value().as_lisp_string().map(dump_lisp_string),
         name: None,
+        last_name_lisp: buf.last_name_value().as_lisp_string().map(dump_lisp_string),
+        last_name: None,
         base_buffer: buf.base_buffer.map(|id| DumpBufferId(id.0)),
         text: DumpGapBuffer {
             text: buf.text.dump_text(),
@@ -3971,13 +3973,23 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         _ => None,
     };
 
+    let name = if let Some(ref name) = db.name_lisp {
+        Value::heap_string(load_lisp_string(name))
+    } else {
+        Value::string(db.name.clone().unwrap_or_default())
+    };
+    let last_name = if let Some(ref last_name) = db.last_name_lisp {
+        Value::heap_string(load_lisp_string(last_name))
+    } else if let Some(ref last_name) = db.last_name {
+        Value::string(last_name.clone())
+    } else {
+        Value::NIL
+    };
+
     Buffer {
         id: BufferId(db.id.0),
-        name: if let Some(ref name) = db.name_lisp {
-            Value::heap_string(load_lisp_string(name))
-        } else {
-            Value::string(db.name.clone().unwrap_or_default())
-        },
+        name,
+        last_name,
         base_buffer: db.base_buffer.map(|id| BufferId(id.0)),
         text,
         pt: pt_char,

@@ -4938,6 +4938,10 @@ fn pure_dispatch_buffer_placeholder_mutators_match_compat_contracts() {
             eval.buffers.get(buf_id).unwrap().name_value(),
             Value::string("new-name")
         );
+        assert_eq!(
+            builtin_buffer_last_name(&mut eval, vec![Value::make_buffer(buf_id)]).unwrap(),
+            Value::string("old-name")
+        );
     }
 
     {

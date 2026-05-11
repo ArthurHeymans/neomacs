@@ -1385,6 +1385,9 @@ pub struct Buffer {
     pub id: BufferId,
     /// Buffer name (e.g. `"*scratch*"`). Mirrors GNU `struct buffer.name_`.
     pub name: Value,
+    /// Buffer name before the last rename, or before death after kill.
+    /// Mirrors GNU `struct buffer.last_name_` and `BVAR (buf, last_name)`.
+    pub last_name: Value,
     /// Base buffer when this is an indirect buffer.
     pub base_buffer: Option<BufferId>,
     /// The underlying text storage.
@@ -1496,6 +1499,7 @@ impl Buffer {
         Self {
             id,
             name,
+            last_name: Value::NIL,
             base_buffer: None,
             text: BufferText::new(),
             pt: 0,
@@ -1540,6 +1544,10 @@ impl Buffer {
         self.name
     }
 
+    pub fn last_name_value(&self) -> Value {
+        self.last_name
+    }
+
     pub fn name_runtime_string_owned(&self) -> String {
         self.name
             .as_runtime_string_owned()
@@ -1557,6 +1565,11 @@ impl Buffer {
     pub fn set_name_value(&mut self, name: Value) {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         self.name = name;
+    }
+
+    pub fn set_last_name_value(&mut self, name: Value) {
+        debug_assert!(name.is_nil() || name.is_string());
+        self.last_name = name;
     }
 
     pub fn set_name_runtime_string(&mut self, name: impl Into<String>) {
@@ -3657,6 +3670,15 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn rename_buffer(&mut self, id: BufferId, name: Value) -> Option<()> {
+        debug_assert!(name.is_string());
+        let buf = self.buffers.get_mut(&id)?;
+        let old_name = buf.name_value();
+        buf.set_last_name_value(old_name);
+        buf.set_name_value(name);
+        Some(())
+    }
+
     pub fn set_buffer_mark(&mut self, id: BufferId, pos: usize) -> Option<()> {
         self.buffers.get_mut(&id)?.set_mark_byte(pos);
         Some(())
@@ -4256,6 +4278,7 @@ impl GcTrace for BufferManager {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         for buffer in self.buffers.values() {
             roots.push(buffer.name);
+            roots.push(buffer.last_name);
             buffer.text.trace_text_prop_roots(roots);
             buffer.undo_state.trace_roots(roots);
             buffer.overlays.trace_roots(roots);

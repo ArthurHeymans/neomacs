@@ -720,10 +720,7 @@ pub(crate) fn builtin_buffer_last_name(
     };
 
     if let Some(buf) = buffers.get(target) {
-        if buf.has_name("*scratch*") {
-            return Ok(Value::NIL);
-        }
-        return Ok(buf.name_value());
+        return Ok(buf.last_name_value());
     }
     if let Some(name) = buffers.dead_buffer_last_name_value(target) {
         return Ok(name);

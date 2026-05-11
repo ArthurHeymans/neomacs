@@ -589,6 +589,10 @@ pub struct DumpBuffer {
     pub name_lisp: Option<DumpLispString>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub last_name_lisp: Option<DumpLispString>,
+    #[serde(default)]
+    pub last_name: Option<String>,
     pub base_buffer: Option<DumpBufferId>,
     pub text: DumpGapBuffer,
     pub pt: usize,

@@ -16,7 +16,7 @@ use super::types::{
 };
 
 const BUFFER_MAGIC: [u8; 16] = *b"NEOBUFFER\0\0\0\0\0\0\0";
-const BUFFER_FORMAT_VERSION: u32 = 2;
+const BUFFER_FORMAT_VERSION: u32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -136,6 +136,8 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     write_buffer_id(out, buffer.id);
     write_opt_lisp_string(out, buffer.name_lisp.as_ref())?;
     write_opt_string(out, buffer.name.as_deref())?;
+    write_opt_lisp_string(out, buffer.last_name_lisp.as_ref())?;
+    write_opt_string(out, buffer.last_name.as_deref())?;
     write_opt_buffer_id(out, buffer.base_buffer);
     write_gap_buffer(out, &buffer.text)?;
     write_usize(out, buffer.pt)?;
@@ -184,6 +186,8 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
         id: read_buffer_id(cursor)?,
         name_lisp: read_opt_lisp_string(cursor)?,
         name: read_opt_string(cursor)?,
+        last_name_lisp: read_opt_lisp_string(cursor)?,
+        last_name: read_opt_string(cursor)?,
         base_buffer: read_opt_buffer_id(cursor)?,
         text: read_gap_buffer(cursor)?,
         pt: read_usize(cursor, "buffer point")?,
@@ -868,6 +872,8 @@ mod tests {
                 size_byte: 9,
             }),
             name: Some("*scratch*".into()),
+            last_name_lisp: None,
+            last_name: Some("*old-scratch*".into()),
             base_buffer: Some(DumpBufferId(2)),
             text: DumpGapBuffer {
                 text: b"hello buffer".to_vec(),
