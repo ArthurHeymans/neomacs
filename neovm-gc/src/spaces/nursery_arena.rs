@@ -111,7 +111,7 @@ impl NurseryArena {
                 current,
                 end,
                 Ordering::AcqRel,
-                Ordering::Acquire,
+                Ordering::Relaxed,
             ) {
                 Ok(_) => return NonNull::new(aligned as *mut u8),
                 Err(actual) => current = actual,
