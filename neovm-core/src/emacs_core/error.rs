@@ -310,6 +310,9 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     let print_circle = obarray
         .symbol_value("print-circle")
         .is_some_and(|v| v.is_truthy());
+    let print_symbols_bare = obarray
+        .symbol_value("print-symbols-bare")
+        .is_some_and(|v| v.is_truthy());
     let print_escape_newlines = obarray
         .symbol_value("print-escape-newlines")
         .is_some_and(|v| v.is_truthy());
@@ -342,6 +345,7 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
         None
     };
     let mut opts = PrintOptions::new(print_gensym, print_circle, print_level, print_length);
+    opts.print_symbols_bare = print_symbols_bare;
     opts.print_escape_newlines = print_escape_newlines;
     opts.print_escape_nonascii = print_escape_nonascii;
     opts.print_escape_multibyte = print_escape_multibyte;

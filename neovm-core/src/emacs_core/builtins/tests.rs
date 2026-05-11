@@ -12814,6 +12814,24 @@ fn indirect_function_nil_and_non_symbol_behavior() {
 }
 
 #[test]
+fn indirect_function_symbol_with_pos_follows_gnu_toggle() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let positioned = eval
+        .tagged_heap
+        .alloc_symbol_with_pos(Value::symbol("file-exists-p"), Value::fixnum(11));
+
+    let disabled = builtin_indirect_function(&mut eval, vec![positioned])
+        .expect("disabled symbol-with-pos should be returned unchanged");
+    assert_eq!(disabled, positioned);
+
+    eval.set_variable("symbols-with-pos-enabled", Value::T);
+    let enabled = builtin_indirect_function(&mut eval, vec![positioned])
+        .expect("enabled symbol-with-pos should resolve like GNU SYMBOLP");
+    assert_eq!(enabled, Value::subr(intern("file-exists-p")));
+}
+
+#[test]
 fn indirect_function_rejects_overflow_arity() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

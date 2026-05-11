@@ -1538,6 +1538,9 @@ fn apply_print_override_setting(
                 options.print_number_table = None;
             }
         }
+        "symbols-bare" => {
+            options.print_symbols_bare = value.is_truthy();
+        }
         "number-table" => {
             options.print_number_table = value.is_hash_table().then_some(value);
         }
@@ -1548,8 +1551,7 @@ fn apply_print_override_setting(
         | "unreadable-function"
         | "unreadeable-function"
         | "float-format"
-        | "integers-as-characters"
-        | "symbols-bare" => {}
+        | "integers-as-characters" => {}
         _ => {
             return Err(signal(
                 "wrong-type-argument",

@@ -317,15 +317,15 @@ pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_symbol_name(args: Vec<Value>) -> EvalResult {
     expect_args("symbol-name", &args, 1)?;
-    builtin_symbol_name_value(args[0])
+    builtin_symbol_name_value(args[0], false)
 }
 
-pub(crate) fn builtin_symbol_name_1(_eval: &mut super::eval::Context, symbol: Value) -> EvalResult {
-    builtin_symbol_name_value(symbol)
+pub(crate) fn builtin_symbol_name_1(eval: &mut super::eval::Context, symbol: Value) -> EvalResult {
+    builtin_symbol_name_value(symbol, eval.symbols_with_pos_enabled)
 }
 
-fn builtin_symbol_name_value(symbol: Value) -> EvalResult {
-    match symbol_id(&symbol) {
+fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> EvalResult {
+    match super::symbols::symbol_id_checked(&symbol, symbols_with_pos_enabled) {
         Some(id) => Ok(Value::heap_string(
             crate::emacs_core::intern::resolve_sym_lisp_string(id).clone(),
         )),

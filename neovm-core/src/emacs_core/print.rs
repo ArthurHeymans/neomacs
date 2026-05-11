@@ -17,6 +17,7 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 pub struct PrintOptions {
     pub print_gensym: bool,
     pub print_circle: bool,
+    pub print_symbols_bare: bool,
     pub print_escape_newlines: bool,
     pub print_escape_nonascii: bool,
     pub print_escape_multibyte: bool,
@@ -33,6 +34,7 @@ impl PrintOptions {
         Self {
             print_gensym,
             print_circle: false,
+            print_symbols_bare: false,
             print_escape_newlines: false,
             print_escape_nonascii: false,
             print_escape_multibyte: false,
@@ -55,6 +57,7 @@ impl PrintOptions {
         Self {
             print_gensym,
             print_circle,
+            print_symbols_bare: false,
             print_escape_newlines: false,
             print_escape_nonascii: false,
             print_escape_multibyte: false,
@@ -845,13 +848,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
             write!(out, "{}", value.as_bignum().unwrap()).unwrap();
         }
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
-            // GNU prints symbol-with-pos as the bare symbol name.
-            // Full implementation in Task 7.
-            if let Some(sym) = value.as_symbol_with_pos_sym() {
-                write_value_stateful(&sym, out, state);
-            } else {
-                out.push_str("#<symbol-with-pos>");
-            }
+            write_symbol_with_pos_stateful(value, out, state);
         }
         ValueKind::Unbound => out.push_str("#<unbound>"),
         ValueKind::Unknown => write!(out, "#<unknown {:#x}>", value.0).unwrap(),
@@ -1753,13 +1750,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             out.extend_from_slice(value.as_bignum().unwrap().to_string().as_bytes());
         }
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
-            // GNU prints symbol-with-pos as the bare symbol name.
-            // Full implementation in Task 7.
-            if let Some(sym) = value.as_symbol_with_pos_sym() {
-                append_print_value_bytes(&sym, out, options);
-            } else {
-                out.extend_from_slice(b"#<symbol-with-pos>");
-            }
+            append_symbol_with_pos_bytes(value, out, options);
         }
         ValueKind::Unbound => {
             out.extend_from_slice(b"#<unbound>");
@@ -1798,6 +1789,58 @@ fn format_symbol_name(name: &str) -> String {
         out.push(ch);
     }
     out
+}
+
+fn write_symbol_with_pos_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+    let Some(swp) = value.as_symbol_with_pos() else {
+        out.push_str("#<symbol-with-pos>");
+        return;
+    };
+
+    let sym = swp.sym;
+    if state.options.print_symbols_bare {
+        write_value_stateful(&sym, out, state);
+        return;
+    }
+
+    out.push_str("#<symbol ");
+    if sym.is_symbol() {
+        write_value_stateful(&sym, out, state);
+    } else {
+        out.push_str("NOT A SYMBOL!!");
+    }
+    if let Some(pos) = swp.pos.as_fixnum() {
+        write!(out, " at {pos}").unwrap();
+    } else {
+        out.push_str(" NOT A POSITION!!");
+    }
+    out.push('>');
+}
+
+fn append_symbol_with_pos_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptions) {
+    let Some(swp) = value.as_symbol_with_pos() else {
+        out.extend_from_slice(b"#<symbol-with-pos>");
+        return;
+    };
+
+    let sym = swp.sym;
+    if options.print_symbols_bare {
+        append_print_value_bytes(&sym, out, options);
+        return;
+    }
+
+    out.extend_from_slice(b"#<symbol ");
+    if sym.is_symbol() {
+        append_print_value_bytes(&sym, out, options);
+    } else {
+        out.extend_from_slice(b"NOT A SYMBOL!!");
+    }
+    if let Some(pos) = swp.pos.as_fixnum() {
+        out.extend_from_slice(format!(" at {pos}").as_bytes());
+    } else {
+        out.extend_from_slice(b" NOT A POSITION!!");
+    }
+    out.push(b'>');
 }
 
 fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {

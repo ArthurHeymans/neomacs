@@ -357,7 +357,13 @@ fn bare_symbol_value(arg: Value) -> EvalResult {
     } else {
         Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("symbolp"), arg],
+            vec![
+                Value::list(vec![
+                    Value::symbol("symbolp"),
+                    Value::symbol("symbol-with-pos-p"),
+                ]),
+                arg,
+            ],
         ))
     }
 }

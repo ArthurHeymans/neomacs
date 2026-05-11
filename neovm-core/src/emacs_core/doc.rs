@@ -149,7 +149,8 @@ fn documentation_plan(
         }
     }
 
-    let function = resolve_documentation_function_value(obarray, args[0])?;
+    let function =
+        resolve_documentation_function_value(obarray, args[0], eval.symbols_with_pos_enabled)?;
     let plan = if obarray
         .symbol_function_id(intern("function-documentation"))
         .is_some()
@@ -230,19 +231,36 @@ fn documentation_result_from_raw_doc(lisp_directory: Option<&str>, value: Value)
 fn resolve_documentation_function_value(
     obarray: &super::symbol::Obarray,
     function: Value,
+    symbols_with_pos_enabled: bool,
 ) -> EvalResult {
-    let mut resolved = if super::builtins::symbols::symbol_id(&function).is_some() {
-        let func = super::builtins::symbols::symbol_function_impl_1(obarray, function)?;
-        if func.is_nil() {
-            return Err(signal("void-function", vec![function]));
-        }
-        func
-    } else {
-        function
-    };
+    let mut resolved =
+        if super::builtins::symbols::symbol_id_checked(&function, symbols_with_pos_enabled)
+            .is_some()
+        {
+            let func = super::builtins::symbols::symbol_function_impl_1_checked(
+                obarray,
+                function,
+                symbols_with_pos_enabled,
+            )?;
+            if func.is_nil() {
+                return Err(signal("void-function", vec![function]));
+            }
+            func
+        } else {
+            function
+        };
 
-    if let Some(alias_symbol) = super::builtins::symbols::symbol_id(&resolved) {
-        if let Some(indirect) = obarray.indirect_function_id(alias_symbol) {
+    if let Some(alias_symbol) =
+        super::builtins::symbols::symbol_id_checked(&resolved, symbols_with_pos_enabled)
+    {
+        if let Some(indirect) =
+            super::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray_checked(
+                obarray,
+                alias_symbol,
+                symbols_with_pos_enabled,
+            )
+            .map(|(_, value)| value)
+        {
             resolved = indirect;
         }
     }

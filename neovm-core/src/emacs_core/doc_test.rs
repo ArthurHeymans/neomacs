@@ -1,6 +1,6 @@
 use super::*;
 use crate::emacs_core::builtins::builtin_documentation_stringp;
-use crate::emacs_core::{Context, format_eval_result};
+use crate::emacs_core::{Context, EvalError};
 use crate::test_utils::{
     load_minimal_gnu_help_runtime, runtime_startup_context, runtime_startup_eval_all,
 };
@@ -81,9 +81,48 @@ fn documentation_preserves_uninterned_autoload_symbol_identity() {
     )
     .expect("autoload uninterned symbol");
 
-    let function = resolve_documentation_function_value(eval.obarray(), sym)
+    let function = resolve_documentation_function_value(eval.obarray(), sym, false)
         .expect("documentation resolver should find uninterned symbol function");
     assert!(crate::emacs_core::autoload::is_autoload_value(&function));
+}
+
+#[test]
+fn documentation_accepts_symbol_with_pos_when_enabled_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((symbols-with-pos-enabled t))
+                 (substring (documentation (position-symbol 'file-exists-p 406) t) 0 20))"#,
+        )
+        .expect("documentation should resolve positioned function symbols when enabled");
+    assert_eq!(result.as_utf8_str(), Some("Return t if file FIL"));
+}
+
+#[test]
+fn documentation_rejects_symbol_with_pos_when_disabled_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let err = eval
+        .eval_str(
+            r#"(let ((symbols-with-pos-enabled nil))
+                 (documentation (position-symbol 'file-exists-p 406) t))"#,
+        )
+        .expect_err("documentation should not unwrap positioned symbols when disabled");
+    match err {
+        EvalError::Signal { symbol, data, .. } => {
+            assert_eq!(
+                crate::emacs_core::intern::resolve_sym(symbol),
+                "invalid-function"
+            );
+            assert_eq!(data.len(), 1);
+            assert_eq!(
+                crate::emacs_core::print::print_value(&data[0]),
+                "#<symbol file-exists-p at 406>"
+            );
+        }
+        other => panic!("expected invalid-function signal, got {other:?}"),
+    }
 }
 
 // =======================================================================

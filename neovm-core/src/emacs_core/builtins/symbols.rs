@@ -227,7 +227,10 @@ pub(crate) fn builtin_boundp(eval: &mut super::eval::Context, args: Vec<Value>) 
 
 pub(crate) fn builtin_boundp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(obarray, expect_symbol_id(&arg)?)?;
+    let resolved = resolve_variable_alias_id_in_obarray(
+        obarray,
+        expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?,
+    )?;
     // specbind writes directly to obarray, so no dynamic stack lookup needed.
     let resolved_name = resolve_sym(resolved);
     if let Some(buf) = eval.buffers.current_buffer() {
@@ -257,7 +260,7 @@ pub(crate) fn builtin_special_variable_p_1(
     eval: &mut super::eval::Context,
     arg: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id(&arg)?;
+    let symbol = expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?;
     // Match GNU eval.c Fspecial_variable_p: this is a direct declared-special
     // bit test on the symbol itself, not an alias walk and not a constant
     // check.  Canonical keywords become special when materialized in the
@@ -272,7 +275,10 @@ pub(crate) fn builtin_default_boundp(
 ) -> EvalResult {
     expect_args("default-boundp", &args, 1)?;
     let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(obarray, expect_symbol_id(&args[0])?)?;
+    let resolved = resolve_variable_alias_id_in_obarray(
+        obarray,
+        expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?,
+    )?;
     // boundp_id already returns true for BUFFER_OBJFWD slots
     // (Phase 10D), so default-boundp picks that up automatically.
     Ok(Value::bool_val(
@@ -286,7 +292,7 @@ pub(crate) fn builtin_default_toplevel_value(
 ) -> EvalResult {
     expect_args("default-toplevel-value", &args, 1)?;
     let obarray = eval.obarray();
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
     let resolved_name = resolve_sym(resolved);
     match crate::emacs_core::eval::default_toplevel_value_in_state(
@@ -308,7 +314,7 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("internal--define-uninitialized-variable", &args, 1, 2)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let documentation = args.get(1).copied().unwrap_or(Value::NIL);
 
     eval.note_macro_expansion_mutation();
@@ -330,7 +336,7 @@ pub(crate) fn builtin_set_default_toplevel_value(
     args: Vec<Value>,
 ) -> EvalResult {
     set_default_toplevel_value_impl(eval, args.clone())?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     let value = args[1];
     eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
@@ -345,7 +351,7 @@ pub(crate) fn set_default_toplevel_value_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-default-toplevel-value", &args, 2)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     if ctx.obarray.is_constant_id(resolved) {
         return Err(signal("setting-constant", vec![args[0]]));
@@ -401,8 +407,8 @@ pub(crate) fn defvaralias_impl(
     args: Vec<Value>,
 ) -> Result<DefvaraliasStateChange, Flow> {
     expect_range_args("defvaralias", &args, 2, 3)?;
-    let new_symbol = expect_symbol_id(&args[0])?;
-    let old_symbol = expect_symbol_id(&args[1])?;
+    let new_symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let old_symbol = expect_symbol_id_checked(&args[1], ctx.symbols_with_pos_enabled)?;
     let new_name = resolve_sym(new_symbol).to_string();
     if ctx.obarray.is_constant_id(new_symbol) {
         return Err(signal(
@@ -450,7 +456,7 @@ pub(crate) fn builtin_fboundp(eval: &mut super::eval::Context, args: Vec<Value>)
 }
 
 pub(crate) fn builtin_fboundp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    let symbol = expect_symbol_id(&arg)?;
+    let symbol = expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?;
     Ok(Value::bool_val(
         symbol_function_cell_in_obarray(eval.obarray(), symbol)
             .is_some_and(|function| !function.is_nil()),
@@ -469,7 +475,7 @@ pub(crate) fn builtin_symbol_value_1(
     eval: &mut super::eval::Context,
     symbol_value: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id(&symbol_value)?;
+    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
     match eval.visible_runtime_variable_value_by_id(symbol)? {
         Some(value) => Ok(value),
         None => Err(signal("void-variable", vec![symbol_value])),
@@ -487,11 +493,12 @@ pub(crate) fn builtin_symbol_function(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    symbol_function_impl(eval.obarray(), args)
+    expect_args("symbol-function", &args, 1)?;
+    symbol_function_impl_1_checked(eval.obarray(), args[0], eval.symbols_with_pos_enabled)
 }
 
 pub(crate) fn builtin_symbol_function_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    symbol_function_impl_1(eval.obarray(), arg)
+    symbol_function_impl_1_checked(eval.obarray(), arg, eval.symbols_with_pos_enabled)
 }
 
 /// Obarray-only implementation shared by `builtin_symbol_function` and doc.rs.
@@ -501,7 +508,15 @@ pub(crate) fn symbol_function_impl(obarray: &Obarray, args: Vec<Value>) -> EvalR
 }
 
 pub(crate) fn symbol_function_impl_1(obarray: &Obarray, arg: Value) -> EvalResult {
-    let symbol = expect_symbol_id(&arg)?;
+    symbol_function_impl_1_checked(obarray, arg, false)
+}
+
+pub(crate) fn symbol_function_impl_1_checked(
+    obarray: &Obarray,
+    arg: Value,
+    symbols_with_pos_enabled: bool,
+) -> EvalResult {
+    let symbol = expect_symbol_id_checked(&arg, symbols_with_pos_enabled)?;
     if obarray.is_function_unbound_id(symbol) {
         return Ok(Value::NIL);
     }
@@ -575,7 +590,7 @@ pub(crate) fn builtin_set_2(
     symbol_value: Value,
     value: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id(&symbol_value)?;
+    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     if let Some(result) =
         constant_set_outcome_in_obarray(eval.obarray(), resolved, symbol_value, value)
@@ -606,7 +621,7 @@ pub(crate) fn builtin_fset_2(
     symbol_value: Value,
     def: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id(&symbol_value)?;
+    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
     if symbol == intern("nil") && !def.is_nil() {
         return Err(signal("setting-constant", vec![Value::symbol("nil")]));
     }
@@ -668,7 +683,7 @@ pub(crate) fn would_create_function_alias_cycle_in_obarray(
 
 pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("makunbound", &args, 1)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     if eval.obarray().is_constant_id(resolved) {
         return Err(signal("setting-constant", vec![args[0]]));
@@ -681,7 +696,7 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
 
 pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("defvar-1", &args, 2, 3)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
     let was_bound = builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
 
@@ -700,7 +715,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
 
 pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("defconst-1", &args, 2, 3)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
 
     if documentation.is_nil() {
@@ -719,7 +734,7 @@ pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Valu
 
 pub(crate) fn builtin_fmakunbound(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("fmakunbound", &args, 1)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     if symbol == intern("nil") || symbol == intern("t") {
         return Err(signal("setting-constant", vec![args[0]]));
     }
@@ -829,7 +844,7 @@ pub(crate) fn builtin_symbol_plist_fn(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("symbol-plist", &args, 1)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     Ok(eval.obarray().symbol_plist_id(symbol))
 }
 
@@ -967,7 +982,7 @@ pub(super) fn builtin_register_ccl_program(
 
 pub(crate) fn builtin_setplist(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("setplist", &args, 2)?;
-    let symbol = expect_symbol_id(&args[0])?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let plist = args[1];
     eval.obarray_mut().set_symbol_plist_id(symbol, plist);
     Ok(plist)
@@ -1128,17 +1143,29 @@ pub(crate) fn builtin_indirect_function(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    indirect_function_impl(eval.obarray(), args)
+    indirect_function_impl_checked(eval.obarray(), args, eval.symbols_with_pos_enabled)
 }
 
 /// Obarray-only implementation shared by `builtin_indirect_function` and doc.rs.
 pub(crate) fn indirect_function_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResult {
+    indirect_function_impl_checked(obarray, args, false)
+}
+
+pub(crate) fn indirect_function_impl_checked(
+    obarray: &Obarray,
+    args: Vec<Value>,
+    symbols_with_pos_enabled: bool,
+) -> EvalResult {
     expect_min_args("indirect-function", &args, 1)?;
     expect_max_args("indirect-function", &args, 2)?;
 
-    if let Some(symbol) = symbol_id(&args[0]) {
-        if let Some(function) =
-            resolve_indirect_symbol_by_id_in_obarray(obarray, symbol).map(|(_, value)| value)
+    if let Some(symbol) = symbol_id_checked(&args[0], symbols_with_pos_enabled) {
+        if let Some(function) = resolve_indirect_symbol_by_id_in_obarray_checked(
+            obarray,
+            symbol,
+            symbols_with_pos_enabled,
+        )
+        .map(|(_, value)| value)
         {
             return Ok(function);
         }
@@ -1183,10 +1210,18 @@ pub(crate) fn resolve_indirect_symbol_by_id_in_obarray(
     obarray: &Obarray,
     symbol: SymId,
 ) -> Option<(SymId, Value)> {
+    resolve_indirect_symbol_by_id_in_obarray_checked(obarray, symbol, false)
+}
+
+pub(crate) fn resolve_indirect_symbol_by_id_in_obarray_checked(
+    obarray: &Obarray,
+    symbol: SymId,
+    symbols_with_pos_enabled: bool,
+) -> Option<(SymId, Value)> {
     let mut current = symbol;
     for _ in 0..128 {
         let function = symbol_function_cell_in_obarray(obarray, current)?;
-        if let Some(next) = symbol_id(&function) {
+        if let Some(next) = symbol_id_checked(&function, symbols_with_pos_enabled) {
             if next == NIL_SYM_ID {
                 return Some((next, Value::NIL));
             }
@@ -2310,7 +2345,13 @@ pub(crate) fn builtin_position_symbol(
     } else {
         return Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
+            vec![
+                Value::list(vec![
+                    Value::symbol("symbolp"),
+                    Value::symbol("symbol-with-pos-p"),
+                ]),
+                args[0],
+            ],
         ));
     };
     let pos_val = if let Some(n) = args[1].as_fixnum() {
@@ -2320,7 +2361,7 @@ pub(crate) fn builtin_position_symbol(
     } else {
         return Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("fixnump"), args[1]],
+            vec![Value::symbol("fixnum-or-symbol-with-pos-p"), args[1]],
         ));
     };
     Ok(ctx.tagged_heap.alloc_symbol_with_pos(sym, pos_val))
