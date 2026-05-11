@@ -1437,6 +1437,38 @@ fn property_list_edge_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn plist_get_circular_missing_property_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:plist_get uses FOR_EACH_TAIL_SAFE and returns nil for a
+    // cyclic plist when PROP is absent.  This deliberately differs from
+    // plist-member/plist-put, which validate the tail as plistp.
+    let expr = r#"(message "pgcycle:%S" (condition-case e (let ((x (list :a 1 :b 2))) (setcdr (cdddr x) x) (plist-get x :z)) (error (car e))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("pgcycle:nil"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: plist-get should return nil for missing cyclic plist property like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "plist_get_circular_missing_property_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn symbol_property_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
