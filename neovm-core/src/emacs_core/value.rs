@@ -589,6 +589,8 @@ pub enum HashKey {
         end: usize,
         plist: Box<HashKey>,
     },
+    /// Compact structural key for bool-vectors whose bits fit in one word.
+    BoolVec(usize, u128),
     /// Structural key for symbol-with-pos objects when they are not transparent.
     SymbolWithPos(Box<HashKey>, Box<HashKey>),
     /// Back-reference marker used when structural objects recurse.
@@ -618,6 +620,7 @@ impl std::hash::Hash for HashKey {
             HashKey::SymbolWithPos(_, _) => 17,
             HashKey::Marker(_, _) => 18,
             HashKey::Overlay { .. } => 19,
+            HashKey::BoolVec(_, _) => 20,
         };
         tag.hash(state);
         match self {
@@ -656,6 +659,10 @@ impl std::hash::Hash for HashKey {
                 start.hash(state);
                 end.hash(state);
                 plist.hash(state);
+            }
+            HashKey::BoolVec(len, bits) => {
+                len.hash(state);
+                bits.hash(state);
             }
             HashKey::SymbolWithPos(sym, pos) => {
                 sym.hash(state);
@@ -702,6 +709,9 @@ impl PartialEq for HashKey {
                     plist: b_plist,
                 },
             ) => a_buffer == b_buffer && a_start == b_start && a_end == b_end && a_plist == b_plist,
+            (HashKey::BoolVec(a_len, a_bits), HashKey::BoolVec(b_len, b_bits)) => {
+                a_len == b_len && a_bits == b_bits
+            }
             (HashKey::SymbolWithPos(a_sym, a_pos), HashKey::SymbolWithPos(b_sym, b_pos)) => {
                 a_sym == b_sym && a_pos == b_pos
             }
@@ -1740,6 +1750,11 @@ impl TaggedValue {
                 HashKey::EqualCons(Box::new(car_key), Box::new(cdr_key))
             }
             ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
+                if self.is_vector()
+                    && let Some(key) = bool_vector_equal_hash_key(self)
+                {
+                    return key;
+                }
                 let ptr = self.bits();
                 if let Some(index) = seen.iter().position(|&p| p == ptr) {
                     return HashKey::Cycle(index as u32);
@@ -1803,6 +1818,30 @@ impl TaggedValue {
             as_neovm_int(STRINGS_CONSED.load(Ordering::Relaxed)),
         ]
     }
+}
+
+pub(crate) fn bool_vector_equal_hash_key(value: &Value) -> Option<HashKey> {
+    let vec = value.as_vector_data()?;
+    if vec.len() < 2 || vec[0].as_symbol_name()? != "--bool-vector--" {
+        return None;
+    }
+    let len = match vec[1].kind() {
+        ValueKind::Fixnum(n) if (0..=128).contains(&n) => n as usize,
+        _ => return None,
+    };
+    if vec.len() != len + 2 {
+        return None;
+    }
+
+    let mut bits = 0_u128;
+    for index in 0..len {
+        match vec[2 + index].as_fixnum() {
+            Some(0) => {}
+            Some(1) => bits |= 1_u128 << index,
+            _ => return None,
+        }
+    }
+    Some(HashKey::BoolVec(len, bits))
 }
 
 // ---------------------------------------------------------------------------

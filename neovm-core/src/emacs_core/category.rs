@@ -12,7 +12,10 @@ use std::cell::RefCell;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
-use super::value::{RuntimeBindingValue, Value, ValueKind, VecLikeType};
+use super::value::{
+    HashKey, HashTableTest, RuntimeBindingValue, Value, ValueKind, VecLikeType,
+    bool_vector_equal_hash_key,
+};
 
 thread_local! {
     static STANDARD_CATEGORY_TABLE_OBJECT: RefCell<Option<Value>> = const { RefCell::new(None) };
@@ -41,7 +44,7 @@ pub fn collect_category_gc_roots(roots: &mut Vec<Value>) {
 // to signal void-variable as in GNU. Reads/writes happen exclusively
 // through `(category-table)` / `(set-category-table)`.
 const CATEGORY_DOCSTRING_SLOT: i64 = 0;
-const CATEGORY_VERSION_SLOT: i64 = 1;
+const CATEGORY_SET_HASH_SLOT: i64 = 1;
 const CATEGORY_DOCSTRING_COUNT: usize = 95;
 const CATEGORY_MIN: i64 = 0x20;
 const CATEGORY_MAX: i64 = 0x7e;
@@ -131,6 +134,105 @@ fn clone_vector_value(value: &Value) -> EvalResult {
     }
 }
 
+fn category_set_hash(table: Value) -> Result<Value, Flow> {
+    let hash_slot = super::chartable::builtin_char_table_extra_slot(vec![
+        table,
+        Value::fixnum(CATEGORY_SET_HASH_SLOT),
+    ])?;
+    if hash_slot.is_nil() {
+        let hash = Value::hash_table(HashTableTest::Equal);
+        super::chartable::builtin_set_char_table_extra_slot(vec![
+            table,
+            Value::fixnum(CATEGORY_SET_HASH_SLOT),
+            hash,
+        ])?;
+        Ok(hash)
+    } else {
+        Ok(hash_slot)
+    }
+}
+
+fn intern_category_set(table: Value, category_set: Value) -> EvalResult {
+    let hash = category_set_hash(table)?;
+    let Some(hash_ref) = hash.as_hash_table() else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("hash-table-p"), hash],
+        ));
+    };
+    let key = category_set.to_hash_key(&hash_ref.test);
+    if let Some(existing) = hash_ref.key_snapshots.get(&key) {
+        return Ok(*existing);
+    }
+
+    let _ = hash.with_hash_table_mut(|hash_table| {
+        hash_table.data.insert(key.clone(), Value::NIL);
+        hash_table.key_snapshots.insert(key.clone(), category_set);
+        hash_table.insertion_order.push(key);
+    });
+    Ok(category_set)
+}
+
+fn category_set_bits(category_set: &Value) -> Option<u128> {
+    match bool_vector_equal_hash_key(category_set)? {
+        HashKey::BoolVec(128, bits) => Some(bits),
+        _ => None,
+    }
+}
+
+fn make_category_set_from_bits(bits: u128) -> Value {
+    let mut values = Vec::with_capacity(130);
+    values.push(Value::symbol("--bool-vector--"));
+    values.push(Value::fixnum(128));
+    for index in 0..128 {
+        values.push(Value::fixnum(if bits & (1_u128 << index) == 0 {
+            0
+        } else {
+            1
+        }));
+    }
+    Value::vector(values)
+}
+
+fn intern_category_set_bits(table: Value, bits: u128) -> EvalResult {
+    let hash = category_set_hash(table)?;
+    let Some(hash_ref) = hash.as_hash_table() else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("hash-table-p"), hash],
+        ));
+    };
+    let key = HashKey::BoolVec(128, bits);
+    if let Some(existing) = hash_ref.key_snapshots.get(&key) {
+        return Ok(*existing);
+    }
+
+    let category_set = make_category_set_from_bits(bits);
+    let _ = hash.with_hash_table_mut(|hash_table| {
+        hash_table.data.insert(key.clone(), Value::NIL);
+        hash_table.key_snapshots.insert(key.clone(), category_set);
+        hash_table.insertion_order.push(key);
+    });
+    Ok(category_set)
+}
+
+fn category_set_with_member(
+    table: Value,
+    existing: Value,
+    category: char,
+    present: bool,
+) -> EvalResult {
+    if let Some(bits) = category_set_bits(&existing) {
+        let bit = 1_u128 << (category as u32);
+        let updated_bits = if present { bits | bit } else { bits & !bit };
+        return intern_category_set_bits(table, updated_bits);
+    }
+
+    let updated = clone_vector_value(&existing)?;
+    set_category_set_member(&updated, category, present)?;
+    intern_category_set(table, updated)
+}
+
 fn is_category_table_value(value: &Value) -> Result<bool, Flow> {
     let is_char_table = super::chartable::builtin_char_table_p(vec![*value])?;
     if !is_char_table.is_truthy() {
@@ -154,7 +256,7 @@ fn make_category_table_object() -> EvalResult {
     ])?;
     super::chartable::builtin_set_char_table_extra_slot(vec![
         table,
-        Value::fixnum(CATEGORY_VERSION_SLOT),
+        Value::fixnum(CATEGORY_SET_HASH_SLOT),
         Value::NIL,
     ])?;
     Ok(table)
@@ -203,14 +305,14 @@ fn deep_copy_category_table(source: &Value) -> EvalResult {
         Value::fixnum(CATEGORY_DOCSTRING_SLOT),
         clone_vector_value(&docstrings)?,
     ])?;
-    let version = super::chartable::builtin_char_table_extra_slot(vec![
+    let set_hash = super::chartable::builtin_char_table_extra_slot(vec![
         *source,
-        Value::fixnum(CATEGORY_VERSION_SLOT),
+        Value::fixnum(CATEGORY_SET_HASH_SLOT),
     ])?;
     super::chartable::builtin_set_char_table_extra_slot(vec![
         copy,
-        Value::fixnum(CATEGORY_VERSION_SLOT),
-        version,
+        Value::fixnum(CATEGORY_SET_HASH_SLOT),
+        set_hash,
     ])?;
 
     for (key, value) in super::chartable::char_table_local_entries(source)? {
@@ -517,14 +619,26 @@ pub(crate) fn builtin_modify_category_entry(
         return Ok(Value::NIL);
     }
 
-    let mut cursor = start;
-    while cursor <= end {
-        let (existing, _from, to) =
-            super::chartable::char_table_ref_and_atomic_range(&table, cursor)?;
+    if start == end && (0..=crate::emacs_core::emacs_char::MAX_CHAR as i64).contains(&start) {
+        let existing = super::chartable::ct_lookup(&table, start)?;
         let has_category = category_set_contains(&existing, category)?;
         if has_category == reset {
-            let updated = clone_vector_value(&existing)?;
-            set_category_set_member(&updated, category, !reset)?;
+            let updated = category_set_with_member(table, existing, category, !reset)?;
+            super::chartable::builtin_set_char_table_range(vec![
+                table,
+                Value::fixnum(start),
+                updated,
+            ])?;
+        }
+        return Ok(Value::NIL);
+    }
+
+    for (existing, cursor, to) in
+        super::chartable::char_table_atomic_runs_in_range(&table, start, end)?
+    {
+        let has_category = category_set_contains(&existing, category)?;
+        if has_category == reset {
+            let updated = category_set_with_member(table, existing, category, !reset)?;
             let chunk_end = to.min(end);
             let key = if cursor == chunk_end {
                 Value::fixnum(cursor)
@@ -533,7 +647,6 @@ pub(crate) fn builtin_modify_category_entry(
             };
             super::chartable::builtin_set_char_table_range(vec![table, key, updated])?;
         }
-        cursor = to.min(end).saturating_add(1);
     }
 
     Ok(Value::NIL)

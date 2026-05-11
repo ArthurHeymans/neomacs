@@ -101,6 +101,19 @@ fn hash_key_to_value(key: &HashKey) -> Value {
             Value::vector(vals)
         }
         HashKey::Marker(_, _) | HashKey::Overlay { .. } => Value::NIL,
+        HashKey::BoolVec(len, bits) => {
+            let mut vals = Vec::with_capacity(len + 2);
+            vals.push(Value::symbol("--bool-vector--"));
+            vals.push(Value::fixnum(*len as i64));
+            for index in 0..*len {
+                vals.push(Value::fixnum(if bits & (1_u128 << index) == 0 {
+                    0
+                } else {
+                    1
+                }));
+            }
+            Value::vector(vals)
+        }
         HashKey::SymbolWithPos(_, _) => Value::NIL,
         HashKey::Cycle(index) => Value::string(format!("#{}", index)),
     }

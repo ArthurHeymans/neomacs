@@ -151,6 +151,142 @@ fn set_range_cons() {
 }
 
 #[test]
+fn optimize_char_table_compacts_local_runs_without_changing_lookup() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
+    builtin_set_char_table_range(vec![
+        ct,
+        Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
+        Value::symbol("letter"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![
+        ct,
+        Value::cons(Value::fixnum('D' as i64), Value::fixnum('F' as i64)),
+        Value::symbol("letter"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![
+        ct,
+        Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
+        Value::symbol("letter"),
+    ])
+    .unwrap();
+
+    let before_len = ct.as_vector_data().unwrap().len();
+    optimize_char_table(&ct, OptimizeCharTableTest::Equal).unwrap();
+    let after_len = ct.as_vector_data().unwrap().len();
+
+    assert!(after_len < before_len);
+    for ch in ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] {
+        let value = builtin_char_table_range(vec![ct, Value::fixnum(ch as i64)]).unwrap();
+        assert!(value.is_symbol_named("letter"));
+    }
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)])
+            .unwrap()
+            .is_nil()
+    );
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum('J' as i64)])
+            .unwrap()
+            .is_nil()
+    );
+}
+
+#[test]
+fn optimize_char_table_preserves_later_override_precedence() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_value(Value::symbol("test"), Value::symbol("default"));
+    builtin_set_char_table_range(vec![
+        ct,
+        Value::cons(Value::fixnum(10), Value::fixnum(20)),
+        Value::symbol("base"),
+    ])
+    .unwrap();
+    optimize_char_table(&ct, OptimizeCharTableTest::Equal).unwrap();
+
+    builtin_set_char_table_range(vec![
+        ct,
+        Value::cons(Value::fixnum(15), Value::fixnum(17)),
+        Value::symbol("later"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(16), Value::NIL]).unwrap();
+
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum(14)])
+            .unwrap()
+            .is_symbol_named("base")
+    );
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum(15)])
+            .unwrap()
+            .is_symbol_named("later")
+    );
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum(16)])
+            .unwrap()
+            .is_symbol_named("default")
+    );
+    assert!(
+        builtin_char_table_range(vec![ct, Value::fixnum(18)])
+            .unwrap()
+            .is_symbol_named("base")
+    );
+}
+
+#[test]
+fn translation_table_extra_slot_optimizes_constructed_entries() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_with_extra_slots(Value::symbol("translation-table"), Value::NIL, 2);
+    for ch in 0..96 {
+        builtin_set_char_table_range(vec![ct, Value::fixnum(0x1000 + ch), Value::fixnum(ch)])
+            .unwrap();
+    }
+
+    builtin_set_char_table_extra_slot(vec![ct, Value::fixnum(1), Value::fixnum(1)]).unwrap();
+
+    let vec = ct.as_vector_data().unwrap();
+    let data_start = ct_data_start(&vec);
+    assert!(vec[data_start].is_symbol_named(CT_OPTIMIZED_PREFIX_MARKER));
+    assert_eq!(vec[data_start + 1].as_fixnum(), Some(96));
+    for ch in [0, 11, 57, 95] {
+        assert_eq!(
+            builtin_char_table_range(vec![ct, Value::fixnum(0x1000 + ch)])
+                .unwrap()
+                .as_fixnum(),
+            Some(ch)
+        );
+    }
+}
+
+#[test]
+fn optimize_char_table_custom_test_is_noop_until_callbacks_are_supported() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
+    let first = Value::string("same");
+    let second = Value::string("same");
+    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), first]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), second]).unwrap();
+
+    let before_len = ct.as_vector_data().unwrap().len();
+    crate::emacs_core::builtins::symbols::builtin_optimize_char_table(vec![
+        ct,
+        Value::symbol("custom-test"),
+    ])
+    .unwrap();
+    let after_len = ct.as_vector_data().unwrap().len();
+
+    assert_eq!(after_len, before_len);
+    let first_lookup = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap();
+    let second_lookup = builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)]).unwrap();
+    assert!(crate::emacs_core::value::eq_value(&first_lookup, &first));
+    assert!(crate::emacs_core::value::eq_value(&second_lookup, &second));
+}
+
+#[test]
 fn set_default_via_range_nil() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
@@ -514,6 +650,44 @@ fn map_char_table_latest_nil_entry_falls_back_to_parent_run() {
                 Value::cons(Value::fixnum('N' as i64), Value::fixnum('Z' as i64)),
                 Value::symbol("child"),
             ),
+        ]
+    );
+}
+
+#[test]
+fn atomic_runs_in_range_preserve_child_shadowing_and_parent_fallback() {
+    crate::test_utils::init_test_tracing();
+    let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
+    builtin_set_char_table_range(vec![
+        parent,
+        Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
+        Value::symbol("parent"),
+    ])
+    .unwrap();
+
+    let child = make_char_table_value(Value::symbol("test"), Value::NIL);
+    builtin_set_char_table_parent(vec![child, parent]).unwrap();
+    builtin_set_char_table_range(vec![
+        child,
+        Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
+        Value::symbol("child"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![
+        child,
+        Value::cons(Value::fixnum('C' as i64), Value::fixnum('D' as i64)),
+        Value::NIL,
+    ])
+    .unwrap();
+
+    let runs =
+        char_table_atomic_runs_in_range(&child, 'A' as i64, 'F' as i64).expect("atomic runs");
+    assert_eq!(
+        runs,
+        vec![
+            (Value::symbol("child"), 'A' as i64, 'B' as i64),
+            (Value::symbol("parent"), 'C' as i64, 'D' as i64),
+            (Value::symbol("child"), 'E' as i64, 'F' as i64),
         ]
     );
 }

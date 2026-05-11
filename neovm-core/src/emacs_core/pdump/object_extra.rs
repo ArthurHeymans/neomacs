@@ -254,8 +254,18 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
         )));
     }
     let mut objects = Vec::with_capacity(count);
+    let mut present = Vec::with_capacity(count);
     for index in 0..count {
-        objects.push(mapped_object_from_span(spans.get(index), mapped_heap)?);
+        match mapped_object_from_span(spans.get(index), mapped_heap)? {
+            Some(object) => {
+                objects.push(object);
+                present.push(true);
+            }
+            None => {
+                objects.push(DumpHeapObject::Free);
+                present.push(false);
+            }
+        }
     }
 
     let mut cursor = object_value_codec::Cursor::new_at(payload, 0);
@@ -266,26 +276,23 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
                 "object-extra index {index} is outside object count {count}"
             )));
         }
-        if objects[index].is_some() {
+        if present[index] {
             return Err(DumpError::ImageFormatError(format!(
                 "object-extra has duplicate or unnecessary record for mapped object {index}"
             )));
         }
         let extra = read_object_extra(&mut cursor)?;
-        objects[index] = Some(object_extra_into_heap_object(extra));
+        objects[index] = object_extra_into_heap_object(extra);
+        present[index] = true;
     }
 
-    objects
-        .into_iter()
-        .enumerate()
-        .map(|(index, object)| {
-            object.ok_or_else(|| {
-                DumpError::ImageFormatError(format!(
-                    "object-extra has no descriptor for object {index}"
-                ))
-            })
-        })
-        .collect()
+    if let Some(index) = present.iter().position(|present| !present) {
+        return Err(DumpError::ImageFormatError(format!(
+            "object-extra has no descriptor for object {index}"
+        )));
+    }
+
+    Ok(objects)
 }
 
 fn object_extra_payload(section: &[u8]) -> Result<(usize, &[u8]), DumpError> {

@@ -358,11 +358,7 @@ fn write_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), DumpError> {
 
 fn read_bytes(cursor: &mut Cursor<'_>) -> Result<Vec<u8>, DumpError> {
     let len = read_len(cursor, "byte payload length")?;
-    let mut bytes = Vec::with_capacity(len);
-    for _ in 0..len {
-        bytes.push(cursor.read_u8("byte payload")?);
-    }
-    Ok(bytes)
+    cursor.read_bytes_fixed(len)
 }
 
 fn write_len(out: &mut Vec<u8>, len: usize, what: &str) -> Result<(), DumpError> {

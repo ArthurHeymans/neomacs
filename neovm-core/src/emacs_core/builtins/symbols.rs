@@ -2357,12 +2357,15 @@ pub(crate) fn builtin_object_intervals(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_optimize_char_table(args: Vec<Value>) -> EvalResult {
     expect_range_args("optimize-char-table", &args, 1, 2)?;
-    if !super::chartable::is_char_table(&args[0]) {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("char-table-p"), args[0]],
-        ));
-    }
+    let test = match args.get(1) {
+        None => super::chartable::OptimizeCharTableTest::Equal,
+        Some(value) if value.is_nil() || value.is_symbol_named("equal") => {
+            super::chartable::OptimizeCharTableTest::Equal
+        }
+        Some(value) if value.is_symbol_named("eq") => super::chartable::OptimizeCharTableTest::Eq,
+        Some(_) => return Ok(Value::NIL),
+    };
+    super::chartable::optimize_char_table(&args[0], test)?;
     Ok(Value::NIL)
 }
 

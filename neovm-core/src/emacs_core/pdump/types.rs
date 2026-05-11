@@ -348,6 +348,10 @@ pub enum DumpHashKey {
         end: usize,
         plist: Box<DumpHashKey>,
     },
+    BoolVec {
+        len: u32,
+        bits: u128,
+    },
     SymbolWithPos(Box<DumpHashKey>, Box<DumpHashKey>),
     Cycle(u32),
     Text(String),

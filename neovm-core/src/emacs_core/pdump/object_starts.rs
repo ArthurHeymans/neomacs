@@ -8,6 +8,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use super::{DumpError, types::*};
+use std::marker::PhantomData;
 
 const OBJECT_STARTS_MAGIC: [u8; 16] = *b"NEOOBJSTARTS\0\0\0\0";
 const OBJECT_STARTS_FORMAT_VERSION: u32 = 4;
@@ -152,12 +153,8 @@ impl Default for LoadedObjectSpan {
 /// single object-indexed table instead of expanding it into five parallel
 /// `Vec<Option<_>>` tables.
 pub(crate) struct LoadedSpans<'a> {
-    records: LoadedSpanRecords<'a>,
-}
-
-enum LoadedSpanRecords<'a> {
-    Owned(Vec<LoadedObjectSpan>),
-    Mapped { bytes: &'a [u8], offsets: Vec<u32> },
+    records: Vec<LoadedObjectSpan>,
+    _marker: PhantomData<&'a ()>,
 }
 
 pub(crate) struct LoadedSpansIter<'spans, 'data> {
@@ -172,27 +169,17 @@ impl<'data> LoadedSpans<'data> {
             records.push(span_record_from_heap(heap, index));
         }
         Self {
-            records: LoadedSpanRecords::Owned(records),
+            records,
+            _marker: PhantomData,
         }
     }
 
     pub(crate) fn len(&self) -> usize {
-        match &self.records {
-            LoadedSpanRecords::Owned(records) => records.len(),
-            LoadedSpanRecords::Mapped { offsets, .. } => offsets.len(),
-        }
+        self.records.len()
     }
 
     pub(crate) fn get(&self, index: usize) -> LoadedObjectSpan {
-        match &self.records {
-            LoadedSpanRecords::Owned(records) => records.get(index).copied().unwrap_or_default(),
-            LoadedSpanRecords::Mapped { bytes, offsets } => {
-                let Some(offset) = offsets.get(index) else {
-                    return LoadedObjectSpan::default();
-                };
-                loaded_span_at(bytes, *offset as usize).unwrap_or_default()
-            }
-        }
+        self.records.get(index).copied().unwrap_or_default()
     }
 
     pub(crate) fn iter(&self) -> LoadedSpansIter<'_, 'data> {
@@ -304,24 +291,18 @@ pub(crate) fn load_object_starts(section: &[u8]) -> Result<LoadedSpans<'_>, Dump
         DumpError::ImageFormatError("object-starts object count overflows usize".into())
     })?;
     let mut cursor = HEADER_SIZE;
-    let mut offsets = Vec::with_capacity(count);
+    let mut records = Vec::with_capacity(count);
     for _ in 0..count {
-        let offset = u32::try_from(cursor).map_err(|_| {
-            DumpError::ImageFormatError("object-starts record offset overflows u32".into())
-        })?;
-        offsets.push(offset);
-        skip_span_record(section, &mut cursor)?;
+        records.push(read_span_record(section, &mut cursor)?);
     }
 
     Ok(LoadedSpans {
-        records: LoadedSpanRecords::Mapped {
-            bytes: &section[..cursor],
-            offsets,
-        },
+        records,
+        _marker: PhantomData,
     })
 }
 
-fn skip_span_record(data: &[u8], cursor: &mut usize) -> Result<(), DumpError> {
+fn read_span_record(data: &[u8], cursor: &mut usize) -> Result<LoadedObjectSpan, DumpError> {
     if *cursor >= data.len() {
         return Err(DumpError::ImageFormatError(
             "object-starts section truncated".into(),
@@ -330,19 +311,24 @@ fn skip_span_record(data: &[u8], cursor: &mut usize) -> Result<(), DumpError> {
     let tag = data[*cursor];
     *cursor += 1;
     match tag {
-        SPAN_NONE | SPAN_UNMAPPED => Ok(()),
-        SPAN_CONS | SPAN_FLOAT => {
-            read_dump_off(data, cursor)?;
-            Ok(())
-        }
+        SPAN_NONE => Ok(LoadedObjectSpan::None),
+        SPAN_UNMAPPED => Ok(LoadedObjectSpan::Unmapped),
+        SPAN_CONS => Ok(LoadedObjectSpan::Cons(DumpConsSpan {
+            offset: read_dump_off(data, cursor)?,
+        })),
+        SPAN_FLOAT => Ok(LoadedObjectSpan::Float(DumpFloatSpan {
+            offset: read_dump_off(data, cursor)?,
+        })),
         SPAN_STRING => {
-            read_dump_off(data, cursor)?;
-            read_dump_off(data, cursor)?;
-            Ok(())
+            let offset = read_dump_off(data, cursor)?;
+            let len = read_dump_off(data, cursor)?;
+            Ok(LoadedObjectSpan::String(DumpStringSpan { offset, len }))
         }
         SPAN_VECTORLIKE => {
-            read_dump_off(data, cursor)?;
-            read_dump_off(data, cursor)?;
+            let object = DumpVecLikeSpan {
+                offset: read_dump_off(data, cursor)?,
+                len: read_dump_off(data, cursor)?,
+            };
             if *cursor >= data.len() {
                 return Err(DumpError::ImageFormatError(
                     "object-starts vectorlike slot flag truncated".into(),
@@ -355,55 +341,10 @@ fn skip_span_record(data: &[u8], cursor: &mut usize) -> Result<(), DumpError> {
                     "object-starts vectorlike slot flag is invalid".into(),
                 ));
             }
-            if has_slots != 0 {
-                read_dump_off(data, cursor)?;
-                read_dump_off(data, cursor)?;
-            }
-            Ok(())
-        }
-        other => Err(DumpError::ImageFormatError(format!(
-            "unknown object-starts span tag {other}"
-        ))),
-    }
-}
-
-fn loaded_span_at(data: &[u8], cursor: usize) -> Result<LoadedObjectSpan, DumpError> {
-    if cursor >= data.len() {
-        return Err(DumpError::ImageFormatError(
-            "object-starts record offset out of range".into(),
-        ));
-    }
-    let tag = data[cursor];
-    let mut cursor = cursor + 1;
-    match tag {
-        SPAN_NONE => Ok(LoadedObjectSpan::None),
-        SPAN_UNMAPPED => Ok(LoadedObjectSpan::Unmapped),
-        SPAN_CONS => Ok(LoadedObjectSpan::Cons(DumpConsSpan {
-            offset: read_dump_off(data, &mut cursor)?,
-        })),
-        SPAN_FLOAT => Ok(LoadedObjectSpan::Float(DumpFloatSpan {
-            offset: read_dump_off(data, &mut cursor)?,
-        })),
-        SPAN_STRING => Ok(LoadedObjectSpan::String(DumpStringSpan {
-            offset: read_dump_off(data, &mut cursor)?,
-            len: read_dump_off(data, &mut cursor)?,
-        })),
-        SPAN_VECTORLIKE => {
-            let object = DumpVecLikeSpan {
-                offset: read_dump_off(data, &mut cursor)?,
-                len: read_dump_off(data, &mut cursor)?,
-            };
-            if cursor >= data.len() {
-                return Err(DumpError::ImageFormatError(
-                    "object-starts vectorlike slot flag truncated".into(),
-                ));
-            }
-            let has_slots = data[cursor];
-            cursor += 1;
             let slots = if has_slots != 0 {
                 Some(DumpSlotSpan {
-                    offset: read_dump_off(data, &mut cursor)?,
-                    len: read_dump_off(data, &mut cursor)?,
+                    offset: read_dump_off(data, cursor)?,
+                    len: read_dump_off(data, cursor)?,
                 })
             } else {
                 None

@@ -29,6 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 const CHAR_TABLE_TAG: &str = "--char-table--";
 const SUB_CHAR_TABLE_TAG: &str = "--sub-char-table--";
 const BOOL_VECTOR_TAG: &str = "--bool-vector--";
+const CT_OPTIMIZED_PREFIX_MARKER: &str = "--char-table-optimized-prefix--";
 
 // Char-table fixed-layout indices (after the tag at index 0):
 const CT_DEFAULT: usize = 1; // default value
@@ -648,6 +649,46 @@ fn flatten_sub_char_table(
     }
 }
 
+fn maybe_optimize_loaded_char_table_storage(vec: &mut Vec<Value>) {
+    let data_start = ct_data_start(vec);
+    let old_slots = vec.len().saturating_sub(data_start);
+    if old_slots < 128 {
+        return;
+    }
+
+    let runs = ct_optimized_local_runs(vec, OptimizeCharTableTest::Eq);
+    let new_slots = if runs.is_empty() {
+        0
+    } else {
+        2 + runs.len() * 2
+    };
+    if new_slots < old_slots {
+        ct_replace_local_entries_with_runs(vec, runs);
+    }
+}
+
+fn maybe_optimize_completed_translation_table(vec: &mut Vec<Value>, extra_slot: i64) {
+    if extra_slot != 1 || !vec[CT_SUBTYPE].is_symbol_named("translation-table") {
+        return;
+    }
+
+    let data_start = ct_data_start(vec);
+    let old_slots = vec.len().saturating_sub(data_start);
+    if old_slots < 128 {
+        return;
+    }
+
+    let runs = ct_optimized_local_runs(vec, OptimizeCharTableTest::Eq);
+    if runs.len() < 64 {
+        return;
+    }
+
+    let new_slots = 2 + runs.len() * 2;
+    if new_slots <= old_slots + 2 {
+        ct_replace_local_entries_with_runs(vec, runs);
+    }
+}
+
 /// Build a NeoVM char-table from GNU's readable `#^[...]` char-table literal.
 ///
 /// GNU's external order is:
@@ -698,6 +739,7 @@ pub(crate) fn make_char_table_from_external_slots(items: &[Value]) -> Result<Val
         );
     }
 
+    maybe_optimize_loaded_char_table_storage(&mut vec);
     Ok(Value::vector(vec))
 }
 
@@ -736,12 +778,9 @@ pub fn make_char_table_with_extra_slots(sub_type: Value, default: Value, n_extra
 /// Panics if `table` is not a char-table Vector.
 pub fn ct_set_single(table: &Value, ch: i64, value: Value) {
     if table.is_vector() {
-        let mut vec = table
-            .as_vector_data()
-            .map(|items| items.to_vec())
-            .unwrap_or_default();
-        ct_set_char(&mut vec, ch, value);
-        let _ = table.replace_vector_data(vec);
+        table.with_vector_data_mut(|vec| {
+            ct_set_char(vec, ch, value);
+        });
     } else {
         panic!("ct_set_single: expected char-table Vector");
     }
@@ -813,16 +852,19 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
         return Err(wrong_type("char-table-p", table));
     }
 
-    let mut vec = table.as_vector_data().unwrap().clone();
-
     match range.kind() {
         // nil -> set default
         ValueKind::Nil => {
-            vec[CT_DEFAULT] = *value;
+            table.with_vector_data_mut(|vec| {
+                vec[CT_DEFAULT] = *value;
+            });
         }
         // t -> set all characters, but not the default slot.
         ValueKind::T => {
-            ct_set_range(&mut vec, 0, MAX_CHAR, *value);
+            let key = Value::cons(Value::fixnum(0), Value::fixnum(MAX_CHAR));
+            table.with_vector_data_mut(|vec| {
+                ct_push_range_entry(vec, 0, MAX_CHAR, key, *value);
+            });
         }
         // Single character
         ValueKind::Fixnum(_) => {
@@ -830,7 +872,9 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
                 Ok(ch) => ch,
                 Err(_) => return Err(invalid_range_error("set-char-table-range")),
             };
-            ct_set_char(&mut vec, ch, *value);
+            table.with_vector_data_mut(|vec| {
+                ct_set_char(vec, ch, *value);
+            });
         }
         // Range cons (MIN . MAX)
         ValueKind::Cons => {
@@ -839,13 +883,14 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
             let min = expect_character_code(&pair_car)?;
             let max = expect_character_code(&pair_cdr)?;
             if min <= max {
-                ct_set_range(&mut vec, min, max, *value);
+                let key = Value::cons(Value::fixnum(min), Value::fixnum(max));
+                table.with_vector_data_mut(|vec| {
+                    ct_push_range_entry(vec, min, max, key, *value);
+                });
             }
         }
         _ => return Err(invalid_range_error("set-char-table-range")),
     }
-
-    let _ = table.replace_vector_data(vec);
 
     Ok(*value)
 }
@@ -860,12 +905,71 @@ fn ct_set_char(vec: &mut Vec<Value>, ch: i64, value: Value) {
 /// Set a range entry in the char-table's data pairs.
 /// The range is stored as a `Cons(min . max)` key.
 fn ct_set_range(vec: &mut Vec<Value>, min: i64, max: i64, value: Value) {
-    ct_update_ascii_cache(vec, min, max, value);
     // Store an internal range key, not the caller's cons.  GNU's char-table
     // storage records bounds; Lisp-visible range conses from `map-char-table`
     // are reusable mutable objects.
-    vec.push(Value::cons(Value::fixnum(min), Value::fixnum(max)));
+    let key = Value::cons(Value::fixnum(min), Value::fixnum(max));
+    ct_push_range_entry(vec, min, max, key, value);
+}
+
+fn ct_push_range_entry(vec: &mut Vec<Value>, min: i64, max: i64, key: Value, value: Value) {
+    ct_update_ascii_cache(vec, min, max, value);
+    vec.push(key);
     vec.push(value);
+}
+
+fn ct_optimized_prefix_range(vec: &[Value], data_start: usize) -> Option<std::ops::Range<usize>> {
+    if vec.len() < data_start + 2 || !vec[data_start].is_symbol_named(CT_OPTIMIZED_PREFIX_MARKER) {
+        return None;
+    }
+    let pair_count = usize::try_from(vec[data_start + 1].as_fixnum()?).ok()?;
+    let prefix_start = data_start + 2;
+    let prefix_end = prefix_start.checked_add(pair_count.checked_mul(2)?)?;
+    if prefix_end <= vec.len() {
+        Some(prefix_start..prefix_end)
+    } else {
+        None
+    }
+}
+
+fn ct_entry_value_for_char(value: Value, min: i64, max: i64, ch: i64, is_uniprop: bool) -> Value {
+    if is_uniprop
+        && max - min + 1 == GNU_CHARTAB_CHARS[2]
+        && let Some(decoded) = uniprop_compressed_value_at(value, ch - min)
+    {
+        decoded
+    } else {
+        value
+    }
+}
+
+fn ct_get_char_from_sorted_prefix(
+    vec: &[Value],
+    prefix: std::ops::Range<usize>,
+    ch: i64,
+    is_uniprop: bool,
+) -> Option<Value> {
+    let mut lo = 0usize;
+    let mut hi = prefix.len() / 2;
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        let idx = prefix.start + mid * 2;
+        let (min, max) = key_span(vec[idx])?;
+        if ch < min {
+            hi = mid;
+        } else if ch > max {
+            lo = mid + 1;
+        } else {
+            return Some(ct_entry_value_for_char(
+                vec[idx + 1],
+                min,
+                max,
+                ch,
+                is_uniprop,
+            ));
+        }
+    }
+    None
 }
 
 /// Look up a single character in the data pairs (no parent/default fallback).
@@ -878,6 +982,8 @@ fn ct_get_char(vec: &[Value], ch: i64, is_uniprop: bool) -> Option<Value> {
     if len < start + 2 {
         return None;
     }
+    let optimized_prefix = ct_optimized_prefix_range(vec, start);
+    let reverse_stop = optimized_prefix.as_ref().map_or(start, |range| range.end);
     // Scan right-to-left so the first match seen is the most recently
     // pushed entry — matching the "last assignment wins" semantic of
     // `set-char-table-range` without needing to scan every pair on
@@ -886,7 +992,7 @@ fn ct_get_char(vec: &[Value], ch: i64, is_uniprop: bool) -> Option<Value> {
     // unconditional O(N) scan was the dominant cost on a 147-char
     // *scratch* buffer (see commit note).
     let mut i = len; // walk backwards two slots at a time
-    while i >= start + 2 {
+    while i >= reverse_stop + 2 {
         i -= 2;
         let key = vec[i];
         match key.kind() {
@@ -900,19 +1006,21 @@ fn ct_get_char(vec: &[Value], ch: i64, is_uniprop: bool) -> Option<Value> {
                 let pair_cdr = key.cons_cdr();
                 if let (Some(min), Some(max)) = (pair_car.as_fixnum(), pair_cdr.as_fixnum()) {
                     if ch >= min && ch <= max {
-                        let value = vec[i + 1];
-                        if is_uniprop
-                            && max - min + 1 == GNU_CHARTAB_CHARS[2]
-                            && let Some(decoded) = uniprop_compressed_value_at(value, ch - min)
-                        {
-                            return Some(decoded);
-                        }
-                        return Some(value);
+                        return Some(ct_entry_value_for_char(
+                            vec[i + 1],
+                            min,
+                            max,
+                            ch,
+                            is_uniprop,
+                        ));
                     }
                 }
             }
             _ => {}
         }
+    }
+    if let Some(prefix) = optimized_prefix {
+        return ct_get_char_from_sorted_prefix(vec, prefix, ch, is_uniprop);
     }
     None
 }
@@ -1021,13 +1129,14 @@ pub(crate) fn ct_lookup(table: &Value, ch: i64) -> EvalResult {
     let default = vec_ref[CT_DEFAULT];
     let parent = vec_ref[CT_PARENT];
 
-    if !default.is_nil() {
-        Ok(default)
+    let value = if !default.is_nil() {
+        default
     } else if is_char_table(&parent) {
-        ct_lookup(&parent, ch)
+        ct_lookup(&parent, ch)?
     } else {
-        Ok(Value::NIL)
-    }
+        Value::NIL
+    };
+    Ok(value)
 }
 
 /// Translate character `c` through translation `table`.
@@ -1108,6 +1217,13 @@ fn key_span(key: Value) -> Option<(i64, i64)> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct LocalAtomicRun {
+    value: Option<Value>,
+    start: i64,
+    end: i64,
+}
+
 fn refine_atomic_boundary(start: i64, end: i64, ch: i64, lo: &mut i64, hi: &mut i64) {
     let domain_end = MAX_CHAR.saturating_add(1);
     let start = start.clamp(0, domain_end);
@@ -1144,6 +1260,7 @@ fn ct_lookup_atomic_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), F
             if !found_local && ch >= entry_start && ch <= entry_end {
                 found_local = true;
                 local_value = vec[i + 1];
+                break;
             }
         }
     }
@@ -1171,6 +1288,80 @@ fn ct_lookup_atomic_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), F
     Ok((Value::NIL, lo, atomic_end))
 }
 
+fn append_atomic_run(out: &mut Vec<(Value, i64, i64)>, value: Value, start: i64, end: i64) {
+    if start > end {
+        return;
+    }
+    if let Some((last_value, _last_start, last_end)) = out.last_mut() {
+        if *last_end + 1 == start && *last_value == value {
+            *last_end = end;
+            return;
+        }
+    }
+    out.push((value, start, end));
+}
+
+fn ct_local_atomic_runs(
+    table: &Value,
+    requested_start: i64,
+    requested_end: i64,
+) -> (Vec<LocalAtomicRun>, Value, Value) {
+    let vec = table.as_vector_data().unwrap();
+    let default = vec[CT_DEFAULT];
+    let parent = vec[CT_PARENT];
+    let start = requested_start.max(0);
+    let end = requested_end.min(MAX_CHAR);
+    if start > end {
+        return (Vec::new(), default, parent);
+    }
+
+    let end_exclusive = end.saturating_add(1);
+    let data_start = ct_data_start(vec);
+    let mut boundaries = vec![start, end_exclusive];
+    let mut spans = Vec::new();
+    let mut i = data_start;
+    while i + 1 < vec.len() {
+        if let Some((entry_start, entry_end)) = key_span(vec[i]) {
+            let span_start = entry_start.max(start);
+            let span_end = entry_end.min(end);
+            if span_start <= span_end {
+                let span_end_exclusive = span_end.saturating_add(1);
+                boundaries.push(span_start);
+                boundaries.push(span_end_exclusive);
+                spans.push((span_start, span_end_exclusive, vec[i + 1]));
+            }
+        }
+        i += 2;
+    }
+
+    boundaries.sort_unstable();
+    boundaries.dedup();
+
+    let mut values = vec![None; boundaries.len().saturating_sub(1)];
+    for (span_start, span_end_exclusive, value) in spans {
+        let Ok(first) = boundaries.binary_search(&span_start) else {
+            continue;
+        };
+        let Ok(last) = boundaries.binary_search(&span_end_exclusive) else {
+            continue;
+        };
+        for slot in values.iter_mut().take(last).skip(first) {
+            *slot = Some(value);
+        }
+    }
+
+    let runs = values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| LocalAtomicRun {
+            value,
+            start: boundaries[index],
+            end: boundaries[index + 1].saturating_sub(1),
+        })
+        .collect();
+    (runs, default, parent)
+}
+
 /// GNU `char-table-ref-and-range`-style helper used by subsystems that need
 /// the effective value together with the maximal contiguous run covering `ch`.
 pub(crate) fn char_table_ref_and_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), Flow> {
@@ -1189,6 +1380,50 @@ pub(crate) fn char_table_ref_and_atomic_range(
     ch: i64,
 ) -> Result<(Value, i64, i64), Flow> {
     ct_lookup_atomic_range(table, ch)
+}
+
+/// Return effective atomic runs for a caller-supplied range.
+///
+/// This has the same local-entry shadowing and default/parent fallback rules as
+/// `char_table_ref_and_atomic_range`, but scans the table entries once for the
+/// whole requested range.  Bulk mutators can then update each returned run
+/// without repeating a reverse lookup from every cursor position.
+pub(crate) fn char_table_atomic_runs_in_range(
+    table: &Value,
+    start: i64,
+    end: i64,
+) -> Result<Vec<(Value, i64, i64)>, Flow> {
+    if !is_char_table(table) {
+        return Err(wrong_type("char-table-p", table));
+    }
+    let start = start.max(0);
+    let end = end.min(MAX_CHAR);
+    if start > end {
+        return Ok(Vec::new());
+    }
+
+    let (local_runs, default, parent) = ct_local_atomic_runs(table, start, end);
+    let mut out = Vec::with_capacity(local_runs.len());
+    for run in local_runs {
+        if let Some(value) = run.value
+            && !value.is_nil()
+        {
+            append_atomic_run(&mut out, value, run.start, run.end);
+            continue;
+        }
+        if !default.is_nil() {
+            append_atomic_run(&mut out, default, run.start, run.end);
+        } else if is_char_table(&parent) {
+            for (value, child_start, child_end) in
+                char_table_atomic_runs_in_range(&parent, run.start, run.end)?
+            {
+                append_atomic_run(&mut out, value, child_start, child_end);
+            }
+        } else {
+            append_atomic_run(&mut out, Value::NIL, run.start, run.end);
+        }
+    }
+    Ok(out)
 }
 
 /// `(char-table-parent CHAR-TABLE)` -- return the parent table (or nil).
@@ -1513,6 +1748,19 @@ struct EffectiveRun {
     value: Value,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum OptimizeCharTableTest {
+    Equal,
+    Eq,
+}
+
+fn optimize_values_equal(a: Value, b: Value, test: OptimizeCharTableTest) -> bool {
+    match test {
+        OptimizeCharTableTest::Equal => equal_value(&a, &b, 100),
+        OptimizeCharTableTest::Eq => eq_value(&a, &b),
+    }
+}
+
 fn ct_collect_raw_entries(vec: &[Value], is_uniprop: bool) -> Vec<RawEntry> {
     let start = ct_data_start(vec);
     let mut raws = Vec::new();
@@ -1550,6 +1798,120 @@ fn ct_collect_raw_entries(vec: &[Value], is_uniprop: bool) -> Vec<RawEntry> {
 
 fn ct_collect_local_raw_entries(vec: &[Value]) -> Vec<RawEntry> {
     ct_collect_raw_entries(vec, false)
+}
+
+fn append_optimized_raw_run(
+    runs: &mut Vec<RawEntry>,
+    start: i64,
+    end: i64,
+    value: Value,
+    test: OptimizeCharTableTest,
+) {
+    if start > end || value.is_nil() {
+        return;
+    }
+    if let Some(previous) = runs.last_mut()
+        && previous.end.saturating_add(1) == start
+        && optimize_values_equal(previous.value, value, test)
+    {
+        previous.end = end;
+        return;
+    }
+    runs.push(RawEntry { start, end, value });
+}
+
+fn ct_optimized_local_runs(vec: &[Value], test: OptimizeCharTableTest) -> Vec<RawEntry> {
+    let raws = ct_collect_raw_entries(vec, is_char_code_property_vec(vec));
+    if raws.is_empty() {
+        return Vec::new();
+    }
+
+    let domain_end = MAX_CHAR.saturating_add(1);
+    let mut boundaries = BTreeSet::new();
+    let mut starts: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    let mut ends: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    boundaries.insert(0);
+    boundaries.insert(domain_end);
+    for (idx, raw) in raws.iter().enumerate() {
+        let start = raw.start.clamp(0, domain_end);
+        let end_exclusive = raw.end.saturating_add(1).clamp(0, domain_end);
+        if start >= end_exclusive {
+            continue;
+        }
+        boundaries.insert(start);
+        boundaries.insert(end_exclusive);
+        starts.entry(start).or_default().push(idx);
+        ends.entry(end_exclusive).or_default().push(idx);
+    }
+
+    let mut runs = Vec::new();
+    let mut active_raws = BTreeSet::new();
+    let boundary_vec = boundaries.into_iter().collect::<Vec<_>>();
+    for window in boundary_vec.windows(2) {
+        let start = window[0];
+        let end_exclusive = window[1];
+        if let Some(indices) = ends.get(&start) {
+            for idx in indices {
+                active_raws.remove(idx);
+            }
+        }
+        if let Some(indices) = starts.get(&start) {
+            for idx in indices {
+                active_raws.insert(*idx);
+            }
+        }
+        if start > MAX_CHAR || end_exclusive <= start {
+            continue;
+        }
+        let Some(local_idx) = active_raws.iter().next_back().copied() else {
+            continue;
+        };
+        append_optimized_raw_run(
+            &mut runs,
+            start,
+            end_exclusive.saturating_sub(1).min(MAX_CHAR),
+            raws[local_idx].value,
+            test,
+        );
+    }
+    runs
+}
+
+fn ct_clear_ascii_cache(vec: &mut [Value]) {
+    if let Some(range) = ct_ascii_cache_range(vec) {
+        for slot in range {
+            vec[slot] = Value::NIL;
+        }
+    }
+}
+
+fn ct_replace_local_entries_with_runs(vec: &mut Vec<Value>, runs: Vec<RawEntry>) {
+    let data_start = ct_data_start(vec);
+    let pair_count = runs.len();
+    vec.truncate(data_start);
+    ct_clear_ascii_cache(vec);
+    if pair_count > 0 {
+        vec.push(Value::symbol(CT_OPTIMIZED_PREFIX_MARKER));
+        vec.push(Value::fixnum(pair_count as i64));
+    }
+    for run in runs {
+        if run.start == run.end {
+            ct_set_char(vec, run.start, run.value);
+        } else {
+            ct_set_range(vec, run.start, run.end, run.value);
+        }
+    }
+}
+
+pub(crate) fn optimize_char_table(table: &Value, test: OptimizeCharTableTest) -> Result<(), Flow> {
+    if !is_char_table(table) {
+        return Err(wrong_type("char-table-p", table));
+    }
+    table.with_vector_data_mut(|vec| {
+        let runs = ct_optimized_local_runs(vec, test);
+        ct_replace_local_entries_with_runs(vec, runs);
+    });
+    Ok(())
 }
 
 fn ct_effective_runs(table: &Value) -> Vec<EffectiveRun> {
@@ -1823,7 +2185,7 @@ pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
-    let v = table.as_vector_data().unwrap().clone();
+    let v = table.as_vector_data().unwrap();
     let extra_count = match v[CT_EXTRA_COUNT].kind() {
         ValueKind::Fixnum(c) => c,
         _ => 0,
@@ -1857,7 +2219,10 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
     }
 
     let slot_idx = CT_EXTRA_START + n as usize;
-    let _ = table.set_vector_slot(slot_idx, *value);
+    table.with_vector_data_mut(|vec| {
+        vec[slot_idx] = *value;
+        maybe_optimize_completed_translation_table(vec, n);
+    });
     Ok(*value)
 }
 

@@ -930,8 +930,9 @@ impl<'a> LoadDecoder<'a> {
         &mut self,
         id: TaggedHeapRef,
         value: Value,
+        object: &DumpHeapObject,
     ) -> Result<bool, DumpError> {
-        match &self.state.objects[id.index as usize] {
+        match object {
             DumpHeapObject::Cons { .. } => {
                 if self.state.spans.cons(id.index as usize).is_some() {
                     return Ok(true);
@@ -1227,17 +1228,19 @@ impl<'a> LoadDecoder<'a> {
     }
 
     fn populate_tagged_object(&mut self, id: TaggedHeapRef) -> Result<(), DumpError> {
-        if self.state.populated[id.index as usize] {
+        let index = id.index as usize;
+        if self.state.populated[index] {
             return Ok(());
         }
 
         let value = self.allocate_tagged_placeholder(id)?;
-        self.state.populated[id.index as usize] = true;
-        if self.populate_from_mapped_heap_without_descriptor_clone(id, value)? {
+        self.state.populated[index] = true;
+        let object = std::mem::replace(&mut self.state.objects[index], DumpHeapObject::Free);
+        if self.populate_from_mapped_heap_without_descriptor_clone(id, value, &object)? {
             return Ok(());
         }
 
-        match self.state.objects[id.index as usize].clone() {
+        match object {
             DumpHeapObject::Cons { car, cdr } => {
                 if !self.mapped_cons_has_raw_words(id, &car, &cdr) {
                     value.set_car(self.load_value(&car));
@@ -1893,6 +1896,10 @@ pub(crate) fn dump_hash_key(encoder: &mut DumpEncoder, k: &HashKey) -> DumpHashK
             start: *start,
             end: *end,
             plist: Box::new(dump_hash_key(encoder, plist)),
+        },
+        HashKey::BoolVec(len, bits) => DumpHashKey::BoolVec {
+            len: *len as u32,
+            bits: *bits,
         },
         HashKey::SymbolWithPos(sym, pos) => DumpHashKey::SymbolWithPos(
             Box::new(dump_hash_key(encoder, sym)),
@@ -3476,6 +3483,7 @@ pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashK
             end: *end,
             plist: Box::new(load_hash_key(decoder, plist)),
         },
+        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(*len as usize, *bits),
         DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
             Box::new(load_hash_key(decoder, sym)),
             Box::new(load_hash_key(decoder, pos)),

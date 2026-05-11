@@ -225,6 +225,25 @@ fn modify_category_entry_range_preserves_existing_subranges() {
 }
 
 #[test]
+fn modify_category_entry_interns_equal_category_sets() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = fresh_eval();
+    let table = builtin_make_category_table(vec![]).unwrap();
+    builtin_define_category(&mut eval, vec![Value::char('x'), Value::string("x"), table]).unwrap();
+
+    builtin_modify_category_entry(&mut eval, vec![Value::char('a'), Value::char('x'), table])
+        .unwrap();
+    builtin_modify_category_entry(&mut eval, vec![Value::char('b'), Value::char('x'), table])
+        .unwrap();
+
+    let a_set =
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('a')]).unwrap();
+    let b_set =
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('b')]).unwrap();
+    assert_eq!(a_set, b_set);
+}
+
+#[test]
 fn define_category_preserves_raw_unibyte_docstring() {
     crate::test_utils::init_test_tracing();
     let mut eval = fresh_eval();

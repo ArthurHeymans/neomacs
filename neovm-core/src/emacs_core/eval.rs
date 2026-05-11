@@ -9769,7 +9769,7 @@ impl Context {
     }
 
     pub(crate) fn push_backtrace_frame(&mut self, function: Value, args: &[Value]) {
-        let args_index = self.store_backtrace_args(args.iter().copied().collect());
+        let args_index = self.store_backtrace_args(LispArgVec::from_slice(args));
         self.specpdl.push(SpecBinding::Backtrace {
             function,
             args: BacktraceArgs::Evaluated(args_index),
@@ -9901,7 +9901,7 @@ impl Context {
                 self.specpdl.get(count)
             );
         }
-        let args_index = self.store_backtrace_args(evaluated.iter().copied().collect());
+        let args_index = self.store_backtrace_args(LispArgVec::from_slice(evaluated));
         let entry = self
             .specpdl
             .get_mut(count)

@@ -13,17 +13,17 @@ use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 const RAW_BYTE_SENTINEL_MIN: u32 = 0xE080;
 const RAW_BYTE_SENTINEL_MAX: u32 = 0xE0FF;
 const UNIBYTE_BYTE_SENTINEL_MIN: u32 = 0xE300;
 const UNIBYTE_BYTE_SENTINEL_MAX: u32 = 0xE3FF;
 
-static CHARSET_MAP_CACHE: OnceLock<RwLock<HashMap<String, Option<CharsetMapData>>>> =
+static CHARSET_MAP_CACHE: OnceLock<RwLock<HashMap<String, Option<Arc<CharsetMapData>>>>> =
     OnceLock::new();
 
-fn charset_map_cache() -> &'static RwLock<HashMap<String, Option<CharsetMapData>>> {
+fn charset_map_cache() -> &'static RwLock<HashMap<String, Option<Arc<CharsetMapData>>>> {
     CHARSET_MAP_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
@@ -73,7 +73,7 @@ fn parse_charset_map_file(path: &Path) -> Option<CharsetMapData> {
     })
 }
 
-fn load_charset_map(map_name: &str) -> Option<CharsetMapData> {
+fn load_charset_map(map_name: &str) -> Option<Arc<CharsetMapData>> {
     let key = map_name.to_string();
     if let Ok(cache) = charset_map_cache().read()
         && let Some(cached) = cache.get(&key)
@@ -81,7 +81,8 @@ fn load_charset_map(map_name: &str) -> Option<CharsetMapData> {
         return cached.clone();
     }
 
-    let loaded = parse_charset_map_file(&charset_map_dir().join(format!("{map_name}.map")));
+    let loaded =
+        parse_charset_map_file(&charset_map_dir().join(format!("{map_name}.map"))).map(Arc::new);
     if let Ok(mut cache) = charset_map_cache().write() {
         cache.insert(key, loaded.clone());
     }
@@ -710,11 +711,54 @@ pub(crate) fn map_charset_char_ranges(
             return Some(Vec::new());
         }
 
-        let values: Vec<u32> = (from..=to)
-            .filter_map(|code| reg.decode_char(name, code))
-            .filter_map(|ch| u32::try_from(ch).ok())
-            .collect();
-        Some(coalesce_u32_ranges(values).unwrap_or_default())
+        match &info.method {
+            CharsetMethod::Offset(offset) if charset_code_linear_p(info) => {
+                let mut ranges = Vec::new();
+                if info.ascii_compatible_p && from <= 0x7f {
+                    let ascii_from = u32::try_from(from.max(0)).ok()?;
+                    let ascii_to = u32::try_from(to.min(0x7f)).ok()?;
+                    if ascii_from <= ascii_to {
+                        ranges.push((ascii_from, ascii_to));
+                    }
+                }
+
+                let from_code = if info.ascii_compatible_p {
+                    from.max(0x80)
+                } else {
+                    from
+                };
+                if from_code <= to {
+                    let first =
+                        charset_code_point_to_index(info, from_code)?.checked_add(*offset)?;
+                    let last = charset_code_point_to_index(info, to)?.checked_add(*offset)?;
+                    let first = u32::try_from(first).ok()?;
+                    let last = u32::try_from(last).ok()?;
+                    ranges.push((first.min(last), first.max(last)));
+                }
+                Some(ranges)
+            }
+            CharsetMethod::Map(map_name) => {
+                let values = load_charset_map(map_name)?
+                    .code_to_char
+                    .iter()
+                    .filter_map(|(code, ch)| {
+                        if *code >= from && *code <= to {
+                            u32::try_from(*ch).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(coalesce_u32_ranges(values).unwrap_or_default())
+            }
+            _ => {
+                let values: Vec<u32> = (from..=to)
+                    .filter_map(|code| reg.decode_char(name, code))
+                    .filter_map(|ch| u32::try_from(ch).ok())
+                    .collect();
+                Some(coalesce_u32_ranges(values).unwrap_or_default())
+            }
+        }
     })
 }
 

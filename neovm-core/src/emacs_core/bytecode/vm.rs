@@ -97,6 +97,7 @@ impl<'a> Vm<'a> {
         self.ctx.depth
     }
 
+    #[inline(always)]
     fn with_dynamic_vm_roots<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         let scope = self.ctx.save_vm_roots();
         let result = f(self);
@@ -115,6 +116,7 @@ impl<'a> Vm<'a> {
         stacker::maybe_grow(VM_STACK_RED_ZONE, VM_STACK_SEGMENT, || f(self))
     }
 
+    #[inline(always)]
     fn with_vm_root_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         let scope = self.ctx.save_vm_roots();
         let result = f(self);
@@ -122,6 +124,7 @@ impl<'a> Vm<'a> {
         result
     }
 
+    #[inline(always)]
     fn push_dynamic_vm_root(&mut self, value: Value) {
         self.ctx.push_vm_frame_root(value);
     }
@@ -3535,10 +3538,7 @@ impl<'a> Vm<'a> {
         {
             return result;
         }
-        let args: LispArgVec = self.ctx.bc_buf[args_start..args_start + nargs]
-            .iter()
-            .copied()
-            .collect();
+        let args = LispArgVec::from_slice(&self.ctx.bc_buf[args_start..args_start + nargs]);
         self.ctx.push_backtrace_frame(func_val, &args);
         let result = self.call_function_untraced_owned(func_val, args);
         let result = self.ctx.dispatch_signal_result_if_needed(result);
@@ -3568,10 +3568,7 @@ impl<'a> Vm<'a> {
     ) -> Option<EvalResult> {
         let (sym_id, entry, callee) = self.fixed_subr_call_target(func_val)?;
         let bt_count = self.ctx.specpdl.len();
-        let args: LispArgVec = self.ctx.bc_buf[args_start..args_start + nargs]
-            .iter()
-            .copied()
-            .collect();
+        let args = LispArgVec::from_slice(&self.ctx.bc_buf[args_start..args_start + nargs]);
         self.ctx.push_backtrace_frame_owned(func_val, args);
         let result = if nargs < entry.min_args as usize
             || entry.max_args.is_some_and(|max| nargs > max as usize)

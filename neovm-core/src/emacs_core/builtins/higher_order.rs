@@ -4,6 +4,17 @@ use smallvec::SmallVec;
 
 type MapResultVec = SmallVec<[Value; 8]>;
 
+fn list_from_map_results(eval: &mut super::eval::Context, results: &[Value]) -> Value {
+    let mut acc = Value::NIL;
+    let acc_root_len = eval.save_vm_frame_roots();
+    for value in results.iter().rev().copied() {
+        acc = Value::cons(value, acc);
+        eval.restore_vm_frame_roots(acc_root_len);
+        eval.push_vm_frame_root(acc);
+    }
+    acc
+}
+
 #[inline]
 fn apply0(eval: &mut super::eval::Context, func: Value) -> EvalResult {
     eval.apply(func, crate::emacs_core::eval::LispArgVec::new())
@@ -236,18 +247,22 @@ pub(crate) fn builtin_mapcar_2(
             if !cursor.is_cons() {
                 break;
             }
+            let cursor_root_len = eval.save_vm_frame_roots();
             eval.push_vm_frame_root(cursor);
             let item = cursor.cons_car();
             let val = match apply1(eval, func, item) {
                 Ok(v) => v,
                 Err(e) => {
+                    eval.restore_vm_frame_roots(cursor_root_len);
                     result = Err(e);
                     break;
                 }
             };
+            let next_cursor = cursor.cons_cdr();
+            eval.restore_vm_frame_roots(cursor_root_len);
             eval.push_vm_frame_root(val);
             results.push(val);
-            cursor = cursor.cons_cdr();
+            cursor = next_cursor;
         }
         result
     } else {
@@ -258,9 +273,13 @@ pub(crate) fn builtin_mapcar_2(
             Ok(())
         })
     };
+    if let Err(flow) = map_result {
+        eval.restore_vm_roots(roots);
+        return Err(flow);
+    }
+    let result_list = list_from_map_results(eval, &results);
     eval.restore_vm_roots(roots);
-    map_result?;
-    Ok(Value::list_from_slice(&results))
+    Ok(result_list)
 }
 
 pub(crate) fn builtin_mapc(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
