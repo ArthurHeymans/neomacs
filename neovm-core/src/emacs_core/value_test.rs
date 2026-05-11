@@ -470,9 +470,25 @@ fn list_length_proper() {
 fn list_length_dotted() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
-        // (1 . 2) — improper list
+        // (1 . 2) improper list
         let dotted = Value::cons(Value::fixnum(1), Value::fixnum(2));
         assert_eq!(super::list_length(&dotted), None);
+    });
+}
+
+#[test]
+fn list_length_circular() {
+    crate::test_utils::init_test_tracing();
+    with_test_heap(|| {
+        let one = Value::cons(Value::fixnum(1), Value::NIL);
+        one.set_cdr(one);
+        assert_eq!(super::list_length(&one), None);
+
+        let list = Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]);
+        let cycle_start = list.cons_cdr();
+        let cycle_tail = cycle_start.cons_cdr();
+        cycle_tail.set_cdr(cycle_start);
+        assert_eq!(super::list_length(&list), None);
     });
 }
 
