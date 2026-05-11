@@ -108,12 +108,50 @@ pub(crate) fn aset_string_replacement(
         return Err(signal("args-out-of-range", vec![*array, *index]));
     }
 
-    let replacement_code = insert_char_code_from_value(new_element)? as u32;
-    if !multibyte && replacement_code > 0xff {
+    let replacement_code = insert_char_code_from_value(new_element)?;
+    if !(0..=0x3F_FFFF).contains(&replacement_code) {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("characterp"), *new_element],
         ));
+    }
+    let replacement_code = replacement_code as u32;
+    if !multibyte && replacement_code > 0xff {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "Attempt to store non-byte value into unibyte string",
+            )],
+        ));
+    }
+    if multibyte {
+        if replacement_code > 0x7f {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Attempt to store non-ASCII char into multibyte string",
+                )],
+            ));
+        }
+        if codes[idx] > 0x7f {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Attempt to replace non-ASCII char in multibyte string",
+                )],
+            ));
+        }
+
+        let byte_pos = crate::emacs_core::emacs_char::char_to_byte_pos(
+            array.as_lisp_string().expect("string").as_bytes(),
+            idx,
+        );
+        let _ = array.with_lisp_string_mut(|s| {
+            s.mutate_bytes(|data| {
+                data[byte_pos] = replacement_code as u8;
+            });
+        });
+        return Ok(*array);
     }
     codes[idx] = replacement_code;
 
