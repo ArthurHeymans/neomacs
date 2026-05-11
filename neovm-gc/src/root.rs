@@ -66,6 +66,7 @@ pub struct Root<'scope, T: ?Sized> {
 }
 
 impl<'scope, T: ?Sized> Root<'scope, T> {
+    #[inline]
     pub(crate) fn new(root_stack: NonNull<RootStack>, index: usize) -> Self {
         Self {
             root_stack,
@@ -107,16 +108,19 @@ impl<'heap> HandleScopeState<'heap> {
         self.ensure_safepoint();
     }
 
+    #[inline]
     pub(crate) fn ensure_safepoint(&mut self) {
         if self.depth > 0 && self.safepoint.is_none() {
             self.safepoint = Some(self.heap.read_safepoint());
         }
     }
 
+    #[inline]
     pub(crate) fn has_safepoint(&self) -> bool {
         self.safepoint.is_some()
     }
 
+    #[inline]
     pub(crate) fn release_safepoint(&mut self) {
         self.safepoint = None;
     }
@@ -167,6 +171,7 @@ impl<'scope, 'heap> HandleScope<'scope, 'heap> {
         unsafe { self.root_stack.as_ref().len().saturating_sub(self.start) }
     }
 
+    #[inline]
     pub(crate) fn root<T: ?Sized>(&mut self, gc: Gc<T>) -> Root<'scope, T> {
         let index = unsafe { self.root_stack.as_mut().push(gc.erase()) };
         Root::new(self.root_stack, index)
