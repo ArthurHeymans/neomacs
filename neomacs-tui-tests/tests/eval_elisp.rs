@@ -2957,6 +2957,40 @@ fn hash_table_copy_maphash_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn maphash_mutation_visits_live_entries_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:maphash walks with DOHASH_SAFE, so callbacks may remhash
+    // the current key or puthash a new value for the current key without
+    // crashing.  Its live traversal also sees the newly added key here and
+    // skips the removed unvisited key.
+    let expr = r#"(message "maphashmut:%S" (let ((h (make-hash-table :test 'eq)) seen) (puthash 'a 1 h) (puthash 'b 2 h) (maphash (lambda (k v) (push k seen) (when (eq k 'a) (puthash 'c 3 h) (remhash 'b h))) h) (list (sort seen (lambda (a b) (string< (symbol-name a) (symbol-name b)))) (hash-table-count h) (gethash 'b h 'missing) (gethash 'c h 'missing))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "maphashmut:((a c) 2 missing 3)";
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: maphash should follow GNU live mutation traversal semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "maphash_mutation_visits_live_entries_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn hash_table_key_test_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
