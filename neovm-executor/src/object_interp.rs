@@ -14365,4 +14365,13 @@ mod tests {
         assert_eq!(value, Some(LispValue::NIL));
     }
 
+    #[test]
+    fn executes_alist_get_returns_nil_for_nil_alist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (alist-get 'key nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
 }
