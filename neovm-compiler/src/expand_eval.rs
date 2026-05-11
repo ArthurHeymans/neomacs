@@ -3282,6 +3282,15 @@ impl MacroEval {
             "nlistp" => Ok(MacroValue::from_bool(
                 args[0].is_nil() || !args[0].is_cons(),
             )),
+            "bare-symbol-p" => {
+                if let MacroValue::Symbol(s) = &args[0] {
+                    Ok(MacroValue::from_bool(!s.starts_with(':')))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "autoloadp" | "bignump" | "bool-vector-p" | "bufferp"
+            | "recordp" | "char-table-p" => Ok(MacroValue::Nil),
             _ => Ok(MacroValue::Nil),
         }
     }
