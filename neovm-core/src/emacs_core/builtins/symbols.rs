@@ -245,7 +245,7 @@ pub(crate) fn builtin_boundp_1(eval: &mut super::eval::Context, arg: Value) -> E
 
 pub(crate) fn builtin_obarrayp(args: Vec<Value>) -> EvalResult {
     expect_args("obarrayp", &args, 1)?;
-    Ok(Value::bool_val(expect_obarray_vector_id(&args[0]).is_ok()))
+    Ok(Value::bool_val(is_obarray_vector(args[0])))
 }
 
 pub(crate) fn builtin_special_variable_p(
@@ -1368,25 +1368,21 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             );
         }
     }
-    if let Some(obarray) = args.get(1) {
-        if !obarray.is_nil() && !obarray.is_vector() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("obarrayp"), *obarray],
-            ));
-        }
-    }
     let name = expect_lisp_string(&args[0])?;
 
     // Custom obarray path
-    if let Some(obarray_val) = args
+    if let Some(obarray_arg) = args
         .get(1)
-        .filter(|v| !v.is_nil() && v.is_vector() && !is_global_obarray_proxy(eval, v))
+        .filter(|v| !v.is_nil() && !is_global_obarray_proxy(eval, v))
     {
+        let obarray_val = check_obarray_value(*obarray_arg)?;
         let vec_data = obarray_val.as_vector_data().unwrap();
         let vec_len = vec_data.len();
         if vec_len == 0 {
-            return Err(signal("args-out-of-range", vec![Value::fixnum(0)]));
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("obarrayp"), *obarray_arg],
+            ));
         }
         let bucket_idx = obarray_hash_lisp_string(name, vec_len);
         let bucket = vec_data[bucket_idx];
@@ -1424,17 +1420,10 @@ pub(crate) fn builtin_intern_soft(eval: &mut super::eval::Context, args: Vec<Val
 pub(crate) fn intern_soft_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResult {
     expect_min_args("intern-soft", &args, 1)?;
     expect_max_args("intern-soft", &args, 2)?;
-    if let Some(obarray) = args.get(1) {
-        if !obarray.is_nil() && !obarray.is_vector() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("obarrayp"), *obarray],
-            ));
-        }
-    }
 
     // Custom obarray path
-    if let Some(obarray_val) = args.get(1).filter(|v| !v.is_nil() && v.is_vector()) {
+    if let Some(obarray_arg) = args.get(1).filter(|v| !v.is_nil()) {
+        let obarray_val = check_obarray_value(*obarray_arg)?;
         let name = match args[0].kind() {
             ValueKind::String => std::borrow::Cow::Borrowed(args[0].as_lisp_string().unwrap()),
             ValueKind::Symbol(id) => {
@@ -1463,7 +1452,10 @@ pub(crate) fn intern_soft_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResul
         let vec_data = obarray_val.as_vector_data().unwrap();
         let vec_len = vec_data.len();
         if vec_len == 0 {
-            return Ok(Value::NIL);
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("obarrayp"), *obarray_arg],
+            ));
         }
         let bucket_idx = obarray_hash_lisp_string(name.as_ref(), vec_len);
         let bucket = vec_data[bucket_idx];
@@ -1511,25 +1503,46 @@ pub(crate) fn builtin_obarray_make(args: Vec<Value>) -> EvalResult {
     Ok(Value::vector(vec![Value::NIL; size]))
 }
 
-pub(crate) fn expect_obarray_vector_id(value: &Value) -> Result<Value, Flow> {
-    if !value.is_vector() {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("obarrayp"), *value],
-        ));
-    };
-    let is_obarray = value
-        .as_vector_data()
-        .unwrap()
-        .iter()
-        .all(|slot| slot.is_nil() || slot.is_cons());
-    if !is_obarray {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("obarrayp"), *value],
-        ));
+fn is_obarray_vector(value: Value) -> bool {
+    value.is_vector()
+        && value
+            .as_vector_data()
+            .is_some_and(|items| items.iter().all(|slot| slot.is_nil() || slot.is_cons()))
+}
+
+fn make_compat_obarray_vector() -> Value {
+    // GNU lread.c:check_obarray_slow calls make_obarray(0), producing a
+    // one-bucket obarray for the legacy vector slot-zero compatibility path.
+    Value::vector(vec![Value::NIL])
+}
+
+pub(crate) fn check_obarray_value(value: Value) -> Result<Value, Flow> {
+    if is_obarray_vector(value) {
+        return Ok(value);
     }
-    Ok(*value)
+
+    if value.is_vector() {
+        let slots = value.as_vector_data().unwrap();
+        if let Some(slot0) = slots.first().copied() {
+            if is_obarray_vector(slot0) {
+                return Ok(slot0);
+            }
+            if slot0 == Value::fixnum(0) {
+                let obarray = make_compat_obarray_vector();
+                let _ = value.set_vector_slot(0, obarray);
+                return Ok(obarray);
+            }
+        }
+    }
+
+    Err(signal(
+        "wrong-type-argument",
+        vec![Value::symbol("obarrayp"), value],
+    ))
+}
+
+pub(crate) fn expect_obarray_vector_id(value: &Value) -> Result<Value, Flow> {
+    check_obarray_value(*value)
 }
 
 pub(crate) fn builtin_obarray_clear(args: Vec<Value>) -> EvalResult {

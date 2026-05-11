@@ -64,11 +64,8 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 
 fn validate_optional_obarray_arg(args: &[Value]) -> Result<(), Flow> {
     if let Some(obarray) = args.get(1) {
-        if !obarray.is_nil() && !obarray.is_vector() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("obarrayp"), *obarray],
-            ));
+        if !obarray.is_nil() {
+            crate::emacs_core::builtins::symbols::check_obarray_value(*obarray)?;
         }
     }
     Ok(())
@@ -799,26 +796,26 @@ pub(crate) fn collect_mapatoms_symbols(
         .get(1)
         .filter(|v| !v.is_nil() && !is_global_obarray_proxy_in_state(obarray, v))
     {
-        if custom_obarray.is_vector() {
-            let all_slots = custom_obarray.as_vector_data().unwrap().clone();
-            let mut symbols = Vec::new();
-            for slot in &all_slots {
-                let mut current = *slot;
-                loop {
-                    match current.kind() {
-                        ValueKind::Nil => break,
-                        ValueKind::Cons => {
-                            let car = current.cons_car();
-                            let cdr = current.cons_cdr();
-                            symbols.push(car);
-                            current = cdr;
-                        }
-                        _ => break,
+        let custom_obarray =
+            crate::emacs_core::builtins::symbols::check_obarray_value(*custom_obarray)?;
+        let all_slots = custom_obarray.as_vector_data().unwrap().clone();
+        let mut symbols = Vec::new();
+        for slot in &all_slots {
+            let mut current = *slot;
+            loop {
+                match current.kind() {
+                    ValueKind::Nil => break,
+                    ValueKind::Cons => {
+                        let car = current.cons_car();
+                        let cdr = current.cons_cdr();
+                        symbols.push(car);
+                        current = cdr;
                     }
+                    _ => break,
                 }
             }
-            return Ok((func, symbols));
         }
+        return Ok((func, symbols));
     }
 
     let symbols = obarray
@@ -861,63 +858,60 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
 
     // Custom obarray path
     if let Some(custom_obarray) = args.get(1).filter(|v| !v.is_nil()) {
-        if custom_obarray.is_vector() {
-            let vec_data = custom_obarray.as_vector_data().unwrap();
-            let vec_len = vec_data.len();
-            if vec_len == 0 {
-                return Ok(Value::NIL);
-            }
-            let bucket_idx = crate::emacs_core::builtins::symbols::obarray_hash_lisp_string(
-                target_name,
-                vec_len,
-            );
-            let bucket = vec_data[bucket_idx];
-
-            // Walk the bucket chain and rebuild without the matching symbol
-            let mut items = Vec::new();
-            let mut found = false;
-            let mut current = bucket;
-            loop {
-                match current.kind() {
-                    ValueKind::Nil => break,
-                    ValueKind::Cons => {
-                        let car = current.cons_car();
-                        let cdr = current.cons_cdr();
-                        if !found {
-                            let should_remove = match (&target, car.kind()) {
-                                (
-                                    UninternTarget::Symbol(target_id, _),
-                                    ValueKind::Symbol(car_id),
-                                ) => car_id == *target_id,
-                                (UninternTarget::Name(name), _) => car
-                                    .as_symbol_lisp_string()
-                                    .is_some_and(|sym_name| sym_name == name.as_ref()),
-                                _ => false,
-                            };
-                            if should_remove {
-                                found = true;
-                                current = cdr;
-                                continue;
-                            }
-                        }
-                        items.push(car);
-                        current = cdr;
-                    }
-                    _ => break,
-                }
-            }
-
-            if found {
-                // Rebuild the bucket chain
-                let new_bucket = items
-                    .into_iter()
-                    .rev()
-                    .fold(Value::NIL, |acc, sym| Value::cons(sym, acc));
-                let _ = custom_obarray.set_vector_slot(bucket_idx, new_bucket);
-                return Ok(Value::T);
-            }
+        let custom_obarray =
+            crate::emacs_core::builtins::symbols::check_obarray_value(*custom_obarray)?;
+        let vec_data = custom_obarray.as_vector_data().unwrap();
+        let vec_len = vec_data.len();
+        if vec_len == 0 {
             return Ok(Value::NIL);
         }
+        let bucket_idx =
+            crate::emacs_core::builtins::symbols::obarray_hash_lisp_string(target_name, vec_len);
+        let bucket = vec_data[bucket_idx];
+
+        // Walk the bucket chain and rebuild without the matching symbol
+        let mut items = Vec::new();
+        let mut found = false;
+        let mut current = bucket;
+        loop {
+            match current.kind() {
+                ValueKind::Nil => break,
+                ValueKind::Cons => {
+                    let car = current.cons_car();
+                    let cdr = current.cons_cdr();
+                    if !found {
+                        let should_remove = match (&target, car.kind()) {
+                            (UninternTarget::Symbol(target_id, _), ValueKind::Symbol(car_id)) => {
+                                car_id == *target_id
+                            }
+                            (UninternTarget::Name(name), _) => car
+                                .as_symbol_lisp_string()
+                                .is_some_and(|sym_name| sym_name == name.as_ref()),
+                            _ => false,
+                        };
+                        if should_remove {
+                            found = true;
+                            current = cdr;
+                            continue;
+                        }
+                    }
+                    items.push(car);
+                    current = cdr;
+                }
+                _ => break,
+            }
+        }
+
+        if found {
+            // Rebuild the bucket chain
+            let new_bucket = items
+                .into_iter()
+                .rev()
+                .fold(Value::NIL, |acc, sym| Value::cons(sym, acc));
+            let _ = custom_obarray.set_vector_slot(bucket_idx, new_bucket);
+            return Ok(Value::T);
+        }
+        return Ok(Value::NIL);
     }
 
     // Global obarray path

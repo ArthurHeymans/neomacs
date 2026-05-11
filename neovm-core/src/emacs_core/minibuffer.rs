@@ -1793,8 +1793,8 @@ pub(crate) fn completion_candidates_from_collection_in_state(
             Some(completion_candidates_from_global_obarray_in_state(obarray))
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
-            super::builtins::symbols::expect_obarray_vector_id(collection)?;
-            Some(completion_candidates_from_custom_obarray(*collection))
+            let obarray = super::builtins::symbols::check_obarray_value(*collection)?;
+            Some(completion_candidates_from_custom_obarray(obarray))
         }
         _ => None,
     })
