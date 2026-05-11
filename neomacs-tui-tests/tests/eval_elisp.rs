@@ -11286,6 +11286,40 @@ fn format_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn format_percent_c_preserves_large_character_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/editfns.c:format handles %c separately from sprintf and emits
+    // the Lisp character code into the result string; #x110000 is a valid
+    // Emacs character and becomes one multibyte character, not a runtime
+    // string-storage panic.
+    let expr = r#"(message "fmtchar:%S" (let ((s (format "%c" #x110000))) (list (string-to-list s) (length s) (string-bytes s) (multibyte-string-p s))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "fmtchar:((1114112) 1 4 t)";
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format %c should preserve large Emacs character codes like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_percent_c_preserves_large_character_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_copies_format_string_text_properties_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
