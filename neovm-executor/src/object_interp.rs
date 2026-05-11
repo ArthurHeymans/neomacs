@@ -14182,4 +14182,34 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_every_nil_seq_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-every #'evenp nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_cl_notany_nil_seq_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-notany #'evenp nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_cl_tailp_nil_sublist_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-tailp nil '(1 2 3))",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
 }

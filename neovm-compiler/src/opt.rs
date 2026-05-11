@@ -1420,6 +1420,24 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-every" | "cl-notany" if args.len() >= 2 => {
+            // (cl-every PRED nil) → t  (universal quantifier: all 0 elements pass)
+            // (cl-notany PRED nil) → t  (no element fails the test in empty set)
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::True)
+            } else {
+                None
+            }
+        },
+        "cl-some" | "cl-notevery" if args.len() >= 2 => {
+            // (cl-some PRED nil) → nil  (existential: no element satisfies)
+            // (cl-notevery PRED nil) → nil  (not every element... over empty set)
+            if matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "nconc" if args.len() >= 1 => {
             // (nconc) → nil, (nconc nil ...) → nil
             // If all args are nil, result is nil
