@@ -3172,6 +3172,7 @@ impl Context {
             "x-cursor-fore-pixel",
         ] {
             obarray.set_symbol_value(name, Value::NIL);
+            obarray.make_special(name);
         }
         // GNU `frame.c` initializes these global minor-mode variables in C:
         //   Vmenu_bar_mode = Qt
@@ -3259,6 +3260,7 @@ impl Context {
         obarray.set_symbol_value("byte-compile-warnings", Value::T);
         // Other missing C variables cus-start.el checks
         obarray.set_symbol_value("history-length", Value::fixnum(100));
+        obarray.make_special("history-length");
         obarray.set_symbol_value("minibuffer-follows-selected-frame", Value::T);
         obarray.set_symbol_value("recenter-redisplay", Value::symbol("tty"));
         obarray.set_symbol_value("iconify-child-frame", Value::symbol("iconify-top-level"));
@@ -3648,8 +3650,11 @@ impl Context {
         obarray.set_symbol_value("completion-tab-width", Value::NIL);
         obarray.set_symbol_value("enable-recursive-minibuffers", Value::NIL);
         obarray.set_symbol_value("history-length", Value::fixnum(100));
+        obarray.make_special("history-length");
         obarray.set_symbol_value("history-delete-duplicates", Value::NIL);
+        obarray.make_special("history-delete-duplicates");
         obarray.set_symbol_value("history-add-new-input", Value::T);
+        obarray.make_special("history-add-new-input");
         obarray.set_symbol_value("read-buffer-function", Value::NIL);
         obarray.set_symbol_value(
             "read-file-name-function",
