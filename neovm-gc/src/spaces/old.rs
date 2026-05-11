@@ -362,33 +362,39 @@ impl OldBlock {
     /// Read-only access to the per-block card table. The remembered-set
     /// write barrier and the minor GC root scan use this to dirty/scan
     /// cards covering the block buffer.
+    #[inline]
     pub(crate) fn card_table(&self) -> &CardTable {
         &self.card_table
     }
 
     /// Total backing buffer length in bytes.
+    #[inline]
     pub(crate) fn capacity_bytes(&self) -> usize {
         self.buffer.len()
     }
 
     /// Number of lines in the block.
+    #[inline]
     pub(crate) fn line_count(&self) -> usize {
         self.line_marks.len()
     }
 
     /// Bytes per line.
+    #[inline]
     pub(crate) fn line_bytes(&self) -> usize {
         self.line_bytes
     }
 
     /// Base pointer of the backing buffer (read-only). The pointer remains
     /// valid for the lifetime of the block.
+    #[inline]
     pub(crate) fn base_ptr(&self) -> *const u8 {
         self.buffer.as_ptr()
     }
 
     /// True if the byte at `addr` (an absolute pointer-as-usize) lies
     /// inside this block's backing buffer.
+    #[inline]
     pub(crate) fn contains_addr(&self, addr: usize) -> bool {
         let base = self.base_ptr() as usize;
         addr >= base && addr < base + self.buffer.len()
