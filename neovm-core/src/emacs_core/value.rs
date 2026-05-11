@@ -17,6 +17,8 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
+use rustc_hash::FxHashMap;
+
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
@@ -540,8 +542,8 @@ pub struct LispHashTable {
     pub weakness: Option<HashTableWeakness>,
     pub rehash_size: f64,
     pub rehash_threshold: f64,
-    pub data: HashMap<HashKey, Value>,
-    pub key_snapshots: HashMap<HashKey, Value>,
+    pub data: FxHashMap<HashKey, Value>,
+    pub key_snapshots: FxHashMap<HashKey, Value>,
     pub insertion_order: Vec<HashKey>,
     pub entry_slots: Vec<Option<HashKey>>,
     pub free_slots: Vec<usize>,
@@ -754,8 +756,11 @@ impl LispHashTable {
             weakness,
             rehash_size,
             rehash_threshold,
-            data: HashMap::with_capacity(size.max(0) as usize),
-            key_snapshots: HashMap::with_capacity(size.max(0) as usize),
+            data: FxHashMap::with_capacity_and_hasher(size.max(0) as usize, Default::default()),
+            key_snapshots: FxHashMap::with_capacity_and_hasher(
+                size.max(0) as usize,
+                Default::default(),
+            ),
             insertion_order: Vec::with_capacity(size.max(0) as usize),
             entry_slots: Vec::with_capacity(size.max(0) as usize),
             free_slots: Vec::new(),

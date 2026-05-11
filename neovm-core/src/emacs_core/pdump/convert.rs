@@ -269,10 +269,10 @@ pub(crate) struct TaggedLoadState<'a> {
     values: Vec<Option<Value>>,
     populated: Vec<bool>,
     mapped_heap: Option<MappedHeapView>,
-    buffers: HashMap<u64, Value>,
-    windows: HashMap<u64, Value>,
-    frames: HashMap<u64, Value>,
-    timers: HashMap<u64, Value>,
+    buffers: FxHashMap<u64, Value>,
+    windows: FxHashMap<u64, Value>,
+    frames: FxHashMap<u64, Value>,
+    timers: FxHashMap<u64, Value>,
     /// O(1) `marker_id` → `MarkerObj*` index built during
     /// `preload_tagged_heap`. Replaces the post-T8
     /// `find_marker_by_id_during_load` heap scan that was used while
@@ -298,10 +298,10 @@ impl<'a> TaggedLoadState<'a> {
             values: vec![None; len],
             populated: vec![false; len],
             mapped_heap,
-            buffers: HashMap::new(),
-            windows: HashMap::new(),
-            frames: HashMap::new(),
-            timers: HashMap::new(),
+            buffers: FxHashMap::default(),
+            windows: FxHashMap::default(),
+            frames: FxHashMap::default(),
+            timers: FxHashMap::default(),
             markers_by_id: FxHashMap::default(),
         }
     }
@@ -330,10 +330,10 @@ impl<'a> TaggedLoadState<'a> {
             values: vec![None; len],
             populated: vec![false; len],
             mapped_heap,
-            buffers: HashMap::new(),
-            windows: HashMap::new(),
-            frames: HashMap::new(),
-            timers: HashMap::new(),
+            buffers: FxHashMap::default(),
+            windows: FxHashMap::default(),
+            frames: FxHashMap::default(),
+            timers: FxHashMap::default(),
             markers_by_id: FxHashMap::default(),
         }
     }
@@ -1262,26 +1262,34 @@ impl<'a> LoadDecoder<'a> {
             }
             DumpHeapObject::HashTable(ht) => {
                 let _ = value.with_hash_table_mut(|table| {
-                    table.test = load_hash_table_test(&ht.test);
-                    table.test_name = ht.test_name.map(|s| load_sym_id(&s));
-                    table.size = ht.size;
-                    table.weakness = ht.weakness.as_ref().map(load_hash_table_weakness);
-                    table.rehash_size = ht.rehash_size;
-                    table.rehash_threshold = ht.rehash_threshold;
-                    table.data = ht
-                        .entries
-                        .iter()
-                        .map(|(k, v)| (load_hash_key(self, k), self.load_value(v)))
+                    let DumpLispHashTable {
+                        test,
+                        test_name,
+                        size,
+                        weakness,
+                        rehash_size,
+                        rehash_threshold,
+                        entries,
+                        key_snapshots,
+                        insertion_order,
+                    } = ht;
+                    table.test = load_hash_table_test(&test);
+                    table.test_name = test_name.map(|s| load_sym_id(&s));
+                    table.size = size;
+                    table.weakness = weakness.as_ref().map(load_hash_table_weakness);
+                    table.rehash_size = rehash_size;
+                    table.rehash_threshold = rehash_threshold;
+                    table.data = entries
+                        .into_iter()
+                        .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
                         .collect();
-                    table.key_snapshots = ht
-                        .key_snapshots
-                        .iter()
-                        .map(|(k, v)| (load_hash_key(self, k), self.load_value(v)))
+                    table.key_snapshots = key_snapshots
+                        .into_iter()
+                        .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
                         .collect();
-                    table.insertion_order = ht
-                        .insertion_order
-                        .iter()
-                        .map(|key| load_hash_key(self, key))
+                    table.insertion_order = insertion_order
+                        .into_iter()
+                        .map(|key| load_hash_key_owned(self, key))
                         .collect();
                 });
             }
@@ -1318,7 +1326,7 @@ impl<'a> LoadDecoder<'a> {
             DumpHeapObject::ByteCode(bc) => {
                 let _ = value
                     .with_bytecode_data_mut(|data| {
-                        *data = load_bytecode(self, &bc)?;
+                        *data = load_bytecode_owned(self, bc)?;
                         Ok::<(), DumpError>(())
                     })
                     .transpose()?;
@@ -1471,8 +1479,47 @@ impl<'a> LoadDecoder<'a> {
         }
     }
 
+    fn load_value_owned(&mut self, v: DumpValue) -> Value {
+        match v {
+            DumpValue::Nil => Value::NIL,
+            DumpValue::True => Value::T,
+            DumpValue::Int(n) => Value::fixnum(n),
+            DumpValue::Float(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Symbol(s) => Value::symbol(load_sym_id(&s)),
+            DumpValue::Str(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Cons(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Vector(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Record(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::HashTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Lambda(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Macro(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Subr(s) => {
+                let name_id = load_name_id(&s);
+                if let Some(sym_id) = intern::canonical_symbol_for_name(name_id) {
+                    Value::subr_from_sym_id(sym_id)
+                } else {
+                    let name = intern::resolve_name(name_id);
+                    Value::subr_from_sym_id(intern::intern(name))
+                }
+            }
+            DumpValue::ByteCode(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Marker(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Overlay(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Buffer(bid) => self.load_cached_buffer(bid.0),
+            DumpValue::Window(w) => self.load_cached_window(w),
+            DumpValue::Frame(f) => self.load_cached_frame(f),
+            DumpValue::Timer(t) => self.load_cached_timer(t),
+            DumpValue::Bignum(text) => Value::make_integer_from_str_or_zero(&text),
+            DumpValue::Unbound => Value::UNBOUND,
+        }
+    }
+
     pub(crate) fn load_opt_value(&mut self, v: &Option<DumpValue>) -> Option<Value> {
         v.as_ref().map(|value| self.load_value(value))
+    }
+
+    fn load_opt_value_owned(&mut self, v: Option<DumpValue>) -> Option<Value> {
+        v.map(|value| self.load_value_owned(value))
     }
 }
 
@@ -1714,6 +1761,10 @@ fn dump_lisp_string(string: &LispString) -> DumpLispString {
 
 pub(super) fn load_lisp_string(dump: &DumpLispString) -> LispString {
     LispString::from_dump(dump.data.clone(), dump.size, dump.size_byte)
+}
+
+fn load_lisp_string_owned(dump: DumpLispString) -> LispString {
+    LispString::from_dump(dump.data, dump.size, dump.size_byte)
 }
 
 // --- Op ---
@@ -3402,6 +3453,14 @@ pub(crate) fn load_lambda_params(p: &DumpLambdaParams) -> LambdaParams {
     }
 }
 
+fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
+    LambdaParams {
+        required: p.required.into_iter().map(|s| load_sym_id(&s)).collect(),
+        optional: p.optional.into_iter().map(|s| load_sym_id(&s)).collect(),
+        rest: p.rest.map(|s| load_sym_id(&s)),
+    }
+}
+
 pub(crate) fn load_bytecode(
     decoder: &mut LoadDecoder,
     bc: &DumpByteCodeFunction,
@@ -3439,6 +3498,50 @@ pub(crate) fn load_bytecode(
             .extra_slots
             .iter()
             .map(|value| decoder.load_value(value))
+            .collect(),
+    })
+}
+
+fn load_bytecode_owned(
+    decoder: &mut LoadDecoder,
+    bc: DumpByteCodeFunction,
+) -> Result<ByteCodeFunction, DumpError> {
+    let params = load_lambda_params_owned(bc.params);
+    let arglist = bc
+        .arglist
+        .map(|value| decoder.load_value_owned(value))
+        .unwrap_or_else(|| crate::emacs_core::builtins::lambda_params_to_value(&params));
+    Ok(ByteCodeFunction {
+        ops: bc
+            .ops
+            .into_iter()
+            .map(|op| load_op(&op))
+            .collect::<Result<Vec<_>, _>>()?,
+        constants: bc
+            .constants
+            .into_iter()
+            .map(|value| decoder.load_value_owned(value))
+            .collect(),
+        max_stack: bc.max_stack,
+        params,
+        arglist,
+        lexical: bc.lexical,
+        env: decoder.load_opt_value_owned(bc.env),
+        gnu_byte_offset_map: bc.gnu_byte_offset_map.map(|pairs| {
+            pairs
+                .into_iter()
+                .map(|(byte_off, instr_idx)| (byte_off as usize, instr_idx as usize))
+                .collect()
+        }),
+        gnu_bytecode_bytes: bc.gnu_bytecode_bytes,
+        docstring: bc.docstring.map(load_lisp_string_owned),
+        doc_form: decoder.load_opt_value_owned(bc.doc_form),
+        interactive: decoder.load_opt_value_owned(bc.interactive),
+        closure_slot_count: bc.closure_slot_count,
+        extra_slots: bc
+            .extra_slots
+            .into_iter()
+            .map(|value| decoder.load_value_owned(value))
             .collect(),
     })
 }
@@ -3493,6 +3596,44 @@ pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashK
     }
 }
 
+fn load_hash_key_owned(decoder: &mut LoadDecoder, k: DumpHashKey) -> HashKey {
+    match k {
+        DumpHashKey::Nil => HashKey::Nil,
+        DumpHashKey::True => HashKey::True,
+        DumpHashKey::Int(n) => HashKey::Int(n),
+        DumpHashKey::Float(bits) => HashKey::Float(bits),
+        DumpHashKey::FloatEq(bits, id) => HashKey::FloatEq(bits, id),
+        DumpHashKey::Symbol(s) => HashKey::Symbol(load_sym_id(&s)),
+        DumpHashKey::Keyword(s) => HashKey::Keyword(load_sym_id(&s)),
+        DumpHashKey::Str(id) => {
+            HashKey::Ptr(decoder.heap_ref_to_value(tagged_heap_ref(&id)).bits())
+        }
+        DumpHashKey::Char(c) => HashKey::Char(c),
+        DumpHashKey::Window(w) => HashKey::Window(w),
+        DumpHashKey::Frame(f) => HashKey::Frame(f),
+        DumpHashKey::Ptr(p) => HashKey::Ptr(p as usize),
+        DumpHashKey::HeapRef(a) => {
+            HashKey::Ptr(decoder.heap_ref_to_value(TaggedHeapRef { index: a }).bits())
+        }
+        DumpHashKey::EqualCons(a, b) => HashKey::EqualCons(
+            Box::new(load_hash_key_owned(decoder, *a)),
+            Box::new(load_hash_key_owned(decoder, *b)),
+        ),
+        DumpHashKey::EqualVec(v) => HashKey::EqualVec(
+            v.into_iter()
+                .map(|item| load_hash_key_owned(decoder, item))
+                .collect(),
+        ),
+        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(len as usize, bits),
+        DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
+            Box::new(load_hash_key_owned(decoder, *sym)),
+            Box::new(load_hash_key_owned(decoder, *pos)),
+        ),
+        DumpHashKey::Cycle(index) => HashKey::Cycle(index),
+        DumpHashKey::Text(text) => HashKey::Text(text),
+    }
+}
+
 pub(crate) fn load_hash_table_test(t: &DumpHashTableTest) -> HashTableTest {
     match t {
         DumpHashTableTest::Eq => HashTableTest::Eq,
@@ -3511,12 +3652,12 @@ pub(crate) fn load_hash_table_weakness(w: &DumpHashTableWeakness) -> HashTableWe
 }
 
 pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable) -> LispHashTable {
-    let data: HashMap<HashKey, Value> = ht
+    let data: FxHashMap<HashKey, Value> = ht
         .entries
         .iter()
         .map(|(k, v)| (load_hash_key(decoder, k), decoder.load_value(v)))
         .collect();
-    let key_snapshots: HashMap<HashKey, Value> = ht
+    let key_snapshots: FxHashMap<HashKey, Value> = ht
         .key_snapshots
         .iter()
         .map(|(k, v)| (load_hash_key(decoder, k), decoder.load_value(v)))
