@@ -426,6 +426,21 @@ impl MacroEval {
                     }
                 }
             }
+            Some("abs") => {
+                if items.len() != 2 {
+                    self.error(span, "abs requires exactly one argument");
+                    return Err(());
+                }
+                let val = self.eval(&items[1], env)?;
+                match val {
+                    MacroValue::Int(n) => Ok(MacroValue::Int(n.wrapping_abs())),
+                    MacroValue::Float(f) => Ok(MacroValue::Float(f.abs())),
+                    other => {
+                        self.error(span, format!("abs: wrong type argument: {other:?}"));
+                        Err(())
+                    }
+                }
+            }
             Some("max") => self.eval_min_max(span, &items[1..], env, true),
             Some("min") => self.eval_min_max(span, &items[1..], env, false),
             Some("-") => self.eval_sub(span, &items[1..], env),
