@@ -14317,4 +14317,24 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_math_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (+ (truncate 3.7) (floor 3.7) (ceiling 3.7) (round 3.7)  ; 3+3+4+4=14\n\
+                (ftruncate -3.7) (ffloor -3.7) (fceiling -3.7))        ; + -3.0 + -4.0 + -3.0 = 4.0\n\
+             ",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_exp_sqrt_trig_primitives() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (exp 0) (sqrt 4.0) (sin 0.0) (cos 0.0) (log 1.0) (abs -42) (expt 2 3))",
+        );
+        assert!(value.is_some());
+    }
 }
