@@ -1524,42 +1524,42 @@ impl<'a> Reader<'a> {
     }
 
     fn read_bool_vector_literal(&mut self) -> Result<Value, ReadError> {
-        if !matches!(self.current_code(), Some(c) if is_ascii_digit_code(c)) {
-            return Err(self.error("#& expected decimal size"));
+        let mut size = 0usize;
+        let mut saw_digit = false;
+        while let Some(c) = self.current_code() {
+            if !is_ascii_digit_code(c) {
+                break;
+            }
+            saw_digit = true;
+            self.bump();
+            let digit = (c as u8 - b'0') as usize;
+            size = size
+                .checked_mul(10)
+                .and_then(|n| n.checked_add(digit))
+                .ok_or_else(|| self.error("#&"))?;
         }
-        let size = self.parse_decimal_usize()?;
+        if !saw_digit || self.current_code() != Some(b'"' as u32) {
+            return Err(self.error("#&"));
+        }
         let data = self.read_string()?;
-        let data_str = data
-            .as_utf8_str()
-            .ok_or_else(|| self.error("#& expected string after size"))?;
+        let data_string = data.as_lisp_string().ok_or_else(|| self.error("#&..."))?;
+        let size_in_bytes = size.div_ceil(8);
+        let data_chars = data_string.schars();
+        let old_emacs_19_extra_byte = data_chars > 0 && size == (data_chars - 1) * 8;
+        if data_string.is_multibyte() || !(data_chars == size_in_bytes || old_emacs_19_extra_byte) {
+            return Err(self.error("#&..."));
+        }
 
-        // Expand packed bytes to individual bits and emit as
-        // (bool-vector t nil t ...) — the builtin uses truthiness.
-        let saved = save_scratch_gc_roots();
-        let mut call = Vec::with_capacity(1 + size);
-        call.push(Value::symbol("bool-vector"));
-        let mut bit_count = 0;
-        for byte_val in data_str.bytes() {
+        let mut bits = Vec::with_capacity(size);
+        for byte_val in data_string.as_bytes() {
             for bit_idx in 0..8 {
-                if bit_count >= size {
+                if bits.len() >= size {
                     break;
                 }
-                if (byte_val >> bit_idx) & 1 != 0 {
-                    call.push(Value::T);
-                } else {
-                    call.push(Value::NIL);
-                }
-                bit_count += 1;
+                bits.push((byte_val >> bit_idx) & 1 != 0);
             }
         }
-        // Pad with nil if data is shorter than SIZE
-        while bit_count < size {
-            call.push(Value::NIL);
-            bit_count += 1;
-        }
-        let result = Value::list(call);
-        restore_scratch_gc_roots(saved);
-        Ok(result)
+        Ok(super::chartable::bool_vector_from_bits(&bits))
     }
 
     fn read_radix_number(&mut self, radix: u32) -> Result<Value, ReadError> {

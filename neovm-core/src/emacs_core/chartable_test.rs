@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -1137,7 +1138,16 @@ fn bool_vector_empty() {
 fn bool_vector_negative_length() {
     crate::test_utils::init_test_tracing();
     let result = builtin_make_bool_vector(vec![Value::fixnum(-1), Value::NIL]);
-    assert!(result.is_err());
+    match result.expect_err("negative make-bool-vector length should signal") {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("wholenump"), Value::fixnum(-1)]
+            );
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
 }
 
 #[test]
@@ -1175,8 +1185,20 @@ fn bool_vector_union_into_dest() {
     let a = make_bv(&[true, false, false]);
     let b = make_bv(&[false, true, false]);
     let dest = make_bv(&[false, false, false]);
-    builtin_bool_vector_union(vec![a, b, dest]).unwrap();
+    let result = builtin_bool_vector_union(vec![a, b, dest]).unwrap();
+    assert_eq!(result, dest);
     assert_bv_bits(&dest, &[true, true, false]);
+}
+
+#[test]
+fn bool_vector_union_into_unchanged_dest_returns_nil() {
+    crate::test_utils::init_test_tracing();
+    let a = make_bv(&[true, false, true]);
+    let b = make_bv(&[false, true, true]);
+    let dest = make_bv(&[true, true, true]);
+    let result = builtin_bool_vector_union(vec![a, b, dest]).unwrap();
+    assert_eq!(result, Value::NIL);
+    assert_bv_bits(&dest, &[true, true, true]);
 }
 
 #[test]
@@ -1256,7 +1278,7 @@ fn unicode_property_table_internal_returns_alist_char_table() {
 
 /// Build a bool-vector from a slice of bools (test helper).
 fn make_bv(bits: &[bool]) -> Value {
-    bv_from_bits(bits)
+    bool_vector_from_bits(bits)
 }
 
 /// Assert that a bool-vector has the expected bits.

@@ -1071,3 +1071,45 @@ fn lisp_read_source_reads_nonunicode_emacs_string_literal() {
     assert_eq!(text.as_bytes(), &encoded[..encoded_len]);
     assert_eq!(end_pos, input.sbytes());
 }
+
+#[test]
+fn bool_vector_literal_returns_bool_vector_object() {
+    crate::test_utils::init_test_tracing();
+    let value = read1("#&3\"\x05\"");
+
+    assert!(crate::emacs_core::chartable::is_bool_vector(&value));
+    assert_eq!(
+        crate::emacs_core::chartable::bool_vector_length(&value),
+        Some(3)
+    );
+    assert_eq!(
+        crate::emacs_core::chartable::bool_vector_ref_value(&value, 0),
+        Some(Value::T)
+    );
+    assert_eq!(
+        crate::emacs_core::chartable::bool_vector_ref_value(&value, 1),
+        Some(Value::NIL)
+    );
+    assert_eq!(
+        crate::emacs_core::chartable::bool_vector_ref_value(&value, 2),
+        Some(Value::T)
+    );
+}
+
+#[test]
+fn bool_vector_literal_rejects_wrong_payload_size_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let ob = crate::emacs_core::symbol::Obarray::new();
+    let err = read_one("#&3\"\"", 0, &ob).expect_err("short payload should be invalid");
+
+    assert_eq!(err.message, "#&...");
+}
+
+#[test]
+fn bool_vector_literal_rejects_missing_decimal_size_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let ob = crate::emacs_core::symbol::Obarray::new();
+    let err = read_one("#&x\"a\"", 0, &ob).expect_err("missing size should be invalid");
+
+    assert_eq!(err.message, "#&");
+}

@@ -1774,10 +1774,7 @@ pub(crate) fn builtin_get_unicode_property_internal(args: Vec<Value>) -> EvalRes
 /// each initialized to INIT (nil or non-nil).
 pub(crate) fn builtin_make_bool_vector(args: Vec<Value>) -> EvalResult {
     expect_args("make-bool-vector", &args, 2)?;
-    let length = expect_int(&args[0])?;
-    if length < 0 {
-        return Err(signal("args-out-of-range", vec![args[0]]));
-    }
+    let length = expect_wholenump(&args[0])?;
     let init_val = if args[1].is_truthy() {
         Value::fixnum(1)
     } else {
@@ -1797,7 +1794,7 @@ pub(crate) fn builtin_make_bool_vector(args: Vec<Value>) -> EvalResult {
 /// truthiness.
 pub(crate) fn builtin_bool_vector(args: Vec<Value>) -> EvalResult {
     let bits: Vec<bool> = args.into_iter().map(|v| v.is_truthy()).collect();
-    Ok(bv_from_bits(&bits))
+    Ok(bool_vector_from_bits(&bits))
 }
 
 /// `(bool-vector-p OBJ)` -- return t if OBJ is a bool-vector.
@@ -1844,7 +1841,7 @@ fn extract_bv_bits(value: &Value) -> Result<(Vec<bool>, i64), Flow> {
 }
 
 /// Build a bool-vector `Value` from a slice of bools.
-fn bv_from_bits(bits: &[bool]) -> Value {
+pub(crate) fn bool_vector_from_bits(bits: &[bool]) -> Value {
     let len = bits.len();
     let mut vec = Vec::with_capacity(2 + len);
     vec.push(Value::symbol(BOOL_VECTOR_TAG));
@@ -1876,10 +1873,11 @@ pub(crate) fn builtin_bool_vector_intersection(args: Vec<Value>) -> EvalResult {
         .collect();
 
     if args.len() == 3 {
-        store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(args[2])
+        let changed =
+            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
+        Ok(if changed { args[2] } else { Value::NIL })
     } else {
-        Ok(bv_from_bits(&result_bits))
+        Ok(bool_vector_from_bits(&result_bits))
     }
 }
 
@@ -1902,10 +1900,11 @@ pub(crate) fn builtin_bool_vector_union(args: Vec<Value>) -> EvalResult {
         .collect();
 
     if args.len() == 3 {
-        store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(args[2])
+        let changed =
+            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
+        Ok(if changed { args[2] } else { Value::NIL })
     } else {
-        Ok(bv_from_bits(&result_bits))
+        Ok(bool_vector_from_bits(&result_bits))
     }
 }
 
@@ -1928,10 +1927,11 @@ pub(crate) fn builtin_bool_vector_exclusive_or(args: Vec<Value>) -> EvalResult {
         .collect();
 
     if args.len() == 3 {
-        store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(args[2])
+        let changed =
+            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
+        Ok(if changed { args[2] } else { Value::NIL })
     } else {
-        Ok(bv_from_bits(&result_bits))
+        Ok(bool_vector_from_bits(&result_bits))
     }
 }
 
@@ -1948,7 +1948,7 @@ pub(crate) fn builtin_bool_vector_not(args: Vec<Value>) -> EvalResult {
         store_bv_result_with_expected_lengths(&args[1], &result_bits, &[len_a])?;
         Ok(args[1])
     } else {
-        Ok(bv_from_bits(&result_bits))
+        Ok(bool_vector_from_bits(&result_bits))
     }
 }
 
@@ -1970,10 +1970,11 @@ pub(crate) fn builtin_bool_vector_set_difference(args: Vec<Value>) -> EvalResult
         .map(|(&a, &b)| a && !b)
         .collect();
     if args.len() == 3 {
-        store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(args[2])
+        let changed =
+            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
+        Ok(if changed { args[2] } else { Value::NIL })
     } else {
-        Ok(bv_from_bits(&result_bits))
+        Ok(bool_vector_from_bits(&result_bits))
     }
 }
 
@@ -2025,7 +2026,7 @@ fn store_bv_result_with_expected_lengths(
     dest: &Value,
     bits: &[bool],
     expected_lengths: &[i64],
-) -> Result<(), Flow> {
+) -> Result<bool, Flow> {
     if !is_bool_vector(dest) {
         return Err(wrong_type("bool-vector-p", dest));
     }
@@ -2044,11 +2045,22 @@ fn store_bv_result_with_expected_lengths(
         .as_vector_data()
         .map(|items| items.to_vec())
         .unwrap_or_default();
+    let changed = bits.iter().enumerate().any(|(i, &b)| {
+        let current = slots
+            .get(2 + i)
+            .copied()
+            .map(|value| value.as_fixnum().map_or(false, |n| n != 0))
+            .unwrap_or(false);
+        current != b
+    });
+    if !changed {
+        return Ok(false);
+    }
     for (i, &b) in bits.iter().enumerate() {
         slots[2 + i] = Value::fixnum(if b { 1 } else { 0 });
     }
     let _ = dest.replace_vector_data(slots);
-    Ok(())
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------
