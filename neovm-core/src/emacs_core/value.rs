@@ -17,6 +17,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
 use crate::gc_trace::GcTrace;
@@ -1791,6 +1792,39 @@ pub fn equal_value_swp(
     )
 }
 
+pub fn try_equal_value_swp(
+    left: &Value,
+    right: &Value,
+    depth: usize,
+    symbols_with_pos_enabled: bool,
+) -> Result<bool, Flow> {
+    let mut seen = None;
+    try_equal_value_inner(
+        left,
+        right,
+        depth,
+        &mut seen,
+        symbols_with_pos_enabled,
+        EqualKind::Plain,
+    )
+}
+
+pub fn try_equal_value_including_properties(
+    left: &Value,
+    right: &Value,
+    depth: usize,
+) -> Result<bool, Flow> {
+    let mut seen = None;
+    try_equal_value_inner(
+        left,
+        right,
+        depth,
+        &mut seen,
+        false,
+        EqualKind::IncludingProperties,
+    )
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EqualKind {
     Plain,
@@ -1952,6 +1986,216 @@ fn equal_value_inner(
     }
 }
 
+struct EqualTailGuard {
+    tortoise: Value,
+    power: usize,
+    distance: usize,
+}
+
+impl EqualTailGuard {
+    fn new(tail: Value) -> Self {
+        Self {
+            tortoise: tail,
+            power: 1,
+            distance: 0,
+        }
+    }
+
+    fn found_cycle_after_advance(&mut self, tail: Value) -> bool {
+        if !tail.is_cons() {
+            return false;
+        }
+        self.distance = self.distance.saturating_add(1);
+        if tail.bits() == self.tortoise.bits() {
+            return true;
+        }
+        if self.distance == self.power {
+            self.tortoise = tail;
+            self.power = self.power.saturating_mul(2).max(1);
+            self.distance = 0;
+        }
+        false
+    }
+}
+
+fn try_equal_value_inner(
+    left: &Value,
+    right: &Value,
+    depth: usize,
+    seen: &mut Option<HashSet<(usize, usize)>>,
+    symbols_with_pos_enabled: bool,
+    kind: EqualKind,
+) -> Result<bool, Flow> {
+    if depth > 200 {
+        return Err(signal(
+            "error",
+            vec![Value::string("Stack overflow in equal")],
+        ));
+    }
+
+    let mut left = *left;
+    let mut right = *right;
+    if symbols_with_pos_enabled {
+        if left.is_symbol_with_pos() {
+            left = left.as_symbol_with_pos_sym().unwrap();
+        }
+        if right.is_symbol_with_pos() {
+            right = right.as_symbol_with_pos_sym().unwrap();
+        }
+    }
+
+    if left.bits() == right.bits() {
+        return Ok(true);
+    }
+
+    if left.is_fixnum() || right.is_fixnum() || left.is_symbol() || right.is_symbol() {
+        return Ok(false);
+    }
+
+    if left.is_float() {
+        return Ok(right.is_float() && left.xfloat().to_bits() == right.xfloat().to_bits());
+    }
+    if left.is_string() {
+        return Ok(if right.is_string() {
+            match (left.as_lisp_string(), right.as_lisp_string()) {
+                (Some(left_string), Some(right_string)) => {
+                    left_string.schars() == right_string.schars()
+                        && left_string.sbytes() == right_string.sbytes()
+                        && left_string.as_bytes() == right_string.as_bytes()
+                        && (kind == EqualKind::Plain
+                            || TextPropertyTable::equal_including_property_values(
+                                get_string_text_properties_table_for_value(left).as_ref(),
+                                get_string_text_properties_table_for_value(right).as_ref(),
+                                left_string.schars(),
+                            ))
+                }
+                _ => false,
+            }
+        } else {
+            false
+        });
+    }
+    if left.is_cons() {
+        if !right.is_cons() {
+            return Ok(false);
+        }
+        let mut left_tail = left;
+        let mut right_tail = right;
+        let mut tail_guard = EqualTailGuard::new(left_tail);
+        while left_tail.is_cons() {
+            if !right_tail.is_cons() {
+                return Ok(false);
+            }
+            let left_car = left_tail.cons_car();
+            let right_car = right_tail.cons_car();
+            if !try_equal_value_inner(
+                &left_car,
+                &right_car,
+                depth + 1,
+                seen,
+                symbols_with_pos_enabled,
+                kind,
+            )? {
+                return Ok(false);
+            }
+            let left_cdr = left_tail.cons_cdr();
+            right_tail = right_tail.cons_cdr();
+            if left_cdr.bits() == right_tail.bits() {
+                return Ok(true);
+            }
+            left_tail = left_cdr;
+            if tail_guard.found_cycle_after_advance(left_tail) {
+                return Err(signal("circular-list", vec![left_tail]));
+            }
+        }
+        return try_equal_value_inner(
+            &left_tail,
+            &right_tail,
+            depth + 1,
+            seen,
+            symbols_with_pos_enabled,
+            kind,
+        );
+    }
+
+    if !left.is_veclike() || !right.is_veclike() {
+        return Ok(false);
+    }
+
+    let Some(left_type) = left.veclike_type() else {
+        return Ok(false);
+    };
+    let Some(right_type) = right.veclike_type() else {
+        return Ok(false);
+    };
+    if left_type != right_type {
+        return Ok(false);
+    }
+
+    match left_type {
+        VecLikeType::Marker => Ok(super::marker::marker_logical_fields(&left)
+            == super::marker::marker_logical_fields(&right)),
+        VecLikeType::Vector | VecLikeType::Record => {
+            if depth > 10 {
+                let pair = (left.bits(), right.bits());
+                if !seen.get_or_insert_with(HashSet::new).insert(pair) {
+                    return Ok(true);
+                }
+            }
+            let av = left.as_vector_data().or_else(|| left.as_record_data());
+            let bv = right.as_vector_data().or_else(|| right.as_record_data());
+            match (av, bv) {
+                (Some(a), Some(b)) => {
+                    if a.len() != b.len() {
+                        return Ok(false);
+                    }
+                    for (x, y) in a.iter().zip(b.iter()) {
+                        if !try_equal_value_inner(
+                            x,
+                            y,
+                            depth + 1,
+                            seen,
+                            symbols_with_pos_enabled,
+                            kind,
+                        )? {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                }
+                _ => Ok(false),
+            }
+        }
+        VecLikeType::HashTable => Ok(false),
+        VecLikeType::Lambda => {
+            if depth > 10 {
+                let pair = (left.bits(), right.bits());
+                if !seen.get_or_insert_with(HashSet::new).insert(pair) {
+                    return Ok(true);
+                }
+            }
+            try_closure_equal(
+                &left,
+                &right,
+                depth + 1,
+                seen,
+                symbols_with_pos_enabled,
+                kind,
+            )
+        }
+        VecLikeType::SymbolWithPos => {
+            if symbols_with_pos_enabled {
+                unreachable!("symbol-with-pos values are unwrapped before equality dispatch")
+            } else {
+                let l = left.as_symbol_with_pos().unwrap();
+                let r = right.as_symbol_with_pos().unwrap();
+                Ok(l.sym.bits() == r.sym.bits() && l.pos.bits() == r.pos.bits())
+            }
+        }
+        _ => Ok(false),
+    }
+}
+
 fn closure_params_to_equal_key(params: &LambdaParams) -> HashKey {
     let mut values = Vec::with_capacity(params.required.len() + params.optional.len() + 3);
     values.push(HashKey::Text("params".to_string()));
@@ -2068,6 +2312,64 @@ fn closure_equal(
             equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled, kind)
         }
         _ => false,
+    }
+}
+
+fn try_closure_equal(
+    left: &Value,
+    right: &Value,
+    depth: usize,
+    seen: &mut Option<HashSet<(usize, usize)>>,
+    symbols_with_pos_enabled: bool,
+    kind: EqualKind,
+) -> Result<bool, Flow> {
+    let (Some(left_params), Some(right_params)) = (left.closure_params(), right.closure_params())
+    else {
+        return Ok(false);
+    };
+    if left_params != right_params {
+        return Ok(false);
+    }
+
+    let body_equal = match (left.closure_body_value(), right.closure_body_value()) {
+        (Some(left_body), Some(right_body)) => try_equal_value_inner(
+            &left_body,
+            &right_body,
+            depth + 1,
+            seen,
+            symbols_with_pos_enabled,
+            kind,
+        )?,
+        (None, None) => true,
+        _ => false,
+    };
+    if !body_equal {
+        return Ok(false);
+    }
+
+    let env_equal = match (
+        left.closure_env().unwrap_or(None),
+        right.closure_env().unwrap_or(None),
+    ) {
+        (None, None) => true,
+        (Some(l), Some(r)) => {
+            try_equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled, kind)?
+        }
+        _ => false,
+    };
+    if !env_equal || left.closure_docstring().flatten() != right.closure_docstring().flatten() {
+        return Ok(false);
+    }
+
+    match (
+        left.closure_doc_form().flatten(),
+        right.closure_doc_form().flatten(),
+    ) {
+        (None, None) => Ok(true),
+        (Some(l), Some(r)) => {
+            try_equal_value_inner(&l, &r, depth + 1, seen, symbols_with_pos_enabled, kind)
+        }
+        _ => Ok(false),
     }
 }
 

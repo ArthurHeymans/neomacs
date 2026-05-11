@@ -939,9 +939,9 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
 /// Like `equal`, but also compares text properties of strings.
 pub(crate) fn builtin_equal_including_properties(args: Vec<Value>) -> EvalResult {
     expect_args("equal-including-properties", &args, 2)?;
-    Ok(Value::bool_val(equal_value_including_properties(
+    Ok(Value::bool_val(try_equal_value_including_properties(
         &args[0], &args[1], 0,
-    )))
+    )?))
 }
 
 pub(crate) fn builtin_equal_including_properties_2(
@@ -949,9 +949,9 @@ pub(crate) fn builtin_equal_including_properties_2(
     left: Value,
     right: Value,
 ) -> EvalResult {
-    Ok(Value::bool_val(equal_value_including_properties(
+    Ok(Value::bool_val(try_equal_value_including_properties(
         &left, &right, 0,
-    )))
+    )?))
 }
 
 // ---------------------------------------------------------------------------

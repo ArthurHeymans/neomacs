@@ -7804,6 +7804,32 @@ fn plist_get_circular_list_safe_tail_matches_gnu() {
 }
 
 #[test]
+fn equal_circular_list_behavior_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let same = Value::list(vec![Value::fixnum(1)]);
+    same.set_cdr(same);
+    assert_eq!(builtin_equal(vec![same, same]).unwrap(), Value::T);
+
+    let left = Value::list(vec![Value::fixnum(1)]);
+    left.set_cdr(left);
+    let right = Value::list(vec![Value::fixnum(1)]);
+    right.set_cdr(right);
+    match builtin_equal(vec![left, right]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "circular-list");
+        }
+        other => panic!("expected circular-list signal, got {other:?}"),
+    }
+
+    let left = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    left.cons_cdr().set_cdr(left);
+    let right = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    right.cons_cdr().set_cdr(right.cons_cdr());
+    assert_eq!(builtin_equal(vec![left, right]).unwrap(), Value::NIL);
+}
+
+#[test]
 fn string_match_inhibit_modify_preserves_match_data() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;
