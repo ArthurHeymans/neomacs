@@ -3071,6 +3071,9 @@ impl BufferManager {
             return false;
         }
         if self.current == Some(id) {
+            if record_order {
+                self.note_buffer_order_head(id);
+            }
             return true;
         }
 

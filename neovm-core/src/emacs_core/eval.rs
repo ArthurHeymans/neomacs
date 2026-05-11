@@ -6858,6 +6858,20 @@ impl Context {
         }
     }
 
+    pub(crate) fn ensure_echo_area_buffers(&mut self) {
+        for index in 0..2 {
+            let name = format!(" *Echo Area {index}*");
+            let id = self.buffers.find_buffer_by_name(&name).unwrap_or_else(|| {
+                let id = self.buffers.create_buffer(&name);
+                let _ = self
+                    .buffers
+                    .set_buffer_local_property(id, "truncate-lines", Value::NIL);
+                id
+            });
+            let _ = self.buffers.configure_buffer_undo_list(id, Value::T);
+        }
+    }
+
     pub(crate) fn append_current_message_runtime_text(&mut self, text: &str) {
         let multibyte = self
             .current_message
@@ -6880,6 +6894,9 @@ impl Context {
     }
 
     pub(crate) fn append_echo_area_print_runtime_text(&mut self, text: &str) {
+        if !self.noninteractive() {
+            self.ensure_echo_area_buffers();
+        }
         if !self.message_buf_print {
             self.current_message = None;
             self.message_buf_print = true;

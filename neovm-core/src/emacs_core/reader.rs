@@ -423,6 +423,19 @@ fn erase_expired_minibuffer_buffer_in_state(
     let _ = buffers.replace_buffer_contents(minibuf_id, "");
 }
 
+fn find_or_create_minibuffer_buffer_in_state(
+    buffers: &mut crate::buffer::BufferManager,
+    depth: usize,
+) -> crate::buffer::BufferId {
+    let minibuf_name = format!(" *Minibuf-{depth}*");
+    let minibuf_id = buffers
+        .find_buffer_by_name(&minibuf_name)
+        .unwrap_or_else(|| buffers.create_buffer(&minibuf_name));
+    let _ = buffers.configure_buffer_undo_list(minibuf_id, Value::NIL);
+    let _ = buffers.set_buffer_local_property(minibuf_id, "truncate-lines", Value::NIL);
+    minibuf_id
+}
+
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
     restore_minibuffer_window_in_state(
         &mut eval.frames,
@@ -977,10 +990,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
 
     // Find or create *Minibuf-N* buffer
     let minibuf_depth = minibuffers.depth() + 1;
-    let minibuf_name = format!(" *Minibuf-{}*", minibuf_depth);
-    let minibuf_id = buffers
-        .find_buffer_by_name(&minibuf_name)
-        .unwrap_or_else(|| buffers.create_buffer(&minibuf_name));
+    let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
 
     // Clear the minibuffer buffer and insert prompt + initial input
     let prompt_byte_len;
@@ -1008,7 +1018,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     if active_window_state.is_none() {
         // Batch/no-frame fallback: still switch current buffer so tests without
         // a realized GUI frame can exercise the minibuffer logic.
-        buffers.switch_current_unrecorded(minibuf_id);
+        buffers.switch_current(minibuf_id);
     }
     tracing::debug!(
         "read-from-minibuffer: prompt={:?} minibuf_id={:?} current_buffer={:?} active_window={:?} selected_window={:?}",
@@ -1097,7 +1107,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         );
     }
     if let Some(buf_id) = saved_buffer_id {
-        buffers.switch_current_unrecorded(buf_id);
+        buffers.switch_current(buf_id);
     }
     tracing::debug!(
         "read-from-minibuffer: restored current_buffer={:?} active_window={:?} selected_window={:?}",
@@ -1529,11 +1539,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let recursive_depth = shared.recursive_command_loop_depth();
 
     let minibuf_depth = shared.minibuffers.depth() + 1;
-    let minibuf_name = format!(" *Minibuf-{}*", minibuf_depth);
-    let minibuf_id = shared
-        .buffers
-        .find_buffer_by_name(&minibuf_name)
-        .unwrap_or_else(|| shared.buffers.create_buffer(&minibuf_name));
+    let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
     let prompt_byte_len;
     {
@@ -1559,7 +1565,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         minibuf_id,
     );
     if active_window_state.is_none() {
-        shared.buffers.switch_current_unrecorded(minibuf_id);
+        shared.buffers.switch_current(minibuf_id);
     }
     tracing::debug!(
         "read-from-minibuffer: prompt={:?} minibuf_id={:?} current_buffer={:?} active_window={:?} selected_window={:?}",
@@ -1663,7 +1669,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         );
     }
     if let Some(buf_id) = saved_buffer_id {
-        shared.buffers.switch_current_unrecorded(buf_id);
+        shared.buffers.switch_current(buf_id);
     }
     tracing::debug!(
         "read-from-minibuffer: restored current_buffer={:?} active_window={:?} selected_window={:?}",

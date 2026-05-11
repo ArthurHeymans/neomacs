@@ -2430,6 +2430,18 @@ fn bootstrap_buffers(
     // Set *scratch* as the current buffer
     eval.buffer_manager_mut().set_current(scratch_id);
 
+    let mini_id = find_or_create_buffer(eval, " *Minibuf-0*");
+    let _ = eval
+        .buffer_manager_mut()
+        .clear_buffer_labeled_restrictions(mini_id);
+    let _ = eval
+        .buffer_manager_mut()
+        .configure_buffer_undo_list(mini_id, Value::NIL);
+    if let Some(buf) = eval.buffer_manager_mut().get_mut(mini_id) {
+        buf.widen();
+        buf.goto_byte(0);
+    }
+
     let msg_id = find_or_create_buffer(eval, "*Messages*");
     let _ = eval
         .buffer_manager_mut()
@@ -2442,15 +2454,7 @@ fn bootstrap_buffers(
         }
         buf.goto_byte(0);
     }
-
-    let mini_id = find_or_create_buffer(eval, " *Minibuf-0*");
-    let _ = eval
-        .buffer_manager_mut()
-        .clear_buffer_labeled_restrictions(mini_id);
-    if let Some(buf) = eval.buffer_manager_mut().get_mut(mini_id) {
-        buf.widen();
-        buf.goto_byte(0);
-    }
+    let _ = eval.buffer_manager_mut().note_buffer_order_tail(msg_id);
 
     let frame_id = {
         let frame_manager = eval.frame_manager();

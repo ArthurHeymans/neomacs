@@ -1010,6 +1010,26 @@ fn manager_buffer_list() {
 }
 
 #[test]
+fn manager_recorded_switch_records_even_when_buffer_is_already_current() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let scratch = mgr.find_buffer_by_name("*scratch*").expect("scratch");
+    let a = mgr.create_buffer("a");
+    let b = mgr.create_buffer("b");
+
+    mgr.switch_current(a);
+    mgr.switch_current(b);
+    assert_eq!(mgr.buffer_list(), vec![b, a, scratch]);
+
+    mgr.switch_current_unrecorded(a);
+    assert_eq!(mgr.current_buffer_id(), Some(a));
+    assert_eq!(mgr.buffer_list(), vec![b, a, scratch]);
+
+    mgr.switch_current(a);
+    assert_eq!(mgr.buffer_list(), vec![a, b, scratch]);
+}
+
+#[test]
 fn manager_generate_new_buffer_name_unique() {
     crate::test_utils::init_test_tracing();
     let mgr = BufferManager::new();

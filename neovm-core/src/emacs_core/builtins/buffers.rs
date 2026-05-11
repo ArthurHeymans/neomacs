@@ -629,7 +629,7 @@ pub(crate) fn builtin_set_buffer(eval: &mut super::eval::Context, args: Vec<Valu
             ));
         }
     };
-    eval.switch_current_buffer(id)?;
+    eval.set_current_buffer_unrecorded(id)?;
     Ok(Value::make_buffer(id))
 }
 

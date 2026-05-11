@@ -120,12 +120,16 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
         None => crate::heap_types::LispString::from_emacs_bytes(Vec::new()),
     };
     let side_effects = (|| {
-        match message_echo_result(ctx, &msg)? {
+        let displayed_message = message_echo_result(ctx, &msg)?;
+        match &displayed_message {
             Some(displayed) => ctx.set_current_message(Some(displayed.clone())),
             None => ctx.clear_current_message(),
         }
         // GNU Emacs message_dolog: log to *Messages* buffer
         message_dolog(ctx, &msg);
+        if displayed_message.is_some() && !ctx.noninteractive() {
+            ctx.ensure_echo_area_buffers();
+        }
         tracing::info!(msg = %super::runtime_string_from_lisp_string(&msg));
         // GNU Emacs editfns.c: in batch mode, message prints to stderr with newline.
         if ctx.noninteractive() {

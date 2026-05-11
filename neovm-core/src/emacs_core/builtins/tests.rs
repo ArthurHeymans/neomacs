@@ -1340,6 +1340,31 @@ fn set_buffer_rejects_deleted_buffer_object() {
 }
 
 #[test]
+fn set_buffer_does_not_record_buffer_list_order_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let scratch = eval
+        .buffers
+        .find_buffer_by_name("*scratch*")
+        .expect("scratch");
+    let first = eval.buffers.create_buffer("*sb-order-a*");
+    let second = eval.buffers.create_buffer("*sb-order-b*");
+
+    let result = builtin_set_buffer(&mut eval, vec![Value::make_buffer(second)])
+        .expect("set-buffer should select live buffer");
+    assert_eq!(result, Value::make_buffer(second));
+    assert_eq!(eval.buffers.current_buffer_id(), Some(second));
+    assert_eq!(
+        builtin_buffer_list(&mut eval, vec![]).expect("buffer-list"),
+        Value::list(vec![
+            Value::make_buffer(scratch),
+            Value::make_buffer(first),
+            Value::make_buffer(second),
+        ])
+    );
+}
+
+#[test]
 fn eval_buffer_live_p_non_buffer_objects_return_nil() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
@@ -10922,6 +10947,45 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
         eval.buffers.find_buffer_by_name(" *Messages*").is_none(),
         "message should not create hidden legacy messages buffer"
     );
+}
+
+#[test]
+fn interactive_message_materializes_echo_area_buffers_after_messages_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    builtin_message(&mut eval, vec![Value::string("hello echo")])
+        .expect("interactive message should install echo area buffers");
+
+    let names: Vec<String> = eval
+        .buffers
+        .buffer_list()
+        .into_iter()
+        .filter_map(|id| {
+            eval.buffers
+                .get(id)
+                .map(|buf| buf.name_runtime_string_owned())
+        })
+        .collect();
+    assert_eq!(
+        names,
+        vec![
+            "*scratch*",
+            "*Messages*",
+            " *Echo Area 0*",
+            " *Echo Area 1*"
+        ]
+    );
+    for name in [" *Echo Area 0*", " *Echo Area 1*"] {
+        let id = eval
+            .buffers
+            .find_buffer_by_name(name)
+            .expect("echo area buffer");
+        let buffer = eval.buffers.get(id).expect("echo area buffer live");
+        assert_eq!(buffer.get_buffer_local("truncate-lines"), Some(Value::NIL));
+        assert_eq!(buffer.get_buffer_local("buffer-undo-list"), Some(Value::T));
+    }
 }
 
 #[test]
