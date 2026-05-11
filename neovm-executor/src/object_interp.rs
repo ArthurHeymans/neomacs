@@ -14049,4 +14049,14 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_subst_if_not_returns_nil_for_nil_tree() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-subst-if-not #'evenp 'new nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
