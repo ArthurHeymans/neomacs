@@ -14460,4 +14460,31 @@ mod tests {
         );
         assert!(value.is_some());
     }
+
+    #[test]
+    fn executes_listp_returns_t_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (listp nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_atom_returns_t_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (atom nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_symbolp_returns_t_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (symbolp nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
 }
