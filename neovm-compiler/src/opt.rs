@@ -1712,4 +1712,38 @@ mod tests {
         });
         assert!(!has_add_call, "unused + should be eliminated by DCE");
     }
+
+    #[test]
+    fn folds_copy_alist_nil_to_nil() {
+        let artifact = compile_source(
+            "fold-calist.el",
+            ";;; -*- lexical-binding: t; -*-\n(copy-alist nil)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let ssa = artifact.ssa.unwrap();
+        let func = ssa.functions.values().next().unwrap();
+        let has_call = func.blocks.values().any(|b| {
+            b.instructions.iter().any(
+                |inst| matches!(&inst.kind, SsaInstKind::CallNamed { name, .. } if name == "copy-alist"),
+            )
+        });
+        assert!(!has_call, "copy-alist nil should be folded to nil");
+    }
+
+    #[test]
+    fn folds_copy_tree_nil_to_nil() {
+        let artifact = compile_source(
+            "fold-ctree.el",
+            ";;; -*- lexical-binding: t; -*-\n(copy-tree nil)",
+        );
+        assert_eq!(artifact.diagnostics, Vec::new());
+        let ssa = artifact.ssa.unwrap();
+        let func = ssa.functions.values().next().unwrap();
+        let has_call = func.blocks.values().any(|b| {
+            b.instructions.iter().any(
+                |inst| matches!(&inst.kind, SsaInstKind::CallNamed { name, .. } if name == "copy-tree"),
+            )
+        });
+        assert!(!has_call, "copy-tree nil should be folded to nil");
+    }
 }
