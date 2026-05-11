@@ -467,7 +467,7 @@ pub(super) fn normalize_string_start_arg(
         return Ok(0);
     }
 
-    let raw_start = expect_int(start_val)?;
+    let raw_start = expect_fixnum(start_val)?;
     let len = string.chars().count() as i64;
     let normalized = if raw_start < 0 {
         len.checked_add(raw_start)

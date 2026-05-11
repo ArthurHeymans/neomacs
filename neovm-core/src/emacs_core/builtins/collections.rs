@@ -333,8 +333,11 @@ pub(super) fn reset_collections_thread_locals() {
     HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow_mut().clear());
 }
 
-fn invalid_hash_table_argument_list(arg: Value) -> Flow {
-    signal("error", vec![Value::string("Invalid argument list"), arg])
+fn invalid_hash_table_keyword_argument(arg: Value) -> Flow {
+    signal(
+        "error",
+        vec![Value::string("Invalid keyword argument"), arg],
+    )
 }
 
 fn hash_test_from_designator(value: &Value) -> Option<HashTableTest> {
@@ -434,160 +437,96 @@ pub(crate) fn builtin_make_hash_table(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
-    let mut test = HashTableTest::Eql;
-    let mut test_name: Option<SymId> = None;
-    let mut size: i64 = 0;
-    let mut weakness: Option<HashTableWeakness> = None;
-    let mut seen_test = false;
-    let mut seen_size = false;
-    let mut seen_weakness = false;
-    let mut seen_rehash_size = false;
-    let mut seen_rehash_threshold = false;
+    if args.len() % 2 != 0 {
+        return Err(signal(
+            "error",
+            vec![Value::string("Odd number of arguments")],
+        ));
+    }
 
-    let mut i = 0;
-    while i < args.len() {
-        let Some(option) = args[i].as_keyword_id() else {
-            return Err(invalid_hash_table_argument_list(args[i]));
-        };
+    let mut test_arg = Value::NIL;
+    let mut weakness_arg = Value::NIL;
+    let mut size_arg = Value::NIL;
 
-        match resolve_sym(option) {
-            ":test" => {
-                if seen_test {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                }
-                let Some(value) = args.get(i + 1) else {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                };
-                seen_test = true;
-                match value.kind() {
-                    ValueKind::Nil => {
-                        return Err(signal(
-                            "error",
-                            vec![Value::string("Invalid hash table test")],
-                        ));
-                    }
-                    _ => {
-                        let Some(name) = value.as_symbol_name() else {
-                            return Err(signal(
-                                "wrong-type-argument",
-                                vec![Value::symbol("symbolp"), *value],
-                            ));
-                        };
-                        test_name = Some(intern(name));
-                        test = match name {
-                            "eq" => HashTableTest::Eq,
-                            "eql" => HashTableTest::Eql,
-                            "equal" => HashTableTest::Equal,
-                            _ => {
-                                if let Some(alias) = lookup_hash_table_test_alias(name) {
-                                    alias.standard_test.unwrap_or(HashTableTest::Equal)
-                                } else {
-                                    return Err(signal(
-                                        "error",
-                                        vec![Value::string("Invalid hash table test"), *value],
-                                    ));
-                                }
-                            }
-                        };
-                    }
-                }
-                i += 2;
-            }
-            ":size" => {
-                if seen_size {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                }
-                let Some(value) = args.get(i + 1) else {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                };
-                seen_size = true;
-                size = match value.kind() {
-                    ValueKind::Nil => 0,
-                    ValueKind::Fixnum(n) if n >= 0 => n,
-                    _ => {
-                        return Err(signal(
-                            "error",
-                            vec![Value::string("Invalid hash table size"), *value],
-                        ));
-                    }
-                };
-                i += 2;
-            }
-            ":weakness" => {
-                if seen_weakness {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                }
-                let Some(value) = args.get(i + 1) else {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                };
-                seen_weakness = true;
-                weakness = match value.kind() {
-                    ValueKind::Nil => None,
-                    ValueKind::T => Some(HashTableWeakness::KeyAndValue),
-                    _ => {
-                        let Some(name) = value.as_symbol_name() else {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string("Invalid hash table weakness"), *value],
-                            ));
-                        };
-                        Some(match name {
-                            "key" => HashTableWeakness::Key,
-                            "value" => HashTableWeakness::Value,
-                            "key-or-value" => HashTableWeakness::KeyOrValue,
-                            "key-and-value" => HashTableWeakness::KeyAndValue,
-                            _ => {
-                                return Err(signal(
-                                    "error",
-                                    vec![Value::string("Invalid hash table weakness"), *value],
-                                ));
-                            }
-                        })
-                    }
-                };
-                i += 2;
-            }
-            ":rehash-size" => {
-                if seen_rehash_size {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                }
-                seen_rehash_size = true;
-                if i + 1 >= args.len() {
-                    i += 1;
-                } else if args[i + 1].as_keyword_id().is_some_and(|kw| {
-                    matches!(
-                        resolve_sym(kw),
-                        ":test" | ":size" | ":weakness" | ":rehash-size" | ":rehash-threshold"
-                    )
-                }) {
-                    i += 1;
-                } else {
-                    i += 2;
-                }
-                continue;
-            }
-            ":rehash-threshold" => {
-                if seen_rehash_threshold {
-                    return Err(invalid_hash_table_argument_list(args[i]));
-                }
-                seen_rehash_threshold = true;
-                if i + 1 >= args.len() {
-                    i += 1;
-                } else if args[i + 1].as_keyword_id().is_some_and(|kw| {
-                    matches!(
-                        resolve_sym(kw),
-                        ":test" | ":size" | ":weakness" | ":rehash-size" | ":rehash-threshold"
-                    )
-                }) {
-                    i += 1;
-                } else {
-                    i += 2;
-                }
-                continue;
-            }
-            _ => return Err(invalid_hash_table_argument_list(args[i])),
+    let mut i = args.len();
+    while i >= 2 {
+        i -= 1;
+        let arg = args[i];
+        i -= 1;
+        let kw = args[i];
+        match kw.as_symbol_name() {
+            Some(":test") => test_arg = arg,
+            Some(":weakness") => weakness_arg = arg,
+            Some(":size") => size_arg = arg,
+            Some(":rehash-threshold") | Some(":rehash-size") | Some(":purecopy") => {}
+            _ => return Err(invalid_hash_table_keyword_argument(kw)),
         }
     }
+
+    let (test, test_name) = match test_arg.kind() {
+        ValueKind::Nil => (HashTableTest::Eql, None),
+        _ => {
+            let Some(name) = test_arg.as_symbol_name() else {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("symbolp"), test_arg],
+                ));
+            };
+            let test = match name {
+                "eq" => HashTableTest::Eq,
+                "eql" => HashTableTest::Eql,
+                "equal" => HashTableTest::Equal,
+                _ => {
+                    if let Some(alias) = lookup_hash_table_test_alias(name) {
+                        alias.standard_test.unwrap_or(HashTableTest::Equal)
+                    } else {
+                        return Err(signal(
+                            "error",
+                            vec![Value::string("Invalid hash table test"), test_arg],
+                        ));
+                    }
+                }
+            };
+            (test, Some(intern(name)))
+        }
+    };
+
+    let size = match size_arg.kind() {
+        ValueKind::Nil => 0,
+        ValueKind::Fixnum(n) if n >= 0 => n,
+        _ => {
+            return Err(signal(
+                "error",
+                vec![Value::string("Invalid hash table size"), size_arg],
+            ));
+        }
+    };
+
+    let weakness = match weakness_arg.kind() {
+        ValueKind::Nil => None,
+        ValueKind::T => Some(HashTableWeakness::KeyAndValue),
+        _ => {
+            let Some(name) = weakness_arg.as_symbol_name() else {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid hash table weakness"), weakness_arg],
+                ));
+            };
+            Some(match name {
+                "key" => HashTableWeakness::Key,
+                "value" => HashTableWeakness::Value,
+                "key-or-value" => HashTableWeakness::KeyOrValue,
+                "key-and-value" => HashTableWeakness::KeyAndValue,
+                _ => {
+                    return Err(signal(
+                        "error",
+                        vec![Value::string("Invalid hash table weakness"), weakness_arg],
+                    ));
+                }
+            })
+        }
+    };
+
     let table = Value::hash_table_with_options(test, size, weakness, 1.5, 0.8125);
     if table.is_hash_table() {
         let _ = table.with_hash_table_mut(|ht| {

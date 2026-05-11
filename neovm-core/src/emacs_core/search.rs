@@ -64,6 +64,16 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     }
 }
 
+fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
+    match val.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        other => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("fixnump"), *val],
+        )),
+    }
+}
+
 fn expect_integer_or_marker(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -124,7 +134,7 @@ fn normalize_string_start_arg(string: &str, start: Option<&Value>) -> Result<usi
         return Ok(0);
     }
 
-    let raw_start = expect_int(start_val)?;
+    let raw_start = expect_fixnum(start_val)?;
     let string_bytes = string.as_bytes();
     let len = crate::emacs_core::emacs_char::chars_in_multibyte(string_bytes) as i64;
     let normalized = if raw_start < 0 {
@@ -169,7 +179,7 @@ pub(crate) fn normalize_lisp_string_start_arg(
         return Ok(0);
     }
 
-    let raw_start = expect_int(start_val)?;
+    let raw_start = expect_fixnum(start_val)?;
     if !string.is_multibyte() {
         let len = string.byte_len() as i64;
         let normalized = if raw_start < 0 {

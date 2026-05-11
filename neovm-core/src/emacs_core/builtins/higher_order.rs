@@ -485,47 +485,30 @@ pub(crate) fn parse_sort_options(args: &[Value]) -> Result<SortOptions, Flow> {
     let mut reverse = false;
     let mut in_place = false;
 
-    if args.len() == 2 && !args[1].is_keyword() {
+    if args.len() == 2 {
         lessp_fn = args[1];
         in_place = true;
-    } else if args.len() > 2 && !args[1].is_keyword() {
+    } else if args.len() % 2 == 0 {
         return Err(signal(
             "error",
             vec![Value::string("Invalid argument list")],
         ));
     } else if args.len() > 1 {
         let mut i = 1;
-        while i < args.len() {
-            if let Some(kw) = args[i].as_symbol_name() {
-                match kw {
-                    ":key" => {
-                        i += 1;
-                        if i < args.len() {
-                            key_fn = args[i];
-                        }
-                    }
-                    ":lessp" => {
-                        i += 1;
-                        if i < args.len() {
-                            lessp_fn = args[i];
-                        }
-                    }
-                    ":reverse" => {
-                        i += 1;
-                        if i < args.len() {
-                            reverse = args[i].is_truthy();
-                        }
-                    }
-                    ":in-place" => {
-                        i += 1;
-                        if i < args.len() {
-                            in_place = args[i].is_truthy();
-                        }
-                    }
-                    _ => {}
+        while i < args.len() - 1 {
+            match args[i].as_symbol_name() {
+                Some(":key") => key_fn = args[i + 1],
+                Some(":lessp") => lessp_fn = args[i + 1],
+                Some(":reverse") => reverse = args[i + 1].is_truthy(),
+                Some(":in-place") => in_place = args[i + 1].is_truthy(),
+                _ => {
+                    return Err(signal(
+                        "error",
+                        vec![Value::string("Invalid keyword argument"), args[i]],
+                    ));
                 }
             }
-            i += 1;
+            i += 2;
         }
     }
 

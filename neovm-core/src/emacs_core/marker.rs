@@ -513,20 +513,13 @@ pub(crate) fn builtin_set_marker_in_buffers(
 
     let buffer_id: Option<BufferId> = if args.len() > 2 && args[2].is_truthy() {
         match args[2].kind() {
-            ValueKind::String => {
-                let name = args[2].as_runtime_string_owned().ok_or_else(|| {
-                    signal(
-                        "wrong-type-argument",
-                        vec![Value::symbol("stringp"), args[2]],
-                    )
-                })?;
-                buffers.find_buffer_by_name(&name)
-            }
-            ValueKind::Veclike(VecLikeType::Buffer) => args[2].as_buffer_id(),
+            ValueKind::Veclike(VecLikeType::Buffer) => args[2]
+                .as_buffer_id()
+                .and_then(|id| buffers.get(id).map(|_| id)),
             _other => {
                 return Err(signal(
                     "wrong-type-argument",
-                    vec![Value::symbol("stringp"), args[2]],
+                    vec![Value::symbol("bufferp"), args[2]],
                 ));
             }
         }
