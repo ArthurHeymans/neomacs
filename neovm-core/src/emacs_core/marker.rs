@@ -158,15 +158,28 @@ pub(crate) fn marker_logical_fields(v: &Value) -> Option<(Option<BufferId>, Opti
     Some((data.buffer, position, data.insertion_type))
 }
 
+pub(crate) fn marker_equal_logical_fields(v: &Value) -> Option<(Option<BufferId>, usize)> {
+    if !v.is_marker() {
+        return None;
+    };
+    let data = v.as_marker_data().unwrap();
+    let bytepos = if data.buffer.is_some() {
+        data.bytepos
+    } else {
+        0
+    };
+    Some((data.buffer, bytepos))
+}
+
 /// Tagged-pointer version: compute equal hash key from a marker Value.
 pub(crate) fn marker_equal_hash_key_value(v: &Value) -> HashKey {
     if let Some(marker) = v.as_marker_data() {
-        HashKey::Text(format!(
-            "marker:{:?}:{}:{}",
-            marker.buffer.map(|buffer| buffer.0),
-            marker.charpos,
-            marker.insertion_type
-        ))
+        let bytepos = if marker.buffer.is_some() {
+            marker.bytepos
+        } else {
+            0
+        };
+        HashKey::Marker(marker.buffer.map(|buffer| buffer.0), bytepos)
     } else {
         HashKey::Ptr(v.bits())
     }

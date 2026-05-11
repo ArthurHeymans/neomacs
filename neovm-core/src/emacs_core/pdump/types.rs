@@ -341,6 +341,13 @@ pub enum DumpHashKey {
     HeapRef(u32),
     EqualCons(Box<DumpHashKey>, Box<DumpHashKey>),
     EqualVec(Vec<DumpHashKey>),
+    Marker(Option<u64>, usize),
+    Overlay {
+        buffer: Option<u64>,
+        start: usize,
+        end: usize,
+        plist: Box<DumpHashKey>,
+    },
     SymbolWithPos(Box<DumpHashKey>, Box<DumpHashKey>),
     Cycle(u32),
     Text(String),

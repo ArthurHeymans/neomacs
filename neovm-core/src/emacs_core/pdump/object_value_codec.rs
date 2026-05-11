@@ -300,6 +300,8 @@ const HASH_KEY_EQUAL_VEC: u8 = 14;
 const HASH_KEY_SYMBOL_WITH_POS: u8 = 15;
 const HASH_KEY_CYCLE: u8 = 16;
 const HASH_KEY_TEXT: u8 = 17;
+const HASH_KEY_MARKER: u8 = 18;
+const HASH_KEY_OVERLAY: u8 = 19;
 
 fn write_hash_key(out: &mut Vec<u8>, key: &DumpHashKey) -> Result<(), DumpError> {
     match key {
@@ -358,6 +360,23 @@ fn write_hash_key(out: &mut Vec<u8>, key: &DumpHashKey) -> Result<(), DumpError>
         DumpHashKey::EqualVec(keys) => {
             write_u8(out, HASH_KEY_EQUAL_VEC);
             write_hash_keys(out, keys)?;
+        }
+        DumpHashKey::Marker(buffer, bytepos) => {
+            write_u8(out, HASH_KEY_MARKER);
+            write_opt_u64(out, *buffer);
+            write_usize(out, *bytepos)?;
+        }
+        DumpHashKey::Overlay {
+            buffer,
+            start,
+            end,
+            plist,
+        } => {
+            write_u8(out, HASH_KEY_OVERLAY);
+            write_opt_u64(out, *buffer);
+            write_usize(out, *start)?;
+            write_usize(out, *end)?;
+            write_hash_key(out, plist)?;
         }
         DumpHashKey::SymbolWithPos(symbol, pos) => {
             write_u8(out, HASH_KEY_SYMBOL_WITH_POS);
@@ -1031,6 +1050,16 @@ impl<'a> Cursor<'a> {
                 Box::new(self.read_hash_key()?),
             )),
             HASH_KEY_EQUAL_VEC => Ok(DumpHashKey::EqualVec(self.read_hash_keys()?)),
+            HASH_KEY_MARKER => Ok(DumpHashKey::Marker(
+                self.read_opt_u64()?,
+                self.read_usize("hash marker byte position")?,
+            )),
+            HASH_KEY_OVERLAY => Ok(DumpHashKey::Overlay {
+                buffer: self.read_opt_u64()?,
+                start: self.read_usize("hash overlay start")?,
+                end: self.read_usize("hash overlay end")?,
+                plist: Box::new(self.read_hash_key()?),
+            }),
             HASH_KEY_SYMBOL_WITH_POS => Ok(DumpHashKey::SymbolWithPos(
                 Box::new(self.read_hash_key()?),
                 Box::new(self.read_hash_key()?),

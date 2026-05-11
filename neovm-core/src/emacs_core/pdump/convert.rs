@@ -1882,6 +1882,18 @@ pub(crate) fn dump_hash_key(encoder: &mut DumpEncoder, k: &HashKey) -> DumpHashK
         HashKey::EqualVec(v) => {
             DumpHashKey::EqualVec(v.iter().map(|key| dump_hash_key(encoder, key)).collect())
         }
+        HashKey::Marker(buffer, bytepos) => DumpHashKey::Marker(*buffer, *bytepos),
+        HashKey::Overlay {
+            buffer,
+            start,
+            end,
+            plist,
+        } => DumpHashKey::Overlay {
+            buffer: *buffer,
+            start: *start,
+            end: *end,
+            plist: Box::new(dump_hash_key(encoder, plist)),
+        },
         HashKey::SymbolWithPos(sym, pos) => DumpHashKey::SymbolWithPos(
             Box::new(dump_hash_key(encoder, sym)),
             Box::new(dump_hash_key(encoder, pos)),
@@ -3447,6 +3459,18 @@ pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashK
         DumpHashKey::EqualVec(v) => {
             HashKey::EqualVec(v.iter().map(|item| load_hash_key(decoder, item)).collect())
         }
+        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(*buffer, *bytepos),
+        DumpHashKey::Overlay {
+            buffer,
+            start,
+            end,
+            plist,
+        } => HashKey::Overlay {
+            buffer: *buffer,
+            start: *start,
+            end: *end,
+            plist: Box::new(load_hash_key(decoder, plist)),
+        },
         DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
             Box::new(load_hash_key(decoder, sym)),
             Box::new(load_hash_key(decoder, pos)),

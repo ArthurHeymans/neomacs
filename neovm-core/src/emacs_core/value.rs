@@ -578,6 +578,15 @@ pub enum HashKey {
     EqualCons(Box<HashKey>, Box<HashKey>),
     /// Structural vector/record key for `equal`-test hash tables.
     EqualVec(Vec<HashKey>),
+    /// Structural marker key for `equal`-test hash tables.
+    Marker(Option<u64>, usize),
+    /// Structural overlay key for `equal`-test hash tables.
+    Overlay {
+        buffer: Option<u64>,
+        start: usize,
+        end: usize,
+        plist: Box<HashKey>,
+    },
     /// Structural key for symbol-with-pos objects when they are not transparent.
     SymbolWithPos(Box<HashKey>, Box<HashKey>),
     /// Back-reference marker used when structural objects recurse.
@@ -605,6 +614,8 @@ impl std::hash::Hash for HashKey {
             HashKey::Cycle(_) => 15,
             HashKey::Text(_) => 16,
             HashKey::SymbolWithPos(_, _) => 17,
+            HashKey::Marker(_, _) => 18,
+            HashKey::Overlay { .. } => 19,
         };
         tag.hash(state);
         match self {
@@ -628,6 +639,21 @@ impl std::hash::Hash for HashKey {
                 for item in items {
                     item.hash(state);
                 }
+            }
+            HashKey::Marker(buffer, bytepos) => {
+                buffer.hash(state);
+                bytepos.hash(state);
+            }
+            HashKey::Overlay {
+                buffer,
+                start,
+                end,
+                plist,
+            } => {
+                buffer.hash(state);
+                start.hash(state);
+                end.hash(state);
+                plist.hash(state);
             }
             HashKey::SymbolWithPos(sym, pos) => {
                 sym.hash(state);
@@ -657,6 +683,23 @@ impl PartialEq for HashKey {
                 a_car == b_car && a_cdr == b_cdr
             }
             (HashKey::EqualVec(a), HashKey::EqualVec(b)) => a == b,
+            (HashKey::Marker(a_buffer, a_bytepos), HashKey::Marker(b_buffer, b_bytepos)) => {
+                a_buffer == b_buffer && a_bytepos == b_bytepos
+            }
+            (
+                HashKey::Overlay {
+                    buffer: a_buffer,
+                    start: a_start,
+                    end: a_end,
+                    plist: a_plist,
+                },
+                HashKey::Overlay {
+                    buffer: b_buffer,
+                    start: b_start,
+                    end: b_end,
+                    plist: b_plist,
+                },
+            ) => a_buffer == b_buffer && a_start == b_start && a_end == b_end && a_plist == b_plist,
             (HashKey::SymbolWithPos(a_sym, a_pos), HashKey::SymbolWithPos(b_sym, b_pos)) => {
                 a_sym == b_sym && a_pos == b_pos
             }
@@ -1677,6 +1720,22 @@ impl TaggedValue {
             ValueKind::Veclike(VecLikeType::Marker) => {
                 super::marker::marker_equal_hash_key_value(self)
             }
+            ValueKind::Veclike(VecLikeType::Overlay) => {
+                if let Some(overlay) = self.as_overlay_data() {
+                    HashKey::Overlay {
+                        buffer: overlay.buffer.map(|buffer| buffer.0),
+                        start: overlay.start,
+                        end: overlay.end,
+                        plist: Box::new(overlay.plist.to_equal_key_depth_swp(
+                            depth + 1,
+                            seen,
+                            symbols_with_pos_enabled,
+                        )),
+                    }
+                } else {
+                    self.to_eq_key()
+                }
+            }
             ValueKind::Veclike(VecLikeType::Lambda) => {
                 let ptr = self.bits();
                 if let Some(index) = seen.iter().position(|&p| p == ptr) {
@@ -1936,8 +1995,27 @@ fn equal_value_inner(
 
     match left_type {
         VecLikeType::Marker => {
-            super::marker::marker_logical_fields(&left)
-                == super::marker::marker_logical_fields(&right)
+            super::marker::marker_equal_logical_fields(&left)
+                == super::marker::marker_equal_logical_fields(&right)
+        }
+        VecLikeType::Overlay => {
+            let Some(left_overlay) = left.as_overlay_data() else {
+                return false;
+            };
+            let Some(right_overlay) = right.as_overlay_data() else {
+                return false;
+            };
+            left_overlay.buffer == right_overlay.buffer
+                && left_overlay.start == right_overlay.start
+                && left_overlay.end == right_overlay.end
+                && equal_value_inner(
+                    &left_overlay.plist,
+                    &right_overlay.plist,
+                    depth + 1,
+                    seen,
+                    symbols_with_pos_enabled,
+                    kind,
+                )
         }
         VecLikeType::Vector | VecLikeType::Record => {
             if depth > 10 {
@@ -2137,8 +2215,27 @@ fn try_equal_value_inner(
     }
 
     match left_type {
-        VecLikeType::Marker => Ok(super::marker::marker_logical_fields(&left)
-            == super::marker::marker_logical_fields(&right)),
+        VecLikeType::Marker => Ok(super::marker::marker_equal_logical_fields(&left)
+            == super::marker::marker_equal_logical_fields(&right)),
+        VecLikeType::Overlay => {
+            let Some(left_overlay) = left.as_overlay_data() else {
+                return Ok(false);
+            };
+            let Some(right_overlay) = right.as_overlay_data() else {
+                return Ok(false);
+            };
+            Ok(left_overlay.buffer == right_overlay.buffer
+                && left_overlay.start == right_overlay.start
+                && left_overlay.end == right_overlay.end
+                && try_equal_value_inner(
+                    &left_overlay.plist,
+                    &right_overlay.plist,
+                    depth + 1,
+                    seen,
+                    symbols_with_pos_enabled,
+                    kind,
+                )?)
+        }
         VecLikeType::Vector | VecLikeType::Record => {
             if depth > 10 {
                 let pair = (left.bits(), right.bits());

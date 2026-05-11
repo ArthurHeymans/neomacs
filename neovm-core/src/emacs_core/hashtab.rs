@@ -100,6 +100,7 @@ fn hash_key_to_value(key: &HashKey) -> Value {
             let vals: Vec<Value> = items.iter().map(hash_key_to_value).collect();
             Value::vector(vals)
         }
+        HashKey::Marker(_, _) | HashKey::Overlay { .. } => Value::NIL,
         HashKey::SymbolWithPos(_, _) => Value::NIL,
         HashKey::Cycle(index) => Value::string(format!("#{}", index)),
     }
@@ -215,6 +216,27 @@ fn emacs_sxhash_vector(value: &Value, depth: usize) -> u64 {
     hash
 }
 
+fn emacs_sxhash_marker(value: &Value) -> Option<u64> {
+    let marker = value.as_marker_data()?;
+    let bytepos = if marker.buffer.is_some() {
+        marker.bytepos as u64
+    } else {
+        0
+    };
+    Some(sxhash_combine(
+        marker.buffer.map(|buffer| buffer.0).unwrap_or(0),
+        bytepos,
+    ))
+}
+
+fn emacs_sxhash_overlay(value: &Value, depth: usize) -> Option<u64> {
+    let overlay = value.as_overlay_data()?;
+    let mut hash = overlay.start as u64;
+    hash = sxhash_combine(hash, overlay.end as u64);
+    hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&overlay.plist, depth));
+    Some(hash)
+}
+
 fn emacs_sxhash_obj(value: &Value, depth: usize) -> Option<u64> {
     if depth > SXHASH_MAX_DEPTH {
         return Some(0);
@@ -230,8 +252,40 @@ fn emacs_sxhash_obj(value: &Value, depth: usize) -> Option<u64> {
         )),
         ValueKind::Cons => Some(emacs_sxhash_list(value, depth)),
         ValueKind::Veclike(VecLikeType::Vector) => Some(emacs_sxhash_vector(value, depth)),
+        ValueKind::Veclike(VecLikeType::Marker) => emacs_sxhash_marker(value),
+        ValueKind::Veclike(VecLikeType::Overlay) => emacs_sxhash_overlay(value, depth),
         _ => None,
     }
+}
+
+fn plist_pairs_to_value(plist: &[(Value, Value)]) -> Value {
+    let mut out = Value::NIL;
+    for (key, value) in plist.iter().rev() {
+        out = Value::cons(*value, out);
+        out = Value::cons(*key, out);
+    }
+    out
+}
+
+fn sxhash_equal_including_properties_emacs_uint(value: &Value) -> u64 {
+    let mut hash = sxhash_emacs_uint_for(value, HashTableTest::Equal);
+    if !value.is_string() {
+        return hash;
+    }
+
+    let Some(string) = value.as_lisp_string() else {
+        return hash;
+    };
+    if let Some(table) = get_string_text_properties_table_for_value(*value) {
+        let _ = table.try_for_each_interval_in_range(0, string.schars(), |start, end, plist| {
+            hash = sxhash_combine(hash, start as u64);
+            hash = sxhash_combine(hash, end.saturating_sub(start) as u64);
+            let plist_value = plist_pairs_to_value(plist);
+            hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&plist_value, 0));
+            Ok::<(), ()>(())
+        });
+    }
+    hash
 }
 
 fn reduce_emacs_uint_to_fixnum(x: u64) -> i64 {
@@ -354,12 +408,27 @@ fn hash_value_for_equal(value: &Value, hasher: &mut DefaultHasher, depth: usize)
         }
         ValueKind::Veclike(VecLikeType::Marker) => {
             18_u8.hash(hasher);
-            // Hash based on marker identity via pointer bits.
-            value.bits().hash(hasher);
+            if let Some(marker) = value.as_marker_data() {
+                marker.buffer.map(|buffer| buffer.0).hash(hasher);
+                if marker.buffer.is_some() {
+                    marker.bytepos.hash(hasher);
+                } else {
+                    0_usize.hash(hasher);
+                }
+            } else {
+                value.bits().hash(hasher);
+            }
         }
         ValueKind::Veclike(VecLikeType::Overlay) => {
             19_u8.hash(hasher);
-            value.bits().hash(hasher);
+            if let Some(overlay) = value.as_overlay_data() {
+                overlay.buffer.map(|buffer| buffer.0).hash(hasher);
+                overlay.start.hash(hasher);
+                overlay.end.hash(hasher);
+                hash_value_for_equal(&overlay.plist, hasher, depth + 1);
+            } else {
+                value.bits().hash(hasher);
+            }
         }
         _ => {
             // Unknown or other types: hash by pointer bits
@@ -629,7 +698,9 @@ pub(crate) fn builtin_sxhash_equal(args: Vec<Value>) -> EvalResult {
 /// this matches `sxhash-equal`.
 pub(crate) fn builtin_sxhash_equal_including_properties(args: Vec<Value>) -> EvalResult {
     expect_args("sxhash-equal-including-properties", &args, 1)?;
-    Ok(Value::fixnum(sxhash_for(&args[0], HashTableTest::Equal)))
+    Ok(Value::fixnum(reduce_emacs_uint_to_fixnum(
+        sxhash_equal_including_properties_emacs_uint(&args[0]),
+    )))
 }
 
 /// `(internal--hash-table-index-size TABLE)` -- report hash index width.
