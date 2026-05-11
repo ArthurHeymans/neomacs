@@ -526,7 +526,7 @@ impl OldBlock {
                         cursor,
                         next_cursor,
                         Ordering::AcqRel,
-                        Ordering::Acquire,
+                        Ordering::Relaxed,
                     ) {
                         Ok(_) => {
                             if next_cursor > self.used_bytes.load(Ordering::Relaxed) {
