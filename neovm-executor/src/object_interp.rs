@@ -14097,4 +14097,43 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_copy_tree_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (copy-tree nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_string_join_returns_empty_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (string-join nil \", \")",
+        );
+        assert!(value.is_some());
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_cl_fill_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-fill nil 42)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_replace_returns_nil_for_nil_seq() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-replace nil '(1 2 3))",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }

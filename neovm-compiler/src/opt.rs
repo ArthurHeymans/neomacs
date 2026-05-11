@@ -1319,7 +1319,19 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
-        "copy-alist" if args.len() == 1 => match args[0] {
+        "copy-alist" | "copy-tree" if args.len() == 1 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::Nil),
+            _ => None,
+        },
+        "string-join" if args.len() >= 2 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::String(String::new())),
+            _ => None,
+        },
+        "cl-fill" if args.len() >= 2 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::Nil),
+            _ => None,
+        },
+        "cl-replace" | "cl-nreplace" if args.len() >= 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
