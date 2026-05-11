@@ -25,6 +25,10 @@ pub struct Runtime {
     string_index: HashMap<usize, usize>,
     symbol_index: HashMap<usize, usize>,
     float_index: HashMap<usize, usize>,
+    vector_index: HashMap<usize, usize>,
+    hash_table_index: HashMap<usize, usize>,
+    function_index: HashMap<usize, usize>,
+    bignum_index: HashMap<usize, usize>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -74,6 +78,10 @@ impl Default for Runtime {
             string_index: HashMap::new(),
             symbol_index: HashMap::new(),
             float_index: HashMap::new(),
+            vector_index: HashMap::new(),
+            hash_table_index: HashMap::new(),
+            function_index: HashMap::new(),
+            bignum_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -138,6 +146,10 @@ impl Runtime {
             string_index: HashMap::new(),
             symbol_index: HashMap::new(),
             float_index: HashMap::new(),
+            vector_index: HashMap::new(),
+            hash_table_index: HashMap::new(),
+            function_index: HashMap::new(),
+            bignum_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -226,6 +238,7 @@ impl Runtime {
         });
         let addr = (&mut *vector as *mut VectorObject) as usize;
         self.object_index.insert(addr, HeapKind::Vector);
+        self.vector_index.insert(addr, self.vectors.len());
         self.vectors.push(vector);
         LispValue::from_heap_addr(addr)
     }
@@ -241,6 +254,7 @@ impl Runtime {
         });
         let addr = (&mut *table as *mut HashTableObject) as usize;
         self.object_index.insert(addr, HeapKind::HashTable);
+        self.hash_table_index.insert(addr, self.hash_tables.len());
         self.hash_tables.push(table);
         LispValue::from_heap_addr(addr)
     }
@@ -255,6 +269,7 @@ impl Runtime {
         });
         let addr = (&mut *function as *mut FunctionObject) as usize;
         self.object_index.insert(addr, HeapKind::Function);
+        self.function_index.insert(addr, self.functions.len());
         self.functions.push(function);
         LispValue::from_heap_addr(addr)
     }
@@ -451,6 +466,7 @@ impl Runtime {
         });
         let addr = (&mut *obj as *mut BignumObj) as usize;
         self.object_index.insert(addr, HeapKind::Bignum);
+        self.bignum_index.insert(addr, self.bignums.len());
         self.bignums.push(obj);
         LispValue::from_heap_addr(addr)
     }
@@ -1823,9 +1839,16 @@ impl Runtime {
     }
 
     fn vector_by_addr(&self, addr: usize) -> Option<&VectorObject> {
+        if let Some(idx) = self.vector_index.get(&addr) {
+            if let Some(obj) = self.vectors.get(*idx) {
+                if (&**obj as *const VectorObject) as usize == addr {
+                    return Some(obj);
+                }
+            }
+        }
         for vector in &self.vectors {
-            let vector_addr = (&**vector as *const VectorObject) as usize;
-            if vector_addr == addr && vector.header.kind == HeapKind::Vector {
+            let ptr: *const VectorObject = &**vector;
+            if ptr as usize == addr {
                 return Some(vector);
             }
         }
@@ -1833,9 +1856,18 @@ impl Runtime {
     }
 
     fn vector_by_addr_mut(&mut self, addr: usize) -> Option<&mut VectorObject> {
+        let idx_val = self.vector_index.get(&addr).copied();
+        if let Some(idx) = idx_val {
+            if idx < self.vectors.len() {
+                let obj_ptr = &mut *self.vectors[idx] as *mut VectorObject;
+                if obj_ptr as usize == addr {
+                    return Some(unsafe { &mut *obj_ptr });
+                }
+            }
+        }
         for vector in &mut self.vectors {
-            let vector_addr = (&**vector as *const VectorObject) as usize;
-            if vector_addr == addr && vector.header.kind == HeapKind::Vector {
+            let ptr: *const VectorObject = &**vector;
+            if ptr as usize == addr {
                 return Some(vector);
             }
         }
@@ -1843,9 +1875,16 @@ impl Runtime {
     }
 
     fn hash_table_by_addr(&self, addr: usize) -> Option<&HashTableObject> {
+        if let Some(idx) = self.hash_table_index.get(&addr) {
+            if let Some(obj) = self.hash_tables.get(*idx) {
+                if (&**obj as *const HashTableObject) as usize == addr {
+                    return Some(obj);
+                }
+            }
+        }
         for table in &self.hash_tables {
-            let table_addr = (&**table as *const HashTableObject) as usize;
-            if table_addr == addr && table.header.kind == HeapKind::HashTable {
+            let ptr: *const HashTableObject = &**table;
+            if ptr as usize == addr {
                 return Some(table);
             }
         }
@@ -1853,9 +1892,18 @@ impl Runtime {
     }
 
     fn hash_table_by_addr_mut(&mut self, addr: usize) -> Option<&mut HashTableObject> {
+        let idx_val = self.hash_table_index.get(&addr).copied();
+        if let Some(idx) = idx_val {
+            if idx < self.hash_tables.len() {
+                let obj_ptr = &mut *self.hash_tables[idx] as *mut HashTableObject;
+                if obj_ptr as usize == addr {
+                    return Some(unsafe { &mut *obj_ptr });
+                }
+            }
+        }
         for table in &mut self.hash_tables {
-            let table_addr = (&**table as *const HashTableObject) as usize;
-            if table_addr == addr && table.header.kind == HeapKind::HashTable {
+            let ptr: *const HashTableObject = &**table;
+            if ptr as usize == addr {
                 return Some(table);
             }
         }
@@ -1863,9 +1911,16 @@ impl Runtime {
     }
 
     fn function_by_addr(&self, addr: usize) -> Option<&FunctionObject> {
+        if let Some(idx) = self.function_index.get(&addr) {
+            if let Some(obj) = self.functions.get(*idx) {
+                if (&**obj as *const FunctionObject) as usize == addr {
+                    return Some(obj);
+                }
+            }
+        }
         for function in &self.functions {
-            let function_addr = (&**function as *const FunctionObject) as usize;
-            if function_addr == addr && function.header.kind == HeapKind::Function {
+            let ptr: *const FunctionObject = &**function;
+            if ptr as usize == addr {
                 return Some(function);
             }
         }
@@ -1893,9 +1948,16 @@ impl Runtime {
     }
 
     fn bignum_by_addr(&self, addr: usize) -> Option<&BignumObj> {
+        if let Some(idx) = self.bignum_index.get(&addr) {
+            if let Some(obj) = self.bignums.get(*idx) {
+                if (&**obj as *const BignumObj) as usize == addr {
+                    return Some(obj);
+                }
+            }
+        }
         for obj in &self.bignums {
-            let obj_addr = (&**obj as *const BignumObj) as usize;
-            if obj_addr == addr && obj.header.kind == HeapKind::Bignum {
+            let ptr: *const BignumObj = &**obj;
+            if ptr as usize == addr {
                 return Some(obj);
             }
         }
