@@ -1489,11 +1489,171 @@ impl Interpreter<'_, '_, '_> {
                 let result = s.runtime.set_symbol_value(args[0], args[1]);
                 s.runtime_value(result)
             }),
+            "point" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                LispValue::expect_fixnum(buf.point as i64)
+            }),
+            "point-min" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                LispValue::expect_fixnum(buf.point_min() as i64)
+            }),
+            "point-max" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                LispValue::expect_fixnum(buf.point_max() as i64)
+            }),
             "bobp" | "eobp" => Some(LispValue::TRUE),
-            "point-min" | "point-max" => Some(LispValue::expect_fixnum(1)),
-            "buffer-modified-p" => Some(LispValue::NIL),
-            "buffer-size" => Some(LispValue::expect_fixnum(0)),
-            "current-buffer" => Some(LispValue::NIL),
+            "goto-char" => self.subr_1(name, args, |s| {
+                let pos = s.fixnum_arg(name, args[0])? as usize;
+                let buf = s.runtime.current_buffer_mut();
+                buf.point = pos.min(buf.point_max()).max(buf.point_min());
+                buf.clamp_point();
+                Some(LispValue::NIL)
+            }),
+            "buffer-modified-p" => self.min_max_arity(name, args, 0, 1).map(|_| {
+                let buf = self.runtime.current_buffer();
+                bool_value(buf.modified)
+            }),
+            "set-buffer-modified-p" => self.subr_1(name, args, |s| {
+                s.runtime.current_buffer_mut().modified = !args[0].is_nil();
+                Some(LispValue::NIL)
+            }),
+            "buffer-size" => self.min_max_arity(name, args, 0, 1).map(|_| {
+                let buf = self.runtime.current_buffer();
+                LispValue::expect_fixnum((buf.point_max() - buf.point_min()) as i64)
+            }),
+            "current-buffer" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                self.runtime.string(self.runtime.current_buffer().name.clone())
+            }),
+            "buffer-name" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match s.runtime.get_buffer(&name) {
+                    Some(idx) => Some(s.runtime.string(s.runtime.buffers[idx].name.clone())),
+                    None => Some(LispValue::NIL),
+                }
+            }),
+            "get-buffer" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match s.runtime.get_buffer(&name) {
+                    Some(_) => Some(s.runtime.string(name)),
+                    None => Some(LispValue::NIL),
+                }
+            }),
+            "get-buffer-create" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let idx = s.runtime.get_buffer_create(&name);
+                Some(s.runtime.string(s.runtime.buffers[idx].name.clone()))
+            }),
+            "set-buffer" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(s.runtime.set_buffer(&name)))
+            }),
+            "switch-to-buffer" => self.min_max_arity(name, args, 1, 2).and_then(|_| {
+                let name = self.string_contents_owned(args[0])?;
+                self.runtime.set_buffer(&name);
+                Some(LispValue::NIL)
+            }),
+            "kill-buffer" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(s.runtime.kill_buffer(&name)))
+            }),
+            "buffer-list" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let names: Vec<String> = self.runtime.buffer_list().into_iter()
+                    .map(|b| b.name.clone()).collect();
+                let rt = &mut self.runtime;
+                let mut list = LispValue::NIL;
+                for name in names.into_iter().rev() {
+                    let sval = rt.string(name);
+                    list = rt.cons(sval, list);
+                }
+                Some(list)
+            }),
+            "insert" => self.min_arity(name, args, 1).and_then(|_| {
+                let strings: Vec<String> = args.iter().filter_map(|arg| {
+                    self.runtime.string_contents(*arg).ok().map(|s| s.to_string())
+                }).collect();
+                let ints: Vec<u32> = args.iter().filter_map(|arg| {
+                    if !self.runtime.is_string(*arg) {
+                        arg.as_fixnum().map(|n| n as u32)
+                    } else { None }
+                }).collect();
+                let buf = self.runtime.current_buffer_mut();
+                for s in strings {
+                    buf.contents.insert_str(buf.point, &s);
+                    buf.point += s.len();
+                }
+                for n in ints {
+                    let ch = char::from_u32(n).unwrap_or('?');
+                    buf.contents.insert(buf.point, ch);
+                    buf.point += 1;
+                }
+                buf.modified = true;
+                Some(LispValue::NIL)
+            }),
+            "delete-char" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
+                let buf = self.runtime.current_buffer_mut();
+                if n > 0 {
+                    let end = (buf.point + n as usize).min(buf.point_max());
+                    buf.contents.drain(buf.point..end);
+                    buf.modified = true;
+                } else if n < 0 {
+                    let start = if buf.point >= (-n) as usize { buf.point - (-n) as usize } else { 0 };
+                    buf.contents.drain(start..buf.point);
+                    buf.point = start;
+                    buf.modified = true;
+                }
+                Some(LispValue::NIL)
+            }),
+            "delete-backward-char" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
+                let buf = self.runtime.current_buffer_mut();
+                let start = if buf.point >= n as usize { buf.point - n as usize } else { 0 };
+                buf.contents.drain(start..buf.point);
+                buf.point = start;
+                buf.modified = true;
+                Some(LispValue::NIL)
+            }),
+            "delete-region" => self.subr_2(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let buf = s.runtime.current_buffer_mut();
+                let pmin = buf.point_min();
+                let pmax = buf.point_max();
+                let start = start.clamp(pmin, pmax);
+                let end = end.clamp(pmin, pmax);
+                if start < end {
+                    buf.contents.drain(start..end);
+                    if buf.point > start { buf.point = start; }
+                    buf.modified = true;
+                }
+                Some(LispValue::NIL)
+            }),
+            "buffer-string" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let s = self.runtime.current_buffer().contents.clone();
+                self.runtime.string(s)
+            }),
+            "buffer-substring" => self.subr_2(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let (pmin, pmax, contents) = {
+                    let buf = s.runtime.current_buffer();
+                    (buf.point_min(), buf.point_max(), buf.contents.clone())
+                };
+                let start = start.clamp(pmin, pmax);
+                let end = end.clamp(pmin, pmax);
+                if start <= end && end <= contents.len() {
+                    Some(s.runtime.string(&contents[start..end]))
+                } else {
+                    Some(LispValue::NIL)
+                }
+            }),
+            "erase-buffer" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                buf.contents.clear();
+                buf.point = 0;
+                buf.modified = true;
+                LispValue::NIL
+            }),
             "window-buffer" => Some(LispValue::NIL),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);
@@ -7144,8 +7304,12 @@ fn is_primitive_name(name: &str) -> bool {
             "bool-vector-p",
             "booleanp",
             "boundp",
+            "buffer-list",
             "buffer-modified-p",
+            "buffer-name",
             "buffer-size",
+            "buffer-string",
+            "buffer-substring",
             "bufferp",
             "butlast",
             "caaaar",
@@ -7274,8 +7438,11 @@ fn is_primitive_name(name: &str) -> bool {
             "default-value",
             "defun",
             "delete",
+            "delete-backward-char",
+            "delete-char",
             "delete-dups",
             "delete-file",
+            "delete-region",
             "directory-file-name",
             "delq",
             "display-graphic-p",
@@ -12958,12 +13125,12 @@ mod tests {
     }
 
     #[test]
-    fn executes_current_buffer_returns_nil() {
+    fn executes_current_buffer_returns_buffer_name() {
         let (value, _) = execute(
             ";;; -*- lexical-binding: t; -*-\n\
              (current-buffer)",
         );
-        assert_eq!(value, Some(LispValue::NIL));
+        assert!(!value.unwrap().is_nil());
     }
 
     #[test]

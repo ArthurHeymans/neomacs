@@ -8,6 +8,61 @@ use crate::agent_pool::AgentPool;
 use crate::thread::ThreadScheduler;
 use crate::value::LispValue;
 
+/// An Emacs buffer — holds text content, point, and metadata.
+#[derive(Debug, Clone)]
+pub struct Buffer {
+    pub name: String,
+    pub contents: String,
+    pub point: usize,
+    pub mark: Option<usize>,
+    pub modified: bool,
+    pub read_only: bool,
+    pub narrowed_start: Option<usize>,
+    pub narrowed_end: Option<usize>,
+}
+
+impl Buffer {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            contents: String::new(),
+            point: 0,
+            mark: None,
+            modified: false,
+            read_only: false,
+            narrowed_start: None,
+            narrowed_end: None,
+        }
+    }
+
+    pub fn with_contents(name: String, contents: String) -> Self {
+        Self {
+            name,
+            contents,
+            point: 0,
+            mark: None,
+            modified: false,
+            read_only: false,
+            narrowed_start: None,
+            narrowed_end: None,
+        }
+    }
+
+    pub fn point_min(&self) -> usize {
+        self.narrowed_start.unwrap_or(0)
+    }
+
+    pub fn point_max(&self) -> usize {
+        self.narrowed_end.unwrap_or(self.contents.len())
+    }
+
+    pub fn clamp_point(&mut self) {
+        let min = self.point_min();
+        let max = self.point_max();
+        self.point = self.point.clamp(min, max);
+    }
+}
+
 pub struct Runtime {
     /// Shared GC heap for multi-threaded allocation.
     pub(crate) gc_heap: Arc<Heap>,
@@ -58,6 +113,10 @@ pub struct Runtime {
     true_plist: LispValue,
     match_data: Option<MatchData>,
     load_path: Vec<String>,
+    /// Buffer list and current buffer index.
+    pub(crate) buffers: Vec<Buffer>,
+    pub(crate) current_buffer: usize,
+    buf_index: HashMap<usize, usize>,
 }
 
 #[derive(Clone)]
@@ -109,6 +168,9 @@ impl Default for Runtime {
             true_plist: LispValue::NIL,
             match_data: None,
             load_path: Vec::new(),
+            buffers: vec![Buffer::new("*scratch*".into())],
+            current_buffer: 0,
+            buf_index: HashMap::new(),
         }
     }
 }
@@ -178,6 +240,9 @@ impl Runtime {
             true_plist: self.true_plist,
             match_data: None,
             load_path: self.load_path.clone(),
+            buffers: self.buffers.clone(),
+            current_buffer: self.current_buffer,
+            buf_index: self.buf_index.clone(),
         }
     }
 
@@ -1222,6 +1287,54 @@ impl Runtime {
         if !self.load_path.contains(&path) {
             self.load_path.push(path);
         }
+    }
+
+    // ── Buffer operations ──
+
+    pub fn current_buffer(&self) -> &Buffer {
+        &self.buffers[self.current_buffer]
+    }
+
+    pub fn current_buffer_mut(&mut self) -> &mut Buffer {
+        &mut self.buffers[self.current_buffer]
+    }
+
+    pub fn get_buffer(&self, name: &str) -> Option<usize> {
+        self.buffers.iter().position(|b| b.name == name)
+    }
+
+    pub fn get_buffer_create(&mut self, name: &str) -> usize {
+        if let Some(idx) = self.get_buffer(name) {
+            return idx;
+        }
+        let idx = self.buffers.len();
+        self.buffers.push(Buffer::new(name.to_string()));
+        idx
+    }
+
+    pub fn set_buffer(&mut self, name: &str) -> bool {
+        if let Some(idx) = self.get_buffer(name) {
+            self.current_buffer = idx;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn kill_buffer(&mut self, name: &str) -> bool {
+        let Some(idx) = self.get_buffer(name) else { return false };
+        if self.current_buffer == idx {
+            self.current_buffer = if idx > 0 { idx - 1 } else { 0 };
+        }
+        self.buffers.remove(idx);
+        if self.current_buffer >= self.buffers.len() {
+            self.current_buffer = self.buffers.len().saturating_sub(1);
+        }
+        true
+    }
+
+    pub fn buffer_list(&self) -> Vec<&Buffer> {
+        self.buffers.iter().collect()
     }
 
     pub fn resolve_load_file(&self, name: &str) -> Option<String> {
