@@ -235,6 +235,10 @@ pub(crate) fn signal_before_change(
             .begin_buffer_edit(current_id, &source, beg.min(end), beg.max(end));
     }
 
+    crate::emacs_core::textprop::prepare_interval_modification_for_change(
+        ctx, current_id, beg, end,
+    )?;
+
     // Convert byte positions to 1-based character positions.
     let (lisp_beg, lisp_end) = {
         let Some(buf) = ctx.buffers.get(current_id) else {
@@ -345,17 +349,26 @@ pub(crate) fn signal_after_change(
         Value::fixnum(lisp_end),
         Value::fixnum(lisp_old_len),
     ];
+    let saved_interval_insert_behind_hooks = ctx.interval_insert_behind_hooks;
+    let saved_interval_insert_in_front_hooks = ctx.interval_insert_in_front_hooks;
 
     let specpdl_count = ctx.specpdl.len();
     ctx.specbind(intern("inhibit-modification-hooks"), Value::T);
     let result = (|| -> Result<(), Flow> {
         run_named_hook_reset_on_error(ctx, "after-change-functions", &hook_args)?;
 
+        ctx.interval_insert_behind_hooks = saved_interval_insert_behind_hooks;
+        ctx.interval_insert_in_front_hooks = saved_interval_insert_in_front_hooks;
+
         // --- Run overlay hooks ---
         // insert-in-front-hooks: overlays whose start == beg
         // insert-behind-hooks:   overlays whose end == beg (before insertion point)
         // modification-hooks:    overlays covering [beg, end)
         run_overlay_after_change_hooks(ctx, beg, end, lisp_beg, lisp_end, lisp_old_len)?;
+
+        if lisp_old_len == 0 {
+            crate::emacs_core::textprop::report_interval_modification(ctx, lisp_beg, lisp_end)?;
+        }
 
         Ok(())
     })();

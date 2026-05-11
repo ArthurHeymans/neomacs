@@ -1589,6 +1589,14 @@ pub struct Context {
     /// GNU `last_overlay_modification_hooks`: hook-list/overlay pairs recorded
     /// by the before-change overlay scan and replayed by the after-change scan.
     pub(crate) last_overlay_modification_hooks: Vec<OverlayModificationHook>,
+    /// GNU `interval_insert_behind_hooks`: text-property hook list recorded
+    /// by `verify_interval_modification` before an insertion and replayed by
+    /// `report_interval_modification` after the inserted text exists.
+    pub(crate) interval_insert_behind_hooks: Value,
+    /// GNU `interval_insert_in_front_hooks`: text-property hook list recorded
+    /// by `verify_interval_modification` before an insertion and replayed by
+    /// `report_interval_modification` after the inserted text exists.
+    pub(crate) interval_insert_in_front_hooks: Value,
     /// Match data from the last successful search/match operation.
     pub(crate) match_data: Option<MatchData>,
     /// Deferred after-change records, mirroring GNU Emacs's
@@ -2379,6 +2387,8 @@ impl Context {
         ev.loads_in_progress.clear();
         ev.buffers = BufferManager::new();
         ev.last_overlay_modification_hooks.clear();
+        ev.interval_insert_behind_hooks = Value::NIL;
+        ev.interval_insert_in_front_hooks = Value::NIL;
         ev.match_data = None;
         ev.processes = ProcessManager::new();
         ev.timers = TimerManager::new();
@@ -4341,6 +4351,8 @@ impl Context {
             loads_in_progress: Vec::new(),
             buffers: BufferManager::new(),
             last_overlay_modification_hooks: Vec::new(),
+            interval_insert_behind_hooks: Value::NIL,
+            interval_insert_in_front_hooks: Value::NIL,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -4501,6 +4513,8 @@ impl Context {
             loads_in_progress,
             buffers,
             last_overlay_modification_hooks: Vec::new(),
+            interval_insert_behind_hooks: Value::NIL,
+            interval_insert_in_front_hooks: Value::NIL,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -4719,6 +4733,16 @@ impl Context {
             for arg in funcall.args.iter().copied() {
                 visit(arg);
             }
+        }
+        for hook in &self.last_overlay_modification_hooks {
+            visit(hook.hook_list);
+            visit(hook.overlay);
+        }
+        if !self.interval_insert_behind_hooks.is_nil() {
+            visit(self.interval_insert_behind_hooks);
+        }
+        if !self.interval_insert_in_front_hooks.is_nil() {
+            visit(self.interval_insert_in_front_hooks);
         }
         let mut thread_local_roots = Vec::new();
         collect_thread_local_gc_roots(&mut thread_local_roots);

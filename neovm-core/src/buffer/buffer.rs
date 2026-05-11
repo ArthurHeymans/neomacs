@@ -3618,6 +3618,12 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn record_buffer_text_property_modification(&mut self, id: BufferId) -> Option<()> {
+        let buf = self.buffers.get_mut(&id)?;
+        buf.text.increment_modified_tick(1);
+        Some(())
+    }
+
     pub fn set_buffer_multibyte_flag(&mut self, id: BufferId, flag: bool) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.set_multibyte_value(flag);

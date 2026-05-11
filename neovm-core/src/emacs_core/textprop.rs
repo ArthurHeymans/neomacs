@@ -781,6 +781,18 @@ fn run_interval_modification_hooks(
     if hook_lists.is_empty() {
         return Ok(());
     }
+    call_text_property_hook_lists(eval, hook_lists, lisp_start, lisp_end)
+}
+
+fn call_text_property_hook_lists(
+    eval: &mut super::eval::Context,
+    hook_lists: Vec<Value>,
+    lisp_start: i64,
+    lisp_end: i64,
+) -> Result<(), Flow> {
+    if hook_lists.is_empty() {
+        return Ok(());
+    }
     let start_v = Value::fixnum(lisp_start);
     let end_v = Value::fixnum(lisp_end);
     let specpdl_count = eval.specpdl.len();
@@ -801,6 +813,111 @@ fn run_interval_modification_hooks(
     })();
     eval.unbind_to(specpdl_count);
     result
+}
+
+/// GNU `verify_interval_modification` for buffer text changes.
+///
+/// This is the interval-hook part of `prepare_to_modify_buffer_1`: for
+/// non-empty changes, call `modification-hooks` before the text is changed;
+/// for insertions, record `insert-behind-hooks` and `insert-in-front-hooks`
+/// so `signal_after_change` can replay them after the inserted text exists.
+pub(crate) fn prepare_interval_modification_for_change(
+    eval: &mut super::eval::Context,
+    buf_id: BufferId,
+    byte_start: usize,
+    byte_end: usize,
+) -> Result<(), Flow> {
+    eval.interval_insert_behind_hooks = Value::NIL;
+    eval.interval_insert_in_front_hooks = Value::NIL;
+
+    if byte_start == byte_end {
+        record_interval_insert_hooks(eval, buf_id, byte_start);
+        return Ok(());
+    }
+
+    if super::editfns::inhibit_modification_hooks(eval) {
+        return Ok(());
+    }
+
+    let (lisp_start, lisp_end, hook_lists) = {
+        let Some(buf) = eval.buffers.get(buf_id) else {
+            return Ok(());
+        };
+        let start = byte_start.min(byte_end);
+        let end = byte_start.max(byte_end);
+        let lisp_start = buf.text.emacs_byte_to_char(start) as i64 + 1;
+        let lisp_end = buf.text.emacs_byte_to_char(end) as i64 + 1;
+        let mod_sym = Value::symbol("modification-hooks");
+        let mut prev: Option<Value> = None;
+        let mut hooks = Vec::new();
+        let _ = buf
+            .text
+            .text_props_try_for_each_interval_in_range(start, end, |_, _, plist| {
+                let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
+                if mh.is_nil() {
+                    return Ok::<(), ()>(());
+                }
+                if let Some(p) = prev
+                    && eq_value(&p, &mh)
+                {
+                    return Ok(());
+                }
+                prev = Some(mh);
+                hooks.push(mh);
+                Ok(())
+            });
+        (lisp_start, lisp_end, hooks)
+    };
+
+    call_text_property_hook_lists(eval, hook_lists, lisp_start, lisp_end)
+}
+
+fn record_interval_insert_hooks(
+    eval: &mut super::eval::Context,
+    buf_id: BufferId,
+    byte_pos: usize,
+) {
+    let Some(buf) = eval.buffers.get(buf_id) else {
+        return;
+    };
+    let behind_sym = Value::symbol("insert-behind-hooks");
+    let front_sym = Value::symbol("insert-in-front-hooks");
+
+    if byte_pos > buf.begv_byte
+        && let Some(prev_len) = buf.char_before_storage_len(byte_pos)
+    {
+        let prev_byte = byte_pos.saturating_sub(prev_len);
+        if let Some(hooks) = buf.text.text_props_get_property(prev_byte, behind_sym)
+            && !hooks.is_nil()
+        {
+            eval.interval_insert_behind_hooks = hooks;
+        }
+    }
+
+    if byte_pos < buf.zv_byte
+        && let Some(hooks) = buf.text.text_props_get_property(byte_pos, front_sym)
+        && !hooks.is_nil()
+    {
+        eval.interval_insert_in_front_hooks = hooks;
+    }
+}
+
+/// GNU `report_interval_modification`: run insert text-property hooks after
+/// insertion, passing the inserted character range.
+pub(crate) fn report_interval_modification(
+    eval: &mut super::eval::Context,
+    lisp_start: i64,
+    lisp_end: i64,
+) -> Result<(), Flow> {
+    let behind = eval.interval_insert_behind_hooks;
+    let front = eval.interval_insert_in_front_hooks;
+    if !behind.is_nil() {
+        call_text_property_hook_lists(eval, vec![behind], lisp_start, lisp_end)?;
+    }
+    if !front.is_nil() && !eq_value(&front, &behind) {
+        call_text_property_hook_lists(eval, vec![front], lisp_start, lisp_end)?;
+    }
+    Ok(())
 }
 
 /// (put-text-property BEG END PROP VAL &optional OBJECT)
@@ -849,7 +966,12 @@ pub(crate) fn builtin_put_text_property_in_buffers(
     else {
         return Ok(Value::NIL);
     };
-    let _ = buffers.put_buffer_text_property(buf_id, byte_beg, byte_end, prop, val);
+    if buffers
+        .put_buffer_text_property(buf_id, byte_beg, byte_end, prop, val)
+        .unwrap_or(false)
+    {
+        let _ = buffers.record_buffer_text_property_modification(buf_id);
+    }
     Ok(Value::NIL)
 }
 
@@ -1040,6 +1162,9 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
             any_changed = true;
         }
     }
+    if any_changed {
+        let _ = buffers.record_buffer_text_property_modification(buf_id);
+    }
     Ok(if any_changed { Value::T } else { Value::NIL })
 }
 
@@ -1170,8 +1295,17 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         segments.push((seg_start, seg_end, merged));
         seg_start = seg_end;
     }
+    let mut any_changed = false;
     for (s, e, merged) in segments {
-        let _ = buffers.put_buffer_text_property(buf_id, s, e, Value::symbol("face"), merged);
+        if buffers
+            .put_buffer_text_property(buf_id, s, e, Value::symbol("face"), merged)
+            .unwrap_or(false)
+        {
+            any_changed = true;
+        }
+    }
+    if any_changed {
+        let _ = buffers.record_buffer_text_property_modification(buf_id);
     }
     Ok(Value::NIL)
 }
@@ -1235,6 +1369,9 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
             any_removed = true;
         }
     }
+    if any_removed {
+        let _ = buffers.record_buffer_text_property_modification(buf_id);
+    }
     Ok(if any_removed { Value::T } else { Value::NIL })
 }
 
@@ -1295,6 +1432,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
     for (name, val) in pairs {
         let _ = buffers.put_buffer_text_property(buf_id, byte_beg, byte_end, name, val);
     }
+    let _ = buffers.record_buffer_text_property_modification(buf_id);
     Ok(Value::T)
 }
 
@@ -1371,6 +1509,9 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
             }
         }
         let _ = buffers.remove_buffer_text_property(buf_id, byte_beg, byte_end, name);
+    }
+    if changed {
+        let _ = buffers.record_buffer_text_property_modification(buf_id);
     }
     Ok(if changed { Value::T } else { Value::NIL })
 }

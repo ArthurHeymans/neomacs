@@ -8042,6 +8042,61 @@ fn after_change_functions_receive_character_old_len() {
 }
 
 #[test]
+fn text_property_modification_hooks_run_before_text_delete() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (erase-buffer)
+             (insert "abcd")
+             (let ((events nil))
+               (put-text-property
+                2 4 'modification-hooks
+                (list (lambda (beg end)
+                        (setq events
+                              (cons (list 'mod beg end
+                                          (substring-no-properties (buffer-string)))
+                                    events)))))
+               (delete-region 2 3)
+               (list (substring-no-properties (buffer-string))
+                     (nreverse events))))"#,
+    );
+    assert_eq!(result, r#"OK ("acd" ((mod 2 3 "abcd")))"#);
+}
+
+#[test]
+fn text_property_insert_hooks_run_after_text_insert() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (erase-buffer)
+             (insert "ab")
+             (let ((events nil))
+               (put-text-property
+                1 2 'insert-behind-hooks
+                (list (lambda (beg end)
+                        (setq events
+                              (cons (list 'behind beg end
+                                          (substring-no-properties (buffer-string)))
+                                    events)))))
+               (put-text-property
+                2 3 'insert-in-front-hooks
+                (list (lambda (beg end)
+                        (setq events
+                              (cons (list 'front beg end
+                                          (substring-no-properties (buffer-string)))
+                                    events)))))
+               (goto-char 2)
+               (insert "X")
+               (list (substring-no-properties (buffer-string))
+                     (nreverse events))))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ("aXb" ((behind 2 3 "aXb") (front 2 3 "aXb")))"#
+    );
+}
+
+#[test]
 fn overlay_modification_after_phase_replays_before_recorded_hook_list() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
