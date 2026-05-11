@@ -14391,4 +14391,33 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_memql_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (memql 42 nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_nsubstitute_if_returns_nil_for_nil_tree() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-nsubstitute-if #'evenp 'new nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_nsubstitute_if_not_returns_nil_for_nil_tree() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-nsubstitute-if-not #'evenp 'new nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
