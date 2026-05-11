@@ -2375,6 +2375,39 @@ fn fillarray_and_clear_string_multibyte_match_gnu_semantics() {
 }
 
 #[test]
+fn fillarray_multibyte_string_preserves_character_codepoints_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:fillarray validates ITEM with CHECK_CHARACTER, encodes it
+    // with CHAR_STRING for multibyte strings, and refuses only byte-length
+    // changes.  It must not truncate non-ASCII character codepoints to bytes.
+    let expr = r#"(message "fillmb:%S" (let ((s (copy-sequence "éé"))) (fillarray s 256) (list (string-to-list s) (multibyte-string-p s) (length s) (string-bytes s))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "fillmb:((256 256) t 2 4)";
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: fillarray on multibyte strings should preserve character codepoints like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "fillarray_multibyte_string_preserves_character_codepoints_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn reverse_circular_list_error_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
