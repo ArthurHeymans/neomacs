@@ -14514,4 +14514,13 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_length_equal_returns_t_for_nil_zero() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (length= nil 0)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
 }
