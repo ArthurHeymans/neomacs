@@ -593,8 +593,16 @@ pub(crate) fn builtin_capitalize(args: Vec<Value>) -> EvalResult {
     expect_args("capitalize", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
+            let source = args[0];
             let string = args[0].as_lisp_string().expect("string");
-            Ok(Value::heap_string(capitalize_lisp_string(string)))
+            let source_props = (!string.is_multibyte())
+                .then(|| get_string_text_properties_table_for_value(source))
+                .flatten();
+            let result = Value::heap_string(capitalize_lisp_string(string));
+            if let Some(table) = source_props {
+                set_string_text_properties_table_for_value(result, table);
+            }
+            Ok(result)
         }
         ValueKind::Fixnum(c) => {
             let code = c as i64;
@@ -638,8 +646,16 @@ pub(crate) fn builtin_upcase_initials(args: Vec<Value>) -> EvalResult {
     expect_args("upcase-initials", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
+            let source = args[0];
             let string = args[0].as_lisp_string().expect("string");
-            Ok(Value::heap_string(upcase_initials_lisp_string(string)))
+            let source_props = (!string.is_multibyte())
+                .then(|| get_string_text_properties_table_for_value(source))
+                .flatten();
+            let result = Value::heap_string(upcase_initials_lisp_string(string));
+            if let Some(table) = source_props {
+                set_string_text_properties_table_for_value(result, table);
+            }
+            Ok(result)
         }
         ValueKind::Fixnum(c) => {
             let code = c as i64;

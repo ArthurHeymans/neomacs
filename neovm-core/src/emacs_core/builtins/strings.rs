@@ -584,13 +584,21 @@ pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
     expect_args("upcase", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
+            let source = args[0];
             let string = args[0].as_lisp_string().expect("string");
+            let source_props = (!string.is_multibyte())
+                .then(|| get_string_text_properties_table_for_value(source))
+                .flatten();
             let rendered = super::runtime_string_from_lisp_string(string);
             let upcased = upcase_string_emacs_compat(&rendered);
-            Ok(Value::heap_string(super::runtime_string_to_lisp_string(
+            let result = Value::heap_string(super::runtime_string_to_lisp_string(
                 &upcased,
                 runtime_string_result_multibyte(string.is_multibyte(), &upcased),
-            )))
+            ));
+            if let Some(table) = source_props {
+                set_string_text_properties_table_for_value(result, table);
+            }
+            Ok(result)
         }
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => {
             let mapped = upcase_char_code_emacs_compat(c as i64);
@@ -765,13 +773,21 @@ pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
     expect_args("downcase", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
+            let source = args[0];
             let string = args[0].as_lisp_string().expect("string");
+            let source_props = (!string.is_multibyte())
+                .then(|| get_string_text_properties_table_for_value(source))
+                .flatten();
             let rendered = super::runtime_string_from_lisp_string(string);
             let downcased = downcase_string_emacs_compat(&rendered);
-            Ok(Value::heap_string(super::runtime_string_to_lisp_string(
+            let result = Value::heap_string(super::runtime_string_to_lisp_string(
                 &downcased,
                 runtime_string_result_multibyte(string.is_multibyte(), &downcased),
-            )))
+            ));
+            if let Some(table) = source_props {
+                set_string_text_properties_table_for_value(result, table);
+            }
+            Ok(result)
         }
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => {
             let mapped = downcase_char_code_emacs_compat(c as i64);
