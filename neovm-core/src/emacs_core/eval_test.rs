@@ -4853,6 +4853,17 @@ fn defvar_only_sets_if_unbound() {
 }
 
 #[test]
+fn defconst_updates_dynamic_binding_without_enforcing_constancy() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(let ((vm-defconst-local 1)) (defvar vm-defconst-local 2) vm-defconst-local)
+         (let ((vm-defconst-local 1)) (defconst vm-defconst-local 3) vm-defconst-local)
+         (progn (defconst vm-defconst-mutable 1) (setq vm-defconst-mutable 2) vm-defconst-mutable)",
+    );
+    assert_eq!(results, vec!["OK 1", "OK 3", "OK 2"]);
+}
+
+#[test]
 fn bootstrap_does_not_prebind_lisp_derived_mode_tables() {
     crate::test_utils::init_test_tracing();
     let ev = Context::new();

@@ -709,12 +709,8 @@ pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Valu
         builtin_internal_define_uninitialized_variable(eval, vec![args[0], documentation])?;
     }
 
+    super::super::custom::builtin_set_default(eval, vec![args[0], args[1]])?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
-    let value = args[1];
-    eval.note_macro_expansion_mutation();
-    eval.obarray_mut().set_symbol_value_id(resolved, value);
-    eval.refresh_gc_runtime_settings_after_change_by_id(resolved);
-    eval.obarray_mut().set_constant_id(resolved);
     eval.obarray_mut()
         .put_property_id(resolved, intern("risky-local-variable"), Value::T)?;
 

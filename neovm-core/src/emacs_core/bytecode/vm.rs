@@ -3768,11 +3768,16 @@ impl<'a> Vm<'a> {
             }
             "%%defconst" => {
                 if args.len() >= 2 {
-                    let sym_name = args[1].as_symbol_name().unwrap_or("nil").to_string();
-                    self.ctx.obarray.set_symbol_value(&sym_name, args[0]);
-                    self.ctx.obarray.set_constant(&sym_name);
-                    self.ctx.obarray.make_special(&sym_name);
-                    return Ok(Value::symbol(sym_name));
+                    let sym = args[1];
+                    let sym_id = sym.as_symbol_id().unwrap_or_else(|| intern("nil"));
+                    self.builtin_set_default_shared(&[Value::from_sym_id(sym_id), args[0]])?;
+                    self.ctx.obarray.make_special_id(sym_id);
+                    self.ctx.obarray.put_property_id(
+                        sym_id,
+                        intern("risky-local-variable"),
+                        Value::T,
+                    )?;
+                    return Ok(Value::from_sym_id(sym_id));
                 }
                 return Ok(Value::NIL);
             }

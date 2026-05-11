@@ -592,9 +592,8 @@ pub(crate) fn builtin_default_value(
 /// `(set-default SYMBOL VALUE)` -- set the default (global) value.
 ///
 /// GNU design for PLAINVAL (non-buffer-local) variables: `set-default`
-/// delegates to `set_internal`, which writes to the dynamic frame when
-/// let-bound, so the let-bound value is updated.  After the let unwinds,
-/// the obarray value (saved "old" default) is restored.
+/// delegates to `set_internal`, so a dynamic `let` binding's current value is
+/// updated and the saved old value is left for unwind.
 ///
 /// For buffer-local variables, `set-default` writes to the obarray
 /// (default cell) directly, not to the dynamic frame or buffer-local slot.
@@ -642,11 +641,7 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
     };
     if let Some((info, _off)) = forwarded_slot {
         eval.buffers.set_buffer_default_slot(info, value);
-    } else if !crate::emacs_core::eval::set_default_toplevel_value_in_state(
-        eval.specpdl.as_mut_slice(),
-        resolved,
-        value,
-    ) {
+    } else {
         eval.obarray_mut().set_symbol_value_id(resolved, value);
     }
 

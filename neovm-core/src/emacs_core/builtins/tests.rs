@@ -6486,7 +6486,7 @@ fn defvar_1_binds_only_when_default_is_unbound() {
 }
 
 #[test]
-fn defconst_1_sets_constant_value_and_risky_local_property() {
+fn defconst_1_sets_value_and_risky_local_property_without_constant_trap() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
 
@@ -6506,11 +6506,23 @@ fn defconst_1_sets_constant_value_and_risky_local_property() {
         eval.obarray().symbol_value_id(symbol).copied(),
         Some(Value::fixnum(11))
     );
-    assert!(eval.obarray().is_constant_id(symbol));
     assert_eq!(
         eval.obarray()
             .get_property_id(symbol, intern("risky-local-variable")),
         Some(Value::T)
+    );
+    assert!(
+        !eval.obarray().is_constant_id(symbol),
+        "GNU defconst marks the variable special and risky, but does not enforce constancy"
+    );
+    builtin_set(
+        &mut eval,
+        vec![Value::symbol("vm-defconst-1"), Value::fixnum(12)],
+    )
+    .expect("GNU allows setting a defconst variable");
+    assert_eq!(
+        eval.obarray().symbol_value_id(symbol).copied(),
+        Some(Value::fixnum(12))
     );
 }
 
