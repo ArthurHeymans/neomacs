@@ -8111,6 +8111,40 @@ fn char_table_map_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn map_char_table_parent_inheritance_ranges_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/chartab.c:map_char_table/map_sub_char_table treats nil local
+    // slots as inherited from the parent, emits only value changes, and
+    // coalesces the inherited tail into one range.  It must not duplicate the
+    // inherited tail or drop explicit local mappings before it.
+    let expr = r#"(message "chartabparentmap:%S" (let ((p (make-char-table nil 1)) (c (make-char-table nil nil)) seen) (set-char-table-parent c p) (set-char-table-range c ?a 1) (set-char-table-range c ?b 2) (map-char-table (lambda (k v) (push (cons k v) seen)) c) (sort seen (lambda (a b) (< (if (consp (car a)) (caar a) (car a)) (if (consp (car b)) (caar b) (car b)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "chartabparentmap:((97 . 1) (98 . 2) ((99 . 4194303) . 1))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: map-char-table parent inheritance ranges should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "map_char_table_parent_inheritance_ranges_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn display_table_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
