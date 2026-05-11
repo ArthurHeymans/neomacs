@@ -14568,4 +14568,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_not_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (not nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_null_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (null nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
 }
