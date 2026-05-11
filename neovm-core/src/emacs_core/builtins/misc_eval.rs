@@ -161,14 +161,11 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(*str_val).unwrap_or_default();
-        let char_pos = textprop::string_elisp_pos_to_char(s, pos);
-        let (char_limit, limit_val) = match args.get(2) {
+        let char_pos = textprop::validate_string_point(s, pos)?;
+        let (limit_pos, limit_val) = match args.get(2) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_integer_or_marker(v)?;
-                (
-                    Some(textprop::string_elisp_pos_to_char(s, lim_int)),
-                    Some(lim_int),
-                )
+                (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
         };
@@ -180,8 +177,8 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         loop {
             match table.previous_property_change(cursor) {
                 Some(prev) => {
-                    if let Some(lim) = char_limit {
-                        if prev <= lim {
+                    if let Some(lim) = limit_pos {
+                        if (prev as i64) <= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
@@ -229,13 +226,12 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = buf.lisp_pos_to_byte(pos);
+    let byte_pos = textprop::validate_buffer_point(buf, pos)?;
 
-    let (byte_limit, limit_val) = match args.get(2) {
+    let (limit_pos, limit_val) = match args.get(2) {
         Some(v) if !v.is_nil() => {
             let limit = super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?;
-            let limit_byte = buf.lisp_pos_to_byte(limit);
-            (Some(limit_byte), Some(limit))
+            (Some(limit), Some(limit))
         }
         _ => (None, None),
     };
@@ -247,8 +243,8 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
     loop {
         match buf.text.text_props_previous_change(cursor) {
             Some(prev) => {
-                if let (Some(lim_byte), Some(lv)) = (byte_limit, limit_val) {
-                    if prev <= lim_byte {
+                if let (Some(lim), Some(lv)) = (limit_pos, limit_val) {
+                    if textprop::byte_to_elisp_pos(buf, prev) <= lim {
                         return Ok(Value::fixnum(lv));
                     }
                 }
@@ -322,14 +318,22 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     expect_max_args("next-single-char-property-change", &args, 4)?;
 
     if let Some(str_val) = args.get(2).filter(|v| v.is_string()) {
-        if let Some(limit) = args.get(3) {
-            if !limit.is_nil() {
-                return Ok(Value::fixnum(expect_integer_or_marker(limit)?));
-            }
+        let result = super::textprop::builtin_next_single_property_change_in_state(
+            obarray,
+            buffers,
+            args.clone(),
+        )?;
+        if !result.is_nil() {
+            return Ok(result);
         }
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        if let Some(limit) = args.get(3)
+            && !limit.is_nil()
+        {
+            return Ok(Value::fixnum(expect_int(limit)?));
+        }
         return Ok(Value::fixnum(s.schars() as i64));
     }
 
@@ -375,10 +379,18 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     expect_max_args("previous-single-char-property-change", &args, 4)?;
 
     if args.get(2).is_some_and(|v| v.is_string()) {
-        if let Some(limit) = args.get(3) {
-            if !limit.is_nil() {
-                return Ok(Value::fixnum(expect_integer_or_marker(limit)?));
-            }
+        let result = super::textprop::builtin_previous_single_property_change_in_state(
+            obarray,
+            buffers,
+            args.clone(),
+        )?;
+        if !result.is_nil() {
+            return Ok(result);
+        }
+        if let Some(limit) = args.get(3)
+            && !limit.is_nil()
+        {
+            return Ok(Value::fixnum(expect_int(limit)?));
         }
         return Ok(Value::fixnum(0));
     }

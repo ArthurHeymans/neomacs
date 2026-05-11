@@ -349,34 +349,112 @@ fn lookup_overlay_property(
     )
 }
 
-/// Convert a 1-based Elisp char position to a 0-based byte position,
-/// clamping within the buffer.
+/// Convert a 1-based Elisp char position to a 0-based byte position.
+///
+/// This is only valid after GNU-style range validation.  Text-property
+/// builtins must not clamp positions: GNU `validate_interval_range` signals
+/// `args-out-of-range` for invalid positions.
 fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
-    let char_pos = if pos > 0 { pos as usize - 1 } else { 0 };
-    let clamped = char_pos.min(buf.text.char_count());
-    buf.text.char_to_byte(clamped)
+    debug_assert!(pos >= 1);
+    buf.text.char_to_byte((pos - 1) as usize)
 }
 
-/// Validate that BEG and END are within the buffer's accessible range.
-/// GNU Emacs signals `args-out-of-range` if positions are outside [point-min, point-max].
-fn validate_buffer_range(
+fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
+    let max = buf.text.char_count() as i64 + 1;
+    let clipped = pos.clamp(1, max);
+    elisp_pos_to_byte(buf, clipped)
+}
+
+fn elisp_range_to_byte_clipped_full(
+    buf: &crate::buffer::buffer::Buffer,
+    mut beg: i64,
+    mut end: i64,
+) -> (usize, usize) {
+    if beg > end {
+        std::mem::swap(&mut beg, &mut end);
+    }
+    let max = buf.text.char_count() as i64 + 1;
+    let clipped_beg = beg.clamp(1, max);
+    let clipped_end = end.clamp(clipped_beg, max);
+    (
+        elisp_pos_to_byte(buf, clipped_beg),
+        elisp_pos_to_byte(buf, clipped_end),
+    )
+}
+
+fn args_out_of_range_point(pos: i64) -> Flow {
+    signal("args-out-of-range", vec![Value::fixnum(pos)])
+}
+
+fn args_out_of_range_range(begin0: Value, end0: Value) -> Flow {
+    signal("args-out-of-range", vec![begin0, end0])
+}
+
+pub(crate) fn validate_string_point(
+    s: &crate::heap_types::LispString,
+    pos: i64,
+) -> Result<usize, Flow> {
+    let len = s.schars() as i64;
+    if !(0 <= pos && pos <= len) {
+        return Err(args_out_of_range_point(pos));
+    }
+    Ok(pos as usize)
+}
+
+fn validate_string_range(
+    s: &crate::heap_types::LispString,
+    beg: i64,
+    end: i64,
+    beg0: Value,
+    end0: Value,
+) -> Result<Option<(usize, usize)>, Flow> {
+    if beg == end {
+        return Ok(None);
+    }
+    let (start, finish) = if beg > end { (end, beg) } else { (beg, end) };
+    let len = s.schars() as i64;
+    if !(0 <= start && start <= finish && finish <= len) {
+        return Err(args_out_of_range_range(beg0, end0));
+    }
+    Ok(Some((start as usize, finish as usize)))
+}
+
+pub(crate) fn validate_buffer_point(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+) -> Result<usize, Flow> {
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if !(point_min <= pos && pos <= point_max) {
+        return Err(args_out_of_range_point(pos));
+    }
+    Ok(elisp_pos_to_byte(buf, pos))
+}
+
+fn validate_buffer_property_range(
     buf: &crate::buffer::buffer::Buffer,
     beg: i64,
     end: i64,
-) -> Result<(), Flow> {
-    let point_min = buf.point_min_char() as i64 + 1; // 1-based
-    let point_max = buf.text.char_count() as i64 + 1; // 1-based, exclusive end
-    if beg < point_min || beg > point_max || end < point_min || end > point_max {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::fixnum(beg), Value::fixnum(end)],
-        ));
+    beg0: Value,
+    end0: Value,
+) -> Result<Option<(usize, usize)>, Flow> {
+    if beg == end {
+        return Ok(None);
     }
-    Ok(())
+    let (start, finish) = if beg > end { (end, beg) } else { (beg, end) };
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if !(point_min <= start && start <= finish && finish <= point_max) {
+        return Err(args_out_of_range_range(beg0, end0));
+    }
+    Ok(Some((
+        elisp_pos_to_byte(buf, start),
+        elisp_pos_to_byte(buf, finish),
+    )))
 }
 
 /// Convert a 0-based byte position to a 1-based Elisp char position.
-fn byte_to_elisp_pos(buf: &crate::buffer::buffer::Buffer, byte_pos: usize) -> i64 {
+pub(crate) fn byte_to_elisp_pos(buf: &crate::buffer::buffer::Buffer, byte_pos: usize) -> i64 {
     buf.text.byte_to_char(byte_pos) as i64 + 1
 }
 
@@ -483,12 +561,6 @@ pub(crate) fn is_string_object(object: Option<&Value>) -> Option<Value> {
     }
 }
 
-/// Convert a 0-based Elisp string char position to the interval-tree position.
-pub(crate) fn string_elisp_pos_to_char(s: &crate::heap_types::LispString, pos: i64) -> usize {
-    let char_pos = if pos < 0 { 0usize } else { pos as usize };
-    char_pos.min(s.schars())
-}
-
 pub(crate) fn string_char_to_elisp_pos(_s: &crate::heap_types::LispString, char_pos: usize) -> i64 {
     char_pos as i64
 }
@@ -501,18 +573,29 @@ pub(crate) fn save_string_props_for_value(value: Value, table: TextPropertyTable
 /// Iterate a plist (alternating key value key value ...) from a list or vec.
 /// Returns pairs of (property-name, value).
 fn plist_pairs(plist: &Value) -> Result<Vec<(Value, Value)>, Flow> {
-    let items = list_to_vec(plist)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *plist]))?;
-    if items.len() % 2 != 0 {
-        return Err(signal(
-            "error",
-            vec![Value::string("Odd number of elements in property list")],
-        ));
+    if plist.is_nil() {
+        return Ok(Vec::new());
     }
+    if !plist.is_cons() {
+        return Ok(vec![(expect_property_key(plist)?, Value::NIL)]);
+    }
+
     let mut pairs = Vec::new();
-    for chunk in items.chunks(2) {
-        let name = expect_property_key(&chunk[0])?;
-        pairs.push((name, chunk[1]));
+    let mut tail = *plist;
+    loop {
+        if !tail.is_cons() {
+            break;
+        }
+        let name = tail.cons_car();
+        let rest = tail.cons_cdr();
+        if !rest.is_cons() {
+            return Err(signal(
+                "error",
+                vec![Value::string("Odd length text property list")],
+            ));
+        }
+        pairs.push((expect_property_key(&name)?, rest.cons_car()));
+        tail = rest.cons_cdr();
     }
     Ok(pairs)
 }
@@ -569,7 +652,13 @@ pub(crate) fn verify_text_read_only_in_state(
     let inhibit_sym = Value::symbol("inhibit-read-only");
     buf.text
         .text_props_try_for_each_interval_in_range(byte_start, byte_end, |_, _, plist| {
-            let read_only = plist_slice_get_value(plist, read_only_sym).unwrap_or(Value::NIL);
+            let read_only = lookup_char_property_from_direct(
+                obarray,
+                buffers,
+                |name| plist_slice_get_value(plist, name),
+                read_only_sym,
+                true,
+            );
             if read_only.is_nil() {
                 return Ok::<(), Flow>(());
             }
@@ -625,11 +714,9 @@ fn verify_property_change_read_only(
             .buffers
             .get(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let mut a = elisp_pos_to_byte(buf, beg);
-        let mut b = elisp_pos_to_byte(buf, end);
-        if a > b {
-            std::mem::swap(&mut a, &mut b);
-        }
+        let Some((a, b)) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
+            return Ok(());
+        };
         (a, b)
     };
     verify_text_read_only_in_state(&eval.obarray, &eval.buffers, buf_id, byte_beg, byte_end)
@@ -664,14 +751,9 @@ fn run_interval_modification_hooks(
         let Some(buf) = eval.buffers.get(buf_id) else {
             return Ok(());
         };
-        let mut a = elisp_pos_to_byte(buf, beg);
-        let mut b = elisp_pos_to_byte(buf, end);
-        if a > b {
-            std::mem::swap(&mut a, &mut b);
-        }
-        if a >= b {
+        let Some((a, b)) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
             return Ok(());
-        }
+        };
         let lisp_a = buf.text.emacs_byte_to_char(a) as i64 + 1;
         let lisp_b = buf.text.emacs_byte_to_char(b) as i64 + 1;
         let mod_sym = Value::symbol("modification-hooks");
@@ -747,9 +829,11 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         table.put_property(char_beg, char_end, prop, val);
         save_string_props_for_value(str_val, table);
         return Ok(Value::NIL);
@@ -760,8 +844,11 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     let _ = buffers.put_buffer_text_property(buf_id, byte_beg, byte_end, prop, val);
     Ok(Value::NIL)
 }
@@ -788,8 +875,11 @@ pub(crate) fn builtin_get_text_property_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let char_pos = validate_string_point(s, pos)?;
+        if char_pos == s.schars() {
+            return Ok(Value::NIL);
+        }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
-            let char_pos = string_elisp_pos_to_char(s, pos);
             return Ok(lookup_string_text_property(
                 obarray, buffers, &table, char_pos, prop,
             ));
@@ -808,7 +898,10 @@ pub(crate) fn builtin_get_text_property_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+        return Ok(Value::NIL);
+    }
     Ok(lookup_buffer_text_property(
         obarray, buffers, buf, byte_pos, prop,
     ))
@@ -872,7 +965,10 @@ pub(crate) fn builtin_get_char_property_in_state(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+        return Ok(Value::NIL);
+    }
 
     if let Some((value, _overlay_id)) =
         buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop)
@@ -910,9 +1006,11 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         let mut any_changed = false;
         for (name, val) in pairs {
             if table.put_property(char_beg, char_end, name, val) {
@@ -928,8 +1026,11 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     let mut any_changed = false;
     for (name, val) in pairs {
         if buffers
@@ -1002,9 +1103,11 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         // GNU iterates intervals in [beg, end); per interval, fetch its existing
         // face value and merge. Walk the range segment-by-segment.
         let mut seg_start = char_beg;
@@ -1045,8 +1148,11 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     // GNU iterates intervals in [beg, end); per interval, fetch its existing
     // face value and merge. Walk the range segment-by-segment to preserve any
     // heterogeneous face properties already present.
@@ -1095,9 +1201,11 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         let mut any_removed = false;
         for (name, _val) in pairs {
             if table.remove_property(char_beg, char_end, name) {
@@ -1113,8 +1221,11 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     let mut any_removed = false;
     for (name, _val) in pairs {
         if buffers
@@ -1157,9 +1268,11 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         table.remove_all_properties(char_beg, char_end);
         for (name, val) in pairs {
             table.put_property(char_beg, char_end, name, val);
@@ -1173,8 +1286,11 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     let _ = buffers.clear_buffer_text_properties(buf_id, byte_beg, byte_end);
     for (name, val) in pairs {
         let _ = buffers.put_buffer_text_property(buf_id, byte_beg, byte_end, name, val);
@@ -1209,9 +1325,11 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         let mut changed = false;
         for name_val in names {
             let name = expect_property_key(&name_val)?;
@@ -1229,7 +1347,10 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         let buf = buffers
             .get(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        (elisp_pos_to_byte(buf, beg), elisp_pos_to_byte(buf, end))
+        let Some(range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
+            return Ok(Value::NIL);
+        };
+        range
     };
 
     let mut changed = false;
@@ -1274,8 +1395,11 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let char_pos = validate_string_point(s, pos)?;
+        if char_pos == s.schars() {
+            return Ok(Value::NIL);
+        }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
-            let char_pos = string_elisp_pos_to_char(s, pos);
             let props = table.get_properties_ordered(char_pos);
             return Ok(ordered_pairs_to_plist(&props));
         }
@@ -1287,7 +1411,10 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+        return Ok(Value::NIL);
+    }
     let props = buf.text.text_props_get_properties_ordered(byte_pos);
     Ok(ordered_pairs_to_plist(&props))
 }
@@ -1315,11 +1442,11 @@ pub(crate) fn builtin_next_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = string_elisp_pos_to_char(s, pos);
-        let (char_limit, limit_val) = match args.get(3) {
+        let char_pos = validate_string_point(s, pos)?;
+        let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_int(v)?;
-                (Some(string_elisp_pos_to_char(s, lim_int)), Some(lim_int))
+                (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
         };
@@ -1329,8 +1456,8 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         loop {
             match table.next_property_change(cursor) {
                 Some(next) => {
-                    if let Some(lim) = char_limit {
-                        if next >= lim {
+                    if let Some(lim) = limit_pos {
+                        if next as i64 >= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
@@ -1362,11 +1489,11 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
-    let (byte_limit, limit_val) = match args.get(3) {
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_int(v)?;
-            (Some(elisp_pos_to_byte(buf, lim_int)), Some(lim_int))
+            (Some(lim_int), Some(lim_int))
         }
         _ => (None, None),
     };
@@ -1378,8 +1505,8 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     loop {
         match buf.text.text_props_next_change(cursor) {
             Some(next) => {
-                if let Some(lim) = byte_limit {
-                    if next >= lim {
+                if let Some(lim) = limit_pos {
+                    if byte_to_elisp_pos(buf, next) >= lim {
                         return Ok(match limit_val {
                             Some(lv) => Value::fixnum(lv),
                             None => Value::NIL,
@@ -1429,11 +1556,11 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = string_elisp_pos_to_char(s, pos);
-        let (char_limit, limit_val) = match args.get(3) {
+        let char_pos = validate_string_point(s, pos)?;
+        let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_int(v)?;
-                (Some(string_elisp_pos_to_char(s, lim_int)), Some(lim_int))
+                (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
         };
@@ -1443,8 +1570,8 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         loop {
             match table.previous_property_change(cursor) {
                 Some(prev) => {
-                    if let Some(lim) = char_limit {
-                        if prev <= lim {
+                    if let Some(lim) = limit_pos {
+                        if (prev as i64) <= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
@@ -1478,11 +1605,11 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
-    let (byte_limit, limit_val) = match args.get(3) {
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_int(v)?;
-            (Some(elisp_pos_to_byte(buf, lim_int)), Some(lim_int))
+            (Some(lim_int), Some(lim_int))
         }
         _ => (None, None),
     };
@@ -1494,8 +1621,8 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
     loop {
         match buf.text.text_props_previous_change(cursor) {
             Some(prev) => {
-                if let Some(lim) = byte_limit {
-                    if prev <= lim {
+                if let Some(lim) = limit_pos {
+                    if byte_to_elisp_pos(buf, prev) <= lim {
                         return Ok(match limit_val {
                             Some(lv) => Value::fixnum(lv),
                             None => Value::NIL,
@@ -1544,27 +1671,26 @@ pub(crate) fn builtin_next_property_change_in_buffers(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = string_elisp_pos_to_char(s, pos);
+        let char_pos = validate_string_point(s, pos)?;
         let limit_arg = args.get(2);
-        // Keep original limit value for returning (don't clamp to string length)
-        // GNU: LIMIT == t means "return start of next interval, no further checking";
-        // we treat it as no integer bound and return t when nothing is found.
-        let (char_limit, limit_val) = match limit_arg {
-            Some(v) if v.is_t() => (None, Some(*v)),
+        if limit_arg.is_some_and(|v| v.is_t()) {
+            let next = table
+                .next_property_change(char_pos)
+                .unwrap_or_else(|| s.schars());
+            return Ok(Value::fixnum(next as i64));
+        }
+        let (limit_pos, limit_val) = match limit_arg {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_int(v)?;
-                (
-                    Some(string_elisp_pos_to_char(s, lim_int)),
-                    Some(Value::fixnum(lim_int)),
-                )
+                (Some(lim_int), Some(Value::fixnum(lim_int)))
             }
             _ => (None, None),
         };
         let str_char_len = s.schars();
         return match table.next_property_change(char_pos) {
             Some(next) => {
-                if let Some(lim) = char_limit {
-                    if next >= lim {
+                if let Some(lim) = limit_pos {
+                    if (next as i64) >= lim {
                         return Ok(limit_val.unwrap_or(Value::NIL));
                     }
                 }
@@ -1585,18 +1711,18 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
-    // Keep original limit value for returning.
-    // GNU: LIMIT == t means "return start of next interval, no further checking";
-    // we treat it as no integer bound and return t when nothing is found.
-    let (byte_limit, limit_val) = match limit_arg {
-        Some(v) if v.is_t() => (None, Some(*v)),
+    let byte_pos = validate_buffer_point(buf, pos)?;
+    if limit_arg.is_some_and(|v| v.is_t()) {
+        let next = buf
+            .text
+            .text_props_next_change(byte_pos)
+            .unwrap_or_else(|| buf.point_max());
+        return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
+    }
+    let (limit_pos, limit_val) = match limit_arg {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_int(v)?;
-            (
-                Some(elisp_pos_to_byte(buf, lim_int)),
-                Some(Value::fixnum(lim_int)),
-            )
+            (Some(lim_int), Some(Value::fixnum(lim_int)))
         }
         _ => (None, None),
     };
@@ -1604,8 +1730,8 @@ pub(crate) fn builtin_next_property_change_in_buffers(
 
     match buf.text.text_props_next_change(byte_pos) {
         Some(next) => {
-            if let Some(lim) = byte_limit {
-                if next >= lim {
+            if let Some(lim) = limit_pos {
+                if byte_to_elisp_pos(buf, next) >= lim {
                     return Ok(limit_val.unwrap_or(Value::NIL));
                 }
             }
@@ -1643,9 +1769,11 @@ pub(crate) fn builtin_text_property_any_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         let mut cursor = char_beg;
         while cursor < char_end {
             let found = lookup_string_text_property(obarray, buffers, &table, cursor, prop);
@@ -1665,9 +1793,11 @@ pub(crate) fn builtin_text_property_any_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    validate_buffer_range(buf, beg, end)?;
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
 
     let mut cursor = byte_beg;
     while cursor < byte_end {
@@ -1709,9 +1839,11 @@ pub(crate) fn builtin_text_property_not_all_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
+        else {
+            return Ok(Value::NIL);
+        };
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_beg = string_elisp_pos_to_char(s, beg);
-        let char_end = string_elisp_pos_to_char(s, end);
         let mut cursor = char_beg;
         while cursor < char_end {
             let found = lookup_string_text_property(obarray, buffers, &table, cursor, prop);
@@ -1732,9 +1864,11 @@ pub(crate) fn builtin_text_property_not_all_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    validate_buffer_range(buf, beg, end)?;
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let Some((byte_beg, byte_end)) =
+        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
+    else {
+        return Ok(Value::NIL);
+    };
     let mut cursor = byte_beg;
 
     while cursor < byte_end {
@@ -1780,7 +1914,10 @@ pub(crate) fn builtin_get_char_property_and_overlay_in_state(
     let buf_id = resolve_text_property_buffer_id_in_buffers(buffers, args.get(2))?;
 
     if let Some(buf) = buffers.get(buf_id) {
-        let byte_pos = elisp_pos_to_byte(buf, pos);
+        let byte_pos = validate_buffer_point(buf, pos)?;
+        if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+            return Ok(Value::cons(Value::NIL, Value::NIL));
+        }
         if let Some((value, ov_val)) =
             buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop)
         {
@@ -1841,7 +1978,7 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
     match buf.overlays.next_boundary_after(byte_pos) {
         Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_max()))),
@@ -1867,7 +2004,7 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
     match buf.overlays.previous_boundary_before(byte_pos) {
         Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_min()))),
@@ -1891,11 +2028,8 @@ pub(crate) fn builtin_make_overlay_in_buffers(
     let buf_id = resolve_buffer_id_in_buffers(buffers, args.get(2))?;
     ensure_marker_points_into_buffer(buffers, &args[0], buf_id)?;
     ensure_marker_points_into_buffer(buffers, &args[1], buf_id)?;
-    let mut beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
-    let mut end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
-    if beg > end {
-        std::mem::swap(&mut beg, &mut end);
-    }
+    let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
     let front_advance = args.get(3).is_some_and(|v| v.is_truthy());
     let rear_advance = args.get(4).is_some_and(|v| v.is_truthy());
 
@@ -1903,8 +2037,7 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         .get_mut(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
     let overlay = Value::make_overlay(crate::heap_types::OverlayData {
         plist: Value::NIL,
         buffer: Some(buf_id),
@@ -2032,7 +2165,7 @@ pub(crate) fn builtin_overlays_at_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
     let mut ids = buf.overlays.overlays_at(byte_pos);
     if let Some(sorted) = args.get(1)
         && sorted.is_truthy()
@@ -2071,8 +2204,7 @@ pub(crate) fn builtin_overlays_in_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_beg = elisp_pos_to_byte(buf, beg);
-    let byte_end = elisp_pos_to_byte(buf, end);
+    let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
     let ids = buf
         .overlays
         .overlays_in_region(byte_beg, byte_end, buf.point_max_byte());
@@ -2109,19 +2241,15 @@ pub(crate) fn builtin_move_overlay_in_buffers(
 
     ensure_marker_points_into_buffer(buffers, &args[1], new_buf_id)?;
     ensure_marker_points_into_buffer(buffers, &args[2], new_buf_id)?;
-    let mut beg = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
-    let mut end = expect_integer_or_marker_in_buffers(buffers, &args[2])?;
-    if beg > end {
-        std::mem::swap(&mut beg, &mut end);
-    }
+    let beg = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    let end = expect_integer_or_marker_in_buffers(buffers, &args[2])?;
 
     if old_buf_id == Some(new_buf_id) {
         // Same buffer: just move within the buffer.
         let buf = buffers
             .get_mut(new_buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let byte_beg = elisp_pos_to_byte(buf, beg);
-        let byte_end = elisp_pos_to_byte(buf, end);
+        let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
         buf.overlays.move_overlay(overlay, byte_beg, byte_end);
         Ok(args[0])
     } else {
@@ -2134,8 +2262,7 @@ pub(crate) fn builtin_move_overlay_in_buffers(
         let new_buf = buffers
             .get_mut(new_buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let byte_beg = elisp_pos_to_byte(new_buf, beg);
-        let byte_end = elisp_pos_to_byte(new_buf, end);
+        let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(new_buf, beg, end);
         let _ = overlay.with_overlay_data_mut(|object| {
             object.buffer = Some(new_buf_id);
             object.start = byte_beg;
@@ -2266,12 +2393,12 @@ pub(crate) fn builtin_remove_overlays(
         let start = if args.is_empty() || args[0].is_nil() {
             buf.point_min()
         } else {
-            elisp_pos_to_byte(buf, expect_int_eval(eval, &args[0])?)
+            elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[0])?)
         };
         let end = if args.len() < 2 || args[1].is_nil() {
             buf.point_max()
         } else {
-            elisp_pos_to_byte(buf, expect_int_eval(eval, &args[1])?)
+            elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[1])?)
         };
         (start, end)
     };
