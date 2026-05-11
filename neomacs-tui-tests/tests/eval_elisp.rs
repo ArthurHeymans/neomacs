@@ -5129,6 +5129,44 @@ fn unicode_character_reader_error_payloads_match_gnu() {
 }
 
 #[test]
+fn hex_character_reader_error_payloads_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:read_char_escape accepts modifier bits in hex escapes
+    // up to CHAR_META | (CHAR_META - 1), and signals ordinary `error' for
+    // empty or out-of-range hex escapes.
+    let expr = r#"(message "readhexerr:%S" (list (read (concat "?" "\\" "x4000001")) (condition-case e (read (concat "?" "\\" "x")) (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "x10000000")) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid.join("\n");
+        recent.contains("readhexerr:")
+            && recent.contains("67108865")
+            && recent.contains("Invalid escape char syntax")
+            && recent.contains("Hex character out of range")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: hex character reader errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "hex_character_reader_error_payloads_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn provide_eval_after_load_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
