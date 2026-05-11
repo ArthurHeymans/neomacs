@@ -1525,6 +1525,37 @@ fn sort_detects_circular_lists_like_gnu() {
 }
 
 #[test]
+fn sort_rejects_records_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:sort accepts only lists, nil, and vectors.  Records are
+    // not valid sort sequences even though they are vectorlike objects.
+    let expr = r#"(message "sortrec:%S" (condition-case e (sort #s(foo 3 1 2) :lessp #'<) (error (list (car e) (cadr e)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("sortrec:(wrong-type-argument list-or-vector-p)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: sort should reject records with list-or-vector-p like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("sort_rejects_records_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn copy_tree_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
