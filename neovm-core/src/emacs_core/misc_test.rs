@@ -45,6 +45,18 @@ fn copy_alist_empty() {
     assert!(result.is_nil());
 }
 
+#[test]
+fn copy_alist_circular_top_level_signals_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let alist = Value::list(vec![Value::cons(Value::symbol("a"), Value::fixnum(1))]);
+    alist.set_cdr(alist);
+
+    match builtin_copy_alist(vec![alist]) {
+        Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "circular-list"),
+        other => panic!("expected circular-list signal, got {other:?}"),
+    }
+}
+
 // ----- rassoc / rassq -----
 
 #[test]

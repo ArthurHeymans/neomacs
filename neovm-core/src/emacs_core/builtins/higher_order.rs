@@ -1,6 +1,5 @@
 use super::*;
 use crate::emacs_core::eval::LispArgVec;
-use crate::emacs_core::value::list_length;
 use smallvec::SmallVec;
 
 type MapResultVec = SmallVec<[Value; 8]>;
@@ -223,17 +222,11 @@ pub(crate) fn builtin_mapcar_2(
     let map_result: Result<(), Flow> = if seq.is_nil() {
         Ok(())
     } else if seq.is_cons() {
-        let len = match list_length(&seq) {
-            Some(len) => len,
-            None => {
-                let mut cursor = seq;
-                while cursor.is_cons() {
-                    cursor = cursor.cons_cdr();
-                }
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), cursor],
-                ));
+        let len = match super::cons_list::proper_list_length_or_signal(seq) {
+            Ok(len) => len,
+            Err(err) => {
+                eval.restore_vm_roots(roots);
+                return Err(err);
             }
         };
         results = MapResultVec::with_capacity(len);
@@ -299,6 +292,10 @@ pub(crate) fn builtin_mapc_2(
     // (which doesn't scan the Rust stack) can find the remaining
     // chain even if a hook callback modifies the list.
     let result: Result<(), Flow> = if seq.is_cons() || seq.is_nil() {
+        if let Err(err) = super::cons_list::proper_list_length_or_signal(seq) {
+            eval.restore_vm_roots(roots);
+            return Err(err);
+        }
         let mut cursor = seq;
         loop {
             match cursor.kind() {
@@ -352,6 +349,12 @@ pub(crate) fn builtin_mapconcat(eval: &mut super::eval::Context, args: Vec<Value
             vec![Value::symbol("listp"), sequence],
         ));
     }
+    if sequence.is_cons()
+        && let Err(err) = super::cons_list::proper_list_length_or_signal(sequence)
+    {
+        eval.restore_vm_roots(roots);
+        return Err(err);
+    }
     let mapconcat_result = for_each_sequence_element(&sequence, |item| {
         let val = apply1(eval, func, item)?;
         eval.push_vm_frame_root(val);
@@ -394,6 +397,12 @@ pub(crate) fn builtin_mapcan(eval: &mut super::eval::Context, args: Vec<Value>) 
             "wrong-type-argument",
             vec![Value::symbol("listp"), sequence],
         ));
+    }
+    if sequence.is_cons()
+        && let Err(err) = super::cons_list::proper_list_length_or_signal(sequence)
+    {
+        eval.restore_vm_roots(roots);
+        return Err(err);
     }
     let mapcan_result = for_each_sequence_element(&sequence, |item| {
         let val = apply1(eval, func, item)?;

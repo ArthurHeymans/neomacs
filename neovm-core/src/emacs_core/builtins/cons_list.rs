@@ -64,6 +64,74 @@ where
     }
 }
 
+pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
+    let mut len = 0usize;
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        len = len.saturating_add(1);
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(len)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), tail],
+        ))
+    }
+}
+
+fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow> {
+    let mut items = Vec::new();
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        items.push(tail.cons_car());
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(items)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), tail],
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Lambda → cons-list transparency helpers
 //
@@ -496,25 +564,7 @@ fn builtin_length_value(sequence: Value) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::ByteCode) => {
             Ok(Value::fixnum(closure_vector_length(&sequence).unwrap()))
         }
-        ValueKind::Cons => match list_length(&sequence) {
-            Some(n) => Ok(Value::fixnum(n as i64)),
-            None => {
-                // Mirrors GNU `Flength` which walks the cons list
-                // until a non-cons cdr is found, and signals
-                // `(wrong-type-argument listp TAIL)` where TAIL is
-                // the offending non-nil non-cons cell (not the
-                // whole list). Verified via the GNU emacs binary:
-                // `(length '(1 . 2))` → `(wrong-type-argument listp 2)`.
-                let mut cursor = sequence;
-                while cursor.is_cons() {
-                    cursor = cursor.cons_cdr();
-                }
-                Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), cursor],
-                ))
-            }
-        },
+        ValueKind::Cons => proper_list_length_or_signal(sequence).map(|n| Value::fixnum(n as i64)),
         ValueKind::String => {
             let s = sequence.as_lisp_string().expect("string");
             Ok(Value::fixnum(s.schars() as i64))
@@ -541,6 +591,43 @@ fn vector_sequence_length(sequence: &Value) -> i64 {
         })
 }
 
+fn list_length_internal_for_predicate(mut sequence: Value, mut len: i64) -> Result<i64, Flow> {
+    if len < 0xffff {
+        while sequence.is_cons() {
+            len -= 1;
+            if len <= 0 {
+                return Ok(-1);
+            }
+            sequence = sequence.cons_cdr();
+        }
+        return Ok(len);
+    }
+
+    let mut tortoise = sequence;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+    while sequence.is_cons() {
+        len -= 1;
+        if len <= 0 {
+            return Ok(-1);
+        }
+
+        sequence = sequence.cons_cdr();
+        if sequence.is_cons() {
+            distance = distance.saturating_add(1);
+            if sequence.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![sequence]));
+            }
+            if distance == power {
+                tortoise = sequence;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+    Ok(len)
+}
+
 fn sequence_length_less_than(sequence: &Value, target: i64) -> Result<bool, Flow> {
     match sequence.kind() {
         ValueKind::Nil => Ok(0 < target),
@@ -554,21 +641,8 @@ fn sequence_length_less_than(sequence: &Value, target: i64) -> Result<bool, Flow
             Ok(vector_sequence_length(sequence) < target)
         }
         ValueKind::Cons => {
-            if target <= 0 {
-                return Ok(false);
-            }
-            let mut remaining = target;
-            let mut cursor = *sequence;
-            while remaining > 0 {
-                match cursor.kind() {
-                    ValueKind::Cons => {
-                        cursor = cursor.cons_cdr();
-                        remaining -= 1;
-                    }
-                    _ => return Ok(true),
-                }
-            }
-            Ok(false)
+            let remaining = list_length_internal_for_predicate(*sequence, target)?;
+            Ok(remaining != -1)
         }
         _ => Err(signal(
             "wrong-type-argument",
@@ -593,18 +667,9 @@ fn sequence_length_equal(sequence: &Value, target: i64) -> Result<bool, Flow> {
             if target < 0 {
                 return Ok(false);
             }
-            let mut remaining = target;
-            let mut cursor = *sequence;
-            while remaining > 0 {
-                match cursor.kind() {
-                    ValueKind::Cons => {
-                        cursor = cursor.cons_cdr();
-                        remaining -= 1;
-                    }
-                    _ => return Ok(false),
-                }
-            }
-            Ok(!cursor.is_cons())
+            let remaining =
+                list_length_internal_for_predicate(*sequence, target.saturating_add(1))?;
+            Ok(remaining == 1)
         }
         _ => Err(signal(
             "wrong-type-argument",
@@ -626,24 +691,9 @@ fn sequence_length_greater_than(sequence: &Value, target: i64) -> Result<bool, F
             Ok(vector_sequence_length(sequence) > target)
         }
         ValueKind::Cons => {
-            if target < 0 {
-                return Ok(true);
-            }
-            if target == i64::MAX {
-                return Ok(false);
-            }
-            let mut remaining = target + 1;
-            let mut cursor = *sequence;
-            while remaining > 0 {
-                match cursor.kind() {
-                    ValueKind::Cons => {
-                        cursor = cursor.cons_cdr();
-                        remaining -= 1;
-                    }
-                    _ => return Ok(false),
-                }
-            }
-            Ok(true)
+            let remaining =
+                list_length_internal_for_predicate(*sequence, target.saturating_add(1))?;
+            Ok(remaining == -1)
         }
         _ => Err(signal(
             "wrong-type-argument",
@@ -1212,25 +1262,7 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => {
-            let mut items = Vec::new();
-            let mut cursor = args[0];
-            loop {
-                match cursor.kind() {
-                    ValueKind::Nil => break,
-                    ValueKind::Cons => {
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        items.push(pair_car);
-                        cursor = pair_cdr;
-                    }
-                    _ => {
-                        return Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("listp"), cursor],
-                        ));
-                    }
-                }
-            }
+            let items = collect_proper_list_items(args[0])?;
             Ok(Value::list(items))
         }
         ValueKind::String => {
@@ -1277,21 +1309,7 @@ fn delete_from_list_in_place_result<F>(seq: &Value, mut should_delete: F) -> Res
 where
     F: FnMut(&Value) -> Result<bool, Flow>,
 {
-    let mut probe = *seq;
-    loop {
-        match probe.kind() {
-            ValueKind::Nil => break,
-            ValueKind::Cons => {
-                probe = probe.cons_cdr();
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), probe],
-                ));
-            }
-        }
-    }
+    for_each_proper_list_tail(*seq, *seq, |_| Ok(None))?;
 
     let mut head = *seq;
     loop {

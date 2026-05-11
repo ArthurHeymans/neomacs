@@ -21,6 +21,30 @@ fn eval_one(src: &str) -> String {
     format_eval_result(&result)
 }
 
+#[test]
+fn mapc_mapconcat_and_mapcan_signal_circular_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        eval_one(
+            "(condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (mapc (lambda (_) nil) x)) (error (car e)))"
+        ),
+        "OK circular-list"
+    );
+    assert_eq!(
+        eval_one(
+            "(condition-case e (let ((x (list \"a\" \"b\"))) (setcdr (cdr x) x) (mapconcat 'identity x \"-\")) (error (car e)))"
+        ),
+        "OK circular-list"
+    );
+    assert_eq!(
+        eval_one(
+            "(condition-case e (let ((x (list 1 2))) (setcdr (cdr x) x) (mapcan (lambda (v) (list v)) x)) (error (car e)))"
+        ),
+        "OK circular-list"
+    );
+}
+
 fn eval_all(src: &str) -> Vec<String> {
     let mut ev = Context::new();
     let forms = crate::emacs_core::value_reader::read_all(src, &test_ob()).expect("parse");

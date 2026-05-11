@@ -7685,6 +7685,56 @@ fn copy_sequence_handles_raw_unibyte_strings_and_preserves_text_properties() {
 }
 
 #[test]
+fn list_copy_length_and_delq_signal_circular_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    fn assert_circular(result: EvalResult) {
+        match result {
+            Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "circular-list");
+            }
+            other => panic!("expected circular-list signal, got {other:?}"),
+        }
+    }
+
+    let copy_input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    copy_input.cons_cdr().set_cdr(copy_input);
+    assert_circular(builtin_copy_sequence(vec![copy_input]));
+
+    let length_input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    length_input.cons_cdr().set_cdr(length_input);
+    assert_circular(builtin_length(vec![length_input]));
+
+    let delq_input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    delq_input.cons_cdr().set_cdr(delq_input);
+    assert_circular(builtin_delq(vec![Value::fixnum(9), delq_input]));
+}
+
+#[test]
+fn large_length_predicates_signal_circular_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    fn assert_circular(result: EvalResult) {
+        match result {
+            Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "circular-list");
+            }
+            other => panic!("expected circular-list signal, got {other:?}"),
+        }
+    }
+
+    for predicate in [
+        builtin_length_lt as fn(Vec<Value>) -> EvalResult,
+        builtin_length_gt,
+        builtin_length_eq,
+    ] {
+        let input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+        input.cons_cdr().set_cdr(input);
+        assert_circular(predicate(vec![input, Value::fixnum(100_000)]));
+    }
+}
+
+#[test]
 fn string_match_inhibit_modify_preserves_match_data() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;

@@ -100,35 +100,23 @@ fn reinterpret_unibyte_as_multibyte_bytes(src: &[u8]) -> Vec<u8> {
 pub(crate) fn builtin_copy_alist(args: Vec<Value>) -> EvalResult {
     expect_args("copy-alist", &args, 1)?;
     let alist = &args[0];
-    let mut result = Vec::new();
-    let mut cursor = *alist;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => break,
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                // If the element is a cons, copy it; otherwise keep as-is
-                let entry = match pair_car.kind() {
-                    ValueKind::Cons => {
-                        let inner_pair_car = pair_car.cons_car();
-                        let inner_pair_cdr = pair_car.cons_cdr();
-                        Value::cons(inner_pair_car, inner_pair_cdr)
-                    }
-                    _ => pair_car,
-                };
-                result.push(entry);
-                cursor = pair_cdr;
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), *alist],
-                ));
-            }
-        }
+    if !alist.is_nil() && !alist.is_cons() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), *alist],
+        ));
     }
-    Ok(Value::list(result))
+
+    let copy = super::builtins::builtin_copy_sequence(vec![*alist])?;
+    let mut cursor = copy;
+    while cursor.is_cons() {
+        let element = cursor.cons_car();
+        if element.is_cons() {
+            cursor.set_car(Value::cons(element.cons_car(), element.cons_cdr()));
+        }
+        cursor = cursor.cons_cdr();
+    }
+    Ok(copy)
 }
 
 /// `(rassoc KEY ALIST)` -- find the first entry in ALIST whose cdr equals KEY
