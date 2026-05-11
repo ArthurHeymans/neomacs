@@ -5938,6 +5938,43 @@ fn optional_submatch_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn match_string_source_type_error_matches_gnu_substring_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/subr.el:match-string delegates SOURCE extraction directly to
+    // substring, which accepts arrays and therefore signals arrayp for a
+    // non-array SOURCE.
+    let expr = r#"(message "matchsrc:%S" (condition-case e (progn (string-match "a" "a") (match-string 0 123)) (error (list (car e) (cadr e)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("matchsrc:(wrong-type-argument arrayp)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: match-string SOURCE type error should inherit GNU substring semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "match_string_source_type_error_matches_gnu_substring_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn failed_match_data_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
