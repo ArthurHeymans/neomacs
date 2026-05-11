@@ -409,6 +409,7 @@ impl NurseryState {
     /// Takes `&self` — the underlying arena cursor is atomic so
     /// multiple mutators can reserve TLABs concurrently.
     #[allow(dead_code)]
+    #[inline]
     pub(crate) fn reserve_tlab(&self, size: usize) -> Option<NurseryTlab> {
         if size == 0 {
             return None;
