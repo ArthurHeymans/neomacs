@@ -152,10 +152,12 @@ impl CardTable {
 
     /// Clear every card back to `CARD_CLEAN`. Typically invoked at the
     /// end of a minor GC after dirty cards have been processed.
+    #[inline]
     pub(crate) fn has_dirty(&self) -> bool {
         self.has_dirty.load(Ordering::Relaxed)
     }
 
+    #[inline]
     pub(crate) fn clear_all(&self) {
         if !self.has_dirty() {
             return;
