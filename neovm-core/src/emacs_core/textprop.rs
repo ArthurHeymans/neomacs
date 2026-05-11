@@ -1454,7 +1454,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         let str_len = s.schars();
         let mut cursor = char_pos;
         loop {
-            match table.next_property_change(cursor) {
+            match table.next_interval_boundary(cursor) {
                 Some(next) => {
                     if let Some(lim) = limit_pos {
                         if next as i64 >= lim {
@@ -1503,7 +1503,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     let mut cursor = byte_pos;
 
     loop {
-        match buf.text.text_props_next_change(cursor) {
+        match buf.text.text_props_next_interval_boundary(cursor) {
             Some(next) => {
                 if let Some(lim) = limit_pos {
                     if byte_to_elisp_pos(buf, next) >= lim {
@@ -1568,7 +1568,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         let current_val = lookup_string_text_property(obarray, buffers, &table, ref_char, prop);
         let mut cursor = char_pos;
         loop {
-            match table.previous_property_change(cursor) {
+            match table.previous_interval_boundary(cursor) {
                 Some(prev) => {
                     if let Some(lim) = limit_pos {
                         if (prev as i64) <= lim {
@@ -1619,7 +1619,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
     let mut cursor = byte_pos;
 
     loop {
-        match buf.text.text_props_previous_change(cursor) {
+        match buf.text.text_props_previous_interval_boundary(cursor) {
             Some(prev) => {
                 if let Some(lim) = limit_pos {
                     if byte_to_elisp_pos(buf, prev) <= lim {
@@ -1675,7 +1675,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         let limit_arg = args.get(2);
         if limit_arg.is_some_and(|v| v.is_t()) {
             let next = table
-                .next_property_change(char_pos)
+                .next_interval_boundary(char_pos)
                 .unwrap_or_else(|| s.schars());
             return Ok(Value::fixnum(next as i64));
         }
@@ -1715,7 +1715,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
     if limit_arg.is_some_and(|v| v.is_t()) {
         let next = buf
             .text
-            .text_props_next_change(byte_pos)
+            .text_props_next_interval_boundary(byte_pos)
             .unwrap_or_else(|| buf.point_max());
         return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
     }

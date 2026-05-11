@@ -556,6 +556,28 @@ impl BufferText {
         prev.map(|prev| self.buf_charpos_to_bytepos(prev))
     }
 
+    pub fn text_props_next_interval_boundary(&self, pos: usize) -> Option<usize> {
+        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let next = {
+            self.storage
+                .borrow()
+                .text_props
+                .next_interval_boundary(char_pos)
+        };
+        next.map(|next| self.buf_charpos_to_bytepos(next))
+    }
+
+    pub fn text_props_previous_interval_boundary(&self, pos: usize) -> Option<usize> {
+        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let prev = {
+            self.storage
+                .borrow()
+                .text_props
+                .previous_interval_boundary(char_pos)
+        };
+        prev.map(|prev| self.buf_charpos_to_bytepos(prev))
+    }
+
     pub fn text_props_append_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
         let char_offset = self.buf_bytepos_to_charpos(byte_offset);
         self.storage

@@ -461,6 +461,21 @@ fn adjust_delete_shrinks_spanning_interval() {
 }
 
 #[test]
+fn adjust_delete_inside_one_interval_does_not_create_raw_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(1, 4, Value::symbol("face"), Value::symbol("bold"));
+
+    table.adjust_for_delete(2, 3);
+
+    let snapshot = table.intervals_snapshot();
+    assert_eq!(snapshot.len(), 1);
+    assert_eq!(snapshot[0].start, 1);
+    assert_eq!(snapshot[0].end, 3);
+    assert_eq!(table.next_interval_boundary(1), Some(3));
+}
+
+#[test]
 fn adjust_delete_overlaps_interval_start() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();
@@ -489,26 +504,29 @@ fn adjust_delete_empty_range() {
 }
 
 // -----------------------------------------------------------------------
-// Merge adjacent intervals
+// GNU raw interval boundaries vs semantic property changes
 // -----------------------------------------------------------------------
 
 #[test]
-fn merge_adjacent_same_properties() {
+fn adjacent_equal_intervals_preserve_raw_boundary_but_skip_semantic_change() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();
     table.put_property(0, 5, Value::symbol("face"), Value::symbol("bold"));
     table.put_property(5, 10, Value::symbol("face"), Value::symbol("bold"));
 
-    // After put, adjacent intervals with same properties should merge.
-    // We can verify by checking that only one interval exists.
+    // GNU `put-text-property' preserves adjacent interval boundaries even when
+    // the resulting plists are `eq' equal.  Ordinary property-change queries
+    // skip that boundary, but the raw boundary remains observable through the
+    // LIMIT=t path in `next-property-change'.
     assert!(table.get_property(0, Value::symbol("face")).is_some());
     assert!(table.get_property(7, Value::symbol("face")).is_some());
-    assert_eq!(table.intervals_snapshot().len(), 1);
+    assert_eq!(table.intervals_snapshot().len(), 2);
 
-    // next_property_change from 0 should go to 10 (not 5)
     assert_eq!(table.next_property_change(0), Some(10));
+    assert_eq!(table.next_interval_boundary(0), Some(5));
     assert_eq!(table.next_property_change(5), Some(10));
-    assert_eq!(table.previous_property_change(10), Some(0));
+    assert_eq!(table.previous_property_change(10), None);
+    assert_eq!(table.previous_interval_boundary(10), Some(5));
 }
 
 #[test]
@@ -917,21 +935,24 @@ fn decode_loop_get_property_at_gap_boundaries() {
         "CRITICAL: pos 58 must be nil after decode of gap - put should NOT be called"
     );
 
-    // Now simulate what the BUG does: put dired-filename on [58, 105) even though val was nil
-    // (this is what we observe in the trace)
-    // If we put here, the two adjacent df ranges merge:
+    // Now simulate what the BUG does: put dired-filename on [58, 105) even
+    // though val was nil (this is what we observe in the trace).  GNU keeps
+    // raw interval boundaries here, but semantic property-change queries skip
+    // the equal adjacent dired-filename intervals.
     table.put_property(58, 58 + new_len, prop, val);
-    // After this erroneous put, [57..58) and [58..105) merge → [57..107)
-    // This is the cascading merge bug!
     assert_eq!(
         table.next_property_change(58),
         Some(107),
-        "after erroneous put on gap, file1 and file2 merge: next change at 107"
+        "after erroneous put on gap, file1 and file2 form one semantic run"
     );
 
-    // Verify that the merge happened
+    // Verify that the raw GNU-style boundaries were preserved.
     let snapshot = table.intervals_snapshot();
-    assert_eq!(snapshot.len(), 3, "merged: 4 ranges → 3 after gap put");
+    assert_eq!(
+        snapshot.len(),
+        5,
+        "raw intervals remain split after gap put"
+    );
     // Note: if get_property(58) correctly returns nil, this put would NEVER happen
     // because the Lisp (if val ...) guard prevents it
 }

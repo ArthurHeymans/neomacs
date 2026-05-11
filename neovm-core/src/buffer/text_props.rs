@@ -3,8 +3,9 @@
 //! GNU Emacs represents text properties as an interval tree rooted from the
 //! owning string or buffer.  Neomacs keeps the existing Rust API name
 //! (`TextPropertyTable`) for callers, and follows GNU's mutation shape: split
-//! at the edit range, change the affected interval plists, then merge adjacent
-//! intervals with equal plists.
+//! at the edit range, change the affected interval plists, and preserve raw
+//! interval boundaries.  Higher-level property-change queries decide whether
+//! adjacent interval plists are semantically equal.
 
 use std::collections::BTreeMap;
 
@@ -321,43 +322,15 @@ impl TextPropertyTable {
         }
     }
 
-    /// After mutations in [range_start, range_end], merge adjacent intervals
-    /// that have equal plists. Also removes empty-plist intervals unless they
-    /// are needed to cover gaps between non-empty ones (we remove them).
-    fn merge_adjacent_after_mutation(&mut self, range_start: usize, _range_end: usize) {
-        // Iteratively merge adjacent equal-plist intervals until stable.
-        // This handles cascading merges (A=B, B=C → A=C) correctly.
-        loop {
-            let sorted_keys: Vec<usize> = {
-                let mut ks: Vec<usize> = self.intervals.keys().copied().collect();
-                ks.sort_unstable();
-                ks
-            };
-
-            let mut merged_any = false;
-            for window in sorted_keys.windows(2) {
-                let (k1, k2) = (window[0], window[1]);
-                let should_merge = {
-                    let n1 = &self.intervals[&k1];
-                    let n2 = &self.intervals[&k2];
-                    n1.end >= k2 && plists_equal_eq(&n1.plist, &n2.plist)
-                };
-                if should_merge {
-                    let new_end = self.intervals[&k2].end;
-                    if let Some(into) = self.intervals.get_mut(&k1) {
-                        into.end = new_end;
-                    }
-                    self.intervals.remove(&k2);
-                    merged_any = true;
-                    break; // restart the loop since keys changed
-                }
-            }
-
-            if !merged_any {
-                break;
-            }
-        }
-
+    /// Prune empty-plist intervals that don't encode a real gap.
+    ///
+    /// GNU keeps interval boundaries even when adjacent plists are equal; for
+    /// example, two adjacent `put-text-property' calls can produce two equal
+    /// intervals, and `(next-property-change POS OBJ t)' must still expose the
+    /// raw boundary.  Empty intervals remain only when they separate non-empty
+    /// runs, which is enough for the sparse representation to model implicit
+    /// nil-property text without losing change boundaries.
+    fn prune_empty_intervals_after_mutation(&mut self) {
         // Remove leading and trailing empty-plist intervals
         while let Some((&first_key, first_node)) = self.intervals.first_key_value() {
             if first_node.is_empty_plist() {
@@ -453,7 +426,7 @@ impl TextPropertyTable {
         }
 
         if changed {
-            self.merge_adjacent_after_mutation(start, end);
+            self.prune_empty_intervals_after_mutation();
         }
         changed
     }
@@ -465,7 +438,7 @@ impl TextPropertyTable {
                 table.intervals.insert(start, IntervalNode::new(end, plist));
             }
         }
-        table.merge_adjacent_after_mutation(0, usize::MAX);
+        table.prune_empty_intervals_after_mutation();
         table
     }
 
@@ -508,7 +481,7 @@ impl TextPropertyTable {
         }
 
         if changed {
-            self.merge_adjacent_after_mutation(start, end);
+            self.prune_empty_intervals_after_mutation();
         }
         changed
     }
@@ -529,64 +502,79 @@ impl TextPropertyTable {
             }
         }
 
-        self.merge_adjacent_after_mutation(start, end);
+        self.prune_empty_intervals_after_mutation();
     }
 
     pub fn next_property_change(&self, pos: usize) -> Option<usize> {
-        if self.intervals.is_empty() {
-            return None;
-        }
-
-        // Check if pos is inside a non-empty interval – return its end
-        if let Some((_, node)) = self.find_interval(pos) {
-            if !node.is_empty_plist() {
-                return Some(node.end);
+        let current = self.plist_at(pos).unwrap_or(&[]);
+        let mut cursor = pos;
+        while let Some(next) = self.next_interval_boundary(cursor) {
+            let next_plist = self.plist_at(next).unwrap_or(&[]);
+            if !plists_equal_eq(current, next_plist) {
+                return Some(next);
             }
-        }
-
-        // Find the next interval with non-empty plist
-        for (start, node) in self.intervals.range(pos..) {
-            if *start > pos && !node.is_empty_plist() {
-                return Some(*start);
+            if next <= cursor {
+                return None;
             }
+            cursor = next;
         }
-
-        // Also handle the case where pos is before any interval start
-        // but covered by find_interval above
-        for (start, node) in self.intervals.range(pos..) {
-            if !node.is_empty_plist() {
-                return Some(*start);
-            }
-        }
-
         None
     }
 
     pub fn previous_property_change(&self, pos: usize) -> Option<usize> {
-        if pos == 0 || self.intervals.is_empty() {
+        if pos == 0 {
             return None;
         }
 
-        let scan_pos = pos.saturating_sub(1);
-
-        // Check if scan_pos is inside a non-empty interval – return its start
-        if let Some((start, node)) = self.find_interval(scan_pos) {
-            if !node.is_empty_plist() {
-                return Some(start);
+        let current = self.plist_at(pos - 1).unwrap_or(&[]);
+        let mut cursor = pos;
+        while let Some(prev) = self.previous_interval_boundary(cursor) {
+            if prev == 0 {
+                return None;
             }
-        }
-
-        // Find the preceding non-empty interval
-        for (start, node) in self.intervals.range(..pos).rev() {
-            if node.end <= scan_pos && !node.is_empty_plist() {
-                return Some(node.end);
+            let previous_plist = self.plist_at(prev - 1).unwrap_or(&[]);
+            if !plists_equal_eq(current, previous_plist) {
+                return Some(prev);
             }
-            if *start <= scan_pos && scan_pos < node.end && !node.is_empty_plist() {
-                return Some(*start);
+            if prev >= cursor {
+                return None;
             }
+            cursor = prev;
         }
 
         None
+    }
+
+    /// Return the next raw interval boundary after `pos`, even when adjacent
+    /// interval plists are equal.  This matches GNU's `next_interval` path used
+    /// by `(next-property-change POS OBJECT t)`.
+    pub fn next_interval_boundary(&self, pos: usize) -> Option<usize> {
+        if let Some((_, node)) = self.find_interval(pos) {
+            return Some(node.end);
+        }
+
+        self.intervals
+            .range((pos + 1)..)
+            .next()
+            .map(|(start, _)| *start)
+    }
+
+    /// Return the previous raw interval boundary before `pos`.
+    pub fn previous_interval_boundary(&self, pos: usize) -> Option<usize> {
+        if pos == 0 {
+            return None;
+        }
+
+        let scan_pos = pos - 1;
+        if let Some((start, _)) = self.find_interval(scan_pos) {
+            return Some(start);
+        }
+
+        self.intervals
+            .range(..=scan_pos)
+            .next_back()
+            .map(|(_, node)| node.end)
+            .filter(|end| *end < pos)
     }
 
     pub fn adjust_for_insert(&mut self, pos: usize, len: usize) {
@@ -631,7 +619,7 @@ impl TextPropertyTable {
             }
         }
 
-        self.merge_adjacent_after_mutation(pos, pos + len);
+        self.prune_empty_intervals_after_mutation();
     }
 
     pub fn adjust_for_delete(&mut self, start: usize, end: usize) {
@@ -640,30 +628,35 @@ impl TextPropertyTable {
         }
 
         let len = end - start;
-        self.split_at(start);
-        self.split_at(end);
+        let old_intervals = std::mem::take(&mut self.intervals);
+        let mut adjusted = BTreeMap::new();
 
-        // Remove all intervals fully within [start, end)
-        let remove_keys: Vec<usize> = self.intervals.range(start..end).map(|(k, _)| *k).collect();
-        for key in &remove_keys {
-            self.intervals.remove(key);
-        }
+        for (old_start, mut node) in old_intervals {
+            let old_end = node.end;
 
-        // Shift intervals with start >= end by -len
-        let shifted_keys: Vec<usize> = self.intervals.range(end..).map(|(k, _)| *k).collect();
+            let (new_start, new_end) = if old_end <= start {
+                (old_start, old_end)
+            } else if old_start >= end {
+                (old_start - len, old_end - len)
+            } else if old_start < start && old_end > end {
+                (old_start, old_end - len)
+            } else if old_start < start {
+                (old_start, start)
+            } else if old_end > end {
+                (start, old_end - len)
+            } else {
+                continue;
+            };
 
-        let mut shifted: Vec<(usize, IntervalNode)> = Vec::new();
-        for key in &shifted_keys {
-            if let Some(node) = self.intervals.remove(key) {
-                shifted.push((*key, node));
+            if new_start < new_end {
+                node.end = new_end;
+                adjusted.insert(new_start, node);
             }
         }
-        for (old_key, mut node) in shifted {
-            node.end -= len;
-            self.intervals.insert(old_key - len, node);
-        }
 
-        self.merge_adjacent_after_mutation(start, start);
+        self.intervals = adjusted;
+
+        self.prune_empty_intervals_after_mutation();
     }
 
     pub fn intervals_snapshot(&self) -> Vec<PropertyInterval> {
@@ -776,15 +769,7 @@ impl TextPropertyTable {
                 IntervalNode::new(node.end + offset, node.plist.clone()),
             );
         }
-        self.merge_adjacent_after_mutation(
-            offset,
-            offset
-                + other
-                    .intervals
-                    .last_key_value()
-                    .map(|(_, n)| n.end)
-                    .unwrap_or(0),
-        );
+        self.prune_empty_intervals_after_mutation();
     }
 
     pub fn merge_missing_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
@@ -824,7 +809,7 @@ impl TextPropertyTable {
                 );
             }
         }
-        self.merge_adjacent_after_mutation(offset, usize::MAX);
+        self.prune_empty_intervals_after_mutation();
     }
 
     pub(crate) fn dump_intervals(&self) -> Vec<PropertyInterval> {
@@ -841,7 +826,7 @@ impl TextPropertyTable {
                 );
             }
         }
-        table.merge_adjacent_after_mutation(0, usize::MAX);
+        table.prune_empty_intervals_after_mutation();
         table
     }
 
