@@ -10371,6 +10371,37 @@ fn gc_safe_point_exact_frees_stack_only_values() {
 }
 
 #[test]
+fn gc_stress_collects_after_allocation_not_at_unchanged_safe_points() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.gc_stress = true;
+    ev.gc_collect_exact();
+    ev.gc_count = 0;
+
+    assert_eq!(ev.tagged_heap.bytes_since_gc(), 0);
+    ev.gc_safe_point_exact();
+    assert_eq!(
+        ev.gc_count, 0,
+        "gc_stress should not collect again before any new allocation"
+    );
+
+    let rooted = Value::cons(Value::fixnum(21), Value::fixnum(22));
+    assert!(ev.tagged_heap.bytes_since_gc() > 0);
+    let roots = ev.save_specpdl_roots();
+    ev.push_specpdl_root(rooted);
+    ev.gc_safe_point_exact();
+    ev.restore_specpdl_roots(roots);
+    assert_eq!(ev.gc_count, 1);
+    assert_eq!(rooted.cons_car(), Value::fixnum(21));
+
+    ev.gc_safe_point_exact();
+    assert_eq!(
+        ev.gc_count, 1,
+        "a second unchanged safe point should not repeat the collection"
+    );
+}
+
+#[test]
 fn eval_sub_exact_gc_retains_cons_form() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

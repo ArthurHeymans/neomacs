@@ -171,14 +171,6 @@ fn eval_forms_from_source_streaming(
         };
         eval.restore_specpdl_roots(eval_roots);
         eval_result?;
-
-        let gc_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        if let Some(mexp_fn) = macroexpand_fn {
-            eval.push_specpdl_root(mexp_fn);
-        }
-        eval.gc_safe_point_exact();
-        eval.restore_specpdl_roots(gc_roots);
     }
 
     Ok(Value::NIL)
@@ -237,13 +229,6 @@ fn eval_forms_from_lisp_source_streaming(
         };
         eval.restore_specpdl_roots(eval_roots);
         eval_result?;
-
-        let gc_roots = eval.save_specpdl_roots();
-        if let Some(mexp_fn) = macroexpand_fn {
-            eval.push_specpdl_root(mexp_fn);
-        }
-        eval.gc_safe_point_exact();
-        eval.restore_specpdl_roots(gc_roots);
     }
 
     Ok(Value::NIL)
@@ -587,7 +572,6 @@ fn eval_forms_from_source_in_vm_runtime_streaming(
             let eval_result = shared.eval_sub(form);
             shared.restore_specpdl_roots(eval_roots);
             eval_result?;
-            shared.gc_safe_point_exact();
         }
 
         Ok(Value::NIL)

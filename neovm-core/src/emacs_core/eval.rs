@@ -6135,6 +6135,13 @@ impl Context {
         self.update_gc_runtime_stats(start.elapsed());
         self.sync_gc_threshold_from_runtime_settings();
         self.run_post_gc_hook();
+        if self.gc_stress {
+            // GNU resets `consing_until_gc` before running post-gc-hook and
+            // runs the hook with GC inhibited.  Keep Neomacs' exact-GC stress
+            // mode from treating hook bookkeeping allocation as a fresh
+            // allocation-bearing safe point.
+            self.tagged_heap.reset_bytes_since_gc();
+        }
     }
 
     fn with_gc_inhibited<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -6167,8 +6174,15 @@ impl Context {
         if self.gc_inhibit_depth > 0 {
             return false;
         }
-        if self.gc_stress || self.gc_pending {
+        if self.gc_pending {
             return true;
+        }
+        if self.gc_stress {
+            // GNU `maybe_gc` only reaches collection after the consing
+            // countdown crosses zero.  Stress exact GC at every boundary that
+            // follows allocation, but do not spin full-heap collections across
+            // boundaries where the heap has not changed.
+            return self.tagged_heap.bytes_since_gc() > 0;
         }
         if self.tagged_heap.gc_threshold_is_overridden() {
             return self.tagged_heap.should_collect();

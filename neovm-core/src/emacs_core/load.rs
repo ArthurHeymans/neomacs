@@ -1419,14 +1419,6 @@ fn streaming_readevalloop(
         }
         eval_result?;
 
-        // GNU keeps the current top-level form protected across the
-        // post-form GC in readevalloop. Exact GC needs the same root here:
-        // freshly installed closures/macros can still share structure with the
-        // just-evaluated source form.
-        let gc_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        eval.gc_safe_point_exact();
-        eval.restore_specpdl_roots(gc_roots);
         debug_assert_eq!(
             eval.specpdl.len(),
             load_specpdl_base,
@@ -1532,10 +1524,6 @@ fn streaming_readevalloop_lisp_source(
         }
         eval_result?;
 
-        let gc_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        eval.gc_safe_point_exact();
-        eval.restore_specpdl_roots(gc_roots);
         debug_assert_eq!(
             eval.specpdl.len(),
             load_specpdl_base,

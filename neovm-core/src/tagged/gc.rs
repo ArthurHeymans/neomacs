@@ -710,6 +710,10 @@ impl TaggedHeap {
         self.bytes_since_gc
     }
 
+    pub(crate) fn reset_bytes_since_gc(&mut self) {
+        self.bytes_since_gc = 0;
+    }
+
     pub fn live_bytes(&self) -> usize {
         self.live_bytes
     }
