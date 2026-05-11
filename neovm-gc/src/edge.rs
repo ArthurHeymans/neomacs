@@ -25,18 +25,21 @@ impl<T: ?Sized> EdgeCell<T> {
     }
 
     /// Read the current edge value.
+    #[inline]
     pub fn get(&self) -> Option<Gc<T>> {
         let raw = self.value.load(Ordering::Acquire);
         unsafe { GcErased::from_raw(raw).map(|value| Gc::from_erased(value)) }
     }
 
     /// Replace the current edge value and return the previous one.
+    #[inline]
     pub fn replace(&self, value: Option<Gc<T>>) -> Option<Gc<T>> {
         let previous = self.value.swap(Self::raw_value(value), Ordering::AcqRel);
         unsafe { GcErased::from_raw(previous).map(|value| Gc::from_erased(value)) }
     }
 
     /// Overwrite the current edge value.
+    #[inline]
     pub fn set(&self, value: Option<Gc<T>>) {
         self.value.store(Self::raw_value(value), Ordering::Release);
     }
