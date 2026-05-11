@@ -11526,6 +11526,42 @@ fn string_algorithm_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn string_distance_unibyte_inputs_use_byte_compare_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:Fstring_distance uses byte comparison when BYTECOMPARE is
+    // non-nil, or when both input strings are unibyte.
+    let expr = r#"(message "strdistuni:%S" (let ((u (string-make-unibyte "é"))) (list (string-distance u "é") (string-distance u "é" nil) (string-distance u "é" t) (string-bytes u) (multibyte-string-p u))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("strdistuni:(0 0 2 1 nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: string-distance should byte-compare unibyte strings like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_distance_unibyte_inputs_use_byte_compare_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_print_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
