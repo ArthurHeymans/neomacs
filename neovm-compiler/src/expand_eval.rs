@@ -441,6 +441,31 @@ impl MacroEval {
                     }
                 }
             }
+            Some("float") => self.eval_unary(span, "float", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Float(n as f64),
+                MacroValue::Float(f) => MacroValue::Float(f),
+                _ => v,
+            }),
+            Some("truncate") => self.eval_unary(span, "truncate", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Int(n),
+                MacroValue::Float(f) => MacroValue::Int(f.trunc() as i64),
+                _ => v,
+            }),
+            Some("floor") => self.eval_unary(span, "floor", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Int(n),
+                MacroValue::Float(f) => MacroValue::Int(f.floor() as i64),
+                _ => v,
+            }),
+            Some("ceiling") => self.eval_unary(span, "ceiling", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Int(n),
+                MacroValue::Float(f) => MacroValue::Int(f.ceil() as i64),
+                _ => v,
+            }),
+            Some("sqrt") => self.eval_unary(span, "sqrt", &items[1..], env, |v| match v {
+                MacroValue::Int(n) if n >= 0 => MacroValue::Float((n as f64).sqrt()),
+                MacroValue::Float(f) if f >= 0.0 => MacroValue::Float(f.sqrt()),
+                _ => v,
+            }),
             Some("max") => self.eval_min_max(span, &items[1..], env, true),
             Some("min") => self.eval_min_max(span, &items[1..], env, false),
             Some("-") => self.eval_sub(span, &items[1..], env),
