@@ -911,6 +911,7 @@ fn format_char_argument(n: i64) -> Result<FormatCharArgument, Flow> {
 }
 
 /// Parsed format specification: %[flags][width][.precision]conversion
+#[derive(Clone, Debug)]
 struct FormatSpec {
     field_number: Option<usize>,
     minus: bool,
@@ -923,9 +924,21 @@ struct FormatSpec {
     conversion: char,
 }
 
+#[derive(Clone, Debug)]
+struct ParsedFormatSpec {
+    spec: FormatSpec,
+    consumed_chars: usize,
+}
+
+fn format_string_overflow_error() -> Flow {
+    signal("error", vec![Value::string("Maximum string size exceeded")])
+}
+
 /// Parse a format spec from a char iterator positioned just after '%'.
-/// Returns None only if the format string ends prematurely.
-fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<FormatSpec> {
+/// Returns the parsed spec and the number of characters consumed after '%'.
+fn parse_format_spec(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Result<ParsedFormatSpec, Flow> {
     let mut spec = FormatSpec {
         field_number: None,
         minus: false,
@@ -937,6 +950,7 @@ fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Op
         precision: None,
         conversion: '\0',
     };
+    let mut consumed_chars = 0usize;
 
     // GNU `styled_format` first looks for [0-9]+ followed by a literal
     // '$'.  If there is no '$', the digits are left for the flag/width
@@ -955,8 +969,10 @@ fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Op
     if !field_digits.is_empty() && lookahead.peek() == Some(&'$') {
         for _ in 0..field_digits.len() {
             chars.next();
+            consumed_chars += 1;
         }
         chars.next();
+        consumed_chars += 1;
         spec.field_number = field_digits.parse().ok();
     }
 
@@ -966,22 +982,27 @@ fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Op
             Some('-') => {
                 spec.minus = true;
                 chars.next();
+                consumed_chars += 1;
             }
             Some('+') => {
                 spec.plus = true;
                 chars.next();
+                consumed_chars += 1;
             }
             Some(' ') => {
                 spec.space = true;
                 chars.next();
+                consumed_chars += 1;
             }
             Some('0') => {
                 spec.zero = true;
                 chars.next();
+                consumed_chars += 1;
             }
             Some('#') => {
                 spec.sharp = true;
                 chars.next();
+                consumed_chars += 1;
             }
             _ => break,
         }
@@ -1001,22 +1022,29 @@ fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Op
         if ch.is_ascii_digit() {
             width_str.push(ch);
             chars.next();
+            consumed_chars += 1;
         } else {
             break;
         }
     }
     if !width_str.is_empty() {
-        spec.width = width_str.parse().ok();
+        spec.width = Some(
+            width_str
+                .parse()
+                .map_err(|_| format_string_overflow_error())?,
+        );
     }
 
     // Parse precision
     if chars.peek() == Some(&'.') {
         chars.next();
+        consumed_chars += 1;
         let mut prec_str = String::new();
         while let Some(&ch) = chars.peek() {
             if ch.is_ascii_digit() {
                 prec_str.push(ch);
                 chars.next();
+                consumed_chars += 1;
             } else {
                 break;
             }
@@ -1024,13 +1052,26 @@ fn parse_format_spec(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Op
         spec.precision = Some(if prec_str.is_empty() {
             0
         } else {
-            prec_str.parse().unwrap_or(0)
+            prec_str
+                .parse()
+                .map_err(|_| format_string_overflow_error())?
         });
     }
 
     // Parse conversion character
-    spec.conversion = chars.next()?;
-    Some(spec)
+    spec.conversion = chars.next().ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string(
+                "Format string ends in middle of format specifier",
+            )],
+        )
+    })?;
+    consumed_chars += 1;
+    Ok(ParsedFormatSpec {
+        spec,
+        consumed_chars,
+    })
 }
 
 /// Apply width/alignment padding to a formatted string.
@@ -1056,62 +1097,85 @@ fn apply_width(s: &str, spec: &FormatSpec) -> String {
     }
 }
 
+fn apply_integer_width(sign: &str, prefix: &str, digits: &str, spec: &FormatSpec) -> String {
+    let content_len = sign.len() + prefix.len() + digits.len();
+    let width = spec.width.unwrap_or(0);
+    if width <= content_len {
+        return format!("{sign}{prefix}{digits}");
+    }
+
+    let padding = width - content_len;
+    if spec.minus {
+        return format!("{sign}{prefix}{digits}{}", " ".repeat(padding));
+    }
+
+    if spec.zero && spec.precision.is_none() {
+        return format!("{sign}{prefix}{}{digits}", "0".repeat(padding));
+    }
+
+    format!("{}{sign}{prefix}{digits}", " ".repeat(padding))
+}
+
+fn format_integer_digits(
+    mut digits: String,
+    negative: bool,
+    zero_value: bool,
+    spec: &FormatSpec,
+) -> String {
+    if spec.precision == Some(0) && zero_value {
+        digits.clear();
+    }
+
+    let sign = if negative {
+        "-"
+    } else if spec.plus {
+        "+"
+    } else if spec.space {
+        " "
+    } else {
+        ""
+    };
+
+    let prefix = match spec.conversion {
+        'b' if spec.sharp && !zero_value => "0b",
+        'B' if spec.sharp && !zero_value => "0B",
+        'x' if spec.sharp && !zero_value => "0x",
+        'X' if spec.sharp && !zero_value => "0X",
+        _ => "",
+    };
+
+    if spec.conversion == 'o' && spec.sharp && digits.is_empty() {
+        digits.push('0');
+    }
+
+    if let Some(precision) = spec.precision {
+        if spec.conversion == 'o' && spec.sharp && !digits.starts_with('0') {
+            let desired = precision.max(digits.len() + 1);
+            if desired > digits.len() {
+                digits = format!("{}{digits}", "0".repeat(desired - digits.len()));
+            }
+        } else if digits.len() < precision {
+            digits = format!("{}{digits}", "0".repeat(precision - digits.len()));
+        }
+    } else if spec.conversion == 'o' && spec.sharp && !digits.starts_with('0') {
+        digits = format!("0{digits}");
+    }
+
+    apply_integer_width(sign, prefix, &digits, spec)
+}
+
 /// Format an integer with the given spec.
 fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
-    let s = match spec.conversion {
-        'd' => {
-            if spec.plus && n >= 0 {
-                format!("+{}", n)
-            } else if spec.space && n >= 0 {
-                format!(" {}", n)
-            } else {
-                n.to_string()
-            }
-        }
-        'o' => {
-            let negative = n < 0;
-            let abs_val = (n as i128).unsigned_abs() as u64;
-            let sign = if negative { "-" } else { "" };
-            let prefix = if spec.sharp && abs_val != 0 { "0" } else { "" };
-            format!("{}{}{:o}", sign, prefix, abs_val)
-        }
-        'b' | 'B' => {
-            let negative = n < 0;
-            let abs_val = (n as i128).unsigned_abs() as u64;
-            let sign = if negative { "-" } else { "" };
-            let prefix = if spec.sharp && abs_val != 0 {
-                if spec.conversion == 'B' { "0B" } else { "0b" }
-            } else {
-                ""
-            };
-            format!("{}{}{:b}", sign, prefix, abs_val)
-        }
-        'x' => {
-            let negative = n < 0;
-            let abs_val = (n as i128).unsigned_abs() as u64;
-            let sign = if negative { "-" } else { "" };
-            let prefix = if spec.sharp && abs_val != 0 { "0x" } else { "" };
-            format!("{}{}{:x}", sign, prefix, abs_val)
-        }
-        'X' => {
-            let negative = n < 0;
-            let abs_val = (n as i128).unsigned_abs() as u64;
-            let sign = if negative { "-" } else { "" };
-            let prefix = if spec.sharp && abs_val != 0 { "0X" } else { "" };
-            format!("{}{}{:X}", sign, prefix, abs_val)
-        }
-        'i' => {
-            if spec.plus && n >= 0 {
-                format!("+{}", n)
-            } else if spec.space && n >= 0 {
-                format!(" {}", n)
-            } else {
-                n.to_string()
-            }
-        }
-        _ => n.to_string(),
+    let negative = n < 0;
+    let abs_val = (n as i128).unsigned_abs();
+    let digits = match spec.conversion {
+        'b' | 'B' => format!("{abs_val:b}"),
+        'o' => format!("{abs_val:o}"),
+        'x' => format!("{abs_val:x}"),
+        'X' => format!("{abs_val:X}"),
+        _ => abs_val.to_string(),
     };
-    apply_width(&s, spec)
+    format_integer_digits(digits, negative, n == 0, spec)
 }
 
 /// Format a bignum for `%d` / `%o` / `%x` / `%X` specs. Mirrors the
@@ -1120,58 +1184,33 @@ fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
 /// handling is identical.
 fn format_bignum_spec(n: &rug::Integer, spec: &FormatSpec) -> String {
     let negative = n.cmp0().is_lt();
-    let s = match spec.conversion {
-        'd' => {
-            // rug already prints the leading minus for negatives.
-            let body = n.to_string();
-            if !negative && spec.plus {
-                format!("+{}", body)
-            } else if !negative && spec.space {
-                format!(" {}", body)
-            } else {
-                body
-            }
-        }
-        'b' | 'B' | 'o' | 'x' | 'X' => {
-            let radix: i32 = match spec.conversion {
-                'b' | 'B' => 2,
-                'o' => 8,
-                'x' | 'X' => 16,
-                _ => unreachable!(),
-            };
-            let abs = rug::Integer::from(n.abs_ref());
-            let mut digits = abs.to_string_radix(radix);
-            if spec.conversion == 'X' {
-                digits.make_ascii_uppercase();
-            }
-            let prefix = if spec.sharp && !abs.is_zero() {
-                match spec.conversion {
-                    'b' => "0b",
-                    'B' => "0B",
-                    'o' => "0",
-                    'x' => "0x",
-                    'X' => "0X",
-                    _ => "",
-                }
-            } else {
-                ""
-            };
-            let sign = if negative { "-" } else { "" };
-            format!("{}{}{}", sign, prefix, digits)
-        }
-        'i' => {
-            let body = n.to_string();
-            if !negative && spec.plus {
-                format!("+{}", body)
-            } else if !negative && spec.space {
-                format!(" {}", body)
-            } else {
-                body
-            }
-        }
-        _ => n.to_string(),
+    let abs = rug::Integer::from(n.abs_ref());
+    let mut digits = match spec.conversion {
+        'b' | 'B' => abs.to_string_radix(2),
+        'o' => abs.to_string_radix(8),
+        'x' | 'X' => abs.to_string_radix(16),
+        _ => abs.to_string(),
     };
-    apply_width(&s, spec)
+    if spec.conversion == 'X' {
+        digits.make_ascii_uppercase();
+    }
+    format_integer_digits(digits, negative, n.cmp0().is_eq(), spec)
+}
+
+fn format_integer_float_spec(f: f64, spec: &FormatSpec) -> Result<String, Flow> {
+    if !f.is_finite() && matches!(spec.conversion, 'd' | 'i') {
+        let text = if f.is_nan() {
+            "nan"
+        } else if f.is_sign_negative() {
+            "-inf"
+        } else {
+            "inf"
+        };
+        return Ok(apply_width(text, spec));
+    }
+
+    let big = rug::Integer::from_f64(f.trunc()).ok_or_else(format_spec_type_mismatch_error)?;
+    Ok(format_bignum_spec(&big, spec))
 }
 
 /// Normalize Rust scientific notation to match C printf: sign always
@@ -1326,38 +1365,109 @@ fn format_value_princ(val: &Value) -> String {
 /// (editfns.c:3808-3813, applied at 4380-4396).
 #[derive(Debug)]
 pub(crate) struct FormatPropSpan {
-    pub result_byte_start: usize,
-    pub result_byte_end: usize,
+    pub result_char_start: usize,
+    pub result_char_end: usize,
     pub arg_idx: usize,
-    pub arg_byte_start: usize,
-    pub arg_byte_end: usize,
+    pub arg_char_len: usize,
+}
+
+#[derive(Debug)]
+struct FormatSourceSpan {
+    source_char_start: usize,
+    source_char_end: usize,
+    result_char_start: usize,
+    result_char_end: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FormatMessageQuotingStyle {
+    None,
+    Grave,
+    Straight,
+    Curve,
+}
+
+impl FormatMessageQuotingStyle {
+    fn from_value(value: Value) -> Self {
+        match value.as_symbol_name() {
+            Some("grave") => Self::Grave,
+            Some("straight") => Self::Straight,
+            Some("curve") => Self::Curve,
+            _ => Self::Curve,
+        }
+    }
+}
+
+fn push_format_literal(
+    result: &mut String,
+    ch: char,
+    quoting_style: FormatMessageQuotingStyle,
+) -> bool {
+    match (quoting_style, ch) {
+        (FormatMessageQuotingStyle::Curve, '`') => {
+            result.push('‘');
+            true
+        }
+        (FormatMessageQuotingStyle::Curve, '\'') => {
+            result.push('’');
+            true
+        }
+        (FormatMessageQuotingStyle::Straight, '`') => {
+            result.push('\'');
+            false
+        }
+        _ => {
+            result.push(ch);
+            false
+        }
+    }
 }
 
 fn do_format(
     args: &[Value],
     princ_fn: &dyn Fn(&Value) -> String,
     prin1_fn: &dyn Fn(&Value) -> String,
-) -> Result<(String, Vec<FormatPropSpan>, bool), Flow> {
+    quoting_style: FormatMessageQuotingStyle,
+) -> Result<(String, Vec<FormatPropSpan>, Vec<FormatSourceSpan>, bool), Flow> {
     let fmt_str = expect_strict_string(&args[0])?;
     let mut result = String::new();
     let mut spans: Vec<FormatPropSpan> = Vec::new();
+    let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
     let mut force_multibyte_result = false;
     let mut arg_idx = 1;
     let mut chars = fmt_str.chars().peekable();
+    let mut format_char_pos = 0usize;
+    let mut result_char_pos = 0usize;
 
     while let Some(ch) = chars.next() {
+        let source_start = format_char_pos;
+        format_char_pos += 1;
         if ch != '%' {
-            result.push(ch);
+            force_multibyte_result |= push_format_literal(&mut result, ch, quoting_style);
+            source_spans.push(FormatSourceSpan {
+                source_char_start: source_start,
+                source_char_end: format_char_pos,
+                result_char_start: result_char_pos,
+                result_char_end: result_char_pos + 1,
+            });
+            result_char_pos += 1;
             continue;
         }
 
-        let Some(spec) = parse_format_spec(&mut chars) else {
-            result.push('%');
-            continue;
-        };
+        let parsed = parse_format_spec(&mut chars)?;
+        let spec = parsed.spec;
+        format_char_pos += parsed.consumed_chars;
+        let spec_source_end = format_char_pos;
 
         if spec.conversion == '%' {
             result.push('%');
+            source_spans.push(FormatSourceSpan {
+                source_char_start: source_start,
+                source_char_end: spec_source_end,
+                result_char_start: result_char_pos,
+                result_char_end: result_char_pos + 1,
+            });
+            result_char_pos += 1;
             continue;
         }
 
@@ -1382,19 +1492,21 @@ fn do_format(
                     format_string_spec_tracked(&s, &spec);
                 if arg_is_string && content_byte_start_in_formatted < content_byte_end_in_formatted
                 {
-                    let result_byte_start = result.len() + content_byte_start_in_formatted;
-                    let result_byte_end = result.len() + content_byte_end_in_formatted;
-                    // Precision may have truncated the content; the
-                    // arg-side range is whatever content bytes actually
-                    // made it into the formatted output.
-                    let arg_bytes_in =
-                        content_byte_end_in_formatted - content_byte_start_in_formatted;
+                    let formatted_chars = formatted.chars().count();
+                    let content_char_start_in_formatted =
+                        formatted[..content_byte_start_in_formatted].chars().count();
+                    let span_char_len = formatted_chars - content_char_start_in_formatted;
+                    let arg_char_len = args[this_arg_idx]
+                        .as_lisp_string()
+                        .map(|string| string.schars())
+                        .unwrap_or(0);
                     spans.push(FormatPropSpan {
-                        result_byte_start,
-                        result_byte_end,
+                        result_char_start: result_char_pos + content_char_start_in_formatted,
+                        result_char_end: result_char_pos
+                            + content_char_start_in_formatted
+                            + span_char_len,
                         arg_idx: this_arg_idx,
-                        arg_byte_start: 0,
-                        arg_byte_end: arg_bytes_in,
+                        arg_char_len,
                     });
                 }
                 formatted
@@ -1407,17 +1519,7 @@ fn do_format(
                 let formatted = match args[this_arg_idx].kind() {
                     ValueKind::Fixnum(i) => format_int_spec(i, &spec),
                     ValueKind::Float => {
-                        // GNU `Fformat` accepts a float for %d/%o/%x/%X
-                        // by promoting it to a bignum via double_to_integer.
-                        // We mirror that here so very large floats don't
-                        // saturate at i64::MAX.
-                        let f = args[this_arg_idx].xfloat();
-                        if !f.is_finite() {
-                            return Err(format_spec_type_mismatch_error());
-                        }
-                        let big = rug::Integer::from_f64(f)
-                            .ok_or_else(format_spec_type_mismatch_error)?;
-                        format_bignum_spec(&big, &spec)
+                        format_integer_float_spec(args[this_arg_idx].xfloat(), &spec)?
                     }
                     ValueKind::Veclike(VecLikeType::Bignum) => {
                         format_bignum_spec(args[this_arg_idx].as_bignum().unwrap(), &spec)
@@ -1451,10 +1553,49 @@ fn do_format(
             }
         };
         arg_idx = this_arg_idx + 1;
+        let formatted_chars = formatted.chars().count();
+        if formatted_chars > 0 {
+            source_spans.push(FormatSourceSpan {
+                source_char_start: source_start,
+                source_char_end: spec_source_end,
+                result_char_start: result_char_pos,
+                result_char_end: result_char_pos + formatted_chars,
+            });
+        }
+        result_char_pos += formatted_chars;
         result.push_str(&formatted);
     }
 
-    Ok((result, spans, force_multibyte_result))
+    Ok((result, spans, source_spans, force_multibyte_result))
+}
+
+fn build_format_result(
+    args: &[Value],
+    s: &str,
+    spans: &[FormatPropSpan],
+    source_spans: &[FormatSourceSpan],
+    force_multibyte_result: bool,
+) -> Value {
+    let multibyte = force_multibyte_result
+        || args.iter().any(|value| value.string_is_multibyte())
+        || runtime_string_result_multibyte(false, s);
+    let result = Value::heap_string(super::runtime_string_to_lisp_string(s, multibyte));
+
+    // Copy text properties from the format string first, then from each
+    // `%s` argument's string, mirroring GNU `styled_format`
+    // (editfns.c:4299-4396).
+    apply_format_string_prop_spans(result, args[0], source_spans);
+
+    // Copy text properties from each `%s` argument's string into the
+    // corresponding span of the formatted output, mirroring GNU
+    // `styled_format` (editfns.c:4380-4396). Without this, `format`
+    // silently strips properties that the caller set on the source
+    // string — the bug that left Doom's dashboard menu items
+    // uncolored (their button faces came from a `(buffer-string)`
+    // that got flattened by `(format "%-37s" ...)`).
+    apply_format_prop_spans(result, args, spans);
+
+    result
 }
 
 pub(crate) fn builtin_format_wrapper_strict(
@@ -1470,26 +1611,95 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format", args, 1)?;
-        let (s, spans, force_multibyte_result) =
-            do_format(args, &|v| format_percent_s_in_state(ctx, v), &|v| {
-                super::error::print_value_in_state(ctx, v)
-            })?;
-        let multibyte = force_multibyte_result
-            || args.iter().any(|value| value.string_is_multibyte())
-            || runtime_string_result_multibyte(false, &s);
-        let result = Value::heap_string(super::runtime_string_to_lisp_string(&s, multibyte));
-
-        // Copy text properties from each `%s` argument's string into the
-        // corresponding span of the formatted output, mirroring GNU
-        // `styled_format` (editfns.c:4380-4396). Without this, `format`
-        // silently strips properties that the caller set on the source
-        // string — the bug that left Doom's dashboard menu items
-        // uncolored (their button faces came from a `(buffer-string)`
-        // that got flattened by `(format "%-37s" ...)`).
-        apply_format_prop_spans(result, &args, &spans);
-
-        Ok(result)
+        let (s, spans, source_spans, force_multibyte_result) = do_format(
+            args,
+            &|v| format_percent_s_in_state(ctx, v),
+            &|v| super::error::print_value_in_state(ctx, v),
+            FormatMessageQuotingStyle::None,
+        )?;
+        Ok(build_format_result(
+            args,
+            &s,
+            &spans,
+            &source_spans,
+            force_multibyte_result,
+        ))
     })
+}
+
+fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[FormatSourceSpan]) {
+    if spans.is_empty() {
+        return;
+    }
+    let Some(src_table) =
+        crate::emacs_core::value::get_string_text_properties_table_for_value(format_value)
+    else {
+        return;
+    };
+    let Some(result_string) = result.as_lisp_string() else {
+        return;
+    };
+    if result_string.schars() == 0 {
+        return;
+    }
+
+    let mut table = crate::emacs_core::value::get_string_text_properties_table_for_value(result)
+        .unwrap_or_else(crate::buffer::text_props::TextPropertyTable::new);
+    let mut touched = false;
+
+    for src_interval in src_table.intervals_snapshot() {
+        let Some(result_start) = translate_format_source_position(src_interval.start, spans) else {
+            continue;
+        };
+        let Some(result_end) = translate_format_source_position(src_interval.end, spans) else {
+            continue;
+        };
+        if result_start >= result_end {
+            continue;
+        }
+
+        for (name, value) in &src_interval.properties {
+            if table.put_property(result_start, result_end, *name, *value) {
+                touched = true;
+            }
+        }
+    }
+
+    if touched {
+        crate::emacs_core::value::set_string_text_properties_table_for_value(result, table);
+    }
+}
+
+fn translate_format_source_position(pos: usize, spans: &[FormatSourceSpan]) -> Option<usize> {
+    if let Some(first) = spans.first()
+        && pos <= first.source_char_start
+    {
+        return Some(first.result_char_start);
+    }
+
+    for span in spans {
+        if pos == span.source_char_start {
+            return Some(span.result_char_start);
+        }
+        if pos == span.source_char_end {
+            return Some(span.result_char_end);
+        }
+        if span.source_char_start < pos && pos < span.source_char_end {
+            let source_len = span.source_char_end - span.source_char_start;
+            let result_len = span.result_char_end - span.result_char_start;
+            return Some(if source_len == result_len {
+                span.result_char_start + (pos - span.source_char_start)
+            } else {
+                // GNU's discarded-table scan maps property endpoints inside a
+                // conversion specification to the conversion field boundary.
+                // Interior spec endpoints are rare, but choosing the field
+                // start preserves the same monotonic interval translation.
+                span.result_char_start
+            });
+        }
+    }
+
+    spans.last().map(|span| span.result_char_end)
 }
 
 fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpan]) {
@@ -1506,70 +1716,38 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
         let Some(arg) = args.get(span.arg_idx) else {
             continue;
         };
-        let Some(arg_string) = arg.as_lisp_string() else {
-            continue;
-        };
         let Some(src_table) =
             crate::emacs_core::value::get_string_text_properties_table_for_value(*arg)
         else {
             continue;
         };
-        let arg_char_start = lisp_string_byte_to_char_pos(arg_string, span.arg_byte_start);
-        let arg_char_end = lisp_string_byte_to_char_pos(arg_string, span.arg_byte_end);
-        let result_char_start = lisp_string_byte_to_char_pos(result_string, span.result_byte_start);
-        let sliced = src_table.slice(arg_char_start, arg_char_end);
-        if sliced.intervals_snapshot().iter().next().is_none() {
-            continue;
+        let new_len = span.result_char_end.saturating_sub(span.result_char_start);
+        for interval in src_table.intervals_snapshot() {
+            if interval.start >= new_len {
+                continue;
+            }
+            let mut end = interval.end;
+            if (end == span.arg_char_len && end != new_len) || end > new_len {
+                end = new_len;
+            }
+            if interval.start >= end {
+                continue;
+            }
+            for (name, value) in &interval.properties {
+                if table.put_property(
+                    span.result_char_start + interval.start,
+                    span.result_char_start + end,
+                    *name,
+                    *value,
+                ) {
+                    touched = true;
+                }
+            }
         }
-        table.append_shifted(&sliced, result_char_start);
-        touched = true;
     }
     if touched {
         crate::emacs_core::value::set_string_text_properties_table_for_value(result, table);
     }
-}
-
-fn lisp_string_byte_to_char_pos(string: &crate::heap_types::LispString, byte_pos: usize) -> usize {
-    let clamped = byte_pos.min(string.sbytes());
-    if string.is_multibyte() {
-        crate::emacs_core::emacs_char::byte_to_char_pos(string.as_bytes(), clamped)
-    } else {
-        clamped
-    }
-}
-
-/// Apply `text-quoting-style` translation to an Emacs-encoded byte sequence.
-///
-/// When the style is `curve` (the modern default), grave accent (U+0060,
-/// ASCII 0x60) is replaced with LEFT SINGLE QUOTATION MARK (U+2018, bytes
-/// [0xE2, 0x80, 0x98]) and apostrophe (U+0027, ASCII 0x27) is replaced
-/// with RIGHT SINGLE QUOTATION MARK (U+2019, bytes [0xE2, 0x80, 0x99]).
-/// Mirrors GNU `styled_format` with `message = true`.
-///
-/// Byte-level scanning is safe: `0x60` and `0x27` are both ASCII (< 0x80)
-/// and therefore cannot appear as continuation bytes in Emacs internal
-/// encoding, nor as overlong-C0/C1 leading bytes (those start at 0xC0).
-///
-/// Returns `(quoted_bytes, substituted)` where `substituted` is true iff
-/// at least one backtick or apostrophe was replaced — the caller uses
-/// this to decide whether a unibyte input must be promoted to multibyte.
-fn apply_text_quoting_bytes(bytes: &[u8]) -> (Vec<u8>, bool) {
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut substituted = false;
-    for &b in bytes {
-        match b {
-            b'`' => {
-                out.extend_from_slice(&[0xE2, 0x80, 0x98]);
-                substituted = true;
-            }
-            b'\'' => {
-                out.extend_from_slice(&[0xE2, 0x80, 0x99]);
-                substituted = true;
-            }
-            _ => out.push(b),
-        }
-    }
-    (out, substituted)
 }
 
 pub(crate) fn builtin_format_message(
@@ -1583,25 +1761,24 @@ pub(crate) fn builtin_format_message_slice(
     ctx: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    expect_min_args("format-message", args, 1)?;
-    let formatted = builtin_format_wrapper_strict_slice(ctx, args)?;
-    match formatted.kind() {
-        ValueKind::String => {
-            let string = formatted.as_lisp_string().expect("string");
-            let (quoted_bytes, substituted) = apply_text_quoting_bytes(string.as_bytes());
-            // Quote substitution emits U+2018/U+2019 (3-byte UTF-8), so a
-            // unibyte input with actual substitutions must be promoted to
-            // multibyte. Without substitutions, preserve the input's flag
-            // (raw 0xFF in a unibyte string stays unibyte).
-            let result = if string.is_multibyte() || substituted {
-                crate::heap_types::LispString::from_emacs_bytes(quoted_bytes)
-            } else {
-                crate::heap_types::LispString::from_unibyte(quoted_bytes)
-            };
-            Ok(Value::heap_string(result))
-        }
-        _other => Ok(formatted),
-    }
+    crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
+        expect_min_args("format-message", args, 1)?;
+        let quoting_style = crate::emacs_core::coding::builtin_text_quoting_style(ctx, vec![])?;
+        let quoting_style = FormatMessageQuotingStyle::from_value(quoting_style);
+        let (s, spans, source_spans, force_multibyte_result) = do_format(
+            args,
+            &|v| format_percent_s_in_state(ctx, v),
+            &|v| super::error::print_value_in_state(ctx, v),
+            quoting_style,
+        )?;
+        Ok(build_format_result(
+            args,
+            &s,
+            &spans,
+            &source_spans,
+            force_multibyte_result,
+        ))
+    })
 }
 
 pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {

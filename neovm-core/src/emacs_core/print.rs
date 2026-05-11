@@ -643,7 +643,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 // Level check for containers
                 if let Some(level) = state.options.print_level {
                     if state.depth >= level {
-                        out.push_str("#");
+                        out.push_str("...");
                         return;
                     }
                 }
@@ -669,7 +669,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                     // Level check for char-table
                     if let Some(level) = state.options.print_level {
                         if state.depth >= level {
-                            out.push_str("#");
+                            out.push_str("...");
                             return;
                         }
                     }
@@ -702,7 +702,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                     // Level check for sub-char-table
                     if let Some(level) = state.options.print_level {
                         if state.depth >= level {
-                            out.push_str("#");
+                            out.push_str("...");
                             return;
                         }
                     }
@@ -724,7 +724,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 // Level check
                 if let Some(level) = state.options.print_level {
                     if state.depth >= level {
-                        out.push_str("#");
+                        out.push_str("...");
                         return;
                     }
                 }
@@ -755,7 +755,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 // Level check
                 if let Some(level) = state.options.print_level {
                     if state.depth >= level {
-                        out.push_str("#");
+                        out.push_str("...");
                         return;
                     }
                 }
@@ -786,7 +786,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 // Level check
                 if let Some(level) = state.options.print_level {
                     if state.depth >= level {
-                        out.push_str("#");
+                        out.push_str("...");
                         return;
                     }
                 }
@@ -910,7 +910,7 @@ fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut 
         let _ = with_bytecode_literal_slots(value, |slots| {
             if let Some(level) = state.options.print_level {
                 if state.depth >= level {
-                    out.push_str("#");
+                    out.push_str("...");
                     return;
                 }
             }

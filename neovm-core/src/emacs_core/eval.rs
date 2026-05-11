@@ -3072,6 +3072,7 @@ impl Context {
         }
         obarray.set_symbol_value("print-quoted", Value::T);
         obarray.set_symbol_value("text-quoting-style", Value::NIL);
+        obarray.make_special("text-quoting-style");
         // GNU DEFVAR_LISP variables needed by loadup.el and early .el files.
         obarray.set_symbol_value("char-code-property-alist", Value::NIL);
         obarray.set_symbol_value("redisplay--inhibit-bidi", Value::NIL);

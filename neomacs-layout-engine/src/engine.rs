@@ -892,9 +892,17 @@ fn plain_echo_display_rows(
     text_width: f32,
     char_width: f32,
     truncate_lines: bool,
+    reserve_right_special_col: bool,
 ) -> usize {
     let cell_width = char_width.max(1.0);
     let max_cells = (text_width / cell_width).floor().max(1.0) as usize;
+    let wrap_cells = if truncate_lines {
+        max_cells
+    } else if reserve_right_special_col {
+        max_cells.saturating_sub(1).max(1)
+    } else {
+        max_cells
+    };
     message
         .split(|ch| ch == '\n' || ch == '\r')
         .map(|line| {
@@ -905,7 +913,7 @@ fn plain_echo_display_rows(
                 .chars()
                 .map(|ch| neovm_core::encoding::char_width(ch).max(1) as usize)
                 .sum::<usize>();
-            cells.div_ceil(max_cells).max(1)
+            cells.div_ceil(wrap_cells).max(1)
         })
         .sum::<usize>()
         .max(1)
@@ -2937,11 +2945,15 @@ impl LayoutEngine {
             // GNU measures the displayed height, not just literal newlines:
             // a long one-line message grows the echo area when
             // `message-truncate-lines' is nil.
+            let reserve_right_special_col =
+                !_frame_params.window_system && params.right_fringe_width == 0.0;
+            let truncate_echo_lines = message_truncate_lines(evaluator);
             let echo_lines = plain_echo_display_rows(
                 &echo_message,
                 text_width,
                 char_w,
-                message_truncate_lines(evaluator),
+                truncate_echo_lines,
+                reserve_right_special_col,
             );
             let frame_rows = _frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
@@ -2963,6 +2975,8 @@ impl LayoutEngine {
                 default_resolved,
                 echo_message,
                 max_rows_echo,
+                truncate_echo_lines,
+                reserve_right_special_col,
             );
             self.matrix_builder
                 .insert_face(rendered_face.id, rendered_face);
@@ -3063,7 +3077,18 @@ impl LayoutEngine {
         } else {
             0.0
         };
-        let avail_width = (text_width - lnum_pixel_width - reserve_right_border_width).max(0.0);
+        let reserve_right_special_col =
+            !_frame_params.window_system && params.right_fringe_width == 0.0;
+        let reserve_right_special_width = if reserve_right_special_col {
+            char_w
+        } else {
+            0.0
+        };
+        let avail_width = (text_width
+            - lnum_pixel_width
+            - reserve_right_border_width
+            - reserve_right_special_width)
+            .max(char_w);
 
         // Variable-height row tracking
         let mut row_max_height: f32 = char_h; // max glyph height on current row
@@ -5879,15 +5904,21 @@ impl LayoutEngine {
             );
         }
         self.matrix_builder.end_row();
-        for (row_idx, truncated) in row_truncated.iter().copied().enumerate() {
-            if truncated {
-                let target_col = if reserve_right_border_col {
-                    matrix_cols.saturating_sub(2)
-                } else {
-                    matrix_cols.saturating_sub(1)
-                };
-                self.matrix_builder
-                    .overwrite_current_window_row_glyph_at_col(row_idx, target_col, '$', 0);
+        if reserve_right_special_col {
+            let target_col = if reserve_right_border_col {
+                matrix_cols.saturating_sub(2)
+            } else {
+                matrix_cols.saturating_sub(1)
+            };
+            for row_idx in 0..row_truncated.len() {
+                let matrix_row = text_matrix_row_base + row_idx;
+                if row_truncated[row_idx] {
+                    self.matrix_builder
+                        .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '$', 0);
+                } else if row_continued[row_idx] {
+                    self.matrix_builder
+                        .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '\\', 0);
+                }
             }
         }
 
@@ -6171,6 +6202,8 @@ impl LayoutEngine {
         default_resolved: &crate::neovm_bridge::ResolvedFace,
         echo_message: String,
         max_rows: usize,
+        truncate_lines: bool,
+        reserve_right_special_col: bool,
     ) -> (
         neomacs_display_protocol::face::Face,
         Vec<Vec<neomacs_display_protocol::glyph_matrix::Glyph>>,
@@ -6184,6 +6217,18 @@ impl LayoutEngine {
             self.realize_status_line_face(0, default_resolved, char_w, ascent, row_height);
         let rendered_face = sl_face.render_face();
         let char_width = self.status_line_char_width(&sl_face, char_w);
+        let reserve_width = if reserve_right_special_col {
+            char_width.max(1.0)
+        } else {
+            0.0
+        };
+        let wrap_width = if truncate_lines {
+            text_width
+        } else {
+            (text_width - reserve_width).max(char_width.max(1.0))
+        };
+        let matrix_cols = (text_width / char_w.max(1.0)).ceil().max(1.0) as usize;
+        let special_col = matrix_cols.saturating_sub(1);
 
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
@@ -6215,7 +6260,10 @@ impl LayoutEngine {
                             char_width.max(1.0)
                         }
                     };
-                    if offset > row_start && x_offset + advance > text_width {
+                    if truncate_lines && x_offset + advance > wrap_width {
+                        break;
+                    }
+                    if offset > row_start && x_offset + advance > wrap_width {
                         break;
                     }
                     backend.produce_glyph(
@@ -6225,20 +6273,39 @@ impl LayoutEngine {
                     );
                     x_offset += advance;
                     offset += 1;
-                    if x_offset >= text_width {
+                    if x_offset >= wrap_width {
                         break;
                     }
                 }
+                let needs_special_glyph = reserve_right_special_col && offset < chars.len();
                 let mut flush_row =
                     GlyphRow::new(neomacs_display_protocol::frame_glyphs::GlyphRowRole::Minibuffer);
                 flush_row.enabled = true;
                 backend.finish_row(flush_row);
-                let glyphs = backend
+                let mut glyphs = backend
                     .take_rows()
                     .into_iter()
                     .next()
                     .map(|mut row| std::mem::take(&mut row.glyphs[1]))
                     .unwrap_or_default();
+                if needs_special_glyph {
+                    let ch = if truncate_lines { '$' } else { '\\' };
+                    while glyphs.len() < special_col {
+                        glyphs.push(neomacs_display_protocol::glyph_matrix::Glyph::char(
+                            ' ',
+                            rendered_face.id,
+                            0,
+                        ));
+                    }
+                    glyphs.push(neomacs_display_protocol::glyph_matrix::Glyph::char(
+                        ch,
+                        rendered_face.id,
+                        0,
+                    ));
+                    if truncate_lines {
+                        offset = chars.len();
+                    }
+                }
                 rows.push(glyphs);
                 if offset >= chars.len() {
                     break;

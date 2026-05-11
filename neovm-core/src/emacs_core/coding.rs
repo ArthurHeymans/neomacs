@@ -1994,9 +1994,7 @@ pub(crate) fn builtin_text_quoting_style(
 ) -> EvalResult {
     expect_args("text-quoting-style", &args, 0)?;
     let var = eval
-        .obarray
-        .symbol_value("text-quoting-style")
-        .copied()
+        .eval_symbol_by_id(crate::emacs_core::intern::intern("text-quoting-style"))
         .unwrap_or(Value::NIL);
     if var.is_nil() {
         // GNU `default_to_grave_quoting_style' inspects the standard

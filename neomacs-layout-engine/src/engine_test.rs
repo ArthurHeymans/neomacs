@@ -16,14 +16,15 @@ use std::sync::{Arc, Mutex};
 
 #[test]
 fn echo_area_display_rows_include_wrapped_long_lines_like_gnu() {
-    assert_eq!(plain_echo_display_rows("abcdef", 3.0, 1.0, false), 2);
-    assert_eq!(plain_echo_display_rows("abcdef", 3.0, 1.0, true), 1);
+    assert_eq!(plain_echo_display_rows("abcdef", 3.0, 1.0, false, false), 2);
+    assert_eq!(plain_echo_display_rows("abcdef", 3.0, 1.0, true, false), 1);
+    assert_eq!(plain_echo_display_rows("abcdef", 3.0, 1.0, false, true), 3);
 }
 
 #[test]
 fn echo_area_display_rows_count_newlines_and_wide_chars() {
-    assert_eq!(plain_echo_display_rows("ab\ncd", 3.0, 1.0, false), 2);
-    assert_eq!(plain_echo_display_rows("你你你", 4.0, 1.0, false), 2);
+    assert_eq!(plain_echo_display_rows("ab\ncd", 3.0, 1.0, false, false), 2);
+    assert_eq!(plain_echo_display_rows("你你你", 4.0, 1.0, false, false), 2);
 }
 
 fn test_window_params() -> WindowParams {
