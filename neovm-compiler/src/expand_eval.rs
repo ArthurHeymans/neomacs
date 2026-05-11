@@ -466,6 +466,26 @@ impl MacroEval {
                 MacroValue::Float(f) if f >= 0.0 => MacroValue::Float(f.sqrt()),
                 _ => v,
             }),
+            Some("sin") => self.eval_unary(span, "sin", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Float((n as f64).sin()),
+                MacroValue::Float(f) => MacroValue::Float(f.sin()),
+                _ => v,
+            }),
+            Some("cos") => self.eval_unary(span, "cos", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Float((n as f64).cos()),
+                MacroValue::Float(f) => MacroValue::Float(f.cos()),
+                _ => v,
+            }),
+            Some("exp") => self.eval_unary(span, "exp", &items[1..], env, |v| match v {
+                MacroValue::Int(n) => MacroValue::Float((n as f64).exp()),
+                MacroValue::Float(f) => MacroValue::Float(f.exp()),
+                _ => v,
+            }),
+            Some("log") => self.eval_unary(span, "log", &items[1..], env, |v| match v {
+                MacroValue::Int(n) if n > 0 => MacroValue::Float((n as f64).ln()),
+                MacroValue::Float(f) if f > 0.0 => MacroValue::Float(f.ln()),
+                _ => v,
+            }),
             Some("max") => self.eval_min_max(span, &items[1..], env, true),
             Some("min") => self.eval_min_max(span, &items[1..], env, false),
             Some("-") => self.eval_sub(span, &items[1..], env),
