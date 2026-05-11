@@ -10708,6 +10708,39 @@ fn expand_file_name_preserves_double_slash_root_like_gnu() {
 }
 
 #[test]
+fn expand_file_name_preserves_posix_superroot_parent_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fileio.c:expand-file-name preserves the POSIX superroot
+    // spelling /../ for the first parent reference above root, then collapses
+    // additional parents normally.
+    let expr = r#"(message "expandsuper:%S" (list (expand-file-name "/../x") (expand-file-name "/../../x")))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"expandsuper:(\"/../x\" \"/x\")"#;
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: expand-file-name should preserve POSIX superroot /../ like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "expand_file_name_preserves_posix_superroot_parent_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_handler_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
