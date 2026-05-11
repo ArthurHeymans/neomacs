@@ -1505,6 +1505,32 @@ pub(crate) fn builtin_nconc_slice(_eval: &mut super::eval::Context, args: &[Valu
 }
 
 pub(crate) fn builtin_nconc_slice_values(args: &[Value]) -> EvalResult {
+    fn last_cons_for_nconc(list: Value) -> Result<Value, Flow> {
+        let mut last = list;
+        let mut tail = list;
+        let mut tortoise = list;
+        let mut power = 1usize;
+        let mut distance = 0usize;
+
+        while tail.is_cons() {
+            last = tail;
+            tail = tail.cons_cdr();
+            if tail.is_cons() {
+                distance = distance.saturating_add(1);
+                if tail.bits() == tortoise.bits() {
+                    return Err(signal("circular-list", vec![tail]));
+                }
+                if distance == power {
+                    tortoise = tail;
+                    power = power.saturating_mul(2).max(1);
+                    distance = 0;
+                }
+            }
+        }
+
+        Ok(last)
+    }
+
     if args.is_empty() {
         return Ok(Value::NIL);
     }
@@ -1533,17 +1559,7 @@ pub(crate) fn builtin_nconc_slice_values(args: &[Value]) -> EvalResult {
                     prev.set_cdr(*arg);
                 }
 
-                let mut tail = *arg;
-                loop {
-                    let next = tail.cons_cdr();
-                    match next.kind() {
-                        ValueKind::Cons => tail = next,
-                        _ => {
-                            last_tail = Some(tail);
-                            break;
-                        }
-                    }
-                }
+                last_tail = Some(last_cons_for_nconc(*arg)?);
             }
             _ => {
                 return Err(signal(

@@ -7754,6 +7754,27 @@ fn vconcat_signals_circular_list_like_gnu() {
 }
 
 #[test]
+fn nconc_nonfinal_circular_list_and_dotted_tail_match_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let cyclic = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    cyclic.cons_cdr().set_cdr(cyclic);
+    match builtin_nconc(vec![cyclic, Value::list(vec![Value::fixnum(3)])]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "circular-list");
+        }
+        other => panic!("expected circular-list signal, got {other:?}"),
+    }
+
+    let dotted = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    let result = builtin_nconc(vec![dotted, Value::list(vec![Value::fixnum(3)])]).unwrap();
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![Value::fixnum(1), Value::fixnum(3)]
+    );
+}
+
+#[test]
 fn string_match_inhibit_modify_preserves_match_data() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;
