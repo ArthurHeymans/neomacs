@@ -503,6 +503,7 @@ impl ObjectStore {
     }
 
     #[inline]
+    #[inline]
     fn publish_reserved(
         reservation: &mut ObjectPublishReservation,
         shard_index: usize,
