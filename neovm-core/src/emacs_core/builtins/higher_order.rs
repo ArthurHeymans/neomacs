@@ -559,24 +559,12 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
     match args[0].kind() {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => {
-            let mut cons_cells = Vec::new();
-            let mut values = Vec::new();
+            let values = super::cons_list::collect_proper_list_items(args[0])?;
+            let mut cons_cells = Vec::with_capacity(values.len());
             let mut cursor = args[0];
-            loop {
-                match cursor.kind() {
-                    ValueKind::Nil => break,
-                    ValueKind::Cons => {
-                        values.push(cursor.cons_car());
-                        cons_cells.push(cursor);
-                        cursor = cursor.cons_cdr();
-                    }
-                    tail => {
-                        return Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("listp"), cursor],
-                        ));
-                    }
-                }
+            for _ in 0..values.len() {
+                cons_cells.push(cursor);
+                cursor = cursor.cons_cdr();
             }
 
             let roots = eval.save_specpdl_roots();
