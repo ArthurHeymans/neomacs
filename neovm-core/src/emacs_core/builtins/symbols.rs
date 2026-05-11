@@ -2738,11 +2738,22 @@ pub(crate) fn builtin_split_char(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_string_distance(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-distance", &args, 2, 3)?;
-    let s1 = expect_strict_string(&args[0])?;
-    let s2 = expect_strict_string(&args[1])?;
+    let s1 = args[0].as_lisp_string().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        )
+    })?;
+    let s2 = args[1].as_lisp_string().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[1]],
+        )
+    })?;
     let bytecomp = args.get(2).is_some_and(|v| v.is_truthy());
+    let use_byte_compare = bytecomp || (!s1.is_multibyte() && !s2.is_multibyte());
 
-    if bytecomp {
+    if use_byte_compare {
         // Byte-level Levenshtein distance
         let b1 = s1.as_bytes();
         let b2 = s2.as_bytes();
@@ -2750,14 +2761,14 @@ pub(crate) fn builtin_string_distance(args: Vec<Value>) -> EvalResult {
         Ok(Value::fixnum(dist as i64))
     } else {
         // Character-level Levenshtein distance
-        let c1: Vec<char> = s1.chars().collect();
-        let c2: Vec<char> = s2.chars().collect();
-        let dist = levenshtein_distance_chars(&c1, &c2);
+        let c1 = super::lisp_string_char_codes(s1);
+        let c2 = super::lisp_string_char_codes(s2);
+        let dist = levenshtein_distance_codes(&c1, &c2);
         Ok(Value::fixnum(dist as i64))
     }
 }
 
-fn levenshtein_distance_chars(a: &[char], b: &[char]) -> usize {
+fn levenshtein_distance_codes(a: &[u32], b: &[u32]) -> usize {
     let m = a.len();
     let n = b.len();
     let mut prev = vec![0usize; n + 1];

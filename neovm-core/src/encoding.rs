@@ -511,6 +511,59 @@ pub fn char_width(c: char) -> usize {
     1
 }
 
+fn char_width_for_code_without_display_table(code: i64) -> usize {
+    if let Ok(cp) = u32::try_from(code)
+        && crate::emacs_core::emacs_char::char_byte8_p(cp)
+    {
+        return 4;
+    }
+    if code > 0x10_FFFF {
+        return 1;
+    }
+    char::from_u32(code as u32).map(char_width).unwrap_or(1)
+}
+
+fn display_table_replacement_width(disp: Value) -> Option<usize> {
+    let items = disp.as_vector_data()?;
+    let mut width = 0usize;
+    for item in items {
+        if let ValueKind::Fixnum(code) = item.kind()
+            && (0..=MAX_CHAR_CODE).contains(&code)
+        {
+            width = width.saturating_add(char_width_for_code_without_display_table(code));
+        }
+    }
+    Some(width)
+}
+
+pub(crate) fn active_display_table(ctx: &crate::emacs_core::eval::Context) -> Option<Value> {
+    if let Some(table) = ctx
+        .buffers
+        .current_buffer()
+        .and_then(|buffer| buffer.buffer_local_value("buffer-display-table"))
+        .filter(crate::emacs_core::chartable::is_char_table)
+    {
+        return Some(table);
+    }
+    ctx.eval_symbol_by_id(crate::emacs_core::intern::intern("standard-display-table"))
+        .ok()
+        .filter(crate::emacs_core::chartable::is_char_table)
+}
+
+pub(crate) fn char_width_for_code_with_display_table(
+    code: i64,
+    display_table: Option<Value>,
+) -> usize {
+    let default_width = char_width_for_code_without_display_table(code);
+    let Some(table) = display_table else {
+        return default_width;
+    };
+    crate::emacs_core::chartable::ct_lookup(&table, code)
+        .ok()
+        .and_then(display_table_replacement_width)
+        .unwrap_or(default_width)
+}
+
 /// Whether the character is zero-width (combining mark, etc.).
 fn is_zero_width(c: char) -> bool {
     codepoint_in_sorted_ranges(c as u32, ZERO_WIDTH_RANGES)
@@ -1646,8 +1699,23 @@ pub(crate) fn builtin_decode_coding_region(
     builtin_coding_region(ctx, args, false)
 }
 
-/// `(char-width CHAR)` -> integer
+/// `(char-width CHAR)` -> integer without a current display table.
 pub(crate) fn builtin_char_width(args: Vec<Value>) -> EvalResult {
+    builtin_char_width_with_display_table(None, args)
+}
+
+/// `(char-width CHAR)` -> integer in the current buffer.
+pub(crate) fn builtin_char_width_in_context(
+    ctx: &crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_char_width_with_display_table(active_display_table(ctx), args)
+}
+
+fn builtin_char_width_with_display_table(
+    display_table: Option<Value>,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("char-width", &args, 1)?;
     let code = match args[0].kind() {
         ValueKind::Fixnum(c) => c as i64,
@@ -1664,11 +1732,7 @@ pub(crate) fn builtin_char_width(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("characterp"), Value::fixnum(code)],
         ));
     }
-    // Non-Unicode char codes still have width 1 in Emacs.
-    if code > 0x10_FFFF {
-        return Ok(Value::fixnum(1));
-    }
-    let width = char_width(char::from_u32(code as u32).expect("code <= 0x10FFFF must be valid"));
+    let width = char_width_for_code_with_display_table(code, display_table);
     Ok(Value::fixnum(width as i64))
 }
 

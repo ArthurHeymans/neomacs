@@ -4460,7 +4460,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr_slice("string", |_ctx, args| builtin_string_slice(args), 0, None);
     ctx.defsubr(
         "string-width",
-        |_ctx, args| builtin_string_width(args),
+        |ctx, args| builtin_string_width(ctx, args),
         1,
         Some(3),
     );
@@ -8122,7 +8122,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- Character encoding --
     ctx.defsubr(
         "char-width",
-        |_ctx, args| crate::encoding::builtin_char_width(args),
+        |ctx, args| crate::encoding::builtin_char_width_in_context(ctx, args),
         1,
         Some(1),
     );

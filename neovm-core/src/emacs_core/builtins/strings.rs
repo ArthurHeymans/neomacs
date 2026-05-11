@@ -219,9 +219,16 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
             Ok(Value::vector(items[from..to].to_vec()))
         }
         _ => {
-            let s = expect_string(&args[0])?;
-            let _ = s;
-            unreachable!("expect_string either returns a string or signals")
+            if name == "substring" {
+                Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("arrayp"), args[0]],
+                ))
+            } else {
+                let s = expect_string(&args[0])?;
+                let _ = s;
+                unreachable!("expect_string either returns a string or signals")
+            }
         }
     }
 }
@@ -458,8 +465,8 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
     expect_min_args("string-to-number", &args, 1)?;
     expect_max_args("string-to-number", &args, 2)?;
     let s = expect_string(&args[0])?;
-    let base = if args.len() > 1 {
-        expect_int(&args[1])?
+    let base = if args.len() > 1 && !args[1].is_nil() {
+        expect_fixnum(&args[1])?
     } else {
         10
     };
@@ -470,6 +477,14 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
 
     let s = s.trim_start_matches(|c: char| c == ' ' || c == '\t');
     if base == 10 {
+        let special_float = Regex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)")
+            .expect("special float prefix regexp should compile");
+        if let Some(m) = special_float.find(s)
+            && let Some(f) = crate::emacs_core::value_reader::parse_emacs_special_float(m.as_str())
+        {
+            return Ok(Value::make_float(f));
+        }
+
         // Match GNU Emacs's string_to_number float detection rules:
         // A number is float if it has digits after the decimal point (TRAIL_INT)
         // OR if it has leading digits and an exponent (LEAD_INT & E_EXP).
@@ -1943,7 +1958,7 @@ pub(crate) fn builtin_clear_buffer_auto_save_failure(args: Vec<Value>) -> EvalRe
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_string_width(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("string-width", &args, 1)?;
     expect_max_args("string-width", &args, 3)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
@@ -1954,6 +1969,7 @@ pub(crate) fn builtin_string_width(args: Vec<Value>) -> EvalResult {
     })?;
     let data = ls.as_bytes();
     let is_multibyte = ls.is_multibyte();
+    let display_table = crate::encoding::active_display_table(ctx);
     if args.len() <= 1
         || (args.len() == 2 && args[1] == Value::NIL)
         || (args.len() <= 3
@@ -1961,27 +1977,75 @@ pub(crate) fn builtin_string_width(args: Vec<Value>) -> EvalResult {
             && (args.len() < 3 || args[2] == Value::NIL))
     {
         // Fast path: full string width
-        return Ok(Value::fixnum(
-            super::super::string_escape::display_width_emacs(data, is_multibyte) as i64,
-        ));
+        let units = super::super::string_escape::decode_units_emacs(data, is_multibyte);
+        let width = units
+            .iter()
+            .map(|(code, width)| {
+                if display_table.is_some() {
+                    crate::encoding::char_width_for_code_with_display_table(
+                        *code as i64,
+                        display_table,
+                    )
+                } else {
+                    *width
+                }
+            })
+            .sum::<usize>();
+        return Ok(Value::fixnum(width as i64));
     }
     // Substring range specified — decode units and sum width for [from, to)
     let units = super::super::string_escape::decode_units_emacs(data, is_multibyte);
+    let len = units.len() as i64;
+    let normalize_index = |value: &Value, default: i64| -> Result<usize, Flow> {
+        let raw = if value.is_nil() {
+            default
+        } else {
+            expect_int(value)?
+        };
+        let idx = if raw < 0 { len + raw } else { raw };
+        if idx < 0 || idx > len {
+            return Err(signal(
+                "args-out-of-range",
+                vec![
+                    args[0],
+                    args.get(1).copied().unwrap_or(Value::fixnum(0)),
+                    args.get(2).copied().unwrap_or(Value::NIL),
+                ],
+            ));
+        }
+        Ok(idx as usize)
+    };
     let from = if args.len() > 1 && args[1] != Value::NIL {
-        expect_int(&args[1])? as usize
+        normalize_index(&args[1], 0)?
     } else {
         0
     };
     let to = if args.len() > 2 && args[2] != Value::NIL {
-        expect_int(&args[2])? as usize
+        normalize_index(&args[2], len)?
     } else {
         units.len()
     };
+    if from > to {
+        return Err(signal(
+            "args-out-of-range",
+            vec![
+                args[0],
+                args.get(1).copied().unwrap_or(Value::fixnum(0)),
+                args.get(2).copied().unwrap_or(Value::NIL),
+            ],
+        ));
+    }
     let width: usize = units
         .iter()
         .skip(from)
-        .take(to.saturating_sub(from))
-        .map(|(_, w)| w)
+        .take(to - from)
+        .map(|(code, width)| {
+            if display_table.is_some() {
+                crate::encoding::char_width_for_code_with_display_table(*code as i64, display_table)
+            } else {
+                *width
+            }
+        })
         .sum();
     Ok(Value::fixnum(width as i64))
 }

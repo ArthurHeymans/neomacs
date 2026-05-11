@@ -2254,7 +2254,7 @@ fn looks_like_integer(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
 }
 
-fn parse_emacs_special_float(token: &str) -> Option<f64> {
+pub(crate) fn parse_emacs_special_float(token: &str) -> Option<f64> {
     const NAN_QUIET_BIT: u64 = 1u64 << 51;
     const NAN_PAYLOAD_MASK: u64 = (1u64 << 51) - 1;
     const NAN_LEADING_DOT_PAYLOAD: u64 = 2_251_799_813_685_246;

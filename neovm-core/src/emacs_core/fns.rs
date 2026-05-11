@@ -58,6 +58,13 @@ fn require_string(_name: &str, val: &Value) -> Result<String, Flow> {
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
 }
 
+fn require_string_or_symbol_name(val: &Value) -> Result<String, Flow> {
+    val.as_symbol_name()
+        .map(str::to_owned)
+        .or_else(|| val.as_runtime_string_owned())
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
+}
+
 fn require_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -1412,8 +1419,8 @@ fn filenvercmp(a: &[u8], b: &[u8]) -> i32 {
 /// Simple lexicographic comparison (locale is ignored).
 pub(crate) fn builtin_string_collate_lessp(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-lessp", &args, 2, 4)?;
-    let s1 = require_string("string-collate-lessp", &args[0])?;
-    let s2 = require_string("string-collate-lessp", &args[1])?;
+    let s1 = require_string_or_symbol_name(&args[0])?;
+    let s2 = require_string_or_symbol_name(&args[1])?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
     let result = if ignore_case {
@@ -1428,8 +1435,8 @@ pub(crate) fn builtin_string_collate_lessp(args: Vec<Value>) -> EvalResult {
 /// Simple lexicographic equality (locale is ignored).
 pub(crate) fn builtin_string_collate_equalp(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-equalp", &args, 2, 4)?;
-    let s1 = require_string("string-collate-equalp", &args[0])?;
-    let s2 = require_string("string-collate-equalp", &args[1])?;
+    let s1 = require_string_or_symbol_name(&args[0])?;
+    let s2 = require_string_or_symbol_name(&args[1])?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
     let result = if ignore_case {

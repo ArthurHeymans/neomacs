@@ -66,7 +66,7 @@ fn expect_string(val: &Value) -> Result<String, Flow> {
 
 fn expect_character_code(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
-        ValueKind::Fixnum(c) => Ok(c as i64),
+        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("characterp"), *val],
