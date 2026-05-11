@@ -7629,6 +7629,39 @@ fn char_table_range_error_and_reversed_range_match_gnu_semantics() {
 }
 
 #[test]
+fn set_char_table_reversed_range_returns_value_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/chartab.c:set-char-table-range delegates cons ranges directly
+    // to char_table_set_range.  When FROM is greater than TO, that helper's
+    // loop is empty, no error is signaled, and the Lisp function returns VALUE.
+    let expr = r#"(message "chartabrev:%S" (let ((ct (make-char-table nil 0))) (list (condition-case e (set-char-table-range ct '(?z . ?a) 'bad) (error (list (car e) (cadr e) (caddr e)))) (aref ct ?a) (aref ct ?z))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "chartabrev:(bad 0 0)";
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: reversed set-char-table-range should return VALUE without changing entries like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "set_char_table_reversed_range_returns_value_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn make_char_table_purpose_type_error_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
