@@ -14550,4 +14550,22 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_subrp_nil_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (subrp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_compiled_function_p_nil_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (compiled-function-p nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
