@@ -148,7 +148,7 @@ impl Default for MutatorLocal {
     fn default() -> Self {
         Self {
             tlab: None,
-            barrier_events: Vec::new(),
+            barrier_events: Vec::with_capacity(MAX_BARRIER_EVENTS),
             roots: RootStack::default(),
             alloc_profile_cache: None,
             publish_local: crate::object_store::ObjectPublishLocal::default(),
