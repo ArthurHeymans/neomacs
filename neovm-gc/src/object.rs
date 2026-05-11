@@ -32,6 +32,7 @@ pub(crate) enum Generation {
 }
 
 impl SpaceKind {
+    #[inline]
     pub(crate) fn initial_generation(self) -> Generation {
         match self {
             Self::Nursery => Generation::Young,
@@ -40,6 +41,7 @@ impl SpaceKind {
         }
     }
 
+    #[inline]
     fn from_u8(raw: u8) -> Self {
         match raw {
             raw if raw == Self::Nursery as u8 => Self::Nursery,
@@ -54,6 +56,7 @@ impl SpaceKind {
 
 impl Generation {
     #[allow(dead_code)]
+    #[inline]
     fn from_u8(raw: u8) -> Self {
         match raw {
             raw if raw == Self::Young as u8 => Self::Young,
