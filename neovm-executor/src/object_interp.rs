@@ -14212,4 +14212,34 @@ mod tests {
         );
         assert!(!value.unwrap().is_nil());
     }
+
+    #[test]
+    fn executes_cl_tree_equal_both_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-tree-equal nil nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_cl_delq_nil_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-delq 42 nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_cl_remq_nil_returns_nil_for_nil_list() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-remq 42 nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
