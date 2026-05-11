@@ -1575,6 +1575,14 @@ fn buffer_base_buffer_and_last_name_semantics() {
         Value::NIL
     );
 
+    let created = create_unique_test_buffer(&mut eval, "*bln-created*");
+    let created_name = builtin_buffer_name(&mut eval, vec![created]).unwrap();
+    assert_eq!(
+        builtin_buffer_last_name(&mut eval, vec![created]).unwrap(),
+        created_name,
+        "GNU get-buffer-create initializes last_name to the buffer name"
+    );
+
     let base_type = builtin_buffer_base_buffer(&mut eval, vec![Value::symbol("x")])
         .expect_err("buffer-base-buffer should reject non-buffer, non-nil optional arg");
     match base_type {
@@ -1771,6 +1779,11 @@ fn make_indirect_buffer_clone_and_hook_semantics_follow_buffer_c() {
         Some(Value::symbol("neo-mode"))
     );
     assert_eq!(
+        builtin_buffer_last_name(&mut eval, vec![cloned]).unwrap(),
+        builtin_buffer_last_name(&mut eval, vec![base]).unwrap(),
+        "GNU clone_per_buffer_values copies base last_name into cloned indirect buffers"
+    );
+    assert_eq!(
         eval.buffers.current_buffer_id(),
         Some(base_id),
         "make-indirect-buffer should restore the previous current buffer"
@@ -1842,6 +1855,11 @@ fn make_indirect_buffer_clone_nil_resets_buffer_state() {
     };
     let indirect_id = indirect.as_buffer_id().unwrap();
 
+    assert_eq!(
+        builtin_buffer_last_name(&mut eval, vec![indirect]).unwrap(),
+        Value::string("*mib-default*"),
+        "GNU non-clone make-indirect-buffer keeps the new buffer name as last_name"
+    );
     let indirect_buf = eval.buffers.get(indirect_id).expect("indirect buffer");
     assert_eq!(
         indirect_buf.get_buffer_local("major-mode"),
@@ -11932,6 +11950,13 @@ fn format_message_and_message_signal_strict_format_errors() {
             .as_lisp_string()
             .expect("builtin should return a string")
             .as_bytes();
+        assert!(
+            rendered
+                .as_lisp_string()
+                .expect("builtin should return a string")
+                .is_multibyte(),
+            "GNU Emacs returns a multibyte string for non-ASCII %c"
+        );
         let mut codes = Vec::new();
         let mut i = 0;
         while i < bytes.len() {

@@ -867,7 +867,12 @@ fn format_spec_type_mismatch_error() -> Flow {
     )
 }
 
-fn format_char_argument(n: i64) -> Result<String, Flow> {
+struct FormatCharArgument {
+    rendered: String,
+    force_multibyte_result: bool,
+}
+
+fn format_char_argument(n: i64) -> Result<FormatCharArgument, Flow> {
     if !(0..=KEY_CHAR_CODE_MASK).contains(&n) {
         return Err(signal(
             "wrong-type-argument",
@@ -875,11 +880,17 @@ fn format_char_argument(n: i64) -> Result<String, Flow> {
         ));
     }
 
-    write_char_rendered_text(n).ok_or_else(|| {
+    let rendered = write_char_rendered_text(n).ok_or_else(|| {
         signal(
             "wrong-type-argument",
             vec![Value::symbol("characterp"), Value::fixnum(n)],
         )
+    })?;
+    Ok(FormatCharArgument {
+        rendered,
+        // GNU styled_format retries with a multibyte result when %c receives
+        // any non-ASCII character, then handles it through Fchar_to_string.
+        force_multibyte_result: n > 0x7f,
     })
 }
 
@@ -1239,47 +1250,49 @@ fn format_string_spec(s: &str, spec: &FormatSpec) -> String {
 /// the `info[i].start` / `info[i].end` tracking in GNU's `styled_format`
 /// (editfns.c:3651-3806).
 fn format_string_spec_tracked(s: &str, spec: &FormatSpec) -> (String, usize, usize) {
-    let truncated = if let Some(prec) = spec.precision {
-        if prec < s.chars().count() {
-            &s[..s.char_indices().nth(prec).map_or(s.len(), |(i, _)| i)]
-        } else {
-            s
+    let mut content_width = 0usize;
+    let mut truncated_end = s.len();
+    let mut saw_limit = spec.precision.is_none();
+    if spec.precision.is_some() || spec.width.is_some() {
+        truncated_end = 0;
+        for unit in crate::emacs_core::string_escape::scan_storage_units(s) {
+            if let Some(prec) = spec.precision {
+                if content_width + unit.display_width > prec {
+                    saw_limit = true;
+                    break;
+                }
+            }
+            content_width += unit.display_width;
+            truncated_end = unit.storage_end;
         }
-    } else {
-        s
-    };
+    }
+    if !saw_limit {
+        truncated_end = s.len();
+    }
+    let truncated = &s[..truncated_end];
     let content_bytes = truncated.len();
-    let content_chars = truncated.chars().count();
+    if spec.width.is_none() && spec.precision.is_none() {
+        content_width = truncated.chars().count();
+    }
     let w = match spec.width {
-        Some(w) if w > content_chars => w,
+        Some(w) if w > content_width => w,
         _ => return (truncated.to_string(), 0, content_bytes),
     };
-    let pad_chars = w - content_chars;
+    let pad_chars = w - content_width;
     // Padding is always ASCII spaces (or ASCII '0'/'-'/'+' for numeric
     // zero-padding which doesn't apply to %s). Each padding char is 1
     // byte, so padding byte count == padding char count.
     if spec.minus {
         // Left-aligned: content first, then padding.
-        let padded = format!("{:<width$}", truncated, width = w);
+        let mut padded = String::with_capacity(content_bytes + pad_chars);
+        padded.push_str(truncated);
+        padded.push_str(&" ".repeat(pad_chars));
         (padded, 0, content_bytes)
-    } else if spec.zero && !spec.minus {
-        // Numeric zero-padding — unused for %s in practice, but keep
-        // behavior equivalent to apply_width.
-        let padded = if truncated.starts_with('-') {
-            format!("-{:0>width$}", &truncated[1..], width = w - 1)
-        } else if truncated.starts_with('+') {
-            format!("+{:0>width$}", &truncated[1..], width = w - 1)
-        } else {
-            format!("{:0>width$}", truncated, width = w)
-        };
-        // Content is after leading zero padding; exact offset is the
-        // total length minus content_bytes (sign char stays attached
-        // to content visually).
-        let start = padded.len() - content_bytes;
-        (padded, start, start + content_bytes)
     } else {
         // Right-aligned (default): padding first, then content.
-        let padded = format!("{:>width$}", truncated, width = w);
+        let mut padded = String::with_capacity(content_bytes + pad_chars);
+        padded.push_str(&" ".repeat(pad_chars));
+        padded.push_str(truncated);
         (padded, pad_chars, pad_chars + content_bytes)
     }
 }
@@ -1308,10 +1321,11 @@ fn do_format(
     args: &[Value],
     princ_fn: &dyn Fn(&Value) -> String,
     prin1_fn: &dyn Fn(&Value) -> String,
-) -> Result<(String, Vec<FormatPropSpan>), Flow> {
+) -> Result<(String, Vec<FormatPropSpan>, bool), Flow> {
     let fmt_str = expect_strict_string(&args[0])?;
     let mut result = String::new();
     let mut spans: Vec<FormatPropSpan> = Vec::new();
+    let mut force_multibyte_result = false;
     let mut arg_idx = 1;
     let mut chars = fmt_str.chars().peekable();
 
@@ -1406,8 +1420,9 @@ fn do_format(
             'c' => {
                 let n = expect_int(&args[this_arg_idx])
                     .map_err(|_| format_spec_type_mismatch_error())?;
-                let s = format_char_argument(n)?;
-                format_string_spec(&s, &spec)
+                let formatted_char = format_char_argument(n)?;
+                force_multibyte_result |= formatted_char.force_multibyte_result;
+                format_string_spec(&formatted_char.rendered, &spec)
             }
             _ => {
                 return Err(signal(
@@ -1423,7 +1438,7 @@ fn do_format(
         result.push_str(&formatted);
     }
 
-    Ok((result, spans))
+    Ok((result, spans, force_multibyte_result))
 }
 
 pub(crate) fn builtin_format_wrapper_strict(
@@ -1439,10 +1454,12 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format", args, 1)?;
-        let (s, spans) = do_format(args, &|v| format_percent_s_in_state(ctx, v), &|v| {
-            super::error::print_value_in_state(ctx, v)
-        })?;
-        let multibyte = args.iter().any(|value| value.string_is_multibyte())
+        let (s, spans, force_multibyte_result) =
+            do_format(args, &|v| format_percent_s_in_state(ctx, v), &|v| {
+                super::error::print_value_in_state(ctx, v)
+            })?;
+        let multibyte = force_multibyte_result
+            || args.iter().any(|value| value.string_is_multibyte())
             || runtime_string_result_multibyte(false, &s);
         let result = Value::heap_string(super::runtime_string_to_lisp_string(&s, multibyte));
 

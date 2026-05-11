@@ -145,6 +145,79 @@ fn format_percent_s_promotes_result_when_printer_outputs_non_ascii_text() {
 }
 
 #[test]
+fn format_percent_c_matches_gnu_non_ascii_multibyte_width_and_precision() {
+    crate::test_utils::init_test_tracing();
+
+    fn run_format(fmt: &str, arg: Value) -> LispString {
+        let mut ctx = crate::emacs_core::eval::Context::new();
+        let result = builtin_format_wrapper_strict_slice(&mut ctx, &[Value::string(fmt), arg])
+            .expect("format should evaluate");
+        result
+            .as_lisp_string()
+            .expect("format should return a string")
+            .clone()
+    }
+
+    fn codes(string: &LispString) -> Vec<u32> {
+        if !string.is_multibyte() {
+            return string.as_bytes().iter().map(|byte| *byte as u32).collect();
+        }
+        let mut out = Vec::new();
+        let mut pos = 0usize;
+        while pos < string.as_bytes().len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&string.as_bytes()[pos..]);
+            out.push(code);
+            pos += len;
+        }
+        out
+    }
+
+    let ascii = run_format("%05c", Value::fixnum(b'x' as i64));
+    assert!(!ascii.is_multibyte());
+    assert_eq!(ascii.as_bytes(), b"    x");
+
+    let latin1 = run_format("%c", Value::fixnum(0x80));
+    assert!(latin1.is_multibyte());
+    assert_eq!(latin1.as_bytes(), &[0xc2, 0x80]);
+    assert_eq!(codes(&latin1), vec![0x80]);
+
+    let nonunicode = run_format("%2c", Value::fixnum(0x11_0000));
+    assert!(nonunicode.is_multibyte());
+    assert_eq!(nonunicode.as_bytes(), &[b' ', 0xf4, 0x90, 0x80, 0x80]);
+    assert_eq!(codes(&nonunicode), vec![b' ' as u32, 0x11_0000]);
+
+    let empty_nonunicode = run_format("%.0c", Value::fixnum(0x11_0000));
+    assert!(empty_nonunicode.is_multibyte());
+    assert!(empty_nonunicode.as_bytes().is_empty());
+
+    let padded_empty_nonunicode = run_format("%2.0c", Value::fixnum(0x11_0000));
+    assert!(padded_empty_nonunicode.is_multibyte());
+    assert_eq!(padded_empty_nonunicode.as_bytes(), b"  ");
+}
+
+#[test]
+fn format_string_width_and_precision_use_gnu_display_width() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let wide_padded =
+        builtin_format_wrapper_strict_slice(&mut ctx, &[Value::string("%3s"), Value::string("界")])
+            .expect("format should evaluate");
+    assert_eq!(wide_padded.as_utf8_str(), Some(" 界"));
+
+    let wide_truncated = builtin_format_wrapper_strict_slice(
+        &mut ctx,
+        &[Value::string("%.1s"), Value::string("界")],
+    )
+    .expect("format should evaluate");
+    let wide_truncated = wide_truncated
+        .as_lisp_string()
+        .expect("format should return a string");
+    assert!(wide_truncated.is_multibyte());
+    assert!(wide_truncated.as_bytes().is_empty());
+}
+
+#[test]
 fn format_percent_g_uses_gnu_fixed_precision_for_negative_exponents() {
     crate::test_utils::init_test_tracing();
 

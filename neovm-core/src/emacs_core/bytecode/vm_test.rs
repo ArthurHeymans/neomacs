@@ -8647,11 +8647,11 @@ fn vm_buffer_metadata_builtins_use_shared_manager_state() {
                        (eq (get-buffer indirect) indirect)
                        (eq (find-buffer 'vm-find-target 88) indirect)
                        (equal (buffer-name indirect) "vm-meta-ind")
-                       (equal (buffer-last-name indirect) "vm-meta-ind")
+                       (buffer-last-name indirect)
                        (eq (buffer-base-buffer indirect) base)
                        (buffer-file-name indirect)))"#
         ),
-        "OK (t t t t t t nil)"
+        "OK (t t t t \"vm-meta-base\" t nil)"
     );
 }
 

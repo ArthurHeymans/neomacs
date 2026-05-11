@@ -2788,6 +2788,9 @@ impl BufferManager {
             buffer_defaults,
         };
         let scratch = mgr.create_buffer("*scratch*");
+        if let Some(buf) = mgr.buffers.get_mut(&scratch) {
+            buf.set_last_name_value(crate::emacs_core::value::Value::NIL);
+        }
         mgr.current = Some(scratch);
         mgr.note_buffer_order_head(scratch);
         mgr
@@ -2806,7 +2809,9 @@ impl BufferManager {
     ) -> BufferId {
         let id = BufferId(self.next_id);
         self.next_id += 1;
-        let mut buf = Buffer::new(id, Value::string(name));
+        let name_value = Value::string(name);
+        let mut buf = Buffer::new(id, name_value);
+        buf.set_last_name_value(name_value);
         // Phase 10D: seed every conditional slot from
         // `BufferManager::buffer_defaults` so a buffer created
         // *after* a `setq-default`/`set-default` observes the live
@@ -2874,7 +2879,9 @@ impl BufferManager {
             cloned.set_name_value(Value::string(name));
             cloned
         } else {
-            let mut fresh = Buffer::new(id, Value::string(name));
+            let name_value = Value::string(name);
+            let mut fresh = Buffer::new(id, name_value);
+            fresh.set_last_name_value(name_value);
             if let Some(default_directory) = self
                 .current
                 .and_then(|current| self.buffers.get(&current))
