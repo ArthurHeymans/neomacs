@@ -4146,6 +4146,13 @@ fn decide_auto_coding_for_insert_file_contents(
         ],
     );
     let value = restore_and_finish(eval, result)?;
+    auto_coding_system_name(eval, value)
+}
+
+fn auto_coding_system_name(
+    eval: &super::eval::Context,
+    value: Value,
+) -> Result<Option<String>, Flow> {
     let Some(name) = value
         .as_symbol_name()
         .map(str::to_owned)
@@ -4158,6 +4165,100 @@ fn decide_auto_coding_for_insert_file_contents(
     } else {
         Ok(None)
     }
+}
+
+fn restore_empty_buffer_after_auto_coding_probe(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    saved_multibyte: bool,
+    saved_undo_list: Value,
+) {
+    if eval.buffers.get(buffer_id).is_none() {
+        return;
+    }
+    let _ = eval.set_current_buffer_unrecorded(buffer_id);
+    if let Some(buf) = eval.buffers.get_mut(buffer_id) {
+        buf.set_undo_list(Value::T);
+    }
+    let len = eval
+        .buffers
+        .get(buffer_id)
+        .map(|buf| buf.total_bytes())
+        .unwrap_or(0);
+    if len > 0 {
+        let _ = eval.buffers.delete_buffer_region(buffer_id, 0, len);
+    }
+    let _ = eval
+        .buffers
+        .set_buffer_multibyte_flag(buffer_id, saved_multibyte);
+    if let Some(buf) = eval.buffers.get_mut(buffer_id) {
+        buf.set_undo_list(saved_undo_list);
+        buf.goto_byte(0);
+    }
+}
+
+fn decide_auto_coding_for_empty_insert_file_contents(
+    eval: &mut super::eval::Context,
+    filename: crate::heap_types::LispString,
+    bytes: &[u8],
+    current_id: crate::buffer::BufferId,
+) -> Result<Option<String>, Flow> {
+    let function = eval.visible_variable_value_or_nil("set-auto-coding-function");
+    if function.is_nil() || bytes.is_empty() {
+        return Ok(None);
+    }
+
+    let (saved_multibyte, saved_undo_list) = {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (buf.get_multibyte(), buf.get_undo_list())
+    };
+
+    eval.set_current_buffer_unrecorded(current_id)?;
+    eval.buffers
+        .set_buffer_multibyte_flag(current_id, false)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    if let Some(buf) = eval.buffers.get_mut(current_id) {
+        buf.set_undo_list(Value::T);
+    }
+    let raw = crate::heap_types::LispString::from_unibyte(bytes.to_vec());
+    eval.buffers
+        .insert_lisp_string_into_buffer(current_id, &raw)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    if let Some(buf) = eval.buffers.get_mut(current_id) {
+        buf.goto_byte(0);
+    }
+
+    let result = eval.apply(
+        function,
+        vec![
+            Value::heap_string(filename),
+            Value::fixnum(bytes.len() as i64),
+        ],
+    );
+    let value = match result {
+        Ok(value) => {
+            restore_empty_buffer_after_auto_coding_probe(
+                eval,
+                current_id,
+                saved_multibyte,
+                saved_undo_list,
+            );
+            value
+        }
+        Err(flow) => {
+            restore_empty_buffer_after_auto_coding_probe(
+                eval,
+                current_id,
+                saved_multibyte,
+                saved_undo_list,
+            );
+            return Err(flow);
+        }
+    };
+    auto_coding_system_name(eval, value)
 }
 
 /// `(insert-file-contents FILENAME &optional VISIT BEG END REPLACE)`
@@ -4314,8 +4415,22 @@ pub(crate) fn builtin_insert_file_contents(
         .get(current_id)
         .map(|buffer| buffer.get_multibyte())
         .unwrap_or(true);
+    let current_buffer_was_empty = eval
+        .buffers
+        .get(current_id)
+        .map(|buffer| buffer.total_bytes() == 0)
+        .unwrap_or(false);
     let auto_coding_system = if multibyte && coding_system_for_read.is_none() {
-        decide_auto_coding_for_insert_file_contents(eval, resolved.clone(), slice)?
+        if current_buffer_was_empty {
+            decide_auto_coding_for_empty_insert_file_contents(
+                eval,
+                resolved.clone(),
+                slice,
+                current_id,
+            )?
+        } else {
+            decide_auto_coding_for_insert_file_contents(eval, resolved.clone(), slice)?
+        }
     } else {
         None
     };

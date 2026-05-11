@@ -3493,6 +3493,51 @@ fn insert_file_contents_uses_set_auto_coding_function_for_coding_cookie() {
 }
 
 #[test]
+fn insert_file_contents_empty_buffer_auto_coding_uses_current_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("empty-buffer-auto-coding.txt");
+    fs::write(&path, b"alpha\n").expect("write fixture");
+    let path_str = path.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (defalias 'neovm-test-set-auto-coding-function
+               (lambda (_filename _size)
+                 (setq neovm-test-auto-coding-buffer
+                       (buffer-name (current-buffer)))
+                 nil))
+             (setq set-auto-coding-function
+                   'neovm-test-set-auto-coding-function))"#,
+    )
+    .expect("install set-auto-coding-function probe");
+
+    builtin_insert_file_contents(&mut eval, vec![Value::string(&path_str)])
+        .expect("insert-file-contents should succeed");
+
+    assert_eq!(
+        eval.visible_variable_value_or_nil("neovm-test-auto-coding-buffer")
+            .as_utf8_str(),
+        Some("*scratch*")
+    );
+    assert!(
+        eval.buffers
+            .find_buffer_by_name(" *code-converting-work*")
+            .is_none(),
+        "GNU's empty-buffer insert-file-contents path does not create the work buffer"
+    );
+    assert_eq!(
+        eval.buffers
+            .current_buffer()
+            .expect("current buffer")
+            .buffer_string(),
+        "alpha\n"
+    );
+}
+
+#[test]
 fn insert_file_contents_sets_last_coding_before_after_insert_file_set_coding() {
     crate::test_utils::init_test_tracing();
 
