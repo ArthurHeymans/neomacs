@@ -264,53 +264,60 @@ fn eval_move_to_column_wholenump_validation() {
 #[test]
 fn eval_move_to_column_force_subset() {
     crate::test_utils::init_test_tracing();
-    let mut ev = crate::test_utils::runtime_startup_context();
-    let first = ev
-        .eval_str(
-            r#"(with-temp-buffer
-          (insert "abc")
-          (goto-char (point-min))
-          (list (move-to-column 10 t) (point) (append (buffer-string) nil)))"#,
-        )
-        .expect("eval first force case");
-    let first_items = list_to_vec(&first).expect("first list");
-    assert_eq!(first_items[0], Value::fixnum(10));
-    assert_eq!(first_items[1], Value::fixnum(7));
-    assert_eq!(
-        list_to_vec(&first_items[2]).expect("first buffer bytes"),
-        vec![
-            Value::fixnum(97),
-            Value::fixnum(98),
-            Value::fixnum(99),
-            Value::fixnum(9),
-            Value::fixnum(32),
-            Value::fixnum(32),
-        ]
-    );
 
-    let second = ev
-        .eval_str(
-            r#"(with-temp-buffer
-          (insert "a\tb")
-          (goto-char (point-min))
-          (list (move-to-column 5 t) (point) (append (buffer-string) nil)))"#,
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
+    ev.buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert text");
+    ev.buffers.goto_buffer_byte(buffer_id, 0);
+
+    let first =
+        builtin_move_to_column(&mut ev, vec![Value::fixnum(10), Value::T]).expect("force eol");
+    assert_eq!(first, Value::fixnum(10));
+    let buffer = ev.buffers.get(buffer_id).expect("buffer");
+    assert_eq!(buffer.point_byte(), 6);
+    assert_eq!(buffer.buffer_string(), "abc\t  ");
+
+    ev.buffers
+        .delete_buffer_region(
+            buffer_id,
+            0,
+            ev.buffers.get(buffer_id).unwrap().total_bytes(),
         )
-        .expect("eval second force case");
-    let second_items = list_to_vec(&second).expect("second list");
-    assert_eq!(second_items[0], Value::fixnum(5));
-    assert_eq!(second_items[1], Value::fixnum(6));
-    assert_eq!(
-        list_to_vec(&second_items[2]).expect("second buffer bytes"),
-        vec![
-            Value::fixnum(97),
-            Value::fixnum(32),
-            Value::fixnum(32),
-            Value::fixnum(32),
-            Value::fixnum(32),
-            Value::fixnum(9),
-            Value::fixnum(98),
-        ]
-    );
+        .expect("clear buffer");
+    ev.buffers
+        .insert_into_buffer(buffer_id, "a\tb")
+        .expect("insert tab text");
+    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    let second =
+        builtin_move_to_column(&mut ev, vec![Value::fixnum(5), Value::T]).expect("split tab");
+    assert_eq!(second, Value::fixnum(5));
+    let buffer = ev.buffers.get(buffer_id).expect("buffer");
+    assert_eq!(buffer.point_byte(), 5);
+    assert_eq!(buffer.buffer_string(), "a    \tb");
+
+    ev.buffers
+        .delete_buffer_region(
+            buffer_id,
+            0,
+            ev.buffers.get(buffer_id).unwrap().total_bytes(),
+        )
+        .expect("clear buffer");
+    ev.buffers
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .set_buffer_local("indent-tabs-mode", Value::NIL);
+    ev.buffers
+        .insert_into_buffer(buffer_id, "a\tb\n")
+        .expect("insert tab line");
+    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    let third = builtin_move_to_column(&mut ev, vec![Value::fixnum(4), Value::T])
+        .expect("split tab with spaces");
+    assert_eq!(third, Value::fixnum(4));
+    let buffer = ev.buffers.get(buffer_id).expect("buffer");
+    assert_eq!(buffer.point_byte(), 4);
+    assert_eq!(buffer.buffer_string(), "a       b\n");
 }
 
 #[test]

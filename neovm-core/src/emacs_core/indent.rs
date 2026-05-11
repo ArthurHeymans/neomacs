@@ -367,7 +367,9 @@ pub(crate) fn builtin_move_to_column(
     expect_min_args("move-to-column", &args, 1)?;
     expect_max_args("move-to-column", &args, 2)?;
     let target = expect_wholenump(&args[0])?;
-    let force = args.get(1).is_some_and(|v| v.is_truthy());
+    let force_arg = args.get(1).copied().unwrap_or(Value::NIL);
+    let force_non_nil = force_arg.is_truthy();
+    let force_is_t = force_arg == Value::T;
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::fixnum(0));
     };
@@ -390,15 +392,15 @@ pub(crate) fn builtin_move_to_column(
     let mut dest_byte = bol;
     let mut reached = 0usize;
     let mut found = false;
-    let mut tab_split: Option<(usize, usize)> = None;
+    let mut tab_split: Option<(usize, usize, usize)> = None;
 
     for unit in decode_lisp_string_units(&line) {
         let char_start = bol + unit.start;
         let char_end = bol + unit.end;
         let next = next_column_for_code(column, unit.code, unit.width, tabw);
         if next >= target {
-            if force && unit.code == b'\t' as u32 && next > target {
-                tab_split = Some((char_start, column));
+            if force_non_nil && unit.code == b'\t' as u32 && next > target {
+                tab_split = Some((char_start, column, next));
             } else {
                 dest_byte = char_end;
                 reached = next;
@@ -416,7 +418,7 @@ pub(crate) fn builtin_move_to_column(
         reached = column_for_lisp_string(&line, tabw);
     }
 
-    if let Some((tab_byte, col_before_tab)) = tab_split {
+    if let Some((tab_byte, col_before_tab, col_after_tab)) = tab_split {
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
@@ -427,12 +429,22 @@ pub(crate) fn builtin_move_to_column(
         super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
         super::editfns::signal_after_change(ctx, insert_pos, insert_pos + pad_len, 0)?;
+        let tab_after_pad = insert_pos + pad_len;
+        super::editfns::signal_before_change(ctx, tab_after_pad, tab_after_pad + 1)?;
+        let _ = ctx
+            .buffers
+            .delete_buffer_region(current_id, tab_after_pad, tab_after_pad + 1);
+        super::editfns::signal_after_change(ctx, tab_after_pad, tab_after_pad, 1)?;
+        let goal_point = tab_after_pad;
+        let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
+        let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
+        let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
         return Ok(Value::fixnum(target as i64));
     }
 
     let _ = ctx.buffers.goto_buffer_byte(current_id, dest_byte);
 
-    if force && reached < target {
+    if force_is_t && reached < target {
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
