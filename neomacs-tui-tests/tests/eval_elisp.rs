@@ -11593,6 +11593,39 @@ fn format_numeric_precision_and_prefixes_match_gnu_semantics() {
 }
 
 #[test]
+fn format_integer_conversion_accepts_nonfinite_floats_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/editfns.c:format allows FLOATP arguments for integer
+    // conversions other than %c.  Non-finite floats are formatted through the
+    // numeric conversion path as inf, -inf, and nan rather than rejected.
+    let expr = r#"(message "fmtdfloat:%S" (list (format "%d" 1e+INF) (format "%d" -1e+INF) (format "%d" 0.0e+NaN)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"fmtdfloat:(\"inf\" \"-inf\" \"nan\")"#;
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format %d should accept non-finite floats like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_integer_conversion_accepts_nonfinite_floats_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_print_level_notation_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
