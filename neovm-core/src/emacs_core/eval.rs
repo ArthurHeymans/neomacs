@@ -373,6 +373,8 @@ pub(crate) enum SpecBinding {
 #[derive(Clone, Debug)]
 pub(crate) enum BacktraceArgs {
     Unevalled(Value),
+    Evaluated0,
+    Evaluated1(Value),
     Evaluated(usize),
 }
 
@@ -9769,19 +9771,19 @@ impl Context {
     }
 
     pub(crate) fn push_backtrace_frame(&mut self, function: Value, args: &[Value]) {
-        let args_index = self.store_backtrace_args(LispArgVec::from_slice(args));
+        let args = self.backtrace_args_from_slice(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
-            args: BacktraceArgs::Evaluated(args_index),
+            args,
             debug_on_exit: false,
         });
     }
 
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
-        let args_index = self.store_backtrace_args(args);
+        let args = self.backtrace_args_from_owned(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
-            args: BacktraceArgs::Evaluated(args_index),
+            args,
             debug_on_exit: false,
         });
     }
@@ -9803,6 +9805,26 @@ impl Context {
         let index = self.backtrace_args_stack.len();
         self.backtrace_args_stack.push(args);
         index
+    }
+
+    #[inline]
+    fn backtrace_args_from_slice(&mut self, args: &[Value]) -> BacktraceArgs {
+        match args {
+            [] => BacktraceArgs::Evaluated0,
+            [arg0] => BacktraceArgs::Evaluated1(*arg0),
+            _ => BacktraceArgs::Evaluated(self.store_backtrace_args(LispArgVec::from_slice(args))),
+        }
+    }
+
+    #[inline]
+    fn backtrace_args_from_owned(&mut self, args: LispArgVec) -> BacktraceArgs {
+        if args.is_empty() {
+            BacktraceArgs::Evaluated0
+        } else if args.len() == 1 {
+            BacktraceArgs::Evaluated1(args[0])
+        } else {
+            BacktraceArgs::Evaluated(self.store_backtrace_args(args))
+        }
     }
 
     #[inline]
@@ -9844,6 +9866,8 @@ impl Context {
     pub(crate) fn backtrace_args_values(&self, args: &BacktraceArgs) -> LispArgVec {
         match args {
             BacktraceArgs::Unevalled(value) => smallvec::smallvec![*value],
+            BacktraceArgs::Evaluated0 => LispArgVec::new(),
+            BacktraceArgs::Evaluated1(value) => smallvec::smallvec![*value],
             BacktraceArgs::Evaluated(index) => self
                 .backtrace_args_stack
                 .get(*index)
@@ -9855,6 +9879,8 @@ impl Context {
     pub(crate) fn backtrace_args_len(&self, args: &BacktraceArgs) -> usize {
         match args {
             BacktraceArgs::Unevalled(_) => 1,
+            BacktraceArgs::Evaluated0 => 0,
+            BacktraceArgs::Evaluated1(_) => 1,
             BacktraceArgs::Evaluated(index) => self
                 .backtrace_args_stack
                 .get(*index)
@@ -9865,6 +9891,8 @@ impl Context {
     fn trace_backtrace_args(&self, args: &BacktraceArgs, visit: &mut dyn FnMut(Value)) {
         match args {
             BacktraceArgs::Unevalled(value) => visit(*value),
+            BacktraceArgs::Evaluated0 => {}
+            BacktraceArgs::Evaluated1(value) => visit(*value),
             BacktraceArgs::Evaluated(index) => {
                 if let Some(args) = self.backtrace_args_stack.get(*index) {
                     for arg in args.iter().copied() {
@@ -9901,7 +9929,7 @@ impl Context {
                 self.specpdl.get(count)
             );
         }
-        let args_index = self.store_backtrace_args(LispArgVec::from_slice(evaluated));
+        let evaluated_args = self.backtrace_args_from_slice(evaluated);
         let entry = self
             .specpdl
             .get_mut(count)
@@ -9911,7 +9939,7 @@ impl Context {
                 args: backtrace_args,
                 ..
             } if backtrace_args.is_unevalled() => {
-                *backtrace_args = BacktraceArgs::Evaluated(args_index);
+                *backtrace_args = evaluated_args;
             }
             other => panic!(
                 "set_backtrace_args_evalled: expected UNEVALLED Backtrace at specpdl[{count}], got {other:?}"
@@ -9933,7 +9961,7 @@ impl Context {
                 self.specpdl.get(count)
             );
         }
-        let args_index = self.store_backtrace_args(evaluated);
+        let evaluated_args = self.backtrace_args_from_owned(evaluated);
         let entry = self
             .specpdl
             .get_mut(count)
@@ -9943,7 +9971,7 @@ impl Context {
                 args: backtrace_args,
                 ..
             } if backtrace_args.is_unevalled() => {
-                *backtrace_args = BacktraceArgs::Evaluated(args_index);
+                *backtrace_args = evaluated_args;
             }
             other => panic!(
                 "set_backtrace_args_evalled_owned: expected UNEVALLED Backtrace at specpdl[{count}], got {other:?}"
@@ -10508,16 +10536,34 @@ impl Context {
     }
 
     #[inline]
-    fn backtrace_evaluated_arg_or_nil(&self, count: usize, index: usize) -> Value {
-        match self.specpdl.get(count) {
-            Some(SpecBinding::Backtrace {
-                args: BacktraceArgs::Evaluated(args_index),
-                ..
-            }) => self
+    fn backtrace_arg_or_nil(&self, args: &BacktraceArgs, index: usize) -> Value {
+        match args {
+            BacktraceArgs::Unevalled(_) | BacktraceArgs::Evaluated0 => Value::NIL,
+            BacktraceArgs::Evaluated1(value) => {
+                if index == 0 {
+                    *value
+                } else {
+                    Value::NIL
+                }
+            }
+            BacktraceArgs::Evaluated(args_index) => self
                 .backtrace_args_stack
                 .get(*args_index)
                 .and_then(|args| args.get(index).copied())
                 .unwrap_or(Value::NIL),
+        }
+    }
+
+    #[inline]
+    fn backtrace_evaluated_arg_or_nil(&self, count: usize, index: usize) -> Value {
+        match self.specpdl.get(count) {
+            Some(SpecBinding::Backtrace {
+                args:
+                    args @ (BacktraceArgs::Evaluated0
+                    | BacktraceArgs::Evaluated1(_)
+                    | BacktraceArgs::Evaluated(_)),
+                ..
+            }) => self.backtrace_arg_or_nil(args, index),
             Some(other) => panic!(
                 "backtrace_evaluated_arg_or_nil: expected EVALD Backtrace at specpdl[{count}], got {other:?}"
             ),
