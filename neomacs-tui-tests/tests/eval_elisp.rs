@@ -5023,14 +5023,15 @@ fn character_reader_elisp_functions_match_gnu_semantics() {
 fn incomplete_character_reader_errors_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    let expr = r#"(message "chareof:%S" (list (condition-case e (read "?") (error (list (car e) (cadr e)))) (condition-case e (read "?\\C-") (error (list (car e) (cadr e))))))"#;
+    // GNU src/lread.c:read_char_literal/read_char_escape signal end-of-file
+    // for a bare `?' and for incomplete character modifiers like \C- and \M-.
+    let expr = r#"(message "chareof:%S" (list (condition-case e (read "?") (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "C-")) (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "M-")) (error (list (car e) (cadr e))))))"#;
     support::eval_expression(&mut gnu, &mut neo, expr);
 
     let ready = |grid: &[String]| {
-        grid.iter()
-            .rev()
-            .take(4)
-            .any(|row| row.contains("chareof:((end-of-file nil) (end-of-file nil))"))
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("chareof:((end-of-file nil) (end-of-file nil) (end-of-file nil))")
+        })
     };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
