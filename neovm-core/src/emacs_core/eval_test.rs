@@ -140,6 +140,25 @@ fn symbols_with_pos_enabled_makes_lisp_comparison_primitives_transparent() {
 }
 
 #[test]
+fn memq_and_assq_signal_circular_list_like_gnu() {
+    assert_eq!(
+        eval_all(
+            r#"(let ((x (list 1 2 3)))
+                 (setcdr (cdr (cdr x)) x)
+                 (condition-case err
+                     (memq 9 x)
+                   (error (car err))))
+               (let ((x (list (cons 1 2) (cons 3 4))))
+                 (setcdr (cdr x) x)
+                 (condition-case err
+                     (assq 9 x)
+                   (error (car err))))"#
+        ),
+        vec!["OK circular-list", "OK circular-list"]
+    );
+}
+
+#[test]
 fn keywordp_treats_positioned_keywords_like_gnu_when_enabled() {
     let result = eval_one(
         r#"(let ((pos-kw (position-symbol :neo-keyword 42)))

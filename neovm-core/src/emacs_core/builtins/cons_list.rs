@@ -1112,14 +1112,45 @@ pub(crate) fn builtin_memq_2(
 }
 
 fn builtin_memq_values(target: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    for_each_proper_list_tail(list, list, |tail| {
+    let target_bits = target.bits();
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
         let pair_car = tail.cons_car();
-        if eq_value_swp(&target, &pair_car, symbols_with_pos_enabled) {
-            Ok(Some(tail))
+        let matches = if symbols_with_pos_enabled {
+            eq_value_swp(&target, &pair_car, true)
         } else {
-            Ok(None)
+            target_bits == pair_car.bits()
+        };
+        if matches {
+            return Ok(tail);
         }
-    })
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), list],
+        ))
+    }
 }
 
 pub(crate) fn builtin_memql(args: Vec<Value>) -> EvalResult {
@@ -1235,16 +1266,48 @@ pub(crate) fn builtin_assq_2(
 }
 
 fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    for_each_proper_list_tail(list, list, |tail| {
+    let key_bits = key.bits();
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
         let pair_car = tail.cons_car();
-        if let ValueKind::Cons = pair_car.kind() {
+        if pair_car.is_cons() {
             let entry_key = pair_car.cons_car();
-            if eq_value_swp(&key, &entry_key, symbols_with_pos_enabled) {
-                return Ok(Some(pair_car));
+            let matches = if symbols_with_pos_enabled {
+                eq_value_swp(&key, &entry_key, true)
+            } else {
+                key_bits == entry_key.bits()
+            };
+            if matches {
+                return Ok(pair_car);
             }
         }
-        Ok(None)
-    })
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), list],
+        ))
+    }
 }
 
 pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
