@@ -87,6 +87,19 @@ fn strip_reader_prefix_lisp_string(source: &crate::heap_types::LispString) -> (u
     }
 }
 
+fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flow {
+    match e.kind {
+        super::value_reader::ReadErrorKind::EndOfFile => signal("end-of-file", vec![]),
+        super::value_reader::ReadErrorKind::Error => {
+            signal("error", vec![Value::string(e.message)])
+        }
+        super::value_reader::ReadErrorKind::InvalidReadSyntax => signal(
+            "invalid-read-syntax",
+            vec![Value::string(format!("Read error: {}", e.message))],
+        ),
+    }
+}
+
 pub(crate) fn eval_forms_from_source(
     eval: &mut super::eval::Context,
     source: &str,
@@ -134,12 +147,7 @@ fn eval_forms_from_source_streaming(
             pos,
             &eval.obarray,
         )
-        .map_err(|e| {
-            signal(
-                "invalid-read-syntax",
-                vec![Value::string(format!("Read error: {}", e.message))],
-            )
-        })?;
+        .map_err(signal_reader_error_for_eval_source)?;
         let Some((form, next_pos)) = read_result else {
             break;
         };
@@ -192,12 +200,9 @@ fn eval_forms_from_lisp_source_streaming(
     let read_source = super::value_reader::LispReadSource::new(source);
     let mut pos = start_pos;
     loop {
-        let read_result = read_source.read_one(pos, &eval.obarray).map_err(|e| {
-            signal(
-                "invalid-read-syntax",
-                vec![Value::string(format!("Read error: {}", e.message))],
-            )
-        })?;
+        let read_result = read_source
+            .read_one(pos, &eval.obarray)
+            .map_err(signal_reader_error_for_eval_source)?;
         let Some((form, next_pos)) = read_result else {
             break;
         };
@@ -556,12 +561,9 @@ fn eval_forms_from_source_in_vm_runtime_streaming(
         let read_source = super::value_reader::LispReadSource::new(source);
         let mut pos = start_pos;
         loop {
-            let read_result = read_source.read_one(pos, &shared.obarray).map_err(|e| {
-                signal(
-                    "invalid-read-syntax",
-                    vec![Value::string(format!("Read error: {}", e.message))],
-                )
-            })?;
+            let read_result = read_source
+                .read_one(pos, &shared.obarray)
+                .map_err(signal_reader_error_for_eval_source)?;
             let Some((form, next_pos)) = read_result else {
                 break;
             };

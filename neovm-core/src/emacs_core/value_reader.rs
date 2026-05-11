@@ -227,6 +227,14 @@ impl<'a> LispReadSource<'a> {
 pub struct ReadError {
     pub message: String,
     pub position: usize,
+    pub kind: ReadErrorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadErrorKind {
+    InvalidReadSyntax,
+    EndOfFile,
+    Error,
 }
 
 impl std::fmt::Display for ReadError {
@@ -452,7 +460,7 @@ impl<'a> Reader<'a> {
         // to tag symbols with their source offset (mirrors GNU read0).
         let form_start = self.pos;
         let Some(ch) = self.current_code() else {
-            return Err(self.error("unexpected end of input"));
+            return Err(self.end_of_file_error());
         };
 
         let value = match ch {
@@ -568,7 +576,7 @@ impl<'a> Reader<'a> {
                 }
                 None => {
                     restore_scratch_gc_roots(saved);
-                    return Err(self.error("unterminated list"));
+                    return Err(self.end_of_file_error());
                 }
             }
         }
@@ -1121,8 +1129,67 @@ impl<'a> Reader<'a> {
         u32::from_str_radix(&hex_storage, 16).map_err(|_| self.error("invalid hex escape"))
     }
 
+    fn read_char_hex_escape(&mut self) -> Result<u32, ReadError> {
+        let mut value = 0u32;
+        let mut digits = 0usize;
+        while let Some(c) = self.current_code() {
+            let Some(digit) = ascii_hex_digit_value(c) else {
+                break;
+            };
+            self.bump();
+            value = (value << 4) + digit;
+            if value > (CHAR_META_MODIFIER | (CHAR_META_MODIFIER - 1)) {
+                return Err(
+                    self.ordinary_error(&format!("Hex character out of range: \\x{value:x}..."))
+                );
+            }
+            digits += 1;
+        }
+
+        if digits == 0 {
+            return Err(
+                self.ordinary_error("Invalid escape char syntax: \\x not followed by hex digit")
+            );
+        }
+
+        if digits < 3 && (0x80..0x100).contains(&value) {
+            return Ok(emacs_char::unibyte_to_char(value as u8));
+        }
+
+        Ok(value)
+    }
+
+    fn read_char_unicode_escape(&mut self, count: usize, prefix: char) -> Result<u32, ReadError> {
+        let mut value = 0u32;
+        for _ in 0..count {
+            let Some(c) = self.current_code() else {
+                return Err(
+                    self.ordinary_error(&format!("Malformed Unicode escape: \\{prefix}{value:x}"))
+                );
+            };
+            self.bump();
+            let Some(digit) = ascii_hex_digit_value(c) else {
+                return Err(self.ordinary_error(&format!(
+                    "Non-hex character used for Unicode escape: {} ({})",
+                    source_code_for_error(c),
+                    c
+                )));
+            };
+            value = (value << 4) + digit;
+        }
+
+        if value > 0x10FFFF {
+            return Err(self.ordinary_error(&format!("Non-Unicode character: 0x{value:x}")));
+        }
+
+        Ok(value)
+    }
+
     fn read_unicode_name_escape(&mut self) -> Result<u32, ReadError> {
-        self.expect('{')?;
+        if self.current_code() != Some(b'{' as u32) {
+            return Err(self.error("Expected opening brace after \\N"));
+        }
+        self.bump();
         let mut name = String::new();
         let mut whitespace = false;
 
@@ -1181,21 +1248,28 @@ impl<'a> Reader<'a> {
         if matches!(self.current_code(), Some(ch) if !is_char_literal_delimiter_code(ch)) {
             return Err(self.error("?"));
         }
-        // Character literals with modifier bits produce values beyond Unicode range.
-        // Emit them as fixnums, matching GNU Emacs where characters ARE integers.
-        Ok(Value::fixnum(val as i64))
+        let modifiers = val & !CHAR_CODE_MASK;
+        let mut code = val & CHAR_CODE_MASK;
+        if emacs_char::char_byte8_p(code) {
+            code = emacs_char::char_to_byte8(code) as u32;
+        }
+
+        // Character literals with modifier bits produce values beyond Unicode
+        // range.  Emit them as fixnums, matching GNU Emacs where characters
+        // are integers.
+        Ok(Value::fixnum((code | modifiers) as i64))
     }
 
     /// Parse the value part of a character literal, accumulating modifier bits.
     fn parse_char_value(&mut self, modifiers: u32) -> Result<u32, ReadError> {
         let Some(ch) = self.current_code() else {
-            return Err(self.error("expected character in char literal"));
+            return Err(self.end_of_file_error());
         };
         self.bump();
 
         if ch == b'\\' as u32 {
             let Some(esc) = self.current_code() else {
-                return Err(self.error("unterminated character escape"));
+                return Err(self.end_of_file_error());
             };
             self.bump();
             let val = match esc {
@@ -1216,12 +1290,10 @@ impl<'a> Reader<'a> {
                     return self.parse_char_value(modifiers | (1 << 23)); // super bit
                 }
                 x if x == b's' as u32 => b' ' as u32,
-                x if x == b'x' as u32 => self.read_hex_digits()?.0,
-                x if x == b'u' as u32 => self.read_fixed_hex(4)?,
-                x if x == b'U' as u32 => self.read_fixed_hex(8)?,
-                x if x == b'N' as u32 && self.current_code() == Some(b'{' as u32) => {
-                    self.read_unicode_name_escape()?
-                }
+                x if x == b'x' as u32 => self.read_char_hex_escape()?,
+                x if x == b'u' as u32 => self.read_char_unicode_escape(4, 'u')?,
+                x if x == b'U' as u32 => self.read_char_unicode_escape(8, 'U')?,
+                x if x == b'N' as u32 => self.read_unicode_name_escape()?,
                 x if (b'0' as u32..=b'7' as u32).contains(&x) => {
                     let mut val = esc - b'0' as u32;
                     for _ in 0..2 {
@@ -1235,24 +1307,44 @@ impl<'a> Reader<'a> {
                     }
                     val
                 }
-                x if x == b'C' as u32 && self.current_code() == Some(b'-' as u32) => {
+                x if x == b'C' as u32 => {
+                    if self.current_code() != Some(b'-' as u32) {
+                        return Err(self
+                            .ordinary_error("Invalid escape char syntax: \\C not followed by -"));
+                    }
                     self.bump(); // consume '-'
                     let base = self.parse_char_value(modifiers)?;
                     return Ok(apply_control_modifier(base));
                 }
-                x if x == b'M' as u32 && self.current_code() == Some(b'-' as u32) => {
+                x if x == b'M' as u32 => {
+                    if self.current_code() != Some(b'-' as u32) {
+                        return Err(self
+                            .ordinary_error("Invalid escape char syntax: \\M not followed by -"));
+                    }
                     self.bump();
                     return self.parse_char_value(modifiers | CHAR_META_MODIFIER);
                 }
-                x if x == b'S' as u32 && self.current_code() == Some(b'-' as u32) => {
+                x if x == b'S' as u32 => {
+                    if self.current_code() != Some(b'-' as u32) {
+                        return Err(self
+                            .ordinary_error("Invalid escape char syntax: \\S not followed by -"));
+                    }
                     self.bump();
                     return self.parse_char_value(modifiers | CHAR_SHIFT_MODIFIER);
                 }
-                x if x == b'A' as u32 && self.current_code() == Some(b'-' as u32) => {
+                x if x == b'A' as u32 => {
+                    if self.current_code() != Some(b'-' as u32) {
+                        return Err(self
+                            .ordinary_error("Invalid escape char syntax: \\A not followed by -"));
+                    }
                     self.bump();
                     return self.parse_char_value(modifiers | (1 << 22)); // alt bit
                 }
-                x if x == b'H' as u32 && self.current_code() == Some(b'-' as u32) => {
+                x if x == b'H' as u32 => {
+                    if self.current_code() != Some(b'-' as u32) {
+                        return Err(self
+                            .ordinary_error("Invalid escape char syntax: \\H not followed by -"));
+                    }
                     self.bump();
                     return self.parse_char_value(modifiers | (1 << 24)); // hyper bit
                 }
@@ -1465,7 +1557,7 @@ impl<'a> Reader<'a> {
                         }
                         self.read_radix_number(n as u32)
                     }
-                    Some(code) if code == b'=' as u32 => {
+                    Some(code) if code == b'=' as u32 && self.read_circle_enabled() => {
                         // #N=EXPR -- GNU lread.c installs a placeholder
                         // before reading EXPR so #N# can refer to recursive
                         // structures being read.
@@ -1498,13 +1590,21 @@ impl<'a> Reader<'a> {
                         restore_scratch_gc_roots(saved);
                         Ok(result)
                     }
-                    Some(code) if code == b'#' as u32 => {
+                    Some(code) if code == b'#' as u32 && self.read_circle_enabled() => {
                         // #N# — reference previously defined label N
                         self.bump();
                         self.read_labels
                             .get(&n)
                             .copied()
-                            .ok_or_else(|| self.error(&format!("#{n}#: undefined read label")))
+                            .ok_or_else(|| self.error(&format!("#{n}#")))
+                    }
+                    Some(code) if code == b'=' as u32 => {
+                        self.bump();
+                        Err(self.error(&format!("#{n}=")))
+                    }
+                    Some(code) if code == b'#' as u32 => {
+                        self.bump();
+                        Err(self.error(&format!("#{n}#")))
                     }
                     _ => Err(self.error(&format!("#{n}"))),
                 }
@@ -1869,6 +1969,23 @@ impl<'a> Reader<'a> {
         ReadError {
             position: self.pos,
             message: message.to_string(),
+            kind: ReadErrorKind::InvalidReadSyntax,
+        }
+    }
+
+    fn ordinary_error(&self, message: &str) -> ReadError {
+        ReadError {
+            position: self.pos,
+            message: message.to_string(),
+            kind: ReadErrorKind::Error,
+        }
+    }
+
+    fn end_of_file_error(&self) -> ReadError {
+        ReadError {
+            position: self.pos,
+            message: "end-of-file".to_string(),
+            kind: ReadErrorKind::EndOfFile,
         }
     }
 
@@ -1877,6 +1994,12 @@ impl<'a> Reader<'a> {
             self.bump();
         }
         self.error(message)
+    }
+
+    fn read_circle_enabled(&self) -> bool {
+        self.obarray
+            .symbol_value("read-circle")
+            .is_none_or(|value| !value.is_nil())
     }
 
     fn parse_decimal_usize(&mut self) -> Result<usize, ReadError> {
@@ -2074,6 +2197,18 @@ fn is_ascii_digit_code(code: u32) -> bool {
 
 fn is_ascii_hexdigit_code(code: u32) -> bool {
     code <= 0x7F && (code as u8).is_ascii_hexdigit()
+}
+
+fn ascii_hex_digit_value(code: u32) -> Option<u32> {
+    if code > 0x7F {
+        return None;
+    }
+    match code as u8 {
+        b'0'..=b'9' => Some((code as u8 - b'0') as u32),
+        b'a'..=b'f' => Some((code as u8 - b'a' + 10) as u32),
+        b'A'..=b'F' => Some((code as u8 - b'A' + 10) as u32),
+        _ => None,
+    }
 }
 
 fn is_ascii_digit_for_radix_code(code: u32, radix: u32) -> bool {

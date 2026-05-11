@@ -529,6 +529,33 @@ fn end_of_file_during_parsing_error() -> Flow {
     )
 }
 
+fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
+    match e.kind {
+        super::value_reader::ReadErrorKind::EndOfFile => signal("end-of-file", vec![]),
+        super::value_reader::ReadErrorKind::Error => {
+            signal("error", vec![Value::string(e.message)])
+        }
+        super::value_reader::ReadErrorKind::InvalidReadSyntax => {
+            signal("invalid-read-syntax", vec![Value::string(e.message)])
+        }
+    }
+}
+
+fn signal_reader_error_from_buffer(
+    buffer: &crate::buffer::Buffer,
+    e: super::value_reader::ReadError,
+) -> Flow {
+    match e.kind {
+        super::value_reader::ReadErrorKind::EndOfFile => signal("end-of-file", vec![]),
+        super::value_reader::ReadErrorKind::Error => {
+            signal("error", vec![Value::string(e.message)])
+        }
+        super::value_reader::ReadErrorKind::InvalidReadSyntax => {
+            signal_invalid_read_syntax_in_buffer_object(buffer, e.position, e.message)
+        }
+    }
+}
+
 fn stdin_end_of_file_error() -> Flow {
     signal(
         "end-of-file",
@@ -651,25 +678,8 @@ fn read_from_string_impl_inner(
         read_source.read_one_range_with_locate_syms(start_byte, end_byte, locate_syms, obarray);
 
     let (value, absolute_end_byte) = read_result
-        .map_err(|e| {
-            if e.message.contains("unterminated") || e.message.contains("end of input") {
-                signal(
-                    "end-of-file",
-                    vec![Value::string("End of file during parsing")],
-                )
-            } else {
-                signal(
-                    "invalid-read-syntax",
-                    vec![Value::string(e.message.clone())],
-                )
-            }
-        })?
-        .ok_or_else(|| {
-            signal(
-                "end-of-file",
-                vec![Value::string("End of file during parsing")],
-            )
-        })?;
+        .map_err(signal_reader_error_from_string)?
+        .ok_or_else(|| signal("end-of-file", vec![]))?;
 
     let absolute_end_char = if full_string.is_multibyte() {
         crate::emacs_core::emacs_char::byte_to_char_pos(full_string_bytes, absolute_end_byte)
@@ -805,19 +815,7 @@ pub fn builtin_read_impl(
                     &ctx.obarray,
                 ) {
                     Ok(result) => result,
-                    Err(e) => {
-                        return Err(
-                            if e.message.contains("unterminated")
-                                || e.message.contains("end of input")
-                            {
-                                end_of_file_during_parsing_error()
-                            } else {
-                                signal_invalid_read_syntax_in_buffer_object(
-                                    buf, e.position, e.message,
-                                )
-                            },
-                        );
-                    }
+                    Err(e) => return Err(signal_reader_error_from_buffer(buf, e)),
                 }
             };
 
