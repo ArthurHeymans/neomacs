@@ -6419,6 +6419,39 @@ fn symbol_with_pos_type_and_negative_position_semantics_match_gnu() {
 }
 
 #[test]
+fn symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c uses CHECK_SYMBOL for symbol-name, symbol-plist, and
+    // fset.  A symbol-with-pos is not a Lisp symbol for these APIs; callers
+    // must use bare-symbol explicitly when they want the underlying symbol.
+    let expr = r#"(message "symposcells:%S" (let ((a (position-symbol 'foo 1)) (b (position-symbol 'foo 2))) (list (eq a 'foo) (eq a b) (equal a b) (equal (condition-case e (symbol-name a) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp)) (equal (condition-case e (symbol-plist a) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp)) (equal (condition-case e (progn (put a 'p 9) (list (get 'foo 'p) (get b 'p))) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp)) (equal (condition-case e (progn (fset a (lambda () 7)) (list (fboundp 'foo) (funcall b))) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "symposcells:(nil nil nil t t t t)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: symbol-with-pos should not be transparent to symbol cell APIs like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn function_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
