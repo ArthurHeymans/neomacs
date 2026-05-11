@@ -1281,6 +1281,96 @@ impl Interpreter<'_, '_, '_> {
                 unsafe { std::env::set_var(&*var, &*val); }
                 Some(LispValue::NIL)
             }),
+            "file-exists-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(std::path::Path::new(&path).exists()))
+            }),
+            "file-directory-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(std::path::Path::new(&path).is_dir()))
+            }),
+            "file-regular-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(std::path::Path::new(&path).is_file()))
+            }),
+            "file-readable-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let ok = std::fs::metadata(&path).map(|m| m.permissions().readonly() == false).unwrap_or(false);
+                Some(bool_value(ok))
+            }),
+            "file-writable-p" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let ok = !std::fs::metadata(&path).map(|m| m.permissions().readonly()).unwrap_or(true);
+                Some(bool_value(ok))
+            }),
+            "file-name-absolute-p" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(std::path::Path::new(&name).is_absolute()))
+            }),
+            "expand-file-name" => self.subr_1_2(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let default = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
+                let default_dir = default.as_deref().unwrap_or(".");
+                let expanded = if std::path::Path::new(&name).is_absolute() {
+                    name
+                } else {
+                    std::path::Path::new(default_dir).join(&name).to_string_lossy().to_string()
+                };
+                Some(s.runtime.string(expanded))
+            }),
+            "file-name-directory" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match std::path::Path::new(&name).parent() {
+                    Some(parent) if parent.as_os_str().is_empty() => Some(LispValue::NIL),
+                    Some(parent) => Some(s.runtime.string(parent.to_string_lossy())),
+                    None => Some(LispValue::NIL),
+                }
+            }),
+            "file-name-nondirectory" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let result = std::path::Path::new(&name).file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                Some(s.runtime.string(result))
+            }),
+            "file-name-extension" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match std::path::Path::new(&name).extension() {
+                    Some(ext) => Some(s.runtime.string(ext.to_string_lossy())),
+                    None => Some(LispValue::NIL),
+                }
+            }),
+            "file-name-base" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let result = std::path::Path::new(&name).file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                Some(s.runtime.string(result))
+            }),
+            "directory-file-name" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(s.runtime.string(name.trim_end_matches('/')))
+            }),
+            "delete-file" => self.subr_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match std::fs::remove_file(&path) {
+                    Ok(()) => Some(LispValue::NIL),
+                    Err(_) => None,
+                }
+            }),
+            "make-directory" => self.subr_1_2(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let parents = args.get(1).map(|v| !v.is_nil()).unwrap_or(false);
+                let result = if parents {
+                    std::fs::create_dir_all(&path)
+                } else {
+                    std::fs::create_dir(&path)
+                };
+                match result {
+                    Ok(()) => Some(LispValue::NIL),
+                    Err(_) => None,
+                }
+            }),
             "current-time" => self.subr_0_1(name, args, |s| {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -2686,17 +2776,6 @@ impl Interpreter<'_, '_, '_> {
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
-            "file-exists-p" => self.exact_arity(name, args, 1).and_then(|_| {
-                let path = self.string_contents_owned(args[0])?;
-                Some(bool_value(std::path::Path::new(&path).exists()))
-            }),
-            "file-readable-p" => self.exact_arity(name, args, 1).and_then(|_| {
-                let path = self.string_contents_owned(args[0])?;
-                let meta = std::fs::metadata(&path).ok();
-                Some(bool_value(
-                    meta.is_some_and(|m| !m.permissions().readonly()),
-                ))
-            }),
             "load" => self
                 .min_max_arity(name, args, 1, 5)
                 .and_then(|_| self.load_file(args[0])),
@@ -7140,6 +7219,8 @@ fn is_primitive_name(name: &str) -> bool {
             "defun",
             "delete",
             "delete-dups",
+            "delete-file",
+            "directory-file-name",
             "delq",
             "display-graphic-p",
             "downcase",
@@ -7157,8 +7238,17 @@ fn is_primitive_name(name: &str) -> bool {
             "expt",
             "fboundp",
             "featurep",
+            "file-directory-p",
             "file-exists-p",
+            "file-name-absolute-p",
+            "file-name-base",
+            "file-name-directory",
+            "file-name-extension",
+            "file-name-nondirectory",
+            "file-name-sans-extension",
             "file-readable-p",
+            "file-regular-p",
+            "file-writable-p",
             "fillarray",
             "fixnump",
             "float",
@@ -7211,6 +7301,7 @@ fn is_primitive_name(name: &str) -> bool {
             "make-vector",
             "make-hash-table",
             "make-list",
+            "make-directory",
             "make-string",
             "make-symbol",
             "mapl",
