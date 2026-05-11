@@ -2305,6 +2305,39 @@ fn vconcat_rejects_records_like_gnu() {
 }
 
 #[test]
+fn elt_rejects_records_even_though_length_accepts_them_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/fns.c:Flength accepts RECORDP via PVSIZE, but Felt calls
+    // CHECK_ARRAY(sequence, Qsequencep).  Records are not valid `elt`
+    // sequences even though they have a length and copy-sequence works.
+    let expr = r#"(message "eltrec:%S" (list (length #s(foo a b)) (condition-case e (elt #s(foo a b) 0) (error (list (car e) (cadr e)))) (copy-sequence #s(foo a b))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "eltrec:(3 (wrong-type-argument sequencep) #s(foo a b))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: elt should reject records with GNU sequencep semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "elt_rejects_records_even_though_length_accepts_them_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn vector_array_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
