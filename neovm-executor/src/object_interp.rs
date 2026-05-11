@@ -1281,6 +1281,40 @@ impl Interpreter<'_, '_, '_> {
                 unsafe { std::env::set_var(&*var, &*val); }
                 Some(LispValue::NIL)
             }),
+            "current-time" => self.subr_0_1(name, args, |s| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                let secs = now.as_secs();
+                let high = LispValue::expect_fixnum((secs >> 16) as i64);
+                let low = LispValue::expect_fixnum((secs & 0xFFFF) as i64);
+                let tail = s.runtime.cons(low, LispValue::NIL);
+                Some(s.runtime.cons(high, tail))
+            }),
+            "float-time" => self.subr_0_1(name, args, |s| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                Some(s.runtime.float(now.as_secs_f64()))
+            }),
+            "current-time-string" => self.subr_min_2(name, args, |s| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                let secs = now.as_secs() as i64;
+                let days = secs / 86400;
+                let total_days = days + 719528;
+                let (y, m, d) = days_to_ymd(total_days);
+                let tod = secs % 86400;
+                let mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                let day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                let wday = ((total_days + 3) % 7) as usize;
+                Some(s.runtime.string(format!(
+                    "{} {} {:02} {:02}:{:02}:{:02} {}",
+                    day[wday], mon[m as usize - 1], d,
+                    tod / 3600, (tod % 3600) / 60, tod % 60, y
+                )))
+            }),
             "gensym" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let prefix = args
                     .first()
@@ -6914,6 +6948,22 @@ fn bool_value(value: bool) -> LispValue {
     }
 }
 
+/// Convert days since 0000-03-01 to (year, month, day).
+fn days_to_ymd(days: i64) -> (i64, i64, i64) {
+    // Algorithm from Howard Hinnant
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as i64;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as i64;
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 fn is_primitive_name(name: &str) -> bool {
     use std::sync::OnceLock;
     static PRIMITIVES: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
@@ -7082,6 +7132,8 @@ fn is_primitive_name(name: &str) -> bool {
             "cos",
             "defalias",
             "current-buffer",
+            "current-time",
+            "current-time-string",
             "define-error",
             "default-boundp",
             "default-value",
@@ -7110,6 +7162,7 @@ fn is_primitive_name(name: &str) -> bool {
             "fillarray",
             "fixnump",
             "float",
+            "float-time",
             "floatp",
             "floor",
             "fontp",
