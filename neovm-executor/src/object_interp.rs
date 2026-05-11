@@ -1897,6 +1897,86 @@ impl Interpreter<'_, '_, '_> {
                     Err(_) => Some(LispValue::NIL),
                 }
             }),
+            "sleep-for" => self.subr_0_1(name, args, |s| {
+                let secs = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(0) as f64;
+                if secs > 0.0 {
+                    std::thread::sleep(std::time::Duration::from_secs_f64(secs));
+                }
+                Some(LispValue::NIL)
+            }),
+            "message" => self.subr_vararg(name, args, |s| {
+                if args.is_empty() { return Some(LispValue::NIL); }
+                let fmt = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let msg = if args.len() == 1 {
+                    fmt
+                } else {
+                    let rest: Vec<String> = args[1..].iter().filter_map(|a| {
+                        if a.is_nil() { Some("nil".to_string()) }
+                        else if *a == LispValue::TRUE { Some("t".to_string()) }
+                        else if let Some(n) = a.as_fixnum() { Some(n.to_string()) }
+                        else { s.runtime.string_contents(*a).ok().map(|s| s.to_string()) }
+                    }).collect();
+                    let mut result = String::new();
+                    let mut ri = 0;
+                    let chars: Vec<char> = fmt.chars().collect();
+                    let mut i = 0;
+                    while i < chars.len() {
+                        if chars[i] == '%' && i + 1 < chars.len() && chars[i+1] == 's' && ri < rest.len() {
+                            result.push_str(&rest[ri]);
+                            ri += 1; i += 2;
+                        } else {
+                            result.push(chars[i]); i += 1;
+                        }
+                    }
+                    result
+                };
+                Some(s.runtime.string(msg))
+            }),
+            "documentation" => self.subr_1_2(name, args, |s| {
+                if let Some(_sym) = args[0].as_char() {
+                    return Some(LispValue::NIL);
+                }
+                Some(LispValue::NIL)
+            }),
+            "format-time-string" => self.subr_1_3(name, args, |s| {
+                let fmt = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                let secs = now.as_secs() as i64;
+                let days = secs / 86400 + 719528;
+                let (y, m, d) = days_to_ymd(days);
+                let tod = secs % 86400;
+                let result = fmt
+                    .replace("%Y", &format!("{:04}", y))
+                    .replace("%m", &format!("{:02}", m))
+                    .replace("%d", &format!("{:02}", d))
+                    .replace("%H", &format!("{:02}", tod / 3600))
+                    .replace("%M", &format!("{:02}", (tod % 3600) / 60))
+                    .replace("%S", &format!("{:02}", tod % 60))
+                    .replace("%%", "%");
+                Some(s.runtime.string(result))
+            }),
+            "decode-time" => self.subr_0_1(name, args, |s| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                let secs = now.as_secs() as i64;
+                let days = secs / 86400 + 719528;
+                let (y, m, d) = days_to_ymd(days);
+                let tod = secs % 86400;
+                let rt = &mut s.runtime;
+                let nil = rt.cons(LispValue::NIL, LispValue::NIL);
+                let s1 = rt.cons(LispValue::expect_fixnum(y), nil);
+                let s2 = rt.cons(LispValue::expect_fixnum(m), s1);
+                let s3 = rt.cons(LispValue::expect_fixnum(d), s2);
+                let s4 = rt.cons(LispValue::expect_fixnum((tod / 3600) as i64), s3);
+                let s5 = rt.cons(LispValue::expect_fixnum(((tod % 3600) / 60) as i64), s4);
+                let s6 = rt.cons(LispValue::expect_fixnum((tod % 60) as i64), s5);
+                Some(s6)
+            }),
+            "time-less-p" => self.subr_2(name, args, |s| {
+                // Compare as list times (HIGH LOW MICRO) or just return nil for now
+                Some(LispValue::TRUE)
+            }),
             "window-buffer" => Some(LispValue::NIL),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);
