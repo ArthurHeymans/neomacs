@@ -1208,7 +1208,10 @@ impl Interpreter<'_, '_, '_> {
                     && a.unwrap().to_ascii_lowercase() == b.unwrap().to_ascii_lowercase()))
             }),
             "char-table-p" | "bool-vector-p" | "recordp"
-            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" | "processp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" | "processp"
+            | "framep" | "overlayp" | "keymapp" | "syntax-table-p" | "case-table-p"
+            | "category-table-p" | "fontp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "display-graphic-p" => self.min_max_arity(name, args, 0, 1).map(|_| bool_value(false)),
             "char-valid-p" => self.exact_arity(name, args, 1).map(|_| {
                 let code = args[0].as_fixnum().unwrap_or(-1);
                 bool_value(code >= 0 && code <= 0x10FFFF && (code < 0xD800 || code > 0xDFFF))
@@ -6977,6 +6980,8 @@ fn is_primitive_name(name: &str) -> bool {
             "capitalize",
             "car",
             "car-safe",
+            "case-table-p",
+            "category-table-p",
             "cdaaar",
             "cdaadr",
             "cdaar",
@@ -7107,6 +7112,8 @@ fn is_primitive_name(name: &str) -> bool {
             "float",
             "floatp",
             "floor",
+            "fontp",
+            "framep",
             "fmakunbound",
             "format",
             "format-message",
@@ -7127,6 +7134,7 @@ fn is_primitive_name(name: &str) -> bool {
             "integerp",
             "intern",
             "intern-soft",
+            "keymapp",
             "keywordp",
             "last",
             "length",
@@ -7196,6 +7204,8 @@ fn is_primitive_name(name: &str) -> bool {
             "number-or-marker-p",
             "number-to-string",
             "numberp",
+            "oddp",
+            "overlayp",
             "pairlis",
             "plist-get",
             "plist-member",
