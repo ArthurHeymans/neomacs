@@ -11199,6 +11199,44 @@ fn characterp_ignored_second_arg_matches_gnu_semantics() {
 }
 
 #[test]
+fn unibyte_char_to_multibyte_rejects_negative_chars_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/character.c:Funibyte_char_to_multibyte calls CHECK_CHARACTER
+    // before checking the unibyte range, so negative integers are characterp
+    // type errors.
+    let expr = r#"(message "unibytech:%S" (list (unibyte-char-to-multibyte #x80) (condition-case e (unibyte-char-to-multibyte #x100) (error (list (car e) (cadr e)))) (condition-case e (unibyte-char-to-multibyte -1) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("unibytech:(4194176")
+                && row.contains(r#"(error \"Not a unibyte character: 256\")"#)
+                && row.contains("(wrong-type-argument characterp))")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: unibyte-char-to-multibyte should reject negative chars like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "unibyte_char_to_multibyte_rejects_negative_chars_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn coding_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
