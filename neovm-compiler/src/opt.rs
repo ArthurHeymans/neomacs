@@ -1337,6 +1337,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
+        "cl-pairlis" if args.len() >= 2 => {
+            if matches!(args[0], SsaConst::Nil) && matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::Nil)
+            } else {
+                None
+            }
+        },
         "sort" | "cl-sort" | "cl-stable-sort" if args.len() == 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
