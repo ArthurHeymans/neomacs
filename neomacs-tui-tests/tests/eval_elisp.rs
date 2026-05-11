@@ -3465,6 +3465,40 @@ fn marker_cross_buffer_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn set_marker_buffer_type_error_uses_bufferp_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/marker.c:Fset_marker delegates to set_marker_internal, whose
+    // optional BUFFER argument is validated as a buffer.  Passing a non-buffer
+    // third argument must signal bufferp, not another implementation-specific
+    // predicate.
+    let expr = r#"(message "setmarkbuf:%S" (with-temp-buffer (let ((m (make-marker))) (condition-case e (set-marker m 1 1) (error (list (car e) (cadr e)))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "setmarkbuf:(wrong-type-argument bufferp)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: set-marker third-argument type error should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "set_marker_buffer_type_error_uses_bufferp_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn marker_insertion_type_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
