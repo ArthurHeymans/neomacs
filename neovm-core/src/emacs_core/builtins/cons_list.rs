@@ -22,6 +22,48 @@ fn builtin_cons_values(car: Value, cdr: Value) -> EvalResult {
     Ok(Value::cons(car, cdr))
 }
 
+fn for_each_proper_list_tail<F>(
+    list: Value,
+    improper_error_object: Value,
+    mut visit: F,
+) -> EvalResult
+where
+    F: FnMut(Value) -> Result<Option<Value>, Flow>,
+{
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        if let Some(result) = visit(tail)? {
+            return Ok(result);
+        }
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), improper_error_object],
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Lambda → cons-list transparency helpers
 //
@@ -724,22 +766,11 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
     }
 
     fn append_proper_list(result: &mut Value, last: &mut Value, list: Value) -> Result<(), Flow> {
-        let mut cursor = list;
-        loop {
-            match cursor.kind() {
-                ValueKind::Nil => return Ok(()),
-                ValueKind::Cons => {
-                    append_element(result, last, cursor.cons_car());
-                    cursor = cursor.cons_cdr();
-                }
-                _ => {
-                    return Err(signal(
-                        "wrong-type-argument",
-                        vec![Value::symbol("listp"), cursor],
-                    ));
-                }
-            }
-        }
+        for_each_proper_list_tail(list, list, |tail| {
+            append_element(result, last, tail.cons_car());
+            Ok(None)
+        })?;
+        Ok(())
     }
 
     if args.is_empty() {
@@ -1006,26 +1037,14 @@ fn builtin_member_values(target: Value, list: Value, symbols_with_pos_enabled: b
             target.kind()
         );
     }
-    let mut cursor = list;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if equal_value_swp(&target, &pair_car, 0, symbols_with_pos_enabled) {
-                    return Ok(cursor);
-                }
-                cursor = pair_cdr;
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), list],
-                ));
-            }
+    for_each_proper_list_tail(list, list, |tail| {
+        let pair_car = tail.cons_car();
+        if equal_value_swp(&target, &pair_car, 0, symbols_with_pos_enabled) {
+            Ok(Some(tail))
+        } else {
+            Ok(None)
         }
-    }
+    })
 }
 
 pub(crate) fn builtin_memq(args: Vec<Value>) -> EvalResult {
@@ -1053,26 +1072,14 @@ pub(crate) fn builtin_memq_2(
 }
 
 fn builtin_memq_values(target: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    let mut cursor = list;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if eq_value_swp(&target, &pair_car, symbols_with_pos_enabled) {
-                    return Ok(cursor);
-                }
-                cursor = pair_cdr;
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), list],
-                ));
-            }
+    for_each_proper_list_tail(list, list, |tail| {
+        let pair_car = tail.cons_car();
+        if eq_value_swp(&target, &pair_car, symbols_with_pos_enabled) {
+            Ok(Some(tail))
+        } else {
+            Ok(None)
         }
-    }
+    })
 }
 
 pub(crate) fn builtin_memql(args: Vec<Value>) -> EvalResult {
@@ -1100,26 +1107,14 @@ pub(crate) fn builtin_memql_2(
 }
 
 fn builtin_memql_values(target: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    let mut cursor = list;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if eql_value_swp(&target, &pair_car, symbols_with_pos_enabled) {
-                    return Ok(cursor);
-                }
-                cursor = pair_cdr;
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), list],
-                ));
-            }
+    for_each_proper_list_tail(list, list, |tail| {
+        let pair_car = tail.cons_car();
+        if eql_value_swp(&target, &pair_car, symbols_with_pos_enabled) {
+            Ok(Some(tail))
+        } else {
+            Ok(None)
         }
-    }
+    })
 }
 
 pub(crate) fn builtin_assoc(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -1139,68 +1134,37 @@ pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value
             eval.push_specpdl_root(*key);
             eval.push_specpdl_root(list);
             eval.push_specpdl_root(test_fn.unwrap());
-            let mut cursor = list;
-            let assoc_result = loop {
-                match cursor.kind() {
-                    ValueKind::Nil => break Ok(Value::NIL),
-                    ValueKind::Cons => {
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        if let ValueKind::Cons = pair_car.kind() {
-                            let entry_key = pair_car.cons_car();
-                            let matches = if let Some(test_fn) = &test_fn {
-                                match eval.apply2(*test_fn, entry_key, *key) {
-                                    Ok(v) => v.is_truthy(),
-                                    Err(e) => {
-                                        break Err(e);
-                                    }
-                                }
-                            } else {
-                                equal_value_swp(key, &entry_key, 0, eval.symbols_with_pos_enabled)
-                            };
-                            if matches {
-                                break Ok(pair_car);
-                            }
-                        }
-                        cursor = pair_cdr;
-                    }
-                    _ => {
-                        break Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("listp"), list],
-                        ));
+            let assoc_result = for_each_proper_list_tail(list, list, |tail| {
+                let pair_car = tail.cons_car();
+                if let ValueKind::Cons = pair_car.kind() {
+                    let entry_key = pair_car.cons_car();
+                    let matches = if let Some(test_fn) = &test_fn {
+                        eval.apply2(*test_fn, entry_key, *key)?.is_truthy()
+                    } else {
+                        equal_value_swp(key, &entry_key, 0, eval.symbols_with_pos_enabled)
+                    };
+                    if matches {
+                        return Ok(Some(pair_car));
                     }
                 }
-            };
+                Ok(None)
+            });
             eval.restore_specpdl_roots(roots);
             return assoc_result;
         }
         // No test_fn: simple equal-based traversal (no rooting needed)
         let roots = eval.save_specpdl_roots();
         eval.push_specpdl_root(list);
-        let mut cursor = list;
-        let assoc_result = loop {
-            match cursor.kind() {
-                ValueKind::Nil => break Ok(Value::NIL),
-                ValueKind::Cons => {
-                    let pair_car = cursor.cons_car();
-                    let pair_cdr = cursor.cons_cdr();
-                    if let ValueKind::Cons = pair_car.kind() {
-                        let entry_key = pair_car.cons_car();
-                        if equal_value_swp(key, &entry_key, 0, eval.symbols_with_pos_enabled) {
-                            break Ok(pair_car);
-                        }
-                    }
-                    cursor = pair_cdr;
-                }
-                _ => {
-                    break Err(signal(
-                        "wrong-type-argument",
-                        vec![Value::symbol("listp"), list],
-                    ));
+        let assoc_result = for_each_proper_list_tail(list, list, |tail| {
+            let pair_car = tail.cons_car();
+            if let ValueKind::Cons = pair_car.kind() {
+                let entry_key = pair_car.cons_car();
+                if equal_value_swp(key, &entry_key, 0, eval.symbols_with_pos_enabled) {
+                    return Ok(Some(pair_car));
                 }
             }
-        };
+            Ok(None)
+        });
         eval.restore_specpdl_roots(roots);
         assoc_result
     })
@@ -1231,29 +1195,16 @@ pub(crate) fn builtin_assq_2(
 }
 
 fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    let mut cursor = list;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if let ValueKind::Cons = pair_car.kind() {
-                    let entry_key = pair_car.cons_car();
-                    if eq_value_swp(&key, &entry_key, symbols_with_pos_enabled) {
-                        return Ok(pair_car);
-                    }
-                }
-                cursor = pair_cdr;
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), list],
-                ));
+    for_each_proper_list_tail(list, list, |tail| {
+        let pair_car = tail.cons_car();
+        if let ValueKind::Cons = pair_car.kind() {
+            let entry_key = pair_car.cons_car();
+            if eq_value_swp(&key, &entry_key, symbols_with_pos_enabled) {
+                return Ok(Some(pair_car));
             }
         }
-    }
+        Ok(None)
+    })
 }
 
 pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
