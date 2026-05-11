@@ -1049,13 +1049,16 @@ impl TaggedValue {
     }
 
     /// Allocate a cons cell (old API name).
+    #[inline]
     pub fn cons(car: Value, cdr: Value) -> Self {
         Self::make_cons(car, cdr)
     }
 
     /// Allocate a cons cell.
+    #[inline]
     pub fn make_cons(car: Value, cdr: Value) -> Self {
-        // Validate string values aren't corrupt before storing in cons
+        // Keep the expensive corruption diagnostic out of release allocation hot paths.
+        #[cfg(debug_assertions)]
         if car.is_string() {
             let ptr = car.as_string_ptr().unwrap();
             let hdr = unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
