@@ -275,6 +275,7 @@ fn simplify_cfg(function: &mut SsaFunction) -> bool {
     changed
 }
 
+#[inline]
 fn const_to_bool(c: &SsaConst) -> Option<bool> {
     match c {
         SsaConst::Nil => Some(false),
@@ -1649,6 +1650,7 @@ pub fn common_subexpression_elimination(function: &mut SsaFunction) -> OptOutput
 }
 
 impl SsaConst {
+    #[inline]
     fn as_int(&self) -> Option<i64> {
         match self {
             SsaConst::Int(n) | SsaConst::Char(n) => Some(*n),
@@ -1657,6 +1659,7 @@ impl SsaConst {
     }
 }
 
+#[inline]
 fn to_f64(c: &SsaConst) -> Option<f64> {
     match c {
         SsaConst::Float(f) => Some(*f),
