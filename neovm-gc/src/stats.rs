@@ -607,6 +607,7 @@ impl AtomicAllocationCounters {
     }
 
     #[inline(always)]
+    #[inline]
     pub(crate) fn record_nursery_allocation(
         &self,
         bytes: usize,
