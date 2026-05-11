@@ -269,27 +269,6 @@ pub(crate) fn builtin_vconcat(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
-    fn extend_from_proper_list(out: &mut Vec<Value>, list: &Value) -> Result<(), Flow> {
-        let mut cursor = *list;
-        loop {
-            match cursor.kind() {
-                ValueKind::Nil => return Ok(()),
-                ValueKind::Cons => {
-                    let pair_car = cursor.cons_car();
-                    let pair_cdr = cursor.cons_cdr();
-                    out.push(pair_car);
-                    cursor = pair_cdr;
-                }
-                _tail => {
-                    return Err(signal(
-                        "wrong-type-argument",
-                        vec![Value::symbol("listp"), cursor],
-                    ));
-                }
-            }
-        }
-    }
-
     let mut result = Vec::new();
     for arg in args {
         match arg.kind() {
@@ -316,7 +295,7 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                 });
             }
             ValueKind::Nil => {}
-            ValueKind::Cons => extend_from_proper_list(&mut result, arg)?,
+            ValueKind::Cons => result.extend(super::cons_list::collect_proper_list_items(*arg)?),
             ValueKind::Veclike(VecLikeType::Lambda) => {
                 result.extend(lambda_to_closure_vector(arg).into_iter())
             }

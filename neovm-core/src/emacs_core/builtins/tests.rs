@@ -7739,6 +7739,21 @@ fn large_length_predicates_signal_circular_list_like_gnu() {
 }
 
 #[test]
+fn vconcat_signals_circular_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    input.cons_cdr().set_cdr(input);
+
+    match builtin_vconcat(vec![input]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "circular-list");
+        }
+        other => panic!("expected circular-list signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn string_match_inhibit_modify_preserves_match_data() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;

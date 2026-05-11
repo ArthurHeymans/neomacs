@@ -98,7 +98,7 @@ pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
     }
 }
 
-fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow> {
+pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow> {
     let mut items = Vec::new();
     let mut tail = list;
     let mut tortoise = list;
