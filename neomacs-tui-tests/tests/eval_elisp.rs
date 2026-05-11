@@ -6384,6 +6384,41 @@ fn symbol_function_cell_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn symbol_with_pos_type_and_negative_position_semantics_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c:Fbare_symbol accepts bare symbols and symbol-with-pos,
+    // and its wrong-type predicate is the compound `(symbolp
+    // symbol-with-pos-p)'.  GNU src/data.c:Fposition_symbol accepts any
+    // fixnum position, including negative fixnums, and rejects floats with
+    // fixnum-or-symbol-with-pos-p.
+    let expr = r#"(message "sympos:%S" (list (equal (condition-case e (bare-symbol 1) (error (list (car e) (cadr e)))) '(wrong-type-argument (symbolp symbol-with-pos-p))) (equal (condition-case e (position-symbol 1 0) (error (list (car e) (cadr e)))) '(wrong-type-argument (symbolp symbol-with-pos-p))) (condition-case e (let ((s (position-symbol 'a -1))) (list (bare-symbol s) (symbol-with-pos-pos s) (symbol-with-pos-p s))) (error (list (car e) (cadr e)))) (equal (condition-case e (position-symbol 'a 1.0) (error (list (car e) (cadr e)))) '(wrong-type-argument fixnum-or-symbol-with-pos-p))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "sympos:(t t (a -1 t) t)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: symbol-with-pos type and negative-position semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "symbol_with_pos_type_and_negative_position_semantics_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn function_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
