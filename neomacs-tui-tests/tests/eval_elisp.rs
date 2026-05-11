@@ -11237,6 +11237,38 @@ fn unibyte_char_to_multibyte_rejects_negative_chars_like_gnu() {
 }
 
 #[test]
+fn encode_char_rejects_negative_chars_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/charset.c:Fencode_char validates CH with CHECK_CHARACTER after
+    // validating the charset.  Negative integers are characterp type errors,
+    // not unsupported characters returning nil.
+    let expr = r#"(message "encchar:%S" (list (encode-char ?A 'ascii) (encode-char ?é 'ascii) (condition-case e (encode-char -1 'ascii) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("encchar:(65 nil (wrong-type-argument characterp))"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: encode-char should reject negative chars like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("encode_char_rejects_negative_chars_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn coding_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
