@@ -14487,4 +14487,22 @@ mod tests {
         );
         assert!(!value.unwrap().is_nil());
     }
+
+    #[test]
+    fn executes_max_min_with_mixed_int_float() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (max 1 2.5 3) (min 5 1.5 0))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_identity_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (identity nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
