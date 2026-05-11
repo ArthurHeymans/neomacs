@@ -489,6 +489,7 @@ impl<'a> Vm<'a> {
     ) -> EvalResult {
         let ops = &func.ops;
         let constants = &func.constants;
+        let mut pc_local = *pc;
 
         macro_rules! stk {
             () => {
@@ -512,8 +513,8 @@ impl<'a> Vm<'a> {
                             v.0,
                             ptr,
                             hdr.kind,
-                            *pc - 1,
-                            ops.get(*pc - 1),
+                            pc_local.saturating_sub(1),
+                            ops.get(pc_local.saturating_sub(1)),
                             stk!().len(),
                             frame_base,
                         );
@@ -528,16 +529,16 @@ impl<'a> Vm<'a> {
                 match $expr {
                     Ok(value) => value,
                     Err(flow) => {
-                        self.resume_nonlocal(func, pc, handlers, bind_stack, flow)?;
+                        self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, flow)?;
                         continue;
                     }
                 }
             }};
         }
 
-        while *pc < ops.len() {
-            let op = &ops[*pc];
-            *pc += 1;
+        while pc_local < ops.len() {
+            let op = &ops[pc_local];
+            pc_local += 1;
 
             match op {
                 // -- Constants and stack --
@@ -545,7 +546,7 @@ impl<'a> Vm<'a> {
                     let Some(value) = constants.get(*idx as usize).copied() else {
                         self.resume_nonlocal(
                             func,
-                            pc,
+                            &mut pc_local,
                             handlers,
                             bind_stack,
                             signal("error", vec![Value::string("Invalid byte-code")]),
@@ -758,38 +759,38 @@ impl<'a> Vm<'a> {
                 // `maybe_quit` because control never leaves the VM.
                 Op::Goto(addr) => {
                     let target = *addr as usize;
-                    if target < *pc {
+                    if target < pc_local {
                         vm_try!(self.ctx.maybe_quit());
                     }
-                    *pc = target;
+                    pc_local = target;
                 }
                 Op::GotoIfNil(addr) => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     if val.is_nil() {
                         let target = *addr as usize;
-                        if target < *pc {
+                        if target < pc_local {
                             vm_try!(self.ctx.maybe_quit());
                         }
-                        *pc = target;
+                        pc_local = target;
                     }
                 }
                 Op::GotoIfNotNil(addr) => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     if val.is_truthy() {
                         let target = *addr as usize;
-                        if target < *pc {
+                        if target < pc_local {
                             vm_try!(self.ctx.maybe_quit());
                         }
-                        *pc = target;
+                        pc_local = target;
                     }
                 }
                 Op::GotoIfNilElsePop(addr) => {
                     if stk!().last().is_none_or(|v| v.is_nil()) {
                         let target = *addr as usize;
-                        if target < *pc {
+                        if target < pc_local {
                             vm_try!(self.ctx.maybe_quit());
                         }
-                        *pc = target;
+                        pc_local = target;
                     } else {
                         stk!().pop();
                     }
@@ -797,10 +798,10 @@ impl<'a> Vm<'a> {
                 Op::GotoIfNotNilElsePop(addr) => {
                     if stk!().last().is_some_and(|v| v.is_truthy()) {
                         let target = *addr as usize;
-                        if target < *pc {
+                        if target < pc_local {
                             vm_try!(self.ctx.maybe_quit());
                         }
-                        *pc = target;
+                        pc_local = target;
                     } else {
                         stk!().pop();
                     }
@@ -815,7 +816,7 @@ impl<'a> Vm<'a> {
                     ) {
                         self.resume_nonlocal(
                             func,
-                            pc,
+                            &mut pc_local,
                             handlers,
                             bind_stack,
                             signal(
@@ -833,7 +834,7 @@ impl<'a> Vm<'a> {
                     match target {
                         Some(target_val) => match target_val.kind() {
                             ValueKind::Fixnum(addr) => {
-                                *pc = vm_try!(resolve_switch_target(func, addr));
+                                pc_local = vm_try!(resolve_switch_target(func, addr));
                             }
                             _ => {
                                 vm_try!(Err(signal(
@@ -910,7 +911,7 @@ impl<'a> Vm<'a> {
                         }
                         Err(flow) => {
                             vm_try!(restore_result);
-                            self.resume_nonlocal(func, pc, handlers, bind_stack, flow)?;
+                            self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, flow)?;
                             continue;
                         }
                     }
@@ -1609,7 +1610,7 @@ impl<'a> Vm<'a> {
                     let tag = stk!().pop().unwrap_or(Value::NIL);
                     self.resume_nonlocal(
                         func,
-                        pc,
+                        &mut pc_local,
                         handlers,
                         bind_stack,
                         Flow::Throw { tag, value: val },
@@ -1708,6 +1709,7 @@ impl<'a> Vm<'a> {
         }
 
         // Fell off the end — return TOS or nil
+        *pc = pc_local;
         Ok(stk!().pop().unwrap_or(Value::NIL))
     }
 
