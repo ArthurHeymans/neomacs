@@ -7775,6 +7775,35 @@ fn nconc_nonfinal_circular_list_and_dotted_tail_match_gnu() {
 }
 
 #[test]
+fn plist_get_circular_list_safe_tail_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let missing = Value::list(vec![
+        Value::keyword(":a"),
+        Value::fixnum(1),
+        Value::keyword(":b"),
+        Value::fixnum(2),
+    ]);
+    missing.cons_cdr().cons_cdr().cons_cdr().set_cdr(missing);
+    assert_eq!(
+        builtin_plist_get(vec![missing, Value::keyword(":z")]).unwrap(),
+        Value::NIL
+    );
+
+    let found = Value::list(vec![
+        Value::keyword(":a"),
+        Value::fixnum(1),
+        Value::keyword(":b"),
+        Value::fixnum(2),
+    ]);
+    found.cons_cdr().cons_cdr().cons_cdr().set_cdr(found);
+    assert_eq!(
+        builtin_plist_get(vec![found, Value::keyword(":b")]).unwrap(),
+        Value::fixnum(2)
+    );
+}
+
+#[test]
 fn string_match_inhibit_modify_preserves_match_data() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;

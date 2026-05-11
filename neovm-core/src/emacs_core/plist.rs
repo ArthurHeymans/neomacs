@@ -24,6 +24,40 @@ fn plist_entry(prop: Value, value: Value, tail: Value) -> Value {
     entry
 }
 
+pub(crate) struct SafeTailGuard {
+    tortoise: Value,
+    power: usize,
+    distance: usize,
+}
+
+impl SafeTailGuard {
+    pub(crate) fn new(tail: Value) -> Self {
+        Self {
+            tortoise: tail,
+            power: 1,
+            distance: 0,
+        }
+    }
+
+    /// Mirrors GNU's `FOR_EACH_TAIL_SAFE` cycle arm: after the caller
+    /// advances to the next tail, return true if a cycle was found.
+    pub(crate) fn found_cycle_after_advance(&mut self, tail: Value) -> bool {
+        if !tail.is_cons() {
+            return false;
+        }
+        self.distance = self.distance.saturating_add(1);
+        if tail.bits() == self.tortoise.bits() {
+            return true;
+        }
+        if self.distance == self.power {
+            self.tortoise = tail;
+            self.power = self.power.saturating_mul(2).max(1);
+            self.distance = 0;
+        }
+        false
+    }
+}
+
 /// Walk `plist` looking for `prop`. Returns the associated value or None.
 /// Matches GNU `Fplist_get` when keys compare by eq.
 pub fn plist_get(plist: Value, prop: &Value) -> Option<Value> {
@@ -34,10 +68,8 @@ pub fn plist_get(plist: Value, prop: &Value) -> Option<Value> {
 /// `EQ` semantics when `symbols_with_pos_enabled` is true.
 pub fn plist_get_swp(plist: Value, prop: &Value, symbols_with_pos_enabled: bool) -> Option<Value> {
     let mut tail = plist;
-    loop {
-        if !tail.is_cons() {
-            return None;
-        }
+    let mut safe_tail = SafeTailGuard::new(tail);
+    while tail.is_cons() {
         let key = tail.cons_car();
         let rest = tail.cons_cdr();
         if !rest.is_cons() {
@@ -47,7 +79,11 @@ pub fn plist_get_swp(plist: Value, prop: &Value, symbols_with_pos_enabled: bool)
             return Some(rest.cons_car());
         }
         tail = rest.cons_cdr();
+        if safe_tail.found_cycle_after_advance(tail) {
+            return None;
+        }
     }
+    None
 }
 
 /// Put `value` under `prop` in `plist`. If `prop` is already in the list,

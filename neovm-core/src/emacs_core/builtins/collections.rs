@@ -940,6 +940,7 @@ pub(crate) fn builtin_plist_get_with_ctx(
     eval.push_specpdl_root(predicate);
 
     let mut cursor = plist;
+    let mut safe_tail = crate::emacs_core::plist::SafeTailGuard::new(cursor);
     let plist_result = loop {
         match cursor.kind() {
             ValueKind::Cons => {
@@ -952,6 +953,9 @@ pub(crate) fn builtin_plist_get_with_ctx(
                     Ok(value) if value.is_truthy() => break Ok(pair_cdr.cons_car()),
                     Ok(_) => {
                         cursor = pair_cdr.cons_cdr();
+                        if safe_tail.found_cycle_after_advance(cursor) {
+                            break Ok(Value::NIL);
+                        }
                     }
                     Err(err) => break Err(err),
                 }
@@ -973,32 +977,10 @@ fn builtin_plist_get_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) ->
             vec![Value::symbol("symbolp"), args[2]],
         ));
     }
-    let mut cursor = args[0];
-    loop {
-        match cursor.kind() {
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if eq_value_swp(&pair_car, &args[1], symbols_with_pos_enabled) {
-                    // Next element is the value
-                    match pair_cdr.kind() {
-                        ValueKind::Cons => {
-                            return Ok(pair_cdr.cons_car());
-                        }
-                        _ => return Ok(Value::NIL),
-                    }
-                }
-                // Skip the value entry
-                match pair_cdr.kind() {
-                    ValueKind::Cons => {
-                        cursor = pair_cdr.cons_cdr();
-                    }
-                    _ => return Ok(Value::NIL),
-                }
-            }
-            _ => return Ok(Value::NIL),
-        }
-    }
+    Ok(
+        crate::emacs_core::plist::plist_get_swp(args[0], &args[1], symbols_with_pos_enabled)
+            .unwrap_or(Value::NIL),
+    )
 }
 
 pub(crate) fn builtin_plist_put(args: Vec<Value>) -> EvalResult {
