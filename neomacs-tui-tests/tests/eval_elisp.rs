@@ -6486,6 +6486,39 @@ fn symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu() {
 }
 
 #[test]
+fn symbol_with_pos_is_not_transparent_to_binding_apis_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/data.c validates boundp, default-boundp, makunbound, fboundp,
+    // and fmakunbound arguments with CHECK_SYMBOL.  A symbol-with-pos is not
+    // accepted by these APIs; callers must explicitly pass bare-symbol.
+    let expr = r#"(message "symposbinding:%S" (let ((s (position-symbol 'foo 1))) (mapcar (lambda (form) (equal (condition-case e (eval form) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp))) (list (list 'boundp s) (list 'default-boundp s) (list 'makunbound s) (list 'fboundp s) (list 'fmakunbound s)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "symposbinding:(t t t t t)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: symbol-with-pos should not be transparent to binding APIs like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "symbol_with_pos_is_not_transparent_to_binding_apis_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn symbol_with_pos_print_symbols_bare_semantics_match_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
