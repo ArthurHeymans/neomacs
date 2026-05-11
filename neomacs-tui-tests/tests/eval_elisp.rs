@@ -293,6 +293,42 @@ fn previous_line_ignores_invisible_newlines_like_gnu() {
 }
 
 #[test]
+fn previous_line_without_ignore_invisible_matches_gnu_position() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/simple.el:line-move-1 uses a different backward branch when
+    // line-move-ignore-invisible is nil, and still has defined point semantics.
+    let expr = r#"(progn(switch-to-buffer"*previnv2*")(erase-buffer)(setq line-move-visual nil line-move-ignore-invisible nil)(insert"aaaa\nbbbb\ncccc\n")(put-text-property 5 10 'invisible t)(goto-char 13)(call-interactively 'previous-line)(message"previnv2:%S"(list(line-number-at-pos)(current-column)(point)(char-after))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("previnv2:(2 0 10 10)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: previous-line with line-move-ignore-invisible nil should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "previous_line_without_ignore_invisible_matches_gnu_position",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_expression_empty_minibuffer_multiple_del_keeps_prompt() {
     let (mut gnu, mut neo) = boot_pair("");
 
