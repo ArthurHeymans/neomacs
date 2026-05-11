@@ -3318,15 +3318,16 @@ fn vm_macroexpand_preserves_visible_lexical_binding_like_gnu() {
 }
 
 #[test]
-fn vm_raw_lambda_and_closure_callables_use_shared_runtime() {
+fn vm_raw_lambda_and_closure_callability_matches_gnu() {
     crate::test_utils::init_test_tracing();
+    assert_eq!(vm_eval_str(r#"(funcall '(lambda (x) x) 7)"#), "OK 7");
     assert_eq!(
-        vm_eval_str(
-            "(list
-               (funcall '(lambda (x) x) 7)
-               (funcall '(closure ((x . 5)) (y) (+ x y)) 3))"
-        ),
-        "OK (7 8)"
+        vm_eval_lexical_str(r#"(let ((x 5)) (funcall (lambda (y) (+ x y)) 3))"#),
+        "OK 8"
+    );
+    assert_eq!(
+        vm_eval_str(r#"(funcall '(closure ((x . 5)) (y) (+ x y)) 3)"#),
+        "ERR (invalid-function ((closure ((x . 5)) (y) (+ x y))))"
     );
 }
 
