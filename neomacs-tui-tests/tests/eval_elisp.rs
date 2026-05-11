@@ -11626,6 +11626,42 @@ fn format_integer_conversion_accepts_nonfinite_floats_like_gnu() {
 }
 
 #[test]
+fn format_huge_field_width_overflows_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/editfns.c:format parses field widths into bounded buffer sizes;
+    // absurdly large widths signal "Maximum string size exceeded" instead of
+    // being ignored.
+    let expr = r#"(message "fmtwidth:%S" (list (condition-case e (format "%999999999999999999999s" "x") (error (list (car e) (cadr e)))) (condition-case e (format "%999999999999999999999d" 7) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid
+            .iter()
+            .rev()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        recent.contains("fmtwidth:") && recent.matches("Maximum string size exceeded").count() >= 2
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format huge field widths should overflow like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("format_huge_field_width_overflows_like_gnu", &gnu, &neo, 2);
+}
+
+#[test]
 fn format_print_level_notation_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
