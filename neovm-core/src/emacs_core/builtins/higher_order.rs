@@ -157,7 +157,7 @@ where
             }
             Ok(())
         }
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
+        ValueKind::Veclike(VecLikeType::Vector) => {
             for item in seq.as_vector_data().unwrap().clone().into_iter() {
                 f(item)?;
             }
@@ -586,16 +586,8 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
                 Ok(Value::list(std::mem::take(&mut sorted_values)))
             }
         }
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
-            let values = match args[0].kind() {
-                ValueKind::Veclike(VecLikeType::Vector) => {
-                    args[0].as_vector_data().unwrap().clone()
-                }
-                ValueKind::Veclike(VecLikeType::Record) => {
-                    args[0].as_record_data().unwrap().clone()
-                }
-                _ => unreachable!(),
-            };
+        ValueKind::Veclike(VecLikeType::Vector) => {
+            let values = args[0].as_vector_data().unwrap().clone();
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(args[0]);
             eval.push_specpdl_root(lessp_fn);
@@ -611,13 +603,7 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
                 assert!(args[0].replace_vectorlike_sequence_data(sorted_values));
                 Ok(args[0])
             } else {
-                match args[0].kind() {
-                    ValueKind::Veclike(VecLikeType::Vector) => Ok(Value::vector(sorted_values)),
-                    ValueKind::Veclike(VecLikeType::Record) => {
-                        Ok(Value::make_record(sorted_values))
-                    }
-                    _ => unreachable!(),
-                }
+                Ok(Value::vector(sorted_values))
             }
         }
         other => Err(signal(

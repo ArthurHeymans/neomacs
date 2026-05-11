@@ -285,7 +285,7 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                     result.push(bit);
                 }
             }
-            ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
+            ValueKind::Veclike(VecLikeType::Vector) => {
                 result.extend(arg.as_vector_data().unwrap().clone().into_iter())
             }
             ValueKind::String => {

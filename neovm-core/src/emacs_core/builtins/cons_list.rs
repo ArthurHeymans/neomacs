@@ -1467,9 +1467,9 @@ pub(crate) fn builtin_elt(args: Vec<Value>) -> EvalResult {
         ValueKind::Cons | ValueKind::Nil | ValueKind::Veclike(VecLikeType::Lambda) => {
             builtin_nth(vec![args[1], args[0]])
         }
-        ValueKind::Veclike(VecLikeType::Vector)
-        | ValueKind::Veclike(VecLikeType::Record)
-        | ValueKind::String => builtin_aref(vec![args[0], args[1]]),
+        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
+            builtin_aref(vec![args[0], args[1]])
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), args[0]],
@@ -1486,9 +1486,9 @@ pub(crate) fn builtin_elt_2(
         ValueKind::Cons | ValueKind::Nil | ValueKind::Veclike(VecLikeType::Lambda) => {
             builtin_nth_2(eval, n, sequence)
         }
-        ValueKind::Veclike(VecLikeType::Vector)
-        | ValueKind::Veclike(VecLikeType::Record)
-        | ValueKind::String => builtin_aref_2(eval, sequence, n),
+        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
+            builtin_aref_2(eval, sequence, n)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), sequence],
