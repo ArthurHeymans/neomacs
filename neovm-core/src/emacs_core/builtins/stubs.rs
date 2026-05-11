@@ -1086,9 +1086,13 @@ pub(crate) fn builtin_sqlite_load_extension(args: Vec<Value>) -> EvalResult {
     ))
 }
 
-fn fillarray_character_from_value(value: &Value) -> Result<char, Flow> {
+fn fillarray_character_code_from_value(value: &Value) -> Result<u32, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => Ok((n as u8) as char),
+        ValueKind::Fixnum(n)
+            if (0..=crate::emacs_core::emacs_char::MAX_CHAR as i64).contains(&n) =>
+        {
+            Ok(n as u32)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("characterp"), *value],
@@ -1130,24 +1134,47 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
             Ok(args[0])
         }
         ValueKind::String => {
-            let fill = fillarray_character_from_value(&args[1])?;
+            let fill = fillarray_character_code_from_value(&args[1])?;
             let string = args[0].as_lisp_string().expect("string");
             let len = string.schars();
-            let mut data = Vec::new();
-            if string.is_multibyte() {
-                let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-                let written = crate::emacs_core::emacs_char::char_string(fill as u32, &mut buf);
-                data.reserve(len * written);
-                for _ in 0..len {
-                    data.extend_from_slice(&buf[..written]);
-                }
-            } else {
-                data = vec![fill as u8; len];
+            let size_byte = string.sbytes();
+            if len == 0 {
+                return Ok(args[0]);
             }
+
+            let mut fill_bytes = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+            let fill_len = if string.is_multibyte() {
+                let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+                let written = crate::emacs_core::emacs_char::char_string(fill, &mut buf);
+                fill_bytes[..written].copy_from_slice(&buf[..written]);
+                written
+            } else {
+                fill_bytes[0] = fill as u8;
+                1
+            };
+
+            let new_size_byte = len.checked_mul(fill_len).ok_or_else(|| {
+                signal(
+                    "error",
+                    vec![Value::string("Attempt to change byte length of a string")],
+                )
+            })?;
+            if new_size_byte != size_byte {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Attempt to change byte length of a string")],
+                ));
+            }
+
             let _ = args[0].with_lisp_string_mut(|lisp_str| {
                 lisp_str.mutate_bytes(|bytes| {
-                    bytes.clear();
-                    bytes.extend_from_slice(&data);
+                    if fill_len == 1 && len == size_byte {
+                        bytes.fill(fill_bytes[0]);
+                    } else {
+                        for (idx, byte) in bytes.iter_mut().enumerate() {
+                            *byte = fill_bytes[idx % fill_len];
+                        }
+                    }
                 });
             });
             Ok(args[0])

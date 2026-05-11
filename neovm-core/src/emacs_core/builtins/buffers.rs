@@ -2560,16 +2560,14 @@ pub(crate) fn builtin_delete_field(
 }
 
 /// `(clear-string STRING)` -> nil
-/// Zeroes out every byte in STRING (fills with null characters).
+/// Zeroes every byte, makes STRING unibyte, and removes text properties.
 pub(crate) fn builtin_clear_string(args: Vec<Value>) -> EvalResult {
     expect_args("clear-string", &args, 1)?;
     let _ = expect_strict_string(&args[0])?;
     if args[0].is_string() {
         let _ = args[0].with_lisp_string_mut(|lisp_str| {
-            let len = lisp_str.schars();
-            // Fill with len null bytes (same as GNU Emacs memset 0)
-            let nulls = "\0".repeat(len);
-            *lisp_str = crate::heap_types::LispString::new(nulls, lisp_str.is_multibyte());
+            let len = lisp_str.sbytes();
+            *lisp_str = crate::heap_types::LispString::from_unibyte(vec![0; len]);
         });
     }
     Ok(Value::NIL)

@@ -8,7 +8,8 @@ use crate::emacs_core::editfns::{
 use crate::emacs_core::textprop::builtin_make_overlay;
 use crate::emacs_core::treesit as runtime_treesit;
 use crate::emacs_core::value::{
-    HashTableTest, LambdaData, LambdaParams, Value, ValueKind, VecLikeType,
+    HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, Value, ValueKind, VecLikeType,
+    get_string_text_properties_for_value,
 };
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::{
@@ -9085,6 +9086,63 @@ fn dispatch_builtin_pure_fillarray_preserves_unibyte_strings() {
     let filled = filled.as_lisp_string().expect("filled string");
     assert!(!filled.is_multibyte());
     assert_eq!(filled.as_bytes(), b"AAA");
+}
+
+#[test]
+fn dispatch_builtin_pure_fillarray_multibyte_matches_gnu_byte_length_rule() {
+    crate::test_utils::init_test_tracing();
+    let multibyte = Value::multibyte_string("éé");
+    let filled = dispatch_builtin_pure("fillarray", vec![multibyte, Value::fixnum(256)])
+        .expect("fillarray should resolve")
+        .expect("fillarray should evaluate");
+    let filled_string = filled.as_lisp_string().expect("filled string");
+    assert!(filled_string.is_multibyte());
+    assert_eq!(filled_string.schars(), 2);
+    assert_eq!(filled_string.sbytes(), 4);
+    assert_eq!(decode_value_char_codes(&filled), vec![256, 256]);
+
+    let ascii_fill = dispatch_builtin_pure(
+        "fillarray",
+        vec![Value::multibyte_string("éé"), Value::fixnum(b'x' as i64)],
+    )
+    .expect("fillarray should resolve")
+    .expect_err("GNU fillarray rejects multibyte byte-length changes");
+    match ascii_fill {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Attempt to change byte length of a string")]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+#[test]
+fn dispatch_builtin_pure_clear_string_makes_unibyte_and_removes_properties() {
+    crate::test_utils::init_test_tracing();
+    let string = Value::multibyte_string_with_text_properties(
+        "é",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        }],
+    );
+    assert!(get_string_text_properties_for_value(string).is_some());
+
+    let result = dispatch_builtin_pure("clear-string", vec![string])
+        .expect("clear-string should resolve")
+        .expect("clear-string should evaluate");
+    assert_eq!(result, Value::NIL);
+
+    let cleared = string.as_lisp_string().expect("cleared string");
+    assert!(!cleared.is_multibyte());
+    assert_eq!(cleared.schars(), 2);
+    assert_eq!(cleared.sbytes(), 2);
+    assert_eq!(cleared.as_bytes(), &[0, 0]);
+    assert!(get_string_text_properties_for_value(string).is_none());
 }
 
 #[test]
