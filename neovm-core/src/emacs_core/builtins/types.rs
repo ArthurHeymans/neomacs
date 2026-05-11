@@ -213,9 +213,10 @@ pub(crate) fn builtin_vector_or_char_table_p(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_characterp(args: Vec<Value>) -> EvalResult {
-    expect_args("characterp", &args, 1)?;
+    expect_range_args("characterp", &args, 1, 2)?;
     // Official Emacs: characterp accepts both Char values and integers
-    // in the valid Unicode range (0..MAX_CHAR).
+    // in the valid Unicode range (0..MAX_CHAR).  Its obsolete second
+    // argument is accepted for compatibility and ignored.
     let is_char = match args[0].kind() {
         ValueKind::Fixnum(n) => n >= 0 && n <= 0x3F_FFFF, // MAX_CHAR in Emacs
         _ => false,
