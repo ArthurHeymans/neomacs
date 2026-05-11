@@ -11522,6 +11522,39 @@ fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics()
 }
 
 #[test]
+fn format_string_precision_uses_display_width_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/editfns.c:format implements %s precision with
+    // lisp_string_width, so precision limits display columns, not merely
+    // characters or bytes.  A width-2 character does not fit precision 1.
+    let expr = r#"(message "fmtwideprec:%S" (list (format "%.1s" "中x") (format "%.2s" "中x") (format "%.3s" "中x")))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"fmtwideprec:(\"\" \"中\" \"中x\")"#;
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: format %s precision should count display width like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "format_string_precision_uses_display_width_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_numeric_precision_and_prefixes_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
