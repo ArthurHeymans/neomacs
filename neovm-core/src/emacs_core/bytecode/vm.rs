@@ -664,7 +664,11 @@ impl<'a> Vm<'a> {
                     } else {
                         Value::NIL
                     };
-                    let writeback_names = self.writeback_mutating_callable_names(&func_val);
+                    let writeback_names = if n > 0 && stk!()[args_start].is_string() {
+                        self.writeback_mutating_callable_names(&func_val)
+                    } else {
+                        None
+                    };
                     let writeback_args = writeback_names
                         .as_ref()
                         .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
@@ -684,7 +688,7 @@ impl<'a> Vm<'a> {
                         }
                         self.maybe_writeback_mutating_first_arg(
                             called_name,
-                            alias_target.as_deref(),
+                            *alias_target,
                             writeback_args,
                             &result,
                         );
@@ -719,7 +723,12 @@ impl<'a> Vm<'a> {
                             let spread = list_to_vec(&last).unwrap_or_default();
                             args.extend(spread);
                         }
-                        let writeback_names = self.writeback_mutating_callable_names(&func_val);
+                        let writeback_names = if args.first().is_some_and(|value| value.is_string())
+                        {
+                            self.writeback_mutating_callable_names(&func_val)
+                        } else {
+                            None
+                        };
                         let writeback_args = writeback_names.as_ref().map(|_| args.clone());
                         let result = vm_try!(self.with_frame_call_roots(
                             func,
@@ -737,7 +746,7 @@ impl<'a> Vm<'a> {
                             }
                             self.maybe_writeback_mutating_first_arg(
                                 called_name,
-                                alias_target.as_deref(),
+                                *alias_target,
                                 writeback_args,
                                 &result,
                             );
@@ -1637,7 +1646,9 @@ impl<'a> Vm<'a> {
                     let n = *n as usize;
                     let args_start = stk!().len().saturating_sub(n);
                     let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                    let writeback_args = Self::mutates_first_arg_name(name).then(|| args.clone());
+                    let writeback_args = (args.first().is_some_and(|value| value.is_string())
+                        && Self::mutates_first_arg_name(name))
+                    .then(|| args.clone());
                     let result = if self.named_builtin_fast_path_allowed_id(name_id) {
                         vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args,))
                     } else {
@@ -1670,11 +1681,13 @@ impl<'a> Vm<'a> {
                 // 0140-0177 etc. — the symbol name is encoded in the
                 // op, no constants-pool lookup.
                 Op::CallBuiltinSym(sym, n) => {
-                    let name = crate::emacs_core::intern::resolve_sym(*sym).to_owned();
+                    let name = crate::emacs_core::intern::resolve_sym(*sym);
                     let n = *n as usize;
                     let args_start = stk!().len().saturating_sub(n);
                     let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                    let writeback_args = Self::mutates_first_arg_name(&name).then(|| args.clone());
+                    let writeback_args = (args.first().is_some_and(|value| value.is_string())
+                        && Self::mutates_first_arg_name(name))
+                    .then(|| args.clone());
                     // GNU-parity: opcodes 0140-0177 (decode.rs:295-303)
                     // dispatch *directly* to their C implementations
                     // (bytecode.c:1412-1545), bypassing the symbol's
@@ -1686,7 +1699,7 @@ impl<'a> Vm<'a> {
                     // through maybe_call_named_function_cell (which
                     // consults the symbol's function cell) would make
                     // neomacs MORE advisable than GNU, breaking parity.
-                    let result = vm_try!(self.dispatch_vm_builtin_with_frame(func, &name, args));
+                    let result = vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args));
                     if let Some(writeback_args) = writeback_args.as_ref() {
                         let root_scope = self.ctx.save_vm_roots();
                         self.push_dynamic_vm_root(result);
@@ -1694,7 +1707,7 @@ impl<'a> Vm<'a> {
                             self.push_dynamic_vm_root(value);
                         }
                         self.maybe_writeback_mutating_first_arg(
-                            &name,
+                            name,
                             None,
                             writeback_args,
                             &result,
@@ -1715,26 +1728,28 @@ impl<'a> Vm<'a> {
 
     // -- Helper methods --
 
+    #[inline(always)]
     fn mutates_first_arg_name(name: &str) -> bool {
         name == "fillarray" || name == "aset"
     }
 
+    #[inline]
     fn writeback_mutating_callable_names(
         &self,
         func_val: &Value,
-    ) -> Option<(String, Option<String>)> {
+    ) -> Option<(&'static str, Option<&'static str>)> {
         match func_val.kind() {
             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
                 if func_val.as_subr_id().is_some() =>
             {
                 let id = func_val.as_subr_id().unwrap();
                 let name = resolve_sym(id);
-                Self::mutates_first_arg_name(name).then(|| (name.to_owned(), None))
+                Self::mutates_first_arg_name(name).then_some((name, None))
             }
             ValueKind::Symbol(id) => {
                 let name = resolve_sym(id);
                 if Self::mutates_first_arg_name(name) {
-                    return Some((name.to_owned(), None));
+                    return Some((name, None));
                 }
                 let alias_target =
                     self.ctx
@@ -1743,16 +1758,16 @@ impl<'a> Vm<'a> {
                         .and_then(|bound| match bound.kind() {
                             ValueKind::Symbol(tid) => {
                                 let target = resolve_sym(tid);
-                                Self::mutates_first_arg_name(target).then(|| target.to_owned())
+                                Self::mutates_first_arg_name(target).then_some(target)
                             }
                             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
                                 let tid = bound.as_subr_id().unwrap();
                                 let target = resolve_sym(tid);
-                                Self::mutates_first_arg_name(target).then(|| target.to_owned())
+                                Self::mutates_first_arg_name(target).then_some(target)
                             }
                             _ => None,
                         });
-                alias_target.map(|target| (name.to_owned(), Some(target)))
+                alias_target.map(|target| (name, Some(target)))
             }
             _ => None,
         }
