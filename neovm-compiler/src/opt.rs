@@ -1302,6 +1302,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         | "cl-assoc" | "cl-assq" | "cl-rassoc" | "cl-rassq"
         | "cl-assoc-if" | "cl-assoc-if-not" | "cl-rassoc-if" | "cl-rassoc-if-not"
         | "cl-member-if" | "cl-member-if-not" | "cl-assoc-string"
+        | "assoc-string"
         | "alist-get"
             if args.len() >= 2 => {
             // All alist/list search functions return nil when the list/alist is nil
