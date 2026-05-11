@@ -6138,6 +6138,42 @@ fn documentation_property_overrides_function_docstring_like_gnu() {
 }
 
 #[test]
+fn documentation_property_accepts_non_symbol_properties_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/doc.c:documentation-property delegates to Fget, and
+    // GNU src/fns.c:get/put accept arbitrary Lisp objects as property keys.
+    let expr = r#"(let((p(cons 'k nil)))(put 'dp-non p "Doc")(message "docpn:%S"(list(get 'dp-non p)(documentation-property 'dp-non p t))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("docpn:") && row.contains(r#"\"Doc\" \"Doc\""#))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: documentation-property should accept non-symbol property keys like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "documentation_property_accepts_non_symbol_properties_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn advice_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
