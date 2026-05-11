@@ -8044,6 +8044,39 @@ fn char_table_extra_slots_initialize_like_gnu() {
 }
 
 #[test]
+fn char_table_extra_slot_index_type_errors_use_fixnump_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/chartab.c:Fchar_table_extra_slot and
+    // Fset_char_table_extra_slot validate N with CHECK_FIXNUM, so a float
+    // index must signal fixnump, not the broader integerp predicate.
+    let expr = r#"(message "chartabextraidx:%S" (progn (put 'neo-extra-index-purpose 'char-table-extra-slots 1) (unwind-protect (let ((ct (make-char-table 'neo-extra-index-purpose nil))) (list (condition-case e (char-table-extra-slot ct 0.0) (error (list (car e) (cadr e)))) (condition-case e (set-char-table-extra-slot ct 0.0 'x) (error (list (car e) (cadr e)))))) (put 'neo-extra-index-purpose 'char-table-extra-slots nil))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "chartabextraidx:((wrong-type-argument fixnump) (wrong-type-argument fixnump))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: char-table extra-slot index type errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "char_table_extra_slot_index_type_errors_use_fixnump_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn char_table_map_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
