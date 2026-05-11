@@ -5911,6 +5911,25 @@ fn mapcar_dotted_list_validates_before_callback_like_gnu() {
 }
 
 #[test]
+fn memory_use_counts_track_heap_allocations() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(let* ((before (memory-use-counts))
+                    (_cons (cons 1 2))
+                    (_string (make-string 3 ?x))
+                    (_vector (vector 1 2 3))
+                    (after (memory-use-counts)))
+               (list (> (nth 0 after) (nth 0 before))
+                     (> (nth 2 after) (nth 2 before))
+                     (> (nth 4 after) (nth 4 before))
+                     (> (nth 6 after) (nth 6 before))))"
+        ),
+        "OK (t t t t)"
+    );
+}
+
+#[test]
 fn apply_works() {
     crate::test_utils::init_test_tracing();
     assert_eq!(eval_one("(apply #'+ '(1 2 3))"), "OK 6");

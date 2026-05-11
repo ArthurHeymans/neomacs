@@ -68,6 +68,26 @@ pub struct HeapWriteRecord {
     pub value: Option<TaggedValue>,
 }
 
+pub(crate) const MEMORY_USE_COUNT_LEN: usize = 7;
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum MemoryUseCountSlot {
+    ConsCells = 0,
+    Floats = 1,
+    VectorCells = 2,
+    Symbols = 3,
+    StringChars = 4,
+    Intervals = 5,
+    Strings = 6,
+}
+
+impl MemoryUseCountSlot {
+    #[inline]
+    pub(crate) const fn index(self) -> usize {
+        self as usize
+    }
+}
+
 impl HeapWriteRecord {
     pub const fn bulk(owner: TaggedValue, kind: HeapWriteKind) -> Self {
         Self {
@@ -553,6 +573,8 @@ pub struct TaggedHeap {
 
     /// Total number of allocated objects (cons + non-cons).
     pub allocated_count: usize,
+    /// Lisp-visible allocation statistics backing `memory-use-counts`.
+    memory_use_counts: [u64; MEMORY_USE_COUNT_LEN],
 
     /// GC threshold in approximate Lisp heap bytes.
     gc_threshold: usize,
@@ -631,6 +653,7 @@ impl TaggedHeap {
             all_objects: std::ptr::null_mut(),
             non_cons_object_addrs: FxHashSet::default(),
             allocated_count: 0,
+            memory_use_counts: [0; MEMORY_USE_COUNT_LEN],
             gc_threshold: 1_000_000 * size_of::<usize>(),
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
@@ -704,6 +727,17 @@ impl TaggedHeap {
 
     pub fn allocated_count(&self) -> usize {
         self.allocated_count
+    }
+
+    #[inline]
+    pub(crate) fn add_memory_use_count(&mut self, slot: MemoryUseCountSlot, delta: u64) {
+        let index = slot.index();
+        self.memory_use_counts[index] = self.memory_use_counts[index].wrapping_add(delta);
+    }
+
+    #[inline]
+    pub(crate) fn memory_use_counts_snapshot(&self) -> [u64; MEMORY_USE_COUNT_LEN] {
+        self.memory_use_counts
     }
 
     pub fn bytes_since_gc(&self) -> usize {
@@ -1000,6 +1034,7 @@ impl TaggedHeap {
 
     /// Allocate a cons cell. Returns a tagged Value.
     pub fn alloc_cons(&mut self, car: TaggedValue, cdr: TaggedValue) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::ConsCells, 1);
         if !self.cons_free_list.is_null() {
             let cell = self.cons_free_list;
             unsafe {
@@ -1042,6 +1077,8 @@ impl TaggedHeap {
 
     /// Allocate a string object.
     pub fn alloc_string(&mut self, s: crate::heap_types::LispString) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::Strings, 1);
+        self.add_memory_use_count(MemoryUseCountSlot::StringChars, s.sbytes() as u64);
         let obj = Box::new(StringObj {
             header: GcHeader::new(HeapObjectKind::String),
             data: s,
@@ -1055,6 +1092,7 @@ impl TaggedHeap {
 
     /// Allocate a float object.
     pub fn alloc_float(&mut self, value: f64) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::Floats, 1);
         let obj = Box::new(FloatObj {
             header: GcHeader::new(HeapObjectKind::Float),
             value,
@@ -1068,6 +1106,7 @@ impl TaggedHeap {
 
     /// Allocate a vector.
     pub fn alloc_vector(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
         let obj = Box::new(VectorObj {
             header: VecLikeHeader::new(VecLikeType::Vector),
             data: items.into(),
@@ -1087,6 +1126,7 @@ impl TaggedHeap {
         &mut self,
         table: crate::emacs_core::value::LispHashTable,
     ) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, 1);
         let obj = Box::new(HashTableObj {
             header: VecLikeHeader::new(VecLikeType::HashTable),
             table,
@@ -1217,6 +1257,7 @@ impl TaggedHeap {
 
     /// Allocate a record.
     pub fn alloc_record(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
         let obj = Box::new(RecordObj {
             header: VecLikeHeader::new(VecLikeType::Record),
             data: items.into(),

@@ -11,18 +11,18 @@
 //! - Lexical environment helpers: `lexenv_*`
 //! - String text property helpers
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
-use crate::tagged::gc::with_tagged_heap;
+use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, ConsCell, FloatObj, FrameObj, HashTableObj, LambdaObj, LispValueSlice,
     MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj, TimerObj, VecLikeHeader, VectorObj,
@@ -244,21 +244,22 @@ impl OrderedRuntimeBindingMap {
 }
 
 // ---------------------------------------------------------------------------
-// Allocation statistics counters (unchanged)
+// Allocation statistics counters
 // ---------------------------------------------------------------------------
 
-const ZERO_COUNT: u64 = 0;
+thread_local! {
+    static THREAD_LOCAL_ALLOCATION_COUNTS: Cell<[u64; MEMORY_USE_COUNT_LEN]> =
+        const { Cell::new([0; MEMORY_USE_COUNT_LEN]) };
+}
 
-static CONS_CELLS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static FLOATS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static VECTOR_CELLS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static SYMBOLS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static STRING_CHARS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static INTERVALS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-static STRINGS_CONSED: AtomicU64 = AtomicU64::new(ZERO_COUNT);
-
-fn add_wrapping(counter: &AtomicU64, delta: u64) {
-    counter.fetch_add(delta, Ordering::Relaxed);
+#[inline]
+fn add_wrapping(counter: MemoryUseCountSlot, delta: u64) {
+    THREAD_LOCAL_ALLOCATION_COUNTS.with(|counts| {
+        let mut values = counts.get();
+        let slot = counter.index();
+        values[slot] = values[slot].wrapping_add(delta);
+        counts.set(values);
+    });
 }
 
 fn as_neovm_int(value: u64) -> i64 {
@@ -851,10 +852,10 @@ impl IntoSymbol for &str {
         } else if self == "t" {
             Value::T
         } else if self.starts_with(':') {
-            add_wrapping(&SYMBOLS_CONSED, 1);
+            add_wrapping(MemoryUseCountSlot::Symbols, 1);
             TaggedValue::from_kw_id(intern(self))
         } else {
-            add_wrapping(&SYMBOLS_CONSED, 1);
+            add_wrapping(MemoryUseCountSlot::Symbols, 1);
             TaggedValue::from_sym_id(intern(self))
         }
     }
@@ -909,7 +910,7 @@ impl TaggedValue {
 
     /// Create a keyword by interning a canonical `:name` symbol.
     pub fn keyword(s: impl AsRef<str>) -> Self {
-        add_wrapping(&SYMBOLS_CONSED, 1);
+        add_wrapping(MemoryUseCountSlot::Symbols, 1);
         TaggedValue::from_kw_id(intern(&canonical_keyword_name(s.as_ref())))
     }
 
@@ -945,31 +946,23 @@ impl TaggedValue {
     pub fn make_string(s: impl Into<String>) -> Self {
         let s = s.into();
         let multibyte = !s.is_ascii();
-        add_wrapping(&STRINGS_CONSED, 1);
-        add_wrapping(&STRING_CHARS_CONSED, s.len() as u64);
         with_tagged_heap(|h| h.alloc_string(LispString::new(s, multibyte)))
     }
 
     /// Allocate a string from a pre-built LispString.
     pub fn heap_string(s: LispString) -> Self {
-        add_wrapping(&STRINGS_CONSED, 1);
-        add_wrapping(&STRING_CHARS_CONSED, s.sbytes() as u64);
         with_tagged_heap(|h| h.alloc_string(s))
     }
 
     /// Allocate a multibyte string.
     pub fn multibyte_string(s: impl Into<String>) -> Self {
         let s = s.into();
-        add_wrapping(&STRINGS_CONSED, 1);
-        add_wrapping(&STRING_CHARS_CONSED, s.len() as u64);
         with_tagged_heap(|h| h.alloc_string(LispString::new(s, true)))
     }
 
     /// Allocate a unibyte string.
     pub fn unibyte_string(s: impl Into<String>) -> Self {
         let s = s.into();
-        add_wrapping(&STRINGS_CONSED, 1);
-        add_wrapping(&STRING_CHARS_CONSED, s.len() as u64);
         with_tagged_heap(|h| h.alloc_string(LispString::new(s, false)))
     }
 
@@ -995,7 +988,6 @@ impl TaggedValue {
 
     /// Allocate a float on the heap.
     pub fn make_float(f: f64) -> Self {
-        add_wrapping(&FLOATS_CONSED, 1);
         with_tagged_heap(|h| h.alloc_float(f))
     }
 
@@ -1080,7 +1072,6 @@ impl TaggedValue {
                 );
             }
         }
-        add_wrapping(&CONS_CELLS_CONSED, 1);
         with_tagged_heap(|h| h.alloc_cons(car, cdr))
     }
 
@@ -1123,13 +1114,11 @@ impl TaggedValue {
 
     /// Allocate a vector.
     pub fn make_vector(values: Vec<Value>) -> Self {
-        add_wrapping(&VECTOR_CELLS_CONSED, values.len() as u64);
         with_tagged_heap(|h| h.alloc_vector(values))
     }
 
     /// Allocate a record.
     pub fn make_record(values: Vec<Value>) -> Self {
-        add_wrapping(&VECTOR_CELLS_CONSED, values.len() as u64);
         with_tagged_heap(|h| h.alloc_record(values))
     }
 
@@ -1160,7 +1149,6 @@ impl TaggedValue {
 
     /// Allocate a hash table.
     pub fn hash_table(test: HashTableTest) -> Self {
-        add_wrapping(&VECTOR_CELLS_CONSED, 1);
         with_tagged_heap(|h| h.alloc_hash_table(LispHashTable::new(test)))
     }
 
@@ -1172,7 +1160,6 @@ impl TaggedValue {
         rehash_size: f64,
         rehash_threshold: f64,
     ) -> Self {
-        add_wrapping(&VECTOR_CELLS_CONSED, 1);
         with_tagged_heap(|h| {
             h.alloc_hash_table(LispHashTable::new_with_options(
                 test,
@@ -1811,14 +1798,19 @@ impl TaggedValue {
     }
 
     pub(crate) fn memory_use_counts_snapshot() -> [i64; 7] {
+        let mut counts = with_tagged_heap(|heap| heap.memory_use_counts_snapshot());
+        let thread_local_counts = THREAD_LOCAL_ALLOCATION_COUNTS.with(|counts| counts.get());
+        for (count, extra) in counts.iter_mut().zip(thread_local_counts) {
+            *count = count.wrapping_add(extra);
+        }
         [
-            as_neovm_int(CONS_CELLS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(FLOATS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(VECTOR_CELLS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(SYMBOLS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(STRING_CHARS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(INTERVALS_CONSED.load(Ordering::Relaxed)),
-            as_neovm_int(STRINGS_CONSED.load(Ordering::Relaxed)),
+            as_neovm_int(counts[MemoryUseCountSlot::ConsCells.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::Floats.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::VectorCells.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::Symbols.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::StringChars.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::Intervals.index()]),
+            as_neovm_int(counts[MemoryUseCountSlot::Strings.index()]),
         ]
     }
 }
