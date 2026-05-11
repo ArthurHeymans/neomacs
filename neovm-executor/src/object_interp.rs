@@ -14374,4 +14374,21 @@ mod tests {
         assert_eq!(value, Some(LispValue::NIL));
     }
 
+    #[test]
+    fn executes_proper_list_p_returns_zero_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (proper-list-p nil)",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_copy_list_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (copy-list nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
