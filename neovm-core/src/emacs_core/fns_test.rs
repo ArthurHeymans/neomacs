@@ -1151,6 +1151,87 @@ fn compare_strings_length_diff() {
     assert!(r.as_int().unwrap() < 0);
 }
 
+#[test]
+fn compare_strings_negative_bounds_and_too_large_end_match_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let negative_bounds = builtin_compare_strings(vec![
+        Value::string("abcdef"),
+        Value::fixnum(-3),
+        Value::fixnum(-1),
+        Value::string("cd"),
+        Value::NIL,
+        Value::NIL,
+    ])
+    .unwrap();
+    assert_eq!(negative_bounds.as_int(), Some(1));
+
+    let clamped_end = builtin_compare_strings(vec![
+        Value::string("abc"),
+        Value::fixnum(0),
+        Value::fixnum(99),
+        Value::string("abc"),
+        Value::fixnum(0),
+        Value::fixnum(99),
+    ])
+    .unwrap();
+    assert_eq!(clamped_end, Value::T);
+}
+
+#[test]
+fn compare_strings_reversed_and_out_of_range_bounds_signal_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    for args in [
+        vec![
+            Value::string("abc"),
+            Value::fixnum(3),
+            Value::fixnum(2),
+            Value::string("abc"),
+            Value::NIL,
+            Value::NIL,
+        ],
+        vec![
+            Value::string("abc"),
+            Value::fixnum(9),
+            Value::NIL,
+            Value::string(""),
+            Value::NIL,
+            Value::NIL,
+        ],
+        vec![
+            Value::string("abc"),
+            Value::NIL,
+            Value::fixnum(-9),
+            Value::string(""),
+            Value::NIL,
+            Value::NIL,
+        ],
+    ] {
+        match builtin_compare_strings(args) {
+            Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "args-out-of-range"),
+            other => panic!("expected args-out-of-range signal, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn compare_strings_ignore_case_uses_upcase_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let result = builtin_compare_strings(vec![
+        Value::string("İ"),
+        Value::NIL,
+        Value::NIL,
+        Value::string("i"),
+        Value::NIL,
+        Value::NIL,
+        Value::T,
+    ])
+    .unwrap();
+    assert_eq!(result.as_int(), Some(1));
+}
+
 // ---- string-version-lessp ----
 
 #[test]

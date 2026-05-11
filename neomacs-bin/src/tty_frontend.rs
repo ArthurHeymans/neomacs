@@ -159,40 +159,95 @@ fn decode_utf8_from_slice(bytes: &[u8], pos: &mut usize) -> Option<char> {
 ///
 /// UTF-8 lead bytes (0xC2..=0xF4) trigger multi-byte decoding; all other
 /// bytes are emitted individually via `parse_tty_byte`.
+#[cfg(test)]
 fn emit_events_from_bytes(bytes: &[u8], meta_key: u8) -> Vec<InputEvent> {
+    let mut decoder = TtyInputDecoder::new();
+    let mut events = decoder.emit_events(bytes, meta_key);
+    events.extend(decoder.flush_pending_lossy(meta_key));
+    events
+}
+
+#[derive(Debug, Default)]
+struct TtyInputDecoder {
+    pending_utf8: Vec<u8>,
+}
+
+impl TtyInputDecoder {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn emit_events(&mut self, bytes: &[u8], meta_key: u8) -> Vec<InputEvent> {
+        if self.pending_utf8.is_empty() {
+            return emit_events_from_complete_prefix(bytes, meta_key, &mut self.pending_utf8);
+        }
+
+        let mut merged = Vec::with_capacity(self.pending_utf8.len() + bytes.len());
+        merged.extend_from_slice(&self.pending_utf8);
+        merged.extend_from_slice(bytes);
+        self.pending_utf8.clear();
+        emit_events_from_complete_prefix(&merged, meta_key, &mut self.pending_utf8)
+    }
+
+    #[cfg(test)]
+    fn flush_pending_lossy(&mut self, meta_key: u8) -> Vec<InputEvent> {
+        let pending = std::mem::take(&mut self.pending_utf8);
+        pending
+            .into_iter()
+            .map(|byte| {
+                let (keysym, modifiers) = parse_tty_byte(byte, meta_key);
+                InputEvent::Key {
+                    keysym,
+                    modifiers,
+                    pressed: true,
+                    emacs_frame_id: 0,
+                }
+            })
+            .collect()
+    }
+}
+
+fn emit_key_event(events: &mut Vec<InputEvent>, keysym: u32, modifiers: u32) {
+    events.push(InputEvent::Key {
+        keysym,
+        modifiers,
+        pressed: true,
+        emacs_frame_id: 0,
+    });
+}
+
+fn emit_events_from_complete_prefix(
+    bytes: &[u8],
+    meta_key: u8,
+    pending_utf8: &mut Vec<u8>,
+) -> Vec<InputEvent> {
     let mut events = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         let byte = bytes[i];
         if (0xC2..=0xF4).contains(&byte) {
             if let Some(ch) = decode_utf8_from_slice(bytes, &mut i) {
-                events.push(InputEvent::Key {
-                    keysym: ch as u32,
-                    modifiers: 0,
-                    pressed: true,
-                    emacs_frame_id: 0,
-                });
+                emit_key_event(&mut events, ch as u32, 0);
             } else {
-                // Incomplete UTF-8 sequence at end of buffer: emit the
-                // lead byte as-is.  The continuation bytes will arrive
-                // in the next read and be emitted individually.
+                let expected_len = match byte {
+                    0xC2..=0xDF => 2,
+                    0xE0..=0xEF => 3,
+                    0xF0..=0xF4 => 4,
+                    _ => unreachable!("lead-byte range checked above"),
+                };
+                if i + expected_len > bytes.len()
+                    && bytes[i + 1..].iter().all(|b| (0x80..=0xBF).contains(b))
+                {
+                    pending_utf8.extend_from_slice(&bytes[i..]);
+                    break;
+                }
                 let (keysym, modifiers) = parse_tty_byte(byte, meta_key);
-                events.push(InputEvent::Key {
-                    keysym,
-                    modifiers,
-                    pressed: true,
-                    emacs_frame_id: 0,
-                });
+                emit_key_event(&mut events, keysym, modifiers);
                 i += 1;
             }
         } else {
             let (keysym, modifiers) = parse_tty_byte(byte, meta_key);
-            events.push(InputEvent::Key {
-                keysym,
-                modifiers,
-                pressed: true,
-                emacs_frame_id: 0,
-            });
+            emit_key_event(&mut events, keysym, modifiers);
             i += 1;
         }
     }
@@ -255,7 +310,10 @@ fn read_stdin_bytes(buf: &mut [u8]) -> io::Result<usize> {
 ///
 /// Blocks until data arrives or `stop` is set, then reads all available
 /// bytes and converts them to `InputEvent::Key` events.
-fn read_batch_input_events(stop: &AtomicBool) -> io::Result<Vec<InputEvent>> {
+fn read_batch_input_events(
+    stop: &AtomicBool,
+    decoder: &mut TtyInputDecoder,
+) -> io::Result<Vec<InputEvent>> {
     if !poll_stdin_blocking(stop)? {
         return Ok(Vec::new());
     }
@@ -263,7 +321,7 @@ fn read_batch_input_events(stop: &AtomicBool) -> io::Result<Vec<InputEvent>> {
     let mut buf = [0u8; 64];
     match read_stdin_bytes(&mut buf)? {
         0 => Ok(Vec::new()),
-        n => Ok(emit_events_from_bytes(&buf[..n], /* meta_key= */ 0)),
+        n => Ok(decoder.emit_events(&buf[..n], /* meta_key= */ 0)),
     }
 }
 
@@ -272,12 +330,13 @@ fn read_tty_input(
     stop: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
 ) {
+    let mut decoder = TtyInputDecoder::new();
     while !stop.load(Ordering::Relaxed) {
         if paused.load(Ordering::Relaxed) {
             thread::sleep(Duration::from_millis(25));
             continue;
         }
-        match read_batch_input_events(&stop) {
+        match read_batch_input_events(&stop, &mut decoder) {
             Ok(events) => {
                 for event in events {
                     tracing::info!("tty_input: got event {:?}", event);

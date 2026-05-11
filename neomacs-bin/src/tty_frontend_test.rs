@@ -169,6 +169,30 @@ fn emit_utf8_character_as_single_event() {
 }
 
 #[test]
+fn tty_input_decoder_buffers_split_utf8_character() {
+    let mut decoder = TtyInputDecoder::new();
+    let bytes = "İ".as_bytes();
+    assert_eq!(bytes, &[0xC4, 0xB0]);
+
+    let first = decoder.emit_events(&bytes[..1], 0);
+    assert!(first.is_empty());
+
+    let second = decoder.emit_events(&bytes[1..], 0);
+    assert_eq!(event_keysyms(&second), vec!['İ' as u32]);
+    assert_eq!(event_modifiers(&second), vec![0]);
+}
+
+#[test]
+fn tty_input_decoder_flushes_invalid_split_utf8_as_raw_bytes() {
+    let mut decoder = TtyInputDecoder::new();
+
+    assert!(decoder.emit_events(&[0xC4], 0).is_empty());
+    let events = decoder.emit_events(b"x", 0);
+
+    assert_eq!(event_keysyms(&events), vec![0x44, b'x' as u32]);
+}
+
+#[test]
 fn emit_mixed_ascii_and_utf8() {
     let mut buf = vec![b'a'];
     buf.extend_from_slice("ä".as_bytes()); // 0xC3 0xA4

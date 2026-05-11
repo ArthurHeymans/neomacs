@@ -675,7 +675,7 @@ fn upcase_string_emacs_compat(s: &str) -> String {
     out
 }
 
-fn upcase_char_code_emacs_compat(code: i64) -> i64 {
+pub(crate) fn upcase_char_code_emacs_compat(code: i64) -> i64 {
     if preserve_emacs_upcase_payload(code) {
         return code;
     }

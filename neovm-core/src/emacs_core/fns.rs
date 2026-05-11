@@ -1148,41 +1148,27 @@ pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
     let chars1: Vec<char> = s1.chars().collect();
     let chars2: Vec<char> = s2.chars().collect();
 
-    let start1 = match args[1].kind() {
-        ValueKind::Nil => 0usize,
-        ValueKind::Fixnum(n) => (n).max(0) as usize, // 0-based index
-        _ => 0,
-    };
-    let end1 = match args[2].kind() {
-        ValueKind::Nil => chars1.len(),
-        ValueKind::Fixnum(n) => (n as usize).min(chars1.len()),
-        _ => chars1.len(),
-    };
-    let start2 = match args[4].kind() {
-        ValueKind::Nil => 0usize,
-        ValueKind::Fixnum(n) => (n).max(0) as usize, // 0-based index
-        _ => 0,
-    };
-    let end2 = match args[5].kind() {
-        ValueKind::Nil => chars2.len(),
-        ValueKind::Fixnum(n) => (n as usize).min(chars2.len()),
-        _ => chars2.len(),
-    };
+    let end1_arg = compare_strings_clamp_too_large_end(args[2], chars1.len());
+    let end2_arg = compare_strings_clamp_too_large_end(args[5], chars2.len());
+    let (start1, end1) =
+        validate_compare_strings_subarray(args[0], args[1], end1_arg, chars1.len())?;
+    let (start2, end2) =
+        validate_compare_strings_subarray(args[3], args[4], end2_arg, chars2.len())?;
 
     let ignore_case = args.get(6).is_some_and(|v| v.is_truthy());
 
-    let sub1 = &chars1[start1.min(chars1.len())..end1.min(chars1.len())];
-    let sub2 = &chars2[start2.min(chars2.len())..end2.min(chars2.len())];
+    let sub1 = &chars1[start1..end1];
+    let sub2 = &chars2[start2..end2];
 
     let len = sub1.len().min(sub2.len());
     for i in 0..len {
         let c1 = if ignore_case {
-            sub1[i].to_lowercase().next().unwrap_or(sub1[i])
+            compare_strings_upcase_char(sub1[i])
         } else {
             sub1[i]
         };
         let c2 = if ignore_case {
-            sub2[i].to_lowercase().next().unwrap_or(sub2[i])
+            compare_strings_upcase_char(sub2[i])
         } else {
             sub2[i]
         };
@@ -1203,6 +1189,68 @@ pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
     } else {
         Ok(Value::fixnum((len + 1) as i64))
     }
+}
+
+fn compare_strings_clamp_too_large_end(end: Value, size: usize) -> Value {
+    match end.kind() {
+        ValueKind::Fixnum(n) if n > size as i64 => Value::fixnum(size as i64),
+        _ => end,
+    }
+}
+
+fn validate_compare_strings_subarray(
+    array: Value,
+    from: Value,
+    to: Value,
+    size: usize,
+) -> Result<(usize, usize), Flow> {
+    let size_i64 = size as i64;
+    let from_index = match from.kind() {
+        ValueKind::Fixnum(n) => {
+            if n < 0 {
+                n + size_i64
+            } else {
+                n
+            }
+        }
+        ValueKind::Nil => 0,
+        _ => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("integerp"), from],
+            ));
+        }
+    };
+    let to_index = match to.kind() {
+        ValueKind::Fixnum(n) => {
+            if n < 0 {
+                n + size_i64
+            } else {
+                n
+            }
+        }
+        ValueKind::Nil => size_i64,
+        _ => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("integerp"), to],
+            ));
+        }
+    };
+
+    if !(0 <= from_index && from_index <= to_index && to_index <= size_i64) {
+        return Err(signal("args-out-of-range", vec![array, from, to]));
+    }
+
+    Ok((from_index as usize, to_index as usize))
+}
+
+fn compare_strings_upcase_char(ch: char) -> char {
+    let mapped = super::builtins::upcase_char_code_emacs_compat(ch as i64);
+    u32::try_from(mapped)
+        .ok()
+        .and_then(char::from_u32)
+        .unwrap_or(ch)
 }
 
 /// (string-version-lessp S1 S2) -- version-aware string comparison.
