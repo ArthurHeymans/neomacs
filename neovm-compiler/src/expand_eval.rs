@@ -3206,6 +3206,67 @@ impl MacroEval {
             "null" | "not" => Ok(MacroValue::from_bool(args[0].is_nil())),
             "atom" => Ok(MacroValue::from_bool(!args[0].is_cons())),
             "identity" => Ok(args[0].clone()),
+            "keywordp" => {
+                if let MacroValue::Symbol(s) = &args[0] {
+                    Ok(MacroValue::from_bool(s.starts_with(':')))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "booleanp" => Ok(MacroValue::from_bool(
+                args[0].is_nil() || matches!(&args[0], MacroValue::Symbol(s) if s == "t"),
+            )),
+            "arrayp" => Ok(MacroValue::from_bool(args[0].is_string())),
+            "vectorp" | "hash-table-p" => Ok(MacroValue::Nil),
+            "natnump" | "wholenump" => {
+                if let MacroValue::Int(n) = &args[0] {
+                    Ok(MacroValue::from_bool(*n >= 0))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "zerop" => match &args[0] {
+                MacroValue::Int(n) => Ok(MacroValue::from_bool(*n == 0)),
+                MacroValue::Float(f) => Ok(MacroValue::from_bool(*f == 0.0)),
+                _ => Ok(MacroValue::Nil),
+            },
+            "evenp" | "cl-evenp" => {
+                if let MacroValue::Int(n) = &args[0] {
+                    Ok(MacroValue::from_bool(*n & 1 == 0))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "oddp" | "cl-oddp" => {
+                if let MacroValue::Int(n) = &args[0] {
+                    Ok(MacroValue::from_bool(*n & 1 != 0))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "minusp" | "cl-minusp" => {
+                if let MacroValue::Int(n) = &args[0] {
+                    Ok(MacroValue::from_bool(*n < 0))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "plusp" | "cl-plusp" => {
+                if let MacroValue::Int(n) = &args[0] {
+                    Ok(MacroValue::from_bool(*n > 0))
+                } else {
+                    Ok(MacroValue::Nil)
+                }
+            }
+            "char-or-string-p" => Ok(MacroValue::from_bool(
+                args[0].is_string(),
+            )),
+            "string-or-null-p" => Ok(MacroValue::from_bool(
+                args[0].is_nil() || args[0].is_string(),
+            )),
+            "nlistp" => Ok(MacroValue::from_bool(
+                args[0].is_nil() || !args[0].is_cons(),
+            )),
             _ => Ok(MacroValue::Nil),
         }
     }
