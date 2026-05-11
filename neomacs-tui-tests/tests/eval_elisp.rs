@@ -6485,6 +6485,40 @@ fn symbol_with_pos_print_symbols_bare_semantics_match_gnu() {
 }
 
 #[test]
+fn read_positioning_symbols_print_and_cell_semantics_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:Fread_positioning_symbols wraps read symbols in
+    // symbol-with-pos objects, and GNU src/print.c still obeys
+    // print-symbols-bare for those objects.  The positioned symbols are not
+    // accepted by CHECK_SYMBOL APIs such as symbol-name.
+    let expr = r##"(message "readpos:%S" (let* ((obj (read-positioning-symbols "(alpha beta . gamma)"))) (list (equal (mapcar (lambda (x) (list (symbol-with-pos-p x) (bare-symbol x) (symbol-with-pos-pos x))) (list (car obj) (cadr obj) (cdr (cdr obj)))) '((t alpha 1) (t beta 7) (t gamma 14))) (equal (condition-case e (symbol-name (car obj)) (error (list (car e) (cadr e)))) '(wrong-type-argument symbolp)) (equal (let ((print-symbols-bare t)) (prin1-to-string obj)) "(alpha beta . gamma)") (equal (let ((print-symbols-bare nil)) (prin1-to-string obj)) "(#<symbol alpha at 1> #<symbol beta at 7> . #<symbol gamma at 14>)"))))"##;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "readpos:(t t t t)";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: read-positioning-symbols symbol-with-pos semantics should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "read_positioning_symbols_print_and_cell_semantics_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn function_predicate_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
