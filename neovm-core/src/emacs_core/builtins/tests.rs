@@ -7708,6 +7708,10 @@ fn list_copy_length_and_delq_signal_circular_list_like_gnu() {
     let delq_input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
     delq_input.cons_cdr().set_cdr(delq_input);
     assert_circular(builtin_delq(vec![Value::fixnum(9), delq_input]));
+
+    let reverse_input = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
+    reverse_input.cons_cdr().set_cdr(reverse_input);
+    assert_circular(builtin_reverse(vec![reverse_input]));
 }
 
 #[test]

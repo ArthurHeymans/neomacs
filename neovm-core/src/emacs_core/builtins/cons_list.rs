@@ -953,9 +953,7 @@ pub(crate) fn builtin_reverse(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => {
-            let items = list_to_vec(&args[0]).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), args[0]])
-            })?;
+            let items = collect_proper_list_items(args[0])?;
             let mut reversed = items;
             reversed.reverse();
             Ok(Value::list(reversed))
