@@ -5090,6 +5090,45 @@ fn malformed_unicode_character_escape_error_matches_gnu() {
 }
 
 #[test]
+fn unicode_character_reader_error_payloads_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lread.c:read_char_escape distinguishes named-character syntax,
+    // malformed Unicode escapes, non-hex digits, and out-of-range codepoints.
+    let expr = r#"(message "readunicode:%S" (list (condition-case e (read (concat "?" "\\" "N")) (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "u12")) (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "u12xz")) (error (list (car e) (cadr e)))) (condition-case e (read (concat "?" "\\" "U00110000")) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let recent = grid.join("\n");
+        recent.contains("readunicode:")
+            && recent.contains("Expected opening brace after")
+            && recent.contains("Malformed Unicode escape")
+            && recent.contains("Non-hex character used for")
+            && recent.contains("escape: x (120)")
+            && recent.contains("Non-Unicode character")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: Unicode character reader errors should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "unicode_character_reader_error_payloads_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn provide_eval_after_load_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
