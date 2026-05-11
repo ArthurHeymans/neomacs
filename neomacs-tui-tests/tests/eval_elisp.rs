@@ -11162,6 +11162,43 @@ fn character_string_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn characterp_ignored_second_arg_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/character.c:Fcharacterp has arity 1..2 and ignores the second
+    // argument.  This preserves historical callers that pass an obsolete
+    // strict flag.
+    let expr = r#"(message "charp2:%S" (list (condition-case e (characterp ?a t) (error (list (car e) (cadr e)))) (condition-case e (characterp #x400000 t) (error (list (car e) (cadr e)))) (condition-case e (characterp nil t) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("charp2:(t nil nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: characterp should accept and ignore a second arg like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "characterp_ignored_second_arg_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn coding_string_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
