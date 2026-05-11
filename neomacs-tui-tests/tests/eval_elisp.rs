@@ -5705,6 +5705,38 @@ fn invalid_regexp_error_payload_matches_gnu_semantics() {
 }
 
 #[test]
+fn string_match_start_type_error_matches_gnu_fixnump_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/search.c:string_match_1 validates START with CHECK_FIXNUM for
+    // both ordinary and POSIX string matching.
+    let expr = r#"(message "matchstart:%S" (list (condition-case e (string-match "a" "abc" 1.0) (error (list (car e) (cadr e)))) (condition-case e (posix-string-match "a" "abc" 1.0) (error (list (car e) (cadr e))))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "matchstart:((wrong-type-argument fixnump) (wrong-type-argument fixnump))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: string-match START type errors should match GNU CHECK_FIXNUM\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_match_start_type_error_matches_gnu_fixnump_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn match_data_reuse_and_reseat_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
