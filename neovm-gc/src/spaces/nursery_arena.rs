@@ -147,6 +147,7 @@ impl NurseryArena {
     }
 }
 
+#[inline]
 fn align_up(addr: usize, align: usize) -> usize {
     debug_assert!(align.is_power_of_two(), "alignment must be a power of two");
     let mask = align - 1;

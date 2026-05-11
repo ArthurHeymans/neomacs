@@ -315,6 +315,7 @@ pub(crate) fn collect_global_sources(
 
 /// Round `value` up to the next multiple of `align` (assumed non-zero).
 /// Returns `value` unchanged if it is already aligned.
+#[inline]
 fn align_up_to(value: usize, align: usize) -> usize {
     if align <= 1 {
         return value;
