@@ -143,27 +143,33 @@ impl ObjectHeaderTemplate {
 }
 
 impl ObjectHeader {
+    #[inline]
     pub(crate) fn desc(&self) -> &'static TypeDesc {
         self.desc
     }
 
+    #[inline]
     pub(crate) fn total_size(&self) -> usize {
         self.total_size
     }
 
+    #[inline]
     pub(crate) fn space(&self) -> SpaceKind {
         SpaceKind::from_u8(self.space.load(Ordering::Acquire))
     }
 
     #[allow(dead_code)]
+    #[inline]
     pub(crate) fn generation(&self) -> Generation {
         Generation::from_u8(self.generation.load(Ordering::Acquire))
     }
 
+    #[inline]
     pub(crate) fn is_marked(&self) -> bool {
         self.mark_bits.load(Ordering::Acquire) != 0
     }
 
+    #[inline]
     pub(crate) fn age(&self) -> u8 {
         self.age.load(Ordering::Acquire)
     }
@@ -533,14 +539,17 @@ impl ObjectRecord {
         };
     }
 
+    #[inline]
     pub(crate) fn erased(&self) -> GcErased {
         unsafe { GcErased::from_header(self.header) }
     }
 
+    #[inline]
     pub(crate) fn header(&self) -> &ObjectHeader {
         unsafe { self.header.as_ref() }
     }
 
+    #[inline]
     pub(crate) fn object_key(&self) -> ObjectKey {
         ObjectKey::from_header(self.header)
     }

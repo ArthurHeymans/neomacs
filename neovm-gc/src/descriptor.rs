@@ -38,28 +38,34 @@ impl GcErased {
     /// # Safety
     ///
     /// `header` must point at an object header managed by the heap.
+    #[inline]
     pub(crate) unsafe fn from_header(header: NonNull<ObjectHeader>) -> Self {
         Self(header)
     }
 
+    #[inline]
     pub(crate) unsafe fn from_raw(raw: *mut ObjectHeader) -> Option<Self> {
         NonNull::new(raw).map(Self)
     }
 
+    #[inline]
     pub(crate) fn header(self) -> NonNull<ObjectHeader> {
         self.0
     }
 
+    #[inline]
     pub(crate) fn as_raw(self) -> *mut ObjectHeader {
         self.0.as_ptr()
     }
 
+    #[inline]
     pub(crate) fn object_key(self) -> ObjectKey {
         ObjectKey::from_header(self.0)
     }
 }
 
 impl ObjectKey {
+    #[inline]
     pub(crate) fn from_header(header: NonNull<ObjectHeader>) -> Self {
         Self(header.as_ptr() as usize)
     }
