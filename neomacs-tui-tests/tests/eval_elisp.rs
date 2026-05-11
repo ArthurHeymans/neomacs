@@ -11036,6 +11036,41 @@ fn print_circle_nil_bounded_cycle_matches_gnu_semantics() {
 }
 
 #[test]
+fn print_circle_nil_tail_cycle_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/print.c prints bounded circular structures differently when the
+    // cycle starts in the tail rather than at the head.  With print-circle nil,
+    // print-length truncation must use GNU's #N tail-depth notation.
+    let expr = r#"(message "printtailn:%S" (let ((print-circle nil) (print-length 7) (print-level nil) (x (list 'a 'b 'c))) (setcdr (cddr x) (cdr x)) (prin1-to-string x)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("printtailn:") && row.contains("(a b c b . #2)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: print-circle nil tail-cycle truncation should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "print_circle_nil_tail_cycle_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn print_level_vectorlike_notation_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
