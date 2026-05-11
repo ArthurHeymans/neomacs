@@ -225,6 +225,59 @@ fn arity_unevalled(min: usize) -> Value {
     Value::cons(Value::fixnum(min as i64), Value::symbol("unevalled"))
 }
 
+fn macro_wrapper_payload(function: Value) -> Option<Value> {
+    if function.is_cons() && function.cons_car().as_symbol_name() == Some("macro") {
+        Some(function.cons_cdr())
+    } else {
+        None
+    }
+}
+
+fn lambda_arity_from_arglist(function: Value, arglist: Value) -> EvalResult {
+    let mut syms_left = arglist;
+    let mut minargs = 0;
+    let mut maxargs = 0;
+    let mut optional = false;
+
+    while syms_left.is_cons() {
+        let next = syms_left.cons_car();
+        syms_left = syms_left.cons_cdr();
+        let next = if next.is_symbol_with_pos() {
+            next.as_symbol_with_pos_sym().unwrap_or(next)
+        } else {
+            next
+        };
+        let Some(name) = next.as_symbol_name() else {
+            return Err(signal("invalid-function", vec![function]));
+        };
+
+        match name {
+            "&rest" => return Ok(arity_cons(minargs, None)),
+            "&optional" => optional = true,
+            _ => {
+                if !optional {
+                    minargs += 1;
+                }
+                maxargs += 1;
+            }
+        }
+    }
+
+    if !syms_left.is_nil() {
+        return Err(signal("invalid-function", vec![function]));
+    }
+
+    Ok(arity_cons(minargs, Some(maxargs)))
+}
+
+fn lambda_arity_from_cons(function: Value) -> EvalResult {
+    let syms_left = function.cons_cdr();
+    if !syms_left.is_cons() {
+        return Err(signal("invalid-function", vec![function]));
+    }
+    lambda_arity_from_arglist(function, syms_left.cons_car())
+}
+
 fn is_cxr_subr_name(name: &str) -> bool {
     let Some(inner) = name.strip_prefix('c').and_then(|s| s.strip_suffix('r')) else {
         return false;
@@ -542,70 +595,83 @@ pub(crate) fn builtin_func_arity_ctx(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("func-arity", &args, 1)?;
-    if super::autoload::is_autoload_value(&args[0]) {
+    let original = args[0];
+    let function = macro_wrapper_payload(original).unwrap_or(original);
+    if super::autoload::is_autoload_value(&function) {
         return Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
+            vec![Value::symbol("symbolp"), function],
         ));
     }
-    match args[0].kind() {
+    match function.kind() {
         ValueKind::Veclike(VecLikeType::Lambda) => {
-            let params = args[0].closure_params().unwrap();
+            let params = function.closure_params().unwrap();
             let min = params.min_arity();
             let max = params.max_arity();
             Ok(arity_cons(min, max))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
-            let bc = args[0].get_bytecode_data().unwrap();
+            let bc = function.get_bytecode_data().unwrap();
             let min = bc.params.min_arity();
             let max = bc.params.max_arity();
             Ok(arity_cons(min, max))
         }
         ValueKind::Subr(id) => Ok(subr_arity_from_registry(ctx, id)),
         ValueKind::Veclike(VecLikeType::Subr) => {
-            let id = args[0].as_subr_id().unwrap();
+            let id = function.as_subr_id().unwrap();
             Ok(subr_arity_from_registry(ctx, id))
         }
         ValueKind::Veclike(VecLikeType::Macro) => {
-            let params = args[0].closure_params().unwrap();
+            let params = function.closure_params().unwrap();
             let min = params.min_arity();
             let max = params.max_arity();
             Ok(arity_cons(min, max))
         }
-        _other => Err(signal("invalid-function", vec![args[0]])),
+        ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
+            lambda_arity_from_cons(function)
+        }
+        _other => Err(signal("invalid-function", vec![original])),
     }
 }
 
 /// Legacy pure version for callers that don't have Context access.
 pub(crate) fn builtin_func_arity_impl(args: Vec<Value>) -> EvalResult {
     expect_args("func-arity", &args, 1)?;
-    if super::autoload::is_autoload_value(&args[0]) {
+    let original = args[0];
+    let function = macro_wrapper_payload(original).unwrap_or(original);
+    if super::autoload::is_autoload_value(&function) {
         return Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
+            vec![Value::symbol("symbolp"), function],
         ));
     }
-    match args[0].kind() {
+    match function.kind() {
         ValueKind::Veclike(VecLikeType::Lambda) => {
-            let params = args[0].closure_params().unwrap();
+            let params = function.closure_params().unwrap();
             Ok(arity_cons(params.min_arity(), params.max_arity()))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
-            let bc = args[0].get_bytecode_data().unwrap();
+            let bc = function.get_bytecode_data().unwrap();
             Ok(arity_cons(bc.params.min_arity(), bc.params.max_arity()))
         }
-        ValueKind::Subr(id) => {
-            Ok(subr_arity_from_value(args[0]).unwrap_or_else(|| subr_arity_value(resolve_sym(id))))
-        }
+        ValueKind::Subr(id) => Ok(
+            subr_arity_from_value(function).unwrap_or_else(|| subr_arity_value(resolve_sym(id)))
+        ),
         ValueKind::Veclike(VecLikeType::Subr) => {
-            let id = args[0].as_subr_id().unwrap();
-            Ok(subr_arity_from_value(args[0]).unwrap_or_else(|| subr_arity_value(resolve_sym(id))))
+            let id = function.as_subr_id().unwrap();
+            Ok(
+                subr_arity_from_value(function)
+                    .unwrap_or_else(|| subr_arity_value(resolve_sym(id))),
+            )
         }
         ValueKind::Veclike(VecLikeType::Macro) => {
-            let params = args[0].closure_params().unwrap();
+            let params = function.closure_params().unwrap();
             Ok(arity_cons(params.min_arity(), params.max_arity()))
         }
-        _other => Err(signal("invalid-function", vec![args[0]])),
+        ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
+            lambda_arity_from_cons(function)
+        }
+        _other => Err(signal("invalid-function", vec![original])),
     }
 }
 

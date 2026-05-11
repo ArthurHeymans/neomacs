@@ -9410,6 +9410,7 @@ fn with_demoted_errors_runtime_semantics() {
              (with-demoted-errors 1 (/ 1 0))
            (error (list :error (car err) (cdr err))))
          (with-demoted-errors \"DM %S\")
+         (func-arity (symbol-function 'with-demoted-errors))
          (condition-case err
              (with-demoted-errors)
            (error err))",
@@ -9420,9 +9421,32 @@ fn with_demoted_errors_runtime_semantics() {
     assert_eq!(results[3], "OK nil");
     assert_eq!(results[4], "OK nil");
     assert_eq!(results[5], r#"OK "DM %S""#);
-    // After the specbind refactor, with-demoted-errors uses the Elisp
-    // macro definition which has (1 . many) arity, not the old (1 . 1).
-    assert_eq!(results[6], "OK (wrong-number-of-arguments (1 . many) 0)");
+    // GNU reports the macro's public arity as (1 . many), but a direct
+    // zero-argument macro call signals from the compiled macro entry path
+    // as exactly one argument.
+    assert_eq!(results[6], "OK (1 . many)");
+    assert_eq!(results[7], "OK (wrong-number-of-arguments (1 . 1) 0)");
+}
+
+#[test]
+fn func_arity_direct_lambda_and_macro_values_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(func-arity '(lambda (x &optional y &rest z) x))
+           (func-arity '(lambda (&rest) x))
+           (func-arity '(lambda (&optional &optional x) x))
+           (condition-case err
+               (func-arity '(lambda (x . y) x))
+             (error err))
+           (condition-case err
+               (func-arity '(macro . 1))
+             (error err))"#,
+    );
+    assert_eq!(results[0], "OK (1 . many)");
+    assert_eq!(results[1], "OK (0 . many)");
+    assert_eq!(results[2], "OK (0 . 1)");
+    assert_eq!(results[3], "OK (invalid-function (lambda (x . y) x))");
+    assert_eq!(results[4], "OK (invalid-function (macro . 1))");
 }
 
 #[test]
