@@ -1429,6 +1429,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 None
             }
         },
+        "cl-tree-equal" if args.len() >= 2 => {
+            // (cl-tree-equal nil nil) → t
+            if matches!(args[0], SsaConst::Nil) && matches!(args[1], SsaConst::Nil) {
+                Some(SsaConst::True)
+            } else {
+                None
+            }
+        },
         "cl-some" | "cl-notevery" if args.len() >= 2 => {
             // (cl-some PRED nil) → nil  (existential: no element satisfies)
             // (cl-notevery PRED nil) → nil  (not every element... over empty set)
