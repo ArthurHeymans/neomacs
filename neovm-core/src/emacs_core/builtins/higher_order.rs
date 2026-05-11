@@ -6,9 +6,10 @@ type MapResultVec = SmallVec<[Value; 8]>;
 
 fn list_from_map_results(eval: &mut super::eval::Context, results: &[Value]) -> Value {
     let mut acc = Value::NIL;
+    let acc_root = eval.push_vm_frame_root_slot(acc);
     for value in results.iter().rev().copied() {
         acc = Value::cons(value, acc);
-        eval.push_vm_frame_root(acc);
+        eval.set_vm_frame_root_slot(acc_root, acc);
     }
     acc
 }

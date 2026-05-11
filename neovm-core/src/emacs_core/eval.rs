@@ -10049,6 +10049,24 @@ impl Context {
             .push(value);
     }
 
+    pub(crate) fn push_vm_frame_root_slot(&mut self, value: Value) -> usize {
+        let roots = &mut self
+            .vm_root_frames
+            .last_mut()
+            .expect("VM root frame missing")
+            .roots;
+        let slot = roots.len();
+        roots.push(value);
+        slot
+    }
+
+    pub(crate) fn set_vm_frame_root_slot(&mut self, slot: usize, value: Value) {
+        self.vm_root_frames
+            .last_mut()
+            .expect("VM root frame missing")
+            .roots[slot] = value;
+    }
+
     pub(crate) fn push_eval_result_roots(&mut self, result: &EvalResult) {
         match result {
             Ok(value) => self.push_vm_frame_root(*value),
