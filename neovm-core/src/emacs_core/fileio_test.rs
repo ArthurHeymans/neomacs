@@ -221,6 +221,15 @@ fn test_expand_file_name_preserves_directory_marker() {
 }
 
 #[test]
+fn test_expand_file_name_preserves_gnu_superroot_spellings() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(expand_file_name("//server/share/../x", None), "//server/x");
+    assert_eq!(expand_file_name("///server/share/../x", None), "/server/x");
+    assert_eq!(expand_file_name("/../x", None), "/../x");
+    assert_eq!(expand_file_name("/../../x", None), "/x");
+}
+
+#[test]
 fn test_file_truename_missing_file_and_trailing_slash() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

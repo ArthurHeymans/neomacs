@@ -49,12 +49,11 @@ pub fn expand_file_name(name: &str, default_dir: Option<&str>) -> String {
         name.to_string()
     };
 
-    let path = Path::new(&expanded);
     let preserve_trailing_slash = expanded.ends_with('/');
 
     // If already absolute, just clean it up
-    if path.is_absolute() {
-        let mut cleaned = clean_path(&PathBuf::from(&expanded));
+    if expanded.starts_with('/') {
+        let mut cleaned = clean_path(&expanded);
         if preserve_trailing_slash && !cleaned.ends_with('/') {
             cleaned.push('/');
         }
@@ -70,7 +69,13 @@ pub fn expand_file_name(name: &str, default_dir: Option<&str>) -> String {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"))
     };
 
-    let joined = base.join(&expanded);
+    if expanded.is_empty() {
+        let mut cleaned = clean_path(base.to_string_lossy().as_ref());
+        trim_trailing_slashes_except_roots(&mut cleaned);
+        return cleaned;
+    }
+
+    let joined = join_file_name(base.to_string_lossy().as_ref(), &expanded);
     let mut cleaned = clean_path(&joined);
     if preserve_trailing_slash && !cleaned.ends_with('/') {
         cleaned.push('/');
@@ -233,24 +238,74 @@ fn file_truename_lisp(
     file_truename_lisp_inner(filename, &default_dir, &mut remaining_links, &mut prev_dirs)
 }
 
+fn join_file_name(base: &str, name: &str) -> String {
+    if base.ends_with('/') {
+        format!("{base}{name}")
+    } else {
+        format!("{base}/{name}")
+    }
+}
+
+fn trim_trailing_slashes_except_roots(path: &mut String) {
+    while path.len() > 1 && path.ends_with('/') && !(path.len() == 2 && path.starts_with("//")) {
+        path.pop();
+    }
+}
+
 /// Clean up a path by resolving `.` and `..` components without touching the
-/// filesystem (no symlink resolution).
-fn clean_path(path: &Path) -> String {
-    let mut components = Vec::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {} // skip "."
-            std::path::Component::ParentDir => {
-                // Pop the last component if possible
-                if !components.is_empty() {
-                    components.pop();
+/// filesystem (no symlink resolution).  GNU `expand-file-name` does this as a
+/// spelling-preserving byte pass, not via the platform path parser: an initial
+/// `//` is preserved, later repeated slashes are collapsed, and the first
+/// `/../` above root remains visible as the POSIX "superroot" spelling.
+fn clean_path(path: &str) -> String {
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut p = 0;
+
+    while p < bytes.len() {
+        if bytes[p] != b'/' {
+            out.push(bytes[p]);
+            p += 1;
+        } else if p + 1 < bytes.len()
+            && bytes[p + 1] == b'.'
+            && (p + 2 == bytes.len() || bytes[p + 2] == b'/')
+        {
+            if out.is_empty() && p + 2 == bytes.len() {
+                out.push(b'/');
+            }
+            p += 2;
+        } else if p + 2 < bytes.len()
+            && bytes[p + 1] == b'.'
+            && bytes[p + 2] == b'.'
+            && !out.is_empty()
+            && (p + 3 == bytes.len() || bytes[p + 3] == b'/')
+        {
+            let mut previous_sep = out.len();
+            while previous_sep > 0 {
+                previous_sep -= 1;
+                if out[previous_sep] == b'/' {
+                    break;
                 }
             }
-            other => components.push(other),
+
+            if previous_sep == 0 && out.first() == Some(&b'/') && p + 3 == bytes.len() {
+                out.truncate(1);
+            } else {
+                out.truncate(previous_sep);
+            }
+            p += 3;
+        } else if p + 1 < bytes.len()
+            && bytes[p + 1] == b'/'
+            && (p != 0 || (p + 2 < bytes.len() && bytes[p + 2] == b'/'))
+        {
+            p += 1;
+        } else {
+            out.push(bytes[p]);
+            p += 1;
         }
     }
-    let result: PathBuf = components.iter().collect();
-    result.to_string_lossy().into_owned()
+
+    String::from_utf8(out).expect("path canonicalization preserves UTF-8")
 }
 
 /// Return the directory part of FILENAME, or None if there is no directory part.
