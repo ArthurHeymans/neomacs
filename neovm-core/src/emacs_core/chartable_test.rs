@@ -1,11 +1,25 @@
 use super::*;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
+use crate::emacs_core::intern::{intern, intern_uninterned};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 // -----------------------------------------------------------------------
 // Char-table tests
 // -----------------------------------------------------------------------
+
+fn assert_signal_symbol_and_predicate(result: EvalResult, symbol: &str, predicate: &str) {
+    match result {
+        Err(Flow::Signal(signal)) => {
+            assert_eq!(signal.symbol_name(), symbol);
+            assert_eq!(
+                signal.data.first().and_then(|v| v.as_symbol_name()),
+                Some(predicate)
+            );
+        }
+        other => panic!("expected signal {symbol} {predicate}, got {other:?}"),
+    }
+}
 
 #[test]
 fn make_char_table_basic() {
@@ -23,6 +37,70 @@ fn make_char_table_with_default() {
     // Default lookup should return the default.
     let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
     assert!(def.is_fixnum());
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap(),
+        Value::fixnum(42)
+    );
+}
+
+#[test]
+fn make_char_table_initializes_gnu_standard_and_extra_slots() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_with_extra_slots(Value::symbol("neo-purpose"), Value::fixnum(7), 2);
+
+    assert_eq!(
+        builtin_char_table_extra_slot(vec![ct, Value::fixnum(0)]).unwrap(),
+        Value::fixnum(7)
+    );
+    assert_eq!(
+        builtin_char_table_extra_slot(vec![ct, Value::fixnum(1)]).unwrap(),
+        Value::fixnum(7)
+    );
+
+    let slots = char_table_external_slots(&ct).unwrap();
+    assert_eq!(slots[0], Value::fixnum(7));
+    assert_eq!(slots[3], Value::fixnum(7));
+    assert!(slots[4..68].iter().all(|slot| *slot == Value::fixnum(7)));
+    assert_eq!(slots[68], Value::fixnum(7));
+    assert_eq!(slots[69], Value::fixnum(7));
+}
+
+#[test]
+fn builtin_make_char_table_checks_symbol_and_extra_slot_property_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    assert_signal_symbol_and_predicate(
+        builtin_make_char_table(&mut eval, vec![Value::fixnum(1)]),
+        "wrong-type-argument",
+        "symbolp",
+    );
+
+    let purpose = Value::symbol(intern_uninterned("neo-extra"));
+    eval.obarray
+        .put_property_id(
+            purpose.as_symbol_id().unwrap(),
+            intern("char-table-extra-slots"),
+            Value::make_float(1.0),
+        )
+        .unwrap();
+    assert_signal_symbol_and_predicate(
+        builtin_make_char_table(&mut eval, vec![purpose, Value::NIL]),
+        "wrong-type-argument",
+        "wholenump",
+    );
+
+    eval.obarray
+        .put_property_id(
+            purpose.as_symbol_id().unwrap(),
+            intern("char-table-extra-slots"),
+            Value::fixnum(1),
+        )
+        .unwrap();
+    let ct = builtin_make_char_table(&mut eval, vec![purpose, Value::symbol("init")]).unwrap();
+    assert_eq!(
+        builtin_char_table_extra_slot(vec![ct, Value::fixnum(0)]).unwrap(),
+        Value::symbol("init")
+    );
 }
 
 #[test]
@@ -246,6 +324,23 @@ fn char_table_extra_slot_basic() {
     let set_result =
         builtin_set_char_table_extra_slot(vec![ct, Value::fixnum(0), Value::symbol("extra0")]);
     assert!(set_result.is_err());
+}
+
+#[test]
+fn char_table_extra_slot_index_type_error_uses_fixnump() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_with_extra_slots(Value::symbol("test"), Value::NIL, 1);
+
+    assert_signal_symbol_and_predicate(
+        builtin_char_table_extra_slot(vec![ct, Value::make_float(0.0)]),
+        "wrong-type-argument",
+        "fixnump",
+    );
+    assert_signal_symbol_and_predicate(
+        builtin_set_char_table_extra_slot(vec![ct, Value::make_float(0.0), Value::symbol("x")]),
+        "wrong-type-argument",
+        "fixnump",
+    );
 }
 
 #[test]
@@ -1230,16 +1325,89 @@ fn char_table_range_invalid_range_type() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
     let result = builtin_set_char_table_range(vec![ct, Value::string("invalid"), Value::fixnum(1)]);
-    assert!(result.is_err());
+    match result {
+        Err(Flow::Signal(signal)) => {
+            assert_eq!(signal.symbol_name(), "error");
+            assert!(
+                signal
+                    .data
+                    .first()
+                    .and_then(|v| v.as_utf8_str())
+                    .is_some_and(
+                        |message| message == "Invalid RANGE argument to `set-char-table-range'"
+                    )
+            );
+        }
+        other => panic!("expected invalid range error, got {other:?}"),
+    }
 }
 
 #[test]
-fn char_table_range_reverse_cons_errors() {
+fn char_table_range_reverse_cons_returns_value_without_changing_entries() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_value(Value::symbol("test"), Value::fixnum(0));
+    let range = Value::cons(Value::fixnum(70), Value::fixnum(65)); // min > max
+    assert_eq!(
+        builtin_set_char_table_range(vec![ct, range, Value::fixnum(1)]).unwrap(),
+        Value::fixnum(1)
+    );
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::fixnum(65)]).unwrap(),
+        Value::fixnum(0)
+    );
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::fixnum(70)]).unwrap(),
+        Value::fixnum(0)
+    );
+}
+
+#[test]
+fn char_table_range_rejects_non_character_fixnum_atoms_like_gnu() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    let range = Value::cons(Value::fixnum(70), Value::fixnum(65)); // min > max
-    let result = builtin_set_char_table_range(vec![ct, range, Value::fixnum(1)]);
-    assert!(result.is_err());
+
+    for result in [
+        builtin_char_table_range(vec![ct, Value::fixnum(-1)]),
+        builtin_set_char_table_range(vec![ct, Value::fixnum(-1), Value::symbol("x")]),
+    ] {
+        match result {
+            Err(Flow::Signal(signal)) => {
+                assert_eq!(signal.symbol_name(), "error");
+                assert!(
+                    signal
+                        .data
+                        .first()
+                        .and_then(|v| v.as_utf8_str())
+                        .is_some_and(|message| message.starts_with("Invalid RANGE argument to `"))
+                );
+            }
+            other => panic!("expected invalid range error, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn fillarray_preserves_ascii_cache_while_rewriting_contents_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let ct = make_char_table_value(Value::symbol("case-table"), Value::symbol("base"));
+    crate::emacs_core::builtins::builtin_fillarray(vec![ct, Value::symbol("x")]).unwrap();
+
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)]).unwrap(),
+        Value::symbol("base")
+    );
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::fixnum(999_999)]).unwrap(),
+        Value::symbol("x")
+    );
+    assert_eq!(
+        builtin_char_table_range(vec![ct, Value::NIL]).unwrap(),
+        Value::symbol("x")
+    );
+
+    let slots = char_table_external_slots(&ct).unwrap();
+    assert_eq!(slots[3], Value::symbol("base"));
+    assert!(slots[4..68].iter().all(|slot| *slot == Value::symbol("x")));
 }
 
 #[test]

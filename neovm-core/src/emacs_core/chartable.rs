@@ -18,7 +18,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::{Context, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
-use super::intern::resolve_sym;
+use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, intern, resolve_sym};
 use super::value::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -188,6 +188,14 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+/// Extract a fixnum, signaling with GNU's `fixnump` predicate name.
+fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ => Err(wrong_type("fixnump", value)),
+    }
+}
+
 /// Extract a non-negative integer (for index-like args), signaling with
 /// `wholenump` on any mismatch.
 fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
@@ -207,6 +215,32 @@ fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
         ));
     }
     Ok(n)
+}
+
+fn symbol_id_for_check_symbol(value: &Value) -> Result<SymId, Flow> {
+    match value.kind() {
+        ValueKind::Nil => Ok(NIL_SYM_ID),
+        ValueKind::T => Ok(T_SYM_ID),
+        ValueKind::Symbol(id) => Ok(id),
+        _ => value
+            .as_symbol_with_pos_sym()
+            .and_then(|symbol| symbol_id_for_check_symbol(&symbol).ok())
+            .ok_or_else(|| wrong_type("symbolp", value)),
+    }
+}
+
+fn expect_character_code(value: &Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(ch) if (0..=MAX_CHAR).contains(&ch) => Ok(ch),
+        _ => Err(wrong_type("characterp", value)),
+    }
+}
+
+fn invalid_range_error(name: &str) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!("Invalid RANGE argument to `{name}'"))],
+    )
 }
 
 /// Data-pairs region start index for a char-table vector.
@@ -253,9 +287,9 @@ pub(crate) fn char_table_ascii_cache_range(vec: &[Value]) -> Option<std::ops::Ra
     ct_ascii_cache_range(vec)
 }
 
-fn append_ascii_cache(vec: &mut Vec<Value>) {
+fn append_ascii_cache(vec: &mut Vec<Value>, initial_value: Value) {
     vec.push(Value::fixnum(CT_ASCII_CACHE_MAGIC));
-    vec.resize(vec.len() + CT_ASCII_CACHE_LEN, Value::NIL);
+    vec.resize(vec.len() + CT_ASCII_CACHE_LEN, initial_value);
 }
 
 fn ct_update_ascii_cache(vec: &mut [Value], min: i64, max: i64, value: Value) {
@@ -590,6 +624,14 @@ fn flatten_char_table_slot(
     }
 }
 
+fn ct_set_range_no_ascii_cache(vec: &mut Vec<Value>, min: i64, max: i64, value: Value) {
+    if min > max {
+        return;
+    }
+    vec.push(Value::cons(Value::fixnum(min), Value::fixnum(max)));
+    vec.push(value);
+}
+
 fn flatten_sub_char_table(
     vec: &mut Vec<Value>,
     depth: usize,
@@ -627,7 +669,7 @@ pub(crate) fn make_char_table_from_external_slots(items: &[Value]) -> Result<Val
         Value::fixnum(extra_count as i64),
     ];
     vec.extend_from_slice(&items[GNU_CHAR_TABLE_STANDARD_SLOTS..]);
-    append_ascii_cache(&mut vec);
+    append_ascii_cache(&mut vec, Value::NIL);
 
     let is_uniprop = purpose.is_symbol_named("char-code-property-table") && extra_count == 5;
     for block in 0..GNU_CHAR_TABLE_CONTENT_BLOCKS_USIZE {
@@ -677,11 +719,16 @@ pub fn make_char_table_with_extra_slots(sub_type: Value, default: Value, n_extra
         sub_type,                // CT_SUBTYPE
         Value::fixnum(n_extras), // CT_EXTRA_COUNT
     ];
-    // Allocate extra slots initialised to nil.
+    // GNU `make-char-table` creates one vector initialized to DEFAULT, then
+    // overwrites only the parent and purpose slots.  Extra slots and ordinary
+    // contents therefore start as DEFAULT too.
     for _ in 0..n_extras {
-        vec.push(Value::NIL);
+        vec.push(default);
     }
-    append_ascii_cache(&mut vec);
+    append_ascii_cache(&mut vec, default);
+    if !default.is_nil() {
+        ct_set_range_no_ascii_cache(&mut vec, 0, MAX_CHAR, default);
+    }
     Value::vector(vec)
 }
 
@@ -709,19 +756,38 @@ pub(crate) fn builtin_make_char_table(eval: &mut Context, args: Vec<Value>) -> E
     expect_max_args("make-char-table", &args, 2)?;
     let sub_type = args[0];
     let default = if args.len() > 1 { args[1] } else { Value::NIL };
+    let sub_type_id = symbol_id_for_check_symbol(&sub_type)?;
     // Read char-table-extra-slots property from the sub-type symbol,
     // matching GNU Emacs chartab.c:Fmake_char_table.
-    let n_extras = if let Some(name) = sub_type.as_symbol_name() {
-        eval.obarray
-            .get_property(name, "char-table-extra-slots")
-            .and_then(|v| v.as_int())
-            .unwrap_or(0)
+    let n_extras = if let Some(value) = eval
+        .obarray
+        .get_property_id(sub_type_id, intern("char-table-extra-slots"))
+    {
+        if value.is_nil() {
+            0
+        } else {
+            expect_wholenump(&value)?
+        }
     } else {
         0
     };
     Ok(make_char_table_with_extra_slots(
         sub_type, default, n_extras,
     ))
+}
+
+pub(crate) fn fill_char_table_from_fillarray(table: &Value, item: Value) -> Result<(), Flow> {
+    if !is_char_table(table) {
+        return Err(wrong_type("char-table-p", table));
+    }
+
+    let mut vec = table.as_vector_data().unwrap().clone();
+    vec[CT_DEFAULT] = item;
+    // GNU `fillarray` rewrites the 64 top-level content slots and the default
+    // slot, but it does not rewrite the separate ASCII cache slot.
+    ct_set_range_no_ascii_cache(&mut vec, 0, MAX_CHAR, item);
+    let _ = table.replace_vector_data(vec);
+    Ok(())
 }
 
 /// `(char-table-p OBJ)` -- return t if OBJ is a char-table.
@@ -760,29 +826,23 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
         }
         // Single character
         ValueKind::Fixnum(_) => {
-            let ch = expect_int(range)?;
+            let ch = match expect_character_code(range) {
+                Ok(ch) => ch,
+                Err(_) => return Err(invalid_range_error("set-char-table-range")),
+            };
             ct_set_char(&mut vec, ch, *value);
         }
         // Range cons (MIN . MAX)
         ValueKind::Cons => {
             let pair_car = range.cons_car();
             let pair_cdr = range.cons_cdr();
-            let min = expect_int(&pair_car)?;
-            let max = expect_int(&pair_cdr)?;
-            if min > max {
-                return Err(signal(
-                    "args-out-of-range",
-                    vec![Value::fixnum(min), Value::fixnum(max)],
-                ));
+            let min = expect_character_code(&pair_car)?;
+            let max = expect_character_code(&pair_cdr)?;
+            if min <= max {
+                ct_set_range(&mut vec, min, max, *value);
             }
-            ct_set_range(&mut vec, min, max, *value);
         }
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("char-table-range"), *range],
-            ));
-        }
+        _ => return Err(invalid_range_error("set-char-table-range")),
     }
 
     let _ = table.replace_vector_data(vec);
@@ -914,23 +974,21 @@ pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
             Ok(vec[CT_DEFAULT])
         }
         ValueKind::Fixnum(_) => {
-            let ch = expect_int(range)?;
+            let ch = match expect_character_code(range) {
+                Ok(ch) => ch,
+                Err(_) => return Err(invalid_range_error("char-table-range")),
+            };
             ct_lookup(table, ch)
         }
         ValueKind::Cons => {
             let pair_car = range.cons_car();
             let pair_cdr = range.cons_cdr();
-            let from = expect_int(&pair_car)?;
-            let _to = expect_int(&pair_cdr)?;
+            let from = expect_character_code(&pair_car)?;
+            let _to = expect_character_code(&pair_cdr)?;
             let (value, _run_from, _run_to) = ct_lookup_and_range(table, from)?;
             Ok(value)
         }
-        _ => Err(signal(
-            "error",
-            vec![Value::string(
-                "Invalid RANGE argument to `char-table-range'",
-            )],
-        )),
+        _ => Err(invalid_range_error("char-table-range")),
     }
 }
 
@@ -1227,7 +1285,7 @@ pub(crate) fn for_each_char_table_mapping(
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(shared_range);
     let result = (|| {
-        for run in ct_effective_runs(table) {
+        for run in ct_map_char_table_runs(table) {
             shared_range.set_car(Value::fixnum(run.start));
             shared_range.set_cdr(Value::fixnum(run.end));
             if run.value.is_nil() {
@@ -1265,6 +1323,180 @@ fn ct_resolved_entries(table: &Value) -> Vec<(Value, Value)> {
         .filter(|run| !run.value.is_nil())
         .map(|run| (run_key(run.start, run.end), run.value))
         .collect()
+}
+
+fn ct_local_direct_runs(table: &Value) -> Vec<EffectiveRun> {
+    if !table.is_vector() {
+        return vec![EffectiveRun {
+            start: 0,
+            end: MAX_CHAR,
+            value: Value::NIL,
+        }];
+    }
+    let vec = table.as_vector_data().unwrap().clone();
+    let raws = ct_collect_raw_entries(&vec, is_char_code_property_vec(&vec));
+    let default = vec[CT_DEFAULT];
+    let domain_end = MAX_CHAR.saturating_add(1);
+
+    let mut boundaries = BTreeSet::new();
+    let mut starts: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    let mut ends: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    boundaries.insert(0);
+    boundaries.insert(domain_end);
+    for (idx, raw) in raws.iter().enumerate() {
+        let start = raw.start.clamp(0, domain_end);
+        let end_exclusive = raw.end.saturating_add(1).clamp(0, domain_end);
+        boundaries.insert(start);
+        boundaries.insert(end_exclusive);
+        starts.entry(start).or_default().push(idx);
+        ends.entry(end_exclusive).or_default().push(idx);
+    }
+
+    let mut runs = Vec::new();
+    let mut active_raws = BTreeSet::new();
+    for window in boundaries.into_iter().collect::<Vec<_>>().windows(2) {
+        let start = window[0];
+        let end_exclusive = window[1];
+        if let Some(indices) = ends.get(&start) {
+            for idx in indices {
+                active_raws.remove(idx);
+            }
+        }
+        if let Some(indices) = starts.get(&start) {
+            for idx in indices {
+                active_raws.insert(*idx);
+            }
+        }
+        if start > MAX_CHAR || end_exclusive <= start {
+            continue;
+        }
+        let end = end_exclusive.saturating_sub(1).min(MAX_CHAR);
+        let local = active_raws.iter().next_back().map(|idx| raws[*idx].value);
+        let value = match local {
+            Some(local) if !local.is_nil() => local,
+            _ if !default.is_nil() => default,
+            _ => Value::NIL,
+        };
+        push_effective_run(&mut runs, start, end, value);
+    }
+
+    if runs.is_empty() {
+        vec![EffectiveRun {
+            start: 0,
+            end: MAX_CHAR,
+            value: Value::NIL,
+        }]
+    } else {
+        runs
+    }
+}
+
+fn push_effective_run(runs: &mut Vec<EffectiveRun>, start: i64, end: i64, value: Value) {
+    if start > end {
+        return;
+    }
+    if let Some(previous) = runs.last_mut()
+        && previous.end.saturating_add(1) == start
+        && eq_value(&previous.value, &value)
+    {
+        previous.end = end;
+        return;
+    }
+    runs.push(EffectiveRun { start, end, value });
+}
+
+fn ct_ascii_initial_value(vec: &[Value]) -> Value {
+    ct_ascii_cache_range(vec)
+        .and_then(|range| vec.get(range.start).copied())
+        .unwrap_or(Value::NIL)
+}
+
+fn clipped_runs(
+    runs: impl IntoIterator<Item = EffectiveRun>,
+    from: i64,
+    to: i64,
+) -> Vec<EffectiveRun> {
+    if from > to {
+        return Vec::new();
+    }
+    let mut clipped = Vec::new();
+    for run in runs {
+        let start = run.start.max(from);
+        let end = run.end.min(to);
+        if start <= end {
+            push_effective_run(&mut clipped, start, end, run.value);
+        }
+    }
+    clipped
+}
+
+fn push_parent_direct_span_runs(
+    out: &mut Vec<EffectiveRun>,
+    parent: Value,
+    from: i64,
+    to: i64,
+    next_local_value: Value,
+) -> bool {
+    let parent_runs = clipped_runs(ct_local_direct_runs(&parent), from, to);
+    let Some(last) = parent_runs.last().copied() else {
+        return true;
+    };
+    let suppress_last = eq_value(&last.value, &next_local_value);
+    let emit_len = parent_runs.len() - usize::from(suppress_last);
+    for run in parent_runs.into_iter().take(emit_len) {
+        if !run.value.is_nil() {
+            push_effective_run(out, run.start, run.end, run.value);
+        }
+    }
+    !suppress_last
+}
+
+fn push_parent_tail_runs(out: &mut Vec<EffectiveRun>, parent: Value, from: i64, to: i64) {
+    for run in clipped_runs(ct_map_char_table_runs(&parent), from, to) {
+        if !run.value.is_nil() {
+            push_effective_run(out, run.start, run.end, run.value);
+        }
+    }
+}
+
+fn ct_map_char_table_runs(table: &Value) -> Vec<EffectiveRun> {
+    if !is_char_table(table) {
+        return Vec::new();
+    }
+    let vec = table.as_vector_data().unwrap().clone();
+    let parent = vec[CT_PARENT];
+    let local_runs = ct_local_direct_runs(table);
+    let mut out = Vec::new();
+    let mut val = ct_ascii_initial_value(&vec);
+    let mut from = 0;
+
+    for run in local_runs {
+        if eq_value(&val, &run.value) {
+            continue;
+        }
+
+        let mut different_value = true;
+        let has_previous_span = from < run.start;
+        if val.is_nil() && is_char_table(&parent) && has_previous_span {
+            different_value =
+                push_parent_direct_span_runs(&mut out, parent, from, run.start - 1, run.value);
+        }
+        if !val.is_nil() && different_value && has_previous_span {
+            push_effective_run(&mut out, from, run.start - 1, val);
+        }
+        val = run.value;
+        from = run.start;
+    }
+
+    if val.is_nil() {
+        if is_char_table(&parent) {
+            push_parent_tail_runs(&mut out, parent, from, MAX_CHAR);
+        }
+    } else {
+        push_effective_run(&mut out, from, MAX_CHAR, val);
+    }
+
+    out
 }
 
 #[derive(Clone, Copy)]
@@ -1530,6 +1762,19 @@ fn external_ascii_slot(raws: &[RawEntry]) -> Value {
     external_subtree_for_span(raws, 3, 0, 0, 127)
 }
 
+fn external_ascii_slot_from_cache(vec: &[Value], raws: &[RawEntry]) -> Value {
+    let Some(range) = ct_ascii_cache_range(vec) else {
+        return external_ascii_slot(raws);
+    };
+    let values = vec[range].to_vec();
+    if let Some(first) = values.first().copied()
+        && values.iter().all(|value| eq_value(value, &first))
+    {
+        return first;
+    }
+    make_sub_char_table_literal(3, 0, values)
+}
+
 pub(crate) fn sub_char_table_external_slots(table: &Value) -> Option<(i64, i64, Vec<Value>)> {
     let (depth, min_char, contents) = sub_char_table_depth_min_contents(table)?;
     Some((depth as i64, min_char, contents))
@@ -1554,7 +1799,7 @@ pub(crate) fn char_table_external_slots(table: &Value) -> Option<Vec<Value>> {
     slots.push(vec[CT_DEFAULT]);
     slots.push(vec[CT_PARENT]);
     slots.push(vec[CT_SUBTYPE]);
-    slots.push(external_ascii_slot(&raws));
+    slots.push(external_ascii_slot_from_cache(&vec, &raws));
 
     for idx in 0..GNU_CHAR_TABLE_CONTENT_BLOCKS {
         let start = idx * GNU_CHAR_TABLE_BLOCK_CHARS;
@@ -1573,7 +1818,7 @@ pub(crate) fn char_table_external_slots(table: &Value) -> Option<Vec<Value>> {
 pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     expect_args("char-table-extra-slot", &args, 2)?;
     let table = &args[0];
-    let n = expect_int(&args[1])?;
+    let n = expect_fixnump(&args[1])?;
 
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
@@ -1595,7 +1840,7 @@ pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     expect_args("set-char-table-extra-slot", &args, 3)?;
     let table = &args[0];
-    let n = expect_int(&args[1])?;
+    let n = expect_fixnump(&args[1])?;
     let value = &args[2];
 
     if !is_char_table(table) {

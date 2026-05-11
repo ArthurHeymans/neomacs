@@ -209,6 +209,14 @@ pub(crate) fn builtin_mapcar_2(
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(seq);
     let mut results = MapResultVec::new();
+    // GNU fns.c Fmapcar rejects char-tables with `listp` before mapping.
+    if super::chartable::is_char_table(&seq) {
+        eval.restore_vm_roots(roots);
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), seq],
+        ));
+    }
     // GNU fns.c Fmapcar computes SEQUENCE length before calling FUNCTION, then
     // reads each cons cdr after the callback.  If FUNCTION shortens the list,
     // mapcar returns the mapped prefix instead of following stale cdrs.
@@ -280,6 +288,13 @@ pub(crate) fn builtin_mapc_2(
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(seq);
+    if super::chartable::is_char_table(&seq) {
+        eval.restore_vm_roots(roots);
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), seq],
+        ));
+    }
     // For cons lists, root cursor at each step so our precise GC
     // (which doesn't scan the Rust stack) can find the remaining
     // chain even if a hook callback modifies the list.
@@ -330,6 +345,13 @@ pub(crate) fn builtin_mapconcat(eval: &mut super::eval::Context, args: Vec<Value
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(sequence);
     eval.push_vm_frame_root(separator);
+    if super::chartable::is_char_table(&sequence) {
+        eval.restore_vm_roots(roots);
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), sequence],
+        ));
+    }
     let mapconcat_result = for_each_sequence_element(&sequence, |item| {
         let val = apply1(eval, func, item)?;
         eval.push_vm_frame_root(val);
@@ -366,6 +388,13 @@ pub(crate) fn builtin_mapcan(eval: &mut super::eval::Context, args: Vec<Value>) 
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(sequence);
+    if super::chartable::is_char_table(&sequence) {
+        eval.restore_vm_roots(roots);
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), sequence],
+        ));
+    }
     let mapcan_result = for_each_sequence_element(&sequence, |item| {
         let val = apply1(eval, func, item)?;
         eval.push_vm_frame_root(val);

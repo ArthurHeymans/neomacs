@@ -1097,7 +1097,6 @@ fn fillarray_character_from_value(value: &Value) -> Result<char, Flow> {
 }
 
 pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
-    const CHAR_TABLE_DEFAULT_SLOT: usize = 1;
     const BOOL_VECTOR_SIZE_SLOT: usize = 1;
     const BOOL_VECTOR_BITS_START: usize = 2;
 
@@ -1123,12 +1122,7 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
                 return Ok(args[0]);
             }
             if is_char_table {
-                if args[0]
-                    .as_vector_data()
-                    .is_some_and(|vec| vec.len() > CHAR_TABLE_DEFAULT_SLOT)
-                {
-                    let _ = args[0].set_vector_slot(CHAR_TABLE_DEFAULT_SLOT, args[1]);
-                }
+                super::chartable::fill_char_table_from_fillarray(&args[0], args[1])?;
                 return Ok(args[0]);
             }
             let fill_len = args[0].as_vector_data().map_or(0, |vec| vec.len());
