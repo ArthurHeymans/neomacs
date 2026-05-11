@@ -1654,6 +1654,249 @@ impl Interpreter<'_, '_, '_> {
                 buf.modified = true;
                 LispValue::NIL
             }),
+            "forward-char" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
+                let buf = self.runtime.current_buffer_mut();
+                for _ in 0..n {
+                    if buf.point >= buf.contents.len() { break; }
+                    buf.point += buf.contents[buf.point..].chars().next().map(|c| c.len_utf8()).unwrap_or(0);
+                }
+                buf.point = buf.point.min(buf.point_max());
+                Some(LispValue::NIL)
+            }),
+            "backward-char" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
+                for _ in 0..n {
+                    if buf.point == 0 { break; }
+                    buf.point -= buf.contents[..buf.point].chars().last().map(|c| c.len_utf8()).unwrap_or(1);
+                }
+                buf.point = buf.point.max(buf.point_min());
+                Some(LispValue::NIL)
+            }),
+            "forward-line" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1) as isize;
+                let buf = self.runtime.current_buffer_mut();
+                let contents = &buf.contents;
+                if n > 0 {
+                    let mut pos = buf.point;
+                    for _ in 0..n {
+                        pos = contents[pos..].find('\n').map(|i| pos + i + 1).unwrap_or(contents.len());
+                    }
+                    buf.point = pos;
+                } else if n < 0 {
+                    let mut pos = buf.point;
+                    for _ in 0..(-n) {
+                        if pos == 0 { break; }
+                        pos = contents[..pos-1].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    }
+                    buf.point = pos;
+                }
+                Some(LispValue::NIL)
+            }),
+            "beginning-of-line" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                let pt = buf.point;
+                let bol = buf.contents[..pt].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                buf.point = bol;
+                Some(LispValue::NIL)
+            }),
+            "end-of-line" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                let pt = buf.point;
+                let eol = buf.contents[pt..].find('\n').map(|i| pt + i).unwrap_or(buf.contents.len());
+                buf.point = eol;
+                Some(LispValue::NIL)
+            }),
+            "bolp" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                let pt = buf.point;
+                bool_value(pt == 0 || buf.contents.as_bytes().get(pt.saturating_sub(1)) == Some(&b'\n'))
+            }),
+            "eolp" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                let pt = buf.point;
+                bool_value(pt >= buf.contents.len() || buf.contents.as_bytes().get(pt) == Some(&b'\n'))
+            }),
+            "char-after" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let pos = args.get(0).and_then(|v| v.as_fixnum()).map(|n| n as usize);
+                let buf = self.runtime.current_buffer();
+                let idx = pos.map(|p| p.saturating_sub(1)).unwrap_or(buf.point);
+                match buf.contents[idx..].chars().next() {
+                    Some(ch) => Some(LispValue::from_char(ch)),
+                    None => Some(LispValue::NIL),
+                }
+            }),
+            "char-before" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let pos = args.get(0).and_then(|v| v.as_fixnum()).map(|n| n as usize);
+                let buf = self.runtime.current_buffer();
+                let idx = pos.map(|p| p.saturating_sub(1)).unwrap_or(buf.point);
+                if idx > 0 {
+                    buf.contents[..idx].chars().last().map(|ch| LispValue::from_char(ch))
+                } else {
+                    Some(LispValue::NIL)
+                }
+            }),
+            "skip-chars-forward" => self.subr_1(name, args, |s| {
+                let charset = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let buf = s.runtime.current_buffer_mut();
+                let after = &buf.contents[buf.point..];
+                let len = after.chars().take_while(|c| charset.contains(*c)).map(|c| c.len_utf8()).sum::<usize>();
+                buf.point += len;
+                Some(LispValue::NIL)
+            }),
+            "skip-chars-backward" => self.subr_1(name, args, |s| {
+                let charset = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let buf = s.runtime.current_buffer_mut();
+                let before = &buf.contents[..buf.point];
+                let skip_len: usize = before.chars().rev().take_while(|c| charset.contains(*c)).map(|c| c.len_utf8()).sum();
+                buf.point -= skip_len;
+                Some(LispValue::NIL)
+            }),
+            "looking-at" => self.subr_1(name, args, |s| {
+                let pattern = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let buf = s.runtime.current_buffer();
+                let haystack = &buf.contents[buf.point..];
+                match regex::Regex::new(&pattern) {
+                    Ok(re) => Some(bool_value(re.find(haystack).map_or(false, |m| m.start() == 0))),
+                    Err(_) => Some(LispValue::NIL),
+                }
+            }),
+            "search-forward" => self.subr_1_3(name, args, |s| {
+                let pattern = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let bound = args.get(1).and_then(|v| v.as_fixnum()).map(|n| n as usize);
+                let no_error = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
+                let (search_start, search_end, haystack) = {
+                    let buf = s.runtime.current_buffer();
+                    let ss = buf.point;
+                    let se = bound.unwrap_or(buf.point_max());
+                    (ss, se, buf.contents[ss..se].to_string())
+                };
+                if search_start >= search_end {
+                    if no_error { return Some(LispValue::NIL); }
+                    else { return None; }
+                }
+                match haystack.find(&pattern) {
+                    Some(idx) => {
+                        s.runtime.current_buffer_mut().point = search_start + idx + pattern.len();
+                        Some(LispValue::expect_fixnum((search_start + idx) as i64))
+                    }
+                    None => {
+                        if no_error { Some(LispValue::NIL) }
+                        else { None }
+                    }
+                }
+            }),
+            "search-backward" => self.subr_1_3(name, args, |s| {
+                let pattern = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let bound = args.get(1).and_then(|v| v.as_fixnum()).map(|n| n as usize);
+                let no_error = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
+                let (search_start, search_end, haystack) = {
+                    let buf = s.runtime.current_buffer();
+                    let ss = bound.unwrap_or(buf.point_min());
+                    let se = buf.point;
+                    (ss, se, buf.contents[ss..se].to_string())
+                };
+                if search_start >= search_end {
+                    if no_error { return Some(LispValue::NIL); }
+                    else { return None; }
+                }
+                match haystack.rfind(&pattern) {
+                    Some(idx) => {
+                        s.runtime.current_buffer_mut().point = search_start + idx;
+                        Some(LispValue::expect_fixnum((search_start + idx) as i64))
+                    }
+                    None => {
+                        if no_error { Some(LispValue::NIL) }
+                        else { None }
+                    }
+                }
+            }),
+            "copy-file" => self.subr_min_2(name, args, |s| {
+                let src = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let dst = s.runtime.string_contents(args[1]).ok()?.to_string();
+                let ok_to_ok = args.get(2).map(|v| !v.is_nil()).unwrap_or(true);
+                match std::fs::copy(&src, &dst) {
+                    Ok(_) => Some(LispValue::NIL),
+                    Err(_) if ok_to_ok => Some(LispValue::NIL),
+                    Err(_) => None,
+                }
+            }),
+            "rename-file" => self.subr_1_2(name, args, |s| {
+                let src = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let dst = s.runtime.string_contents(args[1]).ok()?.to_string();
+                let ok_to_ok = args.get(2).map(|v| !v.is_nil()).unwrap_or(true);
+                match std::fs::rename(&src, &dst) {
+                    Ok(_) => Some(LispValue::NIL),
+                    Err(_) if ok_to_ok => Some(LispValue::NIL),
+                    Err(_) => None,
+                }
+            }),
+            "directory-files" => self.subr_1_2(name, args, |s| {
+                let dir = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let full = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|s| s.to_string()));
+                let nosort = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
+                let Ok(entries) = std::fs::read_dir(&dir) else { return Some(LispValue::NIL) };
+                let mut names: Vec<String> = entries.filter_map(|e| {
+                    let e = e.ok()?;
+                    let name = e.file_name().to_string_lossy().to_string();
+                    let full_name = full.as_ref().and_then(|f| {
+                        if f.is_empty() { None }
+                        else if f == "full" { Some(e.path().to_string_lossy().to_string()) }
+                        else { Some(format!("{}/{}", dir, name)) }
+                    });
+                    full_name.or(Some(name))
+                }).collect();
+                if !nosort { names.sort(); }
+                let rt = &mut s.runtime;
+                let mut list = LispValue::NIL;
+                for name in names.into_iter().rev() {
+                    let sval = rt.string(name);
+                    list = rt.cons(sval, list);
+                }
+                Some(list)
+            }),
+            "file-attributes" => self.subr_1_2(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match std::fs::metadata(&path) {
+                    Ok(meta) => {
+                        let len = meta.len() as i64;
+                        let is_dir = meta.is_dir();
+                        let rt = &mut s.runtime;
+                        let nil = LispValue::NIL;
+                        let c = rt.cons(LispValue::expect_fixnum(0), nil);
+                        let b = rt.cons(LispValue::expect_fixnum(len), c);
+                        let a = if is_dir { rt.cons(LispValue::TRUE, b) } else { rt.cons(nil, b) };
+                        Some(a)
+                    }
+                    Err(_) => Some(LispValue::NIL),
+                }
+            }),
+            "insert-file-contents" => self.subr_min_1(name, args, |s| {
+                let path = s.runtime.string_contents(args[0]).ok()?.to_string();
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let len = content.len();
+                        let buf = s.runtime.current_buffer_mut();
+                        buf.contents.insert_str(buf.point, &content);
+                        buf.point += len;
+                        buf.modified = true;
+                        Some(LispValue::expect_fixnum(len as i64))
+                    }
+                    Err(_) => None,
+                }
+            }),
+            "write-region" => self.subr_2_5(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let path = s.runtime.string_contents(args[2]).ok()?.to_string();
+                let buf = s.runtime.current_buffer();
+                let content = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                match std::fs::write(&path, content) {
+                    Ok(()) => Some(LispValue::TRUE),
+                    Err(_) => Some(LispValue::NIL),
+                }
+            }),
             "window-buffer" => Some(LispValue::NIL),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);
