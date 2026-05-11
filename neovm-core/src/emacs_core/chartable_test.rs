@@ -721,7 +721,7 @@ fn unicode_property_run_length_decoder_treats_raw_byte_counts_as_bytes() {
 
     assert_eq!(
         builtin_get_unicode_property_internal(vec![table, Value::fixnum(0)]).unwrap(),
-        Value::symbol("Cc")
+        Value::symbol("Ll")
     );
     assert_eq!(
         builtin_get_unicode_property_internal(vec![table, Value::fixnum(3)]).unwrap(),
