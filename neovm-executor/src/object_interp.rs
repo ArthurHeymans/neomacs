@@ -14440,4 +14440,24 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_nconc_returns_nil_for_all_nil_args() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (nconc nil nil nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_car_cdr_chain_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (list (caar nil) (cadr nil) (cdar nil) (cddr nil)\
+                   (caaar nil) (caadr nil) (cadar nil) (caddr nil)\
+                   (cdaar nil) (cdadr nil) (cddar nil) (cdddr nil))",
+        );
+        assert!(value.is_some());
+    }
 }
