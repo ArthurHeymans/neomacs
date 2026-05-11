@@ -29,6 +29,7 @@ pub struct Runtime {
     hash_table_index: HashMap<usize, usize>,
     function_index: HashMap<usize, usize>,
     bignum_index: HashMap<usize, usize>,
+    lexical_cell_index: HashMap<usize, usize>,
     cons_cells: Vec<Box<Cons>>,
     symbols: Vec<Box<Symbol>>,
     strings: Vec<Box<LispString>>,
@@ -82,6 +83,7 @@ impl Default for Runtime {
             hash_table_index: HashMap::new(),
             function_index: HashMap::new(),
             bignum_index: HashMap::new(),
+            lexical_cell_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -150,6 +152,7 @@ impl Runtime {
             hash_table_index: HashMap::new(),
             function_index: HashMap::new(),
             bignum_index: HashMap::new(),
+            lexical_cell_index: HashMap::new(),
             cons_cells: Vec::new(),
             symbols: Vec::new(),
             strings: Vec::new(),
@@ -283,6 +286,7 @@ impl Runtime {
         });
         let addr = (&mut *cell as *mut LexicalCell) as usize;
         self.object_index.insert(addr, HeapKind::LexicalCell);
+        self.lexical_cell_index.insert(addr, self.lexical_cells.len());
         self.lexical_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
@@ -1928,9 +1932,16 @@ impl Runtime {
     }
 
     fn lexical_cell_by_addr(&self, addr: usize) -> Option<&LexicalCell> {
+        if let Some(idx) = self.lexical_cell_index.get(&addr) {
+            if let Some(obj) = self.lexical_cells.get(*idx) {
+                if (&**obj as *const LexicalCell) as usize == addr {
+                    return Some(obj);
+                }
+            }
+        }
         for cell in &self.lexical_cells {
-            let cell_addr = (&**cell as *const LexicalCell) as usize;
-            if cell_addr == addr && cell.header.kind == HeapKind::LexicalCell {
+            let ptr: *const LexicalCell = &**cell;
+            if ptr as usize == addr {
                 return Some(cell);
             }
         }
@@ -1938,9 +1949,18 @@ impl Runtime {
     }
 
     fn lexical_cell_by_addr_mut(&mut self, addr: usize) -> Option<&mut LexicalCell> {
+        let idx_val = self.lexical_cell_index.get(&addr).copied();
+        if let Some(idx) = idx_val {
+            if idx < self.lexical_cells.len() {
+                let cell_ptr = &mut *self.lexical_cells[idx] as *mut LexicalCell;
+                if cell_ptr as usize == addr {
+                    return Some(unsafe { &mut *cell_ptr });
+                }
+            }
+        }
         for cell in &mut self.lexical_cells {
-            let cell_addr = (&**cell as *const LexicalCell) as usize;
-            if cell_addr == addr && cell.header.kind == HeapKind::LexicalCell {
+            let ptr: *const LexicalCell = &**cell;
+            if ptr as usize == addr {
                 return Some(cell);
             }
         }
