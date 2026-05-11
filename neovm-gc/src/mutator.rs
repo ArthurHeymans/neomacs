@@ -362,6 +362,7 @@ impl<'heap> Mutator<'heap> {
 
     /// Create a new rooted handle scope backed by this
     /// mutator's per-local root stack.
+    #[inline]
     pub fn handle_scope<'scope>(&mut self) -> HandleScope<'scope, 'heap> {
         let had_safepoint = self.handle_scope_state.has_safepoint();
         self.handle_scope_state.begin_scope();
@@ -628,6 +629,7 @@ impl<'heap> Mutator<'heap> {
     /// through to the shared-cursor bump path and finally
     /// to the system allocator. Non-nursery allocations
     /// bypass the TLAB entirely.
+    #[inline]
     pub fn alloc<'scope, T: Trace + 'static>(
         &mut self,
         scope: &mut HandleScope<'scope, 'heap>,
@@ -637,6 +639,7 @@ impl<'heap> Mutator<'heap> {
     }
 
     /// Allocate one managed object, collecting first if nursery pressure requires it.
+    #[inline]
     pub fn alloc_auto<'scope, T: Trace + 'static>(
         &mut self,
         scope: &mut HandleScope<'scope, 'heap>,
@@ -671,6 +674,7 @@ impl<'heap> Mutator<'heap> {
     }
 
     /// Create a new rooted handle for an existing managed object.
+    #[inline]
     pub fn root<'scope, T: ?Sized>(
         &mut self,
         scope: &mut HandleScope<'scope, 'heap>,
