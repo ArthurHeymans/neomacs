@@ -553,6 +553,23 @@ fn documentation_prefers_function_documentation_property() {
 }
 
 #[test]
+fn documentation_prefers_uninterned_symbol_function_documentation_property() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+
+    let result = evaluator
+        .eval_str(
+            r#"(let ((s (make-symbol "doc-prop")))
+                 (fset s (lambda () "lambda-doc" 1))
+                 (put s 'function-documentation "propdoc")
+                 (documentation s t))"#,
+        )
+        .unwrap();
+
+    assert_eq!(result.as_utf8_str(), Some("propdoc"));
+}
+
+#[test]
 fn documentation_integer_function_documentation_property_returns_nil() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
@@ -1523,6 +1540,22 @@ fn documentation_property_eval_non_symbol_prop_returns_nil() {
     )
     .unwrap();
     assert!(result.is_nil());
+}
+
+#[test]
+fn documentation_property_eval_accepts_non_symbol_prop_when_present() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+
+    let result = evaluator
+        .eval_str(
+            r#"(let ((p (cons 'k nil)))
+                 (put 'doc-sym p "v")
+                 (documentation-property 'doc-sym p t))"#,
+        )
+        .unwrap();
+
+    assert_eq!(result.as_utf8_str(), Some("v"));
 }
 
 #[test]

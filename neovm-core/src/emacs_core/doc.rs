@@ -53,9 +53,7 @@ pub(crate) fn builtin_documentation(
     args: Vec<Value>,
 ) -> EvalResult {
     let raw = args.get(1).is_some_and(|v| v.is_truthy());
-    let obarray = eval.obarray() as *const super::symbol::Obarray;
-    // Safety: the evaluator owns the obarray for the duration of this call.
-    let (plan, lisp_directory) = documentation_plan(unsafe { &*obarray }, args)?;
+    let (plan, lisp_directory) = documentation_plan(eval, args)?;
     finish_documentation_result(
         execute_documentation_plan(
             plan,
@@ -126,19 +124,26 @@ fn maybe_substitute_command_keys(eval: &mut super::eval::Context, value: Value) 
 }
 
 fn documentation_plan(
-    obarray: &super::symbol::Obarray,
+    eval: &super::eval::Context,
     args: Vec<Value>,
 ) -> Result<(DocumentationPlan, Option<String>), Flow> {
     expect_min_max_args("documentation", &args, 1, 2)?;
+    let obarray = eval.obarray();
     let lisp_directory = obarray
         .symbol_value("lisp-directory")
         .and_then(|v| v.as_runtime_string_owned());
 
-    // For symbols, Emacs consults the `function-documentation` property first.
-    // This can produce docs even when the function cell is non-callable.
-    if let Some(name) = args[0].as_symbol_name() {
-        let name = name.to_string();
-        if let Some(prop) = obarray.get_property(&name, "function-documentation") {
+    // GNU doc.c:Fdocumentation calls Fget on the original symbol before
+    // looking at the function cell.  Keep that exact object identity so
+    // uninterned symbols and symbols-with-pos use the same path as `get`.
+    if super::builtins::symbols::symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)
+        .is_some()
+    {
+        let prop_key = Value::symbol("function-documentation");
+        if let Some(prop) =
+            super::builtins::symbols::symbol_property_get(eval, args[0], prop_key)?.1
+            && !prop.is_nil()
+        {
             let plan = documentation_plan_from_property_value(lisp_directory.as_deref(), prop)?;
             return Ok((plan, lisp_directory));
         }
@@ -162,7 +167,7 @@ pub(crate) fn builtin_documentation_in_vm_runtime(
 ) -> EvalResult {
     let raw = args.get(1).is_some_and(|v| v.is_truthy());
     let args_roots = args.clone();
-    let (plan, lisp_directory) = documentation_plan(&shared.obarray, args)?;
+    let (plan, lisp_directory) = documentation_plan(shared, args)?;
     finish_documentation_result(
         execute_documentation_plan(
             plan,
@@ -516,10 +521,12 @@ fn load_compiled_doc_string(lisp_directory: Option<&str>, file: &str, position: 
     decode_compiled_doc_bytes(&buffer[offset..end_index])
 }
 
-fn startup_variable_doc_offset_symbol(sym: &str, prop: &str, value: &Value) -> bool {
-    prop == "variable-documentation"
-        && value.is_fixnum()
-        && startup_variable_doc_stub(sym).is_some()
+fn startup_variable_doc_offset_symbol(
+    sym: &str,
+    prop_is_variable_documentation: bool,
+    value: &Value,
+) -> bool {
+    prop_is_variable_documentation && value.is_fixnum() && startup_variable_doc_stub(sym).is_some()
 }
 
 pub(crate) static STARTUP_VARIABLE_DOC_STUBS: &[(&str, &str)] = &[
@@ -7876,8 +7883,12 @@ fn startup_variable_doc_stub(sym: &str) -> Option<&'static str> {
         .find_map(|(name, doc)| (*name == sym).then_some(*doc))
 }
 
-fn startup_variable_doc_string_symbol(sym: &str, prop: &str, value: &Value) -> bool {
-    prop == "variable-documentation"
+fn startup_variable_doc_string_symbol(
+    sym: &str,
+    prop_is_variable_documentation: bool,
+    value: &Value,
+) -> bool {
+    prop_is_variable_documentation
         && value.is_string()
         && STARTUP_VARIABLE_DOC_STRING_PROPERTIES
             .iter()
@@ -7968,9 +7979,7 @@ pub(crate) fn builtin_documentation_property(
     args: Vec<Value>,
 ) -> EvalResult {
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
-    let obarray = eval.obarray() as *const super::symbol::Obarray;
-    // Safety: the evaluator owns the obarray for the duration of this call.
-    let plan = documentation_property_plan(unsafe { &*obarray }, args)?;
+    let plan = documentation_property_plan(eval, args)?;
     finish_documentation_result(
         execute_documentation_plan(
             plan,
@@ -7986,28 +7995,45 @@ pub(crate) fn builtin_documentation_property(
 }
 
 fn documentation_property_plan(
-    obarray: &super::symbol::Obarray,
+    eval: &super::eval::Context,
     args: Vec<Value>,
 ) -> Result<DocumentationPlan, Flow> {
     expect_min_max_args("documentation-property", &args, 2, 3)?;
+    let obarray = eval.obarray();
     let lisp_directory = obarray
         .symbol_value("lisp-directory")
         .and_then(|v| v.as_runtime_string_owned());
 
-    let sym = args[0].as_symbol_name().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
-        )
-    })?;
+    let prop = args[1];
+    let (symbol_id, mut property_value) =
+        super::builtins::symbols::symbol_property_get(eval, args[0], prop)?;
+    let mut documentation_symbol_id = symbol_id;
+    let prop_is_variable_documentation = eq_value_swp(
+        &prop,
+        &Value::symbol("variable-documentation"),
+        eval.symbols_with_pos_enabled,
+    );
 
-    let Some(prop) = args[1].as_symbol_name() else {
-        return Ok(DocumentationPlan::Final(Value::NIL));
-    };
+    // GNU doc.c:Fdocumentation_property retries variable aliases only for
+    // `variable-documentation' when the direct property lookup returned nil.
+    if prop_is_variable_documentation
+        && property_value.as_ref().is_none_or(|value| value.is_nil())
+        && let Some(indirect) = obarray.indirect_variable_id(symbol_id)
+        && indirect != symbol_id
+    {
+        let plist = obarray.symbol_plist_id(indirect);
+        property_value =
+            crate::emacs_core::plist::plist_get_swp(plist, &prop, eval.symbols_with_pos_enabled);
+        documentation_symbol_id = indirect;
+    }
+
+    let sym = resolve_sym(documentation_symbol_id);
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
 
-    match obarray.get_property(sym, prop) {
-        Some(value) if startup_variable_doc_offset_symbol(sym, prop, &value) => {
+    match property_value {
+        Some(value)
+            if startup_variable_doc_offset_symbol(sym, prop_is_variable_documentation, &value) =>
+        {
             let base_doc = super::var_docs::lookup(sym)
                 .or_else(|| startup_variable_doc_stub(sym))
                 .map(ToString::to_string)
@@ -8019,7 +8045,9 @@ fn documentation_property_plan(
             };
             Ok(DocumentationPlan::Final(Value::string(doc)))
         }
-        Some(value) if startup_variable_doc_string_symbol(sym, prop, &value) => {
+        Some(value)
+            if startup_variable_doc_string_symbol(sym, prop_is_variable_documentation, &value) =>
+        {
             let text = value
                 .as_utf8_str()
                 .expect("startup string variable-documentation should be string");
@@ -8045,7 +8073,7 @@ fn documentation_property_plan(
         //
         // Other property names fall through to nil (only
         // `variable-documentation' has a central source).
-        _ if prop == "variable-documentation" => {
+        _ if prop_is_variable_documentation => {
             if let Some(text) = super::var_docs::lookup(sym) {
                 let doc = if raw {
                     startup_doc_quote_style_raw(text)
@@ -8067,7 +8095,7 @@ pub(crate) fn builtin_documentation_property_in_vm_runtime(
 ) -> EvalResult {
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
     let args_roots = args.clone();
-    let plan = documentation_property_plan(&shared.obarray, args)?;
+    let plan = documentation_property_plan(shared, args)?;
     finish_documentation_result(
         execute_documentation_plan(
             plan,

@@ -29,7 +29,7 @@ pub(crate) fn symbol_id(value: &Value) -> Option<SymId> {
     }
 }
 
-fn symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -> Option<SymId> {
+pub(crate) fn symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -> Option<SymId> {
     match value.kind() {
         ValueKind::Nil => Some(NIL_SYM_ID),
         ValueKind::T => Some(T_SYM_ID),
@@ -742,6 +742,16 @@ pub(crate) fn builtin_get_2(
     symbol_value: Value,
     prop: Value,
 ) -> EvalResult {
+    Ok(symbol_property_get(eval, symbol_value, prop)?
+        .1
+        .unwrap_or(Value::NIL))
+}
+
+pub(crate) fn symbol_property_get(
+    eval: &super::eval::Context,
+    symbol_value: Value,
+    prop: Value,
+) -> Result<(SymId, Option<Value>), Flow> {
     let symbols_with_pos_enabled = eval.symbols_with_pos_enabled;
     let sym = expect_symbol_id_checked(&symbol_value, symbols_with_pos_enabled)?;
 
@@ -751,14 +761,14 @@ pub(crate) fn builtin_get_2(
             crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled)
         && !propval.is_nil()
     {
-        return Ok(propval);
+        return Ok((sym, Some(propval)));
     }
 
     let plist = eval.obarray().symbol_plist_id(sym);
-    Ok(
-        crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled)
-            .unwrap_or(Value::NIL),
-    )
+    Ok((
+        sym,
+        crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled),
+    ))
 }
 
 pub(crate) fn builtin_put(
