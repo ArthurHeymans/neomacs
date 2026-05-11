@@ -14523,4 +14523,31 @@ mod tests {
         );
         assert!(!value.unwrap().is_nil());
     }
+
+    #[test]
+    fn executes_equal_nil_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (equal nil nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_eql_nil_nil_returns_t() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (eql nil nil)",
+        );
+        assert!(!value.unwrap().is_nil());
+    }
+
+    #[test]
+    fn executes_numberp_nil_returns_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (numberp nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }
