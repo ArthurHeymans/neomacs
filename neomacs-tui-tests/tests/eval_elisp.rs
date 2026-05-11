@@ -5673,6 +5673,38 @@ fn match_data_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn invalid_regexp_error_payload_matches_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/search.c:string-match reaches compile_pattern, which signals
+    // invalid-regexp with the exact regexp compiler diagnostic.
+    let expr = r#"(message "badre:%S" (condition-case e (string-match "\\(" "abc") (error (list (car e) (cadr e)))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = r#"badre:(invalid-regexp \"Unmatched ( or \\\\(\")"#;
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: invalid-regexp payload should match GNU regexp compiler diagnostics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "invalid_regexp_error_payload_matches_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn match_data_reuse_and_reseat_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
