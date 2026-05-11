@@ -14981,4 +14981,41 @@ mod tests {
         );
         assert!(!value.unwrap().is_nil());
     }
+
+    #[test]
+    fn executes_buffer_insert_and_buffer_string() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (insert \"hello\") (buffer-string))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_buffer_point_after_insert() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (insert \"abc\") (list (point-min) (point-max) (point)))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_get_buffer_create_and_set_buffer() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (get-buffer-create \"test-buf\")\
+                    (set-buffer \"test-buf\"))",
+        );
+        assert!(value.is_some());
+    }
+
+    #[test]
+    fn executes_erase_buffer_works() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (progn (insert \"hello\") (erase-buffer) (buffer-string))",
+        );
+        assert!(value.is_some());
+    }
 }
