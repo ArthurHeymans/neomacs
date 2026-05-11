@@ -221,6 +221,42 @@ fn next_line_key_preserves_goal_column_like_gnu() {
 }
 
 #[test]
+fn next_line_ignores_invisible_newlines_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU lisp/simple.el:line-move-1 honors line-move-ignore-invisible by
+    // skipping invisible text/newlines while preserving the goal column.
+    let expr = r#"(progn(switch-to-buffer"*invmove*")(erase-buffer)(setq line-move-visual nil line-move-ignore-invisible t)(insert"aaaa\nbbbb\ncccc\n")(put-text-property 5 10 'invisible t)(goto-char 3)(call-interactively 'next-line)(message"invmove:%S"(list(line-number-at-pos)(current-column)(point)(char-after))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("invmove:(3 2 13 99)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: next-line should ignore invisible newlines like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "next_line_ignores_invisible_newlines_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_expression_empty_minibuffer_multiple_del_keeps_prompt() {
     let (mut gnu, mut neo) = boot_pair("");
 
