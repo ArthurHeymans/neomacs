@@ -1244,7 +1244,7 @@ impl HeapCore {
         let heap = Self {
             stats: HeapStats {
                 nursery: crate::stats::SpaceStats {
-                    reserved_bytes: config.nursery.semispace_bytes.saturating_mul(2),
+                    reserved_bytes: config.nursery.semispace_bytes << 1,
                     live_bytes: 0,
                 },
                 old: crate::stats::SpaceStats {

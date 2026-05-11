@@ -1302,6 +1302,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         | "cl-assoc" | "cl-assq" | "cl-rassoc" | "cl-rassq"
         | "cl-assoc-if" | "cl-assoc-if-not" | "cl-rassoc-if" | "cl-rassoc-if-not"
         | "cl-member-if" | "cl-member-if-not" | "cl-assoc-string"
+        | "alist-get"
             if args.len() >= 2 => {
             // All alist/list search functions return nil when the list/alist is nil
             if matches!(args[1], SsaConst::Nil) {
@@ -1313,6 +1314,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "cl-endp" if args.len() == 1 => match args[0] {
             SsaConst::Nil => Some(SsaConst::True),
             _ => None, // non-nil may signal error, let runtime handle
+        },
+        "plist-get" | "plist-member" if args.len() >= 2 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::Nil),
+            _ => None,
+        },
+        "copy-alist" if args.len() == 1 => match args[0] {
+            SsaConst::Nil => Some(SsaConst::Nil),
+            _ => None,
         },
         "sort" | "cl-sort" | "cl-stable-sort" if args.len() == 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),

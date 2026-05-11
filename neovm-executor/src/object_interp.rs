@@ -14069,4 +14069,32 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::NIL));
     }
+
+    #[test]
+    fn executes_cl_nsubst_if_not_returns_nil_for_nil_tree() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (require 'cl-lib)\n\
+             (cl-nsubst-if-not #'evenp 'new nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_plist_get_returns_nil_for_nil_plist() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (plist-get nil :key)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
+
+    #[test]
+    fn executes_copy_alist_returns_nil_for_nil() {
+        let (value, _) = execute(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (copy-alist nil)",
+        );
+        assert_eq!(value, Some(LispValue::NIL));
+    }
 }

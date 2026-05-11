@@ -142,7 +142,7 @@ pub(crate) fn allocation_pressure_plan(
         }
         SpaceKind::Old
             if stats.old.live_bytes.saturating_add(bytes)
-                > nursery_config.semispace_bytes.saturating_mul(4) =>
+                > nursery_config.semispace_bytes << 2 =>
         {
             Some(plan_for(CollectionKind::Major))
         }
