@@ -1112,6 +1112,10 @@ pub(crate) fn builtin_memq_2(
 }
 
 fn builtin_memq_values(target: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
+    if symbols_with_pos_enabled {
+        return builtin_memq_values_swp(target, list);
+    }
+
     let target_bits = target.bits();
     let mut tail = list;
     let mut tortoise = list;
@@ -1120,12 +1124,43 @@ fn builtin_memq_values(target: Value, list: Value, symbols_with_pos_enabled: boo
 
     while tail.is_cons() {
         let pair_car = tail.cons_car();
-        let matches = if symbols_with_pos_enabled {
-            eq_value_swp(&target, &pair_car, true)
-        } else {
-            target_bits == pair_car.bits()
-        };
-        if matches {
+        if target_bits == pair_car.bits() {
+            return Ok(tail);
+        }
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), list],
+        ))
+    }
+}
+
+fn builtin_memq_values_swp(target: Value, list: Value) -> EvalResult {
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        let pair_car = tail.cons_car();
+        if eq_value_swp(&target, &pair_car, true) {
             return Ok(tail);
         }
 
@@ -1266,6 +1301,10 @@ pub(crate) fn builtin_assq_2(
 }
 
 fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) -> EvalResult {
+    if symbols_with_pos_enabled {
+        return builtin_assq_values_swp(key, list);
+    }
+
     let key_bits = key.bits();
     let mut tail = list;
     let mut tortoise = list;
@@ -1276,12 +1315,46 @@ fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) 
         let pair_car = tail.cons_car();
         if pair_car.is_cons() {
             let entry_key = pair_car.cons_car();
-            let matches = if symbols_with_pos_enabled {
-                eq_value_swp(&key, &entry_key, true)
-            } else {
-                key_bits == entry_key.bits()
-            };
-            if matches {
+            if key_bits == entry_key.bits() {
+                return Ok(pair_car);
+            }
+        }
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), list],
+        ))
+    }
+}
+
+fn builtin_assq_values_swp(key: Value, list: Value) -> EvalResult {
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        let pair_car = tail.cons_car();
+        if pair_car.is_cons() {
+            let entry_key = pair_car.cons_car();
+            if eq_value_swp(&key, &entry_key, true) {
                 return Ok(pair_car);
             }
         }
