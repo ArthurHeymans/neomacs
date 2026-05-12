@@ -336,23 +336,15 @@ fn replace_match_on_substring(
     subexp: usize,
     match_data: &Option<super::regex::MatchData>,
 ) -> Result<crate::heap_types::LispString, Flow> {
-    let source_storage = storage_string_from_lisp_string(source);
-    let replacement_storage = storage_string_from_lisp_string(replacement);
-    let result = super::regex::replace_match_string_with_syntax(
-        &source_storage,
-        &replacement_storage,
+    replace_match_lisp_string_with_syntax(
+        source,
+        replacement,
         fixedcase,
         literal,
         subexp,
         match_data,
-        None,
-        false,
     )
-    .map_err(|msg| signal("error", vec![Value::string(msg)]))?;
-    Ok(storage_string_to_lisp_string(
-        &result,
-        source.is_multibyte() || replacement.is_multibyte(),
-    ))
+    .map_err(|msg| signal("error", vec![Value::string(msg)]))
 }
 
 fn concat_lisp_string_pieces(
@@ -366,6 +358,197 @@ fn concat_lisp_string_pieces(
         acc = acc.concat(&piece);
     }
     acc
+}
+
+fn empty_lisp_string(multibyte: bool) -> crate::heap_types::LispString {
+    if multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(Vec::new())
+    } else {
+        crate::heap_types::LispString::from_unibyte(Vec::new())
+    }
+}
+
+fn lisp_char_at_byte(
+    string: &crate::heap_types::LispString,
+    byte_pos: usize,
+) -> Option<(u32, usize)> {
+    if byte_pos >= string.byte_len() {
+        return None;
+    }
+    if string.is_multibyte() {
+        Some(crate::emacs_core::emacs_char::string_char(
+            &string.as_bytes()[byte_pos..],
+        ))
+    } else {
+        Some((string.as_bytes()[byte_pos] as u32, 1))
+    }
+}
+
+fn match_group_to_byte_range(
+    source: &crate::heap_types::LispString,
+    md: &super::regex::MatchData,
+    group: usize,
+) -> Option<(usize, usize)> {
+    let (start, end) = md.groups.get(group).and_then(|range| *range)?;
+    if md.searched_string.is_some() {
+        Some((
+            super::regex::char_pos_to_byte_lisp_string(source, start),
+            super::regex::char_pos_to_byte_lisp_string(source, end),
+        ))
+    } else {
+        Some((start.min(source.byte_len()), end.min(source.byte_len())))
+    }
+}
+
+fn build_replacement_lisp_string(
+    source: &crate::heap_types::LispString,
+    newtext: &crate::heap_types::LispString,
+    literal: bool,
+    md: &super::regex::MatchData,
+) -> Result<crate::heap_types::LispString, String> {
+    const INVALID_BACKSLASH_MSG: &str = "Invalid use of `\\' in replacement text";
+
+    if literal || !newtext.as_bytes().contains(&b'\\') {
+        return Ok(newtext.clone());
+    }
+
+    let mut pieces = Vec::new();
+    let mut pos = 0usize;
+    let mut last = 0usize;
+    let len = newtext.byte_len();
+
+    while pos < len {
+        let Some((ch, ch_len)) = lisp_char_at_byte(newtext, pos) else {
+            break;
+        };
+        let ch_start = pos;
+        pos += ch_len;
+
+        if ch != b'\\' as u32 {
+            continue;
+        }
+
+        let Some((next, next_len)) = lisp_char_at_byte(newtext, pos) else {
+            continue;
+        };
+        let next_start = pos;
+        pos += next_len;
+
+        match next {
+            c if c == b'&' as u32 => {
+                if ch_start != last {
+                    pieces.push(
+                        newtext
+                            .slice(last, ch_start)
+                            .expect("validated replacement literal slice"),
+                    );
+                }
+                if let Some((start, end)) = match_group_to_byte_range(source, md, 0) {
+                    pieces.push(
+                        source
+                            .slice(start, end)
+                            .expect("validated whole-match replacement slice"),
+                    );
+                }
+                last = pos;
+            }
+            c if (b'1' as u32..=b'9' as u32).contains(&c) => {
+                if ch_start != last {
+                    pieces.push(
+                        newtext
+                            .slice(last, ch_start)
+                            .expect("validated replacement literal slice"),
+                    );
+                }
+                let group = (c as u8 - b'0') as usize;
+                if let Some((start, end)) = match_group_to_byte_range(source, md, group) {
+                    pieces.push(
+                        source
+                            .slice(start, end)
+                            .expect("validated submatch replacement slice"),
+                    );
+                }
+                last = pos;
+            }
+            c if c == b'\\' as u32 => {
+                pieces.push(
+                    newtext
+                        .slice(last, next_start)
+                        .expect("validated escaped-backslash replacement slice"),
+                );
+                last = pos;
+            }
+            c if c == b'?' as u32 => {
+                // GNU leaves `\?' in the literal run for query-replace-regexp
+                // compatibility.
+            }
+            _ => return Err(INVALID_BACKSLASH_MSG.to_string()),
+        }
+    }
+
+    if last < len {
+        pieces.push(
+            newtext
+                .slice(last, len)
+                .expect("validated trailing replacement slice"),
+        );
+    }
+
+    if pieces.is_empty() {
+        Ok(empty_lisp_string(
+            source.is_multibyte() || newtext.is_multibyte(),
+        ))
+    } else {
+        Ok(concat_lisp_string_pieces(pieces))
+    }
+}
+
+pub(crate) fn replace_match_lisp_string_with_syntax(
+    source: &crate::heap_types::LispString,
+    newtext: &crate::heap_types::LispString,
+    fixedcase: bool,
+    literal: bool,
+    subexp: usize,
+    match_data: &Option<super::regex::MatchData>,
+) -> Result<crate::heap_types::LispString, String> {
+    let md = match match_data {
+        Some(md) => md,
+        None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
+    };
+    let Some((byte_start, byte_end)) = match_group_to_byte_range(source, md, subexp) else {
+        return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
+    };
+    if byte_end > source.byte_len() || byte_start > byte_end {
+        return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
+    }
+
+    let before = source
+        .slice(0, byte_start)
+        .expect("validated replace-match prefix slice");
+    let after = source
+        .slice(byte_end, source.byte_len())
+        .expect("validated replace-match suffix slice");
+    let mut replacement = build_replacement_lisp_string(source, newtext, literal, md)?;
+
+    if !fixedcase {
+        let matched = source
+            .slice(byte_start, byte_end)
+            .expect("validated replace-match matched slice");
+        let cased = crate::emacs_core::casefiddle::apply_replace_match_case(
+            &storage_string_from_lisp_string(&replacement),
+            &storage_string_from_lisp_string(&matched),
+        );
+        let mut cased = storage_string_to_lisp_string(
+            &cased,
+            source.is_multibyte() || replacement.is_multibyte(),
+        );
+        if cased.schars() == replacement.schars() {
+            *cased.intervals_mut() = replacement.intervals().clone();
+        }
+        replacement = cased;
+    }
+
+    Ok(concat_lisp_string_pieces(vec![before, replacement, after]))
 }
 
 fn replace_regexp_in_string_lisp<F>(

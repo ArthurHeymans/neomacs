@@ -1629,12 +1629,13 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         ));
     }
 
+    let newtext_lisp = expect_lisp_string(&args[0])?;
     let newtext = expect_strict_string(&args[0])?;
     let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
     let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
     let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
     let string_arg = if args.get(3).is_some_and(|arg| !arg.is_nil()) {
-        Some(expect_strict_string(&args[3])?)
+        Some(expect_lisp_string(&args[3])?)
     } else {
         None
     };
@@ -1647,7 +1648,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                     vec![
                         Value::fixnum(n),
                         Value::fixnum(0),
-                        Value::fixnum(source.chars().count() as i64),
+                        Value::fixnum(source.schars() as i64),
                     ],
                 ))
             } else {
@@ -1672,17 +1673,15 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         if md_snapshot.is_none() {
             return Err(missing_subexp_signal(raw_subexp));
         }
-        return match super::regex::replace_match_string_with_syntax(
-            &source,
-            &newtext,
+        return match crate::emacs_core::search::replace_match_lisp_string_with_syntax(
+            source,
+            newtext_lisp,
             fixedcase,
             literal,
             subexp,
             &md_snapshot,
-            None,
-            case_symbols_as_words,
         ) {
-            Ok(result) => Ok(Value::string(result)),
+            Ok(result) => Ok(Value::heap_string(result)),
             Err(msg) if msg == missing_subexp_error => Err(missing_subexp_signal(raw_subexp)),
             Err(msg) => Err(signal("error", vec![Value::string(msg)])),
         };

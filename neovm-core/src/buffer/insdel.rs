@@ -4,7 +4,7 @@
 //! `insdel.c`-style boundary. It rehomes the existing `Buffer` edit core
 //! without changing behavior.
 
-use super::{Buffer, BufferId, BufferManager};
+use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::undo;
 use crate::heap_types::LispString;
 
@@ -67,6 +67,20 @@ fn convert_lisp_string_for_buffer_mode(text: &LispString, target_multibyte: bool
         bytes.extend_from_slice(&encode_char_code_for_buffer_bytes(code, target_multibyte));
     }
     lisp_string_from_buffer_bytes(bytes, target_multibyte)
+}
+
+#[inline]
+fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end2: usize) -> usize {
+    if pos < start1 || pos >= end2 {
+        pos
+    } else if pos < end1 {
+        pos + (end2 - end1)
+    } else if pos < start2 {
+        let diff = (end2 - start2) as isize - (end1 - start1) as isize;
+        (pos as isize + diff) as usize
+    } else {
+        pos - (start2 - start1)
+    }
 }
 
 impl Buffer {
@@ -458,8 +472,144 @@ impl Buffer {
 
         self.text
             .replace_same_len_emacs_bytes(start, end, &replacement_bytes);
-        self.apply_same_len_edit_side_effects(changed_chars, noundo);
+        self.apply_same_len_edit_side_effects(changed_chars, false);
         true
+    }
+
+    fn transpose_region_properties(
+        &self,
+        start1_char: usize,
+        end1_char: usize,
+        start2_char: usize,
+        end2_char: usize,
+    ) -> TextPropertyTable {
+        let len1 = end1_char - start1_char;
+        let len2 = end2_char - start2_char;
+        let props1 = self
+            .text
+            .text_props_snapshot()
+            .slice(start1_char, end1_char);
+        let props2 = self
+            .text
+            .text_props_snapshot()
+            .slice(start2_char, end2_char);
+        let props_mid = if len1 == len2 {
+            TextPropertyTable::new()
+        } else {
+            self.text
+                .text_props_snapshot()
+                .slice(end1_char, start2_char)
+        };
+
+        let mut props = self.text.text_props_snapshot();
+        if len1 == len2 {
+            props.remove_all_properties(start1_char, end1_char);
+            props.remove_all_properties(start2_char, end2_char);
+        } else {
+            props.remove_all_properties(start1_char, end2_char);
+            props.append_shifted(&props_mid, start1_char + len2);
+        }
+        props.append_shifted(&props1, end2_char - len1);
+        props.append_shifted(&props2, start1_char);
+        props
+    }
+
+    /// GNU `Ftranspose_regions` core: swap two non-overlapping current-buffer
+    /// regions without changing buffer size.  Text movement is byte-based,
+    /// while property and marker movement follows GNU's character positions.
+    #[allow(clippy::too_many_arguments)]
+    pub fn transpose_regions(
+        &mut self,
+        start1_char: usize,
+        end1_char: usize,
+        start2_char: usize,
+        end2_char: usize,
+        start1_byte: usize,
+        end1_byte: usize,
+        start2_byte: usize,
+        end2_byte: usize,
+        leave_markers: bool,
+    ) {
+        let mut region1 = Vec::with_capacity(end1_byte - start1_byte);
+        let mut mid = Vec::with_capacity(start2_byte - end1_byte);
+        let mut region2 = Vec::with_capacity(end2_byte - start2_byte);
+        self.text
+            .copy_emacs_bytes_to(start1_byte, end1_byte, &mut region1);
+        self.text
+            .copy_emacs_bytes_to(end1_byte, start2_byte, &mut mid);
+        self.text
+            .copy_emacs_bytes_to(start2_byte, end2_byte, &mut region2);
+
+        let mut old_span = Vec::with_capacity(end2_byte - start1_byte);
+        old_span.extend_from_slice(&region1);
+        old_span.extend_from_slice(&mid);
+        old_span.extend_from_slice(&region2);
+
+        let mut replacement = Vec::with_capacity(old_span.len());
+        replacement.extend_from_slice(&region2);
+        replacement.extend_from_slice(&mid);
+        replacement.extend_from_slice(&region1);
+
+        if !self.undo_state.in_progress() {
+            self.undo_prepare_change(start1_byte, self.pt_byte);
+        }
+        let mut undo_list = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&undo_list) {
+            let deleted = lisp_string_from_buffer_bytes(old_span, self.get_multibyte());
+            undo::undo_list_record_delete(&mut undo_list, start1_byte, deleted, self.pt_byte);
+            undo::undo_list_record_insert(
+                &mut undo_list,
+                start1_byte,
+                replacement.len(),
+                self.pt_byte,
+            );
+            self.set_undo_list(undo_list);
+        }
+
+        let replacement_props =
+            self.transpose_region_properties(start1_char, end1_char, start2_char, end2_char);
+        let new_point_byte =
+            transpose_position(self.pt_byte, start1_byte, end1_byte, start2_byte, end2_byte);
+        let new_point_char =
+            transpose_position(self.pt, start1_char, end1_char, start2_char, end2_char);
+
+        self.text
+            .replace_same_len_emacs_bytes(start1_byte, end2_byte, &replacement);
+        self.text.text_props_replace(replacement_props);
+        if leave_markers {
+            self.text
+                .remap_markers_through_byte_char(|old_byte, old_char| {
+                    if old_byte > start1_byte && old_byte <= end2_byte {
+                        (self.text.char_to_emacs_byte(old_char), old_char)
+                    } else {
+                        (old_byte, old_char)
+                    }
+                });
+        } else {
+            self.text
+                .remap_markers_through_byte_char(|old_byte, old_char| {
+                    (
+                        transpose_position(
+                            old_byte,
+                            start1_byte,
+                            end1_byte,
+                            start2_byte,
+                            end2_byte,
+                        ),
+                        transpose_position(
+                            old_char,
+                            start1_char,
+                            end1_char,
+                            start2_char,
+                            end2_char,
+                        ),
+                    )
+                });
+        }
+
+        self.pt_byte = new_point_byte;
+        self.pt = new_point_char;
+        self.apply_same_len_edit_side_effects(end2_char - start1_char, false);
     }
 }
 
@@ -791,8 +941,61 @@ impl BufferManager {
                 continue;
             }
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_same_len_edit_metadata(sibling, changed_chars, noundo);
+            Self::adjust_shared_same_len_edit_metadata(sibling, changed_chars, false);
         }
         Some(true)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn transpose_buffer_regions(
+        &mut self,
+        id: BufferId,
+        start1_char: usize,
+        end1_char: usize,
+        start2_char: usize,
+        end2_char: usize,
+        start1_byte: usize,
+        end1_byte: usize,
+        start2_byte: usize,
+        end2_byte: usize,
+        leave_markers: bool,
+    ) -> Option<()> {
+        let root_id = self.shared_text_root_id(id)?;
+        let shared_ids = self.buffers_sharing_root_ids(root_id);
+
+        self.buffers.get_mut(&id)?.transpose_regions(
+            start1_char,
+            end1_char,
+            start2_char,
+            end2_char,
+            start1_byte,
+            end1_byte,
+            start2_byte,
+            end2_byte,
+            leave_markers,
+        );
+
+        for sibling_id in shared_ids {
+            if sibling_id == id {
+                continue;
+            }
+            let update_state_fields =
+                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
+            let sibling = self.buffers.get_mut(&sibling_id)?;
+            if update_state_fields {
+                sibling.pt_byte = transpose_position(
+                    sibling.pt_byte,
+                    start1_byte,
+                    end1_byte,
+                    start2_byte,
+                    end2_byte,
+                );
+                sibling.pt =
+                    transpose_position(sibling.pt, start1_char, end1_char, start2_char, end2_char);
+            }
+            Self::adjust_shared_same_len_edit_metadata(sibling, end2_char - start1_char, false);
+            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+        }
+        Some(())
     }
 }

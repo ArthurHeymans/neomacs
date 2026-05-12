@@ -588,29 +588,61 @@ impl LispString {
         self.refresh_data_ptr();
     }
 
-    /// Byte-index slice (returns None if out of bounds).
-    pub fn slice(&self, start: usize, end: usize) -> Option<Self> {
+    fn slice_bytes_no_properties(&self, start: usize, end: usize) -> Option<Self> {
         if end > self.as_bytes().len() || start > end {
             return None;
         }
         let slice = &self.as_bytes()[start..end];
-        if self.size_byte >= 0 {
+        Some(if self.size_byte >= 0 {
             // multibyte
-            Some(Self::from_emacs_bytes(slice.to_vec()))
+            Self::from_emacs_bytes(slice.to_vec())
         } else {
-            Some(Self::from_unibyte(slice.to_vec()))
+            Self::from_unibyte(slice.to_vec())
+        })
+    }
+
+    /// Byte-index slice without text properties, matching GNU
+    /// `substring-no-properties`.
+    pub fn slice_no_properties(&self, start: usize, end: usize) -> Option<Self> {
+        self.slice_bytes_no_properties(start, end)
+    }
+
+    /// Byte-index slice that preserves text properties, matching GNU
+    /// `substring`/`substring_both`.
+    pub fn slice(&self, start: usize, end: usize) -> Option<Self> {
+        let mut result = self.slice_bytes_no_properties(start, end)?;
+
+        let (char_start, char_end) = if self.is_multibyte() {
+            (
+                emacs_char::byte_to_char_pos(self.as_bytes(), start),
+                emacs_char::byte_to_char_pos(self.as_bytes(), end),
+            )
+        } else {
+            (start, end)
+        };
+        let intervals = self.intervals().slice(char_start, char_end);
+        if !intervals.is_empty() {
+            *result.intervals_mut() = intervals;
         }
+        Some(result)
     }
 
     pub fn concat(&self, other: &Self) -> Self {
         let mut data = self.as_bytes().to_vec();
         data.extend_from_slice(other.as_bytes());
         let multibyte = self.is_multibyte() || other.is_multibyte();
-        if multibyte {
+        let mut result = if multibyte {
             Self::from_emacs_bytes(data)
         } else {
             Self::from_unibyte(data)
+        };
+
+        let mut intervals = self.intervals().clone();
+        intervals.append_shifted(other.intervals(), self.schars());
+        if !intervals.is_empty() {
+            *result.intervals_mut() = intervals;
         }
+        result
     }
 
     /// Replace the entire contents with a UTF-8 string, preserving the

@@ -108,10 +108,13 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                             ],
                         ));
                     }
-                    return Ok::<_, Flow>((
-                        src.slice(from, to).expect("validated ascii slice"),
-                        None,
-                    ));
+                    let result = if preserve_props {
+                        src.slice(from, to).expect("validated ascii slice")
+                    } else {
+                        src.slice_no_properties(from, to)
+                            .expect("validated ascii slice")
+                    };
+                    return Ok::<_, Flow>((result, None));
                 }
 
                 let len = src.schars() as i64;
@@ -154,9 +157,13 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                         ],
                     ));
                 }
-                let result = src
-                    .slice(byte_from, byte_to)
-                    .expect("validated storage substring bounds");
+                let result = if preserve_props {
+                    src.slice(byte_from, byte_to)
+                        .expect("validated storage substring bounds")
+                } else {
+                    src.slice_no_properties(byte_from, byte_to)
+                        .expect("validated storage substring bounds")
+                };
                 let sliced_props = if let Some(src_table) = src_props.as_ref() {
                     let sliced = src_table.slice(from, to);
                     (!sliced.is_empty()).then_some(sliced)

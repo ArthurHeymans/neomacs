@@ -2920,8 +2920,105 @@ pub(crate) fn builtin_tool_bar_pixel_width(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
-pub(crate) fn builtin_transpose_regions(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_transpose_regions(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("transpose-regions", &args, 4, 5)?;
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let (mut start1, mut end1, mut start2, mut end2) = {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let point_min = buf.point_min_char() as i64 + 1;
+        let point_max = buf.point_max_char() as i64 + 1;
+        let raw_start1 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
+        let raw_end1 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
+        let raw_start2 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[2])?;
+        let raw_end2 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[3])?;
+        for (start, end, start_arg, end_arg) in [
+            (raw_start1, raw_end1, args[0], args[1]),
+            (raw_start2, raw_end2, args[2], args[3]),
+        ] {
+            if start < point_min || start > point_max || end < point_min || end > point_max {
+                return Err(signal(
+                    "args-out-of-range",
+                    vec![Value::make_buffer(buf.id), start_arg, end_arg],
+                ));
+            }
+        }
+        (
+            raw_start1.min(raw_end1) as usize - 1,
+            raw_start1.max(raw_end1) as usize - 1,
+            raw_start2.min(raw_end2) as usize - 1,
+            raw_start2.max(raw_end2) as usize - 1,
+        )
+    };
+
+    if start2 < end1 {
+        std::mem::swap(&mut start1, &mut start2);
+        std::mem::swap(&mut end1, &mut end2);
+    }
+    if start2 < end1 {
+        return Err(signal(
+            "error",
+            vec![Value::string("Transposed regions overlap")],
+        ));
+    }
+    if (start1 == end1 || start2 == end2) && end1 == start2 {
+        return Ok(Value::NIL);
+    }
+
+    let (start1_byte, end1_byte, start2_byte, end2_byte) = {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (
+            buf.text.char_to_emacs_byte(start1),
+            buf.text.char_to_emacs_byte(end1),
+            buf.text.char_to_emacs_byte(start2),
+            buf.text.char_to_emacs_byte(end2),
+        )
+    };
+
+    let read_only = eval.buffers.get(current_id).is_some_and(|buf| {
+        crate::emacs_core::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
+    });
+    if read_only {
+        return Err(signal(
+            "buffer-read-only",
+            vec![Value::make_buffer(current_id)],
+        ));
+    }
+    crate::emacs_core::textprop::verify_text_read_only_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        current_id,
+        start1_byte,
+        end2_byte,
+    )?;
+
+    crate::emacs_core::editfns::signal_before_change(eval, start1_byte, end2_byte)?;
+    let leave_markers = args.get(4).is_some_and(|value| !value.is_nil());
+    let old_len = end2 - start1;
+    let _ = eval.buffers.transpose_buffer_regions(
+        current_id,
+        start1,
+        end1,
+        start2,
+        end2,
+        start1_byte,
+        end1_byte,
+        start2_byte,
+        end2_byte,
+        leave_markers,
+    );
+    crate::emacs_core::editfns::signal_after_change(eval, start1_byte, end2_byte, old_len)?;
     Ok(Value::NIL)
 }
 

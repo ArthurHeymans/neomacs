@@ -2015,7 +2015,7 @@ fn subst_char_in_region_replaces_chars_in_accessible_region() {
 }
 
 #[test]
-fn subst_char_in_region_preserves_modified_flag_with_noundo() {
+fn subst_char_in_region_noundo_marks_buffer_modified_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     builtin_insert(&mut eval, vec![Value::string("a\nb\n")]).unwrap();
@@ -2041,7 +2041,7 @@ fn subst_char_in_region_preserves_modified_flag_with_noundo() {
     );
     assert_eq!(
         builtin_buffer_modified_p(&mut eval, vec![]).unwrap(),
-        Value::NIL
+        Value::T
     );
 }
 
@@ -5657,19 +5657,20 @@ fn pure_dispatch_tty_tool_bar_placeholder_cluster_matches_compat_contracts() {
         .expect("builtin tool-bar-pixel-width should evaluate");
     assert_eq!(tool_bar_width, Value::fixnum(0));
 
-    let transpose = dispatch_builtin_pure(
-        "transpose-regions",
-        vec![
-            Value::fixnum(1),
-            Value::fixnum(2),
-            Value::fixnum(3),
-            Value::fixnum(4),
-            Value::NIL,
-        ],
-    )
-    .expect("builtin transpose-regions should resolve")
-    .expect("builtin transpose-regions should evaluate");
-    assert!(transpose.is_nil());
+    assert!(
+        dispatch_builtin_pure(
+            "transpose-regions",
+            vec![
+                Value::fixnum(1),
+                Value::fixnum(2),
+                Value::fixnum(3),
+                Value::fixnum(4),
+                Value::NIL,
+            ],
+        )
+        .is_none(),
+        "transpose-regions needs the current buffer, matching GNU editfns.c"
+    );
 
     let tty_buf = dispatch_builtin_pure("tty--output-buffer-size", vec![])
         .expect("builtin tty--output-buffer-size should resolve")
@@ -5686,6 +5687,40 @@ fn pure_dispatch_tty_tool_bar_placeholder_cluster_matches_compat_contracts() {
             .expect("builtin tty-suppress-bold-inverse-default-colors should resolve")
             .expect("builtin tty-suppress-bold-inverse-default-colors should evaluate");
     assert!(tty_suppress.is_nil());
+}
+
+#[test]
+fn transpose_regions_moves_text_properties_and_markers_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+
+    let result = eval
+        .eval_str_each(
+            r#"(insert "abcdef")
+               (put-text-property 1 3 'face 'r1)
+               (put-text-property 5 7 'face 'r2)
+               (let ((m1 (copy-marker 2))
+                     (m2 (copy-marker 6)))
+                 (transpose-regions 1 3 5 7 nil)
+                 (list (buffer-string)
+                       (marker-position m1)
+                       (marker-position m2)
+                       (text-properties-at 1)
+                       (text-properties-at 2)
+                       (text-properties-at 3)
+                       (text-properties-at 4)
+                       (text-properties-at 5)
+                       (text-properties-at 6)))"#,
+        )
+        .into_iter()
+        .last()
+        .expect("one form")
+        .expect("evaluation succeeds");
+
+    assert_eq!(
+        format_eval_result(&Ok(result)),
+        r#"OK (#("efcdab" 0 2 (face r2) 4 6 (face r1)) 6 2 (face r2) (face r2) nil nil (face r1) (face r1))"#
+    );
 }
 
 #[test]
@@ -7490,6 +7525,24 @@ fn substring_no_properties_preserves_raw_unibyte_string_content() {
 }
 
 #[test]
+fn substring_no_properties_drops_string_text_properties_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let source = Value::string("abcd");
+    let mut table = crate::buffer::text_props::TextPropertyTable::new();
+    let _ = table.put_property(1, 3, Value::symbol("face"), Value::symbol("bold"));
+    crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
+
+    let result = builtin_substring_no_properties(vec![source, Value::fixnum(1), Value::fixnum(3)])
+        .expect("substring-no-properties should return an unpropertized substring");
+
+    assert_eq!(result.as_lisp_string().unwrap().as_utf8_str(), Some("bc"));
+    assert!(
+        crate::emacs_core::value::get_string_text_properties_table_for_value(result).is_none(),
+        "GNU Fsubstring_no_properties returns a string without intervals"
+    );
+}
+
+#[test]
 fn search_match_runtime_arity_edges_match_oracle_contracts() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -8150,6 +8203,60 @@ fn replace_match_rejects_backslash_zero_and_unknown_escape_like_gnu() {
     )
     .expect("\\? must be accepted in replacement template");
     assert_eq!(result, Value::string("a\\?b"));
+}
+
+#[test]
+fn replace_match_string_preserves_source_and_replacement_text_properties_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::eval::Context;
+
+    fn put_face(value: Value, start: usize, end: usize, face: &str) {
+        let mut table = crate::emacs_core::value::get_string_text_properties_table_for_value(value)
+            .unwrap_or_else(crate::buffer::text_props::TextPropertyTable::new);
+        let _ = table.put_property(start, end, Value::symbol("face"), Value::symbol(face));
+        crate::emacs_core::value::set_string_text_properties_table_for_value(value, table);
+    }
+
+    fn assert_face_run(
+        interval: &crate::buffer::text_props::PropertyInterval,
+        start: usize,
+        end: usize,
+        face: &str,
+    ) {
+        assert_eq!(interval.start, start);
+        assert_eq!(interval.end, end);
+        assert_eq!(
+            interval.properties.get(&Value::symbol("face")),
+            Some(&Value::symbol(face))
+        );
+    }
+
+    let mut eval = Context::new();
+    let source = Value::string("abcde");
+    put_face(source, 0, 2, "a");
+    put_face(source, 2, 5, "b");
+    let replacement = Value::string("XY");
+    put_face(replacement, 0, 2, "x");
+
+    builtin_string_match(&mut eval, vec![Value::string("bc"), source]).expect("seed match data");
+    let result = builtin_replace_match(&mut eval, vec![replacement, Value::T, Value::NIL, source])
+        .expect("replace-match should preserve string intervals");
+
+    assert_eq!(result.as_runtime_string_owned().as_deref(), Some("aXYde"));
+    let table = crate::emacs_core::value::get_string_text_properties_table_for_value(result)
+        .expect("result should keep text properties");
+    let intervals = table.intervals_snapshot();
+    assert_eq!(intervals.len(), 3);
+    assert_face_run(&intervals[0], 0, 1, "a");
+    assert_face_run(&intervals[1], 1, 3, "x");
+    assert_face_run(&intervals[2], 3, 5, "b");
+
+    let source_table = crate::emacs_core::value::get_string_text_properties_table_for_value(source)
+        .expect("source should remain propertized");
+    let source_intervals = source_table.intervals_snapshot();
+    assert_eq!(source_intervals.len(), 2);
+    assert_face_run(&source_intervals[0], 0, 2, "a");
+    assert_face_run(&source_intervals[1], 2, 5, "b");
 }
 
 #[test]

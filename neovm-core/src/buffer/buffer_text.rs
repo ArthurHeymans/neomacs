@@ -480,6 +480,28 @@ impl BufferText {
         }
     }
 
+    /// Like [`Self::remap_markers_through`], but exposes both old byte and
+    /// old character positions to the caller.  GNU's `transpose_markers`
+    /// updates these two cached positions independently because text motion is
+    /// byte-based while interval and marker semantics are character-based.
+    pub fn remap_markers_through_byte_char<F>(&self, mut remap: F)
+    where
+        F: FnMut(usize, usize) -> (usize, usize),
+    {
+        let storage = self.storage.borrow();
+        let mut curr = storage.markers_head;
+        // SAFETY: same intrusive-chain invariant as `remap_markers_through`.
+        unsafe {
+            while !curr.is_null() {
+                let data = &mut (*curr).data;
+                let (new_byte, new_char) = remap(data.bytepos, data.charpos);
+                data.bytepos = new_byte;
+                data.charpos = new_char;
+                curr = data.next_marker;
+            }
+        }
+    }
+
     pub fn text_props_put_property(
         &self,
         start: usize,
