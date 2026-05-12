@@ -1319,6 +1319,27 @@ fn next_previous_overlay_change_boundaries() {
     assert!(prev_from_2.is_fixnum());
 }
 
+#[test]
+fn overlay_change_boundaries_respect_narrowing_limits() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(1)]).unwrap();
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(2)]).unwrap();
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(4), Value::fixnum(4)]).unwrap();
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(7), Value::fixnum(7)]).unwrap();
+
+    let buffer_id = eval.buffers.current_buffer_id().unwrap();
+    eval.buffers
+        .narrow_buffer_to_region(buffer_id, 1, 5)
+        .unwrap();
+
+    let next_at_zv = builtin_next_overlay_change(&mut eval, vec![Value::fixnum(6)]).unwrap();
+    let prev_at_begv = builtin_previous_overlay_change(&mut eval, vec![Value::fixnum(2)]).unwrap();
+
+    assert_eq!(next_at_zv.as_fixnum(), Some(6));
+    assert_eq!(prev_at_begv.as_fixnum(), Some(2));
+}
+
 // -----------------------------------------------------------------------
 // move-overlay
 // -----------------------------------------------------------------------

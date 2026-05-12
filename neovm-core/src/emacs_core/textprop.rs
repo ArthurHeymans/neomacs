@@ -2202,7 +2202,10 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
-    match buf.overlays.next_boundary_after(byte_pos) {
+    match buf
+        .overlays
+        .next_boundary_after_until(byte_pos, buf.point_max_byte())
+    {
         Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_max()))),
     }
@@ -2228,7 +2231,10 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
-    match buf.overlays.previous_boundary_before(byte_pos) {
+    match buf
+        .overlays
+        .previous_boundary_before_since(byte_pos, buf.point_min_byte())
+    {
         Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_min()))),
     }

@@ -473,6 +473,13 @@ impl OverlayList {
     }
 
     pub fn next_boundary_after(&self, pos: usize) -> Option<usize> {
+        self.next_boundary_after_until(pos, usize::MAX)
+    }
+
+    pub fn next_boundary_after_until(&self, pos: usize, limit: usize) -> Option<usize> {
+        if pos >= limit {
+            return None;
+        }
         let next_start = self
             .by_start
             .range((Excluded(pos), Unbounded))
@@ -483,15 +490,23 @@ impl OverlayList {
             .range((Excluded(pos), Unbounded))
             .next()
             .map(|(boundary, _)| *boundary);
-        match (next_start, next_end) {
+        let boundary = match (next_start, next_end) {
             (Some(start), Some(end)) => Some(start.min(end)),
             (Some(start), None) => Some(start),
             (None, Some(end)) => Some(end),
             (None, None) => None,
-        }
+        };
+        boundary.filter(|boundary| *boundary <= limit)
     }
 
     pub fn previous_boundary_before(&self, pos: usize) -> Option<usize> {
+        self.previous_boundary_before_since(pos, 0)
+    }
+
+    pub fn previous_boundary_before_since(&self, pos: usize, limit: usize) -> Option<usize> {
+        if pos <= limit {
+            return None;
+        }
         let prev_start = self
             .by_start
             .range(..pos)
@@ -502,12 +517,13 @@ impl OverlayList {
             .range(..pos)
             .next_back()
             .map(|(boundary, _)| *boundary);
-        match (prev_start, prev_end) {
+        let boundary = match (prev_start, prev_end) {
             (Some(start), Some(end)) => Some(start.max(end)),
             (Some(start), None) => Some(start),
             (None, Some(end)) => Some(end),
             (None, None) => None,
-        }
+        };
+        boundary.filter(|boundary| *boundary >= limit)
     }
 
     pub(crate) fn dump_overlays(&self) -> Vec<Value> {
