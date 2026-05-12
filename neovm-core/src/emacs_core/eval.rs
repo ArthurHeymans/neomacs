@@ -376,6 +376,7 @@ pub(crate) enum BacktraceArgs {
     Unevalled(Value),
     Evaluated0,
     Evaluated1(Value),
+    Evaluated2(Value, Value),
     Evaluated(usize),
 }
 
@@ -9829,6 +9830,7 @@ impl Context {
         match args {
             [] => BacktraceArgs::Evaluated0,
             [arg0] => BacktraceArgs::Evaluated1(*arg0),
+            [arg0, arg1] => BacktraceArgs::Evaluated2(*arg0, *arg1),
             _ => BacktraceArgs::Evaluated(self.store_backtrace_args(LispArgVec::from_slice(args))),
         }
     }
@@ -9839,6 +9841,8 @@ impl Context {
             BacktraceArgs::Evaluated0
         } else if args.len() == 1 {
             BacktraceArgs::Evaluated1(args[0])
+        } else if args.len() == 2 {
+            BacktraceArgs::Evaluated2(args[0], args[1])
         } else {
             BacktraceArgs::Evaluated(self.store_backtrace_args(args))
         }
@@ -9885,6 +9889,7 @@ impl Context {
             BacktraceArgs::Unevalled(value) => smallvec::smallvec![*value],
             BacktraceArgs::Evaluated0 => LispArgVec::new(),
             BacktraceArgs::Evaluated1(value) => smallvec::smallvec![*value],
+            BacktraceArgs::Evaluated2(arg0, arg1) => smallvec::smallvec![*arg0, *arg1],
             BacktraceArgs::Evaluated(index) => self
                 .backtrace_args_stack
                 .get(*index)
@@ -9898,6 +9903,7 @@ impl Context {
             BacktraceArgs::Unevalled(_) => 1,
             BacktraceArgs::Evaluated0 => 0,
             BacktraceArgs::Evaluated1(_) => 1,
+            BacktraceArgs::Evaluated2(_, _) => 2,
             BacktraceArgs::Evaluated(index) => self
                 .backtrace_args_stack
                 .get(*index)
@@ -9910,6 +9916,10 @@ impl Context {
             BacktraceArgs::Unevalled(value) => visit(*value),
             BacktraceArgs::Evaluated0 => {}
             BacktraceArgs::Evaluated1(value) => visit(*value),
+            BacktraceArgs::Evaluated2(arg0, arg1) => {
+                visit(*arg0);
+                visit(*arg1);
+            }
             BacktraceArgs::Evaluated(index) => {
                 if let Some(args) = self.backtrace_args_stack.get(*index) {
                     for arg in args.iter().copied() {
@@ -10581,6 +10591,11 @@ impl Context {
                     Value::NIL
                 }
             }
+            BacktraceArgs::Evaluated2(arg0, arg1) => match index {
+                0 => *arg0,
+                1 => *arg1,
+                _ => Value::NIL,
+            },
             BacktraceArgs::Evaluated(args_index) => self
                 .backtrace_args_stack
                 .get(*args_index)
@@ -10596,6 +10611,7 @@ impl Context {
                 args:
                     args @ (BacktraceArgs::Evaluated0
                     | BacktraceArgs::Evaluated1(_)
+                    | BacktraceArgs::Evaluated2(_, _)
                     | BacktraceArgs::Evaluated(_)),
                 ..
             }) => self.backtrace_arg_or_nil(args, index),
