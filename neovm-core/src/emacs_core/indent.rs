@@ -179,6 +179,27 @@ fn next_column_for_code(column: usize, code: u32, width: usize, tab_width: usize
     }
 }
 
+fn raw_unibyte_display_width(byte: u8) -> usize {
+    if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
+}
+
+fn buffer_char_display_width(buf: &Buffer, byte_pos: usize, code: u32) -> usize {
+    if !buf.get_multibyte() {
+        return buf
+            .text
+            .emacs_byte_at(byte_pos)
+            .map(raw_unibyte_display_width)
+            .unwrap_or(1);
+    }
+    if crate::emacs_core::emacs_char::char_byte8_p(code) {
+        4
+    } else if let Some(ch) = char::from_u32(code) {
+        crate::encoding::char_width(ch)
+    } else {
+        1
+    }
+}
+
 fn current_buffer_line_bounds(
     ctx: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -238,13 +259,7 @@ fn scan_for_column(
                 break;
             };
             let char_len = buf.char_after_emacs_len(scan).unwrap_or(1).max(1);
-            let width = if crate::emacs_core::emacs_char::char_byte8_p(code) {
-                4
-            } else if let Some(ch) = char::from_u32(code) {
-                crate::encoding::char_width(ch)
-            } else {
-                1
-            };
+            let width = buffer_char_display_width(buf, scan, code);
             (code, char_len, width)
         };
 
