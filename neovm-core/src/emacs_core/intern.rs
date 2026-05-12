@@ -534,8 +534,14 @@ pub(crate) fn resolve_name_lisp_string(id: NameId) -> &'static LispString {
 
 #[inline]
 pub(crate) fn canonical_symbol_for_name(id: NameId) -> Option<SymId> {
+    if let Some(sym_id) = thread_local_canonical_symbol_for_name(id) {
+        return Some(sym_id);
+    }
     let registry = global_symbol_registry().read();
-    registry.canonical_symbol_for_name(id)
+    let sym_id = registry.canonical_symbol_for_name(id)?;
+    drop(registry);
+    thread_local_record_canonical_symbol_for_name(id, sym_id);
+    Some(sym_id)
 }
 
 /// Resolve a SymId to its string using the global runtime symbol registry.
@@ -573,6 +579,7 @@ thread_local! {
     static SYM_NAME_CACHE: RefCell<Vec<Option<&'static str>>> = const { RefCell::new(Vec::new()) };
     static SYM_NAME_ID_CACHE: RefCell<Vec<Option<NameId>>> = const { RefCell::new(Vec::new()) };
     static SYM_CANONICAL_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
+    static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<Option<SymId>>> = const { RefCell::new(Vec::new()) };
     static SYM_KEYWORD_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -633,6 +640,26 @@ fn thread_local_record_canonical(id: SymId, is_canonical: bool) {
             cache.resize(idx + 1, None);
         }
         cache[idx] = Some(is_canonical);
+    });
+}
+
+#[inline]
+fn thread_local_canonical_symbol_for_name(id: NameId) -> Option<SymId> {
+    NAME_CANONICAL_SYMBOL_CACHE.with(|cache| {
+        let cache = cache.borrow();
+        cache.get(id.0 as usize).and_then(|slot| *slot)
+    })
+}
+
+#[inline]
+fn thread_local_record_canonical_symbol_for_name(id: NameId, sym_id: SymId) {
+    NAME_CANONICAL_SYMBOL_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let idx = id.0 as usize;
+        if cache.len() <= idx {
+            cache.resize(idx + 1, None);
+        }
+        cache[idx] = Some(sym_id);
     });
 }
 
