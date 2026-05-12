@@ -668,13 +668,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
             }
             if let Some(slots) = char_table_external_slots(value) {
                 with_default_cycle_guard(value, out, state, |out, state| {
-                    // Level check for char-table
-                    if let Some(level) = state.options.print_level {
-                        if state.depth >= level {
-                            out.push_str("...");
-                            return;
-                        }
-                    }
                     state.depth += 1;
                     out.push_str("#^[");
                     for (idx, item) in slots.iter().enumerate() {
@@ -701,13 +694,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 super::chartable::sub_char_table_external_slots(value)
             {
                 with_default_cycle_guard(value, out, state, |out, state| {
-                    // Level check for sub-char-table
-                    if let Some(level) = state.options.print_level {
-                        if state.depth >= level {
-                            out.push_str("...");
-                            return;
-                        }
-                    }
                     state.depth += 1;
                     out.push_str("#^^[");
                     out.push_str(&depth.to_string());
@@ -723,13 +709,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 return;
             }
             with_default_cycle_guard(value, out, state, |out, state| {
-                // Level check
-                if let Some(level) = state.options.print_level {
-                    if state.depth >= level {
-                        out.push_str("...");
-                        return;
-                    }
-                }
                 state.depth += 1;
                 out.push('[');
                 let items = value.as_vector_data().unwrap().clone();
@@ -754,13 +733,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         }
         ValueKind::Veclike(VecLikeType::Record) => {
             with_default_cycle_guard(value, out, state, |out, state| {
-                // Level check
-                if let Some(level) = state.options.print_level {
-                    if state.depth >= level {
-                        out.push_str("...");
-                        return;
-                    }
-                }
                 state.depth += 1;
                 out.push_str("#s(");
                 let items = value.as_record_data().unwrap().clone();
@@ -785,13 +757,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         }
         ValueKind::Veclike(VecLikeType::HashTable) => {
             with_default_cycle_guard(value, out, state, |out, state| {
-                // Level check
-                if let Some(level) = state.options.print_level {
-                    if state.depth >= level {
-                        out.push_str("...");
-                        return;
-                    }
-                }
                 state.depth += 1;
                 write_hash_table_stateful(value, out, state);
                 state.depth -= 1;
@@ -910,12 +875,6 @@ fn with_bytecode_literal_slots<R>(value: &Value, f: impl FnOnce(&[Value]) -> R) 
 fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     with_default_cycle_guard(value, out, state, |out, state| {
         let _ = with_bytecode_literal_slots(value, |slots| {
-            if let Some(level) = state.options.print_level {
-                if state.depth >= level {
-                    out.push_str("...");
-                    return;
-                }
-            }
             state.depth += 1;
             out.push_str("#[");
             for (idx, item) in slots.iter().enumerate() {
@@ -1098,33 +1057,44 @@ fn quote_payload_stateful(value: &Value) -> Option<Value> {
 fn write_cons_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     let mut cursor = *value;
     let mut first = true;
-    let mut count: i64 = 0;
+    let mut maxlen = state.options.print_length.unwrap_or(i64::MAX);
+    let mut tortoise = *value;
+    let mut n: i64 = 2;
+    let mut m: i64 = 2;
+    let mut tortoise_idx: i64 = 0;
     let stack_len = state.object_stack.len();
     loop {
         match cursor.kind() {
             ValueKind::Cons => {
-                if !first && state.circle.is_none() {
-                    if let Some(index) = default_cycle_stack_index(&cursor, state) {
-                        out.push_str(" . ");
-                        write!(out, "#{index}").unwrap();
-                        state.object_stack.truncate(stack_len);
-                        return;
-                    }
-                    push_default_cycle_object(&cursor, state);
-                }
-                // Length check
-                if let Some(length) = state.options.print_length {
-                    if count >= length {
-                        if !first {
-                            out.push(' ');
-                        }
+                if first {
+                    if maxlen == 0 {
                         out.push_str("...");
                         state.object_stack.truncate(stack_len);
                         return;
                     }
-                }
-                if !first {
+                } else {
                     out.push(' ');
+
+                    maxlen = maxlen.saturating_sub(1);
+                    if maxlen <= 0 {
+                        out.push_str("...");
+                        state.object_stack.truncate(stack_len);
+                        return;
+                    }
+
+                    if state.circle.is_none() {
+                        n -= 1;
+                        if n == 0 {
+                            tortoise_idx = tortoise_idx.saturating_add(m);
+                            m = m.saturating_mul(2);
+                            n = m;
+                            tortoise = cursor;
+                        } else if cursor == tortoise {
+                            write!(out, ". #{tortoise_idx}").unwrap();
+                            state.object_stack.truncate(stack_len);
+                            return;
+                        }
+                    }
                 }
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
@@ -1134,7 +1104,6 @@ fn write_cons_stateful(value: &Value, out: &mut String, state: &mut PrintState) 
                 write_value_stateful(&pair_car, out, state);
                 cursor = pair_cdr;
                 first = false;
-                count += 1;
 
                 // Check if cdr is a cons that has a circle label
                 if cursor.is_cons() {

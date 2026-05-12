@@ -311,6 +311,55 @@ fn print_default_handles_circular_cons_like_gnu() {
 }
 
 #[test]
+fn print_default_bounded_circular_list_uses_gnu_tail_index() {
+    crate::test_utils::init_test_tracing();
+    let first = Value::cons(Value::fixnum(1), Value::NIL);
+    let second = Value::cons(Value::fixnum(2), Value::NIL);
+    first.set_cdr(second);
+    second.set_cdr(first);
+
+    let options = PrintOptions::new(false, false, None, Some(6));
+
+    assert_eq!(print_value_stateful(&first, options), "(1 2 1 2 . #2)");
+}
+
+#[test]
+fn print_default_tail_cycle_uses_gnu_tail_index() {
+    crate::test_utils::init_test_tracing();
+    let first = Value::cons(Value::symbol("a"), Value::NIL);
+    let second = Value::cons(Value::symbol("b"), Value::NIL);
+    let third = Value::cons(Value::symbol("c"), Value::NIL);
+    first.set_cdr(second);
+    second.set_cdr(third);
+    third.set_cdr(second);
+
+    let options = PrintOptions::new(false, false, None, Some(7));
+
+    assert_eq!(print_value_stateful(&first, options), "(a b c b . #2)");
+}
+
+#[test]
+fn print_level_applies_to_conses_not_vectorlike_objects_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let options = PrintOptions::new(false, false, Some(1), None);
+    let nested_vector = Value::vector(vec![
+        Value::vector(vec![Value::symbol("a"), Value::symbol("b")]),
+        Value::vector(vec![Value::symbol("c"), Value::symbol("d")]),
+    ]);
+    let record = Value::make_record(vec![
+        Value::symbol("foo"),
+        Value::list(vec![Value::symbol("a"), Value::symbol("b")]),
+        Value::vector(vec![Value::symbol("c"), Value::symbol("d")]),
+    ]);
+
+    assert_eq!(
+        print_value_stateful(&nested_vector, options),
+        "[[a b] [c d]]"
+    );
+    assert_eq!(print_value_stateful(&record, options), "#s(foo ... [c d])");
+}
+
+#[test]
 fn print_circle_handles_self_referential_records() {
     crate::test_utils::init_test_tracing();
     let record = Value::make_record(vec![Value::symbol("foo"), Value::NIL]);
