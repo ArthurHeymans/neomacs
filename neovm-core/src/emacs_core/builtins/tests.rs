@@ -6747,7 +6747,11 @@ fn pure_dispatch_make_placeholder_cluster_matches_compat_contracts() {
 
     let make_interpreted = dispatch_builtin_pure(
         "make-interpreted-closure",
-        vec![Value::list(vec![]), Value::list(vec![]), Value::NIL],
+        vec![
+            Value::list(vec![]),
+            Value::list(vec![Value::NIL]),
+            Value::NIL,
+        ],
     )
     .expect("builtin make-interpreted-closure should resolve")
     .expect("builtin make-interpreted-closure should evaluate");
@@ -7055,7 +7059,7 @@ fn pure_dispatch_make_interpreted_closure_accepts_raw_unibyte_docstring() {
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     let closure = dispatch_builtin_pure(
         "make-interpreted-closure",
-        vec![Value::list(vec![]), Value::list(vec![]), raw],
+        vec![Value::list(vec![]), Value::list(vec![Value::NIL]), raw],
     )
     .expect("builtin make-interpreted-closure should resolve")
     .expect("builtin make-interpreted-closure should evaluate");
