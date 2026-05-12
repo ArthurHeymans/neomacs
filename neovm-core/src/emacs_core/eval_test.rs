@@ -8815,6 +8815,34 @@ fn constrain_to_field_matches_gnu_boundary_and_capture_semantics() {
 }
 
 #[test]
+fn constrain_to_field_honors_dynamic_inhibit_field_text_motion_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        bootstrap_eval_one(
+            r#"(with-temp-buffer
+                 (insert "aa" (propertize "bb" 'field 'f) "cc\nxx")
+                 (goto-char 4)
+                 (list
+                  (line-beginning-position)
+                  (line-end-position)
+                  (let ((inhibit-field-text-motion t))
+                    (list
+                     (line-beginning-position)
+                     (line-end-position)))
+                  (let ((inhibit-field-text-motion t))
+                    (goto-char 4)
+                    (move-beginning-of-line nil)
+                    (point))
+                  (let ((inhibit-field-text-motion t))
+                    (goto-char 4)
+                    (move-end-of-line nil)
+                    (point))))"#,
+        ),
+        r#"OK (3 5 (1 7) 1 7)"#
+    );
+}
+
+#[test]
 fn replace_region_contents_preserves_source_properties_and_rejects_self_buffer() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

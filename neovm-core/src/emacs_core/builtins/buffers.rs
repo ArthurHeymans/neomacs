@@ -2216,12 +2216,9 @@ pub(crate) fn builtin_constrain_to_field(
             )?
             .is_nil());
 
-    let inhibit_field_text_motion = super::misc_eval::dynamic_or_global_symbol_value_in_state(
-        &eval.obarray,
-        &[],
-        "inhibit-field-text-motion",
-    )
-    .is_some_and(|value| !value.is_nil());
+    let inhibit_field_text_motion =
+        super::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
+            .is_some_and(|value| !value.is_nil());
 
     if !inhibit_field_text_motion
         && new_pos != old_pos

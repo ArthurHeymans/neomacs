@@ -7170,6 +7170,35 @@ fn vm_constrain_to_field_uses_shared_field_state() {
 }
 
 #[test]
+fn vm_constrain_to_field_honors_dynamic_inhibit_field_text_motion_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (erase-buffer)
+                 (insert "aa" (propertize "bb" 'field 'f) "cc\nxx")
+                 (goto-char 4)
+                 (list
+                  (line-beginning-position)
+                  (line-end-position)
+                  (let ((inhibit-field-text-motion t))
+                    (list
+                     (line-beginning-position)
+                     (line-end-position)))
+                  (let ((inhibit-field-text-motion t))
+                    (goto-char 4)
+                    (beginning-of-line nil)
+                    (point))
+                  (let ((inhibit-field-text-motion t))
+                    (goto-char 4)
+                    (end-of-line nil)
+                    (point))))"#
+        ),
+        r#"OK (3 5 (1 7) 1 7)"#
+    );
+}
+
+#[test]
 fn vm_replace_region_contents_uses_shared_source_and_property_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
