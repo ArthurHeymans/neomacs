@@ -448,7 +448,7 @@ fn print_lambda() {
         doc_form: None,
         interactive: None,
     });
-    assert_eq!(print_value(&lam), "(lambda (x y) (+ x y))");
+    assert_eq!(print_value(&lam), "#[(x y) ((+ x y)) nil]");
 }
 
 #[test]

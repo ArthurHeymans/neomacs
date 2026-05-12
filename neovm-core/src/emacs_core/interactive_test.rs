@@ -1188,7 +1188,7 @@ fn commandp_true_for_lambda_with_interactive_form() {
     let value = ev
         .eval_str("(lambda () (interactive) 1)")
         .expect("lambda form should evaluate");
-    assert_eq!(lambda[0], "OK (lambda nil (interactive) 1)");
+    assert_eq!(lambda[0], "OK #[nil (1) nil nil nil nil]");
     let result = builtin_commandp_interactive(&mut ev, vec![value]);
     assert!(result.unwrap().is_truthy());
 }

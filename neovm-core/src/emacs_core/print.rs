@@ -942,22 +942,7 @@ fn write_interpreted_closure_stateful(value: &Value, out: &mut String, state: &m
 fn write_lambda_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     with_lambda_print_guard(value, out, state, |out, state| {
         with_default_cycle_guard(value, out, state, |out, state| {
-            if value.closure_env().flatten().is_some() {
-                write_interpreted_closure_stateful(value, out, state);
-            } else if let Some(list_form) = crate::emacs_core::builtins::lambda_to_cons_list(value)
-            {
-                write_value_stateful(&list_form, out, state);
-            } else {
-                out.push_str("(lambda ");
-                write_params_stateful(value.closure_params(), out, state);
-                out.push(' ');
-                if let Some(body) = value.closure_body_value() {
-                    write_closure_body_forms_stateful(body, out, state);
-                } else {
-                    out.push_str("nil");
-                }
-                out.push(')');
-            }
+            write_interpreted_closure_stateful(value, out, state);
         });
     });
 }
@@ -1636,26 +1621,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             let text = with_print_object_guard(
                 PrintObjectRef::Lambda(value.0),
                 |index| format!("#{index}"),
-                || {
-                    if value.closure_env().flatten().is_some() {
-                        format_interpreted_closure(value, options)
-                    } else {
-                        if let Some(list_form) =
-                            crate::emacs_core::builtins::lambda_to_cons_list(value)
-                        {
-                            return print_value_with_options(&list_form, options);
-                        }
-                        let params = value.closure_params().map_or_else(
-                            || "nil".to_string(),
-                            |params| format_params(params, options),
-                        );
-                        let body = value
-                            .closure_body_value()
-                            .map(|body| format_closure_body_forms(body, options))
-                            .unwrap_or_else(|| "nil".to_string());
-                        format!("(lambda {} {})", params, body)
-                    }
-                },
+                || format_interpreted_closure(value, options),
             );
             out.extend_from_slice(text.as_bytes());
             pop_bytes_cycle_object(pushed);
@@ -2093,35 +2059,16 @@ fn format_closure_body_forms(body: Value, options: PrintOptions) -> String {
 }
 
 fn format_interpreted_closure(value: &Value, options: PrintOptions) -> String {
-    let mut slots = Vec::with_capacity(5);
-    slots.push(value.closure_params().map_or_else(
-        || "nil".to_string(),
-        |params| format_params(params, options),
-    ));
-    slots.push(
-        value
-            .closure_body_value()
-            .map(|body| print_value_with_options(&body, options))
-            .unwrap_or_else(|| "nil".to_string()),
-    );
-    let env = value.closure_env().flatten().expect("closure env");
-    slots.push(if env == Value::NIL {
-        "(t)".to_string()
-    } else {
-        print_value_with_options(&env, options)
-    });
-    if let Some(doc_value) = value.closure_doc_value()
-        && !doc_value.is_nil()
-    {
-        slots.push("nil".to_string());
-        slots.push(if doc_value.is_string() {
-            let ls = doc_value.as_lisp_string().unwrap();
-            format_lisp_string_emacs(ls, &PrintOptions::default())
-        } else {
-            print_value_with_options(&doc_value, options)
-        });
-    }
-    format!("#[{}]", slots.join(" "))
+    value
+        .closure_slots()
+        .map(|slots| {
+            let parts = slots
+                .iter()
+                .map(|slot| print_value_with_options(slot, options))
+                .collect::<Vec<_>>();
+            format!("#[{}]", parts.join(" "))
+        })
+        .unwrap_or_else(|| "#[]".to_string())
 }
 
 fn print_list_shorthand(value: &Value, options: PrintOptions) -> Option<String> {
