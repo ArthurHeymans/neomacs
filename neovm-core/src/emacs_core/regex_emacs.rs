@@ -400,7 +400,7 @@ pub(crate) struct RegexCompileError {
 
 impl std::fmt::Display for RegexCompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Invalid regexp: {}", self.message)
+        f.write_str(&self.message)
     }
 }
 
@@ -758,7 +758,7 @@ pub(crate) fn regex_compile_lisp(
                     b')' => {
                         let Some(entry) = compile_stack.pop() else {
                             return Err(RegexCompileError {
-                                message: "unmatched \\)".to_string(),
+                                message: "Unmatched ) or \\)".to_string(),
                             });
                         };
 
@@ -1175,7 +1175,7 @@ pub(crate) fn regex_compile_lisp(
     // Check for unmatched \(
     if !compile_stack.is_empty() {
         return Err(RegexCompileError {
-            message: "unmatched \\(".to_string(),
+            message: "Unmatched ( or \\(".to_string(),
         });
     }
 

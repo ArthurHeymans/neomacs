@@ -805,7 +805,7 @@ fn compile_search_pattern_with_posix(
                 regex_emacs::regex_compile(pattern, posix, case_fold)
                     .map(Rc::new)
                     .map(CompiledSearchPattern::Emacs)
-                    .map_err(|e| format!("Invalid regexp: {}", e.message))
+                    .map_err(|e| e.message)
             }
         },
     )?;
@@ -859,10 +859,7 @@ fn compile_lisp_pattern_with_posix(
 
     let mut compiled = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileMiss,
-        || {
-            regex_emacs::regex_compile_lisp(pattern, posix, case_fold)
-                .map_err(|e| format!("Invalid regexp: {}", e.message))
-        },
+        || regex_emacs::regex_compile_lisp(pattern, posix, case_fold).map_err(|e| e.message),
     )?;
     compiled.target_multibyte = target_multibyte;
     let compiled = Rc::new(compiled);

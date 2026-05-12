@@ -351,22 +351,12 @@ fn string_matches_regexp(text: &str, pattern: &str, case_fold: bool) -> Result<b
     let mut match_data = None;
     super::regex::string_match_full_with_case_fold(pattern, text, 0, case_fold, &mut match_data)
         .map(|matched| matched.is_some())
-        .map_err(|e| {
-            signal(
-                "invalid-regexp",
-                vec![Value::string(format!("Invalid regexp: {e}"))],
-            )
-        })
+        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
 }
 
 fn count_string_regexp_matches(text: &str, pattern: &str, case_fold: bool) -> Result<i64, Flow> {
     let iterated = super::regex::iterate_string_matches_with_case_fold(pattern, text, 0, case_fold)
-        .map_err(|e| {
-            signal(
-                "invalid-regexp",
-                vec![Value::string(format!("Invalid regexp: {e}"))],
-            )
-        })?;
+        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
     Ok(iterated
         .matches
         .into_iter()
@@ -1636,12 +1626,7 @@ fn replace_string_eval_impl(
         let pattern = build_lax_whitespace_pattern(&from, &whitespace_regex);
         let iterated =
             super::regex::iterate_string_matches_with_case_fold(&pattern, &source, 0, case_fold)
-                .map_err(|e| {
-                    signal(
-                        "invalid-regexp",
-                        vec![Value::string(format!("Invalid regexp: {e}"))],
-                    )
-                })?;
+                .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
             let Some((m_start, m_end)) = groups.first().and_then(|group| *group) else {
@@ -1802,15 +1787,9 @@ fn replace_regexp_eval_impl(
 
     let case_fold = case_fold_for_pattern(eval, &from);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
-    let iterated = super::regex::iterate_string_matches_with_case_fold(
-        &from, &source, 0, case_fold,
-    )
-    .map_err(|e| {
-        signal(
-            "invalid-regexp",
-            vec![Value::string(format!("Invalid regexp: {e}"))],
-        )
-    })?;
+    let iterated =
+        super::regex::iterate_string_matches_with_case_fold(&from, &source, 0, case_fold)
+            .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
 
     let mut out = String::with_capacity(source.len());
     let mut last = 0usize;

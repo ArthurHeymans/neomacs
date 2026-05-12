@@ -433,7 +433,7 @@ pub(crate) fn re_search_forward_with_state_posix(
             Ok(None) => {
                 return Err(signal("search-failed", vec![args[0]]));
             }
-            Err(msg) if msg.starts_with("Invalid regexp:") => {
+            Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_byte(current_id, start_pt);
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
@@ -528,7 +528,7 @@ pub(crate) fn re_search_backward_with_state_posix(
             Ok(None) => {
                 return Err(signal("search-failed", vec![args[0]]));
             }
-            Err(msg) if msg.starts_with("Invalid regexp:") => {
+            Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_byte(current_id, start_pt);
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
