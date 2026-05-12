@@ -110,7 +110,7 @@ fn sync_current_buffer_to_selected_window(eval: &mut super::eval::Context) {
         .and_then(|frame| frame.find_window(frame.selected_window))
         .and_then(|window| window.buffer_id());
     if let Some(buffer_id) = selected_buffer_id {
-        let _ = eval.buffers.switch_current(buffer_id);
+        let _ = eval.buffers.switch_current_unrecorded(buffer_id);
     }
 }
 
@@ -481,7 +481,10 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
 
     let saved_current = eval.buffers.current_buffer_id();
     let inhibit_buffer_hooks = eval.buffers.buffer_hooks_inhibited(id);
-    let _ = eval.buffers.switch_current(id);
+    // GNU `Fkill_buffer` runs query functions and `kill-buffer-hook` after
+    // `set_buffer_internal`/`Fset_buffer`, not `record_buffer`; killing or
+    // querying a buffer must not make it the head of `buffer-list`.
+    eval.set_current_buffer_unrecorded(id)?;
     let query_result = if inhibit_buffer_hooks {
         Value::T
     } else {
@@ -509,7 +512,7 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
         return Ok(Value::T);
     }
 
-    let _ = eval.buffers.switch_current(id);
+    eval.set_current_buffer_unrecorded(id)?;
     if !inhibit_buffer_hooks {
         let hook_sym =
             crate::emacs_core::hook_runtime::hook_symbol_by_name(eval, "kill-buffer-hook");
@@ -585,14 +588,14 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
     if current_will_die {
         if let Some(next) = replacement {
             if eval.buffers.get(next).is_some() {
-                eval.buffers.switch_current(next);
+                eval.set_current_buffer_unrecorded(next)?;
             }
         }
         if eval.buffers.current_buffer().is_none() {
             if let Some(next) = eval.buffers.buffer_list().into_iter().next() {
-                eval.buffers.switch_current(next);
+                eval.set_current_buffer_unrecorded(next)?;
             } else {
-                eval.buffers.switch_current(scratch);
+                eval.set_current_buffer_unrecorded(scratch)?;
             }
         }
     }

@@ -16,7 +16,9 @@ use super::types::{
 };
 
 const BUFFER_MAGIC: [u8; 16] = *b"NEOBUFFER\0\0\0\0\0\0\0";
-const BUFFER_FORMAT_VERSION: u32 = 3;
+const BUFFER_FORMAT_VERSION: u32 = 4;
+const BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER: u32 = 4;
+const MIN_BUFFER_FORMAT_VERSION: u32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -40,6 +42,10 @@ pub(crate) fn buffer_manager_section_bytes(
     let mut bytes = vec![0; HEADER_SIZE];
 
     write_opt_buffer_id(&mut bytes, manager.current);
+    write_len(&mut bytes, manager.buffer_order.len(), "buffer order count")?;
+    for id in &manager.buffer_order {
+        write_buffer_id(&mut bytes, *id);
+    }
     for value in &manager.buffer_defaults {
         write_value(&mut bytes, value)?;
     }
@@ -81,6 +87,14 @@ pub(crate) fn load_buffer_manager_section(section: &[u8]) -> Result<DumpBufferMa
 
     let mut cursor = Cursor::new(&section[payload_offset..end]);
     let current = read_opt_buffer_id(&mut cursor)?;
+    let mut buffer_order = Vec::new();
+    if header.version >= BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER {
+        let order_count = read_len(&mut cursor, "buffer order count")?;
+        buffer_order = Vec::with_capacity(order_count);
+        for _ in 0..order_count {
+            buffer_order.push(read_buffer_id(&mut cursor)?);
+        }
+    }
     let mut buffer_defaults =
         Vec::with_capacity(to_usize(header.default_count, "buffer default count")?);
     for _ in 0..header.default_count {
@@ -100,6 +114,7 @@ pub(crate) fn load_buffer_manager_section(section: &[u8]) -> Result<DumpBufferMa
 
     Ok(DumpBufferManager {
         buffers,
+        buffer_order,
         current,
         next_id: header.next_id,
         next_marker_id: header.next_marker_id,
@@ -120,7 +135,7 @@ fn read_header(section: &[u8]) -> Result<BufferHeader, DumpError> {
             "buffer section has bad magic".into(),
         ));
     }
-    if header.version != BUFFER_FORMAT_VERSION {
+    if !(MIN_BUFFER_FORMAT_VERSION..=BUFFER_FORMAT_VERSION).contains(&header.version) {
         return Err(DumpError::UnsupportedVersion(header.version));
     }
     if header.header_size != HEADER_SIZE as u32 {
@@ -842,6 +857,7 @@ fn to_usize(count: u64, what: &str) -> Result<usize, DumpError> {
 pub(crate) fn empty_buffer_manager() -> DumpBufferManager {
     DumpBufferManager {
         buffers: Vec::new(),
+        buffer_order: Vec::new(),
         current: None,
         next_id: 0,
         next_marker_id: 0,
@@ -851,6 +867,7 @@ pub(crate) fn empty_buffer_manager() -> DumpBufferManager {
 
 pub(crate) fn buffer_manager_is_empty(manager: &DumpBufferManager) -> bool {
     manager.buffers.is_empty()
+        && manager.buffer_order.is_empty()
         && manager.current.is_none()
         && manager.next_id == 0
         && manager.next_marker_id == 0
@@ -964,6 +981,7 @@ mod tests {
         };
         let manager = DumpBufferManager {
             buffers: vec![(DumpBufferId(1), buffer)],
+            buffer_order: vec![DumpBufferId(1)],
             current: Some(DumpBufferId(1)),
             next_id: 24,
             next_marker_id: 25,

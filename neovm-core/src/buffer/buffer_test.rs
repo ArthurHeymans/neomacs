@@ -193,6 +193,7 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         mgr.dump_next_id(),
         mgr.dump_next_marker_id(),
         None,
+        None,
     );
 
     let base = restored.get(base_id).expect("base buffer");
@@ -205,6 +206,27 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
             .text_props_get_property(1, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
+}
+
+#[test]
+fn from_dump_preserves_dumped_buffer_order() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let scratch = mgr.current_buffer_id().expect("scratch buffer");
+    let one = mgr.create_buffer("one");
+    let two = mgr.create_buffer("two");
+    let three = mgr.create_buffer("three");
+
+    let restored = BufferManager::from_dump(
+        mgr.dump_buffers().clone(),
+        Some(three),
+        mgr.dump_next_id(),
+        mgr.dump_next_marker_id(),
+        Some(&[two, scratch, three, one]),
+        None,
+    );
+
+    assert_eq!(restored.buffer_list(), vec![two, scratch, three, one]);
 }
 
 #[test]

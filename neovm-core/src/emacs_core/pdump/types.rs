@@ -687,6 +687,12 @@ pub struct DumpBuffer {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpBufferManager {
     pub buffers: Vec<(DumpBufferId, DumpBuffer)>,
+    /// GNU's `Vbuffer_alist` order. `buffer-list` with no frame argument is
+    /// just this global order (`buffer.c:Fbuffer_list`), and pdump preserves
+    /// it as ordinary Lisp state. Keep the explicit order here so pdump-load
+    /// does not reconstruct it from allocation ids.
+    #[serde(default)]
+    pub buffer_order: Vec<DumpBufferId>,
     pub current: Option<DumpBufferId>,
     pub next_id: u64,
     pub next_marker_id: u64,

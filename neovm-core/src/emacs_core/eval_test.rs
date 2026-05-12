@@ -7740,6 +7740,22 @@ fn kill_buffer_runs_query_functions_and_hook_in_target_buffer_context() {
 }
 
 #[test]
+fn kill_buffer_query_abort_does_not_record_buffer_list_order_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(let* ((a (get-buffer-create \"kb-order-a\"))
+                (b (get-buffer-create \"kb-order-b\"))
+                (before (mapcar #'buffer-name (buffer-list))))
+           (setq kill-buffer-query-functions (list (lambda () nil)))
+           (list (equal before '(\"*scratch*\" \"kb-order-a\" \"kb-order-b\"))
+                 (kill-buffer b)
+                 (equal before (mapcar #'buffer-name (buffer-list)))
+                 (and (get-buffer \"kb-order-b\") t)))",
+    );
+    assert_eq!(result, "OK (t nil t t)");
+}
+
+#[test]
 fn run_window_scroll_functions_uses_scrolled_window_buffer_context() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

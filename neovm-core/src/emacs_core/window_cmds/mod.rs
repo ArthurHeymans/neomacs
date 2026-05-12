@@ -3893,7 +3893,10 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     else {
         return;
     };
-    buffers.switch_current(buffer_id);
+    // GNU `command_loop_1` only realigns `current_buffer` with
+    // `selected_window` via `set_buffer_internal`; it does not call
+    // `record_buffer`.  Selection/display primitives record explicitly.
+    buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
         let byte_pos = buffer.lisp_pos_to_byte(point as i64);
         let _ = buffers.goto_buffer_byte(buffer_id, byte_pos);

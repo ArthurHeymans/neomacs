@@ -2395,6 +2395,11 @@ pub(crate) fn dump_buffer_manager(
             .iter()
             .map(|(id, buf)| (DumpBufferId(id.0), dump_buffer(encoder, buf)))
             .collect(),
+        buffer_order: bm
+            .dump_buffer_order()
+            .iter()
+            .map(|id| DumpBufferId(id.0))
+            .collect(),
         current: bm.dump_current().map(|id| DumpBufferId(id.0)),
         next_id: bm.dump_next_id(),
         next_marker_id: bm.dump_next_marker_id(),
@@ -4139,11 +4144,18 @@ pub(crate) fn load_buffer_manager(
     } else {
         Some(defaults_values.as_slice())
     };
+    let order_values: Vec<BufferId> = dbm.buffer_order.iter().map(|id| BufferId(id.0)).collect();
+    let dumped_order = if order_values.is_empty() {
+        None
+    } else {
+        Some(order_values.as_slice())
+    };
     BufferManager::from_dump(
         buffers,
         dbm.current.map(|id| BufferId(id.0)),
         dbm.next_id,
         dbm.next_marker_id,
+        dumped_order,
         dumped_defaults,
     )
 }

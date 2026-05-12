@@ -4205,6 +4205,9 @@ impl BufferManager {
     pub(crate) fn dump_buffers(&self) -> &HashMap<BufferId, Buffer> {
         &self.buffers
     }
+    pub(crate) fn dump_buffer_order(&self) -> &[BufferId] {
+        &self.buffer_order
+    }
     pub(crate) fn dump_current(&self) -> Option<BufferId> {
         self.current
     }
@@ -4219,6 +4222,7 @@ impl BufferManager {
         current: Option<BufferId>,
         next_id: u64,
         next_marker_id: u64,
+        dumped_buffer_order: Option<&[BufferId]>,
         dumped_buffer_defaults: Option<&[crate::emacs_core::value::Value]>,
     ) -> Self {
         let indirect_buffers: Vec<(BufferId, BufferId)> = buffers
@@ -4273,12 +4277,29 @@ impl BufferManager {
             dead_buffer_last_names: HashMap::new(),
             buffer_defaults,
         };
-        manager.buffer_order = manager.buffers.keys().copied().collect();
-        manager.buffer_order.sort_by_key(|id| id.0);
-        if let Some(current) = manager.current
-            && manager.buffers.contains_key(&current)
-        {
-            manager.note_buffer_order_head(current);
+        if let Some(dumped_order) = dumped_buffer_order {
+            let mut seen = HashSet::new();
+            for id in dumped_order {
+                if manager.buffers.contains_key(id) && seen.insert(*id) {
+                    manager.buffer_order.push(*id);
+                }
+            }
+            let mut missing: Vec<BufferId> = manager
+                .buffers
+                .keys()
+                .copied()
+                .filter(|id| seen.insert(*id))
+                .collect();
+            missing.sort_by_key(|id| id.0);
+            manager.buffer_order.extend(missing);
+        } else {
+            manager.buffer_order = manager.buffers.keys().copied().collect();
+            manager.buffer_order.sort_by_key(|id| id.0);
+            if let Some(current) = manager.current
+                && manager.buffers.contains_key(&current)
+            {
+                manager.note_buffer_order_head(current);
+            }
         }
         manager
     }
