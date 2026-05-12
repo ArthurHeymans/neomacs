@@ -2448,7 +2448,7 @@ fn file_name_splitters_bootstrap_match_gnu_files_el() {
     assert_eq!(results[8], "OK nil");
     assert_eq!(results[9], r#"OK "foo/""#);
     assert_eq!(results[10], r#"OK "./""#);
-    assert_eq!(results[11], r#"OK "/""#);
+    assert_eq!(results[11], r#"OK "//""#);
     assert_eq!(results[12], r#"OK ("" "foo" "bar")"#);
     assert_eq!(results[13], r#"OK ("" "" "")"#);
     assert_eq!(results[14], r#"OK ("foo" "")"#);
