@@ -219,6 +219,7 @@ fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Value) {
         };
         if !hash_table.data.contains_key(&hash_key) {
             hash_table.insertion_order.push(hash_key.clone());
+            hash_table.note_hash_key_inserted(hash_key.clone());
         }
         hash_table.key_snapshots.insert(hash_key.clone(), key);
         hash_table.data.insert(hash_key, value);

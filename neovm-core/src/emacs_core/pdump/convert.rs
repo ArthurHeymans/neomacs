@@ -3519,7 +3519,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         .map(|key| load_hash_key(decoder, key))
         .collect();
 
-    LispHashTable {
+    let mut table = LispHashTable {
         test: load_hash_table_test(&ht.test),
         test_name: ht.test_name.map(|s| load_sym_id(&s)),
         user_cmp_function: None,
@@ -3531,7 +3531,11 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         data,
         key_snapshots,
         insertion_order,
-    }
+        entry_slots: Vec::new(),
+        free_slots: Vec::new(),
+    };
+    table.rebuild_hash_slots_from_insertion_order();
+    table
 }
 
 // --- Dump-wide symbol table ---

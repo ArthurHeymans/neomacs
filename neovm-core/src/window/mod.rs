@@ -1756,6 +1756,7 @@ impl Frame {
                 table.data.clear();
                 table.key_snapshots.clear();
                 table.insertion_order.clear();
+                table.clear_hash_slots();
             });
         }
     }

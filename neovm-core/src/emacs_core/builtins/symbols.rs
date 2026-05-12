@@ -5276,7 +5276,8 @@ fn try_convert_hash_table_literal(val: Value) -> Option<Value> {
                     table.data.insert(key.clone(), val_value);
                     if inserting_new_key {
                         table.key_snapshots.insert(key.clone(), key_value);
-                        table.insertion_order.push(key);
+                        table.insertion_order.push(key.clone());
+                        table.note_hash_key_inserted(key);
                     }
                     idx += 2;
                 }

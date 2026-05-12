@@ -955,7 +955,8 @@ impl<'a> JsonParser<'a> {
                     table.data.insert(hash_key.clone(), val);
                     if inserting_new_key {
                         table.key_snapshots.insert(hash_key.clone(), key_val);
-                        table.insertion_order.push(hash_key);
+                        table.insertion_order.push(hash_key.clone());
+                        table.note_hash_key_inserted(hash_key);
                     }
                 });
             }

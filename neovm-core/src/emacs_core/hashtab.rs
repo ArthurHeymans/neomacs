@@ -784,19 +784,34 @@ pub(crate) fn builtin_internal_hash_table_histogram(args: Vec<Value>) -> EvalRes
 
 /// (maphash FUNCTION TABLE) — call FUNCTION with each (KEY VALUE) pair.
 pub(crate) fn builtin_maphash(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    expect_args("maphash", &args, 2)?;
+    if !args[1].is_hash_table() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("hash-table-p"), args[1]],
+        ));
+    }
+
     let roots = eval.save_specpdl_roots();
     for arg in &args {
         eval.push_specpdl_root(*arg);
     }
-    let (func, entries) = collect_maphash_entries(args)?;
-    eval.push_specpdl_root(func);
-    for (key, val) in &entries {
-        eval.push_specpdl_root(*key);
-        eval.push_specpdl_root(*val);
-    }
+    let func = args[0];
+    let table = args[1];
     let result = (|| -> EvalResult {
-        for (key, val) in entries {
+        let mut slot = 0_usize;
+        loop {
+            let Some((key, val)) = maphash_entry_at_slot(table, slot) else {
+                if slot >= maphash_slot_len(table) {
+                    break;
+                }
+                slot += 1;
+                continue;
+            };
+            eval.push_specpdl_root(key);
+            eval.push_specpdl_root(val);
             eval.apply2(func, key, val)?;
+            slot += 1;
         }
         Ok(Value::NIL)
     })();
@@ -825,33 +840,29 @@ pub(crate) fn builtin_mapatoms(eval: &mut super::eval::Context, args: Vec<Value>
     result
 }
 
-pub(crate) fn collect_maphash_entries(
-    args: Vec<Value>,
-) -> Result<(Value, Vec<(Value, Value)>), Flow> {
-    expect_args("maphash", &args, 2)?;
-    let func = args[0];
-    let entries = match args[1].kind() {
-        ValueKind::Veclike(VecLikeType::HashTable) => {
-            let table = args[1].as_hash_table().unwrap().clone();
-            table
-                .insertion_order
-                .iter()
-                .filter_map(|k| {
-                    table
-                        .data
-                        .get(k)
-                        .map(|v| (hash_key_to_visible_value(&table, k), *v))
-                })
-                .collect()
-        }
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("hash-table-p"), args[1]],
-            ));
-        }
-    };
-    Ok((func, entries))
+pub(crate) fn validate_maphash_args(args: &[Value]) -> Result<(Value, Value), Flow> {
+    expect_args("maphash", args, 2)?;
+    if !args[1].is_hash_table() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("hash-table-p"), args[1]],
+        ));
+    }
+    Ok((args[0], args[1]))
+}
+
+pub(crate) fn maphash_slot_len(table: Value) -> usize {
+    table
+        .as_hash_table()
+        .map(|table| table.entry_slots.len())
+        .unwrap_or(0)
+}
+
+pub(crate) fn maphash_entry_at_slot(table: Value, slot: usize) -> Option<(Value, Value)> {
+    let table = table.as_hash_table()?;
+    let key = table.entry_slots.get(slot)?.as_ref()?;
+    let value = *table.data.get(key)?;
+    Some((hash_key_to_visible_value(table, key), value))
 }
 
 pub(crate) fn collect_mapatoms_symbols(

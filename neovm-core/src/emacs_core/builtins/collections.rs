@@ -408,6 +408,10 @@ fn maybe_resize_hash_table_for_insert(table: &mut LispHashTable, inserting_new_k
             let additional = new_size - table.insertion_order.capacity();
             table.insertion_order.reserve(additional);
         }
+        if new_size > table.entry_slots.capacity() {
+            let additional = new_size - table.entry_slots.capacity();
+            table.entry_slots.reserve(additional);
+        }
     }
 }
 
@@ -706,7 +710,8 @@ fn builtin_puthash_user_defined(
             maybe_resize_hash_table_for_insert(ht, true);
             ht.data.insert(storage_key.clone(), value);
             ht.key_snapshots.insert(storage_key.clone(), key_value);
-            ht.insertion_order.push(storage_key);
+            ht.insertion_order.push(storage_key.clone());
+            ht.note_hash_key_inserted(storage_key);
         }
     });
     Ok(Some(()))
@@ -729,7 +734,8 @@ fn builtin_puthash_values(
                     maybe_resize_hash_table_for_insert(ht, true);
                     ht.data.insert(key.clone(), value);
                     ht.key_snapshots.insert(key.clone(), key_value);
-                    ht.insertion_order.push(key);
+                    ht.insertion_order.push(key.clone());
+                    ht.note_hash_key_inserted(key);
                 }
             });
             Ok(value)
@@ -771,9 +777,11 @@ fn builtin_remhash_values(
             let test = table.as_hash_table().unwrap().test.clone();
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
-                ht.data.remove(&key);
-                ht.key_snapshots.remove(&key);
-                ht.insertion_order.retain(|k| k != &key);
+                if ht.data.remove(&key).is_some() {
+                    ht.key_snapshots.remove(&key);
+                    ht.insertion_order.retain(|k| k != &key);
+                    ht.note_hash_key_removed(&key);
+                }
             });
             Ok(Value::NIL)
         }
@@ -792,6 +800,7 @@ pub(crate) fn builtin_clrhash(args: Vec<Value>) -> EvalResult {
                 ht.data.clear();
                 ht.key_snapshots.clear();
                 ht.insertion_order.clear();
+                ht.clear_hash_slots();
             });
             Ok(Value::NIL)
         }

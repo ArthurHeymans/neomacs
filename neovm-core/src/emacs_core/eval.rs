@@ -7979,6 +7979,11 @@ impl Context {
                                 *k = HashKey::Ptr(new_ptr);
                             }
                         }
+                        for k in ht.entry_slots.iter_mut().flatten() {
+                            if *k == HashKey::Ptr(old_ptr) {
+                                *k = HashKey::Ptr(new_ptr);
+                            }
+                        }
                     }
                 }
                 for item in ht.data.values_mut() {

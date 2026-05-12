@@ -1927,6 +1927,11 @@ impl<'a> Vm<'a> {
                                     *k = HashKey::Ptr(new_ptr);
                                 }
                             }
+                            for k in ht.entry_slots.iter_mut().flatten() {
+                                if *k == HashKey::Ptr(old_ptr) {
+                                    *k = HashKey::Ptr(new_ptr);
+                                }
+                            }
                         }
                     }
                     for item in ht.data.values_mut() {
@@ -4015,15 +4020,25 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_maphash_shared(&mut self, args: &[Value]) -> EvalResult {
-        let (func, entries) = crate::emacs_core::hashtab::collect_maphash_entries(args.to_vec())?;
+        let (func, table) = crate::emacs_core::hashtab::validate_maphash_args(args)?;
         self.with_dynamic_vm_roots(|vm| {
             vm.push_dynamic_vm_root(func);
-            for (key, value) in &entries {
-                vm.push_dynamic_vm_root(*key);
-                vm.push_dynamic_vm_root(*value);
-            }
-            for (key, value) in entries {
+            vm.push_dynamic_vm_root(table);
+            let mut slot = 0_usize;
+            loop {
+                let Some((key, value)) =
+                    crate::emacs_core::hashtab::maphash_entry_at_slot(table, slot)
+                else {
+                    if slot >= crate::emacs_core::hashtab::maphash_slot_len(table) {
+                        break;
+                    }
+                    slot += 1;
+                    continue;
+                };
+                vm.push_dynamic_vm_root(key);
+                vm.push_dynamic_vm_root(value);
                 vm.call_function2(func, key, value)?;
+                slot += 1;
             }
             Ok(Value::NIL)
         })

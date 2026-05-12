@@ -542,6 +542,8 @@ pub struct LispHashTable {
     pub data: HashMap<HashKey, Value>,
     pub key_snapshots: HashMap<HashKey, Value>,
     pub insertion_order: Vec<HashKey>,
+    pub entry_slots: Vec<Option<HashKey>>,
+    pub free_slots: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -744,6 +746,45 @@ impl LispHashTable {
             data: HashMap::with_capacity(size.max(0) as usize),
             key_snapshots: HashMap::with_capacity(size.max(0) as usize),
             insertion_order: Vec::with_capacity(size.max(0) as usize),
+            entry_slots: Vec::with_capacity(size.max(0) as usize),
+            free_slots: Vec::new(),
+        }
+    }
+
+    pub fn note_hash_key_inserted(&mut self, key: HashKey) {
+        if let Some(slot) = self.free_slots.pop()
+            && slot < self.entry_slots.len()
+        {
+            debug_assert!(self.entry_slots[slot].is_none());
+            self.entry_slots[slot] = Some(key);
+            return;
+        }
+        self.entry_slots.push(Some(key));
+    }
+
+    pub fn note_hash_key_removed(&mut self, key: &HashKey) {
+        if let Some(slot) = self
+            .entry_slots
+            .iter()
+            .position(|entry| entry.as_ref() == Some(key))
+        {
+            self.entry_slots[slot] = None;
+            self.free_slots.push(slot);
+        }
+    }
+
+    pub fn clear_hash_slots(&mut self) {
+        self.entry_slots.clear();
+        self.free_slots.clear();
+    }
+
+    pub fn rebuild_hash_slots_from_insertion_order(&mut self) {
+        self.entry_slots.clear();
+        self.free_slots.clear();
+        for key in &self.insertion_order {
+            if self.data.contains_key(key) {
+                self.entry_slots.push(Some(key.clone()));
+            }
         }
     }
 }
@@ -769,7 +810,8 @@ pub(crate) fn build_hash_table_literal_value(
             table.data.insert(key.clone(), val_value);
             if inserting_new_key {
                 table.key_snapshots.insert(key.clone(), key_value);
-                table.insertion_order.push(key);
+                table.insertion_order.push(key.clone());
+                table.note_hash_key_inserted(key);
             }
         }
     });

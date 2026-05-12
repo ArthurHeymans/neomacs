@@ -253,7 +253,8 @@ fn put_print_number_table_entry(
         table.data.insert(key.clone(), entry_value);
         if inserting_new_key {
             table.key_snapshots.insert(key.clone(), key_value);
-            table.insertion_order.push(key);
+            table.insertion_order.push(key.clone());
+            table.note_hash_key_inserted(key);
         }
     });
 }
@@ -267,6 +268,7 @@ fn remove_print_number_table_t_entries(table_value: Value) {
         let data = &table.data;
         table.key_snapshots.retain(|key, _| data.contains_key(key));
         table.insertion_order.retain(|key| data.contains_key(key));
+        table.rebuild_hash_slots_from_insertion_order();
     });
 }
 

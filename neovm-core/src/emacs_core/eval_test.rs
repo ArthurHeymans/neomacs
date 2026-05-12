@@ -7320,6 +7320,29 @@ fn maphash_roots_reconstructed_keys_across_exact_gc() {
 }
 
 #[test]
+fn maphash_walks_live_hash_slots_during_mutation_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(let ((h (make-hash-table :test 'eq))
+                 seen)
+             (puthash 'a 1 h)
+             (puthash 'b 2 h)
+             (maphash (lambda (k _v)
+                        (push k seen)
+                        (when (eq k 'a)
+                          (puthash 'c 3 h)
+                          (remhash 'b h)))
+                      h)
+             (list (sort seen (lambda (a b)
+                                (string< (symbol-name a) (symbol-name b))))
+                   (hash-table-count h)
+                   (gethash 'b h 'missing)
+                   (gethash 'c h 'missing)))"#,
+    );
+    assert_eq!(result, "OK ((a c) 2 missing 3)");
+}
+
+#[test]
 fn features_variable_controls_featurep_and_require() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
