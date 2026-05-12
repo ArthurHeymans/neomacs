@@ -153,11 +153,9 @@ fn builtin_move_marker_matches_set_marker_behavior() {
         buf.insert("abcdef");
     }
     let marker = builtin_make_marker(vec![]).expect("make marker");
-    let moved = builtin_move_marker(
-        &mut eval,
-        vec![marker, Value::fixnum(3), Value::string("*scratch*")],
-    )
-    .expect("move marker");
+    let buffer = Value::make_buffer(eval.buffers.current_buffer_id().unwrap());
+    let moved = builtin_move_marker(&mut eval, vec![marker, Value::fixnum(3), buffer])
+        .expect("move marker");
     assert!(is_marker(&moved));
     assert_eq!(call_marker_position(vec![moved]).unwrap(), Value::fixnum(3));
     assert_eq!(

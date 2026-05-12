@@ -1,6 +1,7 @@
 use super::*;
+use crate::buffer::BufferId;
 use crate::emacs_core::intern::{intern, intern_uninterned, resolve_sym};
-use crate::emacs_core::marker::make_marker_value_with_id;
+use crate::heap_types::LispMarker;
 use crate::tagged::header::CLOSURE_ARGLIST;
 
 /// Helper: set up a temporary heap for tests that use Value constructors.
@@ -181,16 +182,33 @@ fn string_equality() {
     });
 }
 
+fn test_marker(buffer: Option<BufferId>, bytepos: usize, marker_id: u64) -> Value {
+    Value::make_marker(LispMarker {
+        buffer,
+        insertion_type: false,
+        marker_id: Some(marker_id),
+        bytepos,
+        charpos: bytepos,
+        last_position_valid: buffer.is_some(),
+        next_marker: std::ptr::null_mut(),
+    })
+}
+
 #[test]
-fn marker_equal_ignores_internal_tracking_id() {
+fn marker_equal_matches_gnu_buffer_and_bytepos_rules() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
-        let left = make_marker_value_with_id(None, Some(4), false, Some(1));
-        let right = make_marker_value_with_id(None, Some(4), false, Some(2));
-        let different = make_marker_value_with_id(None, Some(5), false, Some(1));
+        let detached_left = test_marker(None, 4, 1);
+        let detached_right = test_marker(None, 5, 2);
+        let attached_left = test_marker(Some(BufferId(1)), 4, 1);
+        let attached_same = test_marker(Some(BufferId(1)), 4, 2);
+        let attached_different_pos = test_marker(Some(BufferId(1)), 5, 3);
+        let attached_different_buffer = test_marker(Some(BufferId(2)), 4, 4);
 
-        assert!(equal_value(&left, &right, 0));
-        assert!(!equal_value(&left, &different, 0));
+        assert!(equal_value(&detached_left, &detached_right, 0));
+        assert!(equal_value(&attached_left, &attached_same, 0));
+        assert!(!equal_value(&attached_left, &attached_different_pos, 0));
+        assert!(!equal_value(&attached_left, &attached_different_buffer, 0));
     });
 }
 
