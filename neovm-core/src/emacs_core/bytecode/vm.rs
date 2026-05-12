@@ -566,9 +566,24 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Op::StackRef(n) => {
-                    let idx = stk!().len().saturating_sub(1 + *n as usize);
-                    let val = stk!()[idx];
-                    stk_push!(val);
+                    let offset = 1 + *n as usize;
+                    let len = stk!().len();
+                    if offset <= len {
+                        // Valid bytecode references an existing stack slot.
+                        // Keep the hot path to one explicit check and avoid
+                        // the slice indexer's second bounds check.
+                        let val = unsafe { *stk!().get_unchecked(len - offset) };
+                        stk_push!(val);
+                    } else {
+                        self.resume_nonlocal(
+                            func,
+                            &mut pc_local,
+                            handlers,
+                            bind_stack,
+                            signal("error", vec![Value::string("Invalid byte-code")]),
+                        )?;
+                        continue;
+                    }
                 }
                 Op::StackSet(n) => {
                     if stk!().is_empty() {

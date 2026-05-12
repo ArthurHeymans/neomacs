@@ -143,6 +143,17 @@ fn vm_invalid_constant_reference_signals_instead_of_panicking() {
 }
 
 #[test]
+fn vm_invalid_stack_ref_signals_instead_of_panicking() {
+    crate::test_utils::init_test_tracing();
+    let rendered = vm_eval_str(
+        "(condition-case err
+             (funcall (make-byte-code 0 \"\\000\\207\" [] 1))
+           (error (list 'caught (car err) (car (cdr err)))))",
+    );
+    assert_eq!(rendered, "OK (caught error \"Invalid byte-code\")");
+}
+
+#[test]
 fn vm_integer_arg_descriptor_does_not_dynamic_bind_dummy_args_like_gnu() {
     crate::test_utils::init_test_tracing();
     let rendered = vm_eval_str(
