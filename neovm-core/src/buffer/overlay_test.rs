@@ -25,6 +25,26 @@ fn insert_and_delete_overlay_preserves_object_identity() {
 }
 
 #[test]
+fn same_range_overlays_remain_distinct_objects() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(2, 5);
+    let second = alloc_overlay(2, 5);
+    list.insert_overlay(first);
+    list.insert_overlay(second);
+
+    let overlays = list.overlays_at(3);
+    assert_eq!(overlays.len(), 2);
+    assert!(overlays.iter().any(|overlay| eq_value(overlay, &first)));
+    assert!(overlays.iter().any(|overlay| eq_value(overlay, &second)));
+
+    assert!(list.delete_overlay(first));
+    let overlays = list.overlays_at(3);
+    assert_eq!(overlays.len(), 1);
+    assert!(eq_value(&overlays[0], &second));
+}
+
+#[test]
 fn overlay_put_preserves_existing_property_position() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();

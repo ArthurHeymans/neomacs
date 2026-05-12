@@ -12,7 +12,7 @@ use std::ops::Bound::{Excluded, Unbounded};
 
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::plist;
-use crate::emacs_core::value::{Value, ValueKind};
+use crate::emacs_core::value::{Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::OverlayData;
 
@@ -111,7 +111,7 @@ impl Itree {
                 true
             }
             Some(n) => {
-                if n.overlay == overlay {
+                if eq_value(&n.overlay, &overlay) {
                     // Already present — update endpoints
                     n.start = start;
                     n.end = end;
@@ -144,7 +144,7 @@ impl Itree {
         let Some(mut boxed) = node.take() else {
             return false;
         };
-        if boxed.overlay == overlay {
+        if eq_value(&boxed.overlay, &overlay) {
             // Remove this node, replace with merged children
             let left = boxed.left.take();
             let right = boxed.right.take();
@@ -160,7 +160,7 @@ impl Itree {
             return true;
         }
         // Recurse into child
-        let go_left = overlay < boxed.overlay;
+        let go_left = overlay.bits() < boxed.overlay.bits();
         let found = if go_left {
             Self::remove_node(&mut boxed.left, overlay)
         } else {
@@ -690,8 +690,12 @@ fn compare_overlay_precedence(left: Value, right: Value) -> Ordering {
         }
     } else if left_subpriority != right_subpriority {
         left_subpriority.cmp(&right_subpriority)
+    } else if eq_value(&left, &right) {
+        Ordering::Equal
+    } else if left.bits() < right.bits() {
+        Ordering::Less
     } else {
-        left.cmp(&right)
+        Ordering::Greater
     }
 }
 
