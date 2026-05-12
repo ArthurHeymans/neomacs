@@ -234,6 +234,19 @@ impl OverlayList {
         true
     }
 
+    pub fn delete_all_overlays(&mut self) {
+        let live: Vec<Value> = self.overlays.iter().copied().collect();
+        for overlay in live {
+            let _ = overlay.with_overlay_data_mut(|data| {
+                data.buffer = None;
+            });
+        }
+        self.overlays.clear();
+        self.by_start.clear();
+        self.by_end.clear();
+        self.itree = Itree::new();
+    }
+
     pub fn overlay_put(&mut self, overlay: Value, prop: Value, value: Value) -> Result<bool, Flow> {
         overlay
             .with_overlay_data_mut(|data| {

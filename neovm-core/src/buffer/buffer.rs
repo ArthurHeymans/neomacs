@@ -1578,7 +1578,7 @@ impl Buffer {
         self.local_var_alist = Value::NIL;
         self.local_flags = 0;
         self.keymap = Value::NIL;
-        self.overlays = OverlayList::new();
+        self.overlays.delete_all_overlays();
         self.text = BufferText::new();
         self.mark_marker_id = None;
         self.mark_marker_ptr = std::ptr::null_mut();
@@ -3450,12 +3450,7 @@ impl BufferManager {
 
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        let ids = buf
-            .overlays
-            .overlays_in(buf.point_min_byte(), buf.point_max_byte());
-        for ov_id in ids {
-            buf.overlays.delete_overlay(ov_id);
-        }
+        buf.overlays.delete_all_overlays();
         Some(())
     }
 

@@ -7792,6 +7792,26 @@ fn killed_buffer_slots_and_local_defaults_match_gnu() {
 }
 
 #[test]
+fn killed_buffer_detaches_overlay_objects_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((buf (get-buffer-create "dead-overlay"))
+                 ov)
+             (set-buffer buf)
+             (erase-buffer)
+             (insert "abc")
+             (setq ov (make-overlay 1 2))
+             (set-buffer (get-buffer-create "*scratch*"))
+             (kill-buffer buf)
+             (list (overlay-start ov)
+                   (overlay-end ov)
+                   (overlay-buffer ov)
+                   (delete-overlay ov)))"#,
+    );
+    assert_eq!(result, "OK (nil nil nil nil)");
+}
+
+#[test]
 fn run_window_scroll_functions_uses_scrolled_window_buffer_context() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
