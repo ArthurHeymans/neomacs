@@ -3624,6 +3624,18 @@ fn load_hash_key_owned(decoder: &mut LoadDecoder, k: DumpHashKey) -> HashKey {
                 .map(|item| load_hash_key_owned(decoder, item))
                 .collect(),
         ),
+        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(buffer, bytepos),
+        DumpHashKey::Overlay {
+            buffer,
+            start,
+            end,
+            plist,
+        } => HashKey::Overlay {
+            buffer,
+            start,
+            end,
+            plist: Box::new(load_hash_key_owned(decoder, *plist)),
+        },
         DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(len as usize, bits),
         DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
             Box::new(load_hash_key_owned(decoder, *sym)),
