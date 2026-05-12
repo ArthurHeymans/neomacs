@@ -2212,6 +2212,7 @@ impl<'a> Vm<'a> {
                 if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
                     buf.local_var_alist = new_alist;
                 }
+                return self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set");
             }
         }
 
