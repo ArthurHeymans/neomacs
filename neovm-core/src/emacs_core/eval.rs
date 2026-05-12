@@ -1,11 +1,12 @@
 //! Context — special forms, function application, and dispatch.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use super::abbrev::AbbrevManager;
@@ -1793,7 +1794,7 @@ pub struct Context {
     /// Keyed by symbol id; entries are validated against the obarray's
     /// `function_epoch` so that any `defalias` / `fset` / autoload
     /// installation immediately invalidates stale lookups.
-    named_call_cache: HashMap<SymId, NamedCallCacheEntry>,
+    named_call_cache: FxHashMap<SymId, NamedCallCacheEntry>,
     /// Small hot cache for GNU-shaped lexical env alist lookups.
     lexenv_assq_cache: LexenvAssqCache,
     /// Small hot cache for GNU-shaped lexical special declarations.
@@ -1817,7 +1818,7 @@ pub struct Context {
     /// argument tail, so equivalent cons trees rebuilt from cached/bootstrap
     /// forms can reuse the same expansion.
     pub(crate) runtime_macro_expansion_cache:
-        HashMap<(usize, usize, u64), RuntimeMacroExpansionCacheEntry>,
+        FxHashMap<(usize, usize, u64), RuntimeMacroExpansionCacheEntry>,
     /// When true, collect detailed timing counters for macro/eager-load paths.
     macro_perf_enabled: bool,
     macro_perf_stats: MacroPerfStats,
@@ -1829,11 +1830,11 @@ pub struct Context {
     /// lambda syntax plus lexical-environment shape. The cached data stores
     /// only the selected env template and trimmed body, so captured values are
     /// always rebuilt from the current runtime environment on a hit.
-    interpreted_closure_trim_cache: HashMap<u64, Vec<InterpretedClosureTrimCacheEntry>>,
+    interpreted_closure_trim_cache: FxHashMap<u64, Vec<InterpretedClosureTrimCacheEntry>>,
     /// Value-native cache for runtime callable-cons lambda instantiation.
     /// Keyed by a shallow Value fingerprint of the source callable plus the
     /// lexical environment shape.
-    interpreted_closure_value_cache: HashMap<(u64, u64), Vec<InterpretedClosureValueCacheEntry>>,
+    interpreted_closure_value_cache: FxHashMap<(u64, u64), Vec<InterpretedClosureValueCacheEntry>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4417,7 +4418,10 @@ impl Context {
             compiler_function_overrides_symbol: core_eval_symbols
                 .compiler_function_overrides_symbol,
             compiler_function_overrides_active,
-            named_call_cache: HashMap::with_capacity(NAMED_CALL_CACHE_CAPACITY),
+            named_call_cache: FxHashMap::with_capacity_and_hasher(
+                NAMED_CALL_CACHE_CAPACITY,
+                Default::default(),
+            ),
             lexenv_assq_cache: LexenvAssqCache::default(),
             lexenv_special_cache: LexenvSpecialCache::default(),
 
@@ -4427,12 +4431,12 @@ impl Context {
             macro_cache_misses: 0,
             macro_expand_total_us: 0,
             macro_cache_disabled: false,
-            runtime_macro_expansion_cache: HashMap::new(),
+            runtime_macro_expansion_cache: FxHashMap::default(),
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
-            interpreted_closure_trim_cache: HashMap::new(),
-            interpreted_closure_value_cache: HashMap::new(),
+            interpreted_closure_trim_cache: FxHashMap::default(),
+            interpreted_closure_value_cache: FxHashMap::default(),
         };
         ev.finish_runtime_activation(false);
         ev
@@ -4579,7 +4583,10 @@ impl Context {
             compiler_function_overrides_symbol: core_eval_symbols
                 .compiler_function_overrides_symbol,
             compiler_function_overrides_active,
-            named_call_cache: HashMap::with_capacity(NAMED_CALL_CACHE_CAPACITY),
+            named_call_cache: FxHashMap::with_capacity_and_hasher(
+                NAMED_CALL_CACHE_CAPACITY,
+                Default::default(),
+            ),
             lexenv_assq_cache: LexenvAssqCache::default(),
             lexenv_special_cache: LexenvSpecialCache::default(),
 
@@ -4589,12 +4596,12 @@ impl Context {
             macro_cache_misses: 0,
             macro_expand_total_us: 0,
             macro_cache_disabled: false,
-            runtime_macro_expansion_cache: HashMap::new(),
+            runtime_macro_expansion_cache: FxHashMap::default(),
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
-            interpreted_closure_trim_cache: HashMap::new(),
-            interpreted_closure_value_cache: HashMap::new(),
+            interpreted_closure_trim_cache: FxHashMap::default(),
+            interpreted_closure_value_cache: FxHashMap::default(),
         };
         ev.initialize_gc_stack_bottom();
         ev.setup_thread_locals();
