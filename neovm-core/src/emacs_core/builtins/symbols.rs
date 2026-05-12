@@ -6,6 +6,7 @@ use crate::emacs_core::fontset;
 use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, is_canonical_id};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
+use crate::emacs_core::{indent, xdisp};
 
 // ===========================================================================
 // Symbol operations (need evaluator for obarray access)
@@ -1637,6 +1638,98 @@ pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: usize) -> usize {
+    buf.char_after_emacs_len(pos).unwrap_or(1).max(1)
+}
+
+fn next_visible_line_start(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    mut pos: usize,
+) -> Result<Option<usize>, Flow> {
+    let point_max = match eval.buffers.get(buffer_id) {
+        Some(buf) => buf.point_max_byte(),
+        None => return Ok(None),
+    };
+
+    while pos < point_max {
+        if let Some(next_visible) = xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, pos)?
+        {
+            if next_visible > pos {
+                pos = next_visible.min(point_max);
+                continue;
+            }
+        }
+
+        let (code, len) = match eval.buffers.get(buffer_id) {
+            Some(buf) => match buf.char_code_after(pos) {
+                Some(code) => (code, char_len_at(buf, pos)),
+                None => return Ok(None),
+            },
+            None => return Ok(None),
+        };
+        pos += len;
+        if code == b'\n' as u32 {
+            return Ok(Some(pos));
+        }
+    }
+
+    Ok(None)
+}
+
+fn previous_visible_line_start(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    pos: usize,
+) -> Result<Option<(usize, bool)>, Flow> {
+    let (point_min, point_max) = match eval.buffers.get(buffer_id) {
+        Some(buf) => (buf.point_min_byte(), buf.point_max_byte()),
+        None => return Ok(None),
+    };
+    if pos <= point_min {
+        return Ok(None);
+    }
+
+    let mut scan = point_min;
+    let mut previous_start = None;
+    let mut current_start = point_min;
+    while scan < point_max && scan < pos {
+        if let Some(next_visible) = xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, scan)?
+        {
+            if next_visible > scan {
+                scan = next_visible.min(point_max);
+                continue;
+            }
+        }
+
+        let (code, len) = match eval.buffers.get(buffer_id) {
+            Some(buf) => match buf.char_code_after(scan) {
+                Some(code) => (code, char_len_at(buf, scan)),
+                None => break,
+            },
+            None => return Ok(None),
+        };
+        scan += len;
+        if code == b'\n' as u32 {
+            let next_start = scan;
+            if next_start <= pos {
+                previous_start = Some(current_start);
+                current_start = next_start;
+            } else {
+                break;
+            }
+        }
+    }
+
+    if let Some(previous_start) = previous_start {
+        Ok(Some((previous_start, true)))
+    } else if pos > current_start {
+        Ok(Some((current_start, false)))
+    } else {
+        Ok(None)
+    }
+}
+
 /// `(vertical-motion LINES &optional WINDOW CUR-COL)` -> integer
 ///
 /// Move point to the start of the screen line LINES lines down (or up if
@@ -1649,7 +1742,6 @@ pub(crate) fn builtin_vertical_motion(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let buffers = &mut eval.buffers;
     expect_range_args("vertical-motion", &args, 1, 3)?;
     // First arg can be LINES (integer) or (COLS . LINES) cons pair.
     // When (COLS . LINES), move LINES then position at column COLS.
@@ -1691,25 +1783,22 @@ pub(crate) fn builtin_vertical_motion(
         }
     }
 
-    let Some(current_id) = buffers.current_buffer_id() else {
+    let Some(current_id) = eval.buffers.current_buffer_id() else {
         return Ok(Value::fixnum(0));
     };
-    let Some(buf) = buffers.get(current_id) else {
+    let Some(buf) = eval.buffers.get(current_id) else {
         return Ok(Value::fixnum(0));
     };
-    let text = buf.text.to_string();
     let pt = buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte);
-    let bytes = text.as_bytes();
     let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
         let mut bol = pt;
-        while bol > begv && bytes[bol - 1] != b'\n' {
+        while bol > begv && buf.text.emacs_byte_at(bol - 1) != Some(b'\n') {
             bol -= 1;
         }
-        let _ = buffers.goto_buffer_byte(current_id, bol);
+        let _ = eval.buffers.goto_buffer_byte(current_id, bol);
         return Ok(Value::fixnum(0));
     }
 
@@ -1718,58 +1807,45 @@ pub(crate) fn builtin_vertical_motion(
 
     if lines > 0 {
         for _ in 0..lines {
-            let mut nl = pos;
-            while nl < zv && bytes[nl] != b'\n' {
-                nl += 1;
-            }
-            if nl >= zv {
+            let Some(next) = next_visible_line_start(eval, current_id, pos)? else {
                 break;
-            }
-            pos = nl + 1;
+            };
+            pos = next;
             moved += 1;
         }
     } else if lines < 0 {
-        // Move backward: go to beginning of current line first.
-        while pos > begv && bytes[pos - 1] != b'\n' {
-            pos -= 1;
-        }
         let target = (-lines) as usize;
         for _ in 0..target {
-            if pos <= begv {
+            let Some((prev, line_moved)) = previous_visible_line_start(eval, current_id, pos)?
+            else {
+                break;
+            };
+            pos = prev;
+            if line_moved {
+                moved -= 1;
+            } else {
                 break;
             }
-            pos -= 1;
-            while pos > begv && bytes[pos - 1] != b'\n' {
-                pos -= 1;
-            }
-            moved -= 1;
         }
     } else {
         // lines == 0 but cols is Some: stay on current line, go to BOL first
-        while pos > begv && bytes[pos - 1] != b'\n' {
+        while pos > begv
+            && eval
+                .buffers
+                .get(current_id)
+                .and_then(|buf| buf.text.emacs_byte_at(pos - 1))
+                != Some(b'\n')
+        {
             pos -= 1;
         }
     }
 
     // Now pos is at beginning of target line.
     // If COLS was specified, advance to that column.
+    let _ = eval.buffers.goto_buffer_byte(current_id, pos);
     if let Some(target_col) = cols {
-        if target_col > 0 {
-            let target_col = target_col as usize;
-            let mut col: usize = 0;
-            while pos < zv && bytes[pos] != b'\n' && col < target_col {
-                // Handle tab characters
-                if bytes[pos] == b'\t' {
-                    col = (col + 8) & !7; // tab stops every 8
-                } else {
-                    col += 1;
-                }
-                pos += 1;
-            }
-        }
+        let _ = indent::builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
     }
-
-    let _ = buffers.goto_buffer_byte(current_id, pos);
     Ok(Value::fixnum(moved))
 }
 

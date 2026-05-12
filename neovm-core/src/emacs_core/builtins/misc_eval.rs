@@ -309,6 +309,71 @@ pub(crate) fn builtin_next_single_char_property_change(
     builtin_next_single_char_property_change_in_buffers(&eval.obarray, &eval.buffers, args)
 }
 
+fn char_property_buffer_id_for_object(
+    buffers: &crate::buffer::BufferManager,
+    object: Option<&Value>,
+) -> Result<crate::buffer::BufferId, Flow> {
+    match object {
+        None => buffers
+            .current_buffer()
+            .map(|b| b.id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+        Some(v) if v.is_nil() => buffers
+            .current_buffer()
+            .map(|b| b.id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+        Some(v) if v.is_buffer() => Ok(v.as_buffer_id().expect("buffer value has id")),
+        Some(other) => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("buffer-or-string-p"), *other],
+        )),
+    }
+}
+
+fn next_char_property_change_for_buffer(
+    buf: &crate::buffer::buffer::Buffer,
+    position: i64,
+    limit: i64,
+) -> Result<i64, Flow> {
+    let byte_pos = textprop::validate_buffer_point(buf, position)?;
+    let overlay_next = buf.overlays.next_boundary_after(byte_pos);
+    let point_max = textprop::byte_to_elisp_pos(buf, buf.point_max());
+    let mut temp = overlay_next.map_or(point_max, |next| textprop::byte_to_elisp_pos(buf, next));
+    if limit < temp {
+        temp = limit;
+    }
+
+    if let Some(next) = buf.text.text_props_next_change(byte_pos) {
+        let next_pos = textprop::byte_to_elisp_pos(buf, next);
+        if next < buf.point_max() && next_pos < temp {
+            return Ok(next_pos);
+        }
+    }
+    Ok(temp)
+}
+
+fn previous_char_property_change_for_buffer(
+    buf: &crate::buffer::buffer::Buffer,
+    position: i64,
+    limit: i64,
+) -> Result<i64, Flow> {
+    let byte_pos = textprop::validate_buffer_point(buf, position)?;
+    let overlay_prev = buf.overlays.previous_boundary_before(byte_pos);
+    let point_min = textprop::byte_to_elisp_pos(buf, buf.point_min());
+    let mut temp = overlay_prev.map_or(point_min, |prev| textprop::byte_to_elisp_pos(buf, prev));
+    if limit > temp {
+        temp = limit;
+    }
+
+    if let Some(prev) = buf.text.text_props_previous_change(byte_pos) {
+        let prev_pos = textprop::byte_to_elisp_pos(buf, prev);
+        if prev > buf.point_min() && prev_pos > temp {
+            return Ok(prev_pos);
+        }
+    }
+    Ok(temp)
+}
+
 pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     obarray: &crate::emacs_core::symbol::Obarray,
     buffers: &crate::buffer::BufferManager,
@@ -337,30 +402,46 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(s.schars() as i64));
     }
 
-    let result = super::textprop::builtin_next_single_property_change_in_state(
-        obarray,
-        buffers,
-        args.clone(),
-    )?;
-    if !result.is_nil() {
-        return Ok(result);
+    let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let prop = super::textprop::expect_property_key(&args[1])?;
+    let object = args.get(2);
+    let buf_id = char_property_buffer_id_for_object(buffers, object)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    let point_max = buf.point_max_char() as i64 + 1;
+    let mut get_args = vec![Value::fixnum(position), prop];
+    if let Some(object) = object {
+        get_args.push(*object);
+    }
+    let initial_value =
+        super::textprop::builtin_get_char_property_in_state(obarray, buffers, get_args)?;
+    let limit = match args.get(3) {
+        Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
+        _ => point_max,
+    };
+
+    if position >= limit {
+        return Ok(Value::fixnum(limit.min(point_max)));
     }
 
-    let upper = match args.get(2) {
-        Some(v) if v.is_buffer() => {
-            let buf = buffers
-                .get(v.as_buffer_id().unwrap())
-                .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-            buf.point_max_char() as i64 + 1
+    let mut cursor = position;
+    loop {
+        cursor = next_char_property_change_for_buffer(buf, cursor, limit)?;
+        if cursor >= limit {
+            return Ok(Value::fixnum(limit));
         }
-        _ => {
-            let buf = buffers
-                .current_buffer()
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            buf.point_max_char() as i64 + 1
+
+        let mut value_args = vec![Value::fixnum(cursor), prop];
+        if let Some(object) = object {
+            value_args.push(*object);
         }
-    };
-    Ok(Value::fixnum(upper))
+        let value =
+            super::textprop::builtin_get_char_property_in_state(obarray, buffers, value_args)?;
+        if !eq_value(&value, &initial_value) || cursor >= point_max {
+            return Ok(Value::fixnum(cursor));
+        }
+    }
 }
 
 pub(crate) fn builtin_previous_single_char_property_change(
@@ -395,30 +476,51 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(0));
     }
 
-    let result = super::textprop::builtin_previous_single_property_change_in_state(
-        obarray,
-        buffers,
-        args.clone(),
-    )?;
-    if !result.is_nil() {
-        return Ok(result);
+    let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let prop = super::textprop::expect_property_key(&args[1])?;
+    let object = args.get(2);
+    let buf_id = char_property_buffer_id_for_object(buffers, object)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    let point_min = buf.point_min_char() as i64 + 1;
+    let limit = match args.get(3) {
+        Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
+        _ => point_min,
+    };
+
+    if position <= limit {
+        return Ok(Value::fixnum(limit.max(point_min)));
     }
 
-    let lower = match args.get(2) {
-        Some(v) if v.is_buffer() => {
-            let buf = buffers
-                .get(v.as_buffer_id().unwrap())
-                .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-            buf.point_min_char() as i64 + 1
+    let initial_position = position - i64::from(position >= 0);
+    let mut get_args = vec![Value::fixnum(initial_position), prop];
+    if let Some(object) = object {
+        get_args.push(*object);
+    }
+    let initial_value =
+        super::textprop::builtin_get_char_property_in_state(obarray, buffers, get_args)?;
+
+    let mut cursor = position;
+    loop {
+        cursor = previous_char_property_change_for_buffer(buf, cursor, limit)?;
+        if cursor <= limit {
+            return Ok(Value::fixnum(limit));
         }
-        _ => {
-            let buf = buffers
-                .current_buffer()
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            buf.point_min_char() as i64 + 1
+        if cursor <= point_min {
+            return Ok(Value::fixnum(cursor));
         }
-    };
-    Ok(Value::fixnum(lower))
+
+        let mut value_args = vec![Value::fixnum(cursor - 1), prop];
+        if let Some(object) = object {
+            value_args.push(*object);
+        }
+        let value =
+            super::textprop::builtin_get_char_property_in_state(obarray, buffers, value_args)?;
+        if !eq_value(&value, &initial_value) {
+            return Ok(Value::fixnum(cursor));
+        }
+    }
 }
 
 pub(crate) fn builtin_defalias(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {

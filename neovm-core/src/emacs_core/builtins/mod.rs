@@ -9095,7 +9095,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- Display engine (xdisp) --
     ctx.defsubr(
         "invisible-p",
-        |_ctx, args| super::xdisp::builtin_invisible_p(args),
+        |ctx, args| super::xdisp::builtin_invisible_p(ctx, args),
         1,
         Some(1),
     );

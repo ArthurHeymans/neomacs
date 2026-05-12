@@ -201,6 +201,32 @@ fn eval_column_and_indentation_subset() {
 }
 
 #[test]
+fn current_column_and_move_to_column_treat_invisible_text_as_zero_width() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let value = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "aaaa\nbbbb\ncccc\n")
+                 (put-text-property 5 10 'invisible t)
+                 (list
+                  (mapcar (lambda (p)
+                            (goto-char p)
+                            (current-column))
+                          (number-sequence 5 11))
+                  (progn
+                    (goto-char 6)
+                    (move-to-column 2)
+                    (list (point) (current-column) (char-after)))))"#,
+        )
+        .expect("invisible column scan");
+    assert_eq!(
+        super::super::print::print_value(&value),
+        "((4 0 0 0 0 0 0) (10 0 10))"
+    );
+}
+
+#[test]
 fn current_column_and_indentation_handle_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

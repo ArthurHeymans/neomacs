@@ -12,6 +12,7 @@ use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
 use crate::buffer::{BufferId, BufferManager};
+use crate::window::{FrameManager, WindowId};
 
 pub(crate) fn init_textprop_vars(
     obarray: &mut crate::emacs_core::symbol::Obarray,
@@ -506,6 +507,53 @@ fn resolve_text_property_buffer_id_in_buffers(
         Some(v) if v.is_buffer() => v
             .as_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("Invalid buffer")])),
+        Some(other) => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("buffer-or-string-p"), *other],
+        )),
+    }
+}
+
+fn resolve_char_property_target_in_state(
+    frames: Option<&FrameManager>,
+    buffers: &BufferManager,
+    object: Option<&Value>,
+) -> Result<(BufferId, Option<WindowId>), Flow> {
+    match object {
+        None => buffers
+            .current_buffer()
+            .map(|b| (b.id, None))
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+        Some(v) if v.is_nil() => buffers
+            .current_buffer()
+            .map(|b| (b.id, None))
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+        Some(v) if v.is_buffer() => v
+            .as_buffer_id()
+            .map(|id| (id, None))
+            .ok_or_else(|| signal("error", vec![Value::string("Invalid buffer")])),
+        Some(v) if v.is_window() => {
+            let Some(frames) = frames else {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("buffer-or-string-p"), *v],
+                ));
+            };
+            let wid = WindowId(v.as_window_id().expect("window value has an id"));
+            let window = frames.lookup_window(wid).ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("window-live-p"), *v],
+                )
+            })?;
+            let buffer_id = window.buffer_id().ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("window-live-p"), *v],
+                )
+            })?;
+            Ok((buffer_id, Some(wid)))
+        }
         Some(other) => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("buffer-or-string-p"), *other],
@@ -1035,11 +1083,22 @@ pub(crate) fn buffer_overlay_property_at_byte_pos(
     buf: &crate::buffer::buffer::Buffer,
     byte_pos: usize,
     prop: Value,
+    window_id: Option<WindowId>,
 ) -> Option<(Value, Value)> {
     let mut overlays = buf.overlays.overlays_at(byte_pos);
     buf.overlays
         .sort_overlay_ids_by_priority_desc(&mut overlays);
     for overlay in overlays {
+        if let Some(wid) = window_id {
+            let window_prop =
+                lookup_overlay_property(obarray, buffers, overlay, Value::symbol("window"));
+            if window_prop
+                .as_window_id()
+                .is_some_and(|overlay_wid| overlay_wid != wid.0)
+            {
+                continue;
+            }
+        }
         let value = lookup_overlay_property(obarray, buffers, overlay, prop);
         if !value.is_nil() {
             return Some((value, overlay));
@@ -1066,12 +1125,21 @@ pub(crate) fn builtin_get_char_property(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_get_char_property_in_state(&eval.obarray, &eval.buffers, args)
+    builtin_get_char_property_with_frames(&eval.obarray, &eval.buffers, Some(&eval.frames), args)
 }
 
 pub(crate) fn builtin_get_char_property_in_state(
     obarray: &Obarray,
     buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_get_char_property_with_frames(obarray, buffers, None, args)
+}
+
+fn builtin_get_char_property_with_frames(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    frames: Option<&FrameManager>,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("get-char-property", &args, 2)?;
@@ -1083,7 +1151,7 @@ pub(crate) fn builtin_get_char_property_in_state(
         return builtin_get_text_property_in_state(obarray, buffers, args);
     }
 
-    let buf_id = resolve_text_property_buffer_id_in_buffers(buffers, args.get(2))?;
+    let (buf_id, window_id) = resolve_char_property_target_in_state(frames, buffers, args.get(2))?;
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
@@ -1093,7 +1161,7 @@ pub(crate) fn builtin_get_char_property_in_state(
     }
 
     if let Some((value, _overlay_id)) =
-        buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop)
+        buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop, window_id)
     {
         return Ok(value);
     }
@@ -2033,12 +2101,26 @@ pub(crate) fn builtin_get_char_property_and_overlay(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_get_char_property_and_overlay_in_state(&eval.obarray, &eval.buffers, args)
+    builtin_get_char_property_and_overlay_with_frames(
+        &eval.obarray,
+        &eval.buffers,
+        Some(&eval.frames),
+        args,
+    )
 }
 
 pub(crate) fn builtin_get_char_property_and_overlay_in_state(
     obarray: &Obarray,
     buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_get_char_property_and_overlay_with_frames(obarray, buffers, None, args)
+}
+
+fn builtin_get_char_property_and_overlay_with_frames(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    frames: Option<&FrameManager>,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("get-char-property-and-overlay", &args, 2)?;
@@ -2052,7 +2134,7 @@ pub(crate) fn builtin_get_char_property_and_overlay_in_state(
         return Ok(Value::cons(value, Value::NIL));
     }
 
-    let buf_id = resolve_text_property_buffer_id_in_buffers(buffers, args.get(2))?;
+    let (buf_id, window_id) = resolve_char_property_target_in_state(frames, buffers, args.get(2))?;
 
     if let Some(buf) = buffers.get(buf_id) {
         let byte_pos = validate_buffer_point(buf, pos)?;
@@ -2060,7 +2142,7 @@ pub(crate) fn builtin_get_char_property_and_overlay_in_state(
             return Ok(Value::cons(Value::NIL, Value::NIL));
         }
         if let Some((value, ov_val)) =
-            buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop)
+            buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop, window_id)
         {
             return Ok(Value::cons(value, ov_val));
         }

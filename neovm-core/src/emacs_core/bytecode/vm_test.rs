@@ -8936,6 +8936,61 @@ fn vm_motion_builtins_use_shared_current_buffer_state() {
 }
 
 #[test]
+fn vm_vertical_motion_uses_invisible_text_boundaries_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (insert "aaaa\nbbbb\ncccc\n")
+                 (put-text-property 5 10 'invisible t)
+                 (goto-char 5)
+                 (let ((forward (list (vertical-motion 1)
+                                      (point)
+                                      (line-number-at-pos)
+                                      (current-column)
+                                      (char-after))))
+                   (goto-char 11)
+                   (list forward
+                         (list (vertical-motion -1)
+                               (point)
+                               (line-number-at-pos)
+                               (current-column)
+                               (char-after)))))"#
+        ),
+        "OK ((1 11 3 0 99) (-1 1 1 0 97))"
+    );
+}
+
+#[test]
+fn vm_vertical_motion_does_not_count_missing_previous_line_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (insert "abc\ndef\n")
+                 (let (first second-bol second-mid)
+                   (goto-char 3)
+                   (setq first (list (vertical-motion -1)
+                                     (point)
+                                     (line-number-at-pos)
+                                     (current-column)))
+                   (goto-char 5)
+                   (setq second-bol (list (vertical-motion -1)
+                                          (point)
+                                          (line-number-at-pos)
+                                          (current-column)))
+                   (goto-char 6)
+                   (setq second-mid (list (vertical-motion -1)
+                                          (point)
+                                          (line-number-at-pos)
+                                          (current-column)))
+                   (list first second-bol second-mid)))"#
+        ),
+        "OK ((0 1 1 0) (-1 1 1 0) (-1 1 1 0))"
+    );
+}
+
+#[test]
 fn vm_region_bounds_use_shared_mark_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

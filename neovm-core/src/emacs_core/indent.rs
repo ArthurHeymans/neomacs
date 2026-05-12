@@ -134,6 +134,15 @@ struct DecodedUnit {
     width: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ColumnScan {
+    byte_pos: usize,
+    column: usize,
+    previous_byte_pos: usize,
+    previous_column: usize,
+    previous_code: Option<u32>,
+}
+
 fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
     let begv = buf.begv_byte;
     let zv = buf.zv_byte;
@@ -168,6 +177,95 @@ fn next_column_for_code(column: usize, code: u32, width: usize, tab_width: usize
     } else {
         column + width
     }
+}
+
+fn current_buffer_line_bounds(
+    ctx: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    point: usize,
+) -> Result<(usize, usize), Flow> {
+    let buf = ctx
+        .buffers
+        .get(buffer_id)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    Ok(line_bounds(buf, point))
+}
+
+fn scan_for_column(
+    ctx: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    end_byte: usize,
+    goal_column: Option<usize>,
+) -> Result<ColumnScan, Flow> {
+    let (mut scan, line_end, tab_width) = {
+        let buf = ctx
+            .buffers
+            .get(buffer_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let (bol, eol) = line_bounds(buf, buf.pt_byte);
+        (bol, eol, tab_width_in_state(&ctx.obarray, &[], Some(buf)))
+    };
+    let end = end_byte.min(line_end);
+    let goal = goal_column.unwrap_or(usize::MAX);
+    let mut column = 0usize;
+    let mut previous_byte_pos = scan;
+    let mut previous_column = 0usize;
+    let mut previous_code = None;
+
+    while scan < end {
+        if let Some(next_visible) =
+            super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, scan)?
+        {
+            if next_visible > scan {
+                scan = next_visible.min(end);
+                if scan >= end {
+                    break;
+                }
+                continue;
+            }
+        }
+
+        if column >= goal {
+            break;
+        }
+
+        let (code, char_len, width) = {
+            let buf = ctx
+                .buffers
+                .get(buffer_id)
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            let Some(code) = buf.char_code_after(scan) else {
+                break;
+            };
+            let char_len = buf.char_after_emacs_len(scan).unwrap_or(1).max(1);
+            let width = if crate::emacs_core::emacs_char::char_byte8_p(code) {
+                4
+            } else if let Some(ch) = char::from_u32(code) {
+                crate::encoding::char_width(ch)
+            } else {
+                1
+            };
+            (code, char_len, width)
+        };
+
+        if code == b'\n' as u32 {
+            break;
+        }
+
+        previous_byte_pos = scan;
+        previous_column = column;
+        previous_code = Some(code);
+        column = next_column_for_code(column, code, width, tab_width);
+        scan += char_len;
+    }
+
+    Ok(ColumnScan {
+        byte_pos: scan,
+        column,
+        previous_byte_pos,
+        previous_column,
+        previous_code,
+    })
 }
 
 fn decode_lisp_string_units(text: &LispString) -> Vec<DecodedUnit> {
@@ -345,16 +443,17 @@ pub(crate) fn builtin_current_column(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("current-column", &args, 0)?;
-    let Some(buf) = &ctx.buffers.current_buffer() else {
+    let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::fixnum(0));
     };
-
-    let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
-    let pt = buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte);
-    let (bol, _) = line_bounds(buf, pt);
-    let prefix = buf.buffer_substring_lisp_string(bol, pt);
-
-    Ok(Value::fixnum(column_for_lisp_string(&prefix, tabw) as i64))
+    let point = {
+        let Some(buf) = ctx.buffers.get(current_id) else {
+            return Ok(Value::fixnum(0));
+        };
+        buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte)
+    };
+    let scan = scan_for_column(ctx, current_id, point, None)?;
+    Ok(Value::fixnum(scan.column as i64))
 }
 
 /// (move-to-column COLUMN &optional FORCE) -> COLUMN-REACHED
@@ -379,43 +478,26 @@ pub(crate) fn builtin_move_to_column(
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
     let read_only = super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
     let pt = buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte);
-    let (bol, eol) = line_bounds(buf, pt);
-    let line = buf.buffer_substring_lisp_string(bol, eol);
     let buffer_name = buf.name_value();
 
     if target == 0 {
+        let (bol, _) = current_buffer_line_bounds(ctx, current_id, pt)?;
         let _ = ctx.buffers.goto_buffer_byte(current_id, bol);
         return Ok(Value::fixnum(0));
     }
 
-    let mut column = 0usize;
-    let mut dest_byte = bol;
-    let mut reached = 0usize;
-    let mut found = false;
     let mut tab_split: Option<(usize, usize, usize)> = None;
+    let scan = scan_for_column(ctx, current_id, usize::MAX, Some(target))?;
+    let dest_byte = scan.byte_pos;
+    let mut reached = scan.column;
 
-    for unit in decode_lisp_string_units(&line) {
-        let char_start = bol + unit.start;
-        let char_end = bol + unit.end;
-        let next = next_column_for_code(column, unit.code, unit.width, tabw);
-        if next >= target {
-            if force_non_nil && unit.code == b'\t' as u32 && next > target {
-                tab_split = Some((char_start, column, next));
-            } else {
-                dest_byte = char_end;
-                reached = next;
-            }
-            found = true;
-            break;
-        }
-        dest_byte = char_end;
-        reached = next;
-        column = next;
-    }
-
-    if !found {
-        dest_byte = eol;
-        reached = column_for_lisp_string(&line, tabw);
+    if force_non_nil
+        && scan.column > target
+        && scan.previous_column < target
+        && scan.previous_code == Some(b'\t' as u32)
+        && scan.previous_byte_pos < scan.byte_pos
+    {
+        tab_split = Some((scan.previous_byte_pos, scan.previous_column, scan.column));
     }
 
     if let Some((tab_byte, col_before_tab, col_after_tab)) = tab_split {

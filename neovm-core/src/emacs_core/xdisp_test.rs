@@ -1217,27 +1217,28 @@ fn test_format_mode_line_percent_specs_use_window_buffer_and_completed_window_en
 #[test]
 fn test_invisible_p() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_invisible_p(vec![Value::fixnum(0)]).unwrap_err();
+    let mut eval = Context::new();
+    let err = builtin_invisible_p(&mut eval, vec![Value::fixnum(0)]).unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "args-out-of-range"),
         other => panic!("expected args-out-of-range, got {:?}", other),
     }
-    let result = builtin_invisible_p(vec![Value::fixnum(1)]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::fixnum(1)]).unwrap();
     assert!(result.is_nil());
 
-    let result = builtin_invisible_p(vec![Value::symbol("invisible")]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::symbol("invisible")]).unwrap();
     assert!(result.is_truthy());
 
-    let result = builtin_invisible_p(vec![Value::fixnum(-1)]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::fixnum(-1)]).unwrap();
     assert!(result.is_truthy());
 
-    let result = builtin_invisible_p(vec![Value::NIL]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::NIL]).unwrap();
     assert!(result.is_nil());
 
-    let result = builtin_invisible_p(vec![Value::string("x")]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::string("x")]).unwrap();
     assert!(result.is_truthy());
 
-    let result = builtin_invisible_p(vec![Value::make_float(1.5)]).unwrap();
+    let result = builtin_invisible_p(&mut eval, vec![Value::make_float(1.5)]).unwrap();
     assert!(result.is_truthy());
 }
 
@@ -2185,7 +2186,10 @@ fn test_long_line_optimizations_p() {
 fn test_wrong_arity() {
     crate::test_utils::init_test_tracing();
     assert!(builtin_line_pixel_height(vec![Value::fixnum(1)]).is_err());
-    assert!(builtin_invisible_p(vec![]).is_err());
+    {
+        let mut ev = crate::emacs_core::Context::new();
+        assert!(builtin_invisible_p(&mut ev, vec![]).is_err());
+    }
     assert!(builtin_move_point_visually(vec![]).is_err());
     assert!(builtin_lookup_image_map(vec![Value::fixnum(1), Value::fixnum(2)]).is_err());
     {

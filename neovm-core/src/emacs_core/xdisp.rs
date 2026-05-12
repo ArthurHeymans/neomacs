@@ -2384,28 +2384,106 @@ fn expand_mode_line_percent_in_state(
     }
 }
 
-/// (invisible-p POS-OR-PROP) -> boolean
-///
-/// Batch semantics mirror current oracle behavior:
-/// - numeric positions > 0 are visible (nil),
-/// - position 0 is out-of-range,
-/// - negative numeric positions are invisible (t),
-/// - nil is visible (nil),
-/// - all other property values are treated as invisible (t).
-pub(crate) fn builtin_invisible_p(args: Vec<Value>) -> EvalResult {
-    expect_args("invisible-p", &args, 1)?;
-    match args[0].kind() {
-        ValueKind::Fixnum(v) => {
-            if v == 0 {
-                Err(signal("args-out-of-range", vec![Value::fixnum(v)]))
-            } else if v < 0 {
-                Ok(Value::symbol("t"))
-            } else {
-                Ok(Value::NIL)
-            }
+fn invisible_prop_member(propval: Value, list: Value) -> i64 {
+    let mut tail = list;
+    while tail.is_cons() {
+        let element = tail.cons_car();
+        if eq_value(&propval, &element) {
+            return 1;
         }
-        ValueKind::Nil => Ok(Value::NIL),
-        _ => Ok(Value::symbol("t")),
+        if element.is_cons() && eq_value(&propval, &element.cons_car()) {
+            return if element.cons_cdr().is_nil() { 1 } else { 2 };
+        }
+        tail = tail.cons_cdr();
+    }
+    0
+}
+
+fn invisible_prop(propval: Value, list: Value) -> i64 {
+    let direct = invisible_prop_member(propval, list);
+    if direct != 0 {
+        return direct;
+    }
+
+    let mut proptail = propval;
+    while proptail.is_cons() {
+        let result = invisible_prop_member(proptail.cons_car(), list);
+        if result != 0 {
+            return result;
+        }
+        proptail = proptail.cons_cdr();
+    }
+    0
+}
+
+fn text_prop_means_invisible(prop: Value, invisibility_spec: Value) -> i64 {
+    if invisibility_spec == Value::T {
+        i64::from(prop.is_truthy())
+    } else {
+        invisible_prop(prop, invisibility_spec)
+    }
+}
+
+pub(crate) fn invisible_status_for_value(
+    eval: &mut super::eval::Context,
+    pos_or_prop: Value,
+) -> Result<i64, Flow> {
+    let prop = match pos_or_prop.kind() {
+        ValueKind::Fixnum(v) if v >= 0 => super::textprop::builtin_get_char_property(
+            eval,
+            vec![pos_or_prop, Value::symbol("invisible"), Value::NIL],
+        )?,
+        _ if super::marker::is_marker(&pos_or_prop) => super::textprop::builtin_get_char_property(
+            eval,
+            vec![pos_or_prop, Value::symbol("invisible"), Value::NIL],
+        )?,
+        _ => pos_or_prop,
+    };
+    let invisibility_spec = eval.eval_symbol_by_id(intern("buffer-invisibility-spec"))?;
+    Ok(text_prop_means_invisible(prop, invisibility_spec))
+}
+
+pub(crate) fn zero_width_invisible_run_end_byte(
+    eval: &mut super::eval::Context,
+    buffer_id: BufferId,
+    byte_pos: usize,
+) -> Result<Option<usize>, Flow> {
+    let lisp_pos = {
+        let Some(buf) = eval.buffers.get(buffer_id) else {
+            return Ok(None);
+        };
+        if byte_pos >= buf.point_max_byte() {
+            return Ok(None);
+        }
+        super::textprop::byte_to_elisp_pos(buf, byte_pos)
+    };
+
+    if invisible_status_for_value(eval, Value::fixnum(lisp_pos))? != 1 {
+        return Ok(None);
+    }
+
+    let next =
+        super::builtins::builtin_next_char_property_change(eval, vec![Value::fixnum(lisp_pos)])?;
+    let next_byte = {
+        let Some(buf) = eval.buffers.get(buffer_id) else {
+            return Ok(None);
+        };
+        match next.as_fixnum() {
+            Some(pos) => super::textprop::validate_buffer_point(buf, pos)?,
+            None => buf.point_max_byte(),
+        }
+    };
+
+    Ok(Some(next_byte))
+}
+
+/// (invisible-p POS-OR-PROP) -> boolean
+pub(crate) fn builtin_invisible_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    expect_args("invisible-p", &args, 1)?;
+    match invisible_status_for_value(eval, args[0])? {
+        0 => Ok(Value::NIL),
+        1 => Ok(Value::T),
+        other => Ok(Value::fixnum(other)),
     }
 }
 
