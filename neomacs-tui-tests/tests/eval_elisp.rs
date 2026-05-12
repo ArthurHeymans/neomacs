@@ -8718,8 +8718,11 @@ fn buffer_last_name_elisp_functions_match_gnu_semantics() {
 fn set_visited_file_name_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    let expr = r#"(message "visfile:%S" (let ((f "/tmp/neomacs-visfile-oracle.txt")) (with-temp-buffer (rename-buffer "neo-vis" t) (let ((start (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name f t) (let ((set (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name "" t) (list start set (list (buffer-name) buffer-file-name buffer-file-truename buffer-auto-save-file-name)))))))"#;
-    support::eval_expression(&mut gnu, &mut neo, expr);
+    let filename = format!("/tmp/neomacs-visfile-oracle-{}.txt", std::process::id());
+    let basename = format!("neomacs-visfile-oracle-{}.txt", std::process::id());
+    let expr = format!(
+        r#"(message "visfile:%S" (let ((f "{filename}")) (with-temp-buffer (rename-buffer "neo-vis" t) (let ((start (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name f t) (let ((set (list (buffer-name) buffer-file-name buffer-file-truename default-directory (buffer-modified-p)))) (set-visited-file-name "" t) (list start set (list (buffer-name) buffer-file-name buffer-file-truename buffer-auto-save-file-name)))))))"#
+    );
 
     let ready = |grid: &[String]| {
         let recent = grid
@@ -8731,13 +8734,19 @@ fn set_visited_file_name_elisp_functions_match_gnu_semantics() {
             .join("\n");
         recent.contains("visfile:")
             && recent.contains(r#"(\"neo-vis\" nil nil"#)
-            && recent.contains(r#"(\"neomacs-visfile-oracle.txt\""#)
-            && recent.contains(r#"\"/tmp/neomacs-visfile-oracle.txt\""#)
+            && recent.contains(&format!(r#"(\"{basename}\""#))
+            && recent.contains(&format!(r#"\"{filename}\""#))
             && recent.contains(r#"\"/tmp/\" t)"#)
-            && recent.contains(r#"\"neomacs-visfile-oracle.txt\" nil"#)
+            && recent.contains(&format!(r#"\"{basename}\" nil"#))
             && recent.contains(r#"nil))"#)
     };
+
+    // GNU creates a lock as part of `set-buffer-modified-p` in
+    // `set-visited-file-name`; drive this oracle serially so the two
+    // compared editors do not contend for the same real lock file.
+    eval_expression_one(&mut gnu, &expr);
     gnu.read_until(Duration::from_secs(6), ready);
+    eval_expression_one(&mut neo, &expr);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
