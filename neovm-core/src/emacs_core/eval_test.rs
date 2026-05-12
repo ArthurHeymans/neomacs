@@ -5771,6 +5771,32 @@ fn variable_binding_locus_follows_buffer_local_and_alias_semantics() {
 }
 
 #[test]
+fn uninterned_automatic_buffer_local_symbols_follow_gnu_identity_semantics() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(let ((sym (make-symbol "vm-auto-local")))
+             (make-variable-buffer-local sym)
+             (list (default-boundp sym)
+                   (default-value sym)
+                   (with-temp-buffer
+                     (list (local-variable-p sym)
+                           (local-variable-if-set-p sym)
+                           (variable-binding-locus sym)
+                           (progn
+                             (set sym 9)
+                             (list (local-variable-p sym)
+                                   (local-variable-if-set-p sym)
+                                   (eq (variable-binding-locus sym) (current-buffer))
+                                   (symbol-value sym)))))
+                   (with-temp-buffer
+                     (list (local-variable-p sym)
+                           (local-variable-if-set-p sym)
+                           (boundp sym)))))"#,
+    );
+    assert_eq!(result, "OK (t nil (nil t nil (t t t 9)) (nil t t))");
+}
+
+#[test]
 fn value_lt_matches_oracle_type_and_ordering_semantics() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

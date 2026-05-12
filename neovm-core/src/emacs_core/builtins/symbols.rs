@@ -3339,20 +3339,57 @@ pub(crate) fn builtin_variable_binding_locus(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("variable-binding-locus", &args, 1)?;
-    let name = args[0].as_symbol_name().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
-        )
-    })?;
-    let resolved = resolve_variable_alias_name_in_obarray(&ctx.obarray, name)?;
-    if resolved == "nil" || resolved == "t" || resolved.starts_with(':') {
-        return Ok(Value::NIL);
-    }
-    if let Some(buf) = &ctx.buffers.current_buffer() {
-        if buf.has_buffer_local(&resolved) {
-            return Ok(Value::make_buffer(buf.id));
+    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
+
+    use crate::emacs_core::symbol::SymbolRedirect;
+    if let Some(sym) = ctx.obarray.get_by_id(resolved) {
+        match sym.redirect() {
+            SymbolRedirect::Localized => {
+                if let Some(buf) = ctx.buffers.current_buffer() {
+                    let target_buf = Value::make_buffer(buf.id);
+                    if ctx
+                        .obarray
+                        .has_per_buffer_binding(resolved, target_buf, buf.local_var_alist)
+                    {
+                        return Ok(target_buf);
+                    }
+                }
+                if let Some(blv) = ctx.obarray.blv(resolved)
+                    && blv.found
+                    && !blv.where_buf.is_nil()
+                {
+                    return Ok(blv.where_buf);
+                }
+            }
+            SymbolRedirect::Forwarded => {
+                if let Some(buf) = ctx.buffers.current_buffer() {
+                    let is_local = {
+                        use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
+                        let fwd = unsafe { &*sym.val.fwd };
+                        if matches!(fwd.ty, LispFwdType::BufferObj) {
+                            let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
+                            let offset = buf_fwd.offset as usize;
+                            let flags_idx = buf_fwd.local_flags_idx;
+                            flags_idx == -1 || buf.slot_local_flag(offset)
+                        } else {
+                            false
+                        }
+                    };
+                    if is_local {
+                        return Ok(Value::make_buffer(buf.id));
+                    }
+                }
+            }
+            SymbolRedirect::Plainval | SymbolRedirect::Varalias => {}
         }
+    }
+
+    if is_canonical_symbol_id(resolved)
+        && let Some(buf) = ctx.buffers.current_buffer()
+        && buf.has_buffer_local_by_sym_id(resolved)
+    {
+        return Ok(Value::make_buffer(buf.id));
     }
     Ok(Value::NIL)
 }
@@ -3816,17 +3853,8 @@ pub(crate) fn builtin_local_variable_if_set_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("local-variable-if-set-p", &args, 1, 2)?;
-    let name = args[0].as_symbol_name().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
-        )
-    })?;
-    let resolved = resolve_variable_alias_name_in_obarray(&ctx.obarray, name)?;
-    if resolved == "nil" || resolved == "t" || resolved.starts_with(':') {
-        return Ok(Value::NIL);
-    }
-
+    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let resolved_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     // Mirror the GNU switch on `sym->u.s.redirect` at
     // src/data.c:2445-2461 exactly. PLAINVAL short-circuits to nil
     // *before* the BUFFER argument is validated, which is what
@@ -3834,7 +3862,6 @@ pub(crate) fn builtin_local_variable_if_set_p(
     // legitimately return nil rather than signaling
     // wrong-type-argument.
     use crate::emacs_core::symbol::SymbolRedirect;
-    let resolved_id = crate::emacs_core::intern::intern(&resolved);
     let Some(sym) = ctx.obarray.get_by_id(resolved_id) else {
         return Ok(Value::NIL);
     };

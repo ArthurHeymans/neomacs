@@ -7635,7 +7635,7 @@ impl Context {
                 // GNU `find_symbol_value` switches on the symbol
                 // redirect tag and only walks `local_var_alist` for
                 // `SYMBOL_LOCALIZED`.
-                SymbolRedirect::Localized if resolved_is_canonical => {
+                SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
                         let target_buf = Value::make_buffer(buf.id);
                         if let Some(value) =
@@ -7657,8 +7657,7 @@ impl Context {
                         return Ok(value);
                     }
                 }
-                SymbolRedirect::Plainval | SymbolRedirect::Varalias | SymbolRedirect::Localized => {
-                }
+                SymbolRedirect::Plainval | SymbolRedirect::Varalias => {}
             }
         }
 
@@ -12142,8 +12141,7 @@ pub(crate) fn set_runtime_binding(
     // also visible from the tree-walk interpreter and the `set`
     // builtin.
     let redirect = obarray.get_by_id(sym_id).map(|s| s.redirect());
-    if symbol_is_canonical
-        && matches!(redirect, Some(SymbolRedirect::Localized))
+    if matches!(redirect, Some(SymbolRedirect::Localized))
         && let Some(buf_id) = buffers.current_buffer_id()
     {
         let (cur_val, alist) = match buffers.get(buf_id) {
@@ -12677,7 +12675,7 @@ impl Context {
         use crate::emacs_core::symbol::SymbolRedirect;
         if let Some(sym) = self.obarray.get_by_id(resolved) {
             match sym.redirect() {
-                SymbolRedirect::Localized if resolved_is_canonical => {
+                SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
                         let target_buf = Value::make_buffer(buf.id);
                         if let Some(value) =
@@ -12696,8 +12694,7 @@ impl Context {
                         return Some(value);
                     }
                 }
-                SymbolRedirect::Plainval | SymbolRedirect::Varalias | SymbolRedirect::Localized => {
-                }
+                SymbolRedirect::Plainval | SymbolRedirect::Varalias => {}
             }
         }
 

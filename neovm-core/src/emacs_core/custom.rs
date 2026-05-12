@@ -80,29 +80,29 @@ pub(crate) fn builtin_make_variable_buffer_local_with_state(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("make-variable-buffer-local", &args, 1)?;
-    let name = match args[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        ValueKind::Nil => "nil".to_string(),
-        ValueKind::T => "t".to_string(),
-        _other => {
+    let symbol = match args[0].kind() {
+        ValueKind::Symbol(id) => id,
+        ValueKind::Nil => intern("nil"),
+        ValueKind::T => intern("t"),
+        _ => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
     };
-    let resolved_id =
-        super::builtins::resolve_variable_alias_id_in_obarray(obarray, intern(&name))?;
-    let resolved = resolve_sym(resolved_id).to_string();
-    if obarray.is_constant(&resolved) {
-        return Err(signal("setting-constant", vec![Value::symbol(name)]));
+    let resolved_id = super::builtins::resolve_variable_alias_id_in_obarray(obarray, symbol)?;
+    if obarray.is_constant_id(resolved_id) {
+        return Err(signal("setting-constant", vec![args[0]]));
     }
-    if !obarray.boundp(&resolved) {
-        obarray.set_symbol_value(&resolved, Value::NIL);
-    }
+
     // Flip the symbol's redirect tag to LOCALIZED and mark it as
     // auto-buffer-local at first set. Mirrors GNU
     // `Fmake_variable_buffer_local` (`data.c:2142-2207`).
+    // GNU operates on the exact symbol object after following aliases;
+    // it does not intern by name.  This matters for `(make-symbol ...)`
+    // variables, whose value cells and BLVs are independent from any
+    // interned symbol with the same print name.
     let default_value = obarray.find_symbol_value(resolved_id).unwrap_or(Value::NIL);
     obarray.make_symbol_localized(resolved_id, default_value);
     obarray.set_blv_local_if_set(resolved_id, true);
