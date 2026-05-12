@@ -111,6 +111,34 @@ fn rassq_not_found() {
     assert!(result.is_nil());
 }
 
+#[test]
+fn rassq_improper_alist_signals_listp() {
+    crate::test_utils::init_test_tracing();
+    let alist = Value::cons(
+        Value::cons(Value::symbol("a"), Value::fixnum(1)),
+        Value::fixnum(4),
+    );
+    match builtin_rassq(vec![Value::fixnum(99), alist]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+        }
+        other => panic!("expected wrong-type-argument, got {other:?}"),
+    }
+}
+
+#[test]
+fn rassq_circular_alist_signals_circular_list() {
+    crate::test_utils::init_test_tracing();
+    let alist = Value::list(vec![Value::cons(Value::symbol("a"), Value::fixnum(1))]);
+    alist.set_cdr(alist);
+    match builtin_rassq(vec![Value::fixnum(99), alist]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "circular-list");
+        }
+        other => panic!("expected circular-list, got {other:?}"),
+    }
+}
+
 // ----- assoc-default -----
 
 #[test]

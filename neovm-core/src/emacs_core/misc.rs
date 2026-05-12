@@ -187,23 +187,82 @@ pub(crate) fn builtin_rassq_2(
 }
 
 fn builtin_rassq_values(key: Value, alist: Value, symbols_with_pos_enabled: bool) -> EvalResult {
-    let mut cursor = alist;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if pair_car.is_cons() {
-                    let inner_pair_cdr = pair_car.cons_cdr();
-                    if eq_value_swp(&inner_pair_cdr, &key, symbols_with_pos_enabled) {
-                        return Ok(pair_car);
-                    }
-                }
-                cursor = pair_cdr;
-            }
-            _ => return Ok(Value::NIL),
+    if symbols_with_pos_enabled {
+        return builtin_rassq_values_swp(key, alist);
+    }
+
+    let key_bits = key.bits();
+    let mut tail = alist;
+    let mut tortoise = alist;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        let pair_car = tail.cons_car();
+        if pair_car.is_cons() && pair_car.cons_cdr().bits() == key_bits {
+            return Ok(pair_car);
         }
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), alist],
+        ))
+    }
+}
+
+fn builtin_rassq_values_swp(key: Value, alist: Value) -> EvalResult {
+    let mut tail = alist;
+    let mut tortoise = alist;
+    let mut power = 1usize;
+    let mut distance = 0usize;
+
+    while tail.is_cons() {
+        let pair_car = tail.cons_car();
+        if pair_car.is_cons() {
+            let pair_cdr = pair_car.cons_cdr();
+            if eq_value_swp(&pair_cdr, &key, true) {
+                return Ok(pair_car);
+            }
+        }
+
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            distance = distance.saturating_add(1);
+            if tail.bits() == tortoise.bits() {
+                return Err(signal("circular-list", vec![tail]));
+            }
+            if distance == power {
+                tortoise = tail;
+                power = power.saturating_mul(2).max(1);
+                distance = 0;
+            }
+        }
+    }
+
+    if tail.is_nil() {
+        Ok(Value::NIL)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), alist],
+        ))
     }
 }
 
