@@ -5,7 +5,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
-use super::textprop::lookup_buffer_text_property;
+use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, lexenv_lookup};
 use crate::buffer::BufferManager;
 
@@ -292,6 +292,56 @@ fn point_motion_property(
     }
 }
 
+fn lookup_buffer_char_property(
+    obarray: &super::symbol::Obarray,
+    buffers: &BufferManager,
+    buf: &crate::buffer::Buffer,
+    byte_pos: usize,
+    prop: Value,
+) -> Value {
+    if byte_pos >= buf.text.char_to_emacs_byte(buf.text.char_count()) {
+        return Value::NIL;
+    }
+    if let Some((value, _overlay)) =
+        buffer_overlay_property_at_byte_pos(obarray, buffers, buf, byte_pos, prop, None)
+    {
+        return value;
+    }
+    lookup_buffer_text_property(obarray, buffers, buf, byte_pos, prop)
+}
+
+fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+    let text_next = buf
+        .text
+        .text_props_next_change(byte_pos)
+        .filter(|next| *next <= buf.zv_byte);
+    let overlay_next = buf
+        .overlays
+        .next_boundary_after_until(byte_pos, buf.zv_byte);
+    match (text_next, overlay_next) {
+        (Some(text), Some(overlay)) => Some(text.min(overlay)),
+        (Some(text), None) => Some(text),
+        (None, Some(overlay)) => Some(overlay),
+        (None, None) => None,
+    }
+}
+
+fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+    let text_prev = buf
+        .text
+        .text_props_previous_change(byte_pos)
+        .filter(|prev| *prev >= buf.begv_byte);
+    let overlay_prev = buf
+        .overlays
+        .previous_boundary_before_since(byte_pos, buf.begv_byte);
+    match (text_prev, overlay_prev) {
+        (Some(text), Some(overlay)) => Some(text.max(overlay)),
+        (Some(text), None) => Some(text),
+        (None, Some(overlay)) => Some(overlay),
+        (None, None) => None,
+    }
+}
+
 pub(crate) fn adjust_for_intangible(
     eval: &super::eval::Context,
     pos: usize,
@@ -313,7 +363,7 @@ pub(crate) fn adjust_for_intangible(
         Some(b) => b,
         None => return pos,
     };
-    let intangible = lookup_buffer_text_property(
+    let intangible = lookup_buffer_char_property(
         &eval.obarray,
         &eval.buffers,
         buf,
@@ -326,9 +376,9 @@ pub(crate) fn adjust_for_intangible(
     let mut cursor = pos;
     if direction >= 0 {
         loop {
-            match buf.text.text_props_next_change(cursor) {
+            match next_char_property_change(buf, cursor) {
                 Some(next) => {
-                    let prop = lookup_buffer_text_property(
+                    let prop = lookup_buffer_char_property(
                         &eval.obarray,
                         &eval.buffers,
                         buf,
@@ -336,7 +386,7 @@ pub(crate) fn adjust_for_intangible(
                         Value::symbol("intangible"),
                     );
                     cursor = next;
-                    if !prop.is_truthy() {
+                    if prop != intangible {
                         break;
                     }
                 }
@@ -348,10 +398,10 @@ pub(crate) fn adjust_for_intangible(
         }
     } else {
         loop {
-            match buf.text.text_props_previous_change(cursor) {
+            match previous_char_property_change(buf, cursor) {
                 Some(prev) => {
                     let check = prev.saturating_sub(1);
-                    let prop = lookup_buffer_text_property(
+                    let prop = lookup_buffer_char_property(
                         &eval.obarray,
                         &eval.buffers,
                         buf,
@@ -359,7 +409,7 @@ pub(crate) fn adjust_for_intangible(
                         Value::symbol("intangible"),
                     );
                     cursor = prev;
-                    if !prop.is_truthy() {
+                    if prop != intangible {
                         break;
                     }
                 }

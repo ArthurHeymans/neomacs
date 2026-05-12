@@ -7870,6 +7870,55 @@ fn point_motion_hooks_follow_gnu_interval_boundary_order() {
 }
 
 #[test]
+fn overlay_intangible_adjusts_point_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((buf (get-buffer-create "ov-intangible"))
+                 ov)
+             (set-buffer buf)
+             (erase-buffer)
+             (insert "abcdef")
+             (setq ov (make-overlay 3 5))
+             (overlay-put ov 'intangible 'zone)
+             (let ((inhibit-point-motion-hooks nil))
+               (goto-char 2)
+               (goto-char 4)
+               (let ((forward (point)))
+                 (goto-char 6)
+                 (goto-char 4)
+                 (let ((backward (point)))
+                   (let ((inhibit-point-motion-hooks t))
+                     (goto-char 4)
+                     (list forward backward (point)))))))"#,
+    );
+    assert_eq!(result, "OK (5 3 4)");
+}
+
+#[test]
+fn adjacent_overlay_intangible_values_remain_separate_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((buf (get-buffer-create "ov-intangible-adjacent"))
+                 left right)
+             (set-buffer buf)
+             (erase-buffer)
+             (insert "abcdef")
+             (setq left (make-overlay 2 4))
+             (setq right (make-overlay 4 6))
+             (overlay-put left 'intangible 'left-zone)
+             (overlay-put right 'intangible 'right-zone)
+             (setq inhibit-point-motion-hooks nil)
+             (goto-char 1)
+             (goto-char 3)
+             (let ((from-left (point)))
+               (goto-char 7)
+               (goto-char 5)
+               (list from-left (point))))"#,
+    );
+    assert_eq!(result, "OK (4 4)");
+}
+
+#[test]
 fn run_window_configuration_change_hook_uses_window_buffer_context() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
