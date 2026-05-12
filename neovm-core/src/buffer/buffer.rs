@@ -1567,6 +1567,27 @@ impl Buffer {
         self.name = name;
     }
 
+    /// Mirror the final object-state mutations in GNU `Fkill_buffer`:
+    /// reset local state first, then move `name` to `last_name` and leave
+    /// the buffer object addressable but not live.
+    pub fn mark_killed_after_local_reset(&mut self) {
+        let old_name = self.name;
+        debug_assert!(old_name.is_string());
+        self.last_name = old_name;
+        self.name = Value::NIL;
+        self.local_var_alist = Value::NIL;
+        self.local_flags = 0;
+        self.keymap = Value::NIL;
+        self.overlays = OverlayList::new();
+        self.text = BufferText::new();
+        self.mark_marker_id = None;
+        self.mark_marker_ptr = std::ptr::null_mut();
+        self.state_markers = None;
+        self.undo_state = SharedUndoState::new();
+        self.narrow_to_byte_region(0, 0);
+        self.goto_byte(0);
+    }
+
     pub fn set_last_name_value(&mut self, name: Value) {
         debug_assert!(name.is_nil() || name.is_string());
         self.last_name = name;
@@ -2741,12 +2762,15 @@ impl Buffer {
 #[derive(Clone)]
 pub struct BufferManager {
     buffers: HashMap<BufferId, Buffer>,
+    /// Killed buffer objects. GNU does not destroy the Lisp buffer object;
+    /// it makes `BUFFER_LIVE_P` false while keeping slots like
+    /// `last_name` and `filename` queryable.
+    dead_buffers: HashMap<BufferId, Buffer>,
     buffer_order: Vec<BufferId>,
     current: Option<BufferId>,
     next_id: u64,
     next_marker_id: u64,
     labeled_restrictions: HashMap<BufferId, Vec<LabeledRestriction>>,
-    dead_buffer_last_names: HashMap<BufferId, Value>,
     /// Global default values for `BUFFER_OBJFWD` slots. Mirrors GNU's
     /// `buffer_defaults` (`buffer.c:84-90`), which is itself a
     /// sentinel `struct buffer` whose fields hold the global default
@@ -2779,12 +2803,12 @@ impl BufferManager {
         }
         let mut mgr = Self {
             buffers: HashMap::new(),
+            dead_buffers: HashMap::new(),
             buffer_order: Vec::new(),
             current: None,
             next_id: 1,
             next_marker_id: 1,
             labeled_restrictions: HashMap::new(),
-            dead_buffer_last_names: HashMap::new(),
             buffer_defaults,
         };
         let scratch = mgr.create_buffer("*scratch*");
@@ -2943,6 +2967,16 @@ impl BufferManager {
     /// Immutable access to a buffer by id.
     pub fn get(&self, id: BufferId) -> Option<&Buffer> {
         self.buffers.get(&id)
+    }
+
+    /// Immutable access to a killed buffer by id.
+    pub fn get_dead(&self, id: BufferId) -> Option<&Buffer> {
+        self.dead_buffers.get(&id)
+    }
+
+    /// Immutable access to a buffer object, live or killed.
+    pub fn get_any(&self, id: BufferId) -> Option<&Buffer> {
+        self.buffers.get(&id).or_else(|| self.dead_buffers.get(&id))
     }
 
     /// Mutable access to a buffer by id.
@@ -3131,11 +3165,14 @@ impl BufferManager {
 
     /// Find a killed buffer by its last known name.
     pub fn find_dead_buffer_by_name(&self, name: &str) -> Option<BufferId> {
-        self.dead_buffer_last_names
-            .iter()
-            .find_map(|(id, last_name)| {
-                (last_name.as_runtime_string_owned().as_deref() == Some(name)).then_some(*id)
-            })
+        self.dead_buffers.iter().find_map(|(id, buffer)| {
+            (buffer
+                .last_name_value()
+                .as_runtime_string_owned()
+                .as_deref()
+                == Some(name))
+            .then_some(*id)
+        })
     }
 
     /// Remove a buffer.  Returns `true` if the buffer existed.
@@ -3166,9 +3203,9 @@ impl BufferManager {
             .remove_markers_for_buffers(&killed_set);
 
         for killed_id in &killed_ids {
-            let buf = self.buffers.remove(killed_id)?;
-            self.dead_buffer_last_names
-                .insert(*killed_id, buf.name_value());
+            let mut buf = self.buffers.remove(killed_id)?;
+            buf.mark_killed_after_local_reset();
+            self.dead_buffers.insert(*killed_id, buf);
         }
         self.buffer_order
             .retain(|buffer_id| !killed_set.contains(buffer_id));
@@ -3185,7 +3222,7 @@ impl BufferManager {
 
     /// Return the last known name for a dead buffer id, if available.
     pub fn dead_buffer_last_name_value(&self, id: BufferId) -> Option<Value> {
-        self.dead_buffer_last_names.get(&id).copied()
+        self.dead_buffers.get(&id).map(Buffer::last_name_value)
     }
 
     pub fn dead_buffer_last_name_owned(&self, id: BufferId) -> Option<String> {
@@ -4274,7 +4311,7 @@ impl BufferManager {
             next_id,
             next_marker_id,
             labeled_restrictions: HashMap::new(),
-            dead_buffer_last_names: HashMap::new(),
+            dead_buffers: HashMap::new(),
             buffer_defaults,
         };
         if let Some(dumped_order) = dumped_buffer_order {
@@ -4384,8 +4421,17 @@ impl GcTrace for BufferManager {
                 }
             }
         }
-        for last_name in self.dead_buffer_last_names.values() {
-            roots.push(*last_name);
+        for buffer in self.dead_buffers.values() {
+            roots.push(buffer.name);
+            roots.push(buffer.last_name);
+            buffer.text.trace_text_prop_roots(roots);
+            buffer.undo_state.trace_roots(roots);
+            buffer.overlays.trace_roots(roots);
+            for slot in &buffer.slots {
+                roots.push(*slot);
+            }
+            roots.push(buffer.local_var_alist);
+            roots.push(buffer.keymap);
         }
         // Phase 10D: `buffer_defaults` holds the global default
         // values for every per-buffer slot. Mirrors GNU's

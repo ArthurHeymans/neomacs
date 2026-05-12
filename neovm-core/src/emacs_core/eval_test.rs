@@ -7756,6 +7756,42 @@ fn kill_buffer_query_abort_does_not_record_buffer_list_order_like_gnu() {
 }
 
 #[test]
+fn killed_buffer_slots_and_local_defaults_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((file-buffer (get-buffer-create "dead-file"))
+                 (local-buffer (get-buffer-create "dead-local")))
+             (set-buffer file-buffer)
+             (setq buffer-file-name "/tmp/dead.txt"
+                   buffer-file-truename "/tmp/dead.txt")
+             (set-buffer local-buffer)
+             (setq fill-column 33)
+             (set (make-local-variable 'dead-local-only) 44)
+             (let ((before (list (local-variable-p 'fill-column local-buffer)
+                                 (buffer-local-value 'fill-column local-buffer)
+                                 (buffer-local-value 'dead-local-only local-buffer))))
+               (kill-buffer file-buffer)
+               (kill-buffer local-buffer)
+               (list (buffer-live-p file-buffer)
+                     (buffer-name file-buffer)
+                     (buffer-last-name file-buffer)
+                     (buffer-file-name file-buffer)
+                     (buffer-base-buffer file-buffer)
+                     (condition-case e
+                         (set-buffer file-buffer)
+                       (error (car e)))
+                     before
+                     (buffer-live-p local-buffer)
+                     (buffer-local-value 'fill-column local-buffer)
+                     (boundp 'dead-local-only))))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK (nil nil "dead-file" "/tmp/dead.txt" nil error (t 33 44) nil 70 nil)"#
+    );
+}
+
+#[test]
 fn run_window_scroll_functions_uses_scrolled_window_buffer_context() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

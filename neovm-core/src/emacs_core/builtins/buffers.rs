@@ -559,6 +559,21 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
         None
     };
 
+    let buffer_defaults = eval.buffers.buffer_defaults;
+    let killed_ids_to_reset = eval
+        .buffers
+        .collect_killed_buffer_ids(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    {
+        let buffers = &mut eval.buffers;
+        let obarray = &mut eval.obarray;
+        for killed_id in &killed_ids_to_reset {
+            if let Some(buffer) = buffers.get_mut(*killed_id) {
+                buffer.kill_all_local_variables(obarray, true, &buffer_defaults);
+            }
+        }
+    }
+
     let killed_ids = eval
         .buffers
         .kill_buffer_collect(id)
@@ -681,7 +696,7 @@ pub(crate) fn builtin_buffer_file_name(
         expect_buffer_id(&args[0])?
     };
     Ok(buffers
-        .get(id)
+        .get_any(id)
         .and_then(|buf| buf.buffer_local_value("buffer-file-name"))
         .unwrap_or(Value::NIL))
 }
@@ -702,7 +717,7 @@ pub(crate) fn builtin_buffer_base_buffer(
     };
 
     Ok(buffers
-        .get(target)
+        .get_any(target)
         .and_then(|buf| buf.base_buffer)
         .map(Value::make_buffer)
         .unwrap_or(Value::NIL))
@@ -723,11 +738,8 @@ pub(crate) fn builtin_buffer_last_name(
         expect_buffer_id(&args[0])?
     };
 
-    if let Some(buf) = buffers.get(target) {
+    if let Some(buf) = buffers.get_any(target) {
         return Ok(buf.last_name_value());
-    }
-    if let Some(name) = buffers.dead_buffer_last_name_value(target) {
-        return Ok(name);
     }
     Ok(Value::NIL)
 }
@@ -4109,7 +4121,7 @@ pub(crate) fn builtin_buffer_local_value(
     let id = expect_buffer_id(&args[1])?;
     let buf = eval
         .buffers
-        .get(id)
+        .get_any(id)
         .ok_or_else(|| signal("error", vec![Value::string("No such buffer")]))?;
 
     // Phase 10E: route LOCALIZED reads through the BLV machinery
