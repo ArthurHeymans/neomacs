@@ -573,16 +573,17 @@ pub struct TtyMenuBarState {
     /// `FRAME_MENU_BAR_LINES` in GNU).
     pub lines: u16,
     /// Foreground RGB pixel (`0x00RRGGBB`) for the `menu` face.
-    ///
-    /// Already accounts for `:inverse-video` if set in the face spec —
-    /// the layout-engine `FaceResolver` swaps fg/bg in that case
-    /// (matching GNU's `realize_basic_faces` behaviour). The TTY
-    /// rasterizer just uses these values as-is.
     pub fg: u32,
     /// Background RGB pixel (`0x00RRGGBB`) for the `menu` face.
     pub bg: u32,
+    /// Whether the terminal default foreground should be used.
+    pub use_default_foreground: bool,
+    /// Whether the terminal default background should be used.
+    pub use_default_background: bool,
     /// Bold attribute from the `menu` face.
     pub bold: bool,
+    /// Inverse-video attribute from the `menu` face.
+    pub inverse: bool,
 }
 
 /// GUI menu-bar overlay state carried in a frame snapshot.

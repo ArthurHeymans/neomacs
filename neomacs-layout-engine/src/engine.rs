@@ -2466,7 +2466,10 @@ impl LayoutEngine {
                     lines: menu_bar_lines,
                     fg: menu_face.fg,
                     bg: menu_face.bg,
+                    use_default_foreground: menu_face.use_default_foreground,
+                    use_default_background: menu_face.use_default_background,
                     bold: menu_face.font_weight >= 600,
+                    inverse: menu_face.terminal_inverse_video,
                 });
         }
         if frame_display_state.parent_id == 0 {

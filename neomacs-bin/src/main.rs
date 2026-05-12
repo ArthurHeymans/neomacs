@@ -2520,14 +2520,19 @@ fn bootstrap_buffers(
         } else {
             frame.set_window_system(None);
         }
-        frame.set_parameter(
-            Value::symbol("display-type"),
-            Value::symbol(display.display_type_symbol()),
-        );
-        frame.set_parameter(
-            Value::symbol("background-mode"),
-            Value::symbol(display.background_mode),
-        );
+        if display.frontend == FrontendKind::Gui {
+            frame.set_parameter(
+                Value::symbol("display-type"),
+                Value::symbol(display.display_type_symbol()),
+            );
+            frame.set_parameter(
+                Value::symbol("background-mode"),
+                Value::symbol(display.background_mode),
+            );
+        } else {
+            frame.remove_parameter(Value::symbol("display-type"));
+            frame.remove_parameter(Value::symbol("background-mode"));
+        }
         frame.set_parameter(Value::symbol("font"), default_font_name);
         frame.set_parameter(Value::symbol("font-parameter"), default_font);
         // GNU frame.c: initial frame title is NULL (unset). The %F
@@ -2719,6 +2724,10 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
         FrontendKind::Tty => {
             eval.set_variable("window-system", Value::NIL);
             eval.set_variable("initial-window-system", Value::NIL);
+            if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+                frame.remove_parameter(Value::symbol("display-type"));
+                frame.remove_parameter(Value::symbol("background-mode"));
+            }
             if tty_init::should_enable_live_tty_io(startup) {
                 seed_live_tty_frame_parameters(eval, frame_id, startup);
             }

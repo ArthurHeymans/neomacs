@@ -1436,6 +1436,14 @@ fn configure_gnu_startup_state_clears_window_system_for_tty_boots() {
         .frame_manager()
         .get(frame_id)
         .expect("selected TTY frame should exist");
+    assert!(
+        frame.parameter("display-type").is_none(),
+        "GNU TTY startup must let frame-set-background-mode install display-type"
+    );
+    assert!(
+        frame.parameter("background-mode").is_none(),
+        "GNU TTY startup must let frame-set-background-mode install background-mode"
+    );
     assert_eq!(
         frame.parameter("tty"),
         Some(Value::string(default_controlling_tty_name()))
@@ -2471,6 +2479,51 @@ fn bootstrap_batch_kill_emacs_is_silent_shutdown() {
         })
     );
     assert_ne!(eval.current_message_text().as_deref(), Some("kill-emacs"));
+}
+
+#[test]
+fn bootstrap_batch_startup_error_exits_nonzero_like_gnu() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(
+        &mut eval,
+        80,
+        24,
+        bootstrap_display_config(FrontendKind::Tty),
+    );
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    let startup = tty_batch_startup_with_args(&["-Q", "--eval", "(error \"boom\")"]);
+    configure_gnu_startup_state(&mut eval, frame_id, &startup);
+
+    let (_tx, rx) = crossbeam_channel::unbounded();
+    let mut wake_pipe = [0; 2];
+    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
+    assert_eq!(pipe_result, 0, "pipe should initialize");
+    eval.init_input_system(rx, wake_pipe[0]);
+
+    let result = eval.recursive_edit();
+    unsafe {
+        libc::close(wake_pipe[0]);
+        libc::close(wake_pipe[1]);
+    }
+    result.expect("batch startup error should leave through kill-emacs");
+
+    assert_eq!(
+        eval.shutdown_request(),
+        Some(neovm_core::emacs_core::eval::ShutdownRequest {
+            exit_code: -1,
+            restart: false,
+        })
+    );
+    assert!(
+        eval.current_message_text()
+            .is_some_and(|message| message.contains("error") && message.contains("boom")),
+        "startup error should be reported before nonzero shutdown"
+    );
 }
 
 #[test]

@@ -34,12 +34,20 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
 /// source bootstrap. GNU owns these in xfaces.c, so load/bootstrap glue should
 /// delegate here instead of duplicating the values itself.
 pub(crate) fn ensure_startup_compat_variables(eval: &mut crate::emacs_core::eval::Context) {
-    let defaults = [
-        ("face-filters-always-match", Value::NIL),
-        (
+    match eval
+        .obarray()
+        .symbol_value("face--new-frame-defaults")
+        .copied()
+    {
+        Some(table) if table.is_hash_table() => seed_face_new_frame_defaults_table(table),
+        _ => eval.set_variable(
             "face--new-frame-defaults",
             bootstrap_face_new_frame_defaults_table(),
         ),
+    }
+
+    let defaults = [
+        ("face-filters-always-match", Value::NIL),
         ("face-default-stipple", Value::string("gray3")),
         ("scalable-fonts-allowed", Value::NIL),
         ("face-ignored-fonts", Value::NIL),
@@ -217,11 +225,8 @@ fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Value) {
             ValueKind::Symbol(id) => HashKey::Symbol(id),
             _ => unreachable!("face hash keys are symbols"),
         };
-        if !hash_table.data.contains_key(&hash_key) {
-            hash_table.insertion_order.push(hash_key.clone());
-            hash_table.note_hash_key_inserted(hash_key.clone());
-        }
         hash_table.key_snapshots.insert(hash_key.clone(), key);
+        hash_table.ensure_hash_key_iterable(&hash_key);
         hash_table.data.insert(hash_key, value);
     });
 }

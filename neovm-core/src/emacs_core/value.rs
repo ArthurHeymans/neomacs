@@ -778,6 +778,26 @@ impl LispHashTable {
         self.entry_slots.push(Some(key));
     }
 
+    pub fn ensure_hash_key_iterable(&mut self, key: &HashKey) {
+        if !self.insertion_order.iter().any(|existing| existing == key) {
+            self.insertion_order.push(key.clone());
+        }
+        if !self
+            .entry_slots
+            .iter()
+            .any(|slot| slot.as_ref() == Some(key))
+        {
+            self.note_hash_key_inserted(key.clone());
+        }
+    }
+
+    pub fn ensure_all_hash_keys_iterable(&mut self) {
+        let keys: Vec<HashKey> = self.data.keys().cloned().collect();
+        for key in keys {
+            self.ensure_hash_key_iterable(&key);
+        }
+    }
+
     pub fn note_hash_key_removed(&mut self, key: &HashKey) {
         if let Some(slot) = self
             .entry_slots

@@ -5239,6 +5239,16 @@ impl Context {
                 );
                 self.log_startup_state("top-level-signal");
                 tracing::warn!("Top-level startup error: {}", error_msg);
+                if self.command_loop_noninteractive() {
+                    // GNU keyboard.c:cmd_error treats noninteractive
+                    // startup/eval errors as fatal: it prints the error and
+                    // calls (kill-emacs -1), which exits with status 255.
+                    self.request_shutdown(-1, false);
+                    return Err(crate::emacs_core::error::signal_suppressed(
+                        "kill-emacs",
+                        vec![],
+                    ));
+                }
                 Ok(Value::NIL)
             }
             Err(flow) => Err(flow),

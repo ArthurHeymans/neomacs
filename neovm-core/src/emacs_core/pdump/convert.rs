@@ -1291,6 +1291,7 @@ impl<'a> LoadDecoder<'a> {
                         .into_iter()
                         .map(|key| load_hash_key_owned(self, key))
                         .collect();
+                    table.ensure_all_hash_keys_iterable();
                 });
             }
             DumpHeapObject::Str { text_props, .. } => {
@@ -1730,6 +1731,45 @@ mod tests {
         let value = decoder.load_value(&DumpValue::Vector(DumpHeapRef { index: 0 }));
         let slots = value.as_vector_data().unwrap();
         assert_eq!(slots.as_slice(), &[Value::fixnum(177), Value::fixnum(188)]);
+    }
+
+    #[test]
+    fn load_hash_table_makes_all_dumped_entries_iterable() {
+        crate::test_utils::init_test_tracing();
+
+        let heap = DumpTaggedHeap {
+            objects: Vec::new(),
+            mapped_cons: Vec::new(),
+            mapped_floats: Vec::new(),
+            mapped_strings: Vec::new(),
+            mapped_veclikes: Vec::new(),
+            mapped_slots: Vec::new(),
+        };
+        let mut decoder = LoadDecoder::new(&heap);
+        let table = load_hash_table(
+            &mut decoder,
+            &DumpLispHashTable {
+                test: DumpHashTableTest::Eq,
+                test_name: None,
+                size: 0,
+                weakness: None,
+                rehash_size: 1.5,
+                rehash_threshold: 0.8125,
+                entries: vec![
+                    (DumpHashKey::Int(1), DumpValue::True),
+                    (DumpHashKey::Int(2), DumpValue::True),
+                ],
+                key_snapshots: Vec::new(),
+                insertion_order: vec![DumpHashKey::Int(1)],
+            },
+        );
+
+        assert_eq!(table.data.len(), 2);
+        assert_eq!(
+            table.entry_slots.iter().flatten().count(),
+            2,
+            "loaded hash tables must keep GNU maphash traversal in sync with live entries"
+        );
     }
 
     fn write_raw_word(bytes: &mut [u8], offset: usize, word: usize) {
@@ -3695,7 +3735,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         entry_slots: Vec::new(),
         free_slots: Vec::new(),
     };
-    table.rebuild_hash_slots_from_insertion_order();
+    table.ensure_all_hash_keys_iterable();
     table
 }
 

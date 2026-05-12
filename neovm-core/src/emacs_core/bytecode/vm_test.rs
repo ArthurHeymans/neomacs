@@ -970,6 +970,28 @@ fn vm_primitive_bytecode_ops_ignore_later_function_cell_overrides() {
     );
 }
 
+#[test]
+fn vm_compiled_maphash_closure_mutates_captured_accumulator_like_face_list() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_bootstrap_eval_str(
+            r#"(progn
+                 (require 'bytecomp)
+                 (funcall
+                  (byte-compile
+                   (lambda ()
+                     (let ((table (make-hash-table :test 'eq))
+                           faces)
+                       (puthash 'face '(1) table)
+                       (maphash (lambda (face spec)
+                                  (push `(,(car spec) . ,face) faces))
+                                table)
+                       faces)))))"#
+        ),
+        "OK ((1 . face))"
+    );
+}
+
 fn execute_manual_vm<T>(
     mut func: ByteCodeFunction,
     init: impl FnOnce(&mut ByteCodeFunction, &mut crate::buffer::BufferManager) -> T,

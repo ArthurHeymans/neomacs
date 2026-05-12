@@ -474,13 +474,13 @@ impl TtyRif {
         frame_cols: usize,
     ) {
         let attrs = CellAttrs {
-            fg: Some(rgb_pixel_to_tuple(menu_bar.fg)),
-            bg: Some(rgb_pixel_to_tuple(menu_bar.bg)),
+            fg: (!menu_bar.use_default_foreground).then(|| rgb_pixel_to_tuple(menu_bar.fg)),
+            bg: (!menu_bar.use_default_background).then(|| rgb_pixel_to_tuple(menu_bar.bg)),
             bold: menu_bar.bold,
             italic: false,
             underline: 0,
             strikethrough: false,
-            inverse: false,
+            inverse: menu_bar.inverse,
         };
 
         let lines = (menu_bar.lines as usize).min(self.desired.height.saturating_sub(origin_row));

@@ -76,6 +76,7 @@ pub(crate) struct StatusLineFace {
     pub(crate) box_border_speed: f32,
     pub(crate) box_color2: Option<Color>,
     pub(crate) box_h_line_width: i32,
+    pub(crate) terminal_inverse_video: bool,
     pub(crate) font_char_width: f32,
     pub(crate) font_ascent: f32,
     pub(crate) font_descent: i32,
@@ -129,6 +130,7 @@ impl StatusLineFace {
             box_border_speed: 1.0,
             box_color2: None,
             box_h_line_width: face.box_line_width,
+            terminal_inverse_video: face.terminal_inverse_video,
             font_char_width: face.font_char_width,
             font_ascent: face.font_ascent,
             font_descent,
@@ -147,6 +149,9 @@ impl StatusLineFace {
         if let Some(color) = bg {
             face.background = color;
             face.use_default_background = false;
+        }
+        if fg.is_some() || bg.is_some() {
+            face.terminal_inverse_video = false;
         }
         face
     }
@@ -170,6 +175,9 @@ impl StatusLineFace {
         }
         if !matches!(self.box_type, BoxType::None) {
             attrs |= FaceAttributes::BOX;
+        }
+        if self.terminal_inverse_video {
+            attrs |= FaceAttributes::INVERSE;
         }
         Face {
             id: self.face_id,
@@ -358,6 +366,7 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.box_color == rhs.box_color
         && lhs.box_line_width == rhs.box_line_width
         && lhs.extend == rhs.extend
+        && lhs.terminal_inverse_video == rhs.terminal_inverse_video
 }
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {

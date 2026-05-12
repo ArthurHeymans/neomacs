@@ -1622,6 +1622,8 @@ pub struct ResolvedFace {
     pub extend: bool,
     /// Simulate bold by drawing twice at x and x+1.
     pub overstrike: bool,
+    /// Preserve terminal inverse-video when both colors are terminal defaults.
+    pub terminal_inverse_video: bool,
     /// Per-face character advance width (from FontMetricsService, 0.0 = use default).
     pub font_char_width: f32,
     /// Per-face font ascent (from FontMetricsService, 0.0 = use default).
@@ -1655,6 +1657,7 @@ impl Default for ResolvedFace {
             box_line_width: 0,
             extend: false,
             overstrike: false,
+            terminal_inverse_video: false,
             font_char_width: 0.0,
             font_ascent: 0.0,
             font_line_height: 0.0,
@@ -1814,12 +1817,17 @@ impl FaceResolver {
             rf.bg = color_to_pixel(c);
             rf.use_default_background = false;
         }
-        if face.inverse_video == Some(true) {
-            std::mem::swap(&mut rf.fg, &mut rf.bg);
-            std::mem::swap(
-                &mut rf.use_default_foreground,
-                &mut rf.use_default_background,
-            );
+        match face.inverse_video {
+            Some(true) => {
+                rf.terminal_inverse_video = rf.use_default_foreground && rf.use_default_background;
+                std::mem::swap(&mut rf.fg, &mut rf.bg);
+                std::mem::swap(
+                    &mut rf.use_default_foreground,
+                    &mut rf.use_default_background,
+                );
+            }
+            Some(false) => rf.terminal_inverse_video = false,
+            None => {}
         }
 
         if let Some(family) = face.family_runtime_string_owned() {
@@ -1910,6 +1918,9 @@ impl FaceResolver {
         }
         if resolved.italic != default.italic {
             merged.italic = resolved.italic;
+        }
+        if resolved.terminal_inverse_video != default.terminal_inverse_video {
+            merged.terminal_inverse_video = resolved.terminal_inverse_video;
         }
         if (resolved.font_size - default.font_size).abs() > f32::EPSILON {
             merged.font_size = resolved.font_size;
@@ -2329,12 +2340,17 @@ impl FaceResolver {
             rf.use_default_background = false;
         }
         // Inverse video: swap fg and bg
-        if face.inverse_video == Some(true) {
-            std::mem::swap(&mut rf.fg, &mut rf.bg);
-            std::mem::swap(
-                &mut rf.use_default_foreground,
-                &mut rf.use_default_background,
-            );
+        match face.inverse_video {
+            Some(true) => {
+                rf.terminal_inverse_video = rf.use_default_foreground && rf.use_default_background;
+                std::mem::swap(&mut rf.fg, &mut rf.bg);
+                std::mem::swap(
+                    &mut rf.use_default_foreground,
+                    &mut rf.use_default_background,
+                );
+            }
+            Some(false) => rf.terminal_inverse_video = false,
+            None => {}
         }
 
         // Font family
