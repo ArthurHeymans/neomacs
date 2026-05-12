@@ -1,10 +1,11 @@
 use super::*;
 use crate::emacs_core::builtins::search::{
-    builtin_looking_at, builtin_match_data, builtin_match_string, builtin_set_match_data,
-    builtin_string_match, builtin_string_match_p,
+    builtin_looking_at, builtin_match_data, builtin_match_string, builtin_re_search_forward,
+    builtin_set_match_data, builtin_string_match, builtin_string_match_p,
 };
+use crate::emacs_core::marker;
 use crate::emacs_core::search::builtin_replace_regexp_in_string;
-use crate::emacs_core::value::ValueKind;
+use crate::emacs_core::value::{ValueKind, list_to_vec};
 use crate::heap_types::LispString;
 
 // Test helpers that keep the Context alive across the returned
@@ -320,6 +321,84 @@ fn set_match_data_reseat_detaches_buffer_markers() {
     assert_nil(saved.cons_cdr().cons_car());
     let buffer = eval.buffers.get(buffer_id).expect("test buffer");
     assert_eq!(buffer.text.chain_walk_collect().len(), 0);
+}
+
+#[test]
+fn match_data_destructively_fills_reuse_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("match-data-reuse");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert test text");
+    eval.buffers
+        .goto_buffer_byte(buffer_id, 0)
+        .expect("rewind point");
+
+    builtin_re_search_forward(&mut eval, vec![Value::string("\\(a\\)b")])
+        .expect("regexp should match");
+    let reuse = Value::list(vec![
+        Value::symbol("a"),
+        Value::symbol("b"),
+        Value::symbol("c"),
+        Value::symbol("d"),
+        Value::symbol("e"),
+    ]);
+
+    let result = builtin_match_data(&mut eval, vec![Value::T, reuse]).unwrap();
+
+    assert_eq!(result, reuse);
+    assert_eq!(
+        list_to_vec(&reuse).unwrap(),
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::fixnum(1),
+            Value::fixnum(2),
+            Value::make_buffer(buffer_id),
+        ]
+    );
+}
+
+#[test]
+fn match_data_reseat_reuse_markers_before_refill_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("match-data-reseat-reuse");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert test text");
+    eval.buffers
+        .goto_buffer_byte(buffer_id, 0)
+        .expect("rewind point");
+
+    builtin_re_search_forward(&mut eval, vec![Value::string("b")]).expect("regexp should match");
+    let first_marker =
+        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false);
+    let reuse = Value::list(vec![
+        first_marker,
+        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
+        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
+        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
+        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
+    ]);
+
+    let result = builtin_match_data(&mut eval, vec![Value::T, reuse, Value::T]).unwrap();
+
+    assert_eq!(result, reuse);
+    assert!(first_marker.as_marker_data().unwrap().buffer.is_none());
+    assert_eq!(
+        list_to_vec(&reuse).unwrap(),
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(3),
+            Value::make_buffer(buffer_id),
+            Value::NIL,
+            Value::NIL,
+        ]
+    );
 }
 
 #[test]

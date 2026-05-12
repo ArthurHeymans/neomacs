@@ -1281,6 +1281,13 @@ pub(crate) fn builtin_match_data_with_state(
         ));
     }
 
+    let reuse = args.get(1).copied().unwrap_or(Value::NIL);
+    if args.get(2).is_some_and(|arg| arg.is_truthy()) {
+        if let Some(bufs) = buffers.as_deref_mut() {
+            reseat_match_data_markers(bufs, reuse, None);
+        }
+    }
+
     let Some(md) = match_data else {
         return Ok(Value::NIL);
     };
@@ -1366,7 +1373,29 @@ pub(crate) fn builtin_match_data_with_state(
             flat.push(Value::make_buffer(buffer_id));
         }
     }
-    Ok(Value::list(flat))
+    Ok(store_match_data_in_reuse(reuse, &flat))
+}
+
+fn store_match_data_in_reuse(reuse: Value, data: &[Value]) -> Value {
+    if !reuse.is_cons() {
+        return Value::list_from_slice(data);
+    }
+
+    let mut index = 0usize;
+    let mut tail = reuse;
+    let mut prev = Value::NIL;
+    while tail.is_cons() {
+        tail.set_car(data.get(index).copied().unwrap_or(Value::NIL));
+        prev = tail;
+        tail = tail.cons_cdr();
+        index += 1;
+    }
+
+    if index < data.len() {
+        prev.set_cdr(Value::list_from_slice(&data[index..]));
+    }
+
+    reuse
 }
 
 fn match_data_item_buffer_id_in_manager(
@@ -1477,7 +1506,7 @@ pub(crate) fn builtin_set_match_data_with_state(
     }
 
     if args.get(1).is_some_and(|arg| arg.is_truthy()) {
-        reseat_match_data_markers(buffers, args[0], pair_len);
+        reseat_match_data_markers(buffers, args[0], Some(pair_len));
     }
 
     Ok(Value::NIL)
@@ -1486,19 +1515,18 @@ pub(crate) fn builtin_set_match_data_with_state(
 fn reseat_match_data_markers(
     buffers: &mut crate::buffer::BufferManager,
     list: Value,
-    pair_len: usize,
+    max_cells: Option<usize>,
 ) {
     let mut tail = list;
-    for _ in 0..pair_len {
-        if !tail.is_cons() {
-            return;
-        }
+    let mut seen = 0usize;
+    while tail.is_cons() && max_cells.is_none_or(|limit| seen < limit) {
         let item = tail.cons_car();
         if super::marker::is_marker(&item) {
             super::marker::detach_marker_in_buffers(buffers, &item);
             tail.set_car(Value::NIL);
         }
         tail = tail.cons_cdr();
+        seen += 1;
     }
 }
 
