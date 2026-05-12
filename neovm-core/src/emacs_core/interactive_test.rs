@@ -2277,11 +2277,13 @@ fn describe_key_briefly_loads_from_gnu_help_el() {
              (use-global-map g)
              (describe-key-briefly (kbd "C-f")))"#,
     );
-    assert_eq!(result[0], r#"OK "C-f runs the command forward-char""#);
+    assert_eq!(
+        result[0],
+        r#"OK #("C-f runs the command forward-char" 0 3 (font-lock-face help-key-binding face help-key-binding))"#
+    );
 }
 
 #[test]
-#[ignore = "upstream c10c8cc9c format-preserves-text-properties change: describe-key-briefly now returns a propertized string; test expectation is stale. A naive substring-no-properties fix triggers a heap-corruption SIGABRT in the bootstrap path that predates this test — investigate separately before re-enabling."]
 fn describe_key_briefly_loaded_insert_writes_message() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_all(
@@ -2295,7 +2297,7 @@ fn describe_key_briefly_loaded_insert_writes_message() {
     );
     assert_eq!(
         result[0],
-        r#"OK (nil "C-f runs the command forward-char" nil)"#
+        r#"OK (nil #("C-f runs the command forward-char" 0 3 (font-lock-face help-key-binding face help-key-binding)) nil)"#
     );
 }
 

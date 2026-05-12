@@ -121,6 +121,44 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
 }
 
 #[test]
+fn format_preserves_percent_s_text_property_plist_order() {
+    crate::test_utils::init_test_tracing();
+
+    let source = Value::string("key");
+    let mut table = crate::buffer::text_props::TextPropertyTable::new();
+    table.put_property(
+        0,
+        3,
+        Value::symbol("face"),
+        Value::symbol("help-key-binding"),
+    );
+    table.put_property(
+        0,
+        3,
+        Value::symbol("font-lock-face"),
+        Value::symbol("help-key-binding"),
+    );
+    crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = builtin_format_wrapper_strict_slice(&mut ctx, &[Value::string("%s ok"), source])
+        .expect("format should preserve string properties");
+    let props = crate::emacs_core::value::get_string_text_properties_table_for_value(result)
+        .expect("result should carry text properties");
+    let intervals = props.intervals_snapshot();
+    let ordered_keys: Vec<_> = intervals[0]
+        .ordered_properties()
+        .map(|(name, _)| name.as_symbol_name().unwrap().to_string())
+        .collect();
+
+    assert_eq!(result.as_utf8_str(), Some("key ok"));
+    assert_eq!(
+        ordered_keys,
+        vec!["font-lock-face".to_string(), "face".to_string()]
+    );
+}
+
+#[test]
 fn format_percent_s_promotes_result_when_printer_outputs_non_ascii_text() {
     crate::test_utils::init_test_tracing();
 

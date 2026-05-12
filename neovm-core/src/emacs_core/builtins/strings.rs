@@ -1680,8 +1680,9 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
             continue;
         }
 
-        for (name, value) in &src_interval.properties {
-            if table.put_property(result_start, result_end, *name, *value) {
+        let ordered: Vec<_> = src_interval.ordered_properties().collect();
+        for (name, value) in ordered.into_iter().rev() {
+            if table.put_property(result_start, result_end, name, *value) {
                 touched = true;
             }
         }
@@ -1755,11 +1756,12 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
             if interval.start >= end {
                 continue;
             }
-            for (name, value) in &interval.properties {
+            let ordered: Vec<_> = interval.ordered_properties().collect();
+            for (name, value) in ordered.into_iter().rev() {
                 if table.put_property(
                     span.result_char_start + interval.start,
                     span.result_char_start + end,
-                    *name,
+                    name,
                     *value,
                 ) {
                     touched = true;
