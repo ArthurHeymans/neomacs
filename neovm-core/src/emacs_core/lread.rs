@@ -97,6 +97,9 @@ fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flo
             "invalid-read-syntax",
             vec![Value::string(format!("Read error: {}", e.message))],
         ),
+        super::value_reader::ReadErrorKind::Signal => {
+            signal(e.signal_symbol.as_deref().unwrap_or("error"), e.signal_data)
+        }
     }
 }
 

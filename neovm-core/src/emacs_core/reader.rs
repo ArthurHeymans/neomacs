@@ -538,6 +538,9 @@ fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
         super::value_reader::ReadErrorKind::InvalidReadSyntax => {
             signal("invalid-read-syntax", vec![Value::string(e.message)])
         }
+        super::value_reader::ReadErrorKind::Signal => {
+            signal(e.signal_symbol.as_deref().unwrap_or("error"), e.signal_data)
+        }
     }
 }
 
@@ -552,6 +555,9 @@ fn signal_reader_error_from_buffer(
         }
         super::value_reader::ReadErrorKind::InvalidReadSyntax => {
             signal_invalid_read_syntax_in_buffer_object(buffer, e.position, e.message)
+        }
+        super::value_reader::ReadErrorKind::Signal => {
+            signal(e.signal_symbol.as_deref().unwrap_or("error"), e.signal_data)
         }
     }
 }

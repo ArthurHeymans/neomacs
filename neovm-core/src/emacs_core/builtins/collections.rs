@@ -323,10 +323,10 @@ thread_local! {
 }
 
 #[derive(Clone)]
-pub(super) struct HashTableTestAlias {
-    standard_test: Option<HashTableTest>,
-    user_cmp_function: Option<Value>,
-    user_hash_function: Option<Value>,
+pub(crate) struct HashTableTestAlias {
+    pub(crate) standard_test: Option<HashTableTest>,
+    pub(crate) user_cmp_function: Option<Value>,
+    pub(crate) user_hash_function: Option<Value>,
 }
 
 pub(super) fn reset_collections_thread_locals() {
@@ -370,7 +370,7 @@ fn register_hash_table_test_alias(name: &str, alias: HashTableTestAlias) {
     HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow_mut().insert(name.to_string(), alias));
 }
 
-pub(super) fn lookup_hash_table_test_alias(name: &str) -> Option<HashTableTestAlias> {
+pub(crate) fn lookup_hash_table_test_alias(name: &str) -> Option<HashTableTestAlias> {
     HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow().get(name).cloned())
 }
 

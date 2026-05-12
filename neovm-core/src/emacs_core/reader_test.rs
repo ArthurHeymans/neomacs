@@ -3618,7 +3618,9 @@ fn read_from_string_hash_table_literal_returns_hash_table() {
     };
     let table = pair_car.as_hash_table().unwrap();
     assert!(matches!(table.test, HashTableTest::Equal));
-    assert_eq!(table.size, 3);
+    // GNU lread.c:hash_table_from_plist ignores the printed `size' field and
+    // passes `:size' derived from the number of DATA pairs to make-hash-table.
+    assert_eq!(table.size, 2);
     assert_eq!(table.data.len(), 2);
     assert_eq!(table.key_snapshots.len(), 2);
     assert_eq!(
@@ -3629,6 +3631,51 @@ fn read_from_string_hash_table_literal_returns_hash_table() {
         table.data.get(&HashKey::from_str("b")).copied(),
         Some(Value::fixnum(2))
     );
+}
+
+#[test]
+fn read_from_string_hash_table_literal_errors_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#s(hash-table data (a))")]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Hash table data length is odd")]
+            );
+        }
+        other => panic!("expected hash table data length error, got {other:?}"),
+    }
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#s(hash-table data . a)")]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "invalid-read-syntax");
+            assert_eq!(sig.data, vec![Value::string(".")]);
+        }
+        other => panic!("expected invalid dotted #s syntax, got {other:?}"),
+    }
+
+    let result = builtin_read_from_string(
+        &mut ev,
+        vec![Value::string("#s(hash-table test bogus data (a 1))")],
+    );
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::string("Invalid hash table test"),
+                    Value::symbol("bogus")
+                ]
+            );
+        }
+        other => panic!("expected invalid hash table test error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -3647,7 +3694,7 @@ fn read_buffer_hash_table_literal_returns_hash_table() {
     };
     let table = value.as_hash_table().unwrap();
     assert!(matches!(table.test, HashTableTest::Equal));
-    assert_eq!(table.size, 3);
+    assert_eq!(table.size, 2);
     assert_eq!(table.data.len(), 2);
     assert_eq!(
         table.data.get(&HashKey::from_str("a")).copied(),

@@ -19,7 +19,10 @@ use super::emacs_char;
 use crate::buffer::Buffer;
 use smallvec::SmallVec;
 
-use super::value::{HashTableTest, Value, build_hash_table_literal_value, eq_value};
+use super::builtins::collections::lookup_hash_table_test_alias;
+use super::value::{
+    HashTableTest, HashTableWeakness, Value, build_hash_table_literal_value, eq_value, list_to_vec,
+};
 
 const UNICODE_CHARACTER_NAME_LENGTH_BOUND: usize = 200;
 const CHAR_CODE_MASK: u32 = 0x3F_FFFF;
@@ -40,6 +43,17 @@ fn apply_control_modifier(value: u32) -> u32 {
     } else {
         code | modifiers | CHAR_CTRL_MODIFIER
     }
+}
+
+fn plist_get(plist: &[Value], key: &str) -> Option<Value> {
+    let mut i = 0;
+    while i + 1 < plist.len() {
+        if plist[i].as_symbol_name() == Some(key) {
+            return Some(plist[i + 1]);
+        }
+        i += 2;
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +242,8 @@ pub struct ReadError {
     pub message: String,
     pub position: usize,
     pub kind: ReadErrorKind,
+    pub signal_symbol: Option<String>,
+    pub signal_data: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,6 +251,7 @@ pub enum ReadErrorKind {
     InvalidReadSyntax,
     EndOfFile,
     Error,
+    Signal,
 }
 
 impl std::fmt::Display for ReadError {
@@ -1717,23 +1734,20 @@ impl<'a> Reader<'a> {
         let list = self.read_list_or_dotted()?;
         push_scratch_gc_root(list);
 
-        // Check if this is a proper list (cons chain)
-        if !list.is_cons() && !list.is_nil() {
-            // Not a proper list — fallback
-            let result = Value::list(vec![
-                Value::symbol("make-hash-table-from-literal"),
-                Value::list(vec![Value::symbol("quote"), list]),
-            ]);
-            restore_scratch_gc_roots(saved);
-            return Ok(result);
-        }
-
-        // Collect items into a Vec for easier processing
         let mut items: Vec<Value> = Vec::new();
         let mut cursor = list;
         while cursor.is_cons() {
             items.push(cursor.cons_car());
             cursor = cursor.cons_cdr();
+        }
+        if !cursor.is_nil() {
+            restore_scratch_gc_roots(saved);
+            return Err(self.error("."));
+        }
+
+        if items.is_empty() {
+            restore_scratch_gc_roots(saved);
+            return Err(self.error("#s"));
         }
 
         // Check if first element is the symbol `hash-table`
@@ -1742,86 +1756,118 @@ impl<'a> Reader<'a> {
             .is_some_and(|v| v.is_symbol_named("hash-table"));
 
         if is_hash_table {
-            // Parse keyword args from the list
-            let mut test = HashTableTest::Eql;
-            let mut data_pairs: Vec<(Value, Value)> = Vec::new();
-            let mut size: i64 = 0;
-            let mut i = 1;
-            while i < items.len() {
-                let kw_name = if let Some(id) = items[i].as_keyword_id() {
-                    Some(resolve_sym(id).to_string())
-                } else if let Some(name) = items[i].as_symbol_name() {
-                    Some(name.to_string())
-                } else {
-                    None
-                };
-                if let Some(kw_name) = kw_name {
-                    if i + 1 < items.len() {
-                        match kw_name.trim_start_matches(':') {
-                            "test" => {
-                                if let Some(sym_name) = items[i + 1].as_symbol_name() {
-                                    test = match sym_name {
-                                        "eq" => HashTableTest::Eq,
-                                        "eql" => HashTableTest::Eql,
-                                        "equal" => HashTableTest::Equal,
-                                        _ => HashTableTest::Eql,
-                                    };
-                                }
-                                i += 2;
-                            }
-                            "size" => {
-                                if let Some(n) = items[i + 1].as_fixnum() {
-                                    size = n;
-                                }
-                                i += 2;
-                            }
-                            "data" => {
-                                // data value is a list of alternating key-value pairs
-                                let data_list = items[i + 1];
-                                let mut data_cursor = data_list;
-                                while data_cursor.is_cons() {
-                                    let key = data_cursor.cons_car();
-                                    data_cursor = data_cursor.cons_cdr();
-                                    if data_cursor.is_cons() {
-                                        let val = data_cursor.cons_car();
-                                        data_cursor = data_cursor.cons_cdr();
-                                        data_pairs.push((key, val));
-                                    }
-                                }
-                                i += 2;
-                            }
-                            _ => {
-                                i += 2; // skip unknown keywords
-                            }
-                        }
-                    } else {
-                        i += 1;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-
-            let ht_value =
-                build_hash_table_literal_value(test, None, size, None, 1.5, 0.8125, data_pairs);
+            let result = self.read_hash_table_literal_from_plist(&items[1..]);
             restore_scratch_gc_roots(saved);
-            return Ok(ht_value);
+            return result;
         }
 
         // Not a hash-table — it's a record #s(type field1 field2 ...)
-        if !items.is_empty() {
-            let record_value = Value::make_record(items);
-            restore_scratch_gc_roots(saved);
-            return Ok(record_value);
+        let record_value = Value::make_record(items);
+        restore_scratch_gc_roots(saved);
+        Ok(record_value)
+    }
+
+    fn read_hash_table_literal_from_plist(&self, plist: &[Value]) -> Result<Value, ReadError> {
+        let mut test = HashTableTest::Eql;
+        let mut test_name = None;
+        let mut user_cmp_function = None;
+        let mut user_hash_function = None;
+
+        if let Some(test_value) = plist_get(plist, "test") {
+            if !test_value.is_nil() {
+                let Some(name) = test_value.as_symbol_name() else {
+                    return Err(self.signal_error(
+                        "wrong-type-argument",
+                        vec![Value::symbol("symbolp"), test_value],
+                        "symbolp",
+                    ));
+                };
+                test_name = Some(intern(name));
+                test = match name {
+                    "eq" => HashTableTest::Eq,
+                    "eql" => HashTableTest::Eql,
+                    "equal" => HashTableTest::Equal,
+                    _ => {
+                        if let Some(alias) = lookup_hash_table_test_alias(name) {
+                            user_cmp_function = alias.user_cmp_function;
+                            user_hash_function = alias.user_hash_function;
+                            alias.standard_test.unwrap_or(HashTableTest::Equal)
+                        } else {
+                            return Err(self.signal_error(
+                                "error",
+                                vec![Value::string("Invalid hash table test"), test_value],
+                                "Invalid hash table test",
+                            ));
+                        }
+                    }
+                };
+            }
         }
 
-        // Fallback for empty
-        let result = Value::list(vec![
-            Value::symbol("make-hash-table-from-literal"),
-            Value::list(vec![Value::symbol("quote"), list]),
-        ]);
-        restore_scratch_gc_roots(saved);
-        Ok(result)
+        let weakness = match plist_get(plist, "weakness") {
+            None => None,
+            Some(value) if value.is_nil() => None,
+            Some(value) if value.is_t() => Some(HashTableWeakness::KeyAndValue),
+            Some(value) => {
+                let Some(name) = value.as_symbol_name() else {
+                    return Err(self.signal_error(
+                        "error",
+                        vec![Value::string("Invalid hash table weakness"), value],
+                        "Invalid hash table weakness",
+                    ));
+                };
+                Some(match name {
+                    "key" => HashTableWeakness::Key,
+                    "value" => HashTableWeakness::Value,
+                    "key-or-value" => HashTableWeakness::KeyOrValue,
+                    "key-and-value" => HashTableWeakness::KeyAndValue,
+                    _ => {
+                        return Err(self.signal_error(
+                            "error",
+                            vec![Value::string("Invalid hash table weakness"), value],
+                            "Invalid hash table weakness",
+                        ));
+                    }
+                })
+            }
+        };
+
+        let data_value = plist_get(plist, "data").unwrap_or(Value::NIL);
+        let data = if data_value.is_nil() {
+            Vec::new()
+        } else if !data_value.is_cons() {
+            return Err(self.ordinary_error("Hash table data is not a list"));
+        } else {
+            list_to_vec(&data_value).ok_or_else(|| {
+                self.signal_error(
+                    "wrong-type-argument",
+                    vec![Value::symbol("listp"), data_value],
+                    "listp",
+                )
+            })?
+        };
+        if data.len() & 1 != 0 {
+            return Err(self.ordinary_error("Hash table data length is odd"));
+        }
+
+        let entries = data
+            .chunks_exact(2)
+            .map(|pair| (pair[0], pair[1]))
+            .collect::<Vec<_>>();
+        let table = build_hash_table_literal_value(
+            test,
+            test_name,
+            (data.len() / 2) as i64,
+            weakness,
+            1.5,
+            0.8125,
+            entries,
+        );
+        let _ = table.with_hash_table_mut(|hash_table| {
+            hash_table.user_cmp_function = user_cmp_function;
+            hash_table.user_hash_function = user_hash_function;
+        });
+        Ok(table)
     }
 
     // -- Atoms (numbers, symbols) --------------------------------------------
@@ -1970,6 +2016,8 @@ impl<'a> Reader<'a> {
             position: self.pos,
             message: message.to_string(),
             kind: ReadErrorKind::InvalidReadSyntax,
+            signal_symbol: None,
+            signal_data: Vec::new(),
         }
     }
 
@@ -1978,6 +2026,18 @@ impl<'a> Reader<'a> {
             position: self.pos,
             message: message.to_string(),
             kind: ReadErrorKind::Error,
+            signal_symbol: None,
+            signal_data: Vec::new(),
+        }
+    }
+
+    fn signal_error(&self, symbol: &str, data: Vec<Value>, message: &str) -> ReadError {
+        ReadError {
+            position: self.pos,
+            message: message.to_string(),
+            kind: ReadErrorKind::Signal,
+            signal_symbol: Some(symbol.to_string()),
+            signal_data: data,
         }
     }
 
@@ -1986,6 +2046,8 @@ impl<'a> Reader<'a> {
             position: self.pos,
             message: "end-of-file".to_string(),
             kind: ReadErrorKind::EndOfFile,
+            signal_symbol: None,
+            signal_data: Vec::new(),
         }
     }
 

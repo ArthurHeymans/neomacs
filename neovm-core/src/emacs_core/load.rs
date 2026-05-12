@@ -415,6 +415,11 @@ fn read_error_for_load(path: &Path, e: super::value_reader::ReadError) -> EvalEr
             ))],
             raw_data: None,
         },
+        super::value_reader::ReadErrorKind::Signal => EvalError::Signal {
+            symbol: intern(e.signal_symbol.as_deref().unwrap_or("error")),
+            data: e.signal_data,
+            raw_data: None,
+        },
     }
 }
 
