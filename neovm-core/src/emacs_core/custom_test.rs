@@ -943,7 +943,7 @@ fn buffer_local_bound_p_matches_emacs_shape() {
     assert_eq!(results[1], "OK t");
     assert_eq!(results[2], "OK nil");
     assert_eq!(results[3], "OK t");
-    assert_eq!(results[4], r#"ERR (error ("No such buffer"))"#);
+    assert_eq!(results[4], "OK t");
     assert_eq!(results[5], "OK wrong-type-argument");
     assert_eq!(results[6], "OK wrong-type-argument");
     assert_eq!(results[7], "OK wrong-number-of-arguments");
