@@ -5908,7 +5908,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(3),
         ),
     );
-    ctx.defsubr("transpose-regions", builtin_transpose_regions, 4, Some(5));
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "transpose-regions",
+            builtin_transpose_regions,
+            4,
+            Some(5),
+        ),
+    );
     ctx.defsubr(
         "tty--output-buffer-size",
         |_ctx, args| builtin_tty_output_buffer_size(args),
