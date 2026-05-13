@@ -83,9 +83,6 @@ pub struct FontMetricsService {
     ascii_cache: HashMap<MetricsCacheKey, [f32; 128]>,
     /// Cache: face attrs → single char width (for non-ASCII)
     char_cache: HashMap<(MetricsCacheKey, char), f32>,
-    /// Cache: Unicode script range → resolved font key for that script.
-    /// Avoids per-character fontconfig queries for same-script characters.
-    script_cache: HashMap<unicode_script::Script, ResolvedCharFont>,
     /// Cache: face attrs → font metrics (ascent, descent, etc.)
     metrics_cache: HashMap<MetricsCacheKey, FontMetrics>,
     /// Interned font family strings for cosmic-text Attrs (requires 'static)
@@ -107,7 +104,6 @@ impl FontMetricsService {
             font_system,
             ascii_cache: HashMap::new(),
             char_cache: HashMap::new(),
-            script_cache: HashMap::new(),
             metrics_cache: HashMap::new(),
             interned_families: HashMap::new(),
             font_file_cache: FontFileCache::new(),
@@ -444,16 +440,11 @@ impl FontMetricsService {
             return w;
         }
 
-        // Non-ASCII: resolve the actual covering font for this character's
-        // script first (cached per script range), then measure with that font.
-        let script = unicode_script::Script::from(ch);
-        let resolved = if let Some(r) = self.script_cache.get(&script) {
-            r.clone()
-        } else {
-            let r = self.resolve_font_for_char(ch, family, weight, italic);
-            self.script_cache.insert(script, r.clone());
-            r
-        };
+        // Non-ASCII: resolve the actual covering font for this character.
+        // GNU's font_range starts from the selected font and advances only
+        // while font_encode_char accepts each concrete character; a broad
+        // Unicode script cache is too coarse for Common/emoji symbols.
+        let resolved = self.resolve_font_for_char(ch, family, weight, italic);
         let resolved_italic = resolved.slant.is_italic();
         let resolved_key = MetricsCacheKey::new(
             &resolved.family,
