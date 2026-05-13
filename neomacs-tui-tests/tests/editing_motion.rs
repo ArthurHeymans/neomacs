@@ -120,6 +120,45 @@ fn kill_region_and_yank_via_cw_cy() {
 }
 
 #[test]
+fn next_line_add_newlines_inserts_newline_at_eob_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "next-line-add-newlines.txt",
+        "alpha",
+        "C-x C-f",
+    );
+    eval_expression(&mut gnu, &mut neo, "(setq next-line-add-newlines t)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "M-> C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    send_both_raw(&mut gnu, &mut neo, b"!");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("alpha")) && grid.iter().any(|row| row.contains("!"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "next_line_add_newlines_inserts_newline_at_eob_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+    save_current_file_and_assert_contents(
+        "next_line_add_newlines_inserts_newline_at_eob_like_gnu",
+        &mut gnu,
+        &mut neo,
+        "next-line-add-newlines.txt",
+        "alpha\n!\n",
+    );
+}
+
+#[test]
 fn undo_edit_via_cx_u() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
