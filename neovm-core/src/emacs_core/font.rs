@@ -474,7 +474,16 @@ fn set_runtime_face_color_from_frame_parameter(
     face_name: &str,
     attr_name: &str,
     value: Value,
-) {
+) -> Result<(), crate::emacs_core::error::Flow> {
+    builtin_internal_set_lisp_face_attribute(
+        eval,
+        vec![
+            Value::symbol(face_name),
+            Value::symbol(attr_name),
+            value,
+            Value::make_frame(frame_id.0),
+        ],
+    )?;
     let attr_value = value
         .as_utf8_str()
         .and_then(crate::face::Color::parse)
@@ -482,6 +491,7 @@ fn set_runtime_face_color_from_frame_parameter(
         .unwrap_or(crate::face::FaceAttrValue::Unspecified);
     eval.set_face_attribute(face_name, attr_name, attr_value);
     mirror_runtime_face_into_frame(eval, frame_id, face_name);
+    Ok(())
 }
 
 pub(crate) fn update_face_from_frame_parameter(
@@ -498,7 +508,7 @@ pub(crate) fn update_face_from_frame_parameter(
                 "default",
                 ":foreground",
                 new_value,
-            );
+            )?;
         }
         "background-color" => {
             if let Some(function) = eval.obarray().symbol_function("frame-set-background-mode") {
@@ -510,7 +520,7 @@ pub(crate) fn update_face_from_frame_parameter(
                 "default",
                 ":background",
                 new_value,
-            );
+            )?;
         }
         _ => {}
     }

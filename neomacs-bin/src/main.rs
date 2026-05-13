@@ -590,6 +590,28 @@ fn parse_startup_options(args: impl IntoIterator<Item = String>) -> Result<Start
         idx += 1;
     }
 
+    if frontend == FrontendKind::Tty {
+        let mut tty_args = Vec::with_capacity(forwarded_args.len());
+        if let Some(program) = forwarded_args.first() {
+            tty_args.push(program.clone());
+        }
+        let mut arg_iter = forwarded_args.iter().skip(1);
+        while let Some(arg) = arg_iter.next() {
+            if matches!(
+                arg.as_str(),
+                "-d" | "-display" | "--display" | "--terminal" | "-t"
+            ) {
+                let _ = arg_iter.next();
+                continue;
+            }
+            if arg.starts_with("--display=") || arg.starts_with("--terminal=") {
+                continue;
+            }
+            tty_args.push(arg.clone());
+        }
+        forwarded_args = tty_args;
+    }
+
     // -Q / --quick / -quick PEEK (GNU emacs.c:2123-2130). GNU walks
     // argv one more time looking for any of these three spellings; if
     // found, it sets `no_site_lisp = 1` and leaves the flag in argv so
