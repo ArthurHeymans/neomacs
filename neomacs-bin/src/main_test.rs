@@ -95,12 +95,12 @@ fn bootstrap_gui_display_defaults_to_gnu_light_background_mode() {
 fn gui_startup() -> StartupOptions {
     StartupOptions {
         frontend: FrontendKind::Gui,
-        forwarded_args: vec!["neomacs".to_string()],
+        forwarded_args: vec!["neomacs".to_string(), "-Q".to_string()],
         terminal_device: None,
         noninteractive: false,
         temacs_mode: None,
         dump_file_override: None,
-        no_site_lisp: false,
+        no_site_lisp: true,
         no_loadup: false,
         no_build_details: false,
     }
@@ -1902,7 +1902,7 @@ fn gnu_startup_posts_echo_area_message() {
         .expect("startup echo probe should evaluate");
     assert_eq!(
         print_value_with_eval(&mut eval, &result),
-        "(\"For information about GNU Emacs and the GNU system, type C-h C-a.\" \"For information about GNU Emacs and the GNU system, type C-h C-a.\")"
+        "(#(\"For information about GNU Emacs and the GNU system, type C-h C-a.\" 57 64 (font-lock-face help-key-binding face help-key-binding)) \"For information about GNU Emacs and the GNU system, type C-h C-a.\")"
     );
 }
 
@@ -1988,7 +1988,7 @@ fn gnu_startup_runtime_load_path_finds_mail_rfc6068() {
         .as_runtime_string_owned()
         .expect("locate-library should return a resolved path string after startup");
     assert!(
-        path.ends_with("/mail/rfc6068.el"),
+        path.ends_with("/mail/rfc6068.elc"),
         "expected GNU mail runtime path, got {path}"
     );
 }
@@ -2249,6 +2249,7 @@ fn gnu_startup_window_pixel_queries_use_live_frame_pixels() {
                  (window-text-width nil t)
                  (window-text-height nil t)
                  (window-fringes)
+                 (window-scroll-bar-width)
                  (window-edges nil nil nil t)
                  (window-edges nil t nil t))"#,
         )
@@ -2261,14 +2262,19 @@ fn gnu_startup_window_pixel_queries_use_live_frame_pixels() {
     let text_width = items[4].as_int().expect("window-text-width");
     let text_height = items[5].as_int().expect("window-text-height");
     let fringes = list_to_vec(&items[6]).expect("window fringes");
-    let outer_edges = list_to_vec(&items[7]).expect("outer window edges");
-    let inner_edges = list_to_vec(&items[8]).expect("inner window edges");
+    let scroll_bar_width = items[7].as_int().expect("window-scroll-bar-width");
+    let outer_edges = list_to_vec(&items[8]).expect("outer window edges");
+    let inner_edges = list_to_vec(&items[9]).expect("inner window edges");
     let left_fringe = fringes[0].as_int().expect("left fringe");
     let right_fringe = fringes[1].as_int().expect("right fringe");
+    let outer_top = outer_edges[1].as_int().expect("outer top edge");
 
     assert_eq!(pixel_width, 960);
     assert!(pixel_height > 0);
-    assert_eq!(body_width, pixel_width - left_fringe - right_fringe);
+    assert_eq!(
+        body_width,
+        pixel_width - left_fringe - right_fringe - scroll_bar_width
+    );
     assert_eq!(text_width, body_width);
     assert_eq!(body_height, text_height);
     assert!(pixel_height >= body_height);
@@ -2276,18 +2282,18 @@ fn gnu_startup_window_pixel_queries_use_live_frame_pixels() {
         outer_edges,
         vec![
             Value::fixnum(0),
-            Value::fixnum(0),
+            Value::fixnum(outer_top),
             Value::fixnum(pixel_width),
-            Value::fixnum(pixel_height)
+            Value::fixnum(outer_top + pixel_height)
         ]
     );
     assert_eq!(
         inner_edges,
         vec![
             Value::fixnum(left_fringe),
-            Value::fixnum(0),
-            Value::fixnum(pixel_width - right_fringe),
-            Value::fixnum(body_height)
+            Value::fixnum(outer_top),
+            Value::fixnum(pixel_width - right_fringe - scroll_bar_width),
+            Value::fixnum(outer_top + body_height)
         ]
     );
 }

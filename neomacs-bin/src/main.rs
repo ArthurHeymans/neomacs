@@ -2864,7 +2864,7 @@ fn run_gnu_startup_inner(eval: &mut Context) {
           (defun neomacs--test-exit-startup-recursive-edit ()
             (remove-hook 'window-setup-hook
                          #'neomacs--test-exit-startup-recursive-edit)
-            (exit-recursive-edit))
+            (kill-emacs 0))
           (add-hook 'window-setup-hook
                     #'neomacs--test-exit-startup-recursive-edit))
         "#,
