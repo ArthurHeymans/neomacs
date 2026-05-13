@@ -2,6 +2,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::fmt::Write as _;
 
 use super::chartable::{bool_vector_length, char_table_external_slots};
@@ -26,6 +27,7 @@ pub struct PrintOptions {
     pub print_length: Option<i64>,
     pub print_continuous_numbering: bool,
     pub print_number_table: Option<Value>,
+    pub float_output_format: Option<Value>,
     backquote_output_level: usize,
 }
 
@@ -43,6 +45,7 @@ impl PrintOptions {
             print_length: None,
             print_continuous_numbering: false,
             print_number_table: None,
+            float_output_format: None,
             backquote_output_level: 0,
         }
     }
@@ -66,6 +69,7 @@ impl PrintOptions {
             print_length,
             print_continuous_numbering: false,
             print_number_table: None,
+            float_output_format: None,
             backquote_output_level: 0,
         }
     }
@@ -627,7 +631,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Nil => out.push_str("nil"),
         ValueKind::T => out.push_str("t"),
         ValueKind::Fixnum(v) => write!(out, "{}", v).unwrap(),
-        ValueKind::Float => out.push_str(&format_float(value.xfloat())),
+        ValueKind::Float => out.push_str(&format_float_with_options(value.xfloat(), state.options)),
         ValueKind::Symbol(id) => out.push_str(&format_symbol(id, state.options)),
         ValueKind::String => {
             let ls = value.as_lisp_string().unwrap();
@@ -1506,7 +1510,9 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         ValueKind::Nil => out.extend_from_slice(b"nil"),
         ValueKind::T => out.extend_from_slice(b"t"),
         ValueKind::Fixnum(v) => out.extend_from_slice(v.to_string().as_bytes()),
-        ValueKind::Float => out.extend_from_slice(format_float(value.xfloat()).as_bytes()),
+        ValueKind::Float => {
+            out.extend_from_slice(format_float_with_options(value.xfloat(), options).as_bytes())
+        }
         ValueKind::Symbol(id) => append_symbol_bytes(id, out, options),
         ValueKind::String => {
             let ls = value.as_lisp_string().unwrap();
@@ -1926,6 +1932,115 @@ pub(crate) fn format_float(f: f64) -> String {
         };
     }
     format_float_dtoastr(f)
+}
+
+pub(crate) fn format_float_with_options(f: f64, options: PrintOptions) -> String {
+    format_float_with_output_format(f, options.float_output_format)
+}
+
+pub(crate) fn format_float_with_output_format(f: f64, output_format: Option<Value>) -> String {
+    if f.is_nan() || f.is_infinite() {
+        return format_float(f);
+    }
+
+    let Some((format, width)) = parse_float_output_format(output_format) else {
+        return format_float(f);
+    };
+
+    let Some(mut text) = snprintf_float(&format, f) else {
+        return format_float(f);
+    };
+    finish_float_output_format(&mut text, width);
+    text
+}
+
+fn parse_float_output_format(value: Option<Value>) -> Option<(CString, i32)> {
+    let bytes = value?.as_lisp_string()?.as_bytes();
+    let nul = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    let format = &bytes[..nul];
+    if format.len() < 3 || format[0] != b'%' || format[1] != b'.' {
+        return None;
+    }
+
+    let mut index = 2;
+    let mut width = -1;
+    if format.get(index).is_some_and(u8::is_ascii_digit) {
+        width = 0;
+        while let Some(byte) = format.get(index).filter(|byte| byte.is_ascii_digit()) {
+            width = width * 10 + i32::from(byte - b'0');
+            if width > f64::DIGITS as i32 {
+                return None;
+            }
+            index += 1;
+        }
+        if width == 0 && format.get(index) != Some(&b'f') {
+            return None;
+        }
+    }
+
+    if !matches!(format.get(index), Some(b'e' | b'f' | b'g')) {
+        return None;
+    }
+    index += 1;
+    if index != format.len() {
+        return None;
+    }
+
+    CString::new(format).ok().map(|format| (format, width))
+}
+
+fn snprintf_float(format: &CString, f: f64) -> Option<String> {
+    let mut buffer = vec![0u8; 128];
+    let len = unsafe {
+        libc::snprintf(
+            buffer.as_mut_ptr().cast::<libc::c_char>(),
+            buffer.len(),
+            format.as_ptr(),
+            f,
+        )
+    };
+    if len < 0 {
+        return None;
+    }
+    let len = len as usize;
+    if len >= buffer.len() {
+        buffer.resize(len + 1, 0);
+        let retry = unsafe {
+            libc::snprintf(
+                buffer.as_mut_ptr().cast::<libc::c_char>(),
+                buffer.len(),
+                format.as_ptr(),
+                f,
+            )
+        };
+        if retry < 0 {
+            return None;
+        }
+    }
+
+    let bytes = unsafe { CStr::from_ptr(buffer.as_ptr().cast::<libc::c_char>()) }.to_bytes();
+    Some(String::from_utf8_lossy(bytes).into_owned())
+}
+
+fn finish_float_output_format(text: &mut String, width: i32) {
+    if width == 0 {
+        return;
+    }
+
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() && (bytes[index].is_ascii_digit() || bytes[index] == b'-') {
+        index += 1;
+    }
+
+    if bytes.get(index) == Some(&b'.') && index + 1 == bytes.len() {
+        text.push('0');
+    } else if index == bytes.len() {
+        text.push_str(".0");
+    }
 }
 
 /// Format a finite float matching GNU Emacs's `dtoastr` / `float_to_string`:

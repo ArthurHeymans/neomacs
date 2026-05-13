@@ -587,11 +587,22 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
 /// `(number-to-string NUMBER)` — mirrors GNU `Fnumber_to_string`
 /// (`src/data.c`). Bignums format via `rug::Integer`'s Display, which
 /// uses `mpz_get_str` under the hood.
-pub(crate) fn builtin_number_to_string(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_number_to_string(
+    ctx: &crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("number-to-string", &args, 1)?;
     match args[0].kind() {
         ValueKind::Fixnum(n) => Ok(Value::string(n.to_string())),
-        ValueKind::Float => Ok(Value::string(super::print::format_float(args[0].xfloat()))),
+        ValueKind::Float => Ok(Value::string(
+            super::print::format_float_with_output_format(
+                args[0].xfloat(),
+                ctx.obarray
+                    .symbol_value("float-output-format")
+                    .filter(|v| v.is_string())
+                    .copied(),
+            ),
+        )),
         ValueKind::Veclike(VecLikeType::Bignum) => {
             Ok(Value::string(args[0].as_bignum().unwrap().to_string()))
         }

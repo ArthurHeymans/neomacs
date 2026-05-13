@@ -1646,13 +1646,15 @@ fn apply_print_override_setting(
         "number-table" => {
             options.print_number_table = value.is_hash_table().then_some(value);
         }
+        "float-format" => {
+            options.float_output_format = value.is_string().then_some(value);
+        }
         // GNU accepts these override keys by dynamically binding print
         // variables that Neomacs does not yet model in PrintOptions.
         "quoted"
         | "charset-text-property"
         | "unreadable-function"
         | "unreadeable-function"
-        | "float-format"
         | "integers-as-characters" => {}
         _ => {
             return Err(signal(

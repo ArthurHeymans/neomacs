@@ -3051,6 +3051,8 @@ impl Context {
         obarray.make_special("symbols-with-pos-enabled");
         obarray.set_symbol_value("print-symbols-bare", Value::NIL);
         obarray.make_special("print-symbols-bare");
+        obarray.set_symbol_value("float-output-format", Value::NIL);
+        obarray.make_special("float-output-format");
         // GNU Emacs print.c: all print-* variables are DEFVAR_BOOL or
         // DEFVAR_LISP, making them dynamically scoped (special).
         // This is essential so `(let ((print-escape-newlines t)) ...)`

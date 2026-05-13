@@ -7859,7 +7859,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "number-to-string",
-        |_ctx, args| builtin_number_to_string(args),
+        |ctx, args| builtin_number_to_string(ctx, args),
         1,
         Some(1),
     );

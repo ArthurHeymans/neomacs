@@ -352,6 +352,10 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     opts.print_escape_control_characters = print_escape_control_characters;
     opts.print_continuous_numbering = print_continuous_numbering;
     opts.print_number_table = print_number_table;
+    opts.float_output_format = obarray
+        .symbol_value("float-output-format")
+        .filter(|v| v.is_string())
+        .copied();
     opts
 }
 

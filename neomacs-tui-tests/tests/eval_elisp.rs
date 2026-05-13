@@ -12230,6 +12230,60 @@ fn format_print_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn float_output_format_matches_gnu_print_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(with-current-buffer "*scratch*" (erase-buffer) "#,
+        r#"(dolist (entry (list "#,
+        r#"(list 'meta (boundp 'float-output-format) (symbol-value 'float-output-format) (special-variable-p 'float-output-format)) "#,
+        r#"(list 'default (number-to-string 1.25)) "#,
+        r#"(list 'let (let ((float-output-format "%.1f")) (number-to-string 1.25)) "#,
+        r#"(let ((float-output-format "%.1f")) (prin1-to-string 1.25))) "#,
+        r#"(list 'override (prin1-to-string 1.25 nil '((float-format . "%.1f")))) "#,
+        r#"(list 'bad (let ((float-output-format "bad")) (number-to-string 1.25))) "#,
+        r#"(list 'zero-f (let ((float-output-format "%.0f")) (number-to-string 1.25))) "#,
+        r#"(list 'zero-g (let ((float-output-format "%.0g")) (number-to-string 1.25))) "#,
+        r#"(list 'dynamic (eval '(let ((float-output-format "%.1f")) "#,
+        r#"(symbol-value 'float-output-format)) t)))) "#,
+        r#"(insert (format "float-output:%S\n" entry))) "#,
+        r#"(goto-char (point-min)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains(r#"float-output:(meta t nil t)"#)
+            && text.contains(r#"float-output:(default "1.25")"#)
+            && text.contains(r#"float-output:(let "1.2" "1.2")"#)
+            && text.contains(r#"float-output:(override "1.2")"#)
+            && text.contains(r#"float-output:(bad "1.25")"#)
+            && text.contains(r#"float-output:(zero-f "1")"#)
+            && text.contains(r#"float-output:(zero-g "1.25")"#)
+            && text.contains(r#"float-output:(dynamic "%.1f")"#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: float-output-format should match GNU print.c semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "float_output_format_matches_gnu_print_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn format_percent_c_preserves_large_character_like_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
 
