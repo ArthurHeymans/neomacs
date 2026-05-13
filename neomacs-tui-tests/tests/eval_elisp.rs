@@ -11343,6 +11343,47 @@ fn file_name_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn write_region_inhibit_fsync_matches_gnu_fileio_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "write-fsync:%S" "#,
+        r#"(list (boundp 'write-region-inhibit-fsync) "#,
+        r#"(symbol-value 'write-region-inhibit-fsync) "#,
+        r#"(special-variable-p 'write-region-inhibit-fsync) "#,
+        r#"(eval '(let ((write-region-inhibit-fsync nil)) "#,
+        r#"(symbol-value 'write-region-inhibit-fsync)) t)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("write-fsync:(t t t nil)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: write-region-inhibit-fsync should match GNU fileio.c DEFVAR_BOOL semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "write_region_inhibit_fsync_matches_gnu_fileio_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_edge_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
