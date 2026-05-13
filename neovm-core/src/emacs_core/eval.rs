@@ -12233,7 +12233,8 @@ pub(crate) fn set_runtime_binding(
 ) -> Option<crate::buffer::BufferId> {
     use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
 
-    let symbol_is_canonical = super::builtins::is_canonical_symbol_id(sym_id);
+    let symbol = obarray.get_by_id(sym_id);
+    let symbol_is_interned_global = symbol.is_some_and(|s| s.is_interned_global());
 
     // Phase 10E: route writes for LOCALIZED symbols through the BLV
     // machinery. Mirrors GNU `set_internal` SYMBOL_LOCALIZED arm
@@ -12242,7 +12243,7 @@ pub(crate) fn set_runtime_binding(
     // identical so a buffer-local visible from the bytecode VM is
     // also visible from the tree-walk interpreter and the `set`
     // builtin.
-    let redirect = obarray.get_by_id(sym_id).map(|s| s.redirect());
+    let redirect = symbol.map(|s| s.redirect());
     if matches!(redirect, Some(SymbolRedirect::Localized))
         && let Some(buf_id) = buffers.current_buffer_id()
     {
@@ -12275,7 +12276,7 @@ pub(crate) fn set_runtime_binding(
     //     binding, unless a surrounding `let` is shadowing the buffer
     //     binding, in which case the write targets the default path
     //     (`set_default_internal`)
-    if symbol_is_canonical
+    if symbol_is_interned_global
         && matches!(redirect, Some(SymbolRedirect::Forwarded))
         && let Some(current_id) = buffers.current_buffer_id()
         && let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(sym_id)
@@ -12304,7 +12305,7 @@ pub(crate) fn set_runtime_binding(
     // Preserve the pre-Phase-10 behavior for those names: if the
     // current buffer already reports the variable as local, write the
     // current buffer binding instead of the obarray cell.
-    if symbol_is_canonical
+    if symbol_is_interned_global
         && let Some(current_id) = buffers.current_buffer_id()
         && let Some(buf) = buffers.get(current_id)
         && buf.has_buffer_local_by_sym_id(sym_id)

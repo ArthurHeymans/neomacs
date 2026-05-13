@@ -380,6 +380,11 @@ impl LispSymbol {
         self.flags.redirect()
     }
 
+    #[inline]
+    pub fn is_interned_global(&self) -> bool {
+        self.interned_global
+    }
+
     /// Read the value cell as a plain `Value`. Caller must have verified
     /// the redirect is `Plainval`.
     #[inline]
