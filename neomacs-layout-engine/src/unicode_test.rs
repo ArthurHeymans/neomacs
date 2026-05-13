@@ -192,8 +192,10 @@ fn wide_char_fullwidth_forms() {
 fn wide_char_hangul_syllable() {
     // U+AC00 first Hangul syllable (가)
     assert!(is_wide_char('\u{AC00}'));
-    // U+D7AF last Hangul syllable
-    assert!(is_wide_char('\u{D7AF}'));
+    // GNU char-width-table marks Hangul syllables through U+D7A3 wide.
+    assert!(is_wide_char('\u{D7A3}'));
+    assert!(!is_wide_char('\u{D7A4}'));
+    assert!(!is_wide_char('\u{D7AF}'));
 }
 
 #[test]
@@ -219,7 +221,9 @@ fn wide_char_cjk_symbols_and_punctuation() {
 #[test]
 fn wide_char_cjk_radicals() {
     assert!(is_wide_char('\u{2E80}'));
-    assert!(is_wide_char('\u{2FDF}'));
+    assert!(is_wide_char('\u{2FD5}'));
+    assert!(!is_wide_char('\u{2FD6}'));
+    assert!(!is_wide_char('\u{2FDF}'));
 }
 
 #[test]
@@ -330,7 +334,9 @@ fn cluster_extender_combining_diacritical() {
 #[test]
 fn cluster_extender_combining_diacritical_extended() {
     assert!(is_cluster_extender('\u{1AB0}'));
-    assert!(is_cluster_extender('\u{1AFF}'));
+    assert!(is_cluster_extender('\u{1AC0}'));
+    assert!(!is_cluster_extender('\u{1AC1}'));
+    assert!(!is_cluster_extender('\u{1AFF}'));
 }
 
 #[test]
@@ -744,12 +750,29 @@ fn decode_utf8_sequential_walk() {
 }
 
 #[test]
-fn wide_and_emoji_mutual_coverage() {
-    // Every emoji presentation char should also be wide via is_wide_char
-    let emoji_cps: Vec<u32> = vec![0x1F600, 0x1F4A9, 0x1F680, 0x1F1E6, 0x1F004, 0x1F0CF, 0x2702];
-    for cp in emoji_cps {
+fn emoji_presentation_and_gnu_width_are_distinct() {
+    // GNU's char-width-table gives width 2 only to selected emoji ranges.
+    // Emoji presentation alone does not imply a 2-column char-width.
+    let wide_emoji_cps: Vec<u32> = vec![0x1F600, 0x1F4A9, 0x1F680, 0x1F004, 0x1F0CF, 0x2705];
+    for cp in wide_emoji_cps {
         if let Some(ch) = char::from_u32(cp) {
             assert!(is_wide_char(ch), "emoji 0x{:X} should be wide", cp);
+        }
+    }
+
+    let narrow_emoji_cps: Vec<u32> = vec![0x1F1E6, 0x2702, 0x2764, 0x1F6FF, 0x1FAFF];
+    for cp in narrow_emoji_cps {
+        if let Some(ch) = char::from_u32(cp) {
+            assert!(
+                is_emoji_presentation(cp),
+                "emoji 0x{:X} should still be an emoji presentation codepoint",
+                cp
+            );
+            assert!(
+                !is_wide_char(ch),
+                "GNU char-width-table gives emoji 0x{:X} width 1",
+                cp
+            );
         }
     }
 }

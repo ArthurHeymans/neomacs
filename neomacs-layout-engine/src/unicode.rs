@@ -54,6 +54,7 @@ pub(crate) fn is_wide_char(ch: char) -> bool {
 }
 
 /// Check if a codepoint is an emoji that should have wide (2-column) presentation.
+#[cfg(test)]
 pub(crate) fn is_emoji_presentation(cp: u32) -> bool {
     // Emoticons
     (0x1F600..=0x1F64F).contains(&cp)
