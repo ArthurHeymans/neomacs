@@ -7595,8 +7595,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         Value::list(vec![Value::cons(Value::symbol("clone-of"), Value::T)]),
     );
     obarray.set_symbol_value("recenter-redisplay", Value::symbol("tty"));
+    obarray.set_symbol_value("window-restore-killed-buffer-windows", Value::NIL);
     obarray.set_symbol_value("window-combination-resize", Value::NIL);
     obarray.set_symbol_value("window-combination-limit", Value::symbol("window-size"));
+    for name in [
+        "window-persistent-parameters",
+        "recenter-redisplay",
+        "window-restore-killed-buffer-windows",
+        "window-combination-resize",
+        "window-combination-limit",
+    ] {
+        obarray.make_special(name);
+    }
     obarray.set_symbol_value("delete-frame-functions", Value::NIL);
     obarray.set_symbol_value("after-delete-frame-functions", Value::NIL);
     obarray.set_symbol_value("window-buffer-change-functions", Value::NIL);

@@ -9657,6 +9657,51 @@ fn split_window_order_elisp_functions_match_gnu_semantics() {
 }
 
 #[test]
+fn window_defvar_lisp_variables_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "window-defvar:%S" "#,
+        r#"(list (mapcar (lambda (s) "#,
+        r#"(list s (boundp s) (symbol-value s) (special-variable-p s))) "#,
+        r#"'(window-restore-killed-buffer-windows window-combination-limit)) "#,
+        r#"(eval '(let ((window-restore-killed-buffer-windows 'dyn-restore) "#,
+        r#"(window-combination-limit 'dyn-limit)) "#,
+        r#"(list (symbol-value 'window-restore-killed-buffer-windows) "#,
+        r#"(symbol-value 'window-combination-limit))) t)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("window-defvar:")
+                && row.contains("(window-restore-killed-buffer-windows t nil t)")
+                && row.contains("(window-combination-limit t window-size t)")
+                && row.contains("(dyn-restore dyn-limit)")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: window DEFVAR_LISP variables should be bound and special like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "window_defvar_lisp_variables_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn line_position_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
