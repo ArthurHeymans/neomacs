@@ -498,7 +498,9 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("inhibit-local-menu-bar-menus", Value::NIL);
     obarray.set_symbol_value("meta-prefix-char", Value::fixnum(27));
     obarray.set_symbol_value("enable-disabled-menus-and-buttons", Value::NIL);
-    obarray.set_symbol_value("select-active-regions", Value::symbol("only"));
+    // GNU `src/keyboard.c` defines this with DEFVAR_LISP and initializes it to Qt.
+    obarray.set_symbol_value("select-active-regions", Value::T);
+    obarray.make_special("select-active-regions");
     obarray.set_symbol_value("saved-region-selection", Value::NIL);
     obarray.set_symbol_value(
         "selection-inhibit-update-commands",
