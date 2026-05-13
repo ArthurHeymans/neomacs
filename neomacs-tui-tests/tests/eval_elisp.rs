@@ -9860,6 +9860,57 @@ fn core_c_defvar_variables_match_gnu_semantics() {
 }
 
 #[test]
+fn eval_depth_limit_variables_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(with-current-buffer "*scratch*" (erase-buffer) "#,
+        r#"(dolist (s '(max-lisp-eval-depth lisp-eval-depth-reserve max-specpdl-size)) "#,
+        r#"(insert (format "eval-limit:%S\n" "#,
+        r#"(list s (boundp s) (and (boundp s) (symbol-value s)) "#,
+        r#"(special-variable-p s) (get s 'byte-obsolete-variable))))) "#,
+        r#"(insert (format "eval-limit-dyn:%S\n" "#,
+        r#"(condition-case e "#,
+        r#"(eval '(let ((max-lisp-eval-depth 42) "#,
+        r#"(lisp-eval-depth-reserve 43) "#,
+        r#"(max-specpdl-size 44)) "#,
+        r#"(list (symbol-value 'max-lisp-eval-depth) "#,
+        r#"(symbol-value 'lisp-eval-depth-reserve) "#,
+        r#"(symbol-value 'max-specpdl-size))) t) "#,
+        r#"(error (list 'error (car e) (cadr e)))))) "#,
+        r#"(goto-char (point-min)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains(r#"eval-limit:(max-lisp-eval-depth t 1600 t nil)"#)
+            && text.contains(r#"eval-limit:(lisp-eval-depth-reserve t 200 t nil)"#)
+            && text.contains(r#"eval-limit:(max-specpdl-size t 2500 t (nil nil "29.1"))"#)
+            && text.contains(r#"eval-limit-dyn:(42 43 44)"#)
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: eval depth limit variables should match GNU DEFVAR/subr.el semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "eval_depth_limit_variables_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn move_beginning_of_line_field_constraints_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

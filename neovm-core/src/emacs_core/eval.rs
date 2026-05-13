@@ -3940,7 +3940,9 @@ impl Context {
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);
         obarray.set_symbol_value("max-lisp-eval-depth", Value::fixnum(1600));
-        obarray.set_symbol_value("max-specpdl-size", Value::fixnum(1800));
+        obarray.make_special("max-lisp-eval-depth");
+        obarray.set_symbol_value("lisp-eval-depth-reserve", Value::fixnum(200));
+        obarray.make_special("lisp-eval-depth-reserve");
         obarray.set_symbol_value("inhibit-load-charset-map", Value::NIL);
 
         // Terminal/display variables (C-level DEFVAR in official Emacs)
