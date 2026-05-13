@@ -21,8 +21,14 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     ] {
         obarray.make_special(name);
     }
-    obarray.set_symbol_value("buffer-access-fontify-functions", Value::NIL);
-    obarray.set_symbol_value("buffer-access-fontified-property", Value::NIL);
+    for name in [
+        "inhibit-field-text-motion",
+        "buffer-access-fontify-functions",
+        "buffer-access-fontified-property",
+    ] {
+        obarray.set_symbol_value(name, Value::NIL);
+        obarray.make_special(name);
+    }
     obarray.set_symbol_value("buffer-file-coding-system", Value::NIL);
     obarray.set_symbol_value("buffer-file-format", Value::NIL);
     obarray.set_symbol_value("buffer-saved-size", Value::fixnum(0));

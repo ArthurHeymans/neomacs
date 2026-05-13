@@ -9725,6 +9725,51 @@ fn line_position_field_constraints_match_gnu_semantics() {
 }
 
 #[test]
+fn editfns_defvar_lisp_variables_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "editfns-defvar:%S" "#,
+        r#"(list (mapcar (lambda (s) "#,
+        r#"(list s (boundp s) (symbol-value s) (special-variable-p s))) "#,
+        r#"'(inhibit-field-text-motion "#,
+        r#"buffer-access-fontify-functions "#,
+        r#"buffer-access-fontified-property)) "#,
+        r#"(eval '(let ((inhibit-field-text-motion 'dyn)) "#,
+        r#"(symbol-value 'inhibit-field-text-motion)) t)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter().rev().take(4).any(|row| {
+            row.contains("editfns-defvar:")
+                && row.contains("((inhibit-field-text-motion t nil t)")
+                && row.contains("(buffer-access-fontify-functions t nil t)")
+                && row.contains("(buffer-access-fontified-property t nil t)) dyn")
+        })
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: editfns DEFVAR_LISP variables should be bound and special like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "editfns_defvar_lisp_variables_match_gnu_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn move_beginning_of_line_field_constraints_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
