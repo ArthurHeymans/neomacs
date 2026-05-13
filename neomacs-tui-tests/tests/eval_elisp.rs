@@ -11425,6 +11425,47 @@ fn temporary_file_directory_matches_gnu_filelock_defvar_semantics() {
 }
 
 #[test]
+fn create_lockfiles_matches_gnu_filelock_defvar_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "createlock:%S" "#,
+        r#"(list (boundp 'create-lockfiles) "#,
+        r#"(symbol-value 'create-lockfiles) "#,
+        r#"(special-variable-p 'create-lockfiles) "#,
+        r#"(not (let ((create-lockfiles nil)) "#,
+        r#"(eval 'create-lockfiles t)))))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("createlock:(t t t t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: create-lockfiles should match GNU filelock.c DEFVAR_BOOL semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "create_lockfiles_matches_gnu_filelock_defvar_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_coding_system_variables_match_gnu_fileio_defvar_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
