@@ -613,6 +613,7 @@ fn test_window_params_fringes_and_margins() {
 
     // Set fringes and margins on the root window.
     if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("x")));
         frame.char_width = 8.0;
         if let Some(win) = frame.selected_window_mut() {
             if let Window::Leaf {
@@ -636,6 +637,42 @@ fn test_window_params_fringes_and_margins() {
 
     // text_bounds should be narrower by fringes + margins.
     let expected_text_x = wp.bounds.x + 10.0 + 16.0;
+    assert!((wp.text_bounds.x - expected_text_x).abs() < 0.01);
+}
+
+#[test]
+fn test_window_params_tty_ignores_fringes_keeps_margins() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*tty-fringe*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+
+    // GNU window_body_width subtracts margins on every frame, but subtracts
+    // WINDOW_FRINGES_WIDTH only when FRAME_WINDOW_P is true.
+    if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+        frame.char_width = 8.0;
+        if let Some(win) = frame.selected_window_mut() {
+            if let Window::Leaf {
+                display, margins, ..
+            } = win
+            {
+                *margins = (2, 3);
+                display.left_fringe_width = 10;
+                display.right_fringe_width = 12;
+            }
+        }
+    }
+
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).unwrap();
+    let wp = &wps[0];
+
+    assert_eq!(wp.left_fringe_width, 0.0);
+    assert_eq!(wp.right_fringe_width, 0.0);
+    assert_eq!(wp.left_margin_width, 16.0);
+    assert_eq!(wp.right_margin_width, 24.0);
+
+    let expected_text_x = wp.bounds.x + 16.0;
     assert!((wp.text_bounds.x - expected_text_x).abs() < 0.01);
 }
 
