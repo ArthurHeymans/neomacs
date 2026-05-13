@@ -1,4 +1,4 @@
-use super::EvalError;
+use super::{EvalError, format_flow_with_eval, signal};
 use crate::emacs_core::{Context, Value, print_value_bytes_with_eval, print_value_with_eval};
 
 #[test]
@@ -48,6 +48,25 @@ fn eval_context_printer_renders_killed_buffer_handles() -> Result<(), EvalError>
     );
 
     Ok(())
+}
+
+#[test]
+fn diagnostic_flow_formatter_renders_signal_strings() {
+    crate::test_utils::init_test_tracing();
+    let eval = Context::new();
+    let flow = signal(
+        "file-missing",
+        vec![
+            Value::string("Cannot open load file"),
+            Value::string("No such file or directory"),
+            Value::string("popweb"),
+        ],
+    );
+
+    assert_eq!(
+        format_flow_with_eval(&eval, &flow),
+        r#"(file-missing ("Cannot open load file" "No such file or directory" "popweb"))"#
+    );
 }
 
 #[test]

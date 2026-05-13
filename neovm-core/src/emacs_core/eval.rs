@@ -5015,7 +5015,7 @@ impl Context {
         match self.recursive_edit_inner() {
             Ok(_) => Ok(()),
             Err(Flow::Signal(sig)) if sig.symbol == self.kill_emacs_symbol => Ok(()),
-            Err(flow) => Err(format!("{:?}", flow)),
+            Err(flow) => Err(super::error::format_flow_with_eval(self, &flow)),
         }
     }
 
@@ -5199,11 +5199,8 @@ impl Context {
                 if sig.symbol == self.kill_emacs_symbol {
                     return Err(Flow::Signal(sig));
                 }
-                tracing::warn!(
-                    "command_loop_top_level_1: top-level SIGNALED: {} {:?}",
-                    sig.symbol_name(),
-                    sig.data
-                );
+                let rendered = super::error::format_signal_data_with_eval(self, &sig);
+                tracing::warn!("command_loop_top_level_1: top-level SIGNALED: {}", rendered);
                 let data_str = sig
                     .data
                     .iter()
@@ -5656,7 +5653,8 @@ impl Context {
         // it first is safer in our flow-based error model.
         self.command_loop.last_auto_save_input_events = current;
         if let Err(flow) = self.apply(Value::symbol("do-auto-save"), vec![Value::NIL, Value::NIL]) {
-            tracing::warn!("auto-save from command_loop_1 failed: {:?}", flow);
+            let rendered = super::error::format_flow_with_eval(self, &flow);
+            tracing::warn!("auto-save from command_loop_1 failed: {}", rendered);
         }
     }
 
@@ -9395,10 +9393,11 @@ impl Context {
             noerror.clone(),
         ) {
             Err(e) => {
+                let rendered = super::error::format_flow_with_eval(self, &e);
                 tracing::error!(
                     feature = ?feature_name,
                     filename = ?filename_str,
-                    "require plan failed: {:?}", e
+                    "require plan failed: {}", rendered
                 );
                 return Err(e);
             }
@@ -9418,11 +9417,12 @@ impl Context {
                             let noerror_val =
                                 noerror.as_ref().map(|v| !v.is_nil()).unwrap_or(false);
                             let path_str = path.display().to_string();
+                            let rendered = super::error::format_flow_with_eval(self, e);
                             tracing::error!(
                                 feature_name = ?feature_name,
                                 path = %path_str,
                                 noerror = noerror_val,
-                                "require failed: {:?}", e
+                                "require failed: {}", rendered
                             );
                         }
                         result

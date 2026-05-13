@@ -860,6 +860,31 @@ fn print_signal_payload_with_eval(
     print_data_payload_with_eval(eval, data)
 }
 
+/// Render one signal in Lisp-readable form for diagnostics.
+///
+/// This intentionally avoids `Debug` on `Value`, which prints heap object
+/// identities such as `String@0x...`.  Runtime diagnostics should show the
+/// same string payloads a Lisp user would see.
+pub(crate) fn format_signal_data_with_eval(
+    eval: &super::eval::Context,
+    sig: &SignalData,
+) -> String {
+    let payload = print_signal_payload_with_eval(eval, sig.raw_data.as_ref(), &sig.data);
+    format!("({} {})", sig.symbol_name(), payload)
+}
+
+/// Render non-local control flow in Lisp-readable form for diagnostics.
+pub(crate) fn format_flow_with_eval(eval: &super::eval::Context, flow: &Flow) -> String {
+    match flow {
+        Flow::Signal(sig) => format_signal_data_with_eval(eval, sig),
+        Flow::Throw { tag, value } => format!(
+            "(no-catch ({} {}))",
+            print_value_with_eval(eval, tag),
+            print_value_with_eval(eval, value)
+        ),
+    }
+}
+
 fn append_print_value_bytes_with_eval(
     eval: &super::eval::Context,
     value: &Value,

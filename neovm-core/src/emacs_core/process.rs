@@ -1441,7 +1441,8 @@ impl super::eval::Context {
         self.restore_specpdl_roots(gc_roots);
 
         if let Err(err) = result {
-            tracing::warn!("{label} callback error: {:?}", err);
+            let rendered = super::error::format_flow_with_eval(self, &err);
+            tracing::warn!("{label} callback error: {}", rendered);
         }
     }
 
@@ -1473,7 +1474,8 @@ impl super::eval::Context {
         self.restore_specpdl_roots(gc_roots);
 
         if let Err(err) = result {
-            tracing::warn!("{label} callback error: {:?}", err);
+            let rendered = super::error::format_flow_with_eval(self, &err);
+            tracing::warn!("{label} callback error: {}", rendered);
         }
     }
 

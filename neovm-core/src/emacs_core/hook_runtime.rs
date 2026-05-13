@@ -176,29 +176,26 @@ fn remove_hook_function_after_error_in_context(
     if let Some(new_value) = remove_eq_from_hook_list(default_value, function) {
         let symbol = Value::from_sym_id(hook_sym);
         if let Err(flow) = super::custom::builtin_set_default(ctx, vec![symbol, new_value]) {
+            let rendered = super::error::format_flow_with_eval(ctx, &flow);
             tracing::warn!(
-                "failed to remove broken hook function {} from default {}: {:?}",
+                "failed to remove broken hook function {} from default {}: {}",
                 function,
                 super::intern::resolve_sym(hook_sym),
-                flow
+                rendered
             );
         }
     }
 }
 
-fn log_safe_hook_error(hook_sym: SymId, function: Value, sig: &super::error::SignalData) {
+fn log_safe_hook_error(
+    ctx: &Context,
+    hook_sym: SymId,
+    function: Value,
+    sig: &super::error::SignalData,
+) {
     let hook_name = super::intern::resolve_sym(hook_sym);
-    tracing::warn!(
-        "Error in {} ({}): ({} {})",
-        hook_name,
-        function,
-        sig.symbol_name(),
-        sig.data
-            .iter()
-            .map(|v| format!("{}", v))
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
+    let rendered = super::error::format_signal_data_with_eval(ctx, sig);
+    tracing::warn!("Error in {} ({}): {}", hook_name, function, rendered,);
 }
 
 /// Run a hook with error recovery. Mirrors GNU
@@ -230,7 +227,7 @@ pub(crate) fn safe_run_hook_value<R: HookRuntime>(
             match runtime.call_hook_callable(func, hook_args) {
                 Ok(_) => {}
                 Err(Flow::Signal(ref sig)) => {
-                    log_safe_hook_error(hook_sym, func, sig);
+                    log_safe_hook_error(runtime.hook_context(), hook_sym, func, sig);
                     runtime.remove_hook_function_after_error(hook_sym, func);
                 }
                 Err(flow) => return Err(flow),
