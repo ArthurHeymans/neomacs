@@ -450,6 +450,35 @@ impl ReadKeySequenceState {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ReadCharEvent {
+    event: Value,
+    allow_input_method: bool,
+}
+
+impl ReadCharEvent {
+    fn input_method_candidate(event: Value) -> Self {
+        Self {
+            event,
+            allow_input_method: true,
+        }
+    }
+
+    fn post_input_method(event: Value) -> Self {
+        Self {
+            event,
+            allow_input_method: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum InputMethodEvent {
+    NotApplied,
+    Consumed,
+    Translated(Value),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ReadKeySequenceOptions {
     pub prompt: Value,
@@ -2069,7 +2098,7 @@ struct MousePosnDescriptor {
 enum QueuedReadCharEvent {
     None,
     HandledInternally,
-    Event(Value),
+    Event(ReadCharEvent),
 }
 
 impl crate::emacs_core::eval::Context {
@@ -2327,45 +2356,54 @@ impl crate::emacs_core::eval::Context {
         Some(message)
     }
 
-    /// Invoke `input-method-function` on a just-read character
-    /// event. Returns `Ok(true)` when the character was consumed
-    /// by the input method (the translated events are now on the
-    /// `unread-command-events` queue and the caller should drop
-    /// the original event from the current key sequence), or
-    /// `Ok(false)` when the input method did not apply (no
-    /// function bound, non-character event, or function returned
-    /// a result that should flow through as-is).
+    fn prepend_unread_post_input_method_events(
+        &mut self,
+        events: Value,
+    ) -> Result<(), crate::emacs_core::error::Flow> {
+        if events.is_nil() {
+            return Ok(());
+        }
+
+        let current = self
+            .eval_symbol("unread-post-input-method-events")
+            .unwrap_or(Value::NIL);
+        let new_list = crate::emacs_core::builtins::builtin_nconc(vec![events, current])?;
+        self.assign("unread-post-input-method-events", new_list);
+        Ok(())
+    }
+
+    /// Invoke `input-method-function` on a just-read character event.
     ///
-    /// Mirrors GNU `keyboard.c:2707-2770`: when
-    /// `input-method-function` is non-nil and the event is a
-    /// printable character, call it with the character and
-    /// re-route the returned list of events via
-    /// `unread-command-events`.
+    /// Mirrors GNU `keyboard.c:3237-3311`: when the function returns a cons,
+    /// the car becomes the current event immediately and only the cdr is
+    /// appended ahead of the existing `unread-post-input-method-events`.  Any
+    /// non-cons result means the input method produced no events, so the
+    /// original character is consumed and the caller retries input.
     ///
     /// Keyboard audit Finding 10.
     fn maybe_apply_input_method_function(
         &mut self,
         event: Value,
-    ) -> Result<bool, crate::emacs_core::error::Flow> {
+    ) -> Result<InputMethodEvent, crate::emacs_core::error::Flow> {
         // Only translate ordinary printable characters. GNU
         // skips non-character events (function keys, mouse,
         // etc.) and the NUL byte. We apply the same filter.
         let Some(c) = event.as_fixnum() else {
-            return Ok(false);
+            return Ok(InputMethodEvent::NotApplied);
         };
         // GNU keyboard.c::read_char only calls input-method-function for
         // single-byte printable characters: ' ' <= c < 256 && c != DEL.
         // Control bytes such as ESC must remain ordinary key-sequence input
         // so terminal Meta prefixes keep working.
         if !(i64::from(b' ') <= c && c < 256 && c != 127) {
-            return Ok(false);
+            return Ok(InputMethodEvent::NotApplied);
         }
 
         let im_fn = self
             .eval_symbol("input-method-function")
             .unwrap_or(Value::NIL);
         if im_fn.is_nil() {
-            return Ok(false);
+            return Ok(InputMethodEvent::NotApplied);
         }
 
         // Guard against recursive input-method invocation. GNU
@@ -2373,33 +2411,20 @@ impl crate::emacs_core::eval::Context {
         // on CommandLoop so a pathological input-method that
         // re-reads input via `read-event` does not re-enter.
         if self.command_loop.keyboard.kboard.in_input_method_function {
-            return Ok(false);
+            return Ok(InputMethodEvent::NotApplied);
         }
         self.command_loop.keyboard.kboard.in_input_method_function = true;
         let call_result = self.apply(im_fn, vec![event]);
         self.command_loop.keyboard.kboard.in_input_method_function = false;
         let result = call_result?;
 
-        // A nil or empty-list result drops the event. A cons
-        // list is a queue of events to be re-read. Any other
-        // value is treated as a single event replacement.
-        let events: Vec<Value> = if result.is_nil() {
-            Vec::new()
-        } else if result.is_cons() {
-            crate::emacs_core::value::list_to_vec(&result).unwrap_or_else(|| vec![result])
-        } else {
-            vec![result]
-        };
-
-        // Prepend onto `unread-command-events` in reverse so the
-        // first translated event ends up at the head of the
-        // queue. `push_unread_command_event` is itself a
-        // prepending operation.
-        for ev in events.into_iter().rev() {
-            self.push_unread_command_event(ev);
+        if !result.is_cons() {
+            return Ok(InputMethodEvent::Consumed);
         }
 
-        Ok(true)
+        let first = result.cons_car();
+        self.prepend_unread_post_input_method_events(result.cons_cdr())?;
+        Ok(InputMethodEvent::Translated(first))
     }
 
     /// Dispatch `prefix-help-command` via `call-interactively`,
@@ -2868,7 +2893,7 @@ impl crate::emacs_core::eval::Context {
                 replay_current_sequence = false;
                 tracing::debug!("read_key_sequence: replaying buffered sequence");
             } else {
-                let emacs_event = match self.read_char_with_timeout(None) {
+                let read_event = match self.read_char_event_with_timeout(None) {
                     Ok(Some(event)) => event,
                     Ok(None) => {
                         self.restore_delayed_selection_event(&mut delayed_selection_event);
@@ -2883,6 +2908,7 @@ impl crate::emacs_core::eval::Context {
                         return Err(err);
                     }
                 };
+                let mut emacs_event = read_event.event;
                 self.clear_quit_flag_after_read_key_sequence_event(&emacs_event);
                 if Self::has_switch_frame_event_kind(&emacs_event)
                     && (!self
@@ -2898,6 +2924,36 @@ impl crate::emacs_core::eval::Context {
                     tracing::debug!("read_key_sequence: deferring selection event");
                     continue;
                 }
+
+                // Keyboard audit Finding 10: input-method-function.
+                // GNU `keyboard.c:3237-3311` applies the input method only to
+                // the first printable character in a key sequence, replaces
+                // that current event with the returned car, and queues the
+                // returned cdr in `unread-post-input-method-events`.  Events
+                // read from that post-input-method queue explicitly bypass
+                // this call on their second pass.
+                if read_event.allow_input_method
+                    && self
+                        .command_loop
+                        .keyboard
+                        .kboard
+                        .current_key_sequence
+                        .raw_events()
+                        .is_empty()
+                {
+                    match self.maybe_apply_input_method_function(emacs_event)? {
+                        InputMethodEvent::NotApplied => {}
+                        InputMethodEvent::Consumed => {
+                            replay_current_sequence = false;
+                            shift_translation = None;
+                            continue;
+                        }
+                        InputMethodEvent::Translated(event) => {
+                            emacs_event = event;
+                        }
+                    }
+                }
+
                 self.command_loop
                     .keyboard
                     .push_key_sequence_input_event(emacs_event);
@@ -2915,38 +2971,6 @@ impl crate::emacs_core::eval::Context {
                     "read_key_sequence: event={} starting translation",
                     crate::emacs_core::print::print_value(&emacs_event)
                 );
-
-                // Keyboard audit Finding 10: input-method-function.
-                // GNU `keyboard.c:2707-2770` in `read_char`: when
-                // we just read a printable character at the start
-                // of a key sequence and `input-method-function`
-                // is bound, call it to let quail/robin/etc.
-                // translate the character into a (possibly empty)
-                // list of events. The translated events are
-                // re-queued via `unread-command-events` and the
-                // read_key_sequence loop re-reads from the top.
-                //
-                // We only fire at sequence start — GNU gates on
-                // `!current_kboard->immediate_echo` which is
-                // effectively the same condition, because a
-                // key-sequence in progress has already been
-                // echoed. Mid-sequence characters go straight
-                // through to keymap lookup untranslated.
-                if self
-                    .command_loop
-                    .keyboard
-                    .kboard
-                    .current_key_sequence
-                    .raw_events()
-                    .len()
-                    == 1
-                    && self.maybe_apply_input_method_function(emacs_event)?
-                {
-                    self.command_loop.reset_key_sequence();
-                    replay_current_sequence = false;
-                    shift_translation = None;
-                    continue;
-                }
             }
 
             let mut translated_events = self
@@ -3279,14 +3303,56 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
+    fn pop_lisp_event_queue_unrecorded(&mut self, symbol: &str) -> Option<Value> {
+        let current = self.eval_symbol(symbol).unwrap_or(Value::NIL);
+        if !current.is_cons() {
+            return None;
+        }
+
+        let mut head = current.cons_car();
+        self.assign(symbol, current.cons_cdr());
+
+        // GNU read_char undoes the x-popup-menu one-element event wrapping
+        // when reading the input-method queues.
+        if head.is_cons() && head.cons_cdr().is_nil() {
+            let car = head.cons_car();
+            if car.as_fixnum().is_some() || car.is_symbol() {
+                head = car;
+            }
+        }
+        Some(head)
+    }
+
+    fn pop_unread_post_input_method_event_unrecorded(&mut self) -> Option<Value> {
+        self.pop_lisp_event_queue_unrecorded("unread-post-input-method-events")
+    }
+
+    fn pop_unread_input_method_event_unrecorded(&mut self) -> Option<Value> {
+        self.pop_lisp_event_queue_unrecorded("unread-input-method-events")
+    }
+
     fn pop_queued_read_char_event(
         &mut self,
     ) -> Result<QueuedReadCharEvent, crate::emacs_core::error::Flow> {
+        if let Some(event) = self.pop_unread_post_input_method_event_unrecorded() {
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::post_input_method(event),
+            ));
+        }
         if let Some(event) = self.pop_unread_command_event_unrecorded() {
-            return Ok(QueuedReadCharEvent::Event(event));
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::input_method_candidate(event),
+            ));
+        }
+        if let Some(event) = self.pop_unread_input_method_event_unrecorded() {
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::input_method_candidate(event),
+            ));
         }
         if let Some(event) = self.command_loop.keyboard.take_unread_selection_event() {
-            return Ok(QueuedReadCharEvent::Event(event));
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::input_method_candidate(event),
+            ));
         }
 
         if let Some(event) = self.command_loop.keyboard.pop_unread_event() {
@@ -3296,7 +3362,9 @@ impl crate::emacs_core::eval::Context {
             if self.execute_special_event_if_bound(event)? {
                 return Ok(QueuedReadCharEvent::HandledInternally);
             }
-            return Ok(QueuedReadCharEvent::Event(event));
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::input_method_candidate(event),
+            ));
         }
 
         if let Some(event) = self.command_loop.keyboard.next_executing_kbd_macro_event() {
@@ -3304,7 +3372,9 @@ impl crate::emacs_core::eval::Context {
                 "executing-kbd-macro-index",
                 Value::fixnum(self.command_loop.keyboard.kboard.kbd_macro_index as i64),
             );
-            return Ok(QueuedReadCharEvent::Event(event));
+            return Ok(QueuedReadCharEvent::Event(
+                ReadCharEvent::input_method_candidate(event),
+            ));
         }
 
         Ok(QueuedReadCharEvent::None)
@@ -3501,10 +3571,10 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
-    pub(crate) fn read_char_with_timeout(
+    fn read_char_event_with_timeout(
         &mut self,
         timeout: Option<std::time::Duration>,
-    ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
+    ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
 
         loop {
@@ -3520,7 +3590,7 @@ impl crate::emacs_core::eval::Context {
             }
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
                 if let Some(value) = self.handle_read_char_input_event(event)? {
-                    return Ok(Some(value));
+                    return Ok(Some(ReadCharEvent::input_method_candidate(value)));
                 }
                 continue;
             }
@@ -3562,7 +3632,7 @@ impl crate::emacs_core::eval::Context {
 
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
                 if let Some(value) = self.handle_read_char_input_event(event)? {
-                    return Ok(Some(value));
+                    return Ok(Some(ReadCharEvent::input_method_candidate(value)));
                 }
                 continue;
             }
@@ -3577,7 +3647,7 @@ impl crate::emacs_core::eval::Context {
                         return Err(crate::emacs_core::error::signal("quit", vec![]));
                     }
                     tracing::debug!("read_char: no input_rx (batch mode), returning Nil");
-                    return Ok(Some(Value::NIL));
+                    return Ok(Some(ReadCharEvent::input_method_candidate(Value::NIL)));
                 }
             };
 
@@ -3604,7 +3674,7 @@ impl crate::emacs_core::eval::Context {
                 Ok(event) => {
                     self.timer_stop_idle();
                     if let Some(value) = self.handle_read_char_input_event(event)? {
-                        return Ok(Some(value));
+                        return Ok(Some(ReadCharEvent::input_method_candidate(value)));
                     }
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
@@ -3621,6 +3691,15 @@ impl crate::emacs_core::eval::Context {
                 }
             }
         }
+    }
+
+    pub(crate) fn read_char_with_timeout(
+        &mut self,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
+        Ok(self
+            .read_char_event_with_timeout(timeout)?
+            .map(|read_event| read_event.event))
     }
 
     pub(crate) fn read_char(&mut self) -> Result<Value, crate::emacs_core::error::Flow> {

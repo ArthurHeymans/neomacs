@@ -3792,7 +3792,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("display-fill-column-indicator-character", Value::NIL);
     obarray.set_symbol_value("visible-bell", Value::NIL);
     obarray.set_symbol_value("no-redraw-on-reenter", Value::NIL);
+    // GNU `src/dispnew.c` defines this with DEFVAR_BOOL.
     obarray.set_symbol_value("cursor-in-echo-area", Value::NIL);
+    obarray.make_special("cursor-in-echo-area");
     obarray.set_symbol_value("truncate-partial-width-windows", Value::fixnum(50));
     obarray.set_symbol_value("mode-line-in-non-selected-windows", Value::T);
     obarray.set_symbol_value("line-number-display-limit", Value::NIL);

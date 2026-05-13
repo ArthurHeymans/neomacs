@@ -476,13 +476,18 @@ pub(crate) fn symbol_has_modifier_prefix(name: &str) -> bool {
 pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 
-    obarray.set_symbol_value("help-char", Value::fixnum(8)); // Ctrl-H, keyboard.c:13058
+    // GNU `src/keyboard.c` defines these with DEFVAR_LISP.
+    obarray.set_symbol_value("help-char", Value::fixnum(8));
+    obarray.make_special("help-char");
     obarray.set_symbol_value("help-form", Value::NIL);
+    obarray.make_special("help-form");
     obarray.set_symbol_value("help-event-list", Value::NIL);
+    obarray.make_special("help-event-list");
     obarray.set_symbol_value("suggest-key-bindings", Value::T);
     obarray.set_symbol_value("timer-idle-list", Value::NIL);
     obarray.set_symbol_value("timer-list", Value::NIL);
     obarray.set_symbol_value("input-method-previous-message", Value::NIL);
+    obarray.make_special("input-method-previous-message");
     obarray.set_symbol_value("auto-save-interval", Value::fixnum(300));
     obarray.set_symbol_value("auto-save-timeout", Value::fixnum(30));
     obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
@@ -502,6 +507,16 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("select-active-regions", Value::T);
     obarray.make_special("select-active-regions");
     obarray.set_symbol_value("saved-region-selection", Value::NIL);
+    // GNU `src/keyboard.c` initializes this to nil and makes it buffer-local-on-set.
+    obarray.set_symbol_value("deactivate-mark", Value::NIL);
+    obarray.make_special("deactivate-mark");
+    obarray.make_buffer_local("deactivate-mark", true);
+    obarray.set_symbol_value("input-method-function", Value::symbol("list"));
+    obarray.make_special("input-method-function");
+    obarray.set_symbol_value("tab-bar-separator-image-expression", Value::NIL);
+    obarray.make_special("tab-bar-separator-image-expression");
+    obarray.set_symbol_value("tool-bar-separator-image-expression", Value::NIL);
+    obarray.make_special("tool-bar-separator-image-expression");
     obarray.set_symbol_value(
         "selection-inhibit-update-commands",
         Value::list(vec![

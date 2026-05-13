@@ -3484,7 +3484,9 @@ impl Context {
         obarray.set_symbol_value("prefix-arg", Value::NIL);
         obarray.set_symbol_value("defining-kbd-macro", Value::NIL);
         obarray.set_symbol_value("executing-kbd-macro", Value::NIL);
+        obarray.make_special("executing-kbd-macro");
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
+        obarray.make_special("executing-kbd-macro-index");
         obarray.set_symbol_value("kbd-macro-termination-hook", Value::NIL);
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
@@ -3892,7 +3894,9 @@ impl Context {
         obarray.make_special("while-no-input-ignore-events");
         obarray.set_symbol_value("input-pending-p-filter-events", Value::T);
         obarray.make_special("input-pending-p-filter-events");
-        obarray.set_symbol_value("deactivate-mark", Value::T);
+        obarray.set_symbol_value("deactivate-mark", Value::NIL);
+        obarray.make_special("deactivate-mark");
+        obarray.make_buffer_local("deactivate-mark", true);
         obarray.set_symbol_value("mark-active", Value::NIL);
         obarray.set_symbol_value("mark-even-if-inactive", Value::T);
         obarray.make_special("mark-even-if-inactive");
@@ -3991,14 +3995,9 @@ impl Context {
         obarray.set_symbol_value("input-method-deactivate-hook", Value::NIL);
         obarray.set_symbol_value("input-method-exit-on-first-char", Value::NIL);
         obarray.set_symbol_value("input-method-exit-on-invalid-key", Value::NIL);
-        // GNU `keyboard.c:14147` initialises `Vinput_method_function`
-        // to `Qlist` as a placeholder, but that is a C-side
-        // representation of "no function". The observable default
-        // at the Lisp level is `nil` (checked via `(null
-        // input-method-function)` in `lisp/international/mule.el`
-        // and countless input-method packages). Keyboard audit
-        // Finding 10 in `drafts/keyboard-command-loop-audit.md`.
-        obarray.set_symbol_value("input-method-function", Value::NIL);
+        // GNU `src/keyboard.c` initializes this DEFVAR_LISP to Qlist.
+        obarray.set_symbol_value("input-method-function", Value::symbol("list"));
+        obarray.make_special("input-method-function");
         obarray.set_symbol_value("input-method-highlight-flag", Value::T);
         obarray.set_symbol_value("input-method-history", Value::NIL);
         // input-method-previous-message is set by keyboard::pure::register_bootstrap_vars

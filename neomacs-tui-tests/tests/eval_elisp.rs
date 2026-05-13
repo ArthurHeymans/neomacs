@@ -10020,6 +10020,90 @@ fn display_fill_column_indicator_column_matches_gnu_xdisp_defvar_semantics() {
 }
 
 #[test]
+fn c_bootstrap_defvars_match_gnu_defaults_and_specialness() {
+    let probe = r#";;; -*- lexical-binding: t -*-
+(with-current-buffer "*scratch*"
+  (goto-char (point-min))
+  (dolist (entry
+           (mapcar
+            (lambda (s)
+              (let* ((bound (boundp s))
+                     (value (and bound (symbol-value s)))
+                     (default (and bound (default-value s)))
+                     (normalize
+                      (lambda (v)
+                        (if (and (eq s 'tool-bar-separator-image-expression)
+                                 (consp v))
+                            (let ((printed (prin1-to-string v)))
+                              (list 'cons
+                                    (car v)
+                                    (equal v default)
+                                    (not (null (string-match-p "separator.xpm" printed)))
+                                    (not (null (string-match-p "separator.xbm" printed)))
+                                    (not (null (string-match-p "separator.pbm" printed)))))
+                          v))))
+                (list s
+                      bound
+                      (special-variable-p s)
+                      (funcall normalize value)
+                      (funcall normalize default)
+                      (local-variable-if-set-p s))))
+            '(help-char
+              help-event-list
+              help-form
+              deactivate-mark
+              input-method-function
+              cursor-in-echo-area
+              executing-kbd-macro
+              executing-kbd-macro-index
+              inhibit-read-only
+              tab-bar-separator-image-expression
+              tool-bar-separator-image-expression)))
+    (insert (format "c-bootstrap-defvar:%S\n" entry)))
+  (goto-char (point-min)))"#;
+    let probe_path = write_shared_temp_file("c-bootstrap-defvars.el", probe);
+    let args = format!("-l {}", probe_path.display());
+    let (mut gnu, mut neo) = boot_pair(&args);
+
+    let expected = [
+        "c-bootstrap-defvar:(help-char t t 8 8 nil)",
+        "c-bootstrap-defvar:(help-event-list t t (help f1 63) (help f1 63) nil)",
+        "c-bootstrap-defvar:(help-form t t nil nil nil)",
+        "c-bootstrap-defvar:(deactivate-mark t t nil nil t)",
+        "c-bootstrap-defvar:(input-method-function t t list list nil)",
+        "c-bootstrap-defvar:(cursor-in-echo-area t t nil nil nil)",
+        "c-bootstrap-defvar:(executing-kbd-macro t t nil nil nil)",
+        "c-bootstrap-defvar:(executing-kbd-macro-index t t 0 0 nil)",
+        "c-bootstrap-defvar:(inhibit-read-only t t nil nil nil)",
+        "c-bootstrap-defvar:(tab-bar-separator-image-expression t t nil nil nil)",
+        "c-bootstrap-defvar:(tool-bar-separator-image-expression t t (cons find-image t t t t) (cons find-image t t t t) nil)",
+    ];
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        expected.iter().all(|needle| text.contains(needle))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: C bootstrap DEFVAR defaults and specialness should match GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "c_bootstrap_defvars_match_gnu_defaults_and_specialness",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_depth_limit_variables_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
