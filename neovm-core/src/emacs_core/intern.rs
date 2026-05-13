@@ -418,8 +418,14 @@ pub(crate) fn restore_runtime_interner(
 /// Intern a string using the global runtime symbol registry.
 #[inline]
 pub fn intern(s: &str) -> SymId {
+    if let Some(sym_id) = thread_local_interned_str(s) {
+        return sym_id;
+    }
     let mut registry = global_symbol_registry().write();
-    registry.intern(s)
+    let sym_id = registry.intern(s);
+    drop(registry);
+    thread_local_record_interned_str(s, sym_id);
+    sym_id
 }
 
 /// Intern an exact Lisp-string name using the global runtime symbol registry.
@@ -576,11 +582,24 @@ pub fn resolve_sym_lisp_string(id: SymId) -> &'static LispString {
 // is monotonic and stable for the lifetime of the process.
 
 thread_local! {
+    static INTERN_STR_CACHE: RefCell<FxHashMap<String, SymId>> = RefCell::new(FxHashMap::default());
     static SYM_NAME_CACHE: RefCell<Vec<Option<&'static str>>> = const { RefCell::new(Vec::new()) };
     static SYM_NAME_ID_CACHE: RefCell<Vec<Option<NameId>>> = const { RefCell::new(Vec::new()) };
     static SYM_CANONICAL_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
     static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<Option<SymId>>> = const { RefCell::new(Vec::new()) };
     static SYM_KEYWORD_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
+}
+
+#[inline]
+fn thread_local_interned_str(s: &str) -> Option<SymId> {
+    INTERN_STR_CACHE.with(|cache| cache.borrow().get(s).copied())
+}
+
+#[inline]
+fn thread_local_record_interned_str(s: &str, id: SymId) {
+    INTERN_STR_CACHE.with(|cache| {
+        cache.borrow_mut().insert(s.to_owned(), id);
+    });
 }
 
 #[inline]
