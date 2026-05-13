@@ -486,6 +486,7 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("auto-save-interval", Value::fixnum(300));
     obarray.set_symbol_value("auto-save-timeout", Value::fixnum(30));
     obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
+    obarray.make_special("echo-keystrokes");
     obarray.set_symbol_value("polling-period", Value::fixnum(2));
     obarray.set_symbol_value("double-click-time", Value::fixnum(500));
     obarray.set_symbol_value("double-click-fuzz", Value::fixnum(3));

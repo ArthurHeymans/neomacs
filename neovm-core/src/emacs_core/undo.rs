@@ -9,6 +9,17 @@ use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 
 // ---------------------------------------------------------------------------
+// Bootstrap variables
+// ---------------------------------------------------------------------------
+
+pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
+    obarray.set_symbol_value("undo-limit", Value::fixnum(160000));
+    obarray.set_symbol_value("undo-strong-limit", Value::fixnum(240000));
+    obarray.make_special("undo-limit");
+    obarray.make_special("undo-strong-limit");
+}
+
+// ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
 

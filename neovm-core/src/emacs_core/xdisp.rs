@@ -3761,6 +3761,7 @@ fn posn_at_x_y_impl(
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     obarray.set_symbol_value("redisplay--inhibit-bidi", Value::T);
     obarray.set_symbol_value("inhibit-redisplay", Value::NIL);
+    obarray.make_special("inhibit-redisplay");
     obarray.set_symbol_value("blink-matching-delay", Value::fixnum(1));
     obarray.set_symbol_value("blink-matching-paren", Value::T);
     obarray.set_symbol_value("mouse-autoselect-window", Value::NIL);
@@ -3805,6 +3806,7 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("auto-hscroll-mode", Value::T);
     obarray.set_symbol_value("void-text-area-pointer", Value::symbol("arrow"));
     obarray.set_symbol_value("inhibit-message", Value::NIL);
+    obarray.make_special("inhibit-message");
     obarray.set_symbol_value("make-cursor-line-fully-visible", Value::T);
     obarray.set_symbol_value("x-stretch-cursor", Value::NIL);
     // GNU `src/xdisp.c:38708` (`DEFVAR_BOOL ("inhibit-try-cursor-movement", ...)`)

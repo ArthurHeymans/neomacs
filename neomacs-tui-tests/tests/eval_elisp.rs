@@ -9815,6 +9815,51 @@ fn editfns_defvar_lisp_variables_match_gnu_semantics() {
 }
 
 #[test]
+fn core_c_defvar_variables_match_gnu_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(with-current-buffer "*scratch*" (erase-buffer) "#,
+        r#"(let ((facts (mapcar (lambda (s) "#,
+        r#"(list s (boundp s) (symbol-value s) (special-variable-p s))) "#,
+        r#"'(echo-keystrokes process-connection-type undo-limit undo-strong-limit inhibit-message inhibit-redisplay))) "#,
+        r#"(dyn (eval '(let ((echo-keystrokes 7) (process-connection-type nil) "#,
+        r#"(undo-limit 170001) (undo-strong-limit 270001) (inhibit-message t) (inhibit-redisplay t)) "#,
+        r#"(list (symbol-value 'echo-keystrokes) (symbol-value 'process-connection-type) "#,
+        r#"(symbol-value 'undo-limit) (symbol-value 'undo-strong-limit) "#,
+        r#"(symbol-value 'inhibit-message) (symbol-value 'inhibit-redisplay))) t))) "#,
+        r#"(dolist (entry facts) (insert (format "core-c-defvar-var:%S\n" entry))) "#,
+        r#"(insert (format "core-c-defvar-dyn:%S\n" dyn)) (goto-char (point-min))))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        text.contains("core-c-defvar-var:(echo-keystrokes t 1 t)")
+            && text.contains("core-c-defvar-var:(process-connection-type t t t)")
+            && text.contains("core-c-defvar-var:(undo-limit t 160000 t)")
+            && text.contains("core-c-defvar-var:(undo-strong-limit t 240000 t)")
+            && text.contains("core-c-defvar-var:(inhibit-message t nil t)")
+            && text.contains("core-c-defvar-var:(inhibit-redisplay t nil t)")
+            && text.contains("core-c-defvar-dyn:(7 nil 170001 270001 t t)")
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: core C DEFVAR variables should be bound and special like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches("core_c_defvar_variables_match_gnu_semantics", &gnu, &neo, 2);
+}
+
+#[test]
 fn move_beginning_of_line_field_constraints_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

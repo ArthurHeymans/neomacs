@@ -2275,6 +2275,15 @@ fn default_process_tty_name() -> String {
     "/dev/pts/0".to_string()
 }
 
+// ---------------------------------------------------------------------------
+// Bootstrap variables
+// ---------------------------------------------------------------------------
+
+pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
+    obarray.set_symbol_value("process-connection-type", Value::T);
+    obarray.make_special("process-connection-type");
+}
+
 /// Check whether `process-connection-type` is truthy (non-nil).
 ///
 /// GNU Emacs defaults this to `t`, meaning processes should use PTYs.

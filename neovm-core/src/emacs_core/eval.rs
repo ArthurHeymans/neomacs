@@ -3249,8 +3249,6 @@ impl Context {
         obarray.set_symbol_value("tool-bar-max-label-size", Value::fixnum(10));
         obarray.set_symbol_value("truncate-partial-width-windows", Value::fixnum(50));
         obarray.set_symbol_value("underline-minimum-offset", Value::fixnum(1));
-        obarray.set_symbol_value("undo-limit", Value::fixnum(160000));
-        obarray.set_symbol_value("undo-strong-limit", Value::fixnum(240000));
         obarray.set_symbol_value("eol-mnemonic-dos", Value::string("\\"));
         obarray.set_symbol_value("eol-mnemonic-mac", Value::string("/"));
         obarray.set_symbol_value("eol-mnemonic-undecided", Value::string(":"));
@@ -3966,6 +3964,8 @@ impl Context {
         super::alloc::register_bootstrap_vars(&mut obarray);
         super::load::register_bootstrap_vars(&mut obarray);
         super::fileio::register_bootstrap_vars(&mut obarray);
+        super::process::register_bootstrap_vars(&mut obarray);
+        super::undo::register_bootstrap_vars(&mut obarray);
         super::window_cmds::register_bootstrap_vars(&mut obarray);
         super::keyboard::pure::register_bootstrap_vars(&mut obarray);
         super::composite::register_bootstrap_vars(&mut obarray);
