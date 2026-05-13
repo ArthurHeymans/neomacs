@@ -20,7 +20,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::*;
 use crate::buffer::{Buffer, BufferId, TextPropertyTable};
-use crate::window::{DisplayPointSnapshot, FrameId, Window, WindowId};
+use crate::window::{DisplayPointSnapshot, FrameId, FrameManager, Window, WindowId};
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -2533,30 +2533,14 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("window-text-pixel-size", &args, 0, 7)?;
-    validate_optional_window_designator_in_state(&eval.frames, args.first(), "window-live-p")?;
+    let (fid, wid) = resolve_live_window_for_text_pixel_size(&eval.frames, args.first())?;
 
-    let frame = eval.frames.selected_frame();
-    if frame.is_none() {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
-    }
-
-    // Get frame metrics
-    let char_w = frame.map(|f| f.char_width).unwrap_or(8.0);
-    let char_h = frame.map(|f| f.char_height).unwrap_or(16.0);
-
-    let wid = args
-        .first()
-        .and_then(|v| v.as_window_id().map(crate::window::WindowId))
-        .or_else(|| frame.map(|f| f.selected_window));
-
-    let Some(wid) = wid else {
+    let Some(frame) = eval.frames.get(fid) else {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
-
-    // Find buffer for this window
-    let buf_id = frame
-        .and_then(|f| f.find_window(wid))
-        .and_then(|w| w.buffer_id());
+    let char_w = frame.char_width;
+    let char_h = frame.char_height;
+    let buf_id = frame.find_window(wid).and_then(|w| w.buffer_id());
 
     let Some(buf_id) = buf_id else {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
@@ -2603,6 +2587,43 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     let height = ((lines as f32 + mode_line_rows) * char_h).ceil() as i64;
 
     Ok(Value::cons(Value::fixnum(width), Value::fixnum(height)))
+}
+
+fn resolve_live_window_for_text_pixel_size(
+    frames: &FrameManager,
+    window: Option<&Value>,
+) -> Result<(FrameId, WindowId), Flow> {
+    if window.is_none_or(|value| value.is_nil()) {
+        let Some(frame) = frames.selected_frame() else {
+            return Err(signal("error", vec![Value::string("No selected frame")]));
+        };
+        return Ok((frame.id, frame.selected_window));
+    }
+
+    let value = window.expect("non-nil window argument");
+    let wid = if let Some(id) = value.as_window_id() {
+        Some(WindowId(id))
+    } else {
+        value
+            .as_fixnum()
+            .filter(|id| *id >= 0)
+            .map(|id| WindowId(id as u64))
+    };
+    let Some(wid) = wid else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("window-live-p"), *value],
+        ));
+    };
+    frames
+        .find_window_frame_id(wid)
+        .map(|fid| (fid, wid))
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("window-live-p"), *value],
+            )
+        })
 }
 
 /// (pos-visible-in-window-p &optional POS WINDOW PARTIALLY) -> boolean

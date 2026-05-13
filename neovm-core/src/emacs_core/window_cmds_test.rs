@@ -3422,6 +3422,159 @@ fn make_terminal_frame_accepts_tty_minibuffer_window_parameter() {
 }
 
 #[test]
+fn tty_child_frame_accepts_text_pixel_size_parameters() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    {
+        let root = ev.frames.get_mut(root_id).expect("root frame");
+        root.char_width = 1.0;
+        root.char_height = 1.0;
+        root.font_pixel_size = 1.0;
+    }
+
+    let root = Value::make_frame(root_id.0);
+    let root_minibuffer = ev
+        .frames
+        .get(root_id)
+        .expect("root frame")
+        .minibuffer_window
+        .expect("root minibuffer");
+    let root_minibuffer_value = Value::make_window(root_minibuffer.0);
+    let text_pixels = |n| Value::cons(Value::symbol("text-pixels"), Value::fixnum(n));
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("parent-frame"), root),
+        Value::cons(Value::symbol("width"), text_pixels(17)),
+        Value::cons(Value::symbol("height"), text_pixels(4)),
+        Value::cons(Value::symbol("minibuffer"), root_minibuffer_value),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+
+    let child =
+        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(child_frame.width, 17);
+    assert_eq!(child_frame.height, 4);
+    assert_eq!(child_frame.parameter("width"), Some(Value::fixnum(17)));
+    assert_eq!(child_frame.parameter("height"), Some(Value::fixnum(4)));
+    assert_eq!(
+        *child_frame.root_window.bounds(),
+        crate::window::Rect::new(0.0, 0.0, 17.0, 4.0)
+    );
+}
+
+#[test]
+fn modify_frame_parameters_accepts_text_pixel_size_on_tty_child_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    {
+        let root = ev.frames.get_mut(root_id).expect("root frame");
+        root.char_width = 1.0;
+        root.char_height = 1.0;
+        root.font_pixel_size = 1.0;
+    }
+
+    let root = Value::make_frame(root_id.0);
+    let root_minibuffer = ev
+        .frames
+        .get(root_id)
+        .expect("root frame")
+        .minibuffer_window
+        .expect("root minibuffer");
+    let root_minibuffer_value = Value::make_window(root_minibuffer.0);
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("parent-frame"), root),
+        Value::cons(Value::symbol("width"), Value::fixnum(1)),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("minibuffer"), root_minibuffer_value),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child =
+        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+    let text_pixels = |n| Value::cons(Value::symbol("text-pixels"), Value::fixnum(n));
+    let alist = Value::list(vec![
+        Value::cons(Value::symbol("width"), text_pixels(91)),
+        Value::cons(Value::symbol("height"), text_pixels(18)),
+    ]);
+
+    super::builtin_modify_frame_parameters(&mut ev, vec![child, alist])
+        .expect("modify-frame-parameters");
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(child_frame.width, 91);
+    assert_eq!(child_frame.height, 18);
+    assert_eq!(child_frame.parameter("width"), Some(Value::fixnum(91)));
+    assert_eq!(child_frame.parameter("height"), Some(Value::fixnum(18)));
+    assert_eq!(
+        *child_frame.root_window.bounds(),
+        crate::window::Rect::new(0.0, 0.0, 91.0, 18.0)
+    );
+}
+
+#[test]
+fn window_text_pixel_size_uses_supplied_child_window_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    {
+        let root = ev.frames.get_mut(root_id).expect("root frame");
+        root.char_width = 1.0;
+        root.char_height = 1.0;
+        root.font_pixel_size = 1.0;
+    }
+
+    let root = Value::make_frame(root_id.0);
+    let root_minibuffer = ev
+        .frames
+        .get(root_id)
+        .expect("root frame")
+        .minibuffer_window
+        .expect("root minibuffer");
+    let child_buffer = ev.buffers.create_buffer("*child-measure*");
+    ev.buffers
+        .insert_into_buffer(child_buffer, "abcd\nxy")
+        .expect("insert child buffer");
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("parent-frame"), root),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(
+            Value::symbol("minibuffer"),
+            Value::make_window(root_minibuffer.0),
+        ),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child =
+        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+    let child_window = {
+        let frame = ev.frames.get_mut(child_id).expect("child frame");
+        let child_window = frame.root_window.id();
+        frame
+            .find_window_mut(child_window)
+            .expect("child root window")
+            .set_buffer(child_buffer);
+        child_window
+    };
+
+    let size = crate::emacs_core::xdisp::builtin_window_text_pixel_size_ctx(
+        &mut ev,
+        vec![Value::make_window(child_window.0)],
+    )
+    .expect("window-text-pixel-size");
+    assert_eq!(size.cons_car(), Value::fixnum(4));
+    assert_eq!(size.cons_cdr(), Value::fixnum(2));
+}
+
+#[test]
 fn shared_tty_child_minibuffer_window_apis_use_owner_frame() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

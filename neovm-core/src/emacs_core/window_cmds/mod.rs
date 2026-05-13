@@ -4660,6 +4660,12 @@ const MIN_FRAME_TEXT_LINES: i64 = 5;
 const FRAME_TEXT_LINES_PARAM: &str = "neovm--frame-text-lines";
 const LIVE_GUI_RESIZE_ACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
+#[derive(Clone, Copy, Debug)]
+enum FrameSizeParam {
+    Cells(i64),
+    TextPixels(u32),
+}
+
 fn sync_live_gui_resize_for_geometry_queries(
     eval: &mut super::eval::Context,
     fid: FrameId,
@@ -4744,6 +4750,44 @@ fn check_frame_pixels(value: &Value, pixelwise: bool, item_size: f32) -> Result<
     Ok(pixels as u32)
 }
 
+fn parse_frame_size_param(value: Value) -> Option<FrameSizeParam> {
+    if let Some(n) = value.as_int().filter(|n| *n >= 0) {
+        return Some(FrameSizeParam::Cells(n));
+    }
+    if value.is_cons()
+        && value
+            .cons_car()
+            .as_symbol_name()
+            .is_some_and(|name| name == "text-pixels")
+    {
+        return value
+            .cons_cdr()
+            .as_int()
+            .filter(|n| *n >= 0 && *n <= i64::from(u32::MAX))
+            .map(|n| FrameSizeParam::TextPixels(n as u32));
+    }
+    None
+}
+
+fn frame_size_param_to_cells(param: FrameSizeParam, item_size: f32) -> i64 {
+    match param {
+        FrameSizeParam::Cells(n) => n,
+        FrameSizeParam::TextPixels(px) => {
+            ((px as f32) / item_size.max(1.0)).floor().max(1.0) as i64
+        }
+    }
+}
+
+fn frame_size_param_to_pixels(param: FrameSizeParam, item_size: f32) -> u32 {
+    match param {
+        FrameSizeParam::Cells(n) => {
+            let unit = item_size.max(1.0).round() as i64;
+            n.saturating_mul(unit).max(1).min(u32::MAX as i64) as u32
+        }
+        FrameSizeParam::TextPixels(px) => px.max(1),
+    }
+}
+
 fn frame_total_lines(frame: &crate::window::Frame) -> i64 {
     frame
         .parameter("height")
@@ -4763,8 +4807,15 @@ fn clamp_frame_dimension(value: i64, minimum: i64) -> i64 {
 }
 
 fn set_frame_text_size(frame: &mut crate::window::Frame, cols: i64, text_lines: i64) {
-    let cols = clamp_frame_dimension(cols, MIN_FRAME_COLS);
-    let text_lines = clamp_frame_dimension(text_lines, MIN_FRAME_TEXT_LINES);
+    let is_child_frame = frame.parent_frame.as_frame_id().is_some();
+    let min_cols = if is_child_frame { 1 } else { MIN_FRAME_COLS };
+    let min_text_lines = if is_child_frame {
+        1
+    } else {
+        MIN_FRAME_TEXT_LINES
+    };
+    let cols = clamp_frame_dimension(cols, min_cols);
+    let text_lines = clamp_frame_dimension(text_lines, min_text_lines);
     let minibuffer_lines = i64::from(frame.minibuffer_leaf.is_some());
     let total_lines = text_lines
         .saturating_add(minibuffer_lines)
@@ -6208,6 +6259,8 @@ fn make_frame_plain(
     expect_max_args("make-frame", &args, 1)?;
     let mut width: u32 = 800;
     let mut height: u32 = 600;
+    let mut requested_width = None;
+    let mut requested_height = None;
     let mut name = Value::string("F");
     let mut all_params: Vec<(Value, Value)> = Vec::new();
     let mut parent_frame = Value::NIL;
@@ -6230,13 +6283,15 @@ fn make_frame_plain(
                         all_params.push((pair_car, pair_cdr));
                         match resolve_sym(key) {
                             "width" => {
-                                if let Some(n) = pair_cdr.as_int() {
-                                    width = n.max(1) as u32;
+                                if let Some(size) = parse_frame_size_param(pair_cdr) {
+                                    requested_width = Some(size);
+                                    width = frame_size_param_to_cells(size, 1.0).max(1) as u32;
                                 }
                             }
                             "height" => {
-                                if let Some(n) = pair_cdr.as_int() {
-                                    height = n.max(1) as u32;
+                                if let Some(size) = parse_frame_size_param(pair_cdr) {
+                                    requested_height = Some(size);
+                                    height = frame_size_param_to_cells(size, 1.0).max(1) as u32;
                                 }
                             }
                             "name" => {
@@ -6287,6 +6342,12 @@ fn make_frame_plain(
             )
         });
         if let Some((terminal_id, char_width, char_height, font_pixel_size)) = metrics {
+            if let Some(size) = requested_width {
+                width = frame_size_param_to_cells(size, char_width).max(1) as u32;
+            }
+            if let Some(size) = requested_height {
+                height = frame_size_param_to_cells(size, char_height).max(1) as u32;
+            }
             width = width.max(1);
             height = height.max(1);
             let buf_id = buffers
@@ -6321,6 +6382,8 @@ fn make_frame_plain(
             for (key, value) in all_params {
                 frame.set_parameter(key, value);
             }
+            frame.set_parameter(Value::symbol("width"), Value::fixnum(i64::from(width)));
+            frame.set_parameter(Value::symbol("height"), Value::fixnum(i64::from(height)));
             if let Some(shared_minibuffer) = shared_minibuffer {
                 frame.set_parameter(
                     Value::symbol("minibuffer"),
@@ -6348,6 +6411,12 @@ fn make_frame_plain(
     }
 
     // Use the current buffer (or BufferId(0) as fallback) for the initial window.
+    if let Some(size) = requested_width {
+        width = frame_size_param_to_cells(size, 1.0).max(1) as u32;
+    }
+    if let Some(size) = requested_height {
+        height = frame_size_param_to_cells(size, 1.0).max(1) as u32;
+    }
     let buf_id = buffers
         .current_buffer()
         .map(|b| b.id)
@@ -6357,6 +6426,8 @@ fn make_frame_plain(
         for (key, value) in all_params {
             frame.set_parameter(key, value);
         }
+        frame.set_parameter(Value::symbol("width"), Value::fixnum(i64::from(width)));
+        frame.set_parameter(Value::symbol("height"), Value::fixnum(i64::from(height)));
         frame.visible = visibility.unwrap_or(frame.visible);
         frame.undecorated = undecorated;
         frame.no_accept_focus = no_accept_focus;
@@ -7214,8 +7285,8 @@ pub(crate) fn builtin_modify_frame_parameters(
         return Err(signal("error", vec![Value::string("Frame not found")]));
     }
 
-    let mut requested_width_cols = None;
-    let mut requested_total_lines = None;
+    let mut requested_width = None;
+    let mut requested_height = None;
     let mut requested_left = None;
     let mut requested_top = None;
 
@@ -7248,19 +7319,31 @@ pub(crate) fn builtin_modify_frame_parameters(
                         }
                     }
                     "width" => {
-                        if let Some(n) = pair_cdr.as_int() {
+                        if let Some(size) = parse_frame_size_param(pair_cdr) {
+                            requested_width = Some(size);
+                            let cols = eval
+                                .frames
+                                .get(fid)
+                                .map(|frame| frame_size_param_to_cells(size, frame.char_width))
+                                .unwrap_or(1)
+                                .max(1);
                             if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.set_parameter(Value::symbol("width"), Value::fixnum(n));
+                                frame.set_parameter(Value::symbol("width"), Value::fixnum(cols));
                             }
-                            requested_width_cols = Some(n);
                         }
                     }
                     "height" => {
-                        if let Some(n) = pair_cdr.as_int() {
+                        if let Some(size) = parse_frame_size_param(pair_cdr) {
+                            requested_height = Some(size);
+                            let lines = eval
+                                .frames
+                                .get(fid)
+                                .map(|frame| frame_size_param_to_cells(size, frame.char_height))
+                                .unwrap_or(1)
+                                .max(1);
                             if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.set_parameter(Value::symbol("height"), Value::fixnum(n));
+                                frame.set_parameter(Value::symbol("height"), Value::fixnum(lines));
                             }
-                            requested_total_lines = Some(n);
                         }
                     }
                     "left" => {
@@ -7345,8 +7428,8 @@ pub(crate) fn builtin_modify_frame_parameters(
         frame.sync_tool_bar_height_from_parameters();
     }
 
-    if requested_width_cols.is_some()
-        || requested_total_lines.is_some()
+    if requested_width.is_some()
+        || requested_height.is_some()
         || requested_left.is_some()
         || requested_top.is_some()
     {
@@ -7355,7 +7438,15 @@ pub(crate) fn builtin_modify_frame_parameters(
             .get(fid)
             .is_some_and(frame_uses_window_system_pixels);
         if uses_window_system_pixels {
-            let (current_cols, current_total_lines, should_defer_resize) = {
+            let (
+                current_cols,
+                current_total_lines,
+                current_text_width_px,
+                current_text_height_px,
+                char_width,
+                char_height,
+                should_defer_resize,
+            ) = {
                 let frame = eval
                     .frames
                     .get(fid)
@@ -7363,11 +7454,21 @@ pub(crate) fn builtin_modify_frame_parameters(
                 (
                     frame_total_cols(frame),
                     frame_total_lines(frame),
+                    frame_text_width_pixels_in_state(&eval.frames, fid),
+                    frame_text_height_pixels(frame),
+                    frame.char_width,
+                    frame.char_height,
                     frame.should_defer_gui_parameter_resize(),
                 )
             };
-            let desired_cols = requested_width_cols.unwrap_or(current_cols).max(1);
-            let desired_total_lines = requested_total_lines.unwrap_or(current_total_lines).max(1);
+            let desired_cols = requested_width
+                .map(|size| frame_size_param_to_cells(size, char_width))
+                .unwrap_or(current_cols)
+                .max(1);
+            let desired_total_lines = requested_height
+                .map(|size| frame_size_param_to_cells(size, char_height))
+                .unwrap_or(current_total_lines)
+                .max(1);
             if should_defer_resize {
                 let frame = eval
                     .frames
@@ -7375,12 +7476,12 @@ pub(crate) fn builtin_modify_frame_parameters(
                     .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
                 frame.queue_pending_gui_resize(desired_cols, desired_total_lines, false);
             } else {
-                let (text_width_px, text_height_px) = live_gui_resize_pixels_from_logical_size(
-                    &eval.frames,
-                    fid,
-                    desired_cols,
-                    desired_total_lines,
-                )?;
+                let text_width_px = requested_width
+                    .map(|size| frame_size_param_to_pixels(size, char_width))
+                    .unwrap_or(current_text_width_px);
+                let text_height_px = requested_height
+                    .map(|size| frame_size_param_to_pixels(size, char_height))
+                    .unwrap_or(current_text_height_px);
                 resize_live_gui_frame(
                     &mut eval.frames,
                     &mut eval.display_host,
@@ -7401,8 +7502,12 @@ pub(crate) fn builtin_modify_frame_parameters(
                     .get(fid)
                     .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
                 (
-                    requested_width_cols.unwrap_or_else(|| frame_total_cols(frame)),
-                    requested_total_lines.unwrap_or_else(|| frame_total_lines(frame)),
+                    requested_width
+                        .map(|size| frame_size_param_to_cells(size, frame.char_width))
+                        .unwrap_or_else(|| frame_total_cols(frame)),
+                    requested_height
+                        .map(|size| frame_size_param_to_cells(size, frame.char_height))
+                        .unwrap_or_else(|| frame_total_lines(frame)),
                 )
             };
             let frame = eval
@@ -7411,7 +7516,11 @@ pub(crate) fn builtin_modify_frame_parameters(
                 .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
             let text_lines = total_lines
                 .saturating_sub(i64::from(frame.minibuffer_leaf.is_some()))
-                .max(MIN_FRAME_TEXT_LINES);
+                .max(if frame.parent_frame.as_frame_id().is_some() {
+                    1
+                } else {
+                    MIN_FRAME_TEXT_LINES
+                });
             set_frame_text_size(frame, cols, text_lines);
         }
     }
