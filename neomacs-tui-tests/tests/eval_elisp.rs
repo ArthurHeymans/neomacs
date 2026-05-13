@@ -11425,6 +11425,52 @@ fn temporary_file_directory_matches_gnu_filelock_defvar_semantics() {
 }
 
 #[test]
+fn file_name_coding_system_variables_match_gnu_fileio_defvar_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "fnamecoding:%S" "#,
+        r#"(list (boundp 'file-name-coding-system) "#,
+        r#"(symbol-value 'file-name-coding-system) "#,
+        r#"(special-variable-p 'file-name-coding-system) "#,
+        r#"(eq (let ((file-name-coding-system 'utf-8)) "#,
+        r#"(eval 'file-name-coding-system t)) 'utf-8) "#,
+        r#"(boundp 'default-file-name-coding-system) "#,
+        r#"(symbol-value 'default-file-name-coding-system) "#,
+        r#"(special-variable-p 'default-file-name-coding-system) "#,
+        r#"(eq (let ((default-file-name-coding-system 'raw-text)) "#,
+        r#"(eval 'default-file-name-coding-system t)) 'raw-text)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("fnamecoding:(t nil t t t utf-8-unix t t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: file-name coding variables should match GNU fileio.c DEFVAR_LISP semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "file_name_coding_system_variables_match_gnu_fileio_defvar_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_edge_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

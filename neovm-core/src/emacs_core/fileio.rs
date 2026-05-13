@@ -5054,7 +5054,9 @@ pub(crate) fn builtin_do_auto_save(
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     let temporary_file_directory = std::env::temp_dir().to_string_lossy().to_string();
     obarray.set_symbol_value("file-name-coding-system", Value::NIL);
+    obarray.make_special("file-name-coding-system");
     obarray.set_symbol_value("default-file-name-coding-system", Value::NIL);
+    obarray.make_special("default-file-name-coding-system");
     obarray.set_symbol_value("set-auto-coding-for-load", Value::NIL);
     obarray.set_symbol_value("file-name-handler-alist", Value::NIL);
     obarray.make_special("file-name-handler-alist");
