@@ -189,6 +189,79 @@ fn set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu() {
 }
 
 #[test]
+fn pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "global-mark-widen.txt",
+        "alpha one\nbeta two\ngamma three\ndelta four\n",
+        "C-x C-f",
+    );
+
+    send_both(&mut gnu, &mut neo, "C-SPC C-n C-n C-a C-SPC M-> C-x n n");
+    let prompt_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Use this command?"))
+            || grid
+                .iter()
+                .any(|row| row.contains("disabled command narrow-to-region"))
+    };
+    gnu.read_until(Duration::from_secs(8), prompt_ready);
+    neo.read_until(Duration::from_secs(12), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("narrow-to-region")),
+            "{label} should show disabled-command help for narrow-to-region"
+        );
+        assert!(
+            grid.iter().any(|row| row.contains("Use this command?")),
+            "{label} should ask before running disabled narrow-to-region"
+        );
+    }
+
+    send_both_raw(&mut gnu, &mut neo, b" ");
+    let narrowed_ready = |grid: &[String]| {
+        !grid.iter().any(|row| row.contains("alpha one"))
+            && !grid.iter().any(|row| row.contains("beta two"))
+            && grid.iter().any(|row| row.contains("gamma three"))
+            && grid.iter().any(|row| row.contains("delta four"))
+    };
+    gnu.read_until(Duration::from_secs(6), narrowed_ready);
+    neo.read_until(Duration::from_secs(8), narrowed_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "C-x C-SPC");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    send_both_raw(&mut gnu, &mut neo, b"!");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("!alpha one"))
+            && grid.iter().any(|row| row.contains("beta two"))
+            && grid.iter().any(|row| row.contains("gamma three"))
+            && grid.iter().any(|row| row.contains("delta four"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+    save_current_file_and_assert_contents(
+        "pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu",
+        &mut gnu,
+        &mut neo,
+        "global-mark-widen.txt",
+        "!alpha one\nbeta two\ngamma three\ndelta four\n",
+    );
+}
+
+#[test]
 fn narrow_to_defun_once_then_widen_via_cx_n_d_w() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
