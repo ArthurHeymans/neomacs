@@ -794,3 +794,68 @@ fn render_status_line_spec_skips_multi_byte_align_to_interval() {
         Some(neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'Y' })
     ));
 }
+
+#[test]
+fn render_status_line_align_to_after_multibyte_prefix_uses_character_offsets() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let mut engine = LayoutEngine::new();
+    let table = neovm_core::face::FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let rendered = Value::string("λC R");
+    neovm_core::emacs_core::value::set_string_text_properties_for_value(
+        rendered,
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 2,
+            end: 3,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("align-to"),
+                    Value::fixnum(4),
+                ]),
+            ]),
+        }],
+    );
+
+    let mut next_face_id = 1;
+    let spec = engine
+        .build_rust_status_line_spec(
+            0.0,
+            0.0,
+            80.0,
+            16.0,
+            1,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            rendered,
+            &resolver,
+            HashMap::new(),
+            StatusLineKind::HeaderLine,
+        )
+        .expect("status line spec");
+
+    assert_eq!(spec.align_entries.len(), 1);
+    assert_eq!(spec.align_entries[0].byte_offset as usize, "λC".len());
+    assert_eq!(spec.align_entries[0].covers_bytes, 1);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    builder.end_row();
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    let chars: String = row.glyphs[1]
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(chars, "λC  R");
+}

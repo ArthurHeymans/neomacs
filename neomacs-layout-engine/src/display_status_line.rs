@@ -49,6 +49,19 @@ impl StatusLineKind {
     }
 }
 
+fn char_index_to_byte(text: &[u8], char_index: usize) -> usize {
+    std::str::from_utf8(text)
+        .ok()
+        .and_then(|s| {
+            if char_index == s.chars().count() {
+                Some(s.len())
+            } else {
+                s.char_indices().nth(char_index).map(|(byte, _)| byte)
+            }
+        })
+        .unwrap_or_else(|| char_index.min(text.len()))
+}
+
 /// Shared render-facing face spec for all status-line backends.
 #[derive(Debug, Clone)]
 pub(crate) struct StatusLineFace {
@@ -788,15 +801,15 @@ impl LayoutEngine {
         None
     }
 
-    fn resolved_status_line_face_at_string_byte(
+    fn resolved_status_line_face_at_char(
         face_resolver: &FaceResolver,
         base_face: &ResolvedFace,
         props: &TextPropertyTable,
-        bytepos: usize,
+        charpos: usize,
     ) -> ResolvedFace {
         let mut face = base_face.clone();
-        let face_prop = props.get_property(bytepos, Value::symbol("face"));
-        let font_lock_face_prop = props.get_property(bytepos, Value::symbol("font-lock-face"));
+        let face_prop = props.get_property(charpos, Value::symbol("face"));
+        let font_lock_face_prop = props.get_property(charpos, Value::symbol("font-lock-face"));
         if let Some(value) = face_prop.or(font_lock_face_prop)
             && let Some(next) = face_resolver.resolve_face_value_over(&face, value)
         {
@@ -863,12 +876,8 @@ impl LayoutEngine {
             if boundary >= spec.text.len() {
                 continue;
             }
-            let resolved = Self::resolved_status_line_face_at_string_byte(
-                face_resolver,
-                base_face,
-                &props,
-                boundary,
-            );
+            let resolved =
+                Self::resolved_status_line_face_at_char(face_resolver, base_face, &props, boundary);
             if same_resolved_face(&resolved, &current_face) {
                 continue;
             }
@@ -884,7 +893,7 @@ impl LayoutEngine {
             };
 
             spec.face_runs.push(OverlayFaceRun {
-                byte_offset: boundary as u16,
+                byte_offset: char_index_to_byte(&spec.text, boundary) as u16,
                 fg: resolved.fg,
                 bg: resolved.bg,
                 #[cfg(test)]
@@ -962,6 +971,9 @@ impl LayoutEngine {
             if !disp_prop.cons_car().is_symbol_named("space") {
                 continue;
             }
+            let byte_start = char_index_to_byte(&spec.text, interval.start);
+            let byte_end = char_index_to_byte(&spec.text, interval.end);
+            let covers_bytes = byte_end.saturating_sub(byte_start) as u16;
             let Some(items) = neovm_core::emacs_core::value::list_to_vec(disp_prop) else {
                 continue;
             };
@@ -974,10 +986,10 @@ impl LayoutEngine {
                 if key.is_symbol_named(":width") {
                     if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
                         let byte_offset =
-                            (interval.start as u16).min(spec.text.len().saturating_sub(1) as u16);
+                            (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
                         spec.display_props.push(DisplayPropRecord {
                             byte_offset,
-                            covers_bytes: interval.end.saturating_sub(interval.start) as u16,
+                            covers_bytes,
                             width: (pixels as u16).max(0),
                         });
                         done = true;
@@ -1003,10 +1015,10 @@ impl LayoutEngine {
                             pixels as f32
                         };
                         let byte_offset =
-                            (interval.start as u16).min(spec.text.len().saturating_sub(1) as u16);
+                            (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
                         spec.align_entries.push(OverlayAlignEntry {
                             byte_offset,
-                            covers_bytes: interval.end.saturating_sub(interval.start) as u16,
+                            covers_bytes,
                             align_to_px: target_x,
                         });
                         done = true;

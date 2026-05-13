@@ -74,8 +74,27 @@ pub fn detect_tty_background_mode() -> &'static str {
 
 // ── Terminal size ─────────────────────────────────────────────────────────
 
-/// Query the terminal size in character cells.  Returns `None` if the
-/// ioctl fails or the dimensions are zero.
+fn parse_positive_u32(value: Option<String>) -> Option<u32> {
+    value
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+}
+
+fn terminal_size_from_env_values(
+    columns: Option<String>,
+    lines: Option<String>,
+) -> Option<(u32, u32)> {
+    let cols = parse_positive_u32(columns)?;
+    let rows = parse_positive_u32(lines)?;
+    Some((cols, rows))
+}
+
+fn terminal_size_from_env() -> Option<(u32, u32)> {
+    terminal_size_from_env_values(std::env::var("COLUMNS").ok(), std::env::var("LINES").ok())
+}
+
+/// Query the terminal size in character cells.  Returns `None` if both the
+/// tty size query and the `COLUMNS`/`LINES` fallback fail.
 ///
 /// This is the canonical copy; `tty_frontend` shared this function, and
 /// the TTY redisplay callback also uses it to drive resize detection.
@@ -84,20 +103,25 @@ pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
     use std::mem::MaybeUninit;
 
     unsafe {
-        let mut winsize = MaybeUninit::<libc::winsize>::uninit();
-        if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, winsize.as_mut_ptr()) == 0 {
-            let winsize = winsize.assume_init();
-            if winsize.ws_col > 0 && winsize.ws_row > 0 {
-                return Some((u32::from(winsize.ws_col), u32::from(winsize.ws_row)));
+        // GNU term.c:init_tty gets the size from `fileno (tty->input)`.
+        // Try stdin first, then the output fds for terminal wrappers where
+        // only the write side carries a useful window size.
+        for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
+            let mut winsize = MaybeUninit::<libc::winsize>::uninit();
+            if libc::ioctl(fd, libc::TIOCGWINSZ, winsize.as_mut_ptr()) == 0 {
+                let winsize = winsize.assume_init();
+                if winsize.ws_col > 0 && winsize.ws_row > 0 {
+                    return Some((u32::from(winsize.ws_col), u32::from(winsize.ws_row)));
+                }
             }
         }
     }
-    None
+    terminal_size_from_env()
 }
 
 #[cfg(not(unix))]
 pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
-    None
+    terminal_size_from_env()
 }
 
 // ── TTY terminal lifecycle (raw mode, alt screen) ────────────────────────
@@ -189,4 +213,33 @@ pub fn tty_shutdown_terminal() {
 /// not a GUI frontend).
 pub fn should_enable_live_tty_io(startup: &StartupOptions) -> bool {
     startup.frontend == FrontendKind::Tty && !startup.noninteractive
+}
+
+#[cfg(test)]
+mod tests {
+    use super::terminal_size_from_env_values;
+
+    #[test]
+    fn terminal_size_from_env_values_uses_positive_columns_and_lines() {
+        assert_eq!(
+            terminal_size_from_env_values(Some("160".to_string()), Some("50".to_string())),
+            Some((160, 50))
+        );
+    }
+
+    #[test]
+    fn terminal_size_from_env_values_rejects_missing_zero_or_invalid_values() {
+        assert_eq!(
+            terminal_size_from_env_values(None, Some("50".to_string())),
+            None
+        );
+        assert_eq!(
+            terminal_size_from_env_values(Some("160".to_string()), Some("0".to_string())),
+            None
+        );
+        assert_eq!(
+            terminal_size_from_env_values(Some("wide".to_string()), Some("50".to_string())),
+            None
+        );
+    }
 }
