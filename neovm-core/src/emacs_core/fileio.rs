@@ -5082,6 +5082,7 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         "temporary-file-directory",
         Value::string(temporary_file_directory),
     );
+    obarray.make_special("temporary-file-directory");
     obarray.set_symbol_value("create-lockfiles", Value::T);
 
     // Backup-related variables

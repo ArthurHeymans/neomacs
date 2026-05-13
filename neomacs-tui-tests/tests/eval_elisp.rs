@@ -11384,6 +11384,47 @@ fn write_region_inhibit_fsync_matches_gnu_fileio_semantics() {
 }
 
 #[test]
+fn temporary_file_directory_matches_gnu_filelock_defvar_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(message "tempdir:%S" "#,
+        r#"(list (boundp 'temporary-file-directory) "#,
+        r#"(stringp (symbol-value 'temporary-file-directory)) "#,
+        r#"(special-variable-p 'temporary-file-directory) "#,
+        r#"(equal (eval '(let ((temporary-file-directory "gnu-dynamic/")) "#,
+        r#"temporary-file-directory) t) "gnu-dynamic/")))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| {
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("tempdir:(t t t t)"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: temporary-file-directory should match GNU filelock.c DEFVAR_LISP semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "temporary_file_directory_matches_gnu_filelock_defvar_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn file_name_edge_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
