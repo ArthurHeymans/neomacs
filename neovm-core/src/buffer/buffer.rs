@@ -1161,6 +1161,23 @@ pub(crate) fn find_local_var_alist_entry(
     None
 }
 
+#[inline]
+pub(crate) fn find_local_var_alist_entry_by_sym_id(
+    alist: crate::emacs_core::value::Value,
+    sym_id: SymId,
+) -> Option<crate::emacs_core::value::Value> {
+    let key_bits = crate::emacs_core::value::Value::from_sym_id(sym_id).bits();
+    let mut cursor = alist;
+    while cursor.is_cons() {
+        let entry = cursor.cons_car();
+        cursor = cursor.cons_cdr();
+        if entry.is_cons() && entry.cons_car().bits() == key_bits {
+            return Some(entry.cons_cdr());
+        }
+    }
+    None
+}
+
 /// Set `key` to `value` in a buffer-local alist. If `key` already
 /// has an entry, mutate its cdr in place so any BLV valcell
 /// pointing at the cell sees the new value without re-swapping.
@@ -2496,7 +2513,7 @@ impl Buffer {
         // since callers want a readable value. Use
         // `get_buffer_local_binding` when the Bound/Void/absent
         // distinction matters.
-        find_local_var_alist_entry(self.local_var_alist, Value::from_sym_id(sym_id))
+        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id)
             .filter(|v| !v.is_unbound())
     }
 
@@ -2545,7 +2562,7 @@ impl Buffer {
         // value (Void). Mirrors GNU's `(var . Qunbound)` alist
         // entries created by `Fmake_local_variable` on a void
         // symbol at `data.c:2285-2289`.
-        find_local_var_alist_entry(self.local_var_alist, Value::from_sym_id(sym_id)).map(|v| {
+        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id).map(|v| {
             if v.is_unbound() {
                 RuntimeBindingValue::Void
             } else {
@@ -2578,7 +2595,7 @@ impl Buffer {
         if sym_id == buffer_undo_list_sym() {
             return true;
         }
-        find_local_var_alist_entry(self.local_var_alist, Value::from_sym_id(sym_id)).is_some()
+        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id).is_some()
     }
 
     pub fn local_map(&self) -> Value {
