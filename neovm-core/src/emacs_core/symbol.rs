@@ -2042,8 +2042,19 @@ impl Obarray {
         function_unbound: Vec<SymId>,
         function_epoch: u64,
     ) -> Self {
+        let max_slot = symbols
+            .iter()
+            .map(|(id, _)| Self::slot_index(*id))
+            .chain(global_members.iter().map(|id| Self::slot_index(*id)))
+            .chain(function_unbound.iter().map(|id| Self::slot_index(*id)))
+            .max();
+        let mut slots = Vec::new();
+        if let Some(max_slot) = max_slot {
+            slots.resize_with(max_slot + 1, || None);
+        }
+
         let mut ob = Self {
-            symbols: Vec::new(),
+            symbols: slots,
             global_member_count: 0,
             function_epoch,
             value_epoch: 0,
@@ -2052,13 +2063,21 @@ impl Obarray {
         for (id, mut sym) in symbols {
             sym.interned_global = false;
             sym.function_unbound = false;
-            *ob.ensure_slot(id) = sym;
+            ob.symbols[Self::slot_index(id)] = Some(sym);
         }
         for id in global_members {
-            ob.mark_global_member(id);
+            let sym = ob
+                .slot_mut(id)
+                .expect("pdump global member must reference a loaded symbol");
+            if !sym.interned_global {
+                sym.interned_global = true;
+                ob.global_member_count += 1;
+            }
         }
         for id in function_unbound {
-            ob.ensure_slot(id).function_unbound = true;
+            ob.slot_mut(id)
+                .expect("pdump function-unbound entry must reference a loaded symbol")
+                .function_unbound = true;
         }
         ob
     }
