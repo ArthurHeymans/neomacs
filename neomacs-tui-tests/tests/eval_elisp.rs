@@ -9860,6 +9860,100 @@ fn core_c_defvar_variables_match_gnu_semantics() {
 }
 
 #[test]
+fn true_default_c_defvar_variables_are_special_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = concat!(
+        r#"(with-current-buffer "*scratch*" (erase-buffer) "#,
+        r#"(let ((vars '(auto-hscroll-mode "#,
+        r#"delete-auto-save-files "#,
+        r#"delete-exited-processes "#,
+        r#"display-fill-column-indicator-column "#,
+        r#"display-hourglass "#,
+        r#"display-line-numbers-current-absolute "#,
+        r#"make-cursor-line-fully-visible "#,
+        r#"menu-prompting "#,
+        r#"mode-line-in-non-selected-windows "#,
+        r#"mouse-highlight "#,
+        r#"open-paren-in-column-0-is-defun-start "#,
+        r#"overflow-newline-into-fringe "#,
+        r#"read-minibuffer-restore-windows "#,
+        r#"scroll-bar-adjust-thumb-portion "#,
+        r#"select-active-regions "#,
+        r#"translate-upper-case-key-bindings "#,
+        r#"use-dialog-box "#,
+        r#"use-file-dialog "#,
+        r#"use-system-tooltips "#,
+        r#"visible-cursor "#,
+        r#"x-gtk-file-dialog-help-text "#,
+        r#"x-select-enable-clipboard-manager))) "#,
+        r#"(dolist (s vars) "#,
+        r#"(insert (format "true-defvar-special:%S\n" "#,
+        r#"(list s (boundp s) (special-variable-p s))))) "#,
+        r#"(insert (format "true-defvar-dyn:%S\n" "#,
+        r#"(eval '(let ((auto-hscroll-mode nil) "#,
+        r#"(use-dialog-box nil) "#,
+        r#"(use-file-dialog nil) "#,
+        r#"(visible-cursor nil)) "#,
+        r#"(list (symbol-value 'auto-hscroll-mode) "#,
+        r#"(symbol-value 'use-dialog-box) "#,
+        r#"(symbol-value 'use-file-dialog) "#,
+        r#"(symbol-value 'visible-cursor))) t)))) "#,
+        r#"(goto-char (point-min)))"#
+    );
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = [
+        "true-defvar-special:(auto-hscroll-mode t t)",
+        "true-defvar-special:(delete-auto-save-files t t)",
+        "true-defvar-special:(delete-exited-processes t t)",
+        "true-defvar-special:(display-fill-column-indicator-column t t)",
+        "true-defvar-special:(display-hourglass t t)",
+        "true-defvar-special:(display-line-numbers-current-absolute t t)",
+        "true-defvar-special:(make-cursor-line-fully-visible t t)",
+        "true-defvar-special:(menu-prompting t t)",
+        "true-defvar-special:(mode-line-in-non-selected-windows t t)",
+        "true-defvar-special:(mouse-highlight t t)",
+        "true-defvar-special:(open-paren-in-column-0-is-defun-start t t)",
+        "true-defvar-special:(overflow-newline-into-fringe t t)",
+        "true-defvar-special:(read-minibuffer-restore-windows t t)",
+        "true-defvar-special:(scroll-bar-adjust-thumb-portion t t)",
+        "true-defvar-special:(select-active-regions t t)",
+        "true-defvar-special:(translate-upper-case-key-bindings t t)",
+        "true-defvar-special:(use-dialog-box t t)",
+        "true-defvar-special:(use-file-dialog t t)",
+        "true-defvar-special:(use-system-tooltips t t)",
+        "true-defvar-special:(visible-cursor t t)",
+        "true-defvar-special:(x-gtk-file-dialog-help-text t t)",
+        "true-defvar-special:(x-select-enable-clipboard-manager t t)",
+        "true-defvar-dyn:(nil nil nil nil)",
+    ];
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        expected.iter().all(|needle| text.contains(needle))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: true-default C DEFVAR variables should be special like GNU\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "true_default_c_defvar_variables_are_special_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_depth_limit_variables_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

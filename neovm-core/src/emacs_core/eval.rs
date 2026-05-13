@@ -3224,6 +3224,7 @@ impl Context {
             "x-select-enable-clipboard-manager",
         ] {
             obarray.set_symbol_value(name, Value::T);
+            obarray.make_special(name);
         }
         obarray.set_symbol_value("auto-save-interval", Value::fixnum(300));
         obarray.set_symbol_value("auto-save-timeout", Value::fixnum(30));
