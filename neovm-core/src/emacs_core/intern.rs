@@ -62,6 +62,12 @@ impl StringInterner {
         }
     }
 
+    fn reserve_additional_names(&mut self, additional: usize) {
+        self.strings.reserve(additional);
+        self.map.reserve(additional);
+        self.utf8_map.reserve(additional);
+    }
+
     fn name_atom_from_str(s: &str) -> LispString {
         if s.is_ascii() {
             LispString::from_unibyte(s.as_bytes().to_vec())
@@ -291,6 +297,8 @@ impl SymbolRegistry {
         symbol_names: &[u32],
         canonical: Option<&[bool]>,
     ) -> Result<RestoredDumpSymbolTable, String> {
+        self.names.reserve_additional_names(names.len());
+        self.symbols.reserve(symbol_names.len());
         let mut name_remap = Vec::with_capacity(names.len());
         for name in names {
             name_remap.push(self.names.intern_lisp_string(name));
@@ -323,6 +331,9 @@ impl SymbolRegistry {
                 canonical.len()
             ));
         }
+
+        self.canonical_by_name
+            .reserve(canonical.iter().filter(|&&flag| flag).count());
 
         let mut dump_canonical_slots: FxHashMap<NameId, usize> = FxHashMap::default();
 
