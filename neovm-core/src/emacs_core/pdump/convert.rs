@@ -426,6 +426,29 @@ impl<'a> LoadDecoder<'a> {
         Ok(())
     }
 
+    pub(crate) fn discard_restored_file_object_descriptors(&mut self) {
+        if self.state.mapped_heap.is_none() {
+            return;
+        }
+        if !self
+            .state
+            .objects
+            .iter()
+            .all(restored_file_object_descriptor_is_discardable)
+        {
+            return;
+        }
+
+        // File-pdump restore has already installed every live value into
+        // `state.values` and the returned Context.  At this point the
+        // remaining descriptors are only no-payload sentinels or mapped
+        // descriptors whose bytes live in the mmap image, so walking 200k
+        // enum destructors is pure startup overhead.
+        unsafe {
+            self.state.objects.set_len(0);
+        }
+    }
+
     fn object_is_fully_mapped_without_load_work(&self, index: usize) -> bool {
         matches!(
             self.state.spans.get(index),
@@ -996,14 +1019,18 @@ impl<'a> LoadDecoder<'a> {
         if let Some(value) = self.state.values[id.index as usize] {
             return Ok(value);
         }
+        if let Some(cell) = self.mapped_cons_cell_for_object(id)? {
+            let value = unsafe { Value::from_cons_ptr(cell) };
+            self.state.values[id.index as usize] = Some(value);
+            return Ok(value);
+        }
+        if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
+            let value = unsafe { Value::from_float_ptr(ptr) };
+            self.state.values[id.index as usize] = Some(value);
+            return Ok(value);
+        }
         let value = match &self.state.objects[id.index as usize] {
-            DumpHeapObject::Cons { .. } => {
-                if let Some(cell) = self.mapped_cons_cell_for_object(id)? {
-                    unsafe { Value::from_cons_ptr(cell) }
-                } else {
-                    Value::cons(Value::NIL, Value::NIL)
-                }
-            }
+            DumpHeapObject::Cons { .. } => Value::cons(Value::NIL, Value::NIL),
             DumpHeapObject::Vector(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
                 if let Some(ptr) = self.mapped_typed_object_for_object::<VectorObj>(id, "vector")? {
@@ -1052,16 +1079,7 @@ impl<'a> LoadDecoder<'a> {
                     Value::heap_string(string)
                 }
             }
-            DumpHeapObject::Float(value) => {
-                if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
-                    unsafe {
-                        debug_assert!(matches!((*ptr).header.kind, HeapObjectKind::Float));
-                        Value::from_float_ptr(ptr)
-                    }
-                } else {
-                    Value::make_float(*value)
-                }
-            }
+            DumpHeapObject::Float(value) => Value::make_float(*value),
             DumpHeapObject::Lambda(slots) => {
                 let slot_count = self.mapped_slot_count_or(id, slots.len())?;
                 let len = slot_count.max(CLOSURE_MIN_SLOTS);
@@ -1521,6 +1539,26 @@ impl<'a> LoadDecoder<'a> {
 
     fn load_opt_value_owned(&mut self, v: Option<DumpValue>) -> Option<Value> {
         v.map(|value| self.load_value_owned(value))
+    }
+}
+
+fn restored_file_object_descriptor_is_discardable(object: &DumpHeapObject) -> bool {
+    match object {
+        DumpHeapObject::Free => true,
+        DumpHeapObject::Vector(slots)
+        | DumpHeapObject::Lambda(slots)
+        | DumpHeapObject::Macro(slots)
+        | DumpHeapObject::Record(slots) => slots.is_empty(),
+        DumpHeapObject::Str {
+            data, text_props, ..
+        } => {
+            text_props.is_empty()
+                && matches!(
+                    data,
+                    DumpByteData::Mapped(_) | DumpByteData::StaticRoData { .. }
+                )
+        }
+        _ => false,
     }
 }
 

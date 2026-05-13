@@ -364,11 +364,7 @@ fn mapped_object_from_span(
     mapped_heap: Option<MappedHeapView>,
 ) -> Result<Option<DumpHeapObject>, DumpError> {
     match span {
-        LoadedObjectSpan::Cons(_) => Ok(Some(DumpHeapObject::Cons {
-            car: DumpValue::Nil,
-            cdr: DumpValue::Nil,
-        })),
-        LoadedObjectSpan::Float(_) => Ok(Some(DumpHeapObject::Float(0.0))),
+        LoadedObjectSpan::Cons(_) | LoadedObjectSpan::Float(_) => Ok(Some(DumpHeapObject::Free)),
         LoadedObjectSpan::Vectorlike { object, .. } => {
             let mapped_heap = mapped_heap.ok_or_else(|| {
                 DumpError::ImageFormatError(
@@ -655,7 +651,7 @@ mod tests {
         let objects = load_compact_heap_objects_from_object_extra(&bytes, &spans, None)
             .expect("load heap objects from sparse extra");
 
-        assert!(matches!(objects[0], DumpHeapObject::Cons { .. }));
+        assert!(matches!(objects[0], DumpHeapObject::Free));
         assert!(matches!(objects[1], DumpHeapObject::Free));
     }
 

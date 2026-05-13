@@ -764,6 +764,7 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
         }
     }
 
+    decoder.discard_restored_file_object_descriptors();
     Ok(eval)
 }
 
