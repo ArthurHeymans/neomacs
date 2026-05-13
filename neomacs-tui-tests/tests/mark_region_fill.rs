@@ -143,6 +143,52 @@ fn pop_local_mark_via_cu_cspc_returns_to_current_buffer_mark() {
 }
 
 #[test]
+fn set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "repeat-pop-mark-ring.txt",
+        "alpha one\nbeta two\ngamma three\ndelta four\n",
+        "C-x C-f",
+    );
+    eval_expression(&mut gnu, &mut neo, "(setq set-mark-command-repeat-pop t)");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(
+        &mut gnu,
+        &mut neo,
+        "C-SPC C-n C-a C-SPC C-n C-a C-SPC M-> C-u C-SPC C-SPC",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    send_both_raw(&mut gnu, &mut neo, b"!");
+
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("alpha one"))
+            && grid.iter().any(|row| row.contains("!beta two"))
+            && grid.iter().any(|row| row.contains("gamma three"))
+            && grid.iter().any(|row| row.contains("delta four"))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_pair_nearly_matches(
+        "set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+    save_current_file_and_assert_contents(
+        "set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu",
+        &mut gnu,
+        &mut neo,
+        "repeat-pop-mark-ring.txt",
+        "alpha one\n!beta two\ngamma three\ndelta four\n",
+    );
+}
+
+#[test]
 fn narrow_to_defun_once_then_widen_via_cx_n_d_w() {
     let (mut gnu, mut neo) = boot_pair("");
     open_home_file(
