@@ -1216,6 +1216,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 /// text property-based features.
 pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView> {
     buffer: &'a B,
+    window_id: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1318,7 +1319,18 @@ fn invisible_prop_status(prop: Option<Value>, spec: Value) -> InvisibleStatus {
 impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Create a new text property accessor.
     pub fn new(buffer: &'a B) -> Self {
-        Self { buffer }
+        Self {
+            buffer,
+            window_id: None,
+        }
+    }
+
+    /// Create a text property accessor scoped to the redisplay window.
+    pub fn new_for_window(buffer: &'a B, window_id: u64) -> Self {
+        Self {
+            buffer,
+            window_id: Some(window_id),
+        }
     }
 
     /// Check if text at `charpos` is invisible.
@@ -1438,73 +1450,68 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let mut before = Vec::new();
         let mut after = Vec::new();
 
-        // Get all overlays covering this position
-        let overlay_ids = self.buffer.layout_overlays().overlays_at(bytepos);
-        for oid in &overlay_ids {
-            let oid = *oid;
-            // Before-string: from overlays that START at this position
-            if let Some(start) = self.buffer.layout_overlays().overlay_start(oid) {
-                if start == bytepos {
-                    if let Some(val) = self
-                        .buffer
-                        .layout_overlays()
-                        .overlay_get_named(oid, Value::symbol("before-string"))
-                    {
-                        if let Some(s) = value_as_string(&val) {
-                            before.push((s.as_bytes().to_vec(), oid));
-                        }
-                    }
+        // GNU `load_overlay_strings' (`src/xdisp.c') scans overlays that
+        // start or end at the iterator position, not only overlays covering
+        // the position.  Zero-length completion overlays sit at point/EOB and
+        // carry their displayed candidates in `before-string', so `overlays_at'
+        // would miss exactly the strings redisplay must show.
+        let mut overlay_ids = self
+            .buffer
+            .layout_overlays()
+            .overlays_in(bytepos.saturating_sub(1), bytepos.saturating_add(1));
+        overlay_ids.sort();
+        overlay_ids.dedup();
+
+        for oid in overlay_ids {
+            if !self.overlay_applies_to_window(oid) {
+                continue;
+            }
+            if self.buffer.layout_overlays().overlay_start(oid) == Some(bytepos) {
+                if let Some(val) = self
+                    .buffer
+                    .layout_overlays()
+                    .overlay_get_named(oid, Value::symbol("before-string"))
+                    && let Some(s) = value_as_string(&val)
+                {
+                    before.push((s.as_bytes().to_vec(), oid));
                 }
             }
 
-            // After-string: from overlays that END at this position
-            if let Some(end) = self.buffer.layout_overlays().overlay_end(oid) {
-                if end == bytepos {
-                    if let Some(val) = self
-                        .buffer
-                        .layout_overlays()
-                        .overlay_get_named(oid, Value::symbol("after-string"))
-                    {
-                        if let Some(s) = value_as_string(&val) {
-                            after.push((s.as_bytes().to_vec(), oid));
-                        }
-                    }
+            if self.buffer.layout_overlays().overlay_end(oid) == Some(bytepos) {
+                if let Some(val) = self
+                    .buffer
+                    .layout_overlays()
+                    .overlay_get_named(oid, Value::symbol("after-string"))
+                    && let Some(s) = value_as_string(&val)
+                {
+                    after.push((s.as_bytes().to_vec(), oid));
                 }
             }
         }
 
-        // Also check overlays_in for overlays that end exactly at this position
-        // (overlays_at only returns overlays that CONTAIN pos, not those ending at pos)
-        // The range [pos, pos+1) covers overlays ending at pos
-        // Actually, overlays_at covers [start, end) so overlays ending at pos won't be included.
-        // We need a broader search for after-strings.
-        if bytepos > 0 {
-            let nearby_ids = self
-                .buffer
-                .layout_overlays()
-                .overlays_in(bytepos.saturating_sub(1), bytepos + 1);
-            for oid in &nearby_ids {
-                let oid = *oid;
-                if let Some(end) = self.buffer.layout_overlays().overlay_end(oid) {
-                    if end == bytepos {
-                        // Check we haven't already processed this overlay
-                        if !overlay_ids.contains(&oid) {
-                            if let Some(val) = self
-                                .buffer
-                                .layout_overlays()
-                                .overlay_get_named(oid, Value::symbol("after-string"))
-                            {
-                                if let Some(s) = value_as_string(&val) {
-                                    after.push((s.as_bytes().to_vec(), oid));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        before.sort_by(|(_, left), (_, right)| {
+            overlay_string_priority(*left).cmp(&overlay_string_priority(*right))
+        });
+        after.sort_by(|(_, left), (_, right)| {
+            overlay_string_priority(*right).cmp(&overlay_string_priority(*left))
+        });
 
         (before, after)
+    }
+
+    fn overlay_applies_to_window(&self, overlay_id: Value) -> bool {
+        let Some(window_prop) = self
+            .buffer
+            .layout_overlays()
+            .overlay_get_named(overlay_id, Value::symbol("window"))
+        else {
+            return true;
+        };
+        let Some(target_window_id) = window_prop.as_window_id() else {
+            return true;
+        };
+        self.window_id
+            .is_none_or(|current_window_id| target_window_id == current_window_id)
     }
 
     /// Get the next position where any text property changes.
@@ -1546,6 +1553,21 @@ fn value_as_string(val: &Value) -> Option<String> {
         ValueKind::String => val.as_runtime_string_owned(),
         ValueKind::Nil => None,
         _ => None,
+    }
+}
+
+fn overlay_string_priority(overlay: Value) -> i64 {
+    let Some(data) = overlay.as_overlay_data() else {
+        return 0;
+    };
+    let Some(priority) =
+        neovm_core::emacs_core::plist::plist_get(data.plist, &Value::symbol("priority"))
+    else {
+        return 0;
+    };
+    match priority.kind() {
+        ValueKind::Fixnum(n) => n,
+        _ => 0,
     }
 }
 

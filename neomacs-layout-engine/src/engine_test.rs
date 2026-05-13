@@ -4296,6 +4296,141 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
 }
 
 #[test]
+fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Find file: ~/.config/doom/");
+        let eob = buf.point_max_byte();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays.insert_overlay(overlay);
+        let _ = buf.overlays.overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("\ninit.el\nconfig.el"),
+        );
+        buf.goto_byte(eob);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-eob-before-overlay", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    assert!(
+        rows.iter().any(|row| row.contains("init.el")),
+        "expected zero-length EOB before-string to render init.el, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("config.el")),
+        "expected zero-length EOB before-string to render config.el, rows={rows:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::fixnum(10));
+
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Find file: ~/.config/doom/");
+        let eob = buf.point_max_byte();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays.insert_overlay(overlay);
+        let _ = buf.overlays.overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("\ninit.el\nconfig.el"),
+        );
+        buf.goto_byte(eob);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-mini-eob-before-overlay", 120, 40, buf_id);
+    let minibuffer_window_id = {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.shrink_mini_window();
+        let mini_id = frame.minibuffer_leaf.as_ref().expect("minibuffer").id();
+        frame.selected_window = mini_id;
+        mini_id
+    };
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .expect("minibuffer matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    assert!(
+        rows.iter()
+            .any(|row| row.contains("Find file: ~/.config/doom/")),
+        "expected minibuffer prompt row to render, rows={rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .all(|row| !row.contains("init.el") && !row.contains("config.el")),
+        "GNU does not grow the parent minibuffer for a zero-length EOB before-string, rows={rows:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");

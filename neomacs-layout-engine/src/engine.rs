@@ -2712,13 +2712,17 @@ impl LayoutEngine {
         // `move_it_to` to walk ALL content (buffer text + overlay
         // strings) and measuring the resulting pixel height.
         //
-        // neomacs approximation: count `\n` in the buffer text
-        // plus all overlay `after-string` properties to estimate
-        // the display line count. Pre-expand max_rows to that
-        // count (clamped to max-mini-window-height = 25% of
-        // frame). This avoids the boot-time "tall echo area" bug
-        // (single-line content stays at 1 row) while allowing
-        // fido-vertical-mode's multi-line overlay to render.
+        // neomacs approximation: count `\n` in the buffer text plus
+        // resize-relevant overlay strings to estimate the display line
+        // count.  GNU redisplay can render zero-length EOB overlay
+        // strings (see `overlay_strings' in buffer.c and
+        // `load_overlay_strings' in xdisp.c), but `resize_mini_window'
+        // does not grow the parent minibuffer for a zero-length EOB
+        // `before-string'.  Pre-expand max_rows to the matching count
+        // (clamped to max-mini-window-height = 25% of frame). This avoids
+        // the boot-time "tall echo area" bug (single-line content stays
+        // at 1 row) while allowing fido/vertico multi-line overlays that
+        // GNU counts during mini-window resize to render.
         let max_rows = if params.is_minibuffer {
             let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
             let content_lines = evaluator
@@ -2731,17 +2735,53 @@ impl LayoutEngine {
                         .into_iter()
                         .filter(|&byte| byte == b'\n')
                         .count();
-                    // Count newlines in overlay after-strings.
+                    // Count newlines in overlay strings for the mini-window
+                    // resize measurement.  GNU `resize_mini_window`
+                    // measures with `move_it_to (..., ZV, ..., MOVE_TO_POS)`.
+                    // That measurement can include before-strings before ZV
+                    // and after-strings at ZV, but it does not consume a
+                    // zero-length overlay's before-string at ZV.  Completion
+                    // UIs such as vertico-posframe keep their candidate list
+                    // in exactly that EOB before-string; the parent
+                    // minibuffer must not grow for it, while a child frame
+                    // displaying the same buffer can still render it.
                     // Scan all overlays in the buffer's Emacs-byte range.
+                    let window_sym = Value::symbol("window");
+                    let current_window_id = params.window_id as u64;
+                    let point_max = b.point_max();
                     let overlay_lines: usize = b
                         .overlays
                         .overlays_in(0, b.total_bytes())
                         .iter()
-                        .filter_map(|ov| {
-                            b.overlays
+                        .filter(|ov| match b.overlays.overlay_get_named(**ov, window_sym) {
+                            Some(prop) => prop
+                                .as_window_id()
+                                .is_none_or(|window_id| window_id == current_window_id),
+                            None => true,
+                        })
+                        .map(|ov| {
+                            let before_lines = if b
+                                .overlays
+                                .overlay_start(*ov)
+                                .is_some_and(|start| start < point_max)
+                            {
+                                b.overlays
+                                    .overlay_get_named(*ov, Value::symbol("before-string"))
+                                    .and_then(|v| v.as_lisp_string())
+                                    .map(|s| {
+                                        s.as_bytes().iter().filter(|&&byte| byte == b'\n').count()
+                                    })
+                                    .unwrap_or(0)
+                            } else {
+                                0
+                            };
+                            let after_lines = b
+                                .overlays
                                 .overlay_get_named(*ov, Value::symbol("after-string"))
                                 .and_then(|v| v.as_lisp_string())
                                 .map(|s| s.as_bytes().iter().filter(|&&byte| byte == b'\n').count())
+                                .unwrap_or(0);
+                            before_lines + after_lines
                         })
                         .sum();
                     // Total lines = text lines + overlay lines + 1
@@ -3467,7 +3507,11 @@ impl LayoutEngine {
                     // Packages like org-mode use overlay after-strings at invisible
                     // boundaries to show fold indicators (e.g. "[N lines]").
                     if has_overlays {
-                        let invis_text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
+                        let invis_text_props =
+                            super::neovm_bridge::RustTextPropAccess::new_for_window(
+                                buffer,
+                                params.window_id as u64,
+                            );
                         let (_before_strings, after_strings) =
                             invis_text_props.overlay_strings_at(charpos);
                         if !after_strings.is_empty() {
@@ -5170,7 +5214,10 @@ impl LayoutEngine {
 
             // --- Overlay before-strings ---
             if has_overlays {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
+                let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
+                    buffer,
+                    params.window_id as u64,
+                );
                 let (before_strings, _) = text_props.overlay_strings_at(charpos);
                 if !before_strings.is_empty() {
                     // Flush run buffer before emitting overlay chars
@@ -5289,7 +5336,10 @@ impl LayoutEngine {
 
             // --- Overlay after-strings ---
             if has_overlays {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
+                let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
+                    buffer,
+                    params.window_id as u64,
+                );
                 let (_, after_strings) = text_props.overlay_strings_at(charpos);
                 if !after_strings.is_empty() {
                     // Flush run buffer before emitting overlay chars
@@ -5390,7 +5440,10 @@ impl LayoutEngine {
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
         if has_overlays && row < max_rows {
-            let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
+            let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
+                buffer,
+                params.window_id as u64,
+            );
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
             let right_limit = content_x + avail_width;
             for (string_bytes, overlay_id) in before_strings.iter().chain(after_strings.iter()) {

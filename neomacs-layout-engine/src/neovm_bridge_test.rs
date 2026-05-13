@@ -941,6 +941,142 @@ fn test_text_prop_line_spacing() {
 }
 
 #[test]
+fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*overlay-strings*");
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.insert("prompt");
+
+        let bob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 0,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays.insert_overlay(bob_overlay);
+        buf.overlays
+            .overlay_put(
+                bob_overlay,
+                Value::symbol("before-string"),
+                Value::string("BOB"),
+            )
+            .unwrap();
+
+        let eob = buf.point_max_byte();
+        let eob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays.insert_overlay(eob_overlay);
+        buf.overlays
+            .overlay_put(
+                eob_overlay,
+                Value::symbol("before-string"),
+                Value::string("\ninit.el"),
+            )
+            .unwrap();
+        buf.overlays
+            .overlay_put(
+                eob_overlay,
+                Value::symbol("after-string"),
+                Value::string("\nafter"),
+            )
+            .unwrap();
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    let access = RustTextPropAccess::new(buf);
+
+    let (bob_before, bob_after) = access.overlay_strings_at(0);
+    assert_eq!(bob_before.len(), 1);
+    assert_eq!(String::from_utf8(bob_before[0].0.clone()).unwrap(), "BOB");
+    assert!(bob_after.is_empty());
+
+    let (eob_before, eob_after) = access.overlay_strings_at(buf.point_max_char() as i64);
+    assert_eq!(eob_before.len(), 1);
+    assert_eq!(
+        String::from_utf8(eob_before[0].0.clone()).unwrap(),
+        "\ninit.el"
+    );
+    assert_eq!(eob_after.len(), 1);
+    assert_eq!(
+        String::from_utf8(eob_after[0].0.clone()).unwrap(),
+        "\nafter"
+    );
+}
+
+#[test]
+fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*overlay-window-filter*");
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.insert("prompt");
+        let eob = buf.point_max_byte();
+
+        for (window_id, text) in [
+            (Some(1_u64), "LOCAL"),
+            (Some(2_u64), "OTHER"),
+            (None, "GLOBAL"),
+        ] {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                plist: Value::NIL,
+                buffer: Some(buf_id),
+                start: eob,
+                end: eob,
+                front_advance: false,
+                rear_advance: false,
+            });
+            buf.overlays.insert_overlay(overlay);
+            buf.overlays
+                .overlay_put(overlay, Value::symbol("before-string"), Value::string(text))
+                .unwrap();
+            if let Some(window_id) = window_id {
+                buf.overlays
+                    .overlay_put(
+                        overlay,
+                        Value::symbol("window"),
+                        Value::make_window(window_id),
+                    )
+                    .unwrap();
+            }
+        }
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    let access = RustTextPropAccess::new_for_window(buf, 1);
+    let (before, _) = access.overlay_strings_at(buf.point_max_char() as i64);
+    let rendered: Vec<String> = before
+        .into_iter()
+        .map(|(bytes, _)| String::from_utf8(bytes).unwrap())
+        .collect();
+
+    assert!(
+        rendered.iter().any(|text| text == "LOCAL"),
+        "expected overlay for the current window, got {rendered:?}"
+    );
+    assert!(
+        rendered.iter().any(|text| text == "GLOBAL"),
+        "expected overlay without a window property, got {rendered:?}"
+    );
+    assert!(
+        !rendered.iter().any(|text| text == "OTHER"),
+        "expected overlay for a different window to be filtered, got {rendered:?}"
+    );
+}
+
+#[test]
 fn test_text_prop_next_change() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*next*");
