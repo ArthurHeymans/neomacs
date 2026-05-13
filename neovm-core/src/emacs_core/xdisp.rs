@@ -3784,7 +3784,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("display-line-numbers-current-absolute", Value::T);
     obarray.set_symbol_value("display-line-numbers-widen", Value::NIL);
     obarray.set_symbol_value("display-fill-column-indicator", Value::NIL);
-    obarray.set_symbol_value("display-fill-column-indicator-column", Value::NIL);
+    // GNU `src/xdisp.c:38644-38652` defines this with DEFVAR_LISP,
+    // initializes it to Qt, then calls Fmake_variable_buffer_local.
+    obarray.set_symbol_value("display-fill-column-indicator-column", Value::T);
+    obarray.make_special("display-fill-column-indicator-column");
+    obarray.make_buffer_local("display-fill-column-indicator-column", true);
     obarray.set_symbol_value("display-fill-column-indicator-character", Value::NIL);
     obarray.set_symbol_value("visible-bell", Value::NIL);
     obarray.set_symbol_value("no-redraw-on-reenter", Value::NIL);

@@ -9954,6 +9954,42 @@ fn true_default_c_defvar_variables_are_special_like_gnu() {
 }
 
 #[test]
+fn display_fill_column_indicator_column_matches_gnu_xdisp_defvar_semantics() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    let expr = r#"(with-current-buffer "*scratch*" (erase-buffer) (insert (format "fci-column:%S\n" (list (boundp 'display-fill-column-indicator-column) (special-variable-p 'display-fill-column-indicator-column) display-fill-column-indicator-column (default-value 'display-fill-column-indicator-column) (local-variable-if-set-p 'display-fill-column-indicator-column)))) (let ((before (list (buffer-local-boundp 'display-fill-column-indicator-column (current-buffer)) display-fill-column-indicator-column))) (setq display-fill-column-indicator-column 80) (insert (format "fci-column-local:%S\n" (list before (buffer-local-boundp 'display-fill-column-indicator-column (current-buffer)) display-fill-column-indicator-column (default-value 'display-fill-column-indicator-column) (with-temp-buffer display-fill-column-indicator-column))))) (goto-char (point-min)))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = [
+        "fci-column:(t t t t t)",
+        "fci-column-local:((t t) t 80 t t)",
+    ];
+    let ready = |grid: &[String]| {
+        let text = grid.join("\n");
+        expected.iter().all(|needle| text.contains(needle))
+    };
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: display-fill-column-indicator-column should match GNU xdisp DEFVAR semantics\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "display_fill_column_indicator_column_matches_gnu_xdisp_defvar_semantics",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn eval_depth_limit_variables_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
