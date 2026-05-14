@@ -302,6 +302,37 @@ fn rasterize_respects_matrix_position() {
 }
 
 #[test]
+fn rasterize_text_rows_use_text_pixel_bounds_but_chrome_rows_do_not() {
+    let mut state = FrameDisplayState::new(12, 3, 8.0, 16.0);
+    state.background = Color::rgb(0.0, 0.0, 0.0);
+
+    let mut matrix = GlyphMatrix::new(2, 9);
+
+    let mut text_row = GlyphRow::new(GlyphRowRole::Text);
+    text_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', 0, 0));
+    matrix.rows[0] = text_row;
+
+    let mut mode_line_row = GlyphRow::new(GlyphRowRole::ModeLine);
+    mode_line_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('M', 0, 0));
+    matrix.rows[1] = mode_line_row;
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 96.0, 48.0),
+        text_pixel_bounds: Rect::new(24.0, 0.0, 72.0, 32.0),
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(12, 3);
+    rif.rasterize(&state);
+
+    assert_eq!(desired_char(&rif, 0, 0), ' ');
+    assert_eq!(desired_char(&rif, 0, 3), 'T');
+    assert_eq!(desired_char(&rif, 1, 0), 'M');
+}
+
+#[test]
 fn rasterize_frame_tree_draws_decorated_child_in_z_order() {
     let root = make_grid_state(1, 0, 0.0, 0.0, 12, 6, "root");
     let child = make_grid_state(2, 1, 4.0, 2.0, 3, 1, "M-x");

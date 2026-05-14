@@ -352,15 +352,18 @@ impl TtyRif {
         }
 
         for entry in &state.window_matrices {
-            // Derive screen position from pixel_bounds.
-            // In TTY mode, pixel_bounds uses char-cell units (char_w=1, char_h=1),
-            // so bounds.x/y directly give the screen column/row.
             let char_w = state.char_width.max(1.0);
             let char_h = state.char_height.max(1.0);
-            let win_col = origin_col + (entry.pixel_bounds.x / char_w) as usize;
-            let win_row = origin_row + (entry.pixel_bounds.y / char_h) as usize;
-
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
+                // Mirror FrameDisplayState::materialize(): buffer text rows are
+                // laid out relative to the GNU TEXT_AREA, while mode-line,
+                // header-line, tab-line, and minibuffer chrome remain
+                // window-wide.  This is the TTY side of GNU's glyph matrix
+                // margin reservation in dispnew.c: text-area glyph pointers are
+                // offset past left margin columns, chrome rows are not.
+                let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let row_col = origin_col + (row_bounds.x / char_w).round().max(0.0) as usize;
+                let row_base = origin_row + (row_bounds.y / char_h).round().max(0.0) as usize;
                 // Use the stored pixel_y (window-relative) when available,
                 // falling back to row_idx * char_h for rows without explicit
                 // metrics (matches materialize_grid_row in the GUI path).
@@ -369,7 +372,7 @@ impl TtyRif {
                 } else {
                     row_idx
                 };
-                self.rasterize_glyph_row(win_col, win_row + row_offset, glyph_row);
+                self.rasterize_glyph_row(row_col, row_base + row_offset, glyph_row);
             }
         }
 
