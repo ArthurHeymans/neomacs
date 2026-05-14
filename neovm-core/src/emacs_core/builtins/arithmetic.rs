@@ -35,6 +35,22 @@ fn try_i64_from_value(eval: &super::eval::Context, value: &Value) -> Result<Opti
     }
 }
 
+#[inline]
+fn wrong_number_or_marker(value: &Value) -> Flow {
+    signal(
+        "wrong-type-argument",
+        vec![Value::symbol("number-or-marker-p"), *value],
+    )
+}
+
+#[inline]
+fn wrong_integer_or_marker(value: &Value) -> Flow {
+    signal(
+        "wrong-type-argument",
+        vec![Value::symbol("integer-or-marker-p"), *value],
+    )
+}
+
 /// Materialize an integer-valued operand as a `rug::Integer`. Used by
 /// the bignum slow path. Accepts fixnums, bignums, and markers.
 fn rug_from_value(eval: &super::eval::Context, value: &Value) -> Result<rug::Integer, Flow> {
@@ -44,10 +60,7 @@ fn rug_from_value(eval: &super::eval::Context, value: &Value) -> Result<rug::Int
         _ if super::marker::is_marker(value) => Ok(rug::Integer::from(
             super::marker::marker_position_as_int_eval(eval, value)?,
         )),
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("number-or-marker-p"), *value],
-        )),
+        _ => Err(wrong_number_or_marker(value)),
     }
 }
 
@@ -71,34 +84,59 @@ pub(crate) fn builtin_add_slice(
     eval: &mut super::super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    if has_float(args) {
-        let mut sum = 0.0f64;
-        for a in args {
-            sum += expect_number_or_marker_f64_eval(eval, a)?;
-        }
-        return Ok(Value::make_float(sum));
-    }
-    // Fixnum fast path with overflow detection.
+    // GNU `arith_driver`: stay in the fixnum loop until the current
+    // operand forces float or bignum arithmetic.
     let mut sum: i64 = 0;
     for (i, a) in args.iter().enumerate() {
-        match try_i64_from_value(eval, a)? {
-            Some(n) => match sum.checked_add(n) {
-                Some(s) => sum = s,
+        if let Some(n) = a.as_fixnum() {
+            match sum.checked_add(n) {
+                Some(s) => {
+                    sum = s;
+                    continue;
+                }
                 None => {
                     let mut acc = rug::Integer::from(sum);
                     acc += n;
                     return continue_bignum_add(eval, &args[i + 1..], acc);
                 }
-            },
-            None => {
-                // Operand is a bignum — promote and re-process from here.
-                let mut acc = rug::Integer::from(sum);
-                acc += a.as_bignum().unwrap();
-                return continue_bignum_add(eval, &args[i + 1..], acc);
             }
         }
+        if a.is_float() {
+            return continue_float_add(eval, &args[i + 1..], sum as f64 + a.xfloat());
+        }
+        if let Some(big) = a.as_bignum() {
+            let mut acc = rug::Integer::from(sum);
+            acc += big;
+            return continue_bignum_add(eval, &args[i + 1..], acc);
+        }
+        if super::marker::is_marker(a) {
+            let n = super::marker::marker_position_as_int_eval(eval, a)?;
+            match sum.checked_add(n) {
+                Some(s) => {
+                    sum = s;
+                    continue;
+                }
+                None => {
+                    let mut acc = rug::Integer::from(sum);
+                    acc += n;
+                    return continue_bignum_add(eval, &args[i + 1..], acc);
+                }
+            }
+        }
+        return Err(wrong_number_or_marker(a));
     }
     Ok(Value::make_int(sum))
+}
+
+fn continue_float_add(
+    eval: &super::super::eval::Context,
+    rest: &[Value],
+    mut acc: f64,
+) -> EvalResult {
+    for a in rest {
+        acc += expect_number_or_marker_f64_eval(eval, a)?;
+    }
+    Ok(Value::make_float(acc))
 }
 
 fn continue_bignum_add(
@@ -106,9 +144,10 @@ fn continue_bignum_add(
     rest: &[Value],
     mut acc: rug::Integer,
 ) -> EvalResult {
-    for a in rest {
-        // We already verified upfront that no operand is float, so any
-        // remaining value must be integer-or-marker.
+    for (i, a) in rest.iter().enumerate() {
+        if a.is_float() {
+            return continue_float_add(eval, &rest[i + 1..], acc.to_f64() + a.xfloat());
+        }
         let n = rug_from_value(eval, a)?;
         acc += n;
     }
@@ -118,9 +157,9 @@ fn continue_bignum_add(
 /// Eval-aware `-` that reads live marker positions from buffers.
 ///
 /// Mirrors GNU `Fminus` (`src/data.c:3282`):
-/// * 0 args → 0
-/// * 1 arg  → negation (with bignum promotion for `MIN_FIXNUM`)
-/// * N args → arith_driver in subtract mode
+/// * 0 args -> 0
+/// * 1 arg  -> negation (with bignum promotion for `MIN_FIXNUM`)
+/// * N args -> arith_driver in subtract mode
 pub(crate) fn builtin_sub(eval: &mut super::super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_sub_slice(eval, &args)
 }
@@ -135,43 +174,72 @@ pub(crate) fn builtin_sub_slice(
     if args.len() == 1 {
         return negate_value(eval, &args[0]);
     }
-    if has_float(&args) {
-        let mut acc = expect_number_or_marker_f64_eval(eval, &args[0])?;
-        for a in &args[1..] {
-            acc -= expect_number_or_marker_f64_eval(eval, a)?;
-        }
-        return Ok(Value::make_float(acc));
-    }
-    // Fixnum fast path: seed accumulator with first arg, then subtract.
+
     let first = &args[0];
-    let mut acc: i64 = match try_i64_from_value(eval, first)? {
-        Some(n) => n,
-        None => {
-            // First arg is a bignum — start GMP path immediately.
-            let acc = first.as_bignum().unwrap().clone();
-            return continue_bignum_sub(eval, &args[1..], acc);
-        }
+    let mut acc: i64 = if let Some(n) = first.as_fixnum() {
+        n
+    } else if first.is_float() {
+        return continue_float_sub(eval, &args[1..], first.xfloat());
+    } else if let Some(big) = first.as_bignum() {
+        return continue_bignum_sub(eval, &args[1..], big.clone());
+    } else if super::marker::is_marker(first) {
+        super::marker::marker_position_as_int_eval(eval, first)?
+    } else {
+        return Err(wrong_number_or_marker(first));
     };
+
     for (i, a) in args[1..].iter().enumerate() {
-        match try_i64_from_value(eval, a)? {
-            Some(n) => match acc.checked_sub(n) {
-                Some(s) => acc = s,
+        if let Some(n) = a.as_fixnum() {
+            match acc.checked_sub(n) {
+                Some(s) => {
+                    acc = s;
+                    continue;
+                }
                 None => {
                     let mut bacc = rug::Integer::from(acc);
                     bacc -= n;
                     return continue_bignum_sub(eval, &args[i + 2..], bacc);
                 }
-            },
-            None => {
-                let mut bacc = rug::Integer::from(acc);
-                bacc -= a.as_bignum().unwrap();
-                return continue_bignum_sub(eval, &args[i + 2..], bacc);
             }
         }
+        if a.is_float() {
+            return continue_float_sub(eval, &args[i + 2..], acc as f64 - a.xfloat());
+        }
+        if let Some(big) = a.as_bignum() {
+            let mut bacc = rug::Integer::from(acc);
+            bacc -= big;
+            return continue_bignum_sub(eval, &args[i + 2..], bacc);
+        }
+        if super::marker::is_marker(a) {
+            let n = super::marker::marker_position_as_int_eval(eval, a)?;
+            match acc.checked_sub(n) {
+                Some(s) => {
+                    acc = s;
+                    continue;
+                }
+                None => {
+                    let mut bacc = rug::Integer::from(acc);
+                    bacc -= n;
+                    return continue_bignum_sub(eval, &args[i + 2..], bacc);
+                }
+            }
+        }
+        return Err(wrong_number_or_marker(a));
     }
     // Promote i64 results that exceeded fixnum range (62-bit) but
     // stayed within i64 (64-bit), matching GNU `make_int`.
     Ok(Value::make_int(acc))
+}
+
+fn continue_float_sub(
+    eval: &super::super::eval::Context,
+    rest: &[Value],
+    mut acc: f64,
+) -> EvalResult {
+    for a in rest {
+        acc -= expect_number_or_marker_f64_eval(eval, a)?;
+    }
+    Ok(Value::make_float(acc))
 }
 
 fn continue_bignum_sub(
@@ -179,7 +247,10 @@ fn continue_bignum_sub(
     rest: &[Value],
     mut acc: rug::Integer,
 ) -> EvalResult {
-    for a in rest {
+    for (i, a) in rest.iter().enumerate() {
+        if a.is_float() {
+            return continue_float_sub(eval, &rest[i + 1..], acc.to_f64() - a.xfloat());
+        }
         let n = rug_from_value(eval, a)?;
         acc -= n;
     }
@@ -208,75 +279,74 @@ fn negate_value(eval: &super::super::eval::Context, value: &Value) -> EvalResult
     }
 }
 
-/// `*` with bignum promotion. Mirrors GNU `Ftimes` → `arith_driver`
+/// `*` with bignum promotion. Mirrors GNU `Ftimes` -> `arith_driver`
 /// (`src/data.c:3304`).
 pub(crate) fn builtin_mul(args: Vec<Value>) -> EvalResult {
-    if has_float(&args) {
-        let mut prod = 1.0f64;
-        for a in &args {
-            prod *= expect_number_or_marker_f64(a)?;
-        }
-        return Ok(Value::make_float(prod));
-    }
-    // We don't have an `eval` context here, so use the marker-less
-    // helpers. This matches the existing builtin_mul signature.
     let mut prod: i64 = 1;
     for (i, a) in args.iter().enumerate() {
-        match a.kind() {
-            ValueKind::Fixnum(n) => match prod.checked_mul(n) {
-                Some(p) => prod = p,
+        if let Some(n) = a.as_fixnum() {
+            match prod.checked_mul(n) {
+                Some(p) => {
+                    prod = p;
+                    continue;
+                }
                 None => {
                     let mut acc = rug::Integer::from(prod);
                     acc *= n;
                     return continue_bignum_mul(&args[i + 1..], acc);
                 }
-            },
-            ValueKind::Veclike(VecLikeType::Bignum) => {
-                let mut acc = rug::Integer::from(prod);
-                acc *= a.as_bignum().unwrap();
-                return continue_bignum_mul(&args[i + 1..], acc);
-            }
-            _ if super::marker::is_marker(a) => {
-                let n = super::marker::marker_position_as_int(a)?;
-                match prod.checked_mul(n) {
-                    Some(p) => prod = p,
-                    None => {
-                        let mut acc = rug::Integer::from(prod);
-                        acc *= n;
-                        return continue_bignum_mul(&args[i + 1..], acc);
-                    }
-                }
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("number-or-marker-p"), *a],
-                ));
             }
         }
+        if a.is_float() {
+            return continue_float_mul(&args[i + 1..], prod as f64 * a.xfloat());
+        }
+        if let Some(big) = a.as_bignum() {
+            let mut acc = rug::Integer::from(prod);
+            acc *= big;
+            return continue_bignum_mul(&args[i + 1..], acc);
+        }
+        if super::marker::is_marker(a) {
+            let n = super::marker::marker_position_as_int(a)?;
+            match prod.checked_mul(n) {
+                Some(p) => {
+                    prod = p;
+                    continue;
+                }
+                None => {
+                    let mut acc = rug::Integer::from(prod);
+                    acc *= n;
+                    return continue_bignum_mul(&args[i + 1..], acc);
+                }
+            }
+        }
+        return Err(wrong_number_or_marker(a));
     }
     Ok(Value::make_int(prod))
 }
 
-fn continue_bignum_mul(rest: &[Value], mut acc: rug::Integer) -> EvalResult {
+fn continue_float_mul(rest: &[Value], mut acc: f64) -> EvalResult {
     for a in rest {
+        acc *= expect_number_or_marker_f64(a)?;
+    }
+    Ok(Value::make_float(acc))
+}
+
+fn continue_bignum_mul(rest: &[Value], mut acc: rug::Integer) -> EvalResult {
+    for (i, a) in rest.iter().enumerate() {
+        if a.is_float() {
+            return continue_float_mul(&rest[i + 1..], acc.to_f64() * a.xfloat());
+        }
         match a.kind() {
             ValueKind::Fixnum(n) => acc *= n,
             ValueKind::Veclike(VecLikeType::Bignum) => acc *= a.as_bignum().unwrap(),
             _ if super::marker::is_marker(a) => {
                 acc *= super::marker::marker_position_as_int(a)?;
             }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("number-or-marker-p"), *a],
-                ));
-            }
+            _ => return Err(wrong_number_or_marker(a)),
         }
     }
     Ok(Value::make_integer(acc))
 }
-
 /// `/` with bignum support. Mirrors GNU `Fquo` (`src/data.c:3315`).
 ///
 /// Truncation toward zero (`tdiv_q` semantics, matching `mpz_tdiv_q`),
@@ -629,14 +699,7 @@ pub(crate) fn builtin_logand(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logand_slice(args: &[Value]) -> EvalResult {
-    if has_bignum(args) {
-        return bignum_logop(args, BignumLogop::And);
-    }
-    let mut acc = -1i64;
-    for a in args {
-        acc &= expect_integer_or_marker_after_number_check(a)?;
-    }
-    Ok(Value::make_int(acc))
+    builtin_logop(args, BignumLogop::And)
 }
 
 pub(crate) fn builtin_logior(args: Vec<Value>) -> EvalResult {
@@ -644,14 +707,7 @@ pub(crate) fn builtin_logior(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logior_slice(args: &[Value]) -> EvalResult {
-    if has_bignum(args) {
-        return bignum_logop(args, BignumLogop::Or);
-    }
-    let mut acc = 0i64;
-    for a in args {
-        acc |= expect_integer_or_marker_after_number_check(a)?;
-    }
-    Ok(Value::make_int(acc))
+    builtin_logop(args, BignumLogop::Or)
 }
 
 pub(crate) fn builtin_logxor(args: Vec<Value>) -> EvalResult {
@@ -659,14 +715,7 @@ pub(crate) fn builtin_logxor(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logxor_slice(args: &[Value]) -> EvalResult {
-    if has_bignum(args) {
-        return bignum_logop(args, BignumLogop::Xor);
-    }
-    let mut acc = 0i64;
-    for a in args {
-        acc ^= expect_integer_or_marker_after_number_check(a)?;
-    }
-    Ok(Value::make_int(acc))
+    builtin_logop(args, BignumLogop::Xor)
 }
 
 #[derive(Clone, Copy)]
@@ -676,18 +725,96 @@ enum BignumLogop {
     Xor,
 }
 
-fn bignum_logop(args: &[Value], op: BignumLogop) -> EvalResult {
-    let mut acc = match op {
-        BignumLogop::And => rug::Integer::from(-1),
-        BignumLogop::Or | BignumLogop::Xor => rug::Integer::from(0),
-    };
-    for a in args {
-        let next = bignum_or_int_to_rug(a)?;
-        match op {
-            BignumLogop::And => acc &= next,
-            BignumLogop::Or => acc |= next,
-            BignumLogop::Xor => acc ^= next,
+fn builtin_logop(args: &[Value], op: BignumLogop) -> EvalResult {
+    if args.is_empty() {
+        return Ok(Value::fixnum(match op {
+            BignumLogop::And => -1,
+            BignumLogop::Or | BignumLogop::Xor => 0,
+        }));
+    }
+
+    let first = &args[0];
+    if args.len() == 1 {
+        if first.as_fixnum().is_some() || first.as_bignum().is_some() {
+            return Ok(*first);
         }
+        if super::marker::is_marker(first) {
+            return Ok(Value::fixnum(super::marker::marker_position_as_int(first)?));
+        }
+        return Err(wrong_integer_or_marker(first));
+    }
+
+    let mut acc = if let Some(n) = first.as_fixnum() {
+        n
+    } else if let Some(big) = first.as_bignum() {
+        return continue_bignum_logop(&args[1..], big.clone(), op);
+    } else if super::marker::is_marker(first) {
+        super::marker::marker_position_as_int(first)?
+    } else {
+        return Err(wrong_integer_or_marker(first));
+    };
+
+    for (i, a) in args[1..].iter().enumerate() {
+        if let Some(n) = a.as_fixnum() {
+            apply_i64_logop(&mut acc, n, op);
+            continue;
+        }
+        if let Some(big) = a.as_bignum() {
+            let mut bacc = rug::Integer::from(acc);
+            apply_bignum_logop(&mut bacc, big, op);
+            return continue_bignum_logop(&args[i + 2..], bacc, op);
+        }
+        if super::marker::is_marker(a) {
+            let n = super::marker::marker_position_as_int(a)?;
+            apply_i64_logop(&mut acc, n, op);
+            continue;
+        }
+        if a.is_float() {
+            return Err(wrong_integer_or_marker(a));
+        }
+        return Err(wrong_number_or_marker(a));
+    }
+    Ok(Value::make_int(acc))
+}
+
+#[inline]
+fn apply_i64_logop(acc: &mut i64, next: i64, op: BignumLogop) {
+    match op {
+        BignumLogop::And => *acc &= next,
+        BignumLogop::Or => *acc |= next,
+        BignumLogop::Xor => *acc ^= next,
+    }
+}
+
+#[inline]
+fn apply_bignum_logop(acc: &mut rug::Integer, next: &rug::Integer, op: BignumLogop) {
+    match op {
+        BignumLogop::And => *acc &= next,
+        BignumLogop::Or => *acc |= next,
+        BignumLogop::Xor => *acc ^= next,
+    }
+}
+
+fn continue_bignum_logop(rest: &[Value], mut acc: rug::Integer, op: BignumLogop) -> EvalResult {
+    for a in rest {
+        if let Some(n) = a.as_fixnum() {
+            let next = rug::Integer::from(n);
+            apply_bignum_logop(&mut acc, &next, op);
+            continue;
+        }
+        if let Some(big) = a.as_bignum() {
+            apply_bignum_logop(&mut acc, big, op);
+            continue;
+        }
+        if super::marker::is_marker(a) {
+            let next = rug::Integer::from(super::marker::marker_position_as_int(a)?);
+            apply_bignum_logop(&mut acc, &next, op);
+            continue;
+        }
+        if a.is_float() {
+            return Err(wrong_integer_or_marker(a));
+        }
+        return Err(wrong_number_or_marker(a));
     }
     Ok(Value::make_integer(acc))
 }
