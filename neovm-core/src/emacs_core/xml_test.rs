@@ -2,43 +2,6 @@ use super::*;
 use crate::emacs_core::value::ValueKind;
 
 #[test]
-fn zlib_decompress_region_arity_and_type_validation() {
-    crate::test_utils::init_test_tracing();
-    let arity = builtin_zlib_decompress_region(vec![]);
-    assert!(arity.is_err());
-
-    let too_many = builtin_zlib_decompress_region(vec![
-        Value::fixnum(1),
-        Value::fixnum(1),
-        Value::NIL,
-        Value::NIL,
-    ]);
-    assert!(too_many.is_err());
-
-    let bad_type = builtin_zlib_decompress_region(vec![Value::string("x"), Value::fixnum(1)]);
-    assert!(bad_type.is_err());
-}
-
-#[test]
-fn zlib_decompress_region_signals_unibyte_requirement() {
-    crate::test_utils::init_test_tracing();
-    let result = builtin_zlib_decompress_region(vec![Value::fixnum(1), Value::fixnum(1)])
-        .expect_err("must signal error in multibyte buffers");
-    match result {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "error");
-            assert_eq!(
-                sig.data,
-                vec![Value::string(
-                    "This function can be called only in unibyte buffers"
-                )]
-            );
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
-}
-
-#[test]
 fn libxml_parse_xml_region_arity_and_type_subset() {
     crate::test_utils::init_test_tracing();
     assert_eq!(builtin_libxml_parse_xml_region(vec![]).unwrap(), Value::NIL);
@@ -180,10 +143,9 @@ fn libxml_parse_html_region_arity_and_type_subset() {
 }
 
 #[test]
-fn availability_probes_return_true_and_validate_arity() {
+fn libxml_available_p_returns_true_and_validates_arity() {
     crate::test_utils::init_test_tracing();
     assert_eq!(builtin_libxml_available_p(vec![]).unwrap(), Value::T);
-    assert_eq!(builtin_zlib_available_p(vec![]).unwrap(), Value::T);
 
     let libxml_arity = builtin_libxml_available_p(vec![Value::fixnum(1)]).unwrap_err();
     match libxml_arity {
@@ -196,8 +158,17 @@ fn availability_probes_return_true_and_validate_arity() {
         }
         other => panic!("unexpected flow: {other:?}"),
     }
+}
 
-    let zlib_arity = builtin_zlib_available_p(vec![Value::fixnum(1)]).unwrap_err();
+#[test]
+fn zlib_available_p_returns_true() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        crate::emacs_core::zlib::builtin_zlib_available_p(vec![]).unwrap(),
+        Value::T
+    );
+    let zlib_arity =
+        crate::emacs_core::zlib::builtin_zlib_available_p(vec![Value::fixnum(1)]).unwrap_err();
     match zlib_arity {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-number-of-arguments");

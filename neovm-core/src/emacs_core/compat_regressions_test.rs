@@ -375,7 +375,7 @@ fn gpm_mouse_start_signals_console_only_error() {
 #[test]
 fn sqlite_version_returns_string() {
     crate::test_utils::init_test_tracing();
-    let out = crate::emacs_core::builtins::builtin_sqlite_version(vec![]).unwrap();
+    let out = crate::emacs_core::sqlite::builtin_sqlite_version(vec![]).unwrap();
     assert!(out.is_string());
 }
 
@@ -389,17 +389,17 @@ fn inotify_valid_p_returns_nil() {
 #[test]
 fn sqlite_open_and_close_round_trip() {
     crate::test_utils::init_test_tracing();
-    let db = crate::emacs_core::builtins::builtin_sqlite_open(vec![]).unwrap();
-    let sqlitep = crate::emacs_core::builtins::builtin_sqlitep(vec![db]).unwrap();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+    let sqlitep = crate::emacs_core::sqlite::builtin_sqlitep(vec![db]).unwrap();
     assert_eq!(sqlitep, Value::T);
-    let closed = crate::emacs_core::builtins::builtin_sqlite_close(vec![db]).unwrap();
+    let closed = crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap();
     assert_eq!(closed, Value::T);
 }
 
 #[test]
 fn sqlite_execute_rejects_non_handle() {
     crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::builtins::builtin_sqlite_execute(vec![
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
         Value::NIL,
         Value::string("select 1"),
     ])
