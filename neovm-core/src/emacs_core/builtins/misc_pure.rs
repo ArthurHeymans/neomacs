@@ -74,12 +74,32 @@ fn message_echo_result(
     }
 
     let set_message_function = ctx.visible_variable_value_or_nil("set-message-function");
-    if set_message_function.is_nil() {
+    if set_message_function.is_nil()
+        || ctx.gc_inhibit_depth > 0
+        || builtin_functionp_1(ctx, set_message_function)?.is_nil()
+    {
         return Ok(Some(msg.clone()));
     }
 
-    let result =
-        ctx.funcall_general(set_message_function, vec![Value::heap_string(msg.clone())])?;
+    // GNU xdisp.c `set_message` calls `set-message-function` through
+    // `dsafe_call1`: redisplay is inhibited, quit is inhibited, and hook
+    // errors are demoted instead of escaping from `message`.
+    let specpdl_count = ctx.specpdl.len();
+    ctx.specbind(intern("inhibit-redisplay"), Value::T);
+    ctx.specbind(intern("inhibit-quit"), Value::T);
+    let result = ctx.funcall_general(set_message_function, vec![Value::heap_string(msg.clone())]);
+    ctx.unbind_to(specpdl_count);
+
+    let result = match result {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::warn!(
+                "set-message-function signaled while setting echo message: {:?}",
+                err
+            );
+            return Ok(Some(msg.clone()));
+        }
+    };
     if result.is_nil() {
         return Ok(Some(msg.clone()));
     }

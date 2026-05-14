@@ -11331,6 +11331,42 @@ fn message_uses_set_message_function_string_and_suppression_results() {
 }
 
 #[test]
+fn message_ignores_non_function_set_message_function_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.assign("set-message-function", Value::T);
+    builtin_message(&mut eval, vec![Value::string("plain")])
+        .expect("GNU ignores non-function set-message-function");
+
+    assert_eq!(eval.current_message_text(), Some("plain".to_string()));
+}
+
+#[test]
+fn message_demotes_set_message_function_errors_like_gnu_dsafe_call() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.eval_str(
+        r#"(fset 'neomacs-test-message-error
+                 (lambda (_message) (error "bad message hook")))"#,
+    )
+    .expect("install signaling set-message-function");
+    eval.assign(
+        "set-message-function",
+        Value::symbol("neomacs-test-message-error"),
+    );
+
+    builtin_message(&mut eval, vec![Value::string("still visible")])
+        .expect("GNU dsafe_call1 demotes set-message-function errors");
+
+    assert_eq!(
+        eval.current_message_text(),
+        Some("still visible".to_string())
+    );
+}
+
+#[test]
 fn format_message_promotes_unibyte_ascii_to_multibyte_when_quoting() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
