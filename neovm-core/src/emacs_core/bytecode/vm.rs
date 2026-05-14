@@ -3647,66 +3647,76 @@ impl<'a> Vm<'a> {
         nargs: usize,
     ) -> Option<EvalResult> {
         let args = &self.ctx.bc_buf;
+        macro_rules! stack_arg {
+            ($idx:expr) => {{
+                let idx = $idx;
+                if idx < nargs {
+                    unsafe { *args.get_unchecked(args_start + idx) }
+                } else {
+                    Value::NIL
+                }
+            }};
+        }
         match func {
             SubrFn::A0(func) => Some(func(self.ctx)),
             SubrFn::A1(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
                 Some(func(self.ctx, arg0))
             }
             SubrFn::A2(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
                 Some(func(self.ctx, arg0, arg1))
             }
             SubrFn::A3(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
                 Some(func(self.ctx, arg0, arg1, arg2))
             }
             SubrFn::A4(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
-                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
+                let arg3 = stack_arg!(3);
                 Some(func(self.ctx, arg0, arg1, arg2, arg3))
             }
             SubrFn::A5(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
-                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
-                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
+                let arg3 = stack_arg!(3);
+                let arg4 = stack_arg!(4);
                 Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4))
             }
             SubrFn::A6(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
-                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
-                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
-                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
+                let arg3 = stack_arg!(3);
+                let arg4 = stack_arg!(4);
+                let arg5 = stack_arg!(5);
                 Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5))
             }
             SubrFn::A7(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
-                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
-                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
-                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
-                let arg6 = args.get(args_start + 6).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
+                let arg3 = stack_arg!(3);
+                let arg4 = stack_arg!(4);
+                let arg5 = stack_arg!(5);
+                let arg6 = stack_arg!(6);
                 Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6))
             }
             SubrFn::A8(func) => {
-                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
-                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
-                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
-                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
-                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
-                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
-                let arg6 = args.get(args_start + 6).copied().unwrap_or(Value::NIL);
-                let arg7 = args.get(args_start + 7).copied().unwrap_or(Value::NIL);
+                let arg0 = stack_arg!(0);
+                let arg1 = stack_arg!(1);
+                let arg2 = stack_arg!(2);
+                let arg3 = stack_arg!(3);
+                let arg4 = stack_arg!(4);
+                let arg5 = stack_arg!(5);
+                let arg6 = stack_arg!(6);
+                let arg7 = stack_arg!(7);
                 Some(func(
                     self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
                 ))
@@ -3802,11 +3812,37 @@ impl<'a> Vm<'a> {
         func_val: Value,
     ) -> Option<(SymId, SubrEntry, DirectSubrCallee)> {
         let (sym_id, entry, callee) = match func_val.kind() {
-            ValueKind::Symbol(sym_id) if self.named_builtin_fast_path_allowed_id(sym_id) => (
-                sym_id,
-                lookup_global_subr_entry(sym_id)?,
-                DirectSubrCallee::Symbol(sym_id),
-            ),
+            ValueKind::Symbol(sym_id) => {
+                if self.ctx.compiler_function_overrides_active() {
+                    return None;
+                }
+                match self.ctx.obarray.symbol_function_id(sym_id) {
+                    // GNU bytecode.c:Bcall resolves a symbol's live function
+                    // cell and calls SUBRP function cells directly. Use the
+                    // same resolved subr object here instead of consulting the
+                    // static table again on the hot path.
+                    Some(value)
+                        if matches!(
+                            value.kind(),
+                            ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
+                        ) =>
+                    {
+                        let (callee_sym, entry) = subr_entry_from_value(value)?;
+                        (callee_sym, entry, DirectSubrCallee::Value(value))
+                    }
+                    Some(value) if value.is_nil() => (
+                        sym_id,
+                        lookup_global_subr_entry(sym_id)?,
+                        DirectSubrCallee::Symbol(sym_id),
+                    ),
+                    None => (
+                        sym_id,
+                        lookup_global_subr_entry(sym_id)?,
+                        DirectSubrCallee::Symbol(sym_id),
+                    ),
+                    _ => return None,
+                }
+            }
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
                 let (sym_id, entry) = subr_entry_from_value(func_val)?;
                 (sym_id, entry, DirectSubrCallee::Value(func_val))

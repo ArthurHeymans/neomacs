@@ -6486,6 +6486,32 @@ fn funcall_builtin_wrong_arity_uses_subr_object_payload() {
 }
 
 #[test]
+fn bytecode_bcall_symbol_function_cell_subr_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = runtime_startup_context();
+    let result = ctx.eval_str(
+        r#"(progn
+             (fset 'vm-bcall-subr-alias (symbol-function 'car))
+             (defun vm-bcall-subr-ok (x)
+               (vm-bcall-subr-alias x))
+             (defun vm-bcall-subr-bad ()
+               (vm-bcall-subr-alias))
+             (byte-compile 'vm-bcall-subr-ok)
+             (byte-compile 'vm-bcall-subr-bad)
+             (list (subrp (symbol-function 'vm-bcall-subr-alias))
+                   (vm-bcall-subr-ok '(a b))
+                   (condition-case err
+                       (vm-bcall-subr-bad)
+                     (error
+                      (list (car err) (subrp (nth 1 err)) (nth 2 err))))))"#,
+    );
+    assert_eq!(
+        format_eval_result(&result),
+        "OK (t a (wrong-number-of-arguments t 0))"
+    );
+}
+
+#[test]
 fn condition_case_catches_uncaught_throw_as_no_catch() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
