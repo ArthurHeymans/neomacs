@@ -156,6 +156,61 @@ fn libxml_available_p_returns_true_and_validates_arity() {
 }
 
 #[test]
+fn libxml_parse_xml_region_matches_gnu_tree_shape() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        parse_xml_region(br#"<root><empty/></root>"#, false).unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::NIL,
+            Value::list(vec![Value::symbol("empty"), Value::NIL]),
+        ])
+    );
+
+    assert_eq!(
+        parse_xml_region(
+            br#"<root>
+  <a attr="x&amp;y">text</a>
+</root>"#,
+            false
+        )
+        .unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("a"),
+                Value::list(vec![Value::cons(
+                    Value::symbol("attr"),
+                    Value::string("x&y")
+                )]),
+                Value::string("text"),
+            ]),
+        ])
+    );
+}
+
+#[test]
+fn libxml_parse_xml_region_discards_only_toplevel_comments() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        parse_xml_region(br#"<!--top--><root><!--inner--><a/></root>"#, true).unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("comment"),
+                Value::NIL,
+                Value::string("inner")
+            ]),
+            Value::list(vec![Value::symbol("a"), Value::NIL]),
+        ])
+    );
+}
+
+#[test]
 fn zlib_available_p_returns_true() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

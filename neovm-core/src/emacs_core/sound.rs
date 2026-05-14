@@ -25,6 +25,7 @@ struct SoundSpec {
     #[cfg(not(feature = "sound"))]
     has_data: bool,
     volume: f32,
+    device: Option<String>,
 }
 
 fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
@@ -62,6 +63,7 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
     let file_val = super::plist::plist_get(plist_val, &Value::symbol(":file"));
     let data_val = super::plist::plist_get(plist_val, &Value::symbol(":data"));
     let volume_val = super::plist::plist_get(plist_val, &Value::symbol(":volume"));
+    let device_val = super::plist::plist_get(plist_val, &Value::symbol(":device"));
 
     let file = match file_val {
         Some(v) if !v.is_nil() => match v.kind() {
@@ -160,6 +162,25 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
         _ => 1.0,
     };
 
+    let device = match device_val {
+        Some(v) if !v.is_nil() => match v.kind() {
+            ValueKind::String => Some(
+                v.as_lisp_string()
+                    .unwrap()
+                    .as_utf8_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            ),
+            _ => {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid sound specification")],
+                ));
+            }
+        },
+        _ => None,
+    };
+
     Ok(SoundSpec {
         file,
         #[cfg(feature = "sound")]
@@ -167,6 +188,7 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
         #[cfg(not(feature = "sound"))]
         has_data,
         volume,
+        device,
     })
 }
 
@@ -175,7 +197,60 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "sound")]
-fn play_sound_file(path: &str, volume: f32) -> Result<(), Flow> {
+fn open_output_stream(
+    device: Option<&str>,
+) -> Result<(rodio::OutputStream, rodio::OutputStreamHandle), Flow> {
+    if let Some(device_name) = device {
+        use rodio::DeviceTrait;
+        use rodio::cpal::traits::HostTrait;
+
+        if device_name == "default" {
+            return rodio::OutputStream::try_default().map_err(|e| {
+                signal(
+                    "error",
+                    vec![Value::string(&format!("No audio device: {e}"))],
+                )
+            });
+        }
+
+        let host = rodio::cpal::default_host();
+        let mut devices = host.output_devices().map_err(|e| {
+            signal(
+                "error",
+                vec![Value::string(&format!("No audio device: {e}"))],
+            )
+        })?;
+
+        while let Some(output_device) = devices.next() {
+            if output_device.name().ok().as_deref() == Some(device_name) {
+                return rodio::OutputStream::try_from_device(&output_device).map_err(|e| {
+                    signal(
+                        "error",
+                        vec![Value::string(&format!("No audio device: {e}"))],
+                    )
+                });
+            }
+        }
+
+        return Err(signal(
+            "file-error",
+            vec![
+                Value::string("Cannot open sound device"),
+                Value::string(device_name),
+            ],
+        ));
+    }
+
+    rodio::OutputStream::try_default().map_err(|e| {
+        signal(
+            "error",
+            vec![Value::string(&format!("No audio device: {e}"))],
+        )
+    })
+}
+
+#[cfg(feature = "sound")]
+fn play_sound_file(path: &str, volume: f32, device: Option<&str>) -> Result<(), Flow> {
     let file = std::fs::File::open(path).map_err(|e| {
         signal(
             "file-error",
@@ -186,12 +261,7 @@ fn play_sound_file(path: &str, volume: f32) -> Result<(), Flow> {
         )
     })?;
 
-    let stream = rodio::OutputStream::try_default().map_err(|e| {
-        signal(
-            "error",
-            vec![Value::string(&format!("No audio device: {e}"))],
-        )
-    })?;
+    let stream = open_output_stream(device)?;
     let (_stream, stream_handle) = stream;
 
     let sink = rodio::Sink::try_new(&stream_handle).map_err(|e| {
@@ -217,15 +287,10 @@ fn play_sound_file(path: &str, volume: f32) -> Result<(), Flow> {
 }
 
 #[cfg(feature = "sound")]
-fn play_sound_data(data: &[u8], volume: f32) -> Result<(), Flow> {
+fn play_sound_data(data: &[u8], volume: f32, device: Option<&str>) -> Result<(), Flow> {
     use std::io::Cursor;
 
-    let stream = rodio::OutputStream::try_default().map_err(|e| {
-        signal(
-            "error",
-            vec![Value::string(&format!("No audio device: {e}"))],
-        )
-    })?;
+    let stream = open_output_stream(device)?;
     let (_stream, stream_handle) = stream;
 
     let sink = rodio::Sink::try_new(&stream_handle).map_err(|e| {
@@ -262,9 +327,9 @@ pub(crate) fn builtin_play_sound_internal(args: Vec<Value>) -> EvalResult {
     let spec = parse_sound_spec(args[0])?;
 
     if let Some(ref path) = spec.file {
-        play_sound_file(path, spec.volume)?;
+        play_sound_file(path, spec.volume, spec.device.as_deref())?;
     } else if let Some(ref data) = spec.data {
-        play_sound_data(data, spec.volume)?;
+        play_sound_data(data, spec.volume, spec.device.as_deref())?;
     }
 
     Ok(Value::NIL)
@@ -281,4 +346,40 @@ pub(crate) fn builtin_play_sound_internal(args: Vec<Value>) -> EvalResult {
         "error",
         vec![Value::string("Sound support not available")],
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_sound_spec_validates_device_like_gnu() {
+        crate::test_utils::init_test_tracing();
+
+        let invalid = Value::list(vec![
+            Value::symbol("sound"),
+            Value::symbol(":data"),
+            Value::string(""),
+            Value::symbol(":device"),
+            Value::fixnum(1),
+        ]);
+        match parse_sound_spec(invalid) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "error");
+                assert_eq!(sig.data, vec![Value::string("Invalid sound specification")]);
+            }
+            Err(other) => panic!("unexpected flow: {other:?}"),
+            Ok(_) => panic!("expected invalid sound specification"),
+        }
+
+        let valid = Value::list(vec![
+            Value::symbol("sound"),
+            Value::symbol(":data"),
+            Value::string(""),
+            Value::symbol(":device"),
+            Value::string("default"),
+        ]);
+        let spec = parse_sound_spec(valid).unwrap();
+        assert_eq!(spec.device.as_deref(), Some("default"));
+    }
 }

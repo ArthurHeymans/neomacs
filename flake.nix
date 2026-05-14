@@ -232,6 +232,7 @@
               poppler.dev
             ]
             ++ lib.optionals isLinux [
+              alsa-lib.dev
               libva
               libselinux.dev
               libGL.dev
@@ -285,6 +286,7 @@
                 dbus
                 sqlite
                 gmp
+                alsa-lib
                 libgccjit
                 libsoup_3
                 libGL

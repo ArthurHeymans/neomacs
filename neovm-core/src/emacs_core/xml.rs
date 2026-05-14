@@ -13,12 +13,18 @@ use crate::emacs_core::value::ValueKind;
 // Argument helpers
 // ---------------------------------------------------------------------------
 
-fn expect_integer_or_marker(value: Value) -> Result<i64, Flow> {
+fn expect_integer_or_marker(
+    buffers: &crate::buffer::BufferManager,
+    value: &Value,
+) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
+        _ if value.is_marker() => {
+            super::marker::marker_position_as_int_with_buffers(buffers, value)
+        }
         _ => Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), value],
+            vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
 }
@@ -61,13 +67,13 @@ fn read_region_bytes(
     let start = if args.is_empty() || args[0].is_nil() {
         buf.point_min_char() as i64 + 1
     } else {
-        expect_integer_or_marker(args[0])?
+        expect_integer_or_marker(&ctx.buffers, &args[0])?
     };
 
     let end = if args.len() <= 1 || args[1].is_nil() {
         buf.point_max_char() as i64 + 1
     } else {
-        expect_integer_or_marker(args[1])?
+        expect_integer_or_marker(&ctx.buffers, &args[1])?
     };
 
     if start == end {
@@ -134,7 +140,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
             Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                 let attrs = parse_xml_attributes(e.attributes());
-                let node = make_element_node(&tag, attrs, vec![Value::NIL]);
+                let node = make_element_node(&tag, attrs, Vec::new());
                 if let Some((_, _, children)) = stack.last_mut() {
                     children.push(node);
                 } else {
@@ -153,7 +159,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
             }
             Ok(Event::Text(ref e)) => {
                 let text = e.unescape().ok()?;
-                if !text.is_empty() {
+                if !is_xml_blank_text(text.as_ref()) {
                     let node = Value::string(text.as_ref());
                     if let Some((_, _, children)) = stack.last_mut() {
                         children.push(node);
@@ -176,7 +182,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 }
             }
             Ok(Event::Comment(ref e)) => {
-                if discard_comments {
+                if discard_comments && stack.is_empty() {
                     continue;
                 }
                 let text = String::from_utf8_lossy(e);
@@ -223,10 +229,18 @@ fn parse_xml_attributes(attrs: quick_xml::events::attributes::Attributes<'_>) ->
     let mut result = Vec::new();
     for attr in attrs.flatten() {
         let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
-        let val = String::from_utf8_lossy(&attr.value).into_owned();
+        let val = attr
+            .unescape_value()
+            .map(|value| value.into_owned())
+            .unwrap_or_else(|_| String::from_utf8_lossy(&attr.value).into_owned());
         result.push(Value::cons(Value::symbol(&key), Value::string(&val)));
     }
     result
+}
+
+fn is_xml_blank_text(text: &str) -> bool {
+    text.bytes()
+        .all(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
 }
 
 /// Build an Elisp element node: (tag-name ((attr . val) ...) children...)
@@ -310,9 +324,6 @@ fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool)
                 if let Some(val) = convert_tl_node(child_node, parser, discard_comments) {
                     child_values.push(val);
                 }
-            }
-            if child_values.is_empty() {
-                child_values.push(Value::NIL);
             }
             Some(make_element_node(tag.as_ref(), attrs, child_values))
         }
