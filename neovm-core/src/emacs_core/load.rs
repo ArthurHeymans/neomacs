@@ -2199,7 +2199,7 @@ fn bootstrap_cache_dir(runtime_root: &Path) -> PathBuf {
 }
 
 fn should_hash_bootstrap_source_file(path: &Path) -> bool {
-    path.extension().and_then(OsStr::to_str) == Some("el")
+    matches!(path.extension().and_then(OsStr::to_str), Some("el" | "elc"))
 }
 
 fn collect_bootstrap_source_files(path: &Path, out: &mut Vec<PathBuf>) {
@@ -2233,7 +2233,7 @@ fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
     files.sort();
 
     let mut hasher = Sha256::new();
-    hasher.update(b"neomacs-bootstrap-source-fingerprint-v1\0");
+    hasher.update(b"neomacs-bootstrap-source-fingerprint-v2\0");
     for path in files {
         let rel = path.strip_prefix(runtime_root).unwrap_or(&path);
         hasher.update(rel.as_os_str().as_encoded_bytes());

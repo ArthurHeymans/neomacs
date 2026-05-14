@@ -2472,7 +2472,7 @@ fn accept_process_output_preserves_process_callback_runtime_state() {
         result,
         r#"OK ("out
 " "finished
-" t t keep before t t keep t t t keep t)"#
+" t t nil before t t nil t t t nil t)"#
     );
 }
 
@@ -2532,7 +2532,7 @@ fn make_network_process_open_sentinel_uses_shared_callback_runtime_state() {
     assert_eq!(
         result,
         r#"OK ("open
-" t t keep t t t keep before)"#
+" t t nil t t t nil before)"#
     );
 }
 

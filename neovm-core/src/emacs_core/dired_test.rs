@@ -455,6 +455,151 @@ fn test_file_name_all_completions() {
 }
 
 #[test]
+fn test_file_name_all_completions_honors_completion_regexp_list() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnac_completion_regexp_list");
+    create_file(&dir, "config.el", "");
+    create_file(&dir, "config.neoc", "");
+    create_file(&dir, "custom.el", "");
+    create_file(&dir, "init.el", "");
+    create_file(&dir, "packages.el", "");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("con")]),
+    );
+
+    let result = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str)],
+    )
+    .unwrap();
+    let items = list_to_vec(&result).unwrap();
+    let names: Vec<&str> = items.iter().map(|v| v.as_utf8_str().unwrap()).collect();
+    assert_eq!(items.len(), 2);
+    assert!(names.contains(&"config.el"));
+    assert!(names.contains(&"config.neoc"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_file_name_all_completions_regexps_fold_when_completion_ignore_case() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnac_completion_regexp_case_fold");
+    create_file(&dir, "CONCAP.el", "");
+    create_file(&dir, "config.el", "");
+    create_file(&dir, "custom.el", "");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.obarray
+        .set_symbol_value("completion-ignore-case", Value::T);
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("con")]),
+    );
+
+    let result = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str)],
+    )
+    .unwrap();
+    let items = list_to_vec(&result).unwrap();
+    let names: Vec<&str> = items.iter().map(|v| v.as_utf8_str().unwrap()).collect();
+    assert_eq!(items.len(), 2);
+    assert!(names.contains(&"CONCAP.el"));
+    assert!(names.contains(&"config.el"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_file_name_all_completions_matches_directory_regex_before_slash() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnac_completion_regexp_dir");
+    fs::create_dir(dir.join("subdir")).unwrap();
+
+    let mut eval = super::super::eval::Context::new();
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("subdir$")]),
+    );
+
+    let result = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str)],
+    )
+    .unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].as_utf8_str(), Some("subdir/"));
+
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("subdir/$")]),
+    );
+    let result = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str)],
+    )
+    .unwrap();
+    assert!(result.is_nil());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_file_name_completion_honors_completion_regexp_list() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnc_completion_regexp_list");
+    create_file(&dir, "config.el", "");
+    create_file(&dir, "custom.el", "");
+    create_file(&dir, "init.el", "");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("con")]),
+    );
+
+    let result = builtin_file_name_completion(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str), Value::NIL],
+    )
+    .unwrap();
+    assert_eq!(result.as_utf8_str(), Some("config.el"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_file_name_completion_regexps_fold_when_completion_ignore_case() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnc_completion_regexp_case_fold");
+    create_file(&dir, "CONCAP.el", "");
+    create_file(&dir, "config.el", "");
+    create_file(&dir, "custom.el", "");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.obarray
+        .set_symbol_value("completion-ignore-case", Value::T);
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("con")]),
+    );
+
+    let result = builtin_file_name_completion(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str), Value::NIL],
+    )
+    .unwrap();
+    assert_eq!(result.as_utf8_str(), Some("con"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_file_name_all_completions_empty() {
     crate::test_utils::init_test_tracing();
     let (dir, dir_str) = make_test_dir("fnac_empty");

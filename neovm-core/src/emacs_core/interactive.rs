@@ -3471,20 +3471,16 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
 
     let mut sequences = Vec::new();
     for keymap in &keymaps {
-        let mut prefix = Vec::new();
         if collect_where_is_sequences_value(
             eval.obarray(),
             keymap,
             definition,
-            &mut prefix,
             &mut sequences,
-            first_only_non_ascii,
             no_menu_bindings,
             0,
-        ) && first_only_non_ascii
-        {
+        ) {
             break;
-        }
+        };
     }
 
     if sequences.is_empty() {
@@ -3752,10 +3748,6 @@ fn select_where_is_preferred_sequence<'a>(
 ) -> &'a Vec<Value> {
     let preferred_modifier = where_is_preferred_modifier_mask(obarray);
 
-    if preferred_modifier == 0 {
-        return &sequences[0];
-    }
-
     if let Some(seq) = sequences
         .iter()
         .find(|seq| where_is_sequence_preference(obarray, seq) == 2)
@@ -3763,9 +3755,11 @@ fn select_where_is_preferred_sequence<'a>(
         return seq;
     }
 
-    for seq in sequences {
-        if where_is_sequence_preference(obarray, seq) != 0 {
-            return seq;
+    if preferred_modifier != 0 {
+        for seq in sequences {
+            if where_is_sequence_preference(obarray, seq) != 0 {
+                return seq;
+            }
         }
     }
 
@@ -3832,75 +3826,80 @@ fn event_symbol_base_for_mouse_event_filter(mut name: &str) -> String {
     name.to_string()
 }
 
+fn collect_where_is_accessible_maps(
+    obarray: &Obarray,
+    keymap: &Value,
+    prefix: &mut Vec<Value>,
+    out: &mut Vec<(Vec<Value>, Value)>,
+    seen: &mut Vec<Value>,
+    depth: usize,
+) {
+    if depth > 50 {
+        return;
+    }
+    for seen_map in seen.iter() {
+        if where_is_keymap_value_eq(seen_map, keymap) {
+            return;
+        }
+    }
+
+    seen.push(*keymap);
+    out.push((prefix.clone(), *keymap));
+
+    let mut bindings = Vec::new();
+    list_keymap_for_each_binding(keymap, |event, binding| bindings.push((event, binding)));
+    for (event, binding) in &bindings {
+        let Some(prefix_keymap) = where_is_binding_prefix_keymap(obarray, binding) else {
+            continue;
+        };
+        prefix.push(*event);
+        collect_where_is_accessible_maps(obarray, &prefix_keymap, prefix, out, seen, depth + 1);
+        prefix.pop();
+    }
+
+    let parent = super::keymap::list_keymap_parent(keymap);
+    if is_list_keymap(&parent) {
+        collect_where_is_accessible_maps(obarray, &parent, prefix, out, seen, depth + 1);
+    }
+
+    seen.pop();
+}
+
 fn collect_where_is_sequences_value(
     obarray: &Obarray,
     keymap: &Value,
     definition: &Value,
-    prefix: &mut Vec<Value>,
     out: &mut Vec<Vec<Value>>,
-    first_only: bool,
     no_menu_bindings: bool,
     depth: usize,
 ) -> bool {
-    if depth > 50 {
-        return false; // Prevent infinite recursion in circular keymaps
-    }
+    let mut maps = Vec::new();
+    let mut prefix = Vec::new();
+    let mut seen = Vec::new();
+    collect_where_is_accessible_maps(obarray, keymap, &mut prefix, &mut maps, &mut seen, depth);
 
-    let mut bindings: Vec<(Value, Value)> = Vec::new();
-    list_keymap_for_each_binding(keymap, |event, binding| bindings.push((event, binding)));
-
-    for (event, binding) in bindings {
-        prefix.push(event);
-
-        if no_menu_bindings && where_is_prefix_starts_with_mouse_event(prefix) {
-            prefix.pop();
+    for (map_prefix, map) in maps {
+        if no_menu_bindings && where_is_prefix_starts_with_mouse_event(&map_prefix) {
             continue;
         }
 
-        if binding_matches_definition(&binding, definition) {
-            out.push(prefix.clone());
-            if first_only {
-                prefix.pop();
-                return true;
+        let mut bindings: Vec<(Value, Value)> = Vec::new();
+        list_keymap_for_each_binding(&map, |event, binding| bindings.push((event, binding)));
+        for (event, binding) in bindings {
+            if !binding_matches_definition(&binding, definition) {
+                continue;
             }
-        }
-
-        if let Some(prefix_keymap) = where_is_binding_prefix_keymap(obarray, &binding) {
-            if collect_where_is_sequences_value(
-                obarray,
-                &prefix_keymap,
-                definition,
-                prefix,
-                out,
-                first_only,
-                no_menu_bindings,
-                depth + 1,
-            ) {
-                prefix.pop();
-                return true;
-            }
-        }
-        prefix.pop();
-    }
-
-    // Check parent keymap
-    let parent = super::keymap::list_keymap_parent(keymap);
-    if is_list_keymap(&parent) {
-        if collect_where_is_sequences_value(
-            obarray,
-            &parent,
-            definition,
-            prefix,
-            out,
-            first_only,
-            no_menu_bindings,
-            depth + 1,
-        ) {
-            return true;
+            let mut sequence = map_prefix.clone();
+            sequence.push(event);
+            out.push(sequence);
         }
     }
 
     false
+}
+
+fn where_is_keymap_value_eq(a: &Value, b: &Value) -> bool {
+    matches!((a.kind(), b.kind()), (ValueKind::Cons, ValueKind::Cons)) && a == b
 }
 
 fn where_is_binding_prefix_keymap(obarray: &Obarray, binding: &Value) -> Option<Value> {

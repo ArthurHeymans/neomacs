@@ -4670,6 +4670,7 @@ fn sync_live_gui_resize_for_geometry_queries(
     eval: &mut super::eval::Context,
     fid: FrameId,
 ) -> Result<(), Flow> {
+    eval.sync_pending_resize_events();
     if flush_pending_live_gui_resize(eval, fid)? {
         eval.wait_for_pending_resize_events(LIVE_GUI_RESIZE_ACK_TIMEOUT);
     }

@@ -4615,17 +4615,17 @@ fn where_is_internal_firstonly_prefers_unmodified_printable_key() {
 }
 
 #[test]
-fn where_is_internal_firstonly_non_ascii_keeps_first_stored_binding() {
+fn where_is_internal_firstonly_non_ascii_uses_gnu_accessible_order() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_all(
         r#"(let ((m (define-keymap
                       "q" #'ignore
                       "C-c C-k" #'ignore)))
-             (equal (where-is-internal 'ignore m 'non-ascii) [3 11]))"#,
+             (equal (where-is-internal 'ignore m 'non-ascii) [113]))"#,
     )
     .into_iter()
     .next()
-    .expect("bootstrap where-is non-ascii result");
+    .expect("bootstrap where-is GNU accessible-map order result");
     assert_eq!(result, "OK t");
 }
 

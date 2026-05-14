@@ -793,6 +793,49 @@ fn builtin_all_completions_honors_raw_unibyte_completion_regexps() {
 }
 
 #[test]
+fn builtin_all_completions_completion_regexps_fold_when_completion_ignore_case() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.obarray
+        .set_symbol_value("completion-ignore-case", Value::T);
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("con")]),
+    );
+    let coll = Value::list(vec![
+        Value::string("CONCAP"),
+        Value::string("config"),
+        Value::string("custom"),
+    ]);
+
+    let result = builtin_all_completions(&mut eval, vec![Value::string(""), coll]).unwrap();
+    let items = crate::emacs_core::value::list_to_vec(&result).expect("filtered completion list");
+    let names: Vec<&str> = items.iter().map(|v| v.as_utf8_str().unwrap()).collect();
+    assert_eq!(names, vec!["CONCAP", "config"]);
+}
+
+#[test]
+fn builtin_all_completions_signals_invalid_completion_regexp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("[")]),
+    );
+    let coll = Value::list(vec![Value::string("alpha")]);
+
+    let err = builtin_all_completions(&mut eval, vec![Value::string(""), coll])
+        .expect_err("invalid completion regexp should signal");
+    let crate::emacs_core::error::Flow::Signal(signal) = err else {
+        panic!("expected invalid-regexp signal, got {err:?}");
+    };
+    assert_eq!(
+        crate::emacs_core::intern::resolve_sym(signal.symbol),
+        "invalid-regexp"
+    );
+}
+
+#[test]
 fn builtin_minibuffer_depth_returns_zero() {
     crate::test_utils::init_test_tracing();
     let result = builtin_minibuffer_depth(vec![]).unwrap();

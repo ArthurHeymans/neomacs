@@ -1844,7 +1844,9 @@ pub(crate) fn builtin_try_completion_with_candidates(
         if !completion_text_matches_prefix(&string, &candidate.completion, ignore_case) {
             continue;
         }
-        if !regexps.is_empty() && !matches_completion_regexps(&candidate.completion, regexps) {
+        if !regexps.is_empty()
+            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+        {
             continue;
         }
         if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
@@ -1889,7 +1891,9 @@ pub(crate) fn builtin_all_completions_with_candidates(
         if !completion_text_matches_prefix(&string, &candidate.completion, ignore_case) {
             continue;
         }
-        if !regexps.is_empty() && !matches_completion_regexps(&candidate.completion, regexps) {
+        if !regexps.is_empty()
+            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+        {
             continue;
         }
         if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
@@ -1928,7 +1932,9 @@ pub(crate) fn builtin_test_completion_with_candidates(
         if !completion_text_equals_string(&candidate.completion, &string, ignore_case) {
             continue;
         }
-        if !regexps.is_empty() && !matches_completion_regexps(&candidate.completion, regexps) {
+        if !regexps.is_empty()
+            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+        {
             continue;
         }
         if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
@@ -2030,27 +2036,52 @@ pub(crate) fn completion_regexp_lisp_list_from_obarray(
 fn matches_completion_regexps(
     candidate: &CompletionText,
     regexps: &[crate::heap_types::LispString],
-) -> bool {
+    ignore_case: bool,
+) -> Result<bool, Flow> {
+    completion_string_matches_regexps(
+        candidate.lisp_string(),
+        candidate.searched_string(),
+        regexps,
+        ignore_case,
+    )
+}
+
+pub(crate) fn lisp_string_matches_completion_regexps(
+    candidate: &crate::heap_types::LispString,
+    regexps: &[crate::heap_types::LispString],
+    ignore_case: bool,
+) -> Result<bool, Flow> {
+    completion_string_matches_regexps(
+        candidate,
+        super::regex::SearchedString::Owned(candidate.clone()),
+        regexps,
+        ignore_case,
+    )
+}
+
+fn completion_string_matches_regexps(
+    candidate: &crate::heap_types::LispString,
+    searched_string: super::regex::SearchedString,
+    regexps: &[crate::heap_types::LispString],
+    ignore_case: bool,
+) -> Result<bool, Flow> {
     for re in regexps {
         let mut md = None;
-        // case-fold = false: GNU Emacs uses case-fold-search for the
-        // individual re_search, but completion-regexp-list traditionally
-        // respects completion-ignore-case only for the prefix test, not
-        // for the regexp filter.  We match GNU behaviour by not folding.
         match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
             re,
-            candidate.lisp_string(),
-            candidate.searched_string(),
+            candidate,
+            searched_string.clone(),
             0,
-            false,
+            ignore_case,
             false,
             &mut md,
         ) {
-            Ok(Some(_)) => {}  // matched — continue checking remaining regexps
-            _ => return false, // no match or error — candidate rejected
+            Ok(Some(_)) => {} // matched — continue checking remaining regexps
+            Ok(None) => return Ok(false),
+            Err(message) => return Err(signal("invalid-regexp", vec![Value::string(message)])),
         }
     }
-    true
+    Ok(true)
 }
 
 pub(crate) fn builtin_try_completion(

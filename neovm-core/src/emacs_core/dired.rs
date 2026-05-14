@@ -626,9 +626,14 @@ pub(crate) fn builtin_file_name_all_completions(
         return Ok(Value::NIL);
     }
     let ignore_case = get_completion_ignore_case(&eval.obarray);
+    let regexps = super::minibuffer::completion_regexp_lisp_list_from_obarray(&eval.obarray);
     // GNU Emacs: file-name-all-completions does NOT filter by
     // completion-ignored-extensions (the "all_flag" path).
-    let completions = collect_file_name_completions(&file_runtime, &directory, ignore_case)?;
+    let completions = filter_by_completion_regexps(
+        collect_file_name_completions(&file_runtime, &directory, ignore_case, true)?,
+        &regexps,
+        ignore_case,
+    )?;
     Ok(Value::list(
         completions
             .into_iter()
@@ -681,9 +686,10 @@ fn collect_file_name_completions(
     file: &str,
     directory: &str,
     ignore_case: bool,
+    reverse: bool,
 ) -> Result<Vec<String>, Flow> {
     let names = read_directory_names(directory)?;
-    let mut completions = VecDeque::new();
+    let mut completions = Vec::new();
 
     for name in names {
         let matches = if ignore_case {
@@ -696,14 +702,43 @@ fn collect_file_name_completions(
         }
 
         let full_path = std::path::Path::new(directory).join(&name);
-        if full_path.is_dir() {
-            completions.push_front(format!("{}/", name));
+        let completion = if full_path.is_dir() {
+            format!("{}/", name)
         } else {
-            completions.push_front(name);
-        }
+            name
+        };
+        completions.push(completion);
     }
 
-    Ok(completions.into_iter().collect())
+    if reverse {
+        completions.reverse();
+    }
+
+    Ok(completions)
+}
+
+fn filter_by_completion_regexps(
+    completions: Vec<String>,
+    regexps: &[LispString],
+    ignore_case: bool,
+) -> Result<Vec<String>, Flow> {
+    if regexps.is_empty() {
+        return Ok(completions);
+    }
+
+    let mut filtered = Vec::with_capacity(completions.len());
+    for completion in completions {
+        let regexp_name = completion.strip_suffix('/').unwrap_or(&completion);
+        let candidate = runtime_file_name_to_lisp_string(regexp_name);
+        if super::minibuffer::lisp_string_matches_completion_regexps(
+            &candidate,
+            regexps,
+            ignore_case,
+        )? {
+            filtered.push(completion);
+        }
+    }
+    Ok(filtered)
 }
 
 /// Extract the list of ignored extensions from the `completion-ignored-extensions` variable.
@@ -854,14 +889,18 @@ pub(crate) fn prepare_file_name_completion_in_state(
     let directory = runtime_file_name_to_lisp_string(&directory);
     let ignore_case = get_completion_ignore_case(obarray);
     let ignored_extensions = get_ignored_extensions(obarray);
+    let regexps = super::minibuffer::completion_regexp_lisp_list_from_obarray(obarray);
     let completions = if file_runtime.contains('/') {
         Vec::new()
     } else {
         let directory_runtime = dired_runtime_string(&directory);
-        let raw = collect_file_name_completions(&file_runtime, &directory_runtime, ignore_case)?;
+        let raw =
+            collect_file_name_completions(&file_runtime, &directory_runtime, ignore_case, false)?;
         // Apply completion-ignored-extensions filtering for file-name-completion
         // (but not for file-name-all-completions, per GNU Emacs).
-        filter_by_ignored_extensions(&file_runtime, raw, &ignored_extensions, ignore_case)
+        let filtered =
+            filter_by_ignored_extensions(&file_runtime, raw, &ignored_extensions, ignore_case);
+        filter_by_completion_regexps(filtered, &regexps, ignore_case)?
             .into_iter()
             .map(|completion| runtime_file_name_to_lisp_string(&completion))
             .collect()
