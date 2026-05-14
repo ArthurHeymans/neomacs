@@ -4670,8 +4670,9 @@ fn sync_live_gui_resize_for_geometry_queries(
     eval: &mut super::eval::Context,
     fid: FrameId,
 ) -> Result<(), Flow> {
-    flush_pending_live_gui_resize(eval, fid)?;
-    eval.wait_for_pending_resize_events(LIVE_GUI_RESIZE_ACK_TIMEOUT);
+    if flush_pending_live_gui_resize(eval, fid)? {
+        eval.wait_for_pending_resize_events(LIVE_GUI_RESIZE_ACK_TIMEOUT);
+    }
     Ok(())
 }
 
@@ -5080,13 +5081,13 @@ fn request_live_gui_frame_resize_and_keep_pending(
 fn flush_pending_live_gui_resize(
     eval: &mut super::eval::Context,
     fid: FrameId,
-) -> Result<(), Flow> {
+) -> Result<bool, Flow> {
     let pending = eval
         .frames
         .get_mut(fid)
         .and_then(|frame| frame.take_pending_gui_resize());
     let Some(pending) = pending else {
-        return Ok(());
+        return Ok(false);
     };
 
     let (text_width_px, text_height_px) = live_gui_resize_pixels_from_logical_size(
@@ -5106,8 +5107,13 @@ fn flush_pending_live_gui_resize(
     );
 
     if pending.host_request_sent {
-        Ok(())
+        Ok(true)
     } else {
+        let waits_for_host_ack = eval.display_host.is_some()
+            && eval
+                .frames
+                .get(fid)
+                .is_some_and(|frame| frame.parent_frame.as_frame_id().is_none());
         request_live_gui_frame_resize(
             &mut eval.frames,
             &mut eval.display_host,
@@ -5115,7 +5121,8 @@ fn flush_pending_live_gui_resize(
             text_width_px,
             text_height_px,
             false,
-        )
+        )?;
+        Ok(waits_for_host_ack)
     }
 }
 
