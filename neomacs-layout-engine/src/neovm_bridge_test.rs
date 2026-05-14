@@ -1035,18 +1035,21 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
 
     let (bob_before, bob_after) = access.overlay_strings_at(0);
     assert_eq!(bob_before.len(), 1);
-    assert_eq!(String::from_utf8(bob_before[0].0.clone()).unwrap(), "BOB");
+    assert_eq!(
+        std::str::from_utf8(bob_before[0].bytes().unwrap()).unwrap(),
+        "BOB"
+    );
     assert!(bob_after.is_empty());
 
     let (eob_before, eob_after) = access.overlay_strings_at(buf.point_max_char() as i64);
     assert_eq!(eob_before.len(), 1);
     assert_eq!(
-        String::from_utf8(eob_before[0].0.clone()).unwrap(),
+        std::str::from_utf8(eob_before[0].bytes().unwrap()).unwrap(),
         "\ninit.el"
     );
     assert_eq!(eob_after.len(), 1);
     assert_eq!(
-        String::from_utf8(eob_after[0].0.clone()).unwrap(),
+        std::str::from_utf8(eob_after[0].bytes().unwrap()).unwrap(),
         "\nafter"
     );
 }
@@ -1096,7 +1099,11 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
     let (before, _) = access.overlay_strings_at(buf.point_max_char() as i64);
     let rendered: Vec<String> = before
         .into_iter()
-        .map(|(bytes, _)| String::from_utf8(bytes).unwrap())
+        .map(|string| {
+            std::str::from_utf8(string.bytes().unwrap())
+                .unwrap()
+                .to_owned()
+        })
         .collect();
 
     assert!(

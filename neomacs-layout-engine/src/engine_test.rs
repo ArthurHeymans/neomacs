@@ -10,6 +10,7 @@ use neovm_core::emacs_core::eval::{
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
 };
+use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::DisplayRowSnapshot;
 use std::sync::{Arc, Mutex};
@@ -4480,6 +4481,102 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     assert!(
         rows.iter().any(|row| row.contains("config.el")),
         "expected zero-length EOB before-string to render config.el, rows={rows:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let eob = buf.point_max_byte();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays.insert_overlay(overlay);
+        let display_space = Value::string_with_text_properties(
+            "config.el -rw",
+            vec![StringTextPropertyRun {
+                start: "config.el".chars().count(),
+                end: "config.el ".chars().count(),
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword(":align-to"),
+                        Value::list(vec![
+                            Value::symbol("+"),
+                            Value::symbol("left"),
+                            Value::fixnum(20),
+                        ]),
+                    ]),
+                ]),
+            }],
+        );
+        let _ = buf
+            .overlays
+            .overlay_put(overlay, Value::symbol("before-string"), display_space);
+        buf.goto_byte(eob);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-display-space-align",
+        640,
+        180,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rendered_rows: Vec<String> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled)
+        .map(|row| {
+            row.glyphs[1]
+                .iter()
+                .map(|glyph| match &glyph.glyph_type {
+                    GlyphType::Char { ch } => ch.to_string(),
+                    GlyphType::Composite { text } => text.to_string(),
+                    GlyphType::Stretch { width_cols } => " ".repeat(*width_cols as usize),
+                    _ => String::new(),
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .collect();
+
+    assert!(
+        rendered_rows
+            .iter()
+            .any(|row| row.contains("config.el           -rw")),
+        "GNU TTY expands overlay-string display spaces before suffix text, rows={rendered_rows:?}"
     );
 }
 

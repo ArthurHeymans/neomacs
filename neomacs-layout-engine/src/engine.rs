@@ -23,7 +23,7 @@ use neovm_core::emacs_core::eval::{
     WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::keymap::is_list_keymap;
-use neovm_core::emacs_core::value::list_to_vec;
+use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
@@ -1390,7 +1390,7 @@ fn check_glyphless_char(ch: char) -> u8 {
 fn render_overlay_string(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
-    text_bytes: &[u8],
+    text_value: Value,
     x: &mut f32,
     y: &mut f32,
     col: &mut usize,
@@ -1413,7 +1413,15 @@ fn render_overlay_string(
     overlay_face: Option<&super::neovm_bridge::ResolvedFace>,
     current_face_id: &mut u32,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    params: &WindowParams,
 ) {
+    let Some(text_string) = text_value.as_lisp_string() else {
+        return;
+    };
+    let text_bytes = text_string.as_bytes();
+    let total_chars = text_string.schars();
+    let text_props = get_string_text_properties_table_for_value(text_value);
+
     // Overlay face is now handled by the builder; just track the face_id bump.
     let face_id = if overlay_face.is_some() {
         *current_face_id += 1;
@@ -1423,12 +1431,91 @@ fn render_overlay_string(
     };
 
     let mut idx = 0;
+    let mut char_idx = 0usize;
     while idx < text_bytes.len() {
         if *row >= max_rows {
             break;
         }
+        if let Some(table) = text_props.as_ref()
+            && let Some(display_prop) = table
+                .get_property(char_idx, Value::symbol("display"))
+                .copied()
+        {
+            let next_char = table
+                .next_interval_boundary(char_idx)
+                .unwrap_or(total_chars)
+                .min(total_chars)
+                .max(char_idx + 1);
+
+            if display_prop.is_string() {
+                render_overlay_string(
+                    evaluator,
+                    output_emitter,
+                    display_prop,
+                    x,
+                    y,
+                    col,
+                    row,
+                    hit_rows,
+                    hit_row_charpos_start,
+                    anchor_charpos,
+                    row_y_positions,
+                    row_max_height,
+                    row_max_ascent,
+                    face_char_w,
+                    char_h,
+                    default_row_ascent,
+                    max_x,
+                    content_x,
+                    text_y,
+                    row_extra_y,
+                    row_base,
+                    max_rows,
+                    overlay_face,
+                    current_face_id,
+                    builder,
+                    params,
+                );
+                while char_idx < next_char && idx < text_bytes.len() {
+                    let (_, ch_len) = decode_utf8(&text_bytes[idx..]);
+                    idx += ch_len;
+                    char_idx += 1;
+                }
+                continue;
+            }
+
+            if is_display_space_spec(&display_prop) {
+                let space_width =
+                    eval_display_space_as_width(&display_prop, *x, content_x, face_char_w, params);
+                if space_width > 0.0 && *x < max_x {
+                    let width_cols = (space_width / face_char_w.max(1.0)).ceil().max(1.0) as u16;
+                    builder.push_stretch(width_cols, face_id);
+                    let glyph_start_x = *x;
+                    let glyph_start_col = *col;
+                    *x += space_width;
+                    *col += width_cols as usize;
+                    output_emitter.emit_synthetic_text_span(
+                        evaluator,
+                        *row,
+                        *y,
+                        glyph_start_x,
+                        *x - glyph_start_x,
+                        glyph_start_col,
+                        *col,
+                    );
+                }
+                while char_idx < next_char && idx < text_bytes.len() {
+                    let (_, ch_len) = decode_utf8(&text_bytes[idx..]);
+                    idx += ch_len;
+                    char_idx += 1;
+                }
+                continue;
+            }
+        }
+
         let (ch, ch_len) = decode_utf8(&text_bytes[idx..]);
         idx += ch_len;
+        char_idx += 1;
 
         if ch == '\n' {
             // End current row, start a new one — mirrors the main text loop.
@@ -3525,15 +3612,18 @@ impl LayoutEngine {
                             flush_run(&self.run_buf, ligatures);
                             self.run_buf.clear();
                             let right_limit = content_x + avail_width;
-                            for (string_bytes, overlay_id) in &after_strings {
+                            for overlay_string in &after_strings {
                                 let ov_face = buffer
                                     .overlays
-                                    .overlay_get_named(*overlay_id, Value::symbol("face"))
+                                    .overlay_get_named(
+                                        overlay_string.overlay_id,
+                                        Value::symbol("face"),
+                                    )
                                     .and_then(|val| face_resolver.resolve_face_from_value(&val));
                                 render_overlay_string(
                                     evaluator,
                                     &mut output_emitter,
-                                    string_bytes,
+                                    overlay_string.string,
                                     &mut x,
                                     &mut y,
                                     &mut col,
@@ -3556,6 +3646,7 @@ impl LayoutEngine {
                                     ov_face.as_ref(),
                                     &mut current_face_id,
                                     &mut self.matrix_builder,
+                                    params,
                                 );
                             }
                         }
@@ -5231,15 +5322,15 @@ impl LayoutEngine {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
-                    for (string_bytes, overlay_id) in &before_strings {
+                    for overlay_string in &before_strings {
                         let ov_face = buffer
                             .overlays
-                            .overlay_get_named(*overlay_id, Value::symbol("face"))
+                            .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                             .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
                             evaluator,
                             &mut output_emitter,
-                            string_bytes,
+                            overlay_string.string,
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5262,6 +5353,7 @@ impl LayoutEngine {
                             ov_face.as_ref(),
                             &mut current_face_id,
                             &mut self.matrix_builder,
+                            params,
                         );
                     }
                 }
@@ -5353,15 +5445,15 @@ impl LayoutEngine {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
-                    for (string_bytes, overlay_id) in &after_strings {
+                    for overlay_string in &after_strings {
                         let ov_face = buffer
                             .overlays
-                            .overlay_get_named(*overlay_id, Value::symbol("face"))
+                            .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                             .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
                             evaluator,
                             &mut output_emitter,
-                            string_bytes,
+                            overlay_string.string,
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5384,6 +5476,7 @@ impl LayoutEngine {
                             ov_face.as_ref(),
                             &mut current_face_id,
                             &mut self.matrix_builder,
+                            params,
                         );
                     }
                 }
@@ -5453,15 +5546,15 @@ impl LayoutEngine {
             );
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
             let right_limit = content_x + avail_width;
-            for (string_bytes, overlay_id) in before_strings.iter().chain(after_strings.iter()) {
+            for overlay_string in before_strings.iter().chain(after_strings.iter()) {
                 let ov_face = buffer
                     .overlays
-                    .overlay_get_named(*overlay_id, Value::symbol("face"))
+                    .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                     .and_then(|val| face_resolver.resolve_face_from_value(&val));
                 render_overlay_string(
                     evaluator,
                     &mut output_emitter,
-                    string_bytes,
+                    overlay_string.string,
                     &mut x,
                     &mut y,
                     &mut col,
@@ -5484,6 +5577,7 @@ impl LayoutEngine {
                     ov_face.as_ref(),
                     &mut current_face_id,
                     &mut self.matrix_builder,
+                    params,
                 );
             }
         }

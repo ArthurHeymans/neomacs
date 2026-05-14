@@ -21,7 +21,9 @@ use smallvec::SmallVec;
 
 use super::builtins::collections::lookup_hash_table_test_alias;
 use super::value::{
-    HashTableTest, HashTableWeakness, Value, build_hash_table_literal_value, eq_value, list_to_vec,
+    HashTableTest, HashTableWeakness, StringTextPropertyRun, Value, build_hash_table_literal_value,
+    eq_value, get_string_text_properties_for_value, list_to_vec,
+    set_string_text_properties_for_value,
 };
 
 const UNICODE_CHARACTER_NAME_LENGTH_BOUND: usize = 200;
@@ -310,7 +312,7 @@ fn substitute_read_placeholder_recurse(
         return object;
     }
 
-    if subtree.is_symbol() || subtree.is_number() || subtree.is_string() {
+    if subtree.is_symbol() || subtree.is_number() {
         return subtree;
     }
 
@@ -318,6 +320,21 @@ fn substitute_read_placeholder_recurse(
         return subtree;
     }
     seen.push(subtree);
+
+    if subtree.is_string() {
+        if let Some(runs) = get_string_text_properties_for_value(subtree) {
+            let remapped = runs
+                .into_iter()
+                .map(|mut run| {
+                    run.plist =
+                        substitute_read_placeholder_recurse(object, placeholder, run.plist, seen);
+                    run
+                })
+                .collect();
+            set_string_text_properties_for_value(subtree, remapped);
+        }
+        return subtree;
+    }
 
     if subtree.is_cons() {
         let car =
@@ -1398,27 +1415,68 @@ impl<'a> Reader<'a> {
             }
             x if x == b'(' as u32 => {
                 // #("string" START END (PROPS...) ...) — propertized string.
-                // Parse all elements, extract the string (first element), and
-                // discard text properties for now.
+                //
+                // GNU `src/lread.c:string_props_from_rev_list' reads a string
+                // followed by START END PLIST triplets and applies each triplet
+                // with `Fset_text_properties'.  Keep the same representation as
+                // ordinary string intervals so redisplay sees properties like
+                // `(display (space :align-to ...))' on package string literals.
                 let saved = save_scratch_gc_roots();
                 let list = self.read_list_or_dotted()?;
                 push_scratch_gc_root(list);
-                // Extract the first element (should be a string)
-                if list.is_cons() {
-                    let car = list.cons_car();
-                    if car.is_string() {
-                        restore_scratch_gc_roots(saved);
-                        return Ok(car);
-                    } else {
-                        restore_scratch_gc_roots(saved);
-                        return Err(self.error("#(: first element must be a string"));
-                    }
-                } else if list.is_nil() {
+                let Some(items) = list_to_vec(&list) else {
                     restore_scratch_gc_roots(saved);
                     return Err(self.error("#(: expected propertized string"));
+                };
+                let Some((&string, rest)) = items.split_first() else {
+                    restore_scratch_gc_roots(saved);
+                    return Err(self.error("#(: expected propertized string"));
+                };
+                if !string.is_string() {
+                    restore_scratch_gc_roots(saved);
+                    return Err(self.error("#(: first element must be a string"));
+                }
+                if rest.len() % 3 != 0 {
+                    restore_scratch_gc_roots(saved);
+                    return Err(self.error("#(: invalid string property list"));
+                }
+                let string_len = string
+                    .as_lisp_string()
+                    .map(|s| s.schars() as i64)
+                    .unwrap_or(0);
+                let mut runs = Vec::with_capacity(rest.len() / 3);
+                for chunk in rest.chunks(3) {
+                    let Some(start) = chunk[0].as_fixnum() else {
+                        restore_scratch_gc_roots(saved);
+                        return Err(self.error("#(: invalid string property start"));
+                    };
+                    let Some(end) = chunk[1].as_fixnum() else {
+                        restore_scratch_gc_roots(saved);
+                        return Err(self.error("#(: invalid string property end"));
+                    };
+                    if !(0 <= start && start <= end && end <= string_len) {
+                        restore_scratch_gc_roots(saved);
+                        return Err(self.error("#(: string property range out of bounds"));
+                    }
+                    let Some(plist_items) = list_to_vec(&chunk[2]) else {
+                        restore_scratch_gc_roots(saved);
+                        return Err(self.error("#(: invalid string property list"));
+                    };
+                    if plist_items.len() % 2 != 0 {
+                        restore_scratch_gc_roots(saved);
+                        return Err(self.error("#(: invalid string property list"));
+                    }
+                    runs.push(StringTextPropertyRun {
+                        start: start as usize,
+                        end: end as usize,
+                        plist: chunk[2],
+                    });
+                }
+                if !runs.is_empty() {
+                    set_string_text_properties_for_value(string, runs);
                 }
                 restore_scratch_gc_roots(saved);
-                Err(self.error("#(: expected propertized string"))
+                Ok(string)
             }
             x if x == b'[' as u32 => {
                 // #[...] — compiled-function literal in .elc.

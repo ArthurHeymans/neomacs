@@ -1,7 +1,9 @@
 use super::*;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::print_value;
-use crate::emacs_core::value::{ValueKind, VecLikeType, eq_value};
+use crate::emacs_core::value::{
+    ValueKind, VecLikeType, eq_value, get_string_text_properties_table_for_value,
+};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -142,6 +144,35 @@ fn read_from_string_ascii_string_literals_are_unibyte() {
         }
         _ => panic!("Expected cons"),
     }
+}
+
+#[test]
+fn read_from_string_preserves_propertized_string_literal_intervals() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = builtin_read_from_string(
+        &mut ev,
+        vec![Value::string(
+            r#"#(" " 0 1 (marginalia--align t display (space :align-to (+ left 20))))"#,
+        )],
+    )
+    .expect("read propertized string literal");
+    let string = result.cons_car();
+    let props = get_string_text_properties_table_for_value(string)
+        .expect("reader should apply #(\"...\" START END PLIST) intervals");
+
+    assert_eq!(
+        props
+            .get_property(0, Value::symbol("marginalia--align"))
+            .copied(),
+        Some(Value::symbol("t"))
+    );
+    let display = props
+        .get_property(0, Value::symbol("display"))
+        .copied()
+        .expect("display property should survive reader literal");
+    assert!(display.is_cons());
+    assert!(display.cons_car().is_symbol_named("space"));
 }
 
 #[test]

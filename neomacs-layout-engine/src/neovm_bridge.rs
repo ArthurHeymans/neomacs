@@ -1316,6 +1316,19 @@ pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView> {
     window_id: Option<u64>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct OverlayDisplayString {
+    pub(crate) string: Value,
+    pub(crate) overlay_id: Value,
+}
+
+impl OverlayDisplayString {
+    #[cfg(test)]
+    pub(crate) fn bytes(self) -> Option<&'static [u8]> {
+        self.string.as_lisp_string().map(|string| string.as_bytes())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct InvisibleStatus {
     pub(crate) hidden: bool,
@@ -1534,15 +1547,14 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Before-strings come from overlays starting at charpos.
     /// After-strings come from overlays ending at charpos.
     ///
-    /// Returns `(before_strings, after_strings)` where each is a Vec of
-    /// (string_bytes, overlay_id) pairs.
+    /// Returns `(before_strings, after_strings)` where each entry preserves the
+    /// Lisp string object.  GNU `reseat_to_string' keeps string intervals live
+    /// for overlay strings, so redisplay must not flatten these to bytes before
+    /// the layout iterator has handled text properties such as `display'.
     pub fn overlay_strings_at(
         &self,
         charpos: i64,
-    ) -> (
-        Vec<(Vec<u8>, neovm_core::emacs_core::value::Value)>,
-        Vec<(Vec<u8>, neovm_core::emacs_core::value::Value)>,
-    ) {
+    ) -> (Vec<OverlayDisplayString>, Vec<OverlayDisplayString>) {
         let bytepos = buffer_charpos_to_bytepos(self.buffer, charpos.max(0) as usize);
         let mut before = Vec::new();
         let mut after = Vec::new();
@@ -1568,9 +1580,12 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                     .buffer
                     .layout_overlays()
                     .overlay_get_named(oid, Value::symbol("before-string"))
-                    && let Some(s) = value_as_string(&val)
+                    && val.is_string()
                 {
-                    before.push((s.as_bytes().to_vec(), oid));
+                    before.push(OverlayDisplayString {
+                        string: val,
+                        overlay_id: oid,
+                    });
                 }
             }
 
@@ -1579,18 +1594,21 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                     .buffer
                     .layout_overlays()
                     .overlay_get_named(oid, Value::symbol("after-string"))
-                    && let Some(s) = value_as_string(&val)
+                    && val.is_string()
                 {
-                    after.push((s.as_bytes().to_vec(), oid));
+                    after.push(OverlayDisplayString {
+                        string: val,
+                        overlay_id: oid,
+                    });
                 }
             }
         }
 
-        before.sort_by(|(_, left), (_, right)| {
-            overlay_string_priority(*left).cmp(&overlay_string_priority(*right))
+        before.sort_by(|left, right| {
+            overlay_string_priority(left.overlay_id).cmp(&overlay_string_priority(right.overlay_id))
         });
-        after.sort_by(|(_, left), (_, right)| {
-            overlay_string_priority(*right).cmp(&overlay_string_priority(*left))
+        after.sort_by(|left, right| {
+            overlay_string_priority(right.overlay_id).cmp(&overlay_string_priority(left.overlay_id))
         });
 
         (before, after)
@@ -1639,17 +1657,6 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     pub fn get_text_prop_string(&self, charpos: i64, prop_name: &str) -> Option<String> {
         self.get_property(charpos, Value::symbol(prop_name))
             .and_then(|v| v.as_runtime_string_owned())
-    }
-}
-
-/// Helper: extract a string from a Value.
-///
-/// Tagged strings can be read directly from the Value. Other types return None.
-fn value_as_string(val: &Value) -> Option<String> {
-    match val.kind() {
-        ValueKind::String => val.as_runtime_string_owned(),
-        ValueKind::Nil => None,
-        _ => None,
     }
 }
 
