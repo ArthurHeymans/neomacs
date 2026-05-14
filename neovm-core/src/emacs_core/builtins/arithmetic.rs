@@ -699,6 +699,11 @@ pub(crate) fn builtin_logand(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logand_slice(args: &[Value]) -> EvalResult {
+    if let [lhs, rhs] = args
+        && let (Some(lhs), Some(rhs)) = (lhs.as_fixnum(), rhs.as_fixnum())
+    {
+        return Ok(Value::fixnum(lhs & rhs));
+    }
     builtin_logop(args, BignumLogop::And)
 }
 
@@ -707,6 +712,11 @@ pub(crate) fn builtin_logior(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logior_slice(args: &[Value]) -> EvalResult {
+    if let [lhs, rhs] = args
+        && let (Some(lhs), Some(rhs)) = (lhs.as_fixnum(), rhs.as_fixnum())
+    {
+        return Ok(Value::fixnum(lhs | rhs));
+    }
     builtin_logop(args, BignumLogop::Or)
 }
 
@@ -715,6 +725,11 @@ pub(crate) fn builtin_logxor(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_logxor_slice(args: &[Value]) -> EvalResult {
+    if let [lhs, rhs] = args
+        && let (Some(lhs), Some(rhs)) = (lhs.as_fixnum(), rhs.as_fixnum())
+    {
+        return Ok(Value::fixnum(lhs ^ rhs));
+    }
     builtin_logop(args, BignumLogop::Xor)
 }
 
