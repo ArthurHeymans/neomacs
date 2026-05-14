@@ -27,7 +27,7 @@ use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
-    WindowCursorSnapshot, WindowDisplaySnapshot,
+    WindowCursorSnapshot, WindowDisplaySnapshot, WindowId,
 };
 
 /// Maximum number of characters in a ligature run before forced flush.
@@ -184,17 +184,24 @@ fn eval_status_line_format_value(
     // variable from the TARGET buffer, not the caller's current
     // buffer. We must read the buffer-local value of mode-line-format
     // from the specified buffer BEFORE calling the walker.
-    let format_value = evaluator
-        .buffer_manager()
-        .get(BufferId(buffer_id))
-        .and_then(|buf| buf.buffer_local_value(format_symbol))
+    let window_format_value = evaluator
+        .frame_manager()
+        .window_parameter(WindowId(window_id as u64), &Value::symbol(format_symbol));
+    let format_value = window_format_value
+        .filter(|value| !value.is_nil())
         .unwrap_or_else(|| {
-            // Fall back to the global default
             evaluator
-                .obarray()
-                .symbol_value(format_symbol)
-                .copied()
-                .unwrap_or(Value::NIL)
+                .buffer_manager()
+                .get(BufferId(buffer_id))
+                .and_then(|buf| buf.buffer_local_value(format_symbol))
+                .unwrap_or_else(|| {
+                    // Fall back to the global default
+                    evaluator
+                        .obarray()
+                        .symbol_value(format_symbol)
+                        .copied()
+                        .unwrap_or(Value::NIL)
+                })
         });
     // GNU `display_mode_line` (xdisp.c:27911) runs the mode-line
     // walker in `MODE_LINE_DISPLAY` mode, which makes `%-` expand to

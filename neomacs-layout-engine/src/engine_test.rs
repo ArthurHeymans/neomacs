@@ -3994,6 +3994,132 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
 }
 
 #[test]
+fn layout_frame_rust_honors_window_mode_line_format_none() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+        buf.set_buffer_local("mode-line-format", Value::string("BUFFER MODE"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-window-mode-line-none", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut().set_window_parameter(
+        selected_window,
+        Value::symbol("mode-line-format"),
+        Value::symbol("none"),
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let mode_line_text = engine
+        .last_frame_display_state
+        .as_ref()
+        .map(|state| {
+            state
+                .window_matrices
+                .iter()
+                .flat_map(|wm| wm.matrix.rows.iter())
+                .filter(|row| row.role == GlyphRowRole::ModeLine && row.enabled)
+                .flat_map(|row| row.glyphs[1].iter())
+                .filter_map(|g| match &g.glyph_type {
+                    GlyphType::Char { ch } => Some(*ch),
+                    _ => None,
+                })
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    let snapshot = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.window_display_snapshot(selected_window))
+        .expect("display snapshot");
+
+    assert_eq!(
+        snapshot.mode_line_height, 0,
+        "window parameter mode-line-format=none should suppress mode-line height like GNU"
+    );
+    assert!(
+        mode_line_text.is_empty(),
+        "window parameter mode-line-format=none should suppress rendered mode-line, got {mode_line_text:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_uses_window_mode_line_format_override() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+        buf.set_buffer_local("mode-line-format", Value::NIL);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-window-mode-line-format", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut().set_window_parameter(
+        selected_window,
+        Value::symbol("mode-line-format"),
+        Value::string("WINDOW MODE"),
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let mode_line_text = engine
+        .last_frame_display_state
+        .as_ref()
+        .map(|state| {
+            state
+                .window_matrices
+                .iter()
+                .flat_map(|wm| wm.matrix.rows.iter())
+                .filter(|row| row.role == GlyphRowRole::ModeLine && row.enabled)
+                .flat_map(|row| row.glyphs[1].iter())
+                .filter_map(|g| match &g.glyph_type {
+                    GlyphType::Char { ch } => Some(*ch),
+                    _ => None,
+                })
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    let snapshot = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.window_display_snapshot(selected_window))
+        .expect("display snapshot");
+
+    assert!(
+        snapshot.mode_line_height > 0,
+        "non-nil window mode-line-format should request a mode-line like GNU"
+    );
+    assert!(
+        mode_line_text.contains("WINDOW MODE"),
+        "expected window parameter mode-line-format to override nil buffer format, got {mode_line_text:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
     let mut eval = Context::new();
     let buf_id = eval
