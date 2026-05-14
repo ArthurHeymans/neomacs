@@ -378,6 +378,16 @@ pub(crate) enum BacktraceArgs {
     Evaluated1(Value),
     Evaluated2(Value, Value),
     Evaluated(usize),
+    /// Evaluated bytecode-call args still live in `bc_buf`.
+    ///
+    /// GNU `record_in_backtrace` stores the caller's `Lisp_Object *call_args`
+    /// for `Bcall` frames (bytecode.c:795).  Keeping a bytecode stack span here
+    /// preserves that shape without cloning variadic argument lists just for
+    /// backtrace/debug metadata.
+    EvaluatedBcStack {
+        start: usize,
+        len: usize,
+    },
 }
 
 impl BacktraceArgs {
@@ -9822,9 +9832,10 @@ impl Context {
             0 => BacktraceArgs::Evaluated0,
             1 => BacktraceArgs::Evaluated1(self.bc_buf[args_start]),
             2 => BacktraceArgs::Evaluated2(self.bc_buf[args_start], self.bc_buf[args_start + 1]),
-            _ => BacktraceArgs::Evaluated(self.store_backtrace_args(LispArgVec::from_slice(
-                &self.bc_buf[args_start..args_start + nargs],
-            ))),
+            _ => BacktraceArgs::EvaluatedBcStack {
+                start: args_start,
+                len: nargs,
+            },
         };
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -9922,6 +9933,14 @@ impl Context {
                 .get(*index)
                 .cloned()
                 .unwrap_or_default(),
+            BacktraceArgs::EvaluatedBcStack { start, len } => {
+                let end = start.saturating_add(*len);
+                if end <= self.bc_buf.len() {
+                    LispArgVec::from_slice(&self.bc_buf[*start..end])
+                } else {
+                    LispArgVec::new()
+                }
+            }
         }
     }
 
@@ -9935,6 +9954,7 @@ impl Context {
                 .backtrace_args_stack
                 .get(*index)
                 .map_or(0, |args| args.len()),
+            BacktraceArgs::EvaluatedBcStack { len, .. } => *len,
         }
     }
 
@@ -9950,6 +9970,14 @@ impl Context {
             BacktraceArgs::Evaluated(index) => {
                 if let Some(args) = self.backtrace_args_stack.get(*index) {
                     for arg in args.iter().copied() {
+                        visit(arg);
+                    }
+                }
+            }
+            BacktraceArgs::EvaluatedBcStack { start, len } => {
+                let end = start.saturating_add(*len);
+                if end <= self.bc_buf.len() {
+                    for arg in self.bc_buf[*start..end].iter().copied() {
                         visit(arg);
                     }
                 }
@@ -10628,6 +10656,16 @@ impl Context {
                 .get(*args_index)
                 .and_then(|args| args.get(index).copied())
                 .unwrap_or(Value::NIL),
+            BacktraceArgs::EvaluatedBcStack { start, len } => {
+                if index < *len {
+                    self.bc_buf
+                        .get(start.saturating_add(index))
+                        .copied()
+                        .unwrap_or(Value::NIL)
+                } else {
+                    Value::NIL
+                }
+            }
         }
     }
 
@@ -10639,7 +10677,8 @@ impl Context {
                     args @ (BacktraceArgs::Evaluated0
                     | BacktraceArgs::Evaluated1(_)
                     | BacktraceArgs::Evaluated2(_, _)
-                    | BacktraceArgs::Evaluated(_)),
+                    | BacktraceArgs::Evaluated(_)
+                    | BacktraceArgs::EvaluatedBcStack { .. }),
                 ..
             }) => self.backtrace_arg_or_nil(args, index),
             Some(other) => panic!(

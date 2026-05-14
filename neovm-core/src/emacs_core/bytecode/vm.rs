@@ -37,6 +37,22 @@ type BindStack = SmallVec<[usize; 8]>;
 
 use crate::emacs_core::eval::SpecBinding;
 
+#[derive(Clone, Copy)]
+enum DirectSubrCallee {
+    Symbol(SymId),
+    Value(Value),
+}
+
+impl DirectSubrCallee {
+    #[inline]
+    fn wrong_arity_value(self) -> Value {
+        match self {
+            Self::Symbol(sym_id) => Value::subr_from_sym_id(sym_id),
+            Self::Value(value) => value,
+        }
+    }
+}
+
 /// The bytecode VM execution engine.
 ///
 /// Operates on an Context's obarray and dynamic binding stack.
@@ -3562,12 +3578,12 @@ impl<'a> Vm<'a> {
         func_val: Value,
         args_start: usize,
         nargs: usize,
-        allow_direct_fixed_subr: bool,
+        allow_direct_builtin_subr: bool,
     ) -> EvalResult {
         let bt_count = self.ctx.specpdl.len();
-        if allow_direct_fixed_subr
+        if allow_direct_builtin_subr
             && let Some(result) =
-                self.try_call_fixed_subr_from_stack_args(func_val, args_start, nargs)
+                self.try_call_builtin_subr_from_stack_args(func_val, args_start, nargs)
         {
             return result;
         }
@@ -3593,13 +3609,13 @@ impl<'a> Vm<'a> {
         result
     }
 
-    fn try_call_fixed_subr_from_stack_args(
+    fn try_call_builtin_subr_from_stack_args(
         &mut self,
         func_val: Value,
         args_start: usize,
         nargs: usize,
     ) -> Option<EvalResult> {
-        let (sym_id, entry, callee) = self.fixed_subr_call_target(func_val)?;
+        let (sym_id, entry, callee) = self.direct_subr_call_target(func_val)?;
         let bt_count = self.ctx.specpdl.len();
         self.ctx
             .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
@@ -3608,20 +3624,21 @@ impl<'a> Vm<'a> {
         {
             Err(signal(
                 "wrong-number-of-arguments",
-                vec![callee, Value::fixnum(nargs as i64)],
+                vec![callee.wrong_arity_value(), Value::fixnum(nargs as i64)],
             ))
         } else {
-            self.dispatch_fixed_subr_from_stack_args_unchecked(entry.function?, args_start)
+            self.dispatch_builtin_subr_from_stack_args_unchecked(entry.function?, args_start, nargs)
                 .unwrap_or_else(|| Err(signal("void-function", vec![Value::from_sym_id(sym_id)])))
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         Some(self.ctx.unbind_to_with_result(bt_count, result))
     }
 
-    fn dispatch_fixed_subr_from_stack_args_unchecked(
+    fn dispatch_builtin_subr_from_stack_args_unchecked(
         &mut self,
         func: SubrFn,
         args_start: usize,
+        nargs: usize,
     ) -> Option<EvalResult> {
         let args = &self.ctx.bc_buf;
         match func {
@@ -3688,26 +3705,34 @@ impl<'a> Vm<'a> {
                     self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
                 ))
             }
-            SubrFn::Many(_) | SubrFn::ManySlice(_) => None,
+            SubrFn::Many(func) => {
+                let args = args[args_start..args_start + nargs].to_vec();
+                Some(func(self.ctx, args))
+            }
+            SubrFn::ManySlice(func) => {
+                let args = LispArgVec::from_slice(&args[args_start..args_start + nargs]);
+                Some(func(self.ctx, &args))
+            }
         }
     }
 
-    fn fixed_subr_call_target(&self, func_val: Value) -> Option<(SymId, SubrEntry, Value)> {
+    fn direct_subr_call_target(
+        &self,
+        func_val: Value,
+    ) -> Option<(SymId, SubrEntry, DirectSubrCallee)> {
         let (sym_id, entry, callee) = match func_val.kind() {
             ValueKind::Symbol(sym_id) if self.named_builtin_fast_path_allowed_id(sym_id) => (
                 sym_id,
                 lookup_global_subr_entry(sym_id)?,
-                Value::subr_from_sym_id(sym_id),
+                DirectSubrCallee::Symbol(sym_id),
             ),
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
                 let (sym_id, entry) = subr_entry_from_value(func_val)?;
-                (sym_id, entry, func_val)
+                (sym_id, entry, DirectSubrCallee::Value(func_val))
             }
             _ => return None,
         };
-        if entry.dispatch_kind != SubrDispatchKind::Builtin
-            || !Context::subr_entry_uses_fixed_value_call(entry)
-        {
+        if entry.dispatch_kind != SubrDispatchKind::Builtin {
             return None;
         }
         Some((sym_id, entry, callee))
