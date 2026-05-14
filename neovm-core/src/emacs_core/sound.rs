@@ -28,7 +28,7 @@ struct SoundSpec {
 }
 
 fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
-    let elements = super::value::list_to_vec(&sound).unwrap_or_default();
+    let elements = list_to_vec(&sound).unwrap_or_default();
     if elements.is_empty() {
         return Err(signal(
             "error",

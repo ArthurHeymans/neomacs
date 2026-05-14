@@ -42,6 +42,13 @@ fn expect_optional_string(v: Value) -> Result<Option<String>, Flow> {
     }
 }
 
+fn validate_base_url(args: &[Value]) -> Result<(), Flow> {
+    if args.len() > 2 && !args[2].is_nil() {
+        expect_optional_string(args[2])?;
+    }
+    Ok(())
+}
+
 /// Read buffer region bytes, handling nil start/end as point-min/point-max.
 fn read_region_bytes(
     ctx: &mut super::eval::Context,
@@ -261,27 +268,13 @@ fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
         return Some(nodes.into_iter().next().unwrap());
     }
 
-    // Multiple top-level nodes — check for comments.
-    let has_comments = nodes.iter().any(|n| {
-        if let ValueKind::Cons = n.kind() {
-            // Need to check car — but kind() consumed n.
-            // Rebuild from the list elements.
-            false
-        } else {
-            false
-        }
-    });
-
-    if has_comments {
-        Some(Value::list(
-            std::iter::once(Value::symbol("top"))
-                .chain(std::iter::once(Value::NIL))
-                .chain(nodes)
-                .collect(),
-        ))
-    } else {
-        Some(nodes.into_iter().next().unwrap())
-    }
+    // Multiple top-level nodes — wrap in (top nil children...), matching GNU.
+    Some(Value::list(
+        std::iter::once(Value::symbol("top"))
+            .chain(std::iter::once(Value::NIL))
+            .chain(nodes)
+            .collect(),
+    ))
 }
 
 fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool) -> Option<Value> {
@@ -354,6 +347,7 @@ pub(crate) fn builtin_libxml_parse_html_region(
     args: Vec<Value>,
 ) -> EvalResult {
     super::builtins::expect_max_args("libxml-parse-html-region", &args, 4)?;
+    validate_base_url(&args)?;
     let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
 
     let Some(bytes) = read_region_bytes(ctx, &args)? else {
@@ -375,6 +369,7 @@ pub(crate) fn builtin_libxml_parse_xml_region(
     args: Vec<Value>,
 ) -> EvalResult {
     super::builtins::expect_max_args("libxml-parse-xml-region", &args, 4)?;
+    validate_base_url(&args)?;
     let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
 
     let Some(bytes) = read_region_bytes(ctx, &args)? else {

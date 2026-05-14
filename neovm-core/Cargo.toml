@@ -47,7 +47,7 @@ flate2.workspace = true
 rusqlite.workspace = true
 quick-xml.workspace = true
 tl.workspace = true
-rodio = { workspace = true, optional = true }
+rodio = { version = "0.20", optional = true }
 
 [features]
 default = []

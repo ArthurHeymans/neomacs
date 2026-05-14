@@ -57,6 +57,20 @@ fn libxml_parse_xml_region_arity_and_nil_returns() {
         }
         other => panic!("unexpected flow: {other:?}"),
     }
+
+    // Wrong type for BASE-URL → error (validated before buffer access)
+    let wrong_base = builtin_libxml_parse_xml_region(
+        &mut ctx,
+        vec![Value::NIL, Value::NIL, Value::fixnum(42)],
+    )
+    .unwrap_err();
+    match wrong_base {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::fixnum(42)]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
 }
 
 #[test]
@@ -108,6 +122,20 @@ fn libxml_parse_html_region_arity_and_nil_returns() {
                 sig.data,
                 vec![Value::symbol("integer-or-marker-p"), Value::string("x")]
             );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    // Wrong type for BASE-URL → error (validated before buffer access)
+    let wrong_base = builtin_libxml_parse_html_region(
+        &mut ctx,
+        vec![Value::NIL, Value::NIL, Value::fixnum(42)],
+    )
+    .unwrap_err();
+    match wrong_base {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::fixnum(42)]);
         }
         other => panic!("unexpected flow: {other:?}"),
     }

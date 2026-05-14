@@ -93,9 +93,6 @@ flate2 = "1"
 quick-xml = "0.37"
 tl = "0.7"
 
-# Audio
-rodio = "0.20"
-
 # Database
 rusqlite = { version = "0.35", features = ["bundled"] }
 
