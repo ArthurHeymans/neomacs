@@ -119,8 +119,8 @@ pub mod var_docs;
 pub mod window_cmds;
 pub mod xdisp;
 pub mod xfaces;
-pub(crate) mod zlib;
 pub mod xml;
+pub(crate) mod zlib;
 
 // Re-export the main public API
 pub use bytecode::{ByteCodeFunction, Vm as ByteVm};

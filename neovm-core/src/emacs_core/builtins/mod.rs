@@ -6647,7 +6647,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr("sqlitep", |_ctx, args| super::sqlite::builtin_sqlitep(args), 1, Some(1));
+    ctx.defsubr(
+        "sqlitep",
+        |_ctx, args| super::sqlite::builtin_sqlitep(args),
+        1,
+        Some(1),
+    );
     ctx.defsubr(
         "fillarray",
         |_ctx, args| builtin_fillarray(args),

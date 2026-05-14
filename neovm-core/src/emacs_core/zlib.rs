@@ -6,11 +6,11 @@
 
 use std::io::Read;
 
-use super::error::{signal, EvalResult, Flow};
 use super::editfns::{
     buffer_read_only_active_in_state, current_buffer_byte_span_char_len, signal_after_change,
     signal_before_change,
 };
+use super::error::{EvalResult, Flow, signal};
 use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };
@@ -22,9 +22,7 @@ use crate::heap_types::LispString;
 fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        ValueKind::Symbol(sym)
-            if crate::emacs_core::intern::resolve_sym(sym) == "mark-marker" =>
-        {
+        ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "mark-marker" => {
             // Marker shorthand not fully supported — treat as integer.
             Ok(0)
         }
@@ -88,7 +86,11 @@ pub(crate) fn builtin_zlib_decompress_region(
         ));
     }
 
-    let (from, to) = if start <= end { (start, end) } else { (end, start) };
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
     let from_byte = buf.lisp_pos_to_accessible_byte(from);
     let to_byte = buf.lisp_pos_to_accessible_byte(to);
 
