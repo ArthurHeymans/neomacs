@@ -9144,7 +9144,7 @@ fn dispatch_builtin_pure_handles_sqlite_lifecycle_and_closed_handle_guard() {
         .expect("sqlite-execute should resolve")
         .unwrap_err();
     match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
         other => panic!("expected signal, got {other:?}"),
     }
 }

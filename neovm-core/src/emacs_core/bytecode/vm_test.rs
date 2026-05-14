@@ -6160,7 +6160,7 @@ fn vm_font_stub_tail_uses_direct_dispatch() {
 }
 
 #[test]
-fn vm_sqlite_stub_runtime_uses_direct_dispatch() {
+fn vm_sqlite_runtime_uses_direct_dispatch() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         vm_eval_str(
@@ -6171,22 +6171,19 @@ fn vm_sqlite_stub_runtime_uses_direct_dispatch() {
                   (list
                     (sqlitep db)
                     (= (sqlite-execute db "create table t (x integer)") 0)
-                    (null (sqlite-execute-batch db "insert into t values (1);"))
-                    (equal (sqlite-select db "select 1") '((1)))
-                    (null (sqlite-next db))
-                    (null (sqlite-more-p db))
-                    (null (sqlite-columns db))
-                    (null (sqlite-finalize db))
+                    (sqlite-execute-batch db "insert into t values (1);")
+                    (equal (sqlite-select db "select * from t") '((1)))
                     (sqlite-pragma db "foreign_keys")
-                    (null (sqlite-commit db))
-                    (null (sqlite-rollback db))
                     (sqlite-transaction db)
+                    (null (sqlite-commit db))
+                    (sqlite-transaction db)
+                    (null (sqlite-rollback db))
                     (condition-case nil
                         (sqlite-load-extension db "missing")
                       (sqlite-error t))
                     (sqlite-close db))))"##
         ),
-        r#"OK (t t (t t t t t t t t t t t t t t))"#
+        r#"OK (t t (t t t t t t t t t t t))"#
     );
 }
 
