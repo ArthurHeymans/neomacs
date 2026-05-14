@@ -6553,101 +6553,101 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "sqlite-available-p",
-        |_ctx, args| builtin_sqlite_available_p(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_available_p(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "sqlite-close",
-        |_ctx, args| builtin_sqlite_close(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_close(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-columns",
-        |_ctx, args| builtin_sqlite_columns(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_columns(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-commit",
-        |_ctx, args| builtin_sqlite_commit(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_commit(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-execute",
-        |_ctx, args| builtin_sqlite_execute(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_execute(args),
         2,
         Some(3),
     );
     ctx.defsubr(
         "sqlite-execute-batch",
-        builtin_sqlite_execute_batch,
+        |ctx, args| super::sqlite::builtin_sqlite_execute_batch(ctx, args),
         2,
         Some(2),
     );
     ctx.defsubr(
         "sqlite-finalize",
-        |_ctx, args| builtin_sqlite_finalize(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_finalize(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-load-extension",
-        |_ctx, args| builtin_sqlite_load_extension(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_load_extension(args),
         0,
         None,
     );
     ctx.defsubr(
         "sqlite-more-p",
-        |_ctx, args| builtin_sqlite_more_p(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_more_p(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-next",
-        |_ctx, args| builtin_sqlite_next(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_next(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-open",
-        |_ctx, args| builtin_sqlite_open(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_open(args),
         0,
         Some(3),
     );
     ctx.defsubr(
         "sqlite-pragma",
-        |_ctx, args| builtin_sqlite_pragma(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_pragma(args),
         2,
         Some(2),
     );
     ctx.defsubr(
         "sqlite-rollback",
-        |_ctx, args| builtin_sqlite_rollback(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_rollback(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-select",
-        |_ctx, args| builtin_sqlite_select(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_select(args),
         2,
         Some(4),
     );
     ctx.defsubr(
         "sqlite-transaction",
-        |_ctx, args| builtin_sqlite_transaction(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_transaction(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "sqlite-version",
-        |_ctx, args| builtin_sqlite_version(args),
+        |_ctx, args| super::sqlite::builtin_sqlite_version(args),
         0,
         Some(0),
     );
-    ctx.defsubr("sqlitep", |_ctx, args| builtin_sqlitep(args), 1, Some(1));
+    ctx.defsubr("sqlitep", |_ctx, args| super::sqlite::builtin_sqlitep(args), 1, Some(1));
     ctx.defsubr(
         "fillarray",
         |_ctx, args| builtin_fillarray(args),
@@ -9181,13 +9181,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "zlib-available-p",
-        |_ctx, args| super::xml::builtin_zlib_available_p(args),
+        |_ctx, args| super::zlib::builtin_zlib_available_p(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "zlib-decompress-region",
-        |_ctx, args| super::xml::builtin_zlib_decompress_region(args),
+        |ctx, args| super::zlib::builtin_zlib_decompress_region(ctx, args),
         2,
         Some(3),
     );

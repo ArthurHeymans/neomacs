@@ -43,6 +43,8 @@ rug.workspace = true
 gmp-mpfr-sys.workspace = true
 unicode_names2.workspace = true
 encoding_rs.workspace = true
+flate2.workspace = true
+rusqlite.workspace = true
 
 [features]
 default = []

@@ -152,31 +152,6 @@ pub(crate) fn builtin_libxml_available_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::T)
 }
 
-/// (zlib-available-p)
-/// Returns t (feature availability probe).
-pub(crate) fn builtin_zlib_available_p(args: Vec<Value>) -> EvalResult {
-    expect_args("zlib-available-p", &args, 0)?;
-    Ok(Value::T)
-}
-
-/// (zlib-decompress-region START END)
-/// Compatibility subset:
-/// - validates START/END as integer-or-marker
-/// - supports optional third arg
-/// - signals the same unibyte-buffer requirement as Emacs in current multibyte buffers
-pub(crate) fn builtin_zlib_decompress_region(args: Vec<Value>) -> EvalResult {
-    expect_min_args("zlib-decompress-region", &args, 2)?;
-    expect_max_args("zlib-decompress-region", &args, 3)?;
-    let _start = expect_integer_or_marker(&args[0])?;
-    let _end = expect_integer_or_marker(&args[1])?;
-
-    Err(signal(
-        "error",
-        vec![Value::string(
-            "This function can be called only in unibyte buffers",
-        )],
-    ))
-}
 #[cfg(test)]
 #[path = "xml_test.rs"]
 mod tests;

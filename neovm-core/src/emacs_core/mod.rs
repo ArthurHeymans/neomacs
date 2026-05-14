@@ -92,6 +92,7 @@ pub mod register;
 #[cfg(test)]
 mod runtime_string_guard_test;
 pub mod search;
+pub(crate) mod sqlite;
 pub(crate) mod string_escape;
 pub mod subr_docs;
 pub mod subr_info;
@@ -118,6 +119,7 @@ pub mod var_docs;
 pub mod window_cmds;
 pub mod xdisp;
 pub mod xfaces;
+pub(crate) mod zlib;
 pub mod xml;
 
 // Re-export the main public API
