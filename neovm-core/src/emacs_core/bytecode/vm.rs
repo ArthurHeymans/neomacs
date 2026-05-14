@@ -3710,8 +3710,83 @@ impl<'a> Vm<'a> {
                 Some(func(self.ctx, args))
             }
             SubrFn::ManySlice(func) => {
+                Some(self.call_many_slice_subr_from_stack_args(func, args_start, nargs))
+            }
+        }
+    }
+
+    fn call_many_slice_subr_from_stack_args(
+        &mut self,
+        func: crate::tagged::header::SubrFnManySlice,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
+        let args = &self.ctx.bc_buf;
+        match nargs {
+            0 => func(self.ctx, &[]),
+            1 => {
+                let arg0 = args[args_start];
+                func(self.ctx, &[arg0])
+            }
+            2 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                func(self.ctx, &[arg0, arg1])
+            }
+            3 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                func(self.ctx, &[arg0, arg1, arg2])
+            }
+            4 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                let arg3 = args[args_start + 3];
+                func(self.ctx, &[arg0, arg1, arg2, arg3])
+            }
+            5 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                let arg3 = args[args_start + 3];
+                let arg4 = args[args_start + 4];
+                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4])
+            }
+            6 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                let arg3 = args[args_start + 3];
+                let arg4 = args[args_start + 4];
+                let arg5 = args[args_start + 5];
+                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5])
+            }
+            7 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                let arg3 = args[args_start + 3];
+                let arg4 = args[args_start + 4];
+                let arg5 = args[args_start + 5];
+                let arg6 = args[args_start + 6];
+                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6])
+            }
+            8 => {
+                let arg0 = args[args_start];
+                let arg1 = args[args_start + 1];
+                let arg2 = args[args_start + 2];
+                let arg3 = args[args_start + 3];
+                let arg4 = args[args_start + 4];
+                let arg5 = args[args_start + 5];
+                let arg6 = args[args_start + 6];
+                let arg7 = args[args_start + 7];
+                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7])
+            }
+            _ => {
                 let args = LispArgVec::from_slice(&args[args_start..args_start + nargs]);
-                Some(func(self.ctx, &args))
+                func(self.ctx, &args)
             }
         }
     }
