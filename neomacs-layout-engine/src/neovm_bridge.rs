@@ -895,9 +895,7 @@ pub fn window_params_from_neovm(
                 _ if display.vertical_scroll_bar_type.is_truthy() => {
                     // t or other truthy: resolve from frame parameter
                     match frame.parameter("vertical-scroll-bars") {
-                        Some(v) if v.as_symbol_name() == Some("left") => {
-                            Some("left".to_string())
-                        }
+                        Some(v) if v.as_symbol_name() == Some("left") => Some("left".to_string()),
                         Some(v) if v.is_nil() => None,
                         Some(_) => Some("right".to_string()), // right is default
                         None => Some("right".to_string()),
@@ -974,7 +972,7 @@ pub fn window_params_from_neovm(
         - right_fringe
         - left_margin
         - right_margin)
-    .max(0.0);
+        .max(0.0);
     let text_bounds = Rect::new(text_x, bounds.y, text_width, bounds.height);
 
     // Read buffer-local variables.
