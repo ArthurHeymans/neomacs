@@ -2661,11 +2661,13 @@ impl LayoutEngine {
             &mut self.matrix_builder,
             crate::matrix_builder::GlyphMatrixBuilder::new(),
         );
-        let mut frame_display_state = matrix_builder.finish(
+        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
             frame_cols,
             frame_rows,
             frame_params.char_width,
             frame_params.char_height,
+            frame_params.width,
+            frame_params.height,
         );
         frame_display_state
             .frame_chrome_rows

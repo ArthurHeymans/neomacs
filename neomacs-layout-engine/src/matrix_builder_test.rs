@@ -12,6 +12,17 @@ fn builder_starts_empty() {
 }
 
 #[test]
+fn builder_can_preserve_exact_frame_pixel_size() {
+    let builder = GlyphMatrixBuilder::new();
+    let state = builder.finish_with_pixel_size(79, 36, 16.25, 33.0, 1300.0, 1188.0);
+
+    assert_eq!(state.frame_cols, 79);
+    assert_eq!(state.frame_rows, 36);
+    assert_eq!(state.frame_pixel_width, 1300.0);
+    assert_eq!(state.frame_pixel_height, 1188.0);
+}
+
+#[test]
 fn builder_tracks_single_window_single_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 24, 80, Rect::new(0.0, 0.0, 640.0, 384.0), true);

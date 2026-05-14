@@ -1066,6 +1066,21 @@ impl GlyphMatrixBuilder {
         state
     }
 
+    pub fn finish_with_pixel_size(
+        self,
+        frame_cols: usize,
+        frame_rows: usize,
+        char_width: f32,
+        char_height: f32,
+        frame_pixel_width: f32,
+        frame_pixel_height: f32,
+    ) -> FrameDisplayState {
+        let mut state = self.finish(frame_cols, frame_rows, char_width, char_height);
+        state.frame_pixel_width = frame_pixel_width;
+        state.frame_pixel_height = frame_pixel_height;
+        state
+    }
+
     fn collect_bidi_units(text: &[Glyph]) -> Vec<BidiGlyphUnit> {
         let mut units = Vec::new();
         let mut idx = 0;
