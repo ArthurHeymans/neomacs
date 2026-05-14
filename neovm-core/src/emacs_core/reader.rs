@@ -319,6 +319,7 @@ fn expect_completing_read_initial_input(value: &Value) -> Result<(), Flow> {
 struct ActiveMinibufferWindowState {
     frame_id: crate::window::FrameId,
     minibuffer_window_id: crate::window::WindowId,
+    calling_frame: crate::window::FrameId,
     previous_selected_window: crate::window::WindowId,
     previous_minibuffer_buffer: Option<crate::buffer::BufferId>,
     previous_minibuffer_window_start: usize,
@@ -356,6 +357,7 @@ fn activate_minibuffer_window_in_state(
     let saved = ActiveMinibufferWindowState {
         frame_id,
         minibuffer_window_id,
+        calling_frame: frame_id,
         previous_selected_window,
         previous_minibuffer_buffer,
         previous_minibuffer_window_start,
@@ -411,6 +413,13 @@ fn restore_minibuffer_window_in_state(
             }
         }
         let _ = frame.select_window(saved.previous_selected_window);
+    }
+    if frames.get(saved.calling_frame).is_some()
+        && frames
+            .selected_frame()
+            .is_none_or(|frame| frame.id != saved.calling_frame)
+    {
+        let _ = frames.select_frame(saved.calling_frame);
     }
     *minibuffer_selected_window = saved.previous_minibuffer_selected_window;
     *active_minibuffer_window = saved.previous_active_minibuffer_window;

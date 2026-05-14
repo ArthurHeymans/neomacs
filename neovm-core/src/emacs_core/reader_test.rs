@@ -809,6 +809,56 @@ fn shared_read_from_minibuffer_runtime_converts_unibyte_initial_input_to_buffer_
 }
 
 #[test]
+fn shared_read_from_minibuffer_runtime_restores_calling_frame_after_frame_switch() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let calling_frame = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
+    let other_buffer = ev.buffers.create_buffer("*completion-frame*");
+    let other_frame = ev
+        .frames
+        .create_frame("completion-frame", 80, 24, other_buffer);
+    assert_eq!(
+        ev.frames.selected_frame().map(|frame| frame.id),
+        Some(calling_frame)
+    );
+
+    let frames_ptr = std::ptr::NonNull::from(&mut ev.frames);
+    let args = vec![Value::string("Prompt: ")];
+
+    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
+        &mut ev.obarray,
+        &mut ev.buffers,
+        &mut ev.frames,
+        &mut ev.minibuffers,
+        &mut ev.minibuffer_selected_window,
+        &mut ev.active_minibuffer_window,
+        ev.command_loop.recursive_depth,
+        &args,
+        || Ok(Value::NIL),
+        || Ok(Value::NIL),
+        move || unsafe {
+            frames_ptr
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+                .select_frame(other_frame);
+            Err(Flow::Throw {
+                tag: Value::symbol("exit"),
+                value: Value::NIL,
+            })
+        },
+    )
+    .expect("minibuffer read should exit normally");
+
+    assert_eq!(result.as_utf8_str(), Some(""));
+    assert_eq!(
+        ev.frames.selected_frame().map(|frame| frame.id),
+        Some(calling_frame),
+        "GNU read_minibuf switches back to the frame that invoked the minibuffer"
+    );
+}
+
+#[test]
 fn read_from_minibuffer_custom_keymap_lambda_sees_last_command_event() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();
