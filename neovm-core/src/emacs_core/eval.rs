@@ -9417,7 +9417,9 @@ impl Context {
                             finish_require_in_state(&self.features, sym_id, &name)
                         })();
                         let _ = self.require_stack.pop();
-                        if let Err(ref e) = result {
+                        if let Err(ref e) = result
+                            && !matches!(e, Flow::Throw { tag, .. } if self.has_active_catch(tag))
+                        {
                             let noerror_val =
                                 noerror.as_ref().map(|v| !v.is_nil()).unwrap_or(false);
                             let path_str = path.display().to_string();

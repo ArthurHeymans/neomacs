@@ -306,6 +306,13 @@ fn is_kill_emacs_signal(err: &EvalError) -> bool {
     )
 }
 
+fn should_log_load_form_error(eval: &super::eval::Context, err: &EvalError) -> bool {
+    match err {
+        EvalError::Signal { .. } => !is_kill_emacs_signal(err),
+        EvalError::UncaughtThrow { tag, .. } => !eval.has_active_catch(tag),
+    }
+}
+
 fn format_load_form_error(err: &EvalError) -> String {
     match err {
         EvalError::Signal {
@@ -1439,7 +1446,7 @@ fn streaming_readevalloop(
         // deliberately exits through `kill-emacs` after dumping, so keep that
         // nonreturn path out of failure diagnostics.
         if let Err(ref e) = eval_result
-            && !is_kill_emacs_signal(e)
+            && should_log_load_form_error(eval, e)
         {
             let preview = load_form_log_preview(path, || {
                 content[form_start..next_pos].chars().take(120).collect()
@@ -1524,7 +1531,7 @@ fn streaming_readevalloop_lisp_source(
         eval.restore_specpdl_roots(eval_roots);
 
         if let Err(ref e) = eval_result
-            && !is_kill_emacs_signal(e)
+            && should_log_load_form_error(eval, e)
         {
             let preview = load_form_log_preview(path, || {
                 read_source

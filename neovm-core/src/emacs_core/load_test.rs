@@ -69,6 +69,32 @@ fn copy_source_fixture(dir: &std::path::Path, rel: &str) -> PathBuf {
 }
 
 #[test]
+fn active_catch_throw_is_not_logged_as_load_form_failure() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let tag = Value::symbol("input");
+    let err = EvalError::UncaughtThrow {
+        tag,
+        value: Value::T,
+    };
+
+    assert!(
+        should_log_load_form_error(&eval, &err),
+        "a truly uncaught throw should still be reported"
+    );
+
+    eval.push_condition_frame(crate::emacs_core::eval::ConditionFrame::Catch {
+        tag,
+        resume: crate::emacs_core::eval::ResumeTarget::InterpreterCatch,
+    });
+
+    assert!(
+        !should_log_load_form_error(&eval, &err),
+        "GNU Fthrow unwinds through load frames to an active outer catch"
+    );
+}
+
+#[test]
 fn loaded_source_paths_accepts_raw_unibyte_load_history_entries() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
