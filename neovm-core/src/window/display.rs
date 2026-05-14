@@ -9,6 +9,21 @@ pub struct WindowBufferDisplayDefaults {
     pub scroll_bars: Option<(Option<i32>, Value, Option<i32>, Value)>,
 }
 
+/// Effective scroll-bar geometry for one live window.
+///
+/// GNU keeps raw scroll-bar settings on the window, resolves `t` through
+/// frame defaults, and then exposes area macros such as
+/// `WINDOW_SCROLL_BAR_AREA_WIDTH`.  Keep that resolution in core so layout,
+/// Lisp-visible queries, and later input hit-testing cannot drift apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowScrollBarGeometry {
+    /// Effective vertical type after frame inheritance (`left`/`right`/nil).
+    pub vertical_type: Option<Value>,
+    pub left_area_width: i64,
+    pub right_area_width: i64,
+    pub horizontal_area_height: i64,
+}
+
 fn symbol_name(value: &Value) -> Option<&str> {
     value.as_symbol_name()
 }
@@ -180,6 +195,37 @@ fn horizontal_scroll_bar_lines(
     } else {
         (height + frame.char_height.max(1.0).round() as i64 - 1)
             / frame.char_height.max(1.0).round() as i64
+    }
+}
+
+pub fn resolve_window_scroll_bar_geometry(
+    frame: &Frame,
+    display: &WindowDisplayState,
+    is_minibuffer: bool,
+) -> WindowScrollBarGeometry {
+    let vertical_type = effective_vertical_scroll_bar_type(frame, display);
+    let vertical_area_width = if vertical_type.is_some() {
+        vertical_scroll_bar_area_width(frame, display)
+    } else {
+        0
+    };
+    let horizontal_area_height = horizontal_scroll_bar_area_height(frame, display, is_minibuffer);
+
+    WindowScrollBarGeometry {
+        vertical_type,
+        left_area_width: if matches!(vertical_type, Some(value) if symbol_name(&value) == Some("left"))
+        {
+            vertical_area_width
+        } else {
+            0
+        },
+        right_area_width: if matches!(vertical_type, Some(value) if symbol_name(&value) == Some("right"))
+        {
+            vertical_area_width
+        } else {
+            0
+        },
+        horizontal_area_height,
     }
 }
 

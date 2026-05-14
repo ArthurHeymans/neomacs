@@ -1900,11 +1900,17 @@ impl WgpuRenderer {
                     }
                 }
                 FrameGlyph::ScrollBar {
+                    window_id: _,
+                    row_role: _,
+                    clip_rect: _,
                     horizontal,
                     x,
                     y,
                     width,
                     height,
+                    position: _,
+                    portion: _,
+                    whole: _,
                     thumb_start,
                     thumb_size,
                     track_color,

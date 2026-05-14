@@ -326,11 +326,17 @@ fn materialize_preserves_phys_cursor() {
 fn materialize_includes_scroll_bars() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.scroll_bars.push(ScrollBarItem {
+        window_id: 42,
+        row_role: GlyphRowRole::Text,
+        clip_rect: Some(Rect::new(0.0, 0.0, 640.0, 384.0)),
         horizontal: false,
         x: 632.0,
         y: 0.0,
         width: 8.0,
         height: 384.0,
+        position: 10,
+        portion: 50,
+        whole: 200,
         thumb_start: 10.0,
         thumb_size: 50.0,
         track_color: Color::BLACK,

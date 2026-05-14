@@ -465,11 +465,17 @@ pub struct WebKitItem {
 /// A scroll bar.
 #[derive(Clone, Debug)]
 pub struct ScrollBarItem {
+    pub window_id: i64,
+    pub row_role: GlyphRowRole,
+    pub clip_rect: Option<Rect>,
     pub horizontal: bool,
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    pub position: i64,
+    pub portion: i64,
+    pub whole: i64,
     pub thumb_start: f32,
     pub thumb_size: f32,
     pub track_color: Color,
@@ -803,22 +809,34 @@ impl FrameDisplayState {
                     });
                 }
                 FrameGlyph::ScrollBar {
+                    window_id,
+                    row_role,
+                    clip_rect,
                     horizontal,
                     x,
                     y,
                     width,
                     height,
+                    position,
+                    portion,
+                    whole,
                     thumb_start,
                     thumb_size,
                     track_color,
                     thumb_color,
                 } => {
                     state.scroll_bars.push(ScrollBarItem {
+                        window_id: *window_id,
+                        row_role: *row_role,
+                        clip_rect: *clip_rect,
                         horizontal: *horizontal,
                         x: *x,
                         y: *y,
                         width: *width,
                         height: *height,
+                        position: *position,
+                        portion: *portion,
+                        whole: *whole,
                         thumb_start: *thumb_start,
                         thumb_size: *thumb_size,
                         track_color: *track_color,
@@ -996,11 +1014,17 @@ impl FrameDisplayState {
         // --- Materialize scroll bars ---
         for sb in &self.scroll_bars {
             buf.glyphs.push(FrameGlyph::ScrollBar {
+                window_id: sb.window_id,
+                row_role: sb.row_role,
+                clip_rect: sb.clip_rect,
                 horizontal: sb.horizontal,
                 x: sb.x,
                 y: sb.y,
                 width: sb.width,
                 height: sb.height,
+                position: sb.position,
+                portion: sb.portion,
+                whole: sb.whole,
                 thumb_start: sb.thumb_start,
                 thumb_size: sb.thumb_size,
                 track_color: sb.track_color,

@@ -17,7 +17,7 @@ use neovm_core::face::{
     Color as NeoColor, Face as NeoFace, FaceHeight, FaceTable, FontWeight,
     UnderlineStyle as NeoUnderlineStyle,
 };
-use neovm_core::window::{Frame, FrameId, Window};
+use neovm_core::window::{Frame, FrameId, Window, resolve_window_scroll_bar_geometry};
 
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
 use crate::fontconfig::face_height_to_pixels;
@@ -883,81 +883,22 @@ pub fn window_params_from_neovm(
     // Convert neovm-core Rect to display Rect (same fields, different types).
     let display_bounds = Rect::new(bounds.x, bounds.y, bounds.width, bounds.height);
 
-    // Resolve effective scroll bar configuration.
-    // Mirrors neovm-core window/display.rs resolution cascade:
-    //   window override → frame parameter → default.
-    let (vertical_scroll_bar_side, scroll_bar_pixel_width) = if frame.window_system.is_some() {
-        window.display().map_or((None, 0.0f32), |display| {
-            let side = match display.vertical_scroll_bar_type.as_symbol_name() {
-                Some("left") => Some("left".to_string()),
-                Some("right") => Some("right".to_string()),
-                _ if display.vertical_scroll_bar_type.is_nil() => None,
-                _ if display.vertical_scroll_bar_type.is_truthy() => {
-                    // t or other truthy: resolve from frame parameter
-                    match frame.parameter("vertical-scroll-bars") {
-                        Some(v) if v.as_symbol_name() == Some("left") => Some("left".to_string()),
-                        Some(v) if v.is_nil() => None,
-                        Some(_) => Some("right".to_string()), // right is default
-                        None => Some("right".to_string()),
-                    }
-                }
-                _ => None,
-            };
-            let width = if side.is_some() {
-                if display.scroll_bar_width >= 0 {
-                    display.scroll_bar_width as f32
-                } else {
-                    frame_parameter_int(frame, "scroll-bar-width", 0) as f32
-                }
-                .max(0.0)
-                .max(char_width) // minimum: one character width
-            } else {
-                0.0
-            };
-            (side, width)
-        })
-    } else {
-        (None, 0.0)
-    };
-
-    let (horizontal_scroll_bar, scroll_bar_pixel_height) = if frame.window_system.is_some() {
-        window.display().map_or((false, 0.0f32), |display| {
-            let enabled = match display.horizontal_scroll_bar_type.as_symbol_name() {
-                Some("bottom") => true,
-                _ if display.horizontal_scroll_bar_type.is_nil() => false,
-                _ if is_minibuffer => false,
-                _ if display.horizontal_scroll_bar_type.is_truthy() => frame
-                    .parameter("horizontal-scroll-bars")
-                    .is_some_and(|v| v.as_symbol_name() == Some("bottom") || v.is_truthy()),
-                _ => false,
-            };
-            let height = if enabled {
-                if display.scroll_bar_height >= 0 {
-                    display.scroll_bar_height as f32
-                } else {
-                    frame_parameter_int(frame, "scroll-bar-height", 0) as f32
-                }
-                .max(0.0)
-                .max(char_height) // minimum: one line height
-            } else {
-                0.0
-            };
-            (enabled, height)
-        })
-    } else {
-        (false, 0.0)
-    };
-
-    let left_sb = if vertical_scroll_bar_side.as_deref() == Some("left") {
-        scroll_bar_pixel_width
-    } else {
-        0.0
-    };
-    let right_sb = if vertical_scroll_bar_side.as_deref() == Some("right") {
-        scroll_bar_pixel_width
-    } else {
-        0.0
-    };
+    let scroll_bar_geometry = window
+        .display()
+        .map(|display| resolve_window_scroll_bar_geometry(frame, display, is_minibuffer))
+        .unwrap_or_default();
+    let vertical_scroll_bar_side = scroll_bar_geometry
+        .vertical_type
+        .and_then(|value| match value.as_symbol_name() {
+            Some("left") => Some("left".to_string()),
+            Some("right") => Some("right".to_string()),
+            _ => None,
+        });
+    let left_sb = scroll_bar_geometry.left_area_width.max(0) as f32;
+    let right_sb = scroll_bar_geometry.right_area_width.max(0) as f32;
+    let scroll_bar_pixel_width = left_sb.max(right_sb);
+    let scroll_bar_pixel_height = scroll_bar_geometry.horizontal_area_height.max(0) as f32;
+    let horizontal_scroll_bar = scroll_bar_pixel_height > 0.0;
 
     // Compute text bounds (bounds minus scroll bars, fringes, and margins).
     let left_fringe = left_fringe_width.max(0) as f32;

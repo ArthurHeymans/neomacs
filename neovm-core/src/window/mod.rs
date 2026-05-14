@@ -17,7 +17,9 @@ mod display;
 mod history;
 mod parameters;
 
-pub use display::WindowBufferDisplayDefaults;
+pub use display::{
+    WindowBufferDisplayDefaults, WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
+};
 
 // ---------------------------------------------------------------------------
 // IDs

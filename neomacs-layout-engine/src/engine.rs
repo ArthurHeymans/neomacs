@@ -36,6 +36,15 @@ const MAX_LIGATURE_RUN_LEN: usize = 64;
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 
+#[derive(Clone, Copy, Debug)]
+struct ScrollBarMetrics {
+    position: i64,
+    portion: i64,
+    whole: i64,
+    thumb_start: f32,
+    thumb_size: f32,
+}
+
 /// Buffer for accumulating same-face text runs for ligature shaping.
 struct LigatureRunBuffer {
     chars: Vec<char>,
@@ -1862,6 +1871,15 @@ impl LayoutEngine {
     /// GTK/wgpu scroll bar rendering path.  The thumb position and size
     /// are proportional to the visible region within the accessible buffer.
     fn emit_window_scroll_bars(&mut self, params: &WindowParams) {
+        let Some(info) = self
+            .matrix_builder
+            .window_infos()
+            .iter()
+            .rev()
+            .find(|info| info.window_id == params.window_id)
+        else {
+            return;
+        };
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
         let chrome_top = params.header_line_height + params.tab_line_height;
@@ -1882,22 +1900,28 @@ impl LayoutEngine {
             };
             let y = params.bounds.y + chrome_top;
 
-            let (thumb_start, thumb_size) = Self::compute_vertical_thumb(
-                params.window_start,
-                params.window_end,
+            let metrics = Self::compute_vertical_scroll_bar_metrics(
+                info.window_start,
+                info.window_end,
                 params.buffer_begv,
                 params.buffer_size,
                 track_height,
             );
 
             self.matrix_builder.push_scroll_bar(ScrollBarItem {
+                window_id: params.window_id,
+                row_role: GlyphRowRole::Text,
+                clip_rect: Some(params.bounds),
                 horizontal: false,
                 x,
                 y,
                 width: track_width,
                 height: track_height,
-                thumb_start,
-                thumb_size,
+                position: metrics.position,
+                portion: metrics.portion,
+                whole: metrics.whole,
+                thumb_start: metrics.thumb_start,
+                thumb_size: metrics.thumb_size,
                 track_color,
                 thumb_color,
             });
@@ -1927,11 +1951,17 @@ impl LayoutEngine {
             };
 
             self.matrix_builder.push_scroll_bar(ScrollBarItem {
+                window_id: params.window_id,
+                row_role: GlyphRowRole::Text,
+                clip_rect: Some(params.bounds),
                 horizontal: true,
                 x,
                 y,
                 width: track_width,
                 height: track_height,
+                position: params.hscroll as i64,
+                portion: visible_px.round().max(1.0) as i64,
+                whole: (visible_px + hscroll_px).round().max(1.0) as i64,
                 thumb_start,
                 thumb_size,
                 track_color,
@@ -1947,26 +1977,24 @@ impl LayoutEngine {
     ///   start = window_start - BEGV
     ///   end   = Z - window_end_pos - BEGV
     ///   portion = end - start
-    fn compute_vertical_thumb(
+    fn compute_vertical_scroll_bar_metrics(
         window_start: i64,
         window_end: i64,
         buffer_begv: i64,
         buffer_size: i64,
         track_height: f32,
-    ) -> (f32, f32) {
+    ) -> ScrollBarMetrics {
         let whole = (buffer_size - buffer_begv).max(1);
-        let start = (window_start - buffer_begv).max(0);
+        let position = (window_start - 1 - buffer_begv).max(0);
         let end = if window_end > 0 {
-            (window_end - buffer_begv).max(start)
+            (window_end - 1 - buffer_begv).max(position)
         } else {
-            // window_end not yet valid — estimate from window_start
-            // as though one screenful is visible.
-            start
+            position
         };
-        let portion = (end - start).max(1);
+        let portion = (end - position).max(1);
         let effective_whole = whole.max(portion);
 
-        let thumb_start = (start as f32 / effective_whole as f32) * track_height;
+        let thumb_start = (position as f32 / effective_whole as f32) * track_height;
         let thumb_size = (portion as f32 / effective_whole as f32) * track_height;
         // Minimum thumb height: 20px or 20% of track, whichever is smaller.
         let min_thumb = 20.0f32.min(track_height * 0.2);
@@ -1975,7 +2003,13 @@ impl LayoutEngine {
             .max(0.0)
             .min((track_height - thumb_size).max(0.0));
 
-        (thumb_start, thumb_size)
+        ScrollBarMetrics {
+            position,
+            portion,
+            whole: effective_whole,
+            thumb_start,
+            thumb_size,
+        }
     }
 
     fn push_window_divider_rects(

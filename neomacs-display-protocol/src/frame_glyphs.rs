@@ -343,6 +343,12 @@ pub enum FrameGlyph {
 
     /// Scroll bar (GPU-rendered)
     ScrollBar {
+        /// Window identifier this scroll bar belongs to.
+        window_id: i64,
+        /// Layout row role for ordering.
+        row_role: GlyphRowRole,
+        /// Authoritative clip rect in frame coordinates.
+        clip_rect: Option<Rect>,
         /// True for horizontal, false for vertical
         horizontal: bool,
         /// Frame-absolute position and dimensions of the scroll bar track
@@ -350,6 +356,12 @@ pub enum FrameGlyph {
         y: f32,
         width: f32,
         height: f32,
+        /// GNU-compatible scroll-bar semantic position.
+        position: i64,
+        /// GNU-compatible visible portion size.
+        portion: i64,
+        /// GNU-compatible whole buffer/content size.
+        whole: i64,
         /// Thumb start position (pixels from track start)
         thumb_start: f32,
         /// Thumb size (pixels)
@@ -1484,17 +1496,26 @@ impl FrameGlyphBuffer {
         y: f32,
         width: f32,
         height: f32,
+        position: i64,
+        portion: i64,
+        whole: i64,
         thumb_start: f32,
         thumb_size: f32,
         track_color: Color,
         thumb_color: Color,
     ) {
         self.glyphs.push(FrameGlyph::ScrollBar {
+            window_id: self.current_window_id,
+            row_role: self.current_row_role,
+            clip_rect: self.current_clip_rect,
             horizontal,
             x,
             y,
             width,
             height,
+            position,
+            portion,
+            whole,
             thumb_start,
             thumb_size,
             track_color,

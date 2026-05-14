@@ -1224,26 +1224,40 @@ fn add_scroll_bar_appends_scrollbar_glyph() {
     let mut buf = FrameGlyphBuffer::new();
     let track = Color::rgb(0.1, 0.1, 0.1);
     let thumb = Color::rgb(0.5, 0.5, 0.5);
-    buf.add_scroll_bar(false, 790.0, 0.0, 10.0, 600.0, 50.0, 100.0, track, thumb);
+    buf.add_scroll_bar(
+        false, 790.0, 0.0, 10.0, 600.0, 5, 20, 100, 50.0, 100.0, track, thumb,
+    );
 
     assert_eq!(buf.len(), 1);
     match &buf.glyphs[0] {
         FrameGlyph::ScrollBar {
+            window_id,
+            row_role,
+            clip_rect,
             horizontal,
             x,
             y,
             width,
             height,
+            position,
+            portion,
+            whole,
             thumb_start,
             thumb_size,
             track_color,
             thumb_color,
         } => {
+            assert_eq!(*window_id, 0);
+            assert_eq!(*row_role, GlyphRowRole::Text);
+            assert_eq!(*clip_rect, None);
             assert!(!*horizontal);
             assert_eq!(*x, 790.0);
             assert_eq!(*y, 0.0);
             assert_eq!(*width, 10.0);
             assert_eq!(*height, 600.0);
+            assert_eq!(*position, 5);
+            assert_eq!(*portion, 20);
+            assert_eq!(*whole, 100);
             assert_eq!(*thumb_start, 50.0);
             assert_eq!(*thumb_size, 100.0);
             assert_color_eq(track_color, &track);
