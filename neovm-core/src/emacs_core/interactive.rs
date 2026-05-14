@@ -3750,19 +3750,26 @@ fn select_where_is_preferred_sequence<'a>(
     obarray: &Obarray,
     sequences: &'a [Vec<Value>],
 ) -> &'a Vec<Value> {
-    let mut best = &sequences[0];
-    let mut best_score = where_is_sequence_preference(obarray, best);
-    for seq in &sequences[1..] {
-        let score = where_is_sequence_preference(obarray, seq);
-        if score > best_score || (score == best_score && seq.len() < best.len()) {
-            best = seq;
-            best_score = score;
-            if score == 2 {
-                continue;
-            }
+    let preferred_modifier = where_is_preferred_modifier_mask(obarray);
+
+    if preferred_modifier == 0 {
+        return &sequences[0];
+    }
+
+    if let Some(seq) = sequences
+        .iter()
+        .find(|seq| where_is_sequence_preference(obarray, seq) == 2)
+    {
+        return seq;
+    }
+
+    for seq in sequences {
+        if where_is_sequence_preference(obarray, seq) != 0 {
+            return seq;
         }
     }
-    best
+
+    &sequences[0]
 }
 
 fn where_is_prefix_starts_with_mouse_event(prefix: &[Value]) -> bool {

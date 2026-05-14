@@ -14462,6 +14462,37 @@ fn where_is_internal_returns_key_bindings_for_commands() {
 }
 
 #[test]
+fn where_is_internal_firstonly_preserves_keymap_order_like_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let expr = r#"(let((map1(make-sparse-keymap))(map2(make-sparse-keymap)))(define-key map1 [32 104 100 104] 'tui-test-command)(define-key map2 [8 100 104] 'tui-test-command)(message "wif:%S"(where-is-internal 'tui-test-command (list map1 map2) t)))"#;
+
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let ready = |grid: &[String]| grid.iter().any(|r| r.contains("wif:"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    let expected = "wif:[32 104 100 104]";
+    if !gnu.text_grid().iter().any(|row| row.contains(expected))
+        || !neo.text_grid().iter().any(|row| row.contains(expected))
+    {
+        dump_pair_grids(
+            "where_is_internal_firstonly_preserves_keymap_order_like_gnu",
+            &gnu,
+            &neo,
+        );
+    }
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains(expected)),
+            "{label}: where-is-internal FIRSTONLY should keep GNU keymap order instead of choosing the shortest binding"
+        );
+    }
+}
+
+#[test]
 fn apropos_command_includes_key_binding_for_find_file() {
     let (mut gnu, mut neo) = boot_pair("");
     let expr = "(apropos-command \"find-file\")";
