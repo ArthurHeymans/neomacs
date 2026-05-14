@@ -20,6 +20,7 @@ use std::sync::atomic::Ordering;
 
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::value::Value;
+use crate::test_utils::runtime_startup_context;
 
 /// Setting `quit-flag` before entering bytecode must surface as a
 /// `quit` signal the first time the VM polls, not loop forever.
@@ -53,6 +54,49 @@ fn bytecode_while_polls_quit_flag() {
         }
         Ok(v) => panic!("expected quit signal, got value: {:?}", v),
     }
+}
+
+/// GNU `bytecode.c:Bcall` calls `maybe_quit` before entering the callee.
+/// A bytecode `setq` of `quit-flag` must update Neomacs's cached runtime
+/// field immediately, otherwise the following call runs even though GNU
+/// would quit first.
+#[test]
+fn bytecode_setq_quit_flag_prevents_following_call() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = runtime_startup_context();
+
+    let result = ctx.eval_str(
+        r#"(progn
+             (setq qtest-called nil
+                   qtest-cleanup :unset)
+             (defun qtest-callee ()
+               (setq qtest-called t))
+             (defun qtest-driver ()
+               (setq quit-flag t)
+               (qtest-callee)
+               'after)
+             (byte-compile 'qtest-driver)
+             (unwind-protect
+                 (qtest-driver)
+               (setq qtest-cleanup qtest-called)))"#,
+    );
+
+    match result {
+        Err(err) => {
+            let msg = format!("{}", err);
+            assert!(
+                msg.contains("quit"),
+                "expected a `quit' signal before qtest-callee, got: {}",
+                msg
+            );
+        }
+        Ok(value) => panic!("expected quit signal, got value: {:?}", value),
+    }
+
+    let cleanup = ctx
+        .eval_str("qtest-cleanup")
+        .expect("unwind-protect cleanup should bind qtest-cleanup");
+    assert_eq!(cleanup, Value::NIL);
 }
 
 /// Setting `quit_requested` from the outside (simulating the bridge

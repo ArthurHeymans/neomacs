@@ -695,6 +695,11 @@ impl<'a> Vm<'a> {
                     } else {
                         Value::NIL
                     };
+                    // GNU `bytecode.c:Bcall` polls `maybe_quit` before
+                    // entering the callee. This is observable when bytecode
+                    // sets `quit-flag` immediately before a call: the callee
+                    // must not run.
+                    vm_try!(self.ctx.maybe_quit());
                     let writeback_names = if n > 0 && stk!()[args_start].is_string() {
                         self.writeback_mutating_callable_names(&func_val)
                     } else {
@@ -727,13 +732,10 @@ impl<'a> Vm<'a> {
                     }
                     stk!().truncate(stack_after_call);
                     stk_push!(result);
-                    // Mirrors GNU `bytecode.c:781`: poll quit after every
-                    // Bcall so a `C-g` that arrived while the callee was
-                    // running gets picked up before the next opcode.
-                    vm_try!(self.ctx.maybe_quit());
                 }
                 Op::Apply(n) => {
                     let n = *n as usize;
+                    vm_try!(self.ctx.maybe_quit());
                     if n == 0 {
                         let stack_after_call = stk!().len().saturating_sub(1);
                         let func_val = stk!().last().copied().unwrap_or(Value::NIL);
@@ -786,8 +788,6 @@ impl<'a> Vm<'a> {
                         stk!().truncate(stack_after_call);
                         stk_push!(result);
                     }
-                    // Match `Op::Call`'s post-call quit poll.
-                    vm_try!(self.ctx.maybe_quit());
                 }
 
                 // -- Control flow --
@@ -2192,6 +2192,7 @@ impl<'a> Vm<'a> {
                             if flags_idx >= 0 {
                                 buf.set_slot_local_flag(offset, true);
                             }
+                            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
                             return self.run_variable_watchers_by_id(
                                 resolved,
                                 &value,
@@ -2228,6 +2229,7 @@ impl<'a> Vm<'a> {
                 if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
                     buf.local_var_alist = new_alist;
                 }
+                self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
                 return self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set");
             }
         }
@@ -2237,6 +2239,7 @@ impl<'a> Vm<'a> {
         // deletes this call once every LOCALIZED symbol is
         // exclusively served by the new BLV path above.
         crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
+        self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
         self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")
     }
 
