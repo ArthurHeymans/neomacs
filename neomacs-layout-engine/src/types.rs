@@ -248,6 +248,17 @@ pub struct WindowParams {
     pub left_margin_width: f32,
     /// Right margin width in pixels (0 = no margin)
     pub right_margin_width: f32,
+
+    // --- Scroll bar configuration ---
+    /// Effective vertical scroll bar side for this window.
+    /// `None` when disabled, `Some("left")` or `Some("right")` when enabled.
+    pub vertical_scroll_bar_side: Option<String>,
+    /// Whether a horizontal scroll bar is shown below the text area.
+    pub horizontal_scroll_bar: bool,
+    /// Vertical scroll bar track width in pixels (0 when disabled).
+    pub scroll_bar_pixel_width: f32,
+    /// Horizontal scroll bar track height in pixels (0 when disabled).
+    pub scroll_bar_pixel_height: f32,
 }
 
 #[derive(Clone, Debug)]

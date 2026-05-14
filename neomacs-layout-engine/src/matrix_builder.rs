@@ -569,6 +569,10 @@ impl GlyphMatrixBuilder {
         });
     }
 
+    pub fn push_scroll_bar(&mut self, item: neomacs_display_protocol::glyph_matrix::ScrollBarItem) {
+        self.scroll_bars.push(item);
+    }
+
     pub fn push_cursor(
         &mut self,
         window_id: i32,

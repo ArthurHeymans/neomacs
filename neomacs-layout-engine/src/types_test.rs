@@ -408,6 +408,10 @@ fn window_params_construction() {
         line_prefix: vec![],
         left_margin_width: 0.0,
         right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
     };
     assert_eq!(params.window_id, 12345);
     assert_eq!(params.buffer_id, 67890);
@@ -474,6 +478,10 @@ fn window_params_minibuffer() {
         line_prefix: vec![],
         left_margin_width: 0.0,
         right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
     };
     assert!(params.is_minibuffer);
     assert_eq!(params.mode_line_height, 0.0);
@@ -532,6 +540,10 @@ fn window_params_clone() {
         line_prefix: b"> ".to_vec(),
         left_margin_width: 5.0,
         right_margin_width: 5.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
     };
     let cloned = params.clone();
     assert_eq!(cloned.window_id, params.window_id);

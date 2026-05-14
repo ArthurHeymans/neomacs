@@ -883,14 +883,98 @@ pub fn window_params_from_neovm(
     // Convert neovm-core Rect to display Rect (same fields, different types).
     let display_bounds = Rect::new(bounds.x, bounds.y, bounds.width, bounds.height);
 
-    // Compute text bounds (bounds minus fringes and margins).
+    // Resolve effective scroll bar configuration.
+    // Mirrors neovm-core window/display.rs resolution cascade:
+    //   window override → frame parameter → default.
+    let (vertical_scroll_bar_side, scroll_bar_pixel_width) = if frame.window_system.is_some() {
+        window.display().map_or((None, 0.0f32), |display| {
+            let side = match display.vertical_scroll_bar_type.as_symbol_name() {
+                Some("left") => Some("left".to_string()),
+                Some("right") => Some("right".to_string()),
+                _ if display.vertical_scroll_bar_type.is_nil() => None,
+                _ if display.vertical_scroll_bar_type.is_truthy() => {
+                    // t or other truthy: resolve from frame parameter
+                    match frame.parameter("vertical-scroll-bars") {
+                        Some(v) if v.as_symbol_name() == Some("left") => {
+                            Some("left".to_string())
+                        }
+                        Some(v) if v.is_nil() => None,
+                        Some(_) => Some("right".to_string()), // right is default
+                        None => Some("right".to_string()),
+                    }
+                }
+                _ => None,
+            };
+            let width = if side.is_some() {
+                if display.scroll_bar_width >= 0 {
+                    display.scroll_bar_width as f32
+                } else {
+                    frame_parameter_int(frame, "scroll-bar-width", 0) as f32
+                }
+                .max(0.0)
+                .max(char_width) // minimum: one character width
+            } else {
+                0.0
+            };
+            (side, width)
+        })
+    } else {
+        (None, 0.0)
+    };
+
+    let (horizontal_scroll_bar, scroll_bar_pixel_height) = if frame.window_system.is_some() {
+        window.display().map_or((false, 0.0f32), |display| {
+            let enabled = match display.horizontal_scroll_bar_type.as_symbol_name() {
+                Some("bottom") => true,
+                _ if display.horizontal_scroll_bar_type.is_nil() => false,
+                _ if is_minibuffer => false,
+                _ if display.horizontal_scroll_bar_type.is_truthy() => frame
+                    .parameter("horizontal-scroll-bars")
+                    .is_some_and(|v| v.as_symbol_name() == Some("bottom") || v.is_truthy()),
+                _ => false,
+            };
+            let height = if enabled {
+                if display.scroll_bar_height >= 0 {
+                    display.scroll_bar_height as f32
+                } else {
+                    frame_parameter_int(frame, "scroll-bar-height", 0) as f32
+                }
+                .max(0.0)
+                .max(char_height) // minimum: one line height
+            } else {
+                0.0
+            };
+            (enabled, height)
+        })
+    } else {
+        (false, 0.0)
+    };
+
+    let left_sb = if vertical_scroll_bar_side.as_deref() == Some("left") {
+        scroll_bar_pixel_width
+    } else {
+        0.0
+    };
+    let right_sb = if vertical_scroll_bar_side.as_deref() == Some("right") {
+        scroll_bar_pixel_width
+    } else {
+        0.0
+    };
+
+    // Compute text bounds (bounds minus scroll bars, fringes, and margins).
     let left_fringe = left_fringe_width.max(0) as f32;
     let right_fringe = right_fringe_width.max(0) as f32;
     let left_margin = margins.0 as f32 * char_width;
     let right_margin = margins.1 as f32 * char_width;
-    let text_x = bounds.x + left_fringe + left_margin;
-    let text_width =
-        (bounds.width - left_fringe - right_fringe - left_margin - right_margin).max(0.0);
+    let text_x = bounds.x + left_sb + left_fringe + left_margin;
+    let text_width = (bounds.width
+        - left_sb
+        - right_sb
+        - left_fringe
+        - right_fringe
+        - left_margin
+        - right_margin)
+    .max(0.0);
     let text_bounds = Rect::new(text_x, bounds.y, text_width, bounds.height);
 
     // Read buffer-local variables.
@@ -1077,6 +1161,10 @@ pub fn window_params_from_neovm(
         line_prefix: Vec::new(),
         left_margin_width: left_margin,
         right_margin_width: right_margin,
+        vertical_scroll_bar_side,
+        horizontal_scroll_bar,
+        scroll_bar_pixel_width,
+        scroll_bar_pixel_height,
     })
 }
 

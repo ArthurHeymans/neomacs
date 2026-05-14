@@ -16,6 +16,7 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint, WindowTransitionKind,
 };
+use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::eval::{
@@ -1855,6 +1856,128 @@ impl LayoutEngine {
         }
     }
 
+    /// Compute and emit scroll bar glyphs for a window.
+    ///
+    /// Mirrors GNU `set_vertical_scroll_bar` (xdisp.c:20109) and the
+    /// GTK/wgpu scroll bar rendering path.  The thumb position and size
+    /// are proportional to the visible region within the accessible buffer.
+    fn emit_window_scroll_bars(&mut self, params: &WindowParams) {
+        let track_color = Color::from_pixel(params.default_bg);
+        let thumb_color = Color::new(0.6, 0.6, 0.6, 1.0);
+        let chrome_top = params.header_line_height + params.tab_line_height;
+        let chrome_bottom = params.mode_line_height + params.scroll_bar_pixel_height;
+
+        // --- Vertical scroll bar ---
+        if let Some(ref side) = params.vertical_scroll_bar_side {
+            let track_height = (params.bounds.height - chrome_top - chrome_bottom).max(0.0);
+            if track_height <= 0.0 {
+                return;
+            }
+            let track_width = params.scroll_bar_pixel_width;
+
+            let x = if side == "left" {
+                params.bounds.x
+            } else {
+                params.bounds.x + params.bounds.width - track_width
+            };
+            let y = params.bounds.y + chrome_top;
+
+            let (thumb_start, thumb_size) = Self::compute_vertical_thumb(
+                params.window_start,
+                params.window_end,
+                params.buffer_begv,
+                params.buffer_size,
+                track_height,
+            );
+
+            self.matrix_builder.push_scroll_bar(ScrollBarItem {
+                horizontal: false,
+                x,
+                y,
+                width: track_width,
+                height: track_height,
+                thumb_start,
+                thumb_size,
+                track_color,
+                thumb_color,
+            });
+        }
+
+        // --- Horizontal scroll bar ---
+        if params.horizontal_scroll_bar {
+            let track_width = params.bounds.width;
+            let track_height = params.scroll_bar_pixel_height;
+            let x = params.bounds.x;
+            let y = params.bounds.y + params.bounds.height
+                - params.mode_line_height
+                - params.scroll_bar_pixel_height;
+
+            let hscroll_px = params.hscroll as f32 * params.char_width;
+            let visible_px = params.text_bounds.width.max(1.0);
+            let thumb_size = if track_width > 0.0 {
+                (visible_px / (visible_px + hscroll_px + track_width)) * track_width
+            } else {
+                track_width
+            }
+            .clamp(8.0, track_width);
+            let thumb_start = if track_width > 0.0 && hscroll_px + visible_px > 0.0 {
+                (hscroll_px / (hscroll_px + visible_px)) * (track_width - thumb_size)
+            } else {
+                0.0
+            };
+
+            self.matrix_builder.push_scroll_bar(ScrollBarItem {
+                horizontal: true,
+                x,
+                y,
+                width: track_width,
+                height: track_height,
+                thumb_start,
+                thumb_size,
+                track_color,
+                thumb_color,
+            });
+        }
+    }
+
+    /// Compute vertical scroll bar thumb position and size.
+    ///
+    /// Mirrors GNU `set_vertical_scroll_bar` (xdisp.c:20109-20161):
+    ///   whole = ZV - BEGV
+    ///   start = window_start - BEGV
+    ///   end   = Z - window_end_pos - BEGV
+    ///   portion = end - start
+    fn compute_vertical_thumb(
+        window_start: i64,
+        window_end: i64,
+        buffer_begv: i64,
+        buffer_size: i64,
+        track_height: f32,
+    ) -> (f32, f32) {
+        let whole = (buffer_size - buffer_begv).max(1);
+        let start = (window_start - buffer_begv).max(0);
+        let end = if window_end > 0 {
+            (window_end - buffer_begv).max(start)
+        } else {
+            // window_end not yet valid — estimate from window_start
+            // as though one screenful is visible.
+            start
+        };
+        let portion = (end - start).max(1);
+        let effective_whole = whole.max(portion);
+
+        let thumb_start = (start as f32 / effective_whole as f32) * track_height;
+        let thumb_size = (portion as f32 / effective_whole as f32) * track_height;
+        // Minimum thumb height: 20px or 20% of track, whichever is smaller.
+        let min_thumb = 20.0f32.min(track_height * 0.2);
+        let thumb_size = thumb_size.max(min_thumb).min(track_height);
+        let thumb_start = thumb_start
+            .max(0.0)
+            .min((track_height - thumb_size).max(0.0));
+
+        (thumb_start, thumb_size)
+    }
+
     fn push_window_divider_rects(
         &mut self,
         window_id: i64,
@@ -2319,6 +2442,9 @@ impl LayoutEngine {
                     reserve_right_border_col,
                     MAX_WINDOW_VISIBILITY_RETRIES,
                 );
+
+                // Emit scroll bar glyphs for this window.
+                self.emit_window_scroll_bars(params);
 
                 // Draw window dividers
                 if !params.is_minibuffer && frame_params.right_divider_width > 0 && !is_rightmost {

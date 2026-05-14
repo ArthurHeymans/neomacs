@@ -80,6 +80,10 @@ fn test_window_params() -> WindowParams {
         line_prefix: vec![],
         left_margin_width: 0.0,
         right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
     }
 }
 
