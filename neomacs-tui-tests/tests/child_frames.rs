@@ -295,6 +295,42 @@ fn delete_child_frame_restores_parent() {
 }
 
 #[test]
+fn make_frame_invisible_hides_tty_child_frame_and_restores_parent_pixels() {
+    let (mut gnu, mut neo) = boot_child_frame_pair();
+
+    let setup = r#"(progn (switch-to-buffer "*scratch*") (erase-buffer) (dotimes (i 10) (insert (format "PARENT-HIDE-L%d\n" (1+ i)))) (goto-char (point-min)) (setq cf--last-child (cf--make-child '(width . 30) '(height . 4) '(left . 5) '(top . 2))) (select-frame cf--last-child) (switch-to-buffer (get-buffer-create "*cf-hide-child*")) (erase-buffer) (insert "CHILD-HIDE-VISIBLE\n") (sit-for 0) (select-frame (frame-parent cf--last-child)) (message "CHILD:%S" (frame-visible-p cf--last-child)))"#;
+    eval_expression(&mut gnu, &mut neo, setup);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+
+    assert_region_contains(&gnu, 2, 7, "CHILD-HIDE-VISIBLE");
+    assert_region_contains(&neo, 2, 7, "CHILD-HIDE-VISIBLE");
+
+    let hide = r#"(progn (make-frame-invisible cf--last-child t) (message "HIDDEN:%S:%S" (frame-visible-p cf--last-child) (eq (selected-frame) cf--last-child)))"#;
+    eval_expression(&mut gnu, &mut neo, hide);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+
+    for session in [&gnu, &neo] {
+        let grid = session.text_grid();
+        let screen = grid.join("\n");
+        assert!(
+            screen.contains("HIDDEN:nil:nil"),
+            "{} should report the hidden child frame as invisible and unselected:\n{screen}",
+            session.name
+        );
+        assert!(
+            !screen.contains("CHILD-HIDE-VISIBLE"),
+            "{} should not leave child-frame text painted after make-frame-invisible:\n{screen}",
+            session.name
+        );
+        assert!(
+            screen.contains("PARENT-HIDE-L4"),
+            "{} should repaint parent text underneath the hidden child frame:\n{screen}",
+            session.name
+        );
+    }
+}
+
+#[test]
 fn multiple_child_frames() {
     let (mut gnu, mut neo) = boot_child_frame_pair();
 

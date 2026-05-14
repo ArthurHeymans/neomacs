@@ -5187,10 +5187,9 @@ fn pure_dispatch_record_and_state_placeholders_match_compat_contracts() {
 #[test]
 fn pure_dispatch_frame_menu_mouse_placeholders_match_compat_contracts() {
     crate::test_utils::init_test_tracing();
-    let frame_invisible = dispatch_builtin_pure("make-frame-invisible", vec![Value::NIL, Value::T])
-        .expect("builtin make-frame-invisible should resolve")
-        .expect("builtin make-frame-invisible should evaluate");
-    assert!(frame_invisible.is_nil());
+    // make-frame-invisible mutates live frame state, so it must stay on the
+    // eval-state dispatch path rather than the pure placeholder path.
+    assert!(dispatch_builtin_pure("make-frame-invisible", vec![Value::NIL, Value::T]).is_none());
 
     let menu_at = dispatch_builtin_pure(
         "menu-bar-menu-at-x-y",

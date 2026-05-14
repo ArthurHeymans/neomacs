@@ -5451,6 +5451,111 @@ pub(crate) fn builtin_iconify_frame(
     frame.visible = false;
     Ok(Value::NIL)
 }
+
+fn mru_rooted_frame_in_state(frames: &FrameManager, hidden: FrameId) -> FrameId {
+    let root = frames.root_frame_id(hidden).unwrap_or(hidden);
+    let mut best: Option<(i64, FrameId)> = None;
+
+    for candidate in frames.frames_in_reverse_z_order(root, true) {
+        if candidate == hidden {
+            continue;
+        }
+        let Some(frame) = frames.get(candidate) else {
+            continue;
+        };
+        let use_time = frames.window_use_time(frame.selected_window);
+        if best.is_none_or(|(best_time, _)| use_time > best_time) {
+            best = Some((use_time, candidate));
+        }
+    }
+
+    best.map(|(_, frame_id)| frame_id).unwrap_or(root)
+}
+
+/// `(make-frame-invisible &optional FRAME FORCE)` -> nil.
+///
+/// Mirrors GNU Emacs `Fmake_frame_invisible` (`src/frame.c`): a TTY
+/// top-level frame is not made invisible, but a TTY child frame is hidden and
+/// selection moves back to the most-recently-used frame with the same root.
+pub(crate) fn builtin_make_frame_invisible(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("make-frame-invisible", &args, 2)?;
+    let fid = {
+        let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+        resolve_frame_id_in_state(frames, buffers, args.first(), "frame-live-p")?
+    };
+    let force = args.get(1).copied().unwrap_or(Value::NIL).is_truthy();
+    if !force && !other_frames_in_state(eval, fid, false) {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "Attempt to make invisible the sole visible or iconified frame",
+            )],
+        ));
+    }
+
+    let (is_tty_child, is_window_frame) = eval
+        .frames
+        .get(fid)
+        .map(|frame| {
+            (
+                frame.effective_window_system().is_none()
+                    && frame.parent_frame.as_frame_id().is_some(),
+                frame.effective_window_system().is_some(),
+            )
+        })
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![
+                    Value::symbol("frame-live-p"),
+                    args.first().copied().unwrap_or(Value::NIL),
+                ],
+            )
+        })?;
+
+    if is_tty_child || is_window_frame {
+        if let Some(frame) = eval.frames.get_mut(fid) {
+            frame.visible = false;
+        }
+        if is_tty_child
+            && eval
+                .frames
+                .selected_frame()
+                .is_some_and(|frame| frame.id == fid)
+        {
+            let fallback = mru_rooted_frame_in_state(&eval.frames, fid);
+            if fallback != fid {
+                if let Some(old_fid) = eval.frames.selected_frame().map(|frame| frame.id) {
+                    remember_selected_window_point_in_state(
+                        &mut eval.frames,
+                        &mut eval.buffers,
+                        old_fid,
+                    );
+                }
+                if eval.frames.select_frame(fallback) {
+                    if let Some(selected_wid) =
+                        eval.frames.get(fallback).map(|frame| frame.selected_window)
+                    {
+                        let _ = eval.frames.note_window_selected(selected_wid);
+                    }
+                    sync_selected_window_buffer_in_state(
+                        &mut eval.frames,
+                        &mut eval.buffers,
+                        fallback,
+                    );
+                    eval.sync_keyboard_terminal_owner();
+                }
+            }
+        }
+    }
+
+    eval.invalidate_redisplay();
+    Ok(Value::NIL)
+}
+
 /// `(make-frame-visible &optional FRAME)` -> frame.
 pub(crate) fn builtin_make_frame_visible(
     eval: &mut super::eval::Context,
@@ -6874,6 +6979,7 @@ fn other_frames_in_state(
         .frame_list()
         .into_iter()
         .filter(|frame_id| *frame_id != deleting)
+        .filter(|frame_id| eval.frames.frame_parent_id(*frame_id).is_none())
         .any(|frame_id| {
             eval.frames
                 .get(frame_id)

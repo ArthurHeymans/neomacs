@@ -2092,28 +2092,6 @@ pub(crate) fn builtin_old_selected_frame(
     super::window_cmds::builtin_selected_frame(eval, Vec::new())
 }
 
-pub(crate) fn builtin_make_frame_invisible(args: Vec<Value>) -> EvalResult {
-    expect_range_args("make-frame-invisible", &args, 0, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
-    }
-    let force = args.get(1).is_some_and(|arg| !arg.is_nil());
-    if force {
-        return Ok(Value::NIL);
-    }
-    Err(signal(
-        "error",
-        vec![Value::string(
-            "Attempt to make invisible the sole visible or iconified frame",
-        )],
-    ))
-}
-
 pub(crate) fn builtin_menu_bar_menu_at_x_y(args: Vec<Value>) -> EvalResult {
     expect_range_args("menu-bar-menu-at-x-y", &args, 2, 3)?;
     Ok(Value::NIL)

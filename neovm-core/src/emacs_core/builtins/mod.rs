@@ -5505,11 +5505,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "make-frame-invisible",
-        |_ctx, args| builtin_make_frame_invisible(args),
-        0,
-        Some(2),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "make-frame-invisible",
+            super::window_cmds::builtin_make_frame_invisible,
+            0,
+            Some(2),
+        ),
     );
     ctx.defsubr(
         "menu-bar-menu-at-x-y",
