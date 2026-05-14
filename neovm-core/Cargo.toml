@@ -45,9 +45,13 @@ unicode_names2.workspace = true
 encoding_rs.workspace = true
 flate2.workspace = true
 rusqlite.workspace = true
+quick-xml.workspace = true
+tl.workspace = true
+rodio = { workspace = true, optional = true }
 
 [features]
 default = []
+sound = ["rodio"]
 
 [dev-dependencies]
 proptest.workspace = true

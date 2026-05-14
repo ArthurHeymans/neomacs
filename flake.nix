@@ -75,6 +75,7 @@
         tree-sitter
         gmp
       ] ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+        alsa-lib
         gst_all_1.gst-vaapi
         libva
         libselinux

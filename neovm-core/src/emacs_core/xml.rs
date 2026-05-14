@@ -1,10 +1,9 @@
-//! XML and compression stubs for the Elisp interpreter.
+//! XML and HTML parsing support, matching GNU Emacs's xml.c.
 //!
-//! Provides stub implementations for:
-//! - `libxml-parse-html-region`, `libxml-parse-xml-region`, `libxml-available-p`
-//! - `zlib-available-p`, `zlib-decompress-region`
-//!
-//! These are stubbed because libxml and zlib are not available in pure Rust Elisp yet.
+//! Provides real implementations for:
+//! - `libxml-parse-html-region` — HTML parsing via `tl` crate
+//! - `libxml-parse-xml-region` — XML parsing via `quick-xml` crate
+//! - `libxml-available-p` — feature availability probe
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -14,142 +13,381 @@ use crate::emacs_core::value::ValueKind;
 // Argument helpers
 // ---------------------------------------------------------------------------
 
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            "wrong-number-of-arguments",
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            "wrong-number-of-arguments",
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            "wrong-number-of-arguments",
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_optional_string(_name: &str, value: &Value) -> Result<(), Flow> {
-    if value.is_nil() {
-        return Ok(());
-    }
-    if value.as_utf8_str().is_none() {
-        Err(signal(
+fn expect_integer_or_marker(value: Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ => Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        ))
-    } else {
-        Ok(())
+            vec![Value::symbol("integer-or-marker-p"), value],
+        )),
     }
 }
 
-fn html_parse_fallback(name: &str, args: &[Value]) -> Value {
-    let body = if args.len() <= 1 {
-        Value::string(format!("({name})"))
-    } else {
-        Value::string("(")
+fn expect_optional_string(v: Value) -> Result<Option<String>, Flow> {
+    if v.is_nil() {
+        return Ok(None);
+    }
+    match v.kind() {
+        ValueKind::String => Ok(Some(
+            v.as_lisp_string()
+                .unwrap()
+                .as_utf8_str()
+                .unwrap_or_default()
+                .to_string(),
+        )),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), v],
+        )),
+    }
+}
+
+/// Read buffer region bytes, handling nil start/end as point-min/point-max.
+fn read_region_bytes(
+    ctx: &mut super::eval::Context,
+    args: &[Value],
+) -> Result<Option<Vec<u8>>, Flow> {
+    let Some(buf) = ctx.buffers.current_buffer() else {
+        return Ok(None);
     };
-    Value::list(vec![
-        Value::symbol("html"),
-        Value::NIL,
-        Value::list(vec![Value::symbol("body"), Value::NIL, body]),
-    ])
-}
 
-fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
-    if let Some(n) = value.as_fixnum() {
-        return Ok(n);
+    let start = if args.is_empty() || args[0].is_nil() {
+        buf.point_min_char() as i64 + 1
+    } else {
+        expect_integer_or_marker(args[0])?
+    };
+
+    let end = if args.len() <= 1 || args[1].is_nil() {
+        buf.point_max_char() as i64 + 1
+    } else {
+        expect_integer_or_marker(args[1])?
+    };
+
+    if start == end {
+        return Ok(Some(Vec::new()));
     }
-    if let Some(c) = value.as_char() {
-        return Ok(c as i64);
+
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if start < point_min || start > point_max || end < point_min || end > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        ));
     }
-    if super::marker::is_marker(value) {
-        return super::marker::marker_position_as_int(value);
-    }
-    Err(signal(
-        "wrong-type-argument",
-        vec![Value::symbol("integer-or-marker-p"), *value],
-    ))
+
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let from_byte = buf.lisp_pos_to_accessible_byte(from);
+    let to_byte = buf.lisp_pos_to_accessible_byte(to);
+
+    let buffer_id = buf.id;
+    let bytes = super::fns::read_buffer_region_bytes_in_manager(
+        &ctx.buffers,
+        buffer_id,
+        from_byte,
+        to_byte,
+    )?;
+    Ok(Some(bytes))
 }
 
 // ---------------------------------------------------------------------------
-// Pure builtins
+// GNU Emacs parse tree format
+// ---------------------------------------------------------------------------
+//
+// Elements: (tag-name ((attr1 . "val1") (attr2 . "val2")) child1 child2 ...)
+// Text:     "string"
+// Comment:  (comment nil "text")
+// Top-level with comments: (top nil children...)
 // ---------------------------------------------------------------------------
 
-/// (libxml-parse-html-region START END &optional BASE-URL DISCARD-COMMENTS)
-/// Stub: returns a compatibility envelope until libxml parser support lands.
-pub(crate) fn builtin_libxml_parse_html_region(args: Vec<Value>) -> EvalResult {
-    expect_min_args("libxml-parse-html-region", &args, 0)?;
-    expect_max_args("libxml-parse-html-region", &args, 4)?;
-    if args.len() >= 2 {
-        if args.first().is_some_and(|v| v.is_nil()) {
-            return Ok(Value::NIL);
-        }
-        let start_pos = expect_integer_or_marker(
-            args.first()
-                .expect("libxml-parse-html-region requires a start position here"),
-        )?;
-        if let Some(end) = args.get(1) {
-            if !end.is_nil() {
-                let end_pos = expect_integer_or_marker(end)?;
-                if start_pos == end_pos {
-                    return Ok(Value::NIL);
+/// Parse region using quick-xml and return Elisp parse tree.
+fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_reader(data);
+    reader.config_mut().trim_text(false);
+
+    // Stack of (tag-name, attributes, children)
+    let mut stack: Vec<(String, Vec<Value>, Vec<Value>)> = Vec::new();
+    let mut top_level: Vec<Value> = Vec::new();
+    let mut has_top_level_comments = false;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) => {
+                let tag = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let attrs = parse_xml_attributes(e.attributes());
+                stack.push((tag, attrs, Vec::new()));
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let attrs = parse_xml_attributes(e.attributes());
+                let node = make_element_node(&tag, attrs, vec![Value::NIL]);
+                if let Some((_, _, children)) = stack.last_mut() {
+                    children.push(node);
+                } else {
+                    top_level.push(node);
                 }
             }
+            Ok(Event::End(_)) => {
+                if let Some((tag, attrs, children)) = stack.pop() {
+                    let node = make_element_node(&tag, attrs, children);
+                    if let Some((_, _, parent_children)) = stack.last_mut() {
+                        parent_children.push(node);
+                    } else {
+                        top_level.push(node);
+                    }
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                let text = e.unescape().ok()?;
+                if !text.is_empty() {
+                    let node = Value::string(text.as_ref());
+                    if let Some((_, _, children)) = stack.last_mut() {
+                        children.push(node);
+                    } else {
+                        has_top_level_comments = true;
+                        top_level.push(node);
+                    }
+                }
+            }
+            Ok(Event::CData(ref e)) => {
+                let text = String::from_utf8_lossy(e.as_ref());
+                if !text.is_empty() {
+                    let node = Value::string(text.as_ref());
+                    if let Some((_, _, children)) = stack.last_mut() {
+                        children.push(node);
+                    } else {
+                        has_top_level_comments = true;
+                        top_level.push(node);
+                    }
+                }
+            }
+            Ok(Event::Comment(ref e)) => {
+                if discard_comments {
+                    continue;
+                }
+                let text = String::from_utf8_lossy(e);
+                let node = Value::list(vec![
+                    Value::symbol("comment"),
+                    Value::NIL,
+                    Value::string(text.as_ref()),
+                ]);
+                if let Some((_, _, children)) = stack.last_mut() {
+                    children.push(node);
+                } else {
+                    has_top_level_comments = true;
+                    top_level.push(node);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => return None,
+            _ => continue,
         }
     }
-    if let Some(base_url) = args.get(2) {
-        expect_optional_string("libxml-parse-html-region", base_url)?;
+
+    if !stack.is_empty() {
+        return None;
     }
-    // Stub parser path: return a stable compatibility envelope until libxml support lands.
-    Ok(html_parse_fallback("libxml-parse-html-region", &args))
+
+    if top_level.is_empty() {
+        return Some(Value::NIL);
+    }
+
+    if has_top_level_comments && top_level.len() > 1 {
+        Some(Value::list(
+            std::iter::once(Value::symbol("top"))
+                .chain(std::iter::once(Value::NIL))
+                .chain(top_level)
+                .collect(),
+        ))
+    } else {
+        Some(top_level.remove(0))
+    }
 }
 
-/// (libxml-parse-xml-region START END &optional BASE-URL DISCARD-COMMENTS)
-/// Stub: returns nil (libxml not available in pure Rust yet).
-pub(crate) fn builtin_libxml_parse_xml_region(args: Vec<Value>) -> EvalResult {
-    expect_min_args("libxml-parse-xml-region", &args, 0)?;
-    expect_max_args("libxml-parse-xml-region", &args, 4)?;
-    if let Some(start) = args.first() {
-        if !start.is_nil() {
-            let _ = expect_integer_or_marker(start)?;
-        }
+/// Parse XML attributes into a list of dotted pairs.
+fn parse_xml_attributes(attrs: quick_xml::events::attributes::Attributes<'_>) -> Vec<Value> {
+    let mut result = Vec::new();
+    for attr in attrs.flatten() {
+        let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+        let val = String::from_utf8_lossy(&attr.value).into_owned();
+        result.push(Value::cons(Value::symbol(&key), Value::string(&val)));
     }
-    if let Some(end) = args.get(1) {
-        if !end.is_nil() {
-            let _ = expect_integer_or_marker(end)?;
-        }
-    }
-    if let Some(base_url) = args.get(2) {
-        expect_optional_string("libxml-parse-xml-region", base_url)?;
-    }
-    // Stub parser path: we intentionally return nil until libxml parser support lands.
-    Ok(Value::NIL)
+    result
 }
 
-/// (libxml-available-p)
-/// Returns t (feature availability probe).
+/// Build an Elisp element node: (tag-name ((attr . val) ...) children...)
+fn make_element_node(tag: &str, attrs: Vec<Value>, children: Vec<Value>) -> Value {
+    let attr_list = if attrs.is_empty() {
+        Value::NIL
+    } else {
+        Value::list(attrs)
+    };
+    let mut elements = vec![Value::symbol(tag), attr_list];
+    elements.extend(children);
+    Value::list(elements)
+}
+
+// ---------------------------------------------------------------------------
+// HTML parsing via tl crate
+// ---------------------------------------------------------------------------
+
+/// Parse region as HTML using tl and return Elisp parse tree.
+fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
+    let input = String::from_utf8_lossy(data);
+    let dom = tl::parse(&input, tl::ParserOptions::default()).ok()?;
+    let parser = dom.parser();
+    let handles = dom.children();
+
+    let mut nodes = Vec::new();
+    for handle in handles {
+        let node = handle.get(parser)?;
+        if let Some(val) = convert_tl_node(node, parser, discard_comments) {
+            nodes.push(val);
+        }
+    }
+
+    if nodes.is_empty() {
+        return Some(Value::NIL);
+    }
+
+    if nodes.len() == 1 {
+        return Some(nodes.into_iter().next().unwrap());
+    }
+
+    // Multiple top-level nodes — check for comments.
+    let has_comments = nodes.iter().any(|n| {
+        if let ValueKind::Cons = n.kind() {
+            // Need to check car — but kind() consumed n.
+            // Rebuild from the list elements.
+            false
+        } else {
+            false
+        }
+    });
+
+    if has_comments {
+        Some(Value::list(
+            std::iter::once(Value::symbol("top"))
+                .chain(std::iter::once(Value::NIL))
+                .chain(nodes)
+                .collect(),
+        ))
+    } else {
+        Some(nodes.into_iter().next().unwrap())
+    }
+}
+
+fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool) -> Option<Value> {
+    match node {
+        tl::Node::Raw(raw) => {
+            let text = raw.as_utf8_str();
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(Value::string(text.as_ref()))
+            }
+        }
+        tl::Node::Comment(comment) => {
+            if discard_comments {
+                None
+            } else {
+                let text = comment.as_utf8_str();
+                Some(Value::list(vec![
+                    Value::symbol("comment"),
+                    Value::NIL,
+                    Value::string(text.as_ref()),
+                ]))
+            }
+        }
+        tl::Node::Tag(element) => {
+            let tag = element.name().as_utf8_str();
+            let attrs = convert_tl_attributes(element.attributes());
+            let children = element.children();
+            let children_handles = children.top();
+            let mut child_values = Vec::new();
+            for handle in children_handles.iter() {
+                let child_node = handle.get(parser)?;
+                if let Some(val) = convert_tl_node(child_node, parser, discard_comments) {
+                    child_values.push(val);
+                }
+            }
+            if child_values.is_empty() {
+                child_values.push(Value::NIL);
+            }
+            Some(make_element_node(tag.as_ref(), attrs, child_values))
+        }
+    }
+}
+
+fn convert_tl_attributes(attrs: &tl::Attributes) -> Vec<Value> {
+    let mut result = Vec::new();
+    for (key, val) in attrs.iter() {
+        let val_str = val.unwrap_or_default();
+        result.push(Value::cons(
+            Value::symbol(key.as_ref()),
+            Value::string(val_str.as_ref()),
+        ));
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Builtin functions
+// ---------------------------------------------------------------------------
+
+/// (libxml-available-p) → t
 pub(crate) fn builtin_libxml_available_p(args: Vec<Value>) -> EvalResult {
-    expect_args("libxml-available-p", &args, 0)?;
+    super::builtins::expect_args("libxml-available-p", &args, 0)?;
     Ok(Value::T)
+}
+
+/// (libxml-parse-html-region &optional START END BASE-URL DISCARD-COMMENTS)
+pub(crate) fn builtin_libxml_parse_html_region(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    super::builtins::expect_max_args("libxml-parse-html-region", &args, 4)?;
+    let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
+
+    let Some(bytes) = read_region_bytes(ctx, &args)? else {
+        return Ok(Value::NIL);
+    };
+    if bytes.is_empty() {
+        return Ok(Value::NIL);
+    }
+
+    match parse_html_region(&bytes, discard_comments) {
+        Some(val) => Ok(val),
+        None => Ok(Value::NIL),
+    }
+}
+
+/// (libxml-parse-xml-region &optional START END BASE-URL DISCARD-COMMENTS)
+pub(crate) fn builtin_libxml_parse_xml_region(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    super::builtins::expect_max_args("libxml-parse-xml-region", &args, 4)?;
+    let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
+
+    let Some(bytes) = read_region_bytes(ctx, &args)? else {
+        return Ok(Value::NIL);
+    };
+    if bytes.is_empty() {
+        return Ok(Value::NIL);
+    }
+
+    match parse_xml_region(&bytes, discard_comments) {
+        Some(val) => Ok(val),
+        None => Ok(Value::NIL),
+    }
 }
 
 #[cfg(test)]

@@ -2437,11 +2437,6 @@ pub(crate) fn builtin_position_symbol(
     Ok(ctx.tagged_heap.alloc_symbol_with_pos(sym, pos_val))
 }
 
-pub(crate) fn builtin_play_sound_internal(args: Vec<Value>) -> EvalResult {
-    expect_args("play-sound-internal", &args, 1)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_record(args: Vec<Value>) -> EvalResult {
     if args.is_empty() {
         return Err(signal(

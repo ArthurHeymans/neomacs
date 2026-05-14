@@ -5371,10 +5371,15 @@ fn pure_dispatch_position_placeholders_match_compat_contracts() {
         .expect("builtin posn-at-x-y should evaluate");
     assert!(posn_at_xy.is_nil());
 
-    let play_sound = dispatch_builtin_pure("play-sound-internal", vec![Value::NIL])
+    let play_sound_err = dispatch_builtin_pure("play-sound-internal", vec![Value::NIL])
         .expect("builtin play-sound-internal should resolve")
-        .expect("builtin play-sound-internal should evaluate");
-    assert!(play_sound.is_nil());
+        .expect_err("play-sound-internal should reject nil as invalid spec");
+    match play_sound_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
 }
 
 #[test]

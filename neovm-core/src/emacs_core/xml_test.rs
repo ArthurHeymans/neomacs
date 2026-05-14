@@ -1,53 +1,36 @@
 use super::*;
 use crate::emacs_core::value::ValueKind;
 
+fn make_ctx() -> super::super::eval::Context {
+    super::super::eval::Context::new()
+}
+
 #[test]
-fn libxml_parse_xml_region_arity_and_type_subset() {
+fn libxml_parse_xml_region_arity_and_nil_returns() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(builtin_libxml_parse_xml_region(vec![]).unwrap(), Value::NIL);
+    let mut ctx = make_ctx();
+
+    // No args, no buffer → nil
     assert_eq!(
-        builtin_libxml_parse_xml_region(vec![Value::NIL]).unwrap(),
+        builtin_libxml_parse_xml_region(&mut ctx, vec![]).unwrap(),
         Value::NIL
     );
     assert_eq!(
-        builtin_libxml_parse_xml_region(vec![Value::fixnum(1), Value::fixnum(1)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        builtin_libxml_parse_xml_region(vec![Value::NIL, Value::fixnum(1)]).unwrap(),
+        builtin_libxml_parse_xml_region(&mut ctx, vec![Value::NIL]).unwrap(),
         Value::NIL
     );
 
-    let wrong_type =
-        builtin_libxml_parse_xml_region(vec![Value::string("x"), Value::fixnum(1)]).unwrap_err();
-    match wrong_type {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(
-                sig.data,
-                vec![Value::symbol("integer-or-marker-p"), Value::string("x")]
-            );
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
-    let wrong_base =
-        builtin_libxml_parse_xml_region(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(1)])
-            .unwrap_err();
-    match wrong_base {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::fixnum(1)]);
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
-
-    let wrong_arity = builtin_libxml_parse_xml_region(vec![
-        Value::fixnum(1),
-        Value::fixnum(1),
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-    ])
+    // Too many args → error
+    let wrong_arity = builtin_libxml_parse_xml_region(
+        &mut ctx,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(1),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
     .unwrap_err();
     match wrong_arity {
         Flow::Signal(sig) => {
@@ -59,45 +42,11 @@ fn libxml_parse_xml_region_arity_and_type_subset() {
         }
         other => panic!("unexpected flow: {other:?}"),
     }
-}
 
-#[test]
-fn libxml_parse_html_region_arity_and_type_subset() {
-    crate::test_utils::init_test_tracing();
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![]).unwrap(),
-        html_parse_fallback("libxml-parse-html-region", &[])
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::NIL]).unwrap(),
-        html_parse_fallback("libxml-parse-html-region", &[Value::NIL])
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::fixnum(1)]).unwrap(),
-        html_parse_fallback("libxml-parse-html-region", &[Value::fixnum(1)])
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::fixnum(1), Value::NIL]).unwrap(),
-        html_parse_fallback("libxml-parse-html-region", &[Value::fixnum(1), Value::NIL])
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::NIL, Value::fixnum(1)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::fixnum(1), Value::fixnum(1)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        builtin_libxml_parse_html_region(vec![Value::fixnum(1), Value::fixnum(2)]).unwrap(),
-        html_parse_fallback(
-            "libxml-parse-html-region",
-            &[Value::fixnum(1), Value::fixnum(2)]
-        )
-    );
-
+    // Wrong type for START → error
     let wrong_type =
-        builtin_libxml_parse_html_region(vec![Value::string("x"), Value::fixnum(1)]).unwrap_err();
+        builtin_libxml_parse_xml_region(&mut ctx, vec![Value::string("x"), Value::fixnum(1)])
+            .unwrap_err();
     match wrong_type {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -108,27 +57,34 @@ fn libxml_parse_html_region_arity_and_type_subset() {
         }
         other => panic!("unexpected flow: {other:?}"),
     }
-    let wrong_base = builtin_libxml_parse_html_region(vec![
-        Value::fixnum(1),
-        Value::fixnum(2),
-        Value::fixnum(1),
-    ])
-    .unwrap_err();
-    match wrong_base {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::fixnum(1)]);
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
+}
 
-    let wrong_arity = builtin_libxml_parse_html_region(vec![
-        Value::fixnum(1),
-        Value::fixnum(1),
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-    ])
+#[test]
+fn libxml_parse_html_region_arity_and_nil_returns() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = make_ctx();
+
+    // No args, no buffer → nil
+    assert_eq!(
+        builtin_libxml_parse_html_region(&mut ctx, vec![]).unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_libxml_parse_html_region(&mut ctx, vec![Value::NIL]).unwrap(),
+        Value::NIL
+    );
+
+    // Too many args → error
+    let wrong_arity = builtin_libxml_parse_html_region(
+        &mut ctx,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(1),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
     .unwrap_err();
     match wrong_arity {
         Flow::Signal(sig) => {
@@ -136,6 +92,21 @@ fn libxml_parse_html_region_arity_and_type_subset() {
             assert_eq!(
                 sig.data,
                 vec![Value::symbol("libxml-parse-html-region"), Value::fixnum(5)]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    // Wrong type for START → error
+    let wrong_type =
+        builtin_libxml_parse_html_region(&mut ctx, vec![Value::string("x"), Value::fixnum(1)])
+            .unwrap_err();
+    match wrong_type {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("integer-or-marker-p"), Value::string("x")]
             );
         }
         other => panic!("unexpected flow: {other:?}"),

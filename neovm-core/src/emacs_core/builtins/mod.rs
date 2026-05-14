@@ -5613,7 +5613,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "play-sound-internal",
-        |_ctx, args| builtin_play_sound_internal(args),
+        |_ctx, args| super::sound::builtin_play_sound_internal(args),
         1,
         Some(1),
     );
@@ -9168,13 +9168,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- XML/decompress --
     ctx.defsubr(
         "libxml-parse-html-region",
-        |_ctx, args| super::xml::builtin_libxml_parse_html_region(args),
+        |ctx, args| super::xml::builtin_libxml_parse_html_region(ctx, args),
         0,
         Some(4),
     );
     ctx.defsubr(
         "libxml-parse-xml-region",
-        |_ctx, args| super::xml::builtin_libxml_parse_xml_region(args),
+        |ctx, args| super::xml::builtin_libxml_parse_xml_region(ctx, args),
         0,
         Some(4),
     );
