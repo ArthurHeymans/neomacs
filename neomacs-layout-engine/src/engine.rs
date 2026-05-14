@@ -1862,8 +1862,8 @@ impl LayoutEngine {
     /// GTK/wgpu scroll bar rendering path.  The thumb position and size
     /// are proportional to the visible region within the accessible buffer.
     fn emit_window_scroll_bars(&mut self, params: &WindowParams) {
-        let track_color = Color::from_pixel(params.default_bg);
-        let thumb_color = Color::new(0.6, 0.6, 0.6, 1.0);
+        let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
+        let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
         let chrome_top = params.header_line_height + params.tab_line_height;
         let chrome_bottom = params.mode_line_height + params.scroll_bar_pixel_height;
 
