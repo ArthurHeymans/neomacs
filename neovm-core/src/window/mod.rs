@@ -1711,6 +1711,9 @@ impl Frame {
     }
 
     pub fn internal_border_width(&self) -> i64 {
+        if self.effective_window_system().is_none() {
+            return 0;
+        }
         if self.parent_frame.as_frame_id().is_some()
             && let Some(width) = self.child_frame_border_width_raw()
         {
@@ -1721,6 +1724,9 @@ impl Frame {
     }
 
     pub fn frame_child_frame_border_width(&self) -> i64 {
+        if self.effective_window_system().is_none() {
+            return 0;
+        }
         self.child_frame_border_width_raw()
             .unwrap_or_else(|| self.internal_border_width())
     }

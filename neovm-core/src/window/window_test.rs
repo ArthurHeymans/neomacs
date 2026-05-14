@@ -43,13 +43,14 @@ fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer(
 }
 
 #[test]
-fn internal_border_width_insets_root_and_minibuffer_geometry() {
+fn gui_internal_border_width_insets_root_and_minibuffer_geometry() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 100, 80, BufferId(1));
 
     {
         let frame = mgr.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::symbol("x")));
         frame.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
         frame.sync_window_area_bounds();
     }
@@ -63,7 +64,65 @@ fn internal_border_width_insets_root_and_minibuffer_geometry() {
 }
 
 #[test]
-fn child_frame_border_width_acts_as_child_internal_border() {
+fn tty_internal_border_width_parameters_do_not_inset_geometry() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 100, 80, BufferId(1));
+
+    {
+        let frame = mgr.get_mut(fid).expect("frame");
+        frame.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        frame.set_parameter(Value::symbol("child-frame-border-width"), Value::fixnum(2));
+        frame.sync_window_area_bounds();
+    }
+
+    let frame = mgr.get(fid).expect("frame");
+    assert_eq!(frame.internal_border_width(), 0);
+    assert_eq!(frame.frame_child_frame_border_width(), 0);
+    assert_eq!(
+        *frame.root_window.bounds(),
+        Rect::new(0.0, 0.0, 100.0, 64.0)
+    );
+    assert_eq!(
+        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
+        Rect::new(0.0, 64.0, 100.0, 16.0)
+    );
+}
+
+#[test]
+fn gui_child_frame_border_width_acts_as_child_internal_border() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let parent_id = mgr.create_frame("parent", 100, 80, BufferId(1));
+    let child_id = mgr.create_frame("child", 40, 30, BufferId(1));
+    let parent_minibuffer = mgr
+        .get(parent_id)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("parent minibuffer");
+
+    {
+        let parent = mgr.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("x")));
+    }
+
+    {
+        let child = mgr.get_mut(child_id).expect("child frame");
+        child.set_window_system(Some(Value::symbol("x")));
+        child.parent_frame = Value::make_frame(parent_id.0);
+        child.minibuffer_window = Some(parent_minibuffer);
+        child.minibuffer_leaf = None;
+        child.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        child.set_parameter(Value::symbol("child-frame-border-width"), Value::fixnum(2));
+        child.sync_window_area_bounds();
+    }
+
+    let child = mgr.get(child_id).expect("child frame");
+    assert_eq!(child.internal_border_width(), 2);
+    assert_eq!(*child.root_window.bounds(), Rect::new(2.0, 2.0, 36.0, 26.0));
+}
+
+#[test]
+fn tty_child_frame_border_width_parameters_do_not_inset_geometry() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();
     let parent_id = mgr.create_frame("parent", 100, 80, BufferId(1));
@@ -84,8 +143,9 @@ fn child_frame_border_width_acts_as_child_internal_border() {
     }
 
     let child = mgr.get(child_id).expect("child frame");
-    assert_eq!(child.internal_border_width(), 2);
-    assert_eq!(*child.root_window.bounds(), Rect::new(2.0, 2.0, 36.0, 26.0));
+    assert_eq!(child.internal_border_width(), 0);
+    assert_eq!(child.frame_child_frame_border_width(), 0);
+    assert_eq!(*child.root_window.bounds(), Rect::new(0.0, 0.0, 40.0, 30.0));
 }
 
 #[test]

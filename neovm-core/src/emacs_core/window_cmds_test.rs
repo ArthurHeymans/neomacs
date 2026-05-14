@@ -4418,9 +4418,25 @@ fn divider_width_builtins_read_frame_parameters_like_gnu() {
 }
 
 #[test]
-fn frame_border_width_builtins_read_effective_gnu_values() {
+fn tty_frame_border_width_builtins_return_zero_but_keep_parameters_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
+        "(modify-frame-parameters
+           (selected-frame)
+           '((internal-border-width . 4) (child-frame-border-width . 2)))
+         (list (frame-internal-border-width)
+               (frame-child-frame-border-width)
+               (cdr (assq 'internal-border-width (frame-parameters)))
+               (cdr (assq 'child-frame-border-width (frame-parameters))))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK (0 0 4 2)");
+}
+
+#[test]
+fn gui_frame_border_width_builtins_read_effective_gnu_values() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_gui_frame(
         "(modify-frame-parameters
            (selected-frame)
            '((internal-border-width . 4) (child-frame-border-width . 2)))
