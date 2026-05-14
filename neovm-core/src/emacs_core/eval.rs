@@ -10249,6 +10249,33 @@ impl Context {
         result
     }
 
+    #[inline]
+    pub(crate) fn pop_bytecode_backtrace_frame_with_result(
+        &mut self,
+        count: usize,
+        result: EvalResult,
+    ) -> EvalResult {
+        let can_pop = self.specpdl.len() == count + 1
+            && matches!(
+                self.specpdl.last(),
+                Some(SpecBinding::Backtrace {
+                    args: BacktraceArgs::Evaluated0
+                        | BacktraceArgs::Evaluated1(_)
+                        | BacktraceArgs::Evaluated2(_, _)
+                        | BacktraceArgs::EvaluatedBcStack { .. },
+                    debug_on_exit: false,
+                    ..
+                })
+            );
+
+        if can_pop {
+            self.specpdl.pop();
+            return result;
+        }
+
+        self.unbind_to_with_result(count, result)
+    }
+
     fn apply_internal(
         &mut self,
         function: Value,

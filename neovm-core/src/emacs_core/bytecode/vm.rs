@@ -3631,7 +3631,10 @@ impl<'a> Vm<'a> {
                 .unwrap_or_else(|| Err(signal("void-function", vec![Value::from_sym_id(sym_id)])))
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
-        Some(self.ctx.unbind_to_with_result(bt_count, result))
+        Some(
+            self.ctx
+                .pop_bytecode_backtrace_frame_with_result(bt_count, result),
+        )
     }
 
     fn dispatch_builtin_subr_from_stack_args_unchecked(
