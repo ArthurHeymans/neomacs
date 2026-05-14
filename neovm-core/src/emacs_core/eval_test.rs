@@ -3894,6 +3894,21 @@ fn basic_arithmetic() {
     assert_eq!(eval_one("(1- 5)"), "OK 4");
 }
 
+/// GNU `Fplus` returns its checked single non-marker operand directly
+/// (`src/data.c:Fplus`), while markers are coerced to their live
+/// position. Heap-number identity is observable with `eq`.
+#[test]
+fn unary_plus_matches_gnu_identity_and_marker_coercion() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        bootstrap_eval_one(
+            "(let ((b (1+ most-positive-fixnum)) (f 1.0)) \
+               (list (eq (+ b) b) (eq (+ f) f) (+ (point-marker))))"
+        ),
+        "OK (t t 1)"
+    );
+}
+
 /// Regression for audit §1.1 / §2.1-§2.2: arithmetic must promote to
 /// bignum on overflow instead of silently wrapping. Mirrors GNU
 /// `arith_driver` (`src/data.c:3215`) which uses `ckd_add` /

@@ -84,6 +84,26 @@ pub(crate) fn builtin_add_slice(
     eval: &mut super::super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
+    match args {
+        [] => return Ok(Value::fixnum(0)),
+        [arg] => {
+            if arg.as_fixnum().is_some() || arg.is_float() || arg.is_bignum() {
+                return Ok(*arg);
+            }
+            if super::marker::is_marker(arg) {
+                return Ok(Value::make_int(super::marker::marker_position_as_int_eval(
+                    eval, arg,
+                )?));
+            }
+            return Err(wrong_number_or_marker(arg));
+        }
+        _ => {
+            if let Some(sum) = try_small_fixnum_add(args) {
+                return Ok(sum);
+            }
+        }
+    }
+
     // GNU `arith_driver`: stay in the fixnum loop until the current
     // operand forces float or bignum arithmetic.
     let mut sum: i64 = 0;
@@ -126,6 +146,23 @@ pub(crate) fn builtin_add_slice(
         return Err(wrong_number_or_marker(a));
     }
     Ok(Value::make_int(sum))
+}
+
+#[inline]
+fn try_small_fixnum_add(args: &[Value]) -> Option<Value> {
+    match args {
+        [a, b] => Some(Value::make_int(a.as_fixnum()?.checked_add(b.as_fixnum()?)?)),
+        [a, b, c] => {
+            let sum = a.as_fixnum()?.checked_add(b.as_fixnum()?)?;
+            Some(Value::make_int(sum.checked_add(c.as_fixnum()?)?))
+        }
+        [a, b, c, d] => {
+            let sum = a.as_fixnum()?.checked_add(b.as_fixnum()?)?;
+            let sum = sum.checked_add(c.as_fixnum()?)?;
+            Some(Value::make_int(sum.checked_add(d.as_fixnum()?)?))
+        }
+        _ => None,
+    }
 }
 
 fn continue_float_add(
