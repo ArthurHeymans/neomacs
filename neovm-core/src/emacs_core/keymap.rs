@@ -614,6 +614,16 @@ pub fn list_keymap_lookup_one_t_ok(keymap: &Value, event: &Value) -> Value {
     list_keymap_access(keymap, event, false, true)
 }
 
+/// Look up a single event in a keymap without stripping menu-item wrappers.
+///
+/// This is used by `read-key-sequence` key translation maps.  GNU
+/// `access_keymap_keyremap` calls `access_keymap` with autoloading enabled, so
+/// menu-item `:filter` properties must be evaluated by the keyboard runtime
+/// rather than discarded by the pure keymap lookup layer.
+pub(crate) fn list_keymap_lookup_one_unresolved(keymap: &Value, event: &Value) -> Value {
+    list_keymap_access_unresolved(keymap, event, false, false)
+}
+
 /// Look up a single event in a keymap without following the parent chain.
 ///
 /// This mirrors GNU Emacs `access_keymap` with `noinherit=true`.
@@ -649,6 +659,27 @@ fn keymap_binding_spine(keymap: &Value) -> Option<Value> {
 }
 
 fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
+    lookup_in_keymap_level_impl(keymap, event, t_ok, true)
+}
+
+fn lookup_in_keymap_level_unresolved(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
+    lookup_in_keymap_level_impl(keymap, event, t_ok, false)
+}
+
+fn maybe_resolve_keyelt(binding: Value, resolve_keyelt: bool) -> Value {
+    if resolve_keyelt {
+        get_keyelt(binding)
+    } else {
+        binding
+    }
+}
+
+fn lookup_in_keymap_level_impl(
+    keymap: &Value,
+    event: &Value,
+    t_ok: bool,
+    resolve_keyelt: bool,
+) -> Option<Value> {
     let mut cursor = keymap_binding_spine(keymap)?;
     let mut entries = 0;
     let mut t_binding: Option<Value> = None;
@@ -681,7 +712,7 @@ fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<V
                             } else {
                                 result
                             };
-                            return Some(get_keyelt(val));
+                            return Some(maybe_resolve_keyelt(val, resolve_keyelt));
                         }
                         // nil in char-table means unbound — fall through
                     }
@@ -701,7 +732,7 @@ fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<V
                     if idx < items.len() {
                         let val = items[idx];
                         if !val.is_nil() {
-                            return Some(get_keyelt(val));
+                            return Some(maybe_resolve_keyelt(val, resolve_keyelt));
                         }
                     }
                 }
@@ -716,7 +747,9 @@ fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<V
         // itself a keymap, GNU keymap.c `access_keymap_1` recursively
         // looks up the event in that sub-keymap before continuing.
         if entry_car.is_cons() && is_list_keymap(&entry_car) {
-            if let Some(found) = lookup_in_keymap_level(&entry_car, event, t_ok) {
+            if let Some(found) =
+                lookup_in_keymap_level_impl(&entry_car, event, t_ok, resolve_keyelt)
+            {
                 return Some(found);
             }
             cursor = entry_cdr;
@@ -728,13 +761,13 @@ fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<V
             let binding_car = entry_car.cons_car();
             let binding_cdr = entry_car.cons_cdr();
             if events_match(&binding_car, event) {
-                return Some(get_keyelt(binding_cdr));
+                return Some(maybe_resolve_keyelt(binding_cdr, resolve_keyelt));
             }
             // Check for (t . COMMAND) default binding.
             // GNU keymap.c:425-429: when t_ok, record the first t binding
             // but keep scanning for a specific match.
             if t_ok && t_binding.is_none() && binding_car == Value::T {
-                t_binding = Some(get_keyelt(binding_cdr));
+                t_binding = Some(maybe_resolve_keyelt(binding_cdr, resolve_keyelt));
             }
         }
 
@@ -773,6 +806,25 @@ fn get_keymap_tail_parent(keymap: &Value) -> Value {
 /// An explicit nil binding (e.g. from `define-key m [?b] nil`) shadows
 /// parent bindings, matching GNU Emacs behavior where nil != unbound.
 fn list_keymap_access(keymap: &Value, event: &Value, noinherit: bool, t_ok: bool) -> Value {
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, true)
+}
+
+fn list_keymap_access_unresolved(
+    keymap: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+) -> Value {
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, false)
+}
+
+fn list_keymap_access_impl(
+    keymap: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+    resolve_keyelt: bool,
+) -> Value {
     let mut current = *keymap;
     let mut depth = 0;
     const MAX_KEYMAP_DEPTH: usize = 50;
@@ -787,7 +839,7 @@ fn list_keymap_access(keymap: &Value, event: &Value, noinherit: bool, t_ok: bool
         // Look up the event in the current keymap level only.
         // Some(val) means "found" (val may be nil for explicit nil binding).
         // None means "not found at this level".
-        match lookup_in_keymap_level(&current, event, t_ok) {
+        match lookup_in_keymap_level_impl(&current, event, t_ok, resolve_keyelt) {
             Some(binding) => {
                 if !noinherit && is_list_keymap(&binding) {
                     // Found a prefix keymap at this level. Check if parent
@@ -795,7 +847,8 @@ fn list_keymap_access(keymap: &Value, event: &Value, noinherit: bool, t_ok: bool
                     // create a composed keymap: (keymap child-sub . parent-sub)
                     let parent = get_keymap_tail_parent(&current);
                     if !parent.is_nil() {
-                        let parent_binding = list_keymap_access(&parent, event, false, t_ok);
+                        let parent_binding =
+                            list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt);
                         if is_list_keymap(&parent_binding) {
                             return compose_keymaps(&binding, &parent_binding);
                         }
@@ -2551,13 +2604,25 @@ pub fn emacs_event_to_key_event(event: &Value) -> Option<KeyEvent> {
 /// Returns the binding Value, or the number of keys matched (as `Value::Int`)
 /// when the sequence resolves through a non-keymap binding.
 pub fn list_keymap_lookup_seq(keymap: &Value, events: &[Value]) -> Value {
+    list_keymap_lookup_seq_impl(keymap, events, true)
+}
+
+pub(crate) fn list_keymap_lookup_seq_unresolved(keymap: &Value, events: &[Value]) -> Value {
+    list_keymap_lookup_seq_impl(keymap, events, false)
+}
+
+fn list_keymap_lookup_seq_impl(keymap: &Value, events: &[Value], resolve_keyelt: bool) -> Value {
     if events.is_empty() {
         return *keymap;
     }
 
     let mut current_map = *keymap;
     for (i, event) in events.iter().enumerate() {
-        let binding = list_keymap_lookup_one(&current_map, event);
+        let binding = if resolve_keyelt {
+            list_keymap_lookup_one(&current_map, event)
+        } else {
+            list_keymap_lookup_one_unresolved(&current_map, event)
+        };
         let is_last = i == events.len() - 1;
         if is_last {
             // GNU: for the last key, return binding directly (even nil)

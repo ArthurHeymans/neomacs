@@ -11,6 +11,7 @@
 
 mod args;
 mod input_bridge;
+mod termcap_input;
 pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
 pub(crate) mod tty_layout;
@@ -2088,6 +2089,9 @@ pub fn run(mode: RuntimeMode) {
         .expect("No selected frame after bootstrap")
         .id;
     configure_gnu_startup_state(&mut evaluator, frame_id, &startup);
+    if tty_init::should_enable_live_tty_io(&startup) {
+        termcap_input::seed_input_decode_map_from_terminal(&mut evaluator);
+    }
 
     maybe_install_startup_phase_trace(&mut evaluator);
 

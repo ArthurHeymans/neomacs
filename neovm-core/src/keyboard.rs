@@ -2224,17 +2224,75 @@ impl crate::emacs_core::eval::Context {
         Ok(true)
     }
 
+    fn publish_current_key_sequence_as_command_keys(&mut self) {
+        let (translated, raw) = self.command_loop.keyboard.key_sequence_snapshot();
+        self.command_loop.set_command_key_sequences(translated, raw);
+    }
+
     fn resolve_key_sequence_translation_binding(
         &mut self,
         binding: Value,
         prompt: Value,
     ) -> Result<Option<Vec<Value>>, crate::emacs_core::error::Flow> {
+        let binding = self.resolve_key_sequence_menu_item_filter(binding)?;
         let resolved = if self.function_value_is_callable(&binding) {
             self.apply(binding, vec![prompt])?
         } else {
             binding
         };
         Ok(key_sequence_translation_events(resolved))
+    }
+
+    fn resolve_key_sequence_menu_item_filter(
+        &mut self,
+        binding: Value,
+    ) -> Result<Value, crate::emacs_core::error::Flow> {
+        if !binding.is_cons() || binding.cons_car().as_symbol_name() != Some("menu-item") {
+            return Ok(binding);
+        }
+
+        let tail = binding.cons_cdr();
+        if !tail.is_cons() {
+            return Ok(binding);
+        }
+        let definition_tail = tail.cons_cdr();
+        if !definition_tail.is_cons() {
+            return Ok(Value::NIL);
+        }
+
+        let definition = definition_tail.cons_car();
+        let mut properties = definition_tail.cons_cdr();
+        while properties.is_cons() {
+            let key = properties.cons_car();
+            properties = properties.cons_cdr();
+            if !properties.is_cons() {
+                break;
+            }
+            let value = properties.cons_car();
+            properties = properties.cons_cdr();
+
+            if key.as_symbol_name() == Some(":filter") {
+                return self.apply_key_sequence_menu_item_filter(value, definition);
+            }
+        }
+
+        Ok(definition)
+    }
+
+    fn apply_key_sequence_menu_item_filter(
+        &mut self,
+        filter: Value,
+        definition: Value,
+    ) -> Result<Value, crate::emacs_core::error::Flow> {
+        match self.apply(filter, vec![definition]) {
+            Ok(value) => Ok(value),
+            Err(crate::emacs_core::error::Flow::Signal(signal))
+                if signal.symbol_name() != "quit" =>
+            {
+                Ok(Value::NIL)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     fn lookup_key_sequence_suffix_translation(
@@ -2250,7 +2308,10 @@ impl crate::emacs_core::eval::Context {
         }
 
         for start in 0..events.len() {
-            let lookup = list_keymap_lookup_seq(&map, &events[start..]);
+            let lookup = crate::emacs_core::keymap::list_keymap_lookup_seq_unresolved(
+                &map,
+                &events[start..],
+            );
             let Some(replacement) =
                 self.resolve_key_sequence_translation_binding(lookup, prompt)?
             else {
@@ -2957,6 +3018,7 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop
                     .keyboard
                     .push_key_sequence_input_event(emacs_event);
+                self.publish_current_key_sequence_as_command_keys();
 
                 self.record_input_event(emacs_event);
                 // GNU `keyboard.c:11635-11640` stores the latest raw key
@@ -2996,6 +3058,7 @@ impl crate::emacs_core::eval::Context {
             self.command_loop
                 .keyboard
                 .rewrite_key_sequence_translation(translated_events.clone());
+            self.publish_current_key_sequence_as_command_keys();
 
             if self
                 .command_loop
@@ -3011,6 +3074,7 @@ impl crate::emacs_core::eval::Context {
                     .keyboard
                     .rewrite_key_sequence_translation(prefixed.clone());
                 translated_events = prefixed;
+                self.publish_current_key_sequence_as_command_keys();
             }
 
             let lookup_position = Self::key_sequence_lookup_position(&translated_events);
@@ -3056,6 +3120,10 @@ impl crate::emacs_core::eval::Context {
                 translated_events = function_key_translation.translated_events;
                 has_pending_translation_prefix |=
                     function_key_translation.has_pending_translation_prefix;
+                self.command_loop
+                    .keyboard
+                    .rewrite_key_sequence_translation(translated_events.clone());
+                self.publish_current_key_sequence_as_command_keys();
             }
 
             let key_translation = match self.apply_translation_map_to_events(
@@ -3075,6 +3143,7 @@ impl crate::emacs_core::eval::Context {
             self.command_loop
                 .keyboard
                 .rewrite_key_sequence_translation(translated_events.clone());
+            self.publish_current_key_sequence_as_command_keys();
 
             if self
                 .command_loop

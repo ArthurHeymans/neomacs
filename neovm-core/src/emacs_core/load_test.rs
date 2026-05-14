@@ -3515,6 +3515,35 @@ fn bootstrap_runtime_local_function_key_map_does_not_shadow_bound_meta_sequence(
 }
 
 #[test]
+fn bootstrap_runtime_input_decode_menu_item_filter_translates_escape() {
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    eval.eval_str(
+        r#"(progn
+             (global-set-key [escape] 'ignore)
+             (global-set-key [f1] 'neomacs-test-fail)
+             (define-key input-decode-map [?\e]
+               (list 'menu-item "" nil
+                     :filter
+                     (lambda (_old-esc-map)
+                       (if (equal (this-single-command-keys) [?\e])
+                           [escape]
+                         [f1])))))"#,
+    )
+    .expect("install menu-item filtered ESC input decode entry");
+
+    eval.command_loop.keyboard.kboard.unread_events.push_back(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
+    );
+
+    let (keys, binding) = eval
+        .read_key_sequence()
+        .expect("read filtered ESC key sequence");
+    assert_eq!(keys, vec![Value::symbol("escape")]);
+    assert_eq!(binding, Value::symbol("ignore"));
+}
+
+#[test]
 fn bootstrap_runtime_read_key_sequence_follows_meta_x_command() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
