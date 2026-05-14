@@ -524,6 +524,7 @@ struct WindowConfigurationSnapshot {
     frame_id: crate::window::FrameId,
     root_window: crate::window::Window,
     selected_window: crate::window::WindowId,
+    current_buffer: Option<crate::buffer::BufferId>,
     minibuffer_window: Option<crate::window::WindowId>,
     minibuffer_leaf: Option<crate::window::Window>,
 }
@@ -686,6 +687,7 @@ pub(crate) fn builtin_current_window_configuration(
             frame_id,
             root_window: frame_state.root_window.clone(),
             selected_window: frame_state.selected_window,
+            current_buffer: eval.buffers.current_buffer_id(),
             minibuffer_window: frame_state.minibuffer_window,
             minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
         };
@@ -746,11 +748,19 @@ pub(crate) fn builtin_set_window_configuration(
             None
         };
         if let Some((buffer_id, point)) = selected_window_state {
-            eval.switch_current_buffer(buffer_id)?;
             if let Some(buffer) = eval.buffers.get(buffer_id) {
                 let byte_pos = buffer.lisp_pos_to_byte(point as i64);
                 let _ = eval.buffers.goto_buffer_byte(buffer_id, byte_pos);
             }
+        }
+        if let Some(buffer_id) = snapshot.current_buffer {
+            if eval.buffers.get(buffer_id).is_some() {
+                eval.set_current_buffer_unrecorded(buffer_id)?;
+            } else if let Some((buffer_id, _)) = selected_window_state {
+                eval.set_current_buffer_unrecorded(buffer_id)?;
+            }
+        } else if let Some((buffer_id, _)) = selected_window_state {
+            eval.set_current_buffer_unrecorded(buffer_id)?;
         }
     }
 

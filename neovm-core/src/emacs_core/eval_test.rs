@@ -9310,6 +9310,35 @@ fn save_window_excursion_restores_window_layout_after_split() {
 }
 
 #[test]
+fn save_window_excursion_restores_current_buffer_separate_from_selected_window() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let* ((current (get-buffer-create "neo-current"))
+                  (shown (get-buffer-create "neo-shown")))
+             (unwind-protect
+                 (progn
+                   (switch-to-buffer shown)
+                   (set-buffer current)
+                   (list
+                    (buffer-name (current-buffer))
+                    (buffer-name (window-buffer (selected-window)))
+                    (save-window-excursion
+                      (dolist (buffer (buffer-list))
+                        (with-current-buffer buffer nil))
+                      (list (buffer-name (current-buffer))
+                            (buffer-name (window-buffer (selected-window)))))
+                    (buffer-name (current-buffer))
+                    (buffer-name (window-buffer (selected-window)))))
+               (ignore-errors (kill-buffer current))
+               (ignore-errors (kill-buffer shown))))"#,
+    );
+    assert_eq!(
+        results[0],
+        r#"OK ("neo-current" "neo-shown" ("neo-current" "neo-shown") "neo-current" "neo-shown")"#
+    );
+}
+
+#[test]
 fn save_window_excursion_with_help_window_restores_original_window_buffer() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
