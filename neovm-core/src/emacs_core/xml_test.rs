@@ -59,11 +59,9 @@ fn libxml_parse_xml_region_arity_and_nil_returns() {
     }
 
     // Wrong type for BASE-URL → error (validated before buffer access)
-    let wrong_base = builtin_libxml_parse_xml_region(
-        &mut ctx,
-        vec![Value::NIL, Value::NIL, Value::fixnum(42)],
-    )
-    .unwrap_err();
+    let wrong_base =
+        builtin_libxml_parse_xml_region(&mut ctx, vec![Value::NIL, Value::NIL, Value::fixnum(42)])
+            .unwrap_err();
     match wrong_base {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -127,11 +125,9 @@ fn libxml_parse_html_region_arity_and_nil_returns() {
     }
 
     // Wrong type for BASE-URL → error (validated before buffer access)
-    let wrong_base = builtin_libxml_parse_html_region(
-        &mut ctx,
-        vec![Value::NIL, Value::NIL, Value::fixnum(42)],
-    )
-    .unwrap_err();
+    let wrong_base =
+        builtin_libxml_parse_html_region(&mut ctx, vec![Value::NIL, Value::NIL, Value::fixnum(42)])
+            .unwrap_err();
     match wrong_base {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
