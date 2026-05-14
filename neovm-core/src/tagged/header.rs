@@ -149,6 +149,8 @@ pub enum VecLikeType {
     /// Symbol with source position (like GNU's PVEC_SYMBOL_WITH_POS).
     /// Wraps a bare symbol + byte offset for byte-compiler diagnostics.
     SymbolWithPos = 14,
+    /// SQLite database or statement object (like GNU's PVEC_SQLITE).
+    Sqlite = 15,
 }
 
 use std::sync::OnceLock;
@@ -592,6 +594,18 @@ pub struct SymbolWithPosObj {
     pub sym: TaggedValue,
     /// Source byte offset. Must always be a fixnum.
     pub pos: TaggedValue,
+}
+
+/// Heap-allocated SQLite database or statement object.
+///
+/// The native SQLite resources are owned by the sqlite module's runtime maps;
+/// this object is the opaque Lisp identity and carries the handle key plus the
+/// database/statement discriminator, mirroring GNU's single PVEC_SQLITE tag.
+#[repr(C)]
+pub struct SqliteObj {
+    pub header: VecLikeHeader,
+    pub is_statement: bool,
+    pub id: i64,
 }
 
 #[cfg(test)]

@@ -6595,9 +6595,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "sqlite-load-extension",
-        |_ctx, args| super::sqlite::builtin_sqlite_load_extension(args),
-        0,
-        None,
+        |ctx, args| super::sqlite::builtin_sqlite_load_extension(ctx, args),
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "sqlite-more-p",

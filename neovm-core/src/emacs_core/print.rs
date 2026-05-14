@@ -821,6 +821,14 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
             write_symbol_with_pos_stateful(value, out, state);
         }
+        ValueKind::Veclike(VecLikeType::Sqlite) => {
+            let obj = value.as_sqlite().unwrap();
+            if obj.is_statement {
+                write!(out, "#<sqlite statement {}>", obj.id).unwrap();
+            } else {
+                write!(out, "#<sqlite db {}>", obj.id).unwrap();
+            }
+        }
         ValueKind::Unbound => out.push_str("#<unbound>"),
         ValueKind::Unknown => write!(out, "#<unknown {:#x}>", value.0).unwrap(),
     }
@@ -1694,6 +1702,14 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
             append_symbol_with_pos_bytes(value, out, options);
+        }
+        ValueKind::Veclike(VecLikeType::Sqlite) => {
+            let obj = value.as_sqlite().unwrap();
+            if obj.is_statement {
+                out.extend_from_slice(format!("#<sqlite statement {}>", obj.id).as_bytes());
+            } else {
+                out.extend_from_slice(format!("#<sqlite db {}>", obj.id).as_bytes());
+            }
         }
         ValueKind::Unbound => {
             out.extend_from_slice(b"#<unbound>");

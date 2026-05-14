@@ -31,8 +31,8 @@ use crate::emacs_core::intern::{
 use crate::heap_types::LispString;
 
 use super::header::{
-    BignumObj, ConsCell, FloatObj, GcHeader, StringObj, SubrObj, SymbolWithPosObj, VecLikeHeader,
-    VecLikeType,
+    BignumObj, ConsCell, FloatObj, GcHeader, SqliteObj, StringObj, SubrObj, SymbolWithPosObj,
+    VecLikeHeader, VecLikeType,
 };
 
 /// Clear the old subr registry on the tagged heap — no-op now that subrs use
@@ -445,6 +445,15 @@ impl TaggedValue {
         }
     }
 
+    /// If this is an SQLite object, return a reference to the object.
+    pub fn as_sqlite(&self) -> Option<&SqliteObj> {
+        if self.veclike_type() == Some(VecLikeType::Sqlite) {
+            Some(unsafe { &*(self.as_veclike_ptr()? as *const SqliteObj) })
+        } else {
+            None
+        }
+    }
+
     /// If this is a symbol-with-pos, return the bare symbol Value.
     pub fn as_symbol_with_pos_sym(&self) -> Option<TaggedValue> {
         self.as_symbol_with_pos().map(|swp| swp.sym)
@@ -764,6 +773,12 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::SymbolWithPos)
     }
 
+    /// True if this is an SQLite database or statement object.
+    #[inline]
+    pub fn is_sqlite(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::Sqlite)
+    }
+
     /// True if this value is callable (lambda, macro, bytecode, subr).
     #[inline]
     pub fn is_function(self) -> bool {
@@ -803,6 +818,7 @@ impl TaggedValue {
                 // "integer" via `Ftype_of` / `Fcl_type_of`.
                 VecLikeType::Bignum => "integer",
                 VecLikeType::SymbolWithPos => "symbol-with-pos",
+                VecLikeType::Sqlite => "sqlite",
             },
             ValueKind::Unbound => "unbound",
             ValueKind::Unknown => "unknown",

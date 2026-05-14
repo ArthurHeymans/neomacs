@@ -1022,6 +1022,7 @@ impl TaggedHeap {
                         VecLikeType::Subr => size_of::<SubrObj>(),
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
+                        VecLikeType::Sqlite => size_of::<SqliteObj>(),
                     }
                 }
             }
@@ -1325,6 +1326,20 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<SymbolWithPosObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate an SQLite database or statement object.
+    pub fn alloc_sqlite(&mut self, is_statement: bool, id: i64) -> TaggedValue {
+        let obj = Box::new(SqliteObj {
+            header: VecLikeHeader::new(VecLikeType::Sqlite),
+            is_statement,
+            id,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<SqliteObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -1804,7 +1819,8 @@ impl TaggedHeap {
             | VecLikeType::Timer
             | VecLikeType::Marker
             | VecLikeType::Subr
-            | VecLikeType::Bignum => {
+            | VecLikeType::Bignum
+            | VecLikeType::Sqlite => {
                 // These have no Value children to trace.
                 //
                 // Bignums own a `rug::Integer`, which owns a libgmp
@@ -1928,6 +1944,7 @@ impl TaggedHeap {
                     VecLikeType::SymbolWithPos => unsafe {
                         drop(Box::from_raw(ptr as *mut SymbolWithPosObj))
                     },
+                    VecLikeType::Sqlite => unsafe { drop(Box::from_raw(ptr as *mut SqliteObj)) },
                 }
             }
         }

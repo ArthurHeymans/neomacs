@@ -1258,6 +1258,11 @@ impl TaggedValue {
         })
     }
 
+    /// Allocate an opaque SQLite database or statement object.
+    pub(crate) fn make_sqlite(is_statement: bool, id: i64) -> Self {
+        with_tagged_heap(|h| h.alloc_sqlite(is_statement, id))
+    }
+
     // -- Veclike accessor helpers --
 
     /// Check if this is a lambda.

@@ -6175,9 +6175,9 @@ fn vm_sqlite_runtime_uses_direct_dispatch() {
                     (equal (sqlite-select db "select * from t") '((1)))
                     (sqlite-pragma db "foreign_keys")
                     (sqlite-transaction db)
-                    (null (sqlite-commit db))
+                    (sqlite-commit db)
                     (sqlite-transaction db)
-                    (null (sqlite-rollback db))
+                    (sqlite-rollback db)
                     (condition-case nil
                         (sqlite-load-extension db "missing")
                       (sqlite-error t))

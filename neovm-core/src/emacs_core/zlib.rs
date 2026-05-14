@@ -17,14 +17,17 @@ use super::fns::{
 use super::value::*;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
+use flate2::{Decompress, FlushDecompress, Status};
 
 /// Resolve a Lisp integer-or-marker to an i64 position value.
-fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
+fn expect_integer_or_marker(
+    buffers: &crate::buffer::BufferManager,
+    value: &Value,
+) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "mark-marker" => {
-            // Marker shorthand not fully supported — treat as integer.
-            Ok(0)
+        _ if value.is_marker() => {
+            super::marker::marker_position_as_int_with_buffers(buffers, value)
         }
         _ => Err(signal(
             "wrong-type-argument",
@@ -73,8 +76,8 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
     }
 
-    let start = expect_integer_or_marker(&args[0])?;
-    let end = expect_integer_or_marker(&args[1])?;
+    let start = expect_integer_or_marker(&ctx.buffers, &args[0])?;
+    let end = expect_integer_or_marker(&ctx.buffers, &args[1])?;
 
     // Clamp to accessible region, matching GNU's validate_region behavior.
     let point_min = buf.point_min_char() as i64 + 1;
@@ -100,10 +103,10 @@ pub(crate) fn builtin_zlib_decompress_region(
 
     // Try gzip first (most common for Emacs .gz files), then fall back to zlib.
     // GNU uses inflateInit2 with MAX_WBITS + 32 which auto-detects format.
-    let decompressed = decompress_auto(&compressed);
+    let decompressed = decompress_auto(&compressed, allow_partial);
 
     match decompressed {
-        Some(data) => {
+        Some((data, remaining)) if remaining == 0 => {
             let replacement = LispString::from_emacs_bytes(data);
             let old_len = current_buffer_byte_span_char_len(ctx, from_byte, to_byte);
             let new_len = replacement.sbytes();
@@ -118,11 +121,23 @@ pub(crate) fn builtin_zlib_decompress_region(
             signal_after_change(ctx, from_byte, from_byte + new_len, old_len)?;
             Ok(Value::T)
         }
-        None if allow_partial => {
-            // Partial decompression not yet supported — leave region unchanged.
-            // GNU returns number of bytes not decompressed on partial success.
-            Ok(Value::fixnum((to_byte - from_byte) as i64))
+        Some((data, remaining)) if allow_partial => {
+            let replacement = LispString::from_emacs_bytes(data);
+            let old_len = current_buffer_byte_span_char_len(ctx, from_byte, to_byte);
+            let new_len = replacement.sbytes();
+            signal_before_change(ctx, from_byte, to_byte)?;
+            replace_buffer_region_lisp_string_in_manager(
+                &mut ctx.buffers,
+                buffer_id,
+                from_byte,
+                to_byte,
+                &replacement,
+            )?;
+            signal_after_change(ctx, from_byte, from_byte + new_len, old_len)?;
+            Ok(Value::fixnum(remaining as i64))
         }
+        Some(_) => unreachable!("non-partial successful decompression handled above"),
+        None if allow_partial => Ok(Value::fixnum((to_byte - from_byte) as i64)),
         None => {
             // Failure without allow-partial — leave region unchanged, return nil.
             Ok(Value::NIL)
@@ -132,15 +147,53 @@ pub(crate) fn builtin_zlib_decompress_region(
 
 /// Auto-detect compression format and decompress.
 /// Tries gzip first (most common in Emacs), then raw zlib.
-fn decompress_auto(compressed: &[u8]) -> Option<Vec<u8>> {
+fn decompress_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, usize)> {
+    if let Some(result) = decompress_streaming_auto(compressed, allow_partial) {
+        return Some(result);
+    }
     // Gzip magic number: 0x1f 0x8b
     if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
         if let Ok(data) = decompress_gzip(compressed) {
-            return Some(data);
+            return Some((data, 0));
         }
     }
     // Try zlib format.
-    decompress_zlib(compressed).ok()
+    decompress_zlib(compressed).ok().map(|data| (data, 0))
+}
+
+fn decompress_streaming_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, usize)> {
+    if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
+        return None;
+    }
+    let mut decoder = Decompress::new(true);
+    let mut output = Vec::new();
+    loop {
+        let before_in = decoder.total_in();
+        let before_out = decoder.total_out();
+        output.reserve(16 * 1024);
+        match decoder.decompress_vec(compressed, &mut output, FlushDecompress::None) {
+            Ok(Status::StreamEnd) => {
+                return Some((output, 0));
+            }
+            Ok(Status::Ok) | Ok(Status::BufError) => {
+                if decoder.total_in() == before_in && decoder.total_out() == before_out {
+                    if allow_partial && !output.is_empty() {
+                        let remaining =
+                            compressed.len().saturating_sub(decoder.total_in() as usize);
+                        return Some((output, remaining));
+                    }
+                    return None;
+                }
+            }
+            Err(_) => {
+                if allow_partial && !output.is_empty() {
+                    let remaining = compressed.len().saturating_sub(decoder.total_in() as usize);
+                    return Some((output, remaining));
+                }
+                return None;
+            }
+        }
+    }
 }
 
 fn decompress_gzip(compressed: &[u8]) -> Result<Vec<u8>, std::io::Error> {

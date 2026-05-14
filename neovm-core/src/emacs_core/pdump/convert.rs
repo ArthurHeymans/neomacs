@@ -252,6 +252,9 @@ impl DumpEncoder {
                 // Signal an error so callers know this case is unimplemented.
                 panic!("pdump: symbol-with-pos is not yet supported in portable dumps")
             }
+            ValueKind::Veclike(VecLikeType::Sqlite) => {
+                panic!("pdump: sqlite objects are not portable")
+            }
             ValueKind::Unbound => DumpValue::Unbound,
             ValueKind::Unknown => DumpValue::Nil,
         }

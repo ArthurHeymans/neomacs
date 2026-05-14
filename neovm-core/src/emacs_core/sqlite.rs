@@ -2,15 +2,16 @@
 //!
 //! Provides the full sqlite Elisp API surface using rusqlite as the backend.
 //! Handle tracking uses thread-local storage to map integer IDs to rusqlite
-//! Connection objects. For 'set mode queries, we materialize all rows eagerly
-//! and store them for incremental iteration — this gives the same Elisp
-//! observable behavior as GNU's prepared-statement approach.
+//! Connection objects. For 'set mode queries, live prepared statements are
+//! kept in `RESULT_SETS`, mirroring GNU's PVEC_SQLITE statement objects.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ffi::CString;
+use std::ptr;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags, ffi};
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -27,15 +28,40 @@ thread_local! {
     /// Open database connections: handle_id -> Connection.
     static DB_HANDLES: RefCell<HashMap<i64, Connection>> = RefCell::new(HashMap::new());
 
-    /// Result sets for 'set mode: stmt_handle_id -> ResultSet.
+    /// Live result sets for 'set mode: stmt_handle_id -> sqlite3_stmt.
     static RESULT_SETS: RefCell<HashMap<i64, ResultSet>> = RefCell::new(HashMap::new());
 }
 
-/// A materialized result set for incremental iteration.
+/// A live SQLite result set for incremental iteration.
 struct ResultSet {
-    columns: Vec<String>,
-    rows: Vec<Vec<Value>>,
-    cursor: usize,
+    db_id: i64,
+    stmt: *mut ffi::sqlite3_stmt,
+    eof: bool,
+}
+
+impl Drop for ResultSet {
+    fn drop(&mut self) {
+        if !self.stmt.is_null() {
+            unsafe {
+                ffi::sqlite3_finalize(self.stmt);
+            }
+            self.stmt = ptr::null_mut();
+        }
+    }
+}
+
+impl Drop for crate::tagged::header::SqliteObj {
+    fn drop(&mut self) {
+        if self.is_statement {
+            RESULT_SETS.with(|h| {
+                h.borrow_mut().remove(&self.id);
+            });
+        } else {
+            DB_HANDLES.with(|h| {
+                h.borrow_mut().remove(&self.id);
+            });
+        }
+    }
 }
 
 /// Reset all thread-local state (called between test runs).
@@ -49,42 +75,16 @@ pub(super) fn reset_sqlite_thread_locals() {
 // Handle helpers
 // ---------------------------------------------------------------------------
 
-/// Extract a DB handle ID from a sqlite Elisp value.
+/// Extract a DB handle ID from an opaque sqlite Elisp value.
 fn sqlite_db_handle_id(value: &Value) -> Option<i64> {
-    let items = value.as_vector_data()?;
-    if items.len() != 2 {
-        return None;
-    }
-    match (items[0].kind(), items[1].kind()) {
-        (ValueKind::Symbol(tag), ValueKind::Fixnum(id))
-            if matches!(
-                crate::emacs_core::intern::resolve_sym(tag),
-                "sqlite-handle" | ":sqlite-handle"
-            ) =>
-        {
-            Some(id)
-        }
-        _ => None,
-    }
+    let obj = value.as_sqlite()?;
+    (!obj.is_statement).then_some(obj.id)
 }
 
-/// Extract a statement handle ID from a sqlite Elisp value.
+/// Extract a statement handle ID from an opaque sqlite Elisp value.
 fn sqlite_stmt_handle_id(value: &Value) -> Option<i64> {
-    let items = value.as_vector_data()?;
-    if items.len() != 2 {
-        return None;
-    }
-    match (items[0].kind(), items[1].kind()) {
-        (ValueKind::Symbol(tag), ValueKind::Fixnum(id))
-            if matches!(
-                crate::emacs_core::intern::resolve_sym(tag),
-                "sqlite-statement" | ":sqlite-statement"
-            ) =>
-        {
-            Some(id)
-        }
-        _ => None,
-    }
+    let obj = value.as_sqlite()?;
+    obj.is_statement.then_some(obj.id)
 }
 
 /// Check if a DB handle ID refers to an open connection.
@@ -135,11 +135,11 @@ fn expect_stmt(value: &Value) -> Result<i64, Flow> {
 }
 
 fn make_db_handle(id: i64) -> Value {
-    Value::vector(vec![Value::keyword("sqlite-handle"), Value::fixnum(id)])
+    Value::make_sqlite(false, id)
 }
 
 fn make_stmt_handle(id: i64) -> Value {
-    Value::vector(vec![Value::keyword("sqlite-statement"), Value::fixnum(id)])
+    Value::make_sqlite(true, id)
 }
 
 fn alloc_handle_id() -> i64 {
@@ -163,6 +163,17 @@ fn expect_strict_string(v: &Value) -> Result<String, Flow> {
             vec![Value::symbol("stringp"), *v],
         )),
     }
+}
+
+fn expect_sql_cstring(v: &Value) -> Result<CString, Flow> {
+    let s = v
+        .as_lisp_string()
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *v]))?;
+    CString::new(s.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))
+}
+
+fn value_is_false_symbol(v: &Value) -> bool {
+    matches!(v.kind(), ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "false")
 }
 
 // ---------------------------------------------------------------------------
@@ -201,9 +212,19 @@ fn bind_elisp_value(
         ValueKind::T => stmt
             .raw_bind_parameter(idx, 1i64)
             .map_err(|e| sqlite_err(&e.to_string())),
+        ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "false" => stmt
+            .raw_bind_parameter(idx, 0i64)
+            .map_err(|e| sqlite_err(&e.to_string())),
         ValueKind::Fixnum(n) => stmt
             .raw_bind_parameter(idx, n)
             .map_err(|e| sqlite_err(&e.to_string())),
+        ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => {
+            let Some(n) = val.as_bignum().and_then(|n| n.to_i64()) else {
+                return Err(sqlite_err("bignum value out of range"));
+            };
+            stmt.raw_bind_parameter(idx, n)
+                .map_err(|e| sqlite_err(&e.to_string()))
+        }
         ValueKind::Float => {
             let f = val.xfloat();
             stmt.raw_bind_parameter(idx, f)
@@ -211,14 +232,189 @@ fn bind_elisp_value(
         }
         ValueKind::String => {
             let s = val.as_lisp_string().unwrap();
-            stmt.raw_bind_parameter(idx, s.as_utf8_str().unwrap_or(""))
-                .map_err(|e| sqlite_err(&e.to_string()))
+            let coding_system =
+                get_string_text_properties_table_for_value(*val).and_then(|table| {
+                    table
+                        .get_property(0, Value::symbol("coding-system"))
+                        .copied()
+                });
+            let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
+            if blob {
+                if s.is_multibyte() {
+                    return Err(sqlite_err("BLOB values must be unibyte"));
+                }
+                stmt.raw_bind_parameter(idx, s.as_bytes())
+                    .map_err(|e| sqlite_err(&e.to_string()))
+            } else {
+                let text = s
+                    .as_utf8_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| String::from_utf8_lossy(s.as_bytes()).into_owned());
+                stmt.raw_bind_parameter(idx, text)
+                    .map_err(|e| sqlite_err(&e.to_string()))
+            }
         }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::string("Invalid SQLite value type"), *val],
         )),
     }
+}
+
+unsafe fn sqlite_errmsg_for_db(db: *mut ffi::sqlite3) -> String {
+    if db.is_null() {
+        return "sqlite error".to_string();
+    }
+    let msg = unsafe { ffi::sqlite3_errmsg(db) };
+    if msg.is_null() {
+        "sqlite error".to_string()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(msg) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+unsafe fn sqlite_errstr(code: i32) -> String {
+    let msg = unsafe { ffi::sqlite3_errstr(code) };
+    if msg.is_null() {
+        format!("sqlite error {code}")
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(msg) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+unsafe fn bind_raw_value(
+    db: *mut ffi::sqlite3,
+    stmt: *mut ffi::sqlite3_stmt,
+    idx: i32,
+    val: &Value,
+) -> Result<(), Flow> {
+    let ret = match val.kind() {
+        ValueKind::Nil => unsafe { ffi::sqlite3_bind_null(stmt, idx) },
+        ValueKind::T => unsafe { ffi::sqlite3_bind_int(stmt, idx, 1) },
+        ValueKind::Symbol(_) if value_is_false_symbol(val) => unsafe {
+            ffi::sqlite3_bind_int(stmt, idx, 0)
+        },
+        ValueKind::Fixnum(n) => unsafe { ffi::sqlite3_bind_int64(stmt, idx, n) },
+        ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => {
+            let Some(n) = val.as_bignum().and_then(|n| n.to_i64()) else {
+                return Err(sqlite_err("bignum value out of range"));
+            };
+            unsafe { ffi::sqlite3_bind_int64(stmt, idx, n) }
+        }
+        ValueKind::Float => unsafe { ffi::sqlite3_bind_double(stmt, idx, val.xfloat()) },
+        ValueKind::String => {
+            let s = val.as_lisp_string().unwrap();
+            let coding_system =
+                get_string_text_properties_table_for_value(*val).and_then(|table| {
+                    table
+                        .get_property(0, Value::symbol("coding-system"))
+                        .copied()
+                });
+            let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
+            if blob {
+                if s.is_multibyte() {
+                    return Err(sqlite_err("BLOB values must be unibyte"));
+                }
+                unsafe {
+                    ffi::sqlite3_bind_blob(
+                        stmt,
+                        idx,
+                        s.as_bytes().as_ptr().cast(),
+                        s.sbytes() as i32,
+                        ffi::SQLITE_TRANSIENT(),
+                    )
+                }
+            } else {
+                unsafe {
+                    ffi::sqlite3_bind_text(
+                        stmt,
+                        idx,
+                        s.as_bytes().as_ptr().cast(),
+                        s.sbytes() as i32,
+                        ffi::SQLITE_TRANSIENT(),
+                    )
+                }
+            }
+        }
+        _ => return Err(sqlite_err("invalid argument")),
+    };
+    if ret == ffi::SQLITE_OK {
+        Ok(())
+    } else {
+        Err(sqlite_err(&unsafe { sqlite_errmsg_for_db(db) }))
+    }
+}
+
+unsafe fn bind_raw_values(
+    db: *mut ffi::sqlite3,
+    stmt: *mut ffi::sqlite3_stmt,
+    values: &Value,
+) -> Result<(), Flow> {
+    if values.is_nil() {
+        return Ok(());
+    }
+    let items: Vec<Value> = match values.kind() {
+        ValueKind::Cons => super::value::list_to_vec(values)
+            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *values]))?,
+        ValueKind::Veclike(crate::tagged::header::VecLikeType::Vector) => {
+            values.as_vector_data().unwrap().to_vec()
+        }
+        _ => {
+            return Err(signal(
+                "sqlite-error",
+                vec![Value::string("VALUES must be a list or a vector")],
+            ));
+        }
+    };
+    unsafe {
+        ffi::sqlite3_reset(stmt);
+    }
+    for (i, val) in items.iter().enumerate() {
+        unsafe { bind_raw_value(db, stmt, i as i32 + 1, val)? };
+    }
+    Ok(())
+}
+
+unsafe fn raw_row_to_value(stmt: *mut ffi::sqlite3_stmt) -> Value {
+    let len = unsafe { ffi::sqlite3_column_count(stmt) };
+    let mut row = Vec::with_capacity(len as usize);
+    for col in 0..len {
+        let v = match unsafe { ffi::sqlite3_column_type(stmt, col) } {
+            ffi::SQLITE_INTEGER => Value::make_int(unsafe { ffi::sqlite3_column_int64(stmt, col) }),
+            ffi::SQLITE_FLOAT => {
+                Value::make_float(unsafe { ffi::sqlite3_column_double(stmt, col) })
+            }
+            ffi::SQLITE_BLOB => {
+                let len = unsafe { ffi::sqlite3_column_bytes(stmt, col) };
+                let ptr = unsafe { ffi::sqlite3_column_blob(stmt, col) };
+                let bytes = if ptr.is_null() || len <= 0 {
+                    Vec::new()
+                } else {
+                    unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), len as usize) }.to_vec()
+                };
+                Value::heap_string(LispString::from_unibyte(bytes))
+            }
+            ffi::SQLITE_TEXT => {
+                let len = unsafe { ffi::sqlite3_column_bytes(stmt, col) };
+                let ptr = unsafe { ffi::sqlite3_column_text(stmt, col) };
+                let bytes = if ptr.is_null() || len <= 0 {
+                    Vec::new()
+                } else {
+                    unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), len as usize) }.to_vec()
+                };
+                let text = String::from_utf8_lossy(&bytes);
+                Value::multibyte_string(text.into_owned())
+            }
+            ffi::SQLITE_NULL => Value::NIL,
+            _ => Value::NIL,
+        };
+        row.push(v);
+    }
+    Value::list(row)
 }
 
 /// Bind a list or vector of values to statement parameters.
@@ -296,24 +492,32 @@ pub(crate) fn builtin_sqlite_version(args: Vec<Value>) -> EvalResult {
 /// (sqlitep OBJECT) → t or nil
 pub(crate) fn builtin_sqlitep(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlitep", &args, 1)?;
-    Ok(Value::bool_val(
-        sqlite_db_handle_id(&args[0]).is_some() || sqlite_stmt_handle_id(&args[0]).is_some(),
-    ))
+    Ok(Value::bool_val(args[0].is_sqlite()))
 }
 
-/// (sqlite-open &optional FILE) → db-handle
+/// (sqlite-open &optional FILE READONLY DISABLE-URI) → db-handle
 pub(crate) fn builtin_sqlite_open(args: Vec<Value>) -> EvalResult {
-    super::builtins::expect_range_args("sqlite-open", &args, 0, 1)?;
+    super::builtins::expect_range_args("sqlite-open", &args, 0, 3)?;
 
     let file = args
         .first()
         .and_then(|v| if v.is_nil() { None } else { Some(v) });
+    let readonly = args.get(1).is_none_or(|v| v.is_truthy());
+    let disable_uri = args.get(2).is_some_and(|v| v.is_truthy());
 
     let conn = match file {
         None => Connection::open_in_memory().map_err(check_rusqlite)?,
         Some(v) => {
             let path = expect_strict_string(v)?;
-            Connection::open(&path).map_err(check_rusqlite)?
+            let mut flags = if readonly {
+                OpenFlags::SQLITE_OPEN_READ_ONLY
+            } else {
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
+            };
+            if !disable_uri {
+                flags |= OpenFlags::SQLITE_OPEN_URI;
+            }
+            Connection::open_with_flags(&path, flags).map_err(check_rusqlite)?
         }
     };
 
@@ -325,12 +529,7 @@ pub(crate) fn builtin_sqlite_open(args: Vec<Value>) -> EvalResult {
 /// (sqlite-close DB) → t
 pub(crate) fn builtin_sqlite_close(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlite-close", &args, 1)?;
-    let id = sqlite_db_handle_id(&args[0]).ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("sqlitep"), args[0]],
-        )
-    })?;
+    let id = expect_db(&args[0])?;
     DB_HANDLES.with(|h| h.borrow_mut().remove(&id));
     Ok(Value::T)
 }
@@ -341,13 +540,6 @@ pub(crate) fn builtin_sqlite_execute(args: Vec<Value>) -> EvalResult {
     let id = expect_db(&args[0])?;
     let sql = expect_strict_string(&args[1])?;
     let values = args.get(2).copied().unwrap_or(Value::NIL);
-
-    if sql.contains("insert into sqlite_schema") || sql.contains("INSERT INTO sqlite_schema") {
-        return Err(signal(
-            "sqlite-error",
-            vec![Value::string("table sqlite_master may not be modified")],
-        ));
-    }
 
     let result = DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
@@ -408,33 +600,42 @@ pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
     };
 
     if is_set {
-        // Materialize all rows and store as a result set.
-        let (columns, rows) = DB_HANDLES.with(|h| {
+        // Keep a live SQLite statement and step it incrementally, like GNU.
+        let stmt = DB_HANDLES.with(|h| {
             let mut handles = h.borrow_mut();
             let conn = handles
                 .get_mut(&id)
                 .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
 
-            let mut stmt = conn.prepare(&sql).map_err(check_rusqlite)?;
-            bind_values(&mut stmt, &values)?;
-
-            let num_cols = stmt.column_count();
-            let columns: Vec<String> = (0..num_cols)
-                .map(|i| stmt.column_name(i).unwrap_or("?").to_string())
-                .collect();
-
-            let mut query_rows = stmt.query([]).map_err(check_rusqlite)?;
-            let mut materialized: Vec<Vec<Value>> = Vec::new();
-            while let Some(row) = query_rows.next().map_err(check_rusqlite)? {
-                let mut row_vals: Vec<Value> = Vec::new();
-                for col_idx in 0..num_cols {
-                    let val: rusqlite::types::Value = row.get(col_idx).map_err(check_rusqlite)?;
-                    row_vals.push(sqlite_value_to_elisp(rusqlite::types::ValueRef::from(&val)));
+            let sql_c =
+                CString::new(sql.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))?;
+            let mut stmt = ptr::null_mut();
+            let db = unsafe { conn.handle() };
+            let ret = unsafe {
+                ffi::sqlite3_prepare_v2(
+                    db,
+                    sql_c.as_ptr(),
+                    sql.len() as i32,
+                    &mut stmt,
+                    ptr::null_mut(),
+                )
+            };
+            if ret != ffi::SQLITE_OK {
+                if !stmt.is_null() {
+                    unsafe {
+                        ffi::sqlite3_finalize(stmt);
+                    }
                 }
-                materialized.push(row_vals);
+                let msg = unsafe { sqlite_errmsg_for_db(db) };
+                return Err(sqlite_err(&msg));
             }
-
-            Ok::<(Vec<String>, Vec<Vec<Value>>), Flow>((columns, materialized))
+            if let Err(err) = unsafe { bind_raw_values(db, stmt, &values) } {
+                unsafe {
+                    ffi::sqlite3_finalize(stmt);
+                }
+                return Err(err);
+            }
+            Ok::<*mut ffi::sqlite3_stmt, Flow>(stmt)
         })?;
 
         let stmt_id = alloc_handle_id();
@@ -442,9 +643,9 @@ pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
             h.borrow_mut().insert(
                 stmt_id,
                 ResultSet {
-                    columns,
-                    rows,
-                    cursor: 0,
+                    db_id: id,
+                    stmt,
+                    eof: false,
                 },
             )
         });
@@ -504,12 +705,23 @@ pub(crate) fn builtin_sqlite_next(args: Vec<Value>) -> EvalResult {
         let rs = handles
             .get_mut(&id)
             .ok_or_else(|| signal("sqlite-error", vec![Value::string("Statement closed")]))?;
-        if rs.cursor < rs.rows.len() {
-            let row = Value::list(rs.rows[rs.cursor].clone());
-            rs.cursor += 1;
-            Ok(row)
-        } else {
+        if rs.eof {
+            return Ok(Value::NIL);
+        }
+        let ret = unsafe { ffi::sqlite3_step(rs.stmt) };
+        if ret == ffi::SQLITE_ROW {
+            Ok(unsafe { raw_row_to_value(rs.stmt) })
+        } else if ret == ffi::SQLITE_DONE {
+            rs.eof = true;
             Ok(Value::NIL)
+        } else {
+            let msg = DB_HANDLES.with(|dbs| {
+                dbs.borrow()
+                    .get(&rs.db_id)
+                    .map(|conn| unsafe { sqlite_errmsg_for_db(conn.handle()) })
+                    .unwrap_or_else(|| "sqlite error".to_string())
+            });
+            Err(sqlite_err(&msg))
         }
     })
 }
@@ -518,11 +730,7 @@ pub(crate) fn builtin_sqlite_next(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_sqlite_more_p(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlite-more-p", &args, 1)?;
     let id = expect_stmt(&args[0])?;
-    let has_more = RESULT_SETS.with(|h| {
-        h.borrow()
-            .get(&id)
-            .is_some_and(|rs| rs.cursor < rs.rows.len())
-    });
+    let has_more = RESULT_SETS.with(|h| h.borrow().get(&id).is_some_and(|rs| !rs.eof));
     Ok(Value::bool_val(has_more))
 }
 
@@ -536,18 +744,29 @@ pub(crate) fn builtin_sqlite_columns(args: Vec<Value>) -> EvalResult {
         let rs = handles
             .get(&id)
             .ok_or_else(|| signal("sqlite-error", vec![Value::string("Statement closed")]))?;
-        Ok(Value::list(
-            rs.columns.iter().map(|s| Value::string(s)).collect(),
-        ))
+        let count = unsafe { ffi::sqlite3_column_count(rs.stmt) };
+        let mut columns = Vec::with_capacity(count as usize);
+        for i in 0..count {
+            let name = unsafe { ffi::sqlite3_column_name(rs.stmt, i) };
+            let text = if name.is_null() {
+                "?".to_string()
+            } else {
+                unsafe { std::ffi::CStr::from_ptr(name) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            columns.push(Value::string(text));
+        }
+        Ok(Value::list(columns))
     })
 }
 
-/// (sqlite-finalize SET) → nil
+/// (sqlite-finalize SET) → t
 pub(crate) fn builtin_sqlite_finalize(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlite-finalize", &args, 1)?;
     let id = expect_stmt(&args[0])?;
     RESULT_SETS.with(|h| h.borrow_mut().remove(&id));
-    Ok(Value::NIL)
+    Ok(Value::T)
 }
 
 /// (sqlite-execute-batch DB STATEMENTS) → t or nil
@@ -593,7 +812,7 @@ pub(crate) fn builtin_sqlite_commit(args: Vec<Value>) -> EvalResult {
             .get_mut(&id)
             .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
         conn.execute_batch("commit").map_err(check_rusqlite)?;
-        Ok(Value::NIL)
+        Ok(Value::T)
     })
 }
 
@@ -607,7 +826,7 @@ pub(crate) fn builtin_sqlite_rollback(args: Vec<Value>) -> EvalResult {
             .get_mut(&id)
             .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
         conn.execute_batch("rollback").map_err(check_rusqlite)?;
-        Ok(Value::NIL)
+        Ok(Value::T)
     })
 }
 
@@ -630,9 +849,12 @@ pub(crate) fn builtin_sqlite_pragma(args: Vec<Value>) -> EvalResult {
 /// (sqlite-load-extension DB MODULE) → t
 ///
 /// GNU semantics: load a SQLite extension, restricted to an allowlist.
-pub(crate) fn builtin_sqlite_load_extension(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_sqlite_load_extension(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::builtins::expect_args("sqlite-load-extension", &args, 2)?;
-    let _id = expect_db(&args[0])?;
+    let id = expect_db(&args[0])?;
     let module = expect_strict_string(&args[1])?;
 
     // GNU's allowlist of allowed extension names.
@@ -658,22 +880,71 @@ pub(crate) fn builtin_sqlite_load_extension(args: Vec<Value>) -> EvalResult {
         "zipfile",
     ];
 
-    let module_name = module.strip_prefix("libsqlite3_mod_").unwrap_or(&module);
-
-    let base_name = module_name.trim_end_matches(|c: char| !c.is_alphanumeric());
-    if !ALLOWED_EXTENSIONS.contains(&base_name) {
+    let file_name = std::path::Path::new(&module)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(module.as_str());
+    let module_name = file_name
+        .strip_prefix("libsqlite3_mod_")
+        .unwrap_or(file_name);
+    let allowed = ALLOWED_EXTENSIONS.iter().any(|allow| {
+        let Some(suffix) = module_name.strip_prefix(allow) else {
+            return false;
+        };
+        !suffix.is_empty()
+            && (suffix == ".so" || suffix == ".dylib" || suffix.eq_ignore_ascii_case(".dll"))
+    });
+    if !allowed {
         return Err(signal(
             "sqlite-error",
             vec![Value::string("Module name not on allowlist")],
         ));
     }
 
-    // Extension loading requires the "load_extension" feature on rusqlite,
-    // which is not enabled by default. Signal a clear error for now.
-    Err(signal(
-        "sqlite-error",
-        vec![Value::string(format!(
-            "load-extension not available (module: {module})"
-        ))],
-    ))
+    let expanded = super::fileio::builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
+    let expanded = expanded.as_runtime_string_owned().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), expanded],
+        )
+    })?;
+    let Ok(ext_fn) = CString::new(expanded) else {
+        return Ok(Value::NIL);
+    };
+
+    let loaded = DB_HANDLES.with(|handles| -> Result<bool, Flow> {
+        let handles = handles.borrow();
+        let conn = handles
+            .get(&id)
+            .ok_or_else(|| sqlite_err("Database closed"))?;
+        let sdb = unsafe { conn.handle() };
+        let enable = unsafe {
+            ffi::sqlite3_db_config(
+                sdb,
+                ffi::SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,
+                1,
+                ptr::null_mut::<std::ffi::c_int>(),
+            )
+        };
+        if enable != ffi::SQLITE_OK {
+            return Ok(false);
+        }
+        let mut err_msg: *mut std::os::raw::c_char = ptr::null_mut();
+        let result =
+            unsafe { ffi::sqlite3_load_extension(sdb, ext_fn.as_ptr(), ptr::null(), &mut err_msg) };
+        unsafe {
+            ffi::sqlite3_db_config(
+                sdb,
+                ffi::SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,
+                0,
+                ptr::null_mut::<std::ffi::c_int>(),
+            );
+        }
+        if !err_msg.is_null() {
+            unsafe { ffi::sqlite3_free(err_msg.cast()) };
+        }
+        Ok(result == ffi::SQLITE_OK)
+    })?;
+
+    Ok(Value::bool_val(loaded))
 }

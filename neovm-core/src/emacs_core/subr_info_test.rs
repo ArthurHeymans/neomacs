@@ -863,7 +863,7 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("sqlite-load-extension", 2, Some(2));
     assert_subr_arity("sqlite-more-p", 1, Some(1));
     assert_subr_arity("sqlite-next", 1, Some(1));
-    assert_subr_arity("sqlite-open", 0, Some(1));
+    assert_subr_arity("sqlite-open", 0, Some(3));
     assert_subr_arity("sqlite-pragma", 2, Some(2));
     assert_subr_arity("sqlite-rollback", 1, Some(1));
     assert_subr_arity("sqlite-select", 2, Some(4));
