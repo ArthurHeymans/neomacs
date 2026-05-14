@@ -9812,6 +9812,27 @@ impl Context {
         });
     }
 
+    pub(crate) fn push_backtrace_frame_from_bc_stack(
+        &mut self,
+        function: Value,
+        args_start: usize,
+        nargs: usize,
+    ) {
+        let args = match nargs {
+            0 => BacktraceArgs::Evaluated0,
+            1 => BacktraceArgs::Evaluated1(self.bc_buf[args_start]),
+            2 => BacktraceArgs::Evaluated2(self.bc_buf[args_start], self.bc_buf[args_start + 1]),
+            _ => BacktraceArgs::Evaluated(self.store_backtrace_args(LispArgVec::from_slice(
+                &self.bc_buf[args_start..args_start + nargs],
+            ))),
+        };
+        self.specpdl.push(SpecBinding::Backtrace {
+            function,
+            args,
+            debug_on_exit: false,
+        });
+    }
+
     /// Push a backtrace frame for a special-form call (`nargs == UNEVALLED`
     /// in GNU eval.c:2585). `original_args` is the cons list of un-evaluated
     /// argument forms — XCDR of the original form. The walker emits

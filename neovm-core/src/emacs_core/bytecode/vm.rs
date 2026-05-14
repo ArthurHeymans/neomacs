@@ -20,7 +20,7 @@ use crate::emacs_core::intern::{SymId, intern, intern_uninterned, lookup_interne
 use crate::emacs_core::regex::MatchData;
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
 use crate::emacs_core::value::*;
-use crate::tagged::header::SubrDispatchKind;
+use crate::tagged::header::{SubrDispatchKind, SubrFn};
 use crate::window::{FrameId, FrameManager, Window};
 
 /// Local marker for catch/condition-case frames mirrored into the shared
@@ -3601,8 +3601,8 @@ impl<'a> Vm<'a> {
     ) -> Option<EvalResult> {
         let (sym_id, entry, callee) = self.fixed_subr_call_target(func_val)?;
         let bt_count = self.ctx.specpdl.len();
-        let args = LispArgVec::from_slice(&self.ctx.bc_buf[args_start..args_start + nargs]);
-        self.ctx.push_backtrace_frame_owned(func_val, args);
+        self.ctx
+            .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
         let result = if nargs < entry.min_args as usize
             || entry.max_args.is_some_and(|max| nargs > max as usize)
         {
@@ -3611,12 +3611,85 @@ impl<'a> Vm<'a> {
                 vec![callee, Value::fixnum(nargs as i64)],
             ))
         } else {
-            self.ctx
-                .dispatch_subr_entry_from_backtrace_unchecked(entry, bt_count)
+            self.dispatch_fixed_subr_from_stack_args_unchecked(entry.function?, args_start)
                 .unwrap_or_else(|| Err(signal("void-function", vec![Value::from_sym_id(sym_id)])))
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         Some(self.ctx.unbind_to_with_result(bt_count, result))
+    }
+
+    fn dispatch_fixed_subr_from_stack_args_unchecked(
+        &mut self,
+        func: SubrFn,
+        args_start: usize,
+    ) -> Option<EvalResult> {
+        let args = &self.ctx.bc_buf;
+        match func {
+            SubrFn::A0(func) => Some(func(self.ctx)),
+            SubrFn::A1(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0))
+            }
+            SubrFn::A2(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1))
+            }
+            SubrFn::A3(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1, arg2))
+            }
+            SubrFn::A4(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1, arg2, arg3))
+            }
+            SubrFn::A5(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4))
+            }
+            SubrFn::A6(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
+                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5))
+            }
+            SubrFn::A7(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
+                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
+                let arg6 = args.get(args_start + 6).copied().unwrap_or(Value::NIL);
+                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6))
+            }
+            SubrFn::A8(func) => {
+                let arg0 = args.get(args_start).copied().unwrap_or(Value::NIL);
+                let arg1 = args.get(args_start + 1).copied().unwrap_or(Value::NIL);
+                let arg2 = args.get(args_start + 2).copied().unwrap_or(Value::NIL);
+                let arg3 = args.get(args_start + 3).copied().unwrap_or(Value::NIL);
+                let arg4 = args.get(args_start + 4).copied().unwrap_or(Value::NIL);
+                let arg5 = args.get(args_start + 5).copied().unwrap_or(Value::NIL);
+                let arg6 = args.get(args_start + 6).copied().unwrap_or(Value::NIL);
+                let arg7 = args.get(args_start + 7).copied().unwrap_or(Value::NIL);
+                Some(func(
+                    self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+                ))
+            }
+            SubrFn::Many(_) | SubrFn::ManySlice(_) => None,
+        }
     }
 
     fn fixed_subr_call_target(&self, func_val: Value) -> Option<(SymId, SubrEntry, Value)> {
