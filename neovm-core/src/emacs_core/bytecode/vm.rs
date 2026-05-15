@@ -1,6 +1,7 @@
 //! Bytecode virtual machine — stack-based interpreter.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 
 use smallvec::SmallVec;
 
@@ -51,6 +52,30 @@ impl DirectSubrCallee {
             Self::Value(value) => value,
         }
     }
+}
+
+#[inline]
+fn plus_sym_id() -> SymId {
+    static PLUS: OnceLock<SymId> = OnceLock::new();
+    *PLUS.get_or_init(|| intern("+"))
+}
+
+#[inline]
+fn logand_sym_id() -> SymId {
+    static LOGAND: OnceLock<SymId> = OnceLock::new();
+    *LOGAND.get_or_init(|| intern("logand"))
+}
+
+#[inline]
+fn logior_sym_id() -> SymId {
+    static LOGIOR: OnceLock<SymId> = OnceLock::new();
+    *LOGIOR.get_or_init(|| intern("logior"))
+}
+
+#[inline]
+fn logxor_sym_id() -> SymId {
+    static LOGXOR: OnceLock<SymId> = OnceLock::new();
+    *LOGXOR.get_or_init(|| intern("logxor"))
 }
 
 /// The bytecode VM execution engine.
@@ -3674,14 +3699,117 @@ impl<'a> Vm<'a> {
                 vec![callee.wrong_arity_value(), Value::fixnum(nargs as i64)],
             ))
         } else {
-            self.dispatch_builtin_subr_from_stack_args_unchecked(entry.function?, args_start, nargs)
-                .unwrap_or_else(|| Err(signal("void-function", vec![Value::from_sym_id(sym_id)])))
+            self.try_dispatch_builtin_subr_fast_from_stack_args(sym_id, args_start, nargs)
+                .unwrap_or_else(|| match entry.function {
+                    Some(function) => self
+                        .dispatch_builtin_subr_from_stack_args_unchecked(
+                            function, args_start, nargs,
+                        )
+                        .unwrap_or_else(|| {
+                            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+                        }),
+                    None => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+                })
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         Some(
             self.ctx
                 .pop_bytecode_backtrace_frame_with_result(bt_count, result),
         )
+    }
+
+    #[inline]
+    fn try_dispatch_builtin_subr_fast_from_stack_args(
+        &self,
+        sym_id: SymId,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        if sym_id == plus_sym_id() {
+            return self.try_fast_fixnum_add_from_stack_args(args_start, nargs);
+        }
+        if sym_id == logand_sym_id() {
+            return self.try_fast_fixnum_logand_from_stack_args(args_start, nargs);
+        }
+        if sym_id == logior_sym_id() {
+            return self.try_fast_fixnum_logior_from_stack_args(args_start, nargs);
+        }
+        if sym_id == logxor_sym_id() {
+            return self.try_fast_fixnum_logxor_from_stack_args(args_start, nargs);
+        }
+        None
+    }
+
+    #[inline]
+    fn try_fast_fixnum_add_from_stack_args(
+        &self,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        let args = &self.ctx.bc_buf;
+        let mut acc = 0i64;
+        for idx in 0..nargs {
+            let next = unsafe { args.get_unchecked(args_start + idx) }.as_fixnum()?;
+            acc = acc.checked_add(next)?;
+        }
+        Some(Ok(Value::make_int(acc)))
+    }
+
+    #[inline]
+    fn try_fast_fixnum_logand_from_stack_args(
+        &self,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        let args = &self.ctx.bc_buf;
+        let mut acc = if nargs == 0 {
+            -1
+        } else {
+            unsafe { args.get_unchecked(args_start) }.as_fixnum()?
+        };
+        for idx in 1..nargs {
+            let next = unsafe { args.get_unchecked(args_start + idx) }.as_fixnum()?;
+            acc &= next;
+        }
+        Some(Ok(Value::make_int(acc)))
+    }
+
+    #[inline]
+    fn try_fast_fixnum_logior_from_stack_args(
+        &self,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        let args = &self.ctx.bc_buf;
+        let mut acc = if nargs == 0 {
+            0
+        } else {
+            unsafe { args.get_unchecked(args_start) }.as_fixnum()?
+        };
+        for idx in 1..nargs {
+            let next = unsafe { args.get_unchecked(args_start + idx) }.as_fixnum()?;
+            acc |= next;
+        }
+        Some(Ok(Value::make_int(acc)))
+    }
+
+    #[inline]
+    fn try_fast_fixnum_logxor_from_stack_args(
+        &self,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        let args = &self.ctx.bc_buf;
+        let mut acc = if nargs == 0 {
+            0
+        } else {
+            unsafe { args.get_unchecked(args_start) }.as_fixnum()?
+        };
+        for idx in 1..nargs {
+            let next = unsafe { args.get_unchecked(args_start + idx) }.as_fixnum()?;
+            acc ^= next;
+        }
+        Some(Ok(Value::make_int(acc)))
     }
 
     fn dispatch_builtin_subr_from_stack_args_unchecked(

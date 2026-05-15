@@ -982,6 +982,50 @@ fn vm_primitive_bytecode_ops_ignore_later_function_cell_overrides() {
 }
 
 #[test]
+fn vm_arithmetic_bcall_fast_path_observes_live_function_cell() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+
+    let mut replacement = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("vm-fast-plus-x"), intern("vm-fast-plus-y")],
+        optional: vec![],
+        rest: None,
+    });
+    let replacement_value_idx = replacement.add_constant(Value::fixnum(99));
+    replacement.ops = vec![Op::Constant(replacement_value_idx), Op::Return];
+    replacement.max_stack = 1;
+
+    let plus = intern("+");
+    eval.obarray
+        .set_symbol_function_id(plus, Value::make_bytecode(replacement));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let plus_idx = caller.add_constant(Value::from_sym_id(plus));
+    let lhs_idx = caller.add_constant(Value::fixnum(10));
+    let rhs_idx = caller.add_constant(Value::fixnum(20));
+    caller.ops = vec![
+        Op::Constant(plus_idx),
+        Op::Constant(lhs_idx),
+        Op::Constant(rhs_idx),
+        Op::Call(2),
+        Op::Return,
+    ];
+    caller.max_stack = 3;
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![])
+            .expect("Bcall must call the live function cell")
+    };
+
+    assert_eq!(result, Value::fixnum(99));
+}
+
+#[test]
 fn vm_compiled_maphash_closure_mutates_captured_accumulator_like_face_list() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
