@@ -1057,6 +1057,8 @@ mod skip_syntax_advanced;
 mod sort;
 #[path = "sort-algorithms.rs"]
 mod sort_algorithms;
+#[path = "sort-command-semantics.rs"]
+mod sort_command_semantics;
 #[path = "sort-extended.rs"]
 mod sort_extended;
 #[path = "sort-stable-patterns.rs"]
