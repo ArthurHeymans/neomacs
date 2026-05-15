@@ -123,6 +123,29 @@ fn oracle_mapcan_destructive_nconc_semantics() {
 }
 
 #[test]
+fn oracle_mapcan_stops_when_list_shortened_by_callback() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fmapcan maps with mapcar1 before calling nconc, so a
+    // callback that shortens the input list should limit the mapped lists too.
+    let form = r#"
+(let ((seq (list 'a 'b 'c))
+      (seen nil))
+  (list
+   (mapcan (lambda (x)
+             (push x seen)
+             (when (eq x 'a)
+               (setcdr seq nil))
+             (list x x))
+           seq)
+   (nreverse seen)
+   seq))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapping_dotted_and_circular_input_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
