@@ -95,6 +95,8 @@ mod catch_throw_advanced;
 mod catch_throw_comprehensive;
 #[path = "catch-throw-patterns.rs"]
 mod catch_throw_patterns;
+#[path = "change-group-semantics.rs"]
+mod change_group_semantics;
 #[path = "char-after.rs"]
 mod char_after;
 #[path = "char-before-operations.rs"]
