@@ -1234,6 +1234,8 @@ mod upcase_downcase_patterns;
 mod upcase_initials_patterns;
 #[path = "url-parse-semantics.rs"]
 mod url_parse_semantics;
+#[path = "url-util-file-semantics.rs"]
+mod url_util_file_semantics;
 #[path = "url-util-semantics.rs"]
 mod url_util_semantics;
 #[path = "vconcat-advanced.rs"]
