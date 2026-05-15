@@ -1125,6 +1125,8 @@ mod sort_algorithms;
 mod sort_command_semantics;
 #[path = "sort-extended.rs"]
 mod sort_extended;
+#[path = "sort-semantics.rs"]
+mod sort_semantics;
 #[path = "sort-stable-patterns.rs"]
 mod sort_stable_patterns;
 #[path = "special-forms-semantics.rs"]
