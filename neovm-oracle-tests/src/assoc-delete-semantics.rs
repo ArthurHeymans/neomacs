@@ -106,3 +106,21 @@ fn oracle_prop_rassq_delete_all_removes_eq_values() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_rassq_delete_all_improper_alist_mutates_before_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((value (list 'v))
+       (alist (cons (cons 'keep 'other)
+                    (cons (cons 'drop value) 'tail))))
+  (list
+   (condition-case err
+       (rassq-delete-all value alist)
+     (error (list (car err) (cdr err))))
+   alist))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
