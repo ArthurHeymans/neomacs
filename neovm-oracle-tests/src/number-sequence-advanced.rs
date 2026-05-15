@@ -172,6 +172,21 @@ fn oracle_prop_number_sequence_edge_cases() {
     assert_oracle_parity_with_bootstrap("(number-sequence -100 -50 7)");
 }
 
+#[test]
+fn oracle_number_sequence_fixnum_boundary_lengths() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (length (number-sequence (1- most-positive-fixnum) most-positive-fixnum))
+ (length (number-sequence (1+ most-negative-fixnum) most-negative-fixnum -1))
+ (number-sequence most-positive-fixnum most-positive-fixnum 0)
+ (number-sequence most-negative-fixnum most-negative-fixnum 0))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Complex: arithmetic progressions with filtering
 // ---------------------------------------------------------------------------
