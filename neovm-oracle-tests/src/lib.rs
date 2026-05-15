@@ -1318,6 +1318,8 @@ mod url_parse_semantics;
 mod url_util_file_semantics;
 #[path = "url-util-semantics.rs"]
 mod url_util_semantics;
+#[path = "variable-watcher-semantics.rs"]
+mod variable_watcher_semantics;
 #[path = "vconcat-advanced.rs"]
 mod vconcat_advanced;
 #[path = "vconcat-operations.rs"]
