@@ -606,6 +606,8 @@ mod end_of_line;
 mod equality;
 #[path = "equality-advanced.rs"]
 mod equality_advanced;
+#[path = "equality-hash-semantics.rs"]
+mod equality_hash_semantics;
 #[path = "erase-buffer-advanced.rs"]
 mod erase_buffer_advanced;
 #[path = "erase-buffer-patterns.rs"]
