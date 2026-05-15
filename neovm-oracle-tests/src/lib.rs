@@ -517,6 +517,8 @@ mod condition_case_extended;
 mod condition_case_patterns;
 #[path = "condition-case-patterns-advanced.rs"]
 mod condition_case_patterns_advanced;
+#[path = "condition-case-unless-debug-semantics.rs"]
+mod condition_case_unless_debug_semantics;
 #[path = "cons-list-dotted-comprehensive.rs"]
 mod cons_list_dotted_comprehensive;
 #[path = "conversion-format-semantics.rs"]
