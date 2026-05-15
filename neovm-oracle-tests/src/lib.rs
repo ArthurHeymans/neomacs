@@ -836,6 +836,8 @@ mod match_data_advanced;
 mod match_end;
 #[path = "match-string-advanced.rs"]
 mod match_string_advanced;
+#[path = "match-substitute-replacement-semantics.rs"]
+mod match_substitute_replacement_semantics;
 #[path = "matching-paren-advanced.rs"]
 mod matching_paren_advanced;
 #[path = "math-functions.rs"]
