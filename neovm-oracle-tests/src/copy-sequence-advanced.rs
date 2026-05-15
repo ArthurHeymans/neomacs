@@ -38,6 +38,29 @@ fn oracle_prop_copy_sequence_advanced_list_independence() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_copy_sequence_improper_list_tail_error_payload() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fcopy_sequence copies cons cells one by one and then
+    // CHECK_LIST_END reports the offending non-list tail, not the original
+    // dotted list.  This exact payload matters for condition-case consumers.
+    let form = r#"
+(list
+ (condition-case err
+     (copy-sequence '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (copy-sequence '(a . (b . c)))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (copy-sequence 42)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Copy vector: verify independence and element-level mutation isolation
 // ---------------------------------------------------------------------------
