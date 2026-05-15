@@ -117,6 +117,25 @@ fn oracle_prop_delete_list_equal() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_delete_mutates_before_improper_tail_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fdelete uses the same list traversal shape as Fdelq:
+    // it removes equal elements destructively before CHECK_LIST_END validates
+    // the final tail.  A later improper tail therefore preserves earlier
+    // mutation even though the call signals.
+    let form = r#"
+(let ((x (list '(needle) '(remove-me) '(keep))))
+  (setcdr (cdr x) 'tail)
+  (condition-case err
+      (delete '(remove-me) x)
+    (error (list (car err) x))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // delq vs delete (eq vs equal semantics)
 // ---------------------------------------------------------------------------
