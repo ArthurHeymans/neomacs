@@ -1055,7 +1055,11 @@ impl<'a> LoadDecoder<'a> {
                 }
             }
             DumpHeapObject::HashTable(ht) => with_tagged_heap(|heap| {
-                heap.alloc_hash_table(LispHashTable::new_with_options(
+                // GNU pdumper restores the hash table header first and wires
+                // the key/value arrays via relocation.  This placeholder is
+                // only for identity during graph fixups, so avoid allocating
+                // maps that population immediately replaces.
+                heap.alloc_hash_table(LispHashTable::new_unpopulated_with_options(
                     load_hash_table_test(&ht.test),
                     ht.size,
                     ht.weakness.as_ref().map(load_hash_table_weakness),

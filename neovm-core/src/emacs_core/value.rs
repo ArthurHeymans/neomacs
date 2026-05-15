@@ -740,6 +740,30 @@ impl LispHashTable {
         Self::new_with_options(test, 0, None, 1.5, 0.8125)
     }
 
+    pub(crate) fn new_unpopulated_with_options(
+        test: HashTableTest,
+        size: i64,
+        weakness: Option<HashTableWeakness>,
+        rehash_size: f64,
+        rehash_threshold: f64,
+    ) -> Self {
+        Self {
+            test,
+            test_name: None,
+            user_cmp_function: None,
+            user_hash_function: None,
+            size,
+            weakness,
+            rehash_size,
+            rehash_threshold,
+            data: FxHashMap::default(),
+            key_snapshots: FxHashMap::default(),
+            insertion_order: Vec::new(),
+            entry_slots: Vec::new(),
+            free_slots: Vec::new(),
+        }
+    }
+
     pub fn new_with_options(
         test: HashTableTest,
         size: i64,
