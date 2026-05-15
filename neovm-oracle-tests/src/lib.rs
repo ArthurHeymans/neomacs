@@ -1184,6 +1184,8 @@ mod subr_predicates;
 mod subr_x_comprehensive;
 #[path = "subst-char-in-string-comprehensive.rs"]
 mod subst_char_in_string_comprehensive;
+#[path = "subst-char-in-string-semantics.rs"]
+mod subst_char_in_string_semantics;
 mod substring;
 #[path = "substring-advanced.rs"]
 mod substring_advanced;
