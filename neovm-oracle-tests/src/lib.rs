@@ -1363,6 +1363,8 @@ mod vector_operations_comprehensive;
 mod vector_or_char_table_operations;
 #[path = "version-semantics.rs"]
 mod version_semantics;
+#[path = "warning-macro-semantics.rs"]
+mod warning_macro_semantics;
 mod when;
 #[path = "when-unless-comprehensive.rs"]
 mod when_unless_comprehensive;
