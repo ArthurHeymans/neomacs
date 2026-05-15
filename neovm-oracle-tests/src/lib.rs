@@ -664,6 +664,8 @@ mod fset_symbol_function;
 mod funcall;
 #[path = "funcall-apply-comprehensive.rs"]
 mod funcall_apply_comprehensive;
+#[path = "generator-semantics.rs"]
+mod generator_semantics;
 #[path = "generic-function-comprehensive.rs"]
 mod generic_function_comprehensive;
 mod r#get;
