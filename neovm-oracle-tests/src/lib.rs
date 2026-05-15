@@ -480,6 +480,8 @@ mod compare_strings_comprehensive;
 mod comparison;
 #[path = "comparison-advanced.rs"]
 mod comparison_advanced;
+#[path = "completion-basic-semantics.rs"]
+mod completion_basic_semantics;
 #[path = "concat-extended.rs"]
 mod concat_extended;
 #[path = "concat-extended-advanced.rs"]
