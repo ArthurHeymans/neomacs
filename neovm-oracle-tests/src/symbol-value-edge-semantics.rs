@@ -140,3 +140,62 @@ fn oracle_set_default_uses_default_cell_not_current_let_binding() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_default_toplevel_value_ignores_active_let_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-top-default 'global)
+  (list
+   (default-value 'neomacs--oracle-top-default)
+   (default-toplevel-value 'neomacs--oracle-top-default)
+   (let ((neomacs--oracle-top-default 'let-value))
+     (list
+      neomacs--oracle-top-default
+      (default-value 'neomacs--oracle-top-default)
+      (default-toplevel-value 'neomacs--oracle-top-default)
+      (set-default 'neomacs--oracle-top-default 'default-set)
+      neomacs--oracle-top-default
+      (default-value 'neomacs--oracle-top-default)
+      (default-toplevel-value 'neomacs--oracle-top-default)
+      (set-default-toplevel-value 'neomacs--oracle-top-default 'top-set)
+      neomacs--oracle-top-default
+      (default-value 'neomacs--oracle-top-default)
+      (default-toplevel-value 'neomacs--oracle-top-default)))
+   neomacs--oracle-top-default
+   (default-value 'neomacs--oracle-top-default)
+   (default-toplevel-value 'neomacs--oracle-top-default)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_default_toplevel_value_errors_and_constant_protection() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((sym (make-symbol "neomacs--oracle-top-void")))
+  (list
+   (condition-case err
+       (default-toplevel-value sym)
+     (error (list (car err) (cdr err))))
+   (set-default-toplevel-value sym 'now-bound)
+   (default-toplevel-value sym)
+   (default-value sym)
+   (condition-case err
+       (set-default-toplevel-value nil nil)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (set-default-toplevel-value t t)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (set-default-toplevel-value :neomacs-oracle-top-key
+                                   :neomacs-oracle-top-key)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
