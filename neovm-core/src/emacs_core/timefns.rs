@@ -133,6 +133,40 @@ impl TimeMicros {
         TimeMicros { secs, usecs, psecs }
     }
 
+    fn from_ticks_hz(ticks: i64, hz: i64) -> Result<TimeMicros, Flow> {
+        if hz <= 0 {
+            return Err(signal(
+                "error",
+                vec![Value::string("Invalid time specification")],
+            ));
+        }
+
+        let secs = ticks.div_euclid(hz);
+        let rem = ticks.rem_euclid(hz) as i128;
+        let hz = hz as i128;
+        let micros_total = rem * 1_000_000;
+        let usecs = (micros_total / hz) as i64;
+        let psecs = (((micros_total % hz) * 1_000_000) / hz) as i64;
+        Ok(TimeMicros { secs, usecs, psecs })
+    }
+
+    fn to_ticks_hz(&self, hz: i64) -> Value {
+        let ticks = self.secs as i128 * hz as i128
+            + self.usecs as i128 * hz as i128 / 1_000_000
+            + self.psecs as i128 * hz as i128 / 1_000_000_000_000;
+        Value::cons(Value::make_int(ticks as i64), Value::fixnum(hz))
+    }
+
+    fn to_arithmetic_result(&self) -> Value {
+        if self.psecs != 0 {
+            self.to_ticks_hz(1_000_000_000_000)
+        } else if self.usecs != 0 {
+            self.to_ticks_hz(1_000_000)
+        } else {
+            Value::make_int(self.secs)
+        }
+    }
+
     fn less_than(self, other: TimeMicros) -> bool {
         if self.secs != other.secs {
             self.secs < other.secs
@@ -154,9 +188,10 @@ impl TimeMicros {
 ///   - nil            -> current time
 ///   - integer        -> seconds since epoch
 ///   - float          -> seconds since epoch (with fractional part)
+///   - (TICKS . HZ)   -> modern GNU timestamp cons
 ///   - (HIGH LOW)     -> high*65536 + low seconds, 0 usecs
 ///   - (HIGH LOW USEC)       -> with microseconds
-///   - (HIGH LOW USEC PSEC)  -> with microseconds (PSEC ignored)
+///   - (HIGH LOW USEC PSEC)  -> with picoseconds
 fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
     use crate::emacs_core::value::VecLikeType;
     // Bignum seconds-since-epoch values get truncated to i64;
@@ -189,6 +224,21 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
             })
         }
         ValueKind::Cons => {
+            let high = val.cons_car();
+            let low_or_tail = val.cons_cdr();
+            if !low_or_tail.is_cons() {
+                let ticks = high.as_int().ok_or_else(|| {
+                    signal("wrong-type-argument", vec![Value::symbol("integerp"), high])
+                })?;
+                let hz = low_or_tail.as_int().ok_or_else(|| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("integerp"), low_or_tail],
+                    )
+                })?;
+                return TimeMicros::from_ticks_hz(ticks, hz);
+            }
+
             let items = list_to_vec(val)
                 .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *val]))?;
             if items.len() < 2 {
@@ -681,6 +731,29 @@ fn decode_time_second_value(
     }
 }
 
+fn time_convert_default_hz(value: &Value) -> i64 {
+    match value.kind() {
+        ValueKind::Fixnum(_) => 1,
+        ValueKind::Float => 1_000_000,
+        ValueKind::Cons => {
+            let tail = value.cons_cdr();
+            if !tail.is_cons() {
+                return tail.as_int().filter(|hz| *hz > 0).unwrap_or(1);
+            }
+            if let Some(items) = list_to_vec(value) {
+                match items.len() {
+                    0 | 1 | 2 => 1,
+                    3 => 1_000_000,
+                    _ => 1_000_000_000_000,
+                }
+            } else {
+                1
+            }
+        }
+        _ => 1,
+    }
+}
+
 fn require_integer_component(value: &Value) -> Result<i64, Flow> {
     value.as_int().ok_or_else(|| {
         signal(
@@ -723,20 +796,20 @@ pub(crate) fn builtin_float_time(args: Vec<Value>) -> EvalResult {
     Ok(Value::make_float(tm.to_float()))
 }
 
-/// `(time-add A B)` -> `(HIGH LOW USEC PSEC)`
+/// `(time-add A B)` -> integer seconds or `(TICKS . HZ)`
 pub(crate) fn builtin_time_add(args: Vec<Value>) -> EvalResult {
     expect_args("time-add", &args, 2)?;
     let a = parse_time(&args[0])?;
     let b = parse_time(&args[1])?;
-    Ok(a.add(b).to_list())
+    Ok(a.add(b).to_arithmetic_result())
 }
 
-/// `(time-subtract A B)` -> `(HIGH LOW USEC PSEC)`
+/// `(time-subtract A B)` -> integer seconds or `(TICKS . HZ)`
 pub(crate) fn builtin_time_subtract(args: Vec<Value>) -> EvalResult {
     expect_args("time-subtract", &args, 2)?;
     let a = parse_time(&args[0])?;
     let b = parse_time(&args[1])?;
-    Ok(a.sub(b).to_list())
+    Ok(a.sub(b).to_arithmetic_result())
 }
 
 /// `(time-less-p A B)` -> t or nil
@@ -909,11 +982,13 @@ pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
     match form.kind() {
         ValueKind::Nil => Ok(tm.to_list()),
         ValueKind::T => {
-            // Emacs 29+: t means highest resolution → (TICKS . HZ)
-            // Use microsecond resolution: TICKS = secs*1000000 + usecs, HZ = 1000000
-            let hz: i64 = 1_000_000;
-            let ticks = tm.secs * hz + tm.usecs;
-            Ok(Value::cons(Value::fixnum(ticks), Value::fixnum(hz)))
+            // GNU's default timestamp representation is (TICKS . HZ).
+            let hz = time_convert_default_hz(&args[0]);
+            Ok(tm.to_ticks_hz(hz))
+        }
+        ValueKind::Fixnum(hz) if hz > 0 => {
+            // GNU accepts a positive integer FORM as an explicit HZ.
+            Ok(tm.to_ticks_hz(hz))
         }
         ValueKind::Symbol(id) => match resolve_sym(id) {
             "list" => Ok(tm.to_list()),
@@ -921,11 +996,10 @@ pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
             "float" => Ok(Value::make_float(tm.to_float())),
             _ => Ok(tm.to_list()),
         },
-        ValueKind::Fixnum(_) => {
-            // When FORM is an integer, Emacs returns a cons (TICKS . HZ).
-            // We approximate by returning (TICKS . 1) where TICKS = seconds.
-            Ok(Value::cons(Value::fixnum(tm.secs), Value::fixnum(1)))
-        }
+        ValueKind::Fixnum(_) => Err(signal(
+            "error",
+            vec![Value::string("Invalid timestamp resolution")],
+        )),
         _ => Ok(tm.to_list()),
     }
 }

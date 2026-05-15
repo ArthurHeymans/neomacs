@@ -354,10 +354,7 @@ fn builtin_time_add_basic() {
     let a = Value::fixnum(100);
     let b = Value::fixnum(200);
     let result = builtin_time_add(vec![a, b]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    assert_eq!(high * 65536 + low, 300);
+    assert_eq!(result.as_int(), Some(300));
 }
 
 #[test]
@@ -366,10 +363,7 @@ fn builtin_time_subtract_basic() {
     let a = Value::fixnum(300);
     let b = Value::fixnum(100);
     let result = builtin_time_subtract(vec![a, b]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    assert_eq!(high * 65536 + low, 200);
+    assert_eq!(result.as_int(), Some(200));
 }
 
 #[test]
@@ -703,14 +697,14 @@ fn builtin_time_convert_to_float() {
 #[test]
 fn builtin_time_convert_with_t() {
     crate::test_utils::init_test_tracing();
-    // Emacs 29+: (time-convert 42 t) returns (TICKS . HZ) cons
+    // GNU: exact integer seconds preserve one-second resolution.
     let result = builtin_time_convert(vec![Value::fixnum(42), Value::T]).unwrap();
     match result.kind() {
         ValueKind::Cons => {
             let ticks = result.cons_car().as_int().expect("expected int ticks");
             let hz = result.cons_cdr().as_int().expect("expected int hz");
-            assert_eq!(hz, 1_000_000);
-            assert_eq!(ticks, 42_000_000);
+            assert_eq!(hz, 1);
+            assert_eq!(ticks, 42);
         }
         _ => panic!("expected cons, got {:?}", result),
     }
@@ -874,12 +868,8 @@ fn time_add_with_usec_overflow() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_add(vec![a, b]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    let usec = items[2].as_int().unwrap();
-    assert_eq!(high * 65536 + low, 16); // 10 + 5 + 1 carry
-    assert_eq!(usec, 499_000); // 999000 + 500000 - 1000000
+    assert_eq!(result.cons_car().as_int(), Some(16_499_000));
+    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
 }
 
 #[test]
@@ -898,12 +888,8 @@ fn time_subtract_with_usec_borrow() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_subtract(vec![a, b]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    let usec = items[2].as_int().unwrap();
-    assert_eq!(high * 65536 + low, 4); // 10 - 5 - 1 borrow
-    assert_eq!(usec, 600_000); // 100000 - 500000 + 1000000
+    assert_eq!(result.cons_car().as_int(), Some(4_600_000));
+    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
 }
 
 #[test]
@@ -931,12 +917,8 @@ fn time_operations_with_mixed_formats() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_add(vec![a, b]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    let usec = items[2].as_int().unwrap();
-    assert_eq!(high * 65536 + low, 150);
-    assert_eq!(usec, 250_000);
+    assert_eq!(result.cons_car().as_int(), Some(150_250_000));
+    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
 }
 
 #[test]
