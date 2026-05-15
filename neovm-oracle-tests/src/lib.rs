@@ -1215,6 +1215,8 @@ mod text_properties_patterns;
 mod text_property_comprehensive;
 #[path = "text-property-manipulation.rs"]
 mod text_property_manipulation;
+#[path = "text-property-order-semantics.rs"]
+mod text_property_order_semantics;
 #[path = "text-property-search.rs"]
 mod text_property_search;
 #[path = "thing-at-point-api-semantics.rs"]
