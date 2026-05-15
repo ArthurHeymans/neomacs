@@ -639,6 +639,8 @@ mod format_extended_advanced;
 mod format_message_patterns;
 #[path = "format-patterns.rs"]
 mod format_patterns;
+#[path = "format-spec-semantics.rs"]
+mod format_spec_semantics;
 #[path = "format-string-advanced-patterns.rs"]
 mod format_string_advanced_patterns;
 #[path = "forward-char.rs"]
