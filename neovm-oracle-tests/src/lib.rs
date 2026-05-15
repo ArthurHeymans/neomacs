@@ -513,6 +513,8 @@ mod condition_case_patterns;
 mod condition_case_patterns_advanced;
 #[path = "cons-list-dotted-comprehensive.rs"]
 mod cons_list_dotted_comprehensive;
+#[path = "conversion-format-semantics.rs"]
+mod conversion_format_semantics;
 #[path = "copy-alist.rs"]
 mod copy_alist;
 #[path = "copy-alist-advanced.rs"]
