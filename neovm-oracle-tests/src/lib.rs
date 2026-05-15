@@ -1271,6 +1271,8 @@ mod vector_operations;
 mod vector_operations_comprehensive;
 #[path = "vector-or-char-table-operations.rs"]
 mod vector_or_char_table_operations;
+#[path = "version-semantics.rs"]
+mod version_semantics;
 mod when;
 #[path = "when-unless-comprehensive.rs"]
 mod when_unless_comprehensive;
