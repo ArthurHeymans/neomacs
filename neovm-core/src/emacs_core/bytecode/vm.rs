@@ -731,6 +731,52 @@ impl<'a> Vm<'a> {
                     stk!().pop();
                 }
                 Op::Dup => {
+                    if pc_local + 2 < ops_len {
+                        let next0 = unsafe { &*ops_ptr.add(pc_local) };
+                        let next1 = unsafe { &*ops_ptr.add(pc_local + 1) };
+                        let next2 = unsafe { &*ops_ptr.add(pc_local + 2) };
+                        if let (Op::StackRef(stack_ref), Op::Lss, Op::GotoIfNil(target)) =
+                            (next0, next1, next2)
+                        {
+                            let len = self.ctx.bc_buf.len();
+                            if len == 0 {
+                                invalid_bytecode!();
+                            }
+                            if len >= frame_limit {
+                                invalid_bytecode!();
+                            }
+
+                            let top = unsafe { *self.ctx.bc_buf.get_unchecked(len - 1) };
+                            let after_dup_len = len + 1;
+                            let offset = 1 + *stack_ref as usize;
+
+                            if offset > after_dup_len || after_dup_len >= frame_limit {
+                                let stack = &mut self.ctx.bc_buf;
+                                unsafe {
+                                    stack.as_mut_ptr().add(len).write(top);
+                                    stack.set_len(after_dup_len);
+                                }
+                                pc_local += 1;
+                                invalid_bytecode!();
+                            }
+
+                            let ref_index = after_dup_len - offset;
+                            let ref_value = if ref_index == len {
+                                top
+                            } else {
+                                unsafe { *self.ctx.bc_buf.get_unchecked(ref_index) }
+                            };
+
+                            if top.is_fixnum() && ref_value.is_fixnum() {
+                                pc_local += 3;
+                                if !fixnum_lt(top, ref_value) {
+                                    branch_to!(*target as usize);
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
                     if let Some(&top) = stk!().last() {
                         stk_push!(top);
                     } else {
