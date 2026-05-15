@@ -54,6 +54,31 @@ fn oracle_mapcar_stops_when_list_shortened_by_callback() {
 }
 
 #[test]
+fn oracle_mapcar_follows_callback_rewritten_cdr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:mapcar1 reads XCDR after FUNCTION returns.  This control
+    // case pins that traversal rule for mapcar, not only mapc/mapcan.
+    let form = r#"
+(let ((seq (list 1 2))
+      (replacement (list 99))
+      (seen nil))
+  (list
+   (mapcar (lambda (x)
+             (push x seen)
+             (when (= x 1)
+               (setcdr seq replacement))
+             (* x 10))
+           seq)
+   (nreverse seen)
+   seq
+   replacement))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapc_stops_when_list_shortened_by_callback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
