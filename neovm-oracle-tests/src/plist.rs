@@ -100,3 +100,60 @@ fn oracle_prop_plist_complex_values() {
     let form = "(plist-get '(:data (1 2 3) :name \"test\" :flag t) :data)";
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_plist_optional_predicate_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((key-a (copy-sequence "key"))
+       (key-b (copy-sequence "key"))
+       (plist (list key-a 1 :other 2)))
+  (list
+   (plist-get plist key-b)
+   (plist-get plist key-b 'equal)
+   (plist-member plist key-b)
+   (plist-member plist key-b 'equal)
+   (let ((copy (copy-sequence plist)))
+     (list (eq (plist-put copy key-b 9 'equal) copy)
+           (plist-get copy key-a)
+           copy))
+   (let ((copy (copy-sequence plist)))
+     (plist-put copy key-b 9)
+     copy)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_plist_malformed_tail_error_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (plist-get '(:a 1 . bogus) :z)
+ (plist-get '(:a) :z)
+ (plist-get '(:a . bogus) :z)
+ (condition-case err
+     (plist-member '(:a 1 . bogus) :z)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (plist-member '(:a) :z)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (plist-member '(:a . bogus) :z)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (plist-put '(:a 1 . bogus) :z 3)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (plist-put '(:a) :z 3)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (plist-put '(:a . bogus) :z 3)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
