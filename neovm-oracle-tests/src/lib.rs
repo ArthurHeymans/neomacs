@@ -1003,6 +1003,8 @@ mod reverse;
 mod ring_buffer_comprehensive;
 #[path = "ring-semantics.rs"]
 mod ring_semantics;
+#[path = "rx-semantics.rs"]
+mod rx_semantics;
 #[path = "safe-length-operations.rs"]
 mod safe_length_operations;
 #[path = "safe-length-patterns.rs"]
