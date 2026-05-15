@@ -91,3 +91,21 @@ fn oracle_nconc_nil_arguments_and_dotted_tail() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_nconc_overwrites_dotted_nonfinal_tail() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dotted (cons 'head 'old-tail))
+       (tail (list 'new-tail))
+       (result (nconc dotted tail)))
+  (list result
+        dotted
+        tail
+        (eq result dotted)
+        (eq (cdr result) tail)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
