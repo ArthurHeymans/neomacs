@@ -1081,6 +1081,8 @@ mod seq_operations_advanced;
 mod seq_operations_comprehensive;
 #[path = "seq-operations-extended.rs"]
 mod seq_operations_extended;
+#[path = "sequence-access-semantics.rs"]
+mod sequence_access_semantics;
 #[path = "sequence-operations.rs"]
 mod sequence_operations;
 #[path = "sequence-sorting-comprehensive.rs"]
