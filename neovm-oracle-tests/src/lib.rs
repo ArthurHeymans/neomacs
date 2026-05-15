@@ -878,6 +878,8 @@ mod move_to_column_patterns;
 mod multibyte_string_comprehensive;
 #[path = "narrow-advanced.rs"]
 mod narrow_advanced;
+#[path = "narrow-point-semantics.rs"]
+mod narrow_point_semantics;
 #[path = "narrow-widen-comprehensive.rs"]
 mod narrow_widen_comprehensive;
 #[path = "narrow-widen-patterns.rs"]
