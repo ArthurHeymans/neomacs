@@ -588,6 +588,8 @@ mod delete_region;
 mod delete_region_advanced;
 #[path = "delete-region-comprehensive.rs"]
 mod delete_region_comprehensive;
+#[path = "delete-remove-semantics.rs"]
+mod delete_remove_semantics;
 mod delq;
 #[path = "derived-mode-semantics.rs"]
 mod derived_mode_semantics;
