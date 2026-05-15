@@ -1235,6 +1235,8 @@ mod window_operations_comprehensive;
 mod with_current_buffer_comprehensive;
 #[path = "with-current-buffer-patterns.rs"]
 mod with_current_buffer_patterns;
+#[path = "with-output-to-temp-buffer.rs"]
+mod with_output_to_temp_buffer;
 #[path = "with-temp-buffer.rs"]
 mod with_temp_buffer;
 #[path = "with-temp-buffer-advanced-patterns.rs"]
