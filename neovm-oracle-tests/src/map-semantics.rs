@@ -77,6 +77,31 @@ fn oracle_mapc_stops_when_list_shortened_by_callback() {
 }
 
 #[test]
+fn oracle_mapc_follows_callback_rewritten_cdr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:mapcar1 reads XCDR after FUNCTION returns, so replacing
+    // the current cons cdr changes which element the next iteration sees.
+    let form = r#"
+(let ((seq (list 1 2))
+      (replacement (list 99))
+      (seen nil))
+  (list
+   (eq (mapc (lambda (x)
+               (push x seen)
+               (when (= x 1)
+                 (setcdr seq replacement)))
+             seq)
+       seq)
+   (nreverse seen)
+   seq
+   replacement))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapconcat_separator_and_return_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -140,6 +165,32 @@ fn oracle_mapcan_stops_when_list_shortened_by_callback() {
            seq)
    (nreverse seen)
    seq))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_mapcan_follows_callback_rewritten_cdr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fmapcan shares mapcar1 traversal, then nconcs the mapped
+    // result lists.  Rewiring the current cons cdr should change the next
+    // mapped element before nconc runs.
+    let form = r#"
+(let ((seq (list 'a 'b))
+      (replacement (list 'z))
+      (seen nil))
+  (list
+   (mapcan (lambda (x)
+             (push x seen)
+             (when (eq x 'a)
+               (setcdr seq replacement))
+             (list x))
+           seq)
+   (nreverse seen)
+   seq
+   replacement))
 "#;
 
     assert_oracle_parity_with_bootstrap(form);
