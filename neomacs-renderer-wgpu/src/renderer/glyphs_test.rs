@@ -16,7 +16,7 @@ fn make_cursor(
     style: CursorStyle,
 ) -> PhysCursor {
     PhysCursor {
-        window_id: slot_id.window_id as i32,
+        window_id: slot_id.window_id,
         charpos: 0,
         row: slot_id.row as usize,
         col: slot_id.col,

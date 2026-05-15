@@ -435,7 +435,7 @@ impl FrameGlyph {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PhysCursor {
     /// Window that owns the cursor.
-    pub window_id: i32,
+    pub window_id: i64,
     /// Buffer position covered by the cursor slot.
     pub charpos: usize,
     /// Matrix row that owns the cursor.
@@ -469,7 +469,7 @@ pub struct PhysCursor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowCursorVisual {
     /// Window that owns the cursor visual.
-    pub window_id: i32,
+    pub window_id: i64,
     /// Display slot the visual should stay attached to.
     pub slot_id: DisplaySlotId,
     /// Frame-absolute origin.
@@ -669,7 +669,7 @@ pub struct FrameGlyphBuffer {
     /// `cursor-type` semantics. The key is the owning window id; renderers use
     /// this profile for that window's cursor and fall back to their global
     /// `EffectsConfig` when the window has no profile.
-    pub cursor_effects_by_window: HashMap<i32, EffectsConfig>,
+    pub cursor_effects_by_window: HashMap<i64, EffectsConfig>,
 
     /// Frame-level tab bar metadata for hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
@@ -1262,7 +1262,7 @@ impl FrameGlyphBuffer {
     /// Add cursor
     pub fn add_cursor(
         &mut self,
-        window_id: i32,
+        window_id: i64,
         x: f32,
         y: f32,
         width: f32,
@@ -1272,13 +1272,7 @@ impl FrameGlyphBuffer {
     ) {
         self.window_cursors.push(WindowCursorVisual {
             window_id,
-            slot_id: DisplaySlotId::from_pixels(
-                window_id as i64,
-                x,
-                y,
-                self.char_width,
-                self.char_height,
-            ),
+            slot_id: DisplaySlotId::from_pixels(window_id, x, y, self.char_width, self.char_height),
             x,
             y,
             width,
@@ -1289,12 +1283,12 @@ impl FrameGlyphBuffer {
     }
 
     /// Set the cursor effect profile for one window.
-    pub fn set_window_cursor_effects(&mut self, window_id: i32, effects: EffectsConfig) {
+    pub fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
         self.cursor_effects_by_window.insert(window_id, effects);
     }
 
     /// Return the cursor effect profile for one window, if layout supplied one.
-    pub fn window_cursor_effects(&self, window_id: i32) -> Option<&EffectsConfig> {
+    pub fn window_cursor_effects(&self, window_id: i64) -> Option<&EffectsConfig> {
         self.cursor_effects_by_window.get(&window_id)
     }
 

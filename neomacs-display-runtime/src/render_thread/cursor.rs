@@ -9,7 +9,7 @@ use crate::core::types::{
 /// Target position/style for cursor animation
 #[derive(Debug, Clone)]
 pub(super) struct CursorTarget {
-    pub(super) window_id: i32,
+    pub(super) window_id: i64,
     pub(super) x: f32,
     pub(super) y: f32,
     pub(super) width: f32,

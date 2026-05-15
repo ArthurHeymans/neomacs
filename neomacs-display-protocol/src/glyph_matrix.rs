@@ -408,7 +408,7 @@ pub struct BorderItem {
 /// A cursor entry.
 #[derive(Clone, Debug)]
 pub struct CursorItem {
-    pub window_id: i32,
+    pub window_id: i64,
     pub slot_id: DisplaySlotId,
     pub x: f32,
     pub y: f32,
@@ -515,7 +515,7 @@ pub struct FrameDisplayState {
     /// Cursor entries.
     pub cursors: Vec<CursorItem>,
     /// Per-window cursor effect profiles.
-    pub cursor_effects_by_window: HashMap<i32, EffectsConfig>,
+    pub cursor_effects_by_window: HashMap<i64, EffectsConfig>,
     /// Inline images (non-grid, pixel-positioned).
     pub images: Vec<ImageItem>,
     /// Inline videos.

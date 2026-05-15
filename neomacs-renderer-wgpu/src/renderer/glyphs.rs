@@ -783,7 +783,7 @@ impl WgpuRenderer {
 
     fn emit_cursor_visual(
         &mut self,
-        window_id: i32,
+        window_id: i64,
         static_rect: (f32, f32, f32, f32),
         style: CursorStyle,
         color: &Color,

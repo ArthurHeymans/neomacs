@@ -29,7 +29,7 @@ fn make_ctx<'a>(
 }
 
 /// Helper to create a test animated cursor
-fn make_animated_cursor(x: f32, y: f32, w: f32, h: f32, window_id: i32) -> AnimatedCursor {
+fn make_animated_cursor(x: f32, y: f32, w: f32, h: f32, window_id: i64) -> AnimatedCursor {
     AnimatedCursor {
         window_id,
         x,

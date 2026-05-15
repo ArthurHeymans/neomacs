@@ -2816,7 +2816,7 @@ impl LayoutEngine {
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         if let Some(effects) = params.cursor_effects.clone() {
             self.matrix_builder
-                .set_window_cursor_effects(params.window_id as i32, effects);
+                .set_window_cursor_effects(params.window_id, effects);
         }
 
         let char_w = params.char_width;
@@ -5897,7 +5897,7 @@ impl LayoutEngine {
                         && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
                     {
                         self.matrix_builder.push_cursor(
-                            params.window_id as i32,
+                            params.window_id,
                             DisplaySlotId {
                                 window_id: params.window_id,
                                 row: resolved_cursor.row as u32,
@@ -5927,7 +5927,7 @@ impl LayoutEngine {
                         });
                         if params.selected {
                             self.matrix_builder.set_phys_cursor(PhysCursor {
-                                window_id: params.window_id as i32,
+                                window_id: params.window_id,
                                 charpos: params.point.max(0) as usize,
                                 row: resolved_cursor.row,
                                 col: resolved_cursor.col as u16,
@@ -6013,10 +6013,10 @@ impl LayoutEngine {
             }
             if let Some(effects) = spec.effects.clone() {
                 self.matrix_builder
-                    .set_window_cursor_effects(spec.id, effects);
+                    .set_window_cursor_effects(spec.id as i64, effects);
             }
             self.matrix_builder.push_cursor(
-                spec.id,
+                spec.id as i64,
                 DisplaySlotId {
                     window_id: spec.id as i64,
                     row: resolved_cursor.row as u32,

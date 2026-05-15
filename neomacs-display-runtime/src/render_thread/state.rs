@@ -226,7 +226,7 @@ pub(super) struct RenderApp {
     // Cursor state (blink, animation, size transition)
     pub(super) cursor: CursorState,
     // Render-only visual cursors keyed by their stable visual cursor id.
-    pub(super) visual_cursors: HashMap<i32, CursorState>,
+    pub(super) visual_cursors: HashMap<i64, CursorState>,
 
     // All visual effect configurations
     pub(super) effects: EffectsConfig,

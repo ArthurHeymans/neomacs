@@ -218,7 +218,7 @@ impl Rect {
 /// frame glyph coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnimatedCursor {
-    pub window_id: i32,
+    pub window_id: i64,
     pub x: f32,
     pub y: f32,
     pub width: f32,

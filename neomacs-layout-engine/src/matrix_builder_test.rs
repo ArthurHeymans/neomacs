@@ -307,6 +307,48 @@ fn builder_preserves_phys_cursor() {
 }
 
 #[test]
+fn builder_preserves_high_window_id_phys_cursor() {
+    let high_window_id = 1_u64 << 48;
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(
+        high_window_id,
+        3,
+        80,
+        Rect::new(0.0, 0.0, 640.0, 48.0),
+        true,
+    );
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_char('M', 0, 0);
+    builder.end_row();
+    builder.set_phys_cursor(PhysCursor {
+        window_id: high_window_id as i64,
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: DisplaySlotId {
+            window_id: high_window_id as i64,
+            row: 0,
+            col: 0,
+        },
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+    assert_eq!(cursor.window_id, high_window_id as i64);
+    assert_eq!(cursor.slot_id.window_id, high_window_id as i64);
+    assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(0));
+}
+
+#[test]
 fn builder_reorders_simple_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);

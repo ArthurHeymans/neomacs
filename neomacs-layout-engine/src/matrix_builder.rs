@@ -17,6 +17,10 @@ use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::HashMap;
 
+fn cursor_window_matches_current(cursor_window_id: i64, current_window_id: u64) -> bool {
+    cursor_window_id >= 0 && cursor_window_id as u64 == current_window_id
+}
+
 /// Attach a cluster-extender char (combining mark / ZWJ / variation
 /// selector) to the last non-padding glyph in `area`, upgrading a
 /// `Char` glyph into `Composite` or appending to an existing
@@ -82,7 +86,7 @@ pub struct GlyphMatrixBuilder {
     webkits: Vec<WebKitItem>,
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
-    cursor_effects_by_window: HashMap<i32, EffectsConfig>,
+    cursor_effects_by_window: HashMap<i64, EffectsConfig>,
     faces: HashMap<u32, Face>,
     stipple_patterns: HashMap<i32, StipplePattern>,
     window_infos: Vec<WindowInfo>,
@@ -575,7 +579,7 @@ impl GlyphMatrixBuilder {
 
     pub fn push_cursor(
         &mut self,
-        window_id: i32,
+        window_id: i64,
         slot_id: DisplaySlotId,
         x: f32,
         y: f32,
@@ -701,7 +705,7 @@ impl GlyphMatrixBuilder {
         let mut cursor = cursor;
         let mut visual_col = None;
 
-        if cursor.window_id as u64 == self.current_window_id
+        if cursor_window_matches_current(cursor.window_id, self.current_window_id)
             && let Some(ref matrix) = self.current_matrix
             && cursor.row < matrix.rows.len()
         {
@@ -735,7 +739,7 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
-    pub fn set_window_cursor_effects(&mut self, window_id: i32, effects: EffectsConfig) {
+    pub fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
         self.cursor_effects_by_window.insert(window_id, effects);
     }
 
@@ -1224,7 +1228,7 @@ impl GlyphMatrixBuilder {
                 .phys_cursor
                 .as_ref()
                 .filter(|cursor| {
-                    cursor.window_id as u64 == self.current_window_id
+                    cursor_window_matches_current(cursor.window_id, self.current_window_id)
                         && cursor.row == self.current_row
                 })
                 .map(|cursor| cursor.col);
@@ -1236,7 +1240,7 @@ impl GlyphMatrixBuilder {
 
         if let Some(col) = remapped_cursor_col
             && let Some(ref mut cursor) = self.phys_cursor
-            && cursor.window_id as u64 == self.current_window_id
+            && cursor_window_matches_current(cursor.window_id, self.current_window_id)
             && cursor.row == self.current_row
         {
             cursor.col = col;
