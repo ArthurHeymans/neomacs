@@ -513,6 +513,31 @@ fn oracle_prop_copy_tree_vs_copy_sequence() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_copy_tree_vectors_and_records_copies_vectors_recursively() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((inner (list 'x 'y))
+       (nested (vector inner (list 'z)))
+       (tree (list nested (cons 'tail nested)))
+       (copy-default (copy-tree tree))
+       (copy-deep (copy-tree tree t)))
+  (setcar inner 'changed)
+  (aset nested 1 (list 'new))
+  (list
+   (equal tree copy-default)
+   (eq (car tree) (car copy-default))
+   (eq (car tree) (car copy-deep))
+   (eq (aref (car tree) 0) (aref (car copy-deep) 0))
+   (eq (aref (car tree) 1) (aref (car copy-deep) 1))
+   copy-default
+   copy-deep))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // tree-equal patterns (cl-lib)
 // ---------------------------------------------------------------------------
