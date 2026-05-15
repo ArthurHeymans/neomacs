@@ -48,6 +48,8 @@ mod assoc_assq_advanced;
 #[path = "assoc-delete-semantics.rs"]
 mod assoc_delete_semantics;
 mod assq;
+#[path = "autoload-semantics.rs"]
+mod autoload_semantics;
 mod backquote;
 #[path = "backquote-advanced.rs"]
 mod backquote_advanced;
