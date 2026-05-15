@@ -54,6 +54,29 @@ fn oracle_mapcar_stops_when_list_shortened_by_callback() {
 }
 
 #[test]
+fn oracle_mapc_stops_when_list_shortened_by_callback() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:mapcar1 reads XCDR after calling FUNCTION, so destructive
+    // shortening by FUNCTION stops `mapc` at the new end of the list.
+    let form = r#"
+(let ((seq (list 1 2 3 4))
+      (seen nil))
+  (list
+   (eq (mapc (lambda (x)
+               (push x seen)
+               (when (= x 1)
+                 (setcdr seq nil)))
+             seq)
+       seq)
+   (nreverse seen)
+   seq))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapconcat_separator_and_return_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
