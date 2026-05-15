@@ -154,6 +154,8 @@ mod cl_loop_advanced_patterns;
 mod cl_loop_comprehensive;
 #[path = "cl-loop-patterns.rs"]
 mod cl_loop_patterns;
+#[path = "clear-string-semantics.rs"]
+mod clear_string_semantics;
 mod closure;
 #[path = "closure-advanced.rs"]
 mod closure_advanced;
