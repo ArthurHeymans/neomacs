@@ -60,6 +60,35 @@ impl DirectSubrCallee {
     }
 }
 
+#[inline(always)]
+fn fixnum_tagged_i64(value: Value) -> i64 {
+    debug_assert!(value.is_fixnum());
+    // GNU bytecode.c compares XFIXNUM values for fixnum comparison opcodes.
+    // Neomacs fixnums are `(n << 2) | 2`, so the signed tagged bits preserve
+    // the same total order without materializing the untagged integer.
+    value.bits() as i64
+}
+
+#[inline(always)]
+fn fixnum_lt(left: Value, right: Value) -> bool {
+    fixnum_tagged_i64(left) < fixnum_tagged_i64(right)
+}
+
+#[inline(always)]
+fn fixnum_gt(left: Value, right: Value) -> bool {
+    fixnum_tagged_i64(left) > fixnum_tagged_i64(right)
+}
+
+#[inline(always)]
+fn fixnum_le(left: Value, right: Value) -> bool {
+    fixnum_tagged_i64(left) <= fixnum_tagged_i64(right)
+}
+
+#[inline(always)]
+fn fixnum_ge(left: Value, right: Value) -> bool {
+    fixnum_tagged_i64(left) >= fixnum_tagged_i64(right)
+}
+
 #[inline]
 fn plus_sym_id() -> SymId {
     static PLUS: OnceLock<SymId> = OnceLock::new();
@@ -581,6 +610,8 @@ impl<'a> Vm<'a> {
     ) -> EvalResult {
         let ops = &func.ops;
         let constants = &func.constants;
+        let ops_len = ops.len();
+        let ops_ptr = ops.as_ptr();
         let mut pc_local = *pc;
         let mut quitcounter: u8 = 1;
 
@@ -672,8 +703,8 @@ impl<'a> Vm<'a> {
             }};
         }
 
-        while pc_local < ops.len() {
-            let op = &ops[pc_local];
+        while pc_local < ops_len {
+            let op = unsafe { &*ops_ptr.add(pc_local) };
             pc_local += 1;
 
             match op {
@@ -1351,9 +1382,11 @@ impl<'a> Vm<'a> {
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
                     if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        stk!()[len - 2] = if av > bv { Value::T } else { Value::NIL };
+                        stk!()[len - 2] = if fixnum_gt(a, b) {
+                            Value::T
+                        } else {
+                            Value::NIL
+                        };
                         stk!().pop();
                     } else {
                         stk!().truncate(len - 2);
@@ -1372,11 +1405,12 @@ impl<'a> Vm<'a> {
                         let b = unsafe { *stack.get_unchecked(len - 1) };
                         let a = unsafe { *stack.get_unchecked(len - 2) };
                         if a.is_fixnum() && b.is_fixnum() {
-                            let av = a.xfixnum();
-                            let bv = b.xfixnum();
                             unsafe {
-                                *stack.get_unchecked_mut(len - 2) =
-                                    if av < bv { Value::T } else { Value::NIL };
+                                *stack.get_unchecked_mut(len - 2) = if fixnum_lt(a, b) {
+                                    Value::T
+                                } else {
+                                    Value::NIL
+                                };
                                 stack.set_len(len - 1);
                             }
                             None
@@ -1396,9 +1430,11 @@ impl<'a> Vm<'a> {
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
                     if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        stk!()[len - 2] = if av <= bv { Value::T } else { Value::NIL };
+                        stk!()[len - 2] = if fixnum_le(a, b) {
+                            Value::T
+                        } else {
+                            Value::NIL
+                        };
                         stk!().pop();
                     } else {
                         stk!().truncate(len - 2);
@@ -1412,9 +1448,11 @@ impl<'a> Vm<'a> {
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
                     if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        stk!()[len - 2] = if av >= bv { Value::T } else { Value::NIL };
+                        stk!()[len - 2] = if fixnum_ge(a, b) {
+                            Value::T
+                        } else {
+                            Value::NIL
+                        };
                         stk!().pop();
                     } else {
                         stk!().truncate(len - 2);
@@ -1428,9 +1466,7 @@ impl<'a> Vm<'a> {
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
                     if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        stk!()[len - 2] = if av >= bv { a } else { b };
+                        stk!()[len - 2] = if fixnum_ge(a, b) { a } else { b };
                         stk!().pop();
                     } else {
                         stk!().truncate(len - 2);
@@ -1444,9 +1480,7 @@ impl<'a> Vm<'a> {
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
                     if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        stk!()[len - 2] = if av <= bv { a } else { b };
+                        stk!()[len - 2] = if fixnum_le(a, b) { a } else { b };
                         stk!().pop();
                     } else {
                         stk!().truncate(len - 2);
