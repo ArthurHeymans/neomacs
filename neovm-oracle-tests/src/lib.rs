@@ -470,6 +470,8 @@ mod combination_verification_system;
 mod combination_virtual_machine_advanced;
 mod combination_workflow;
 mod combination_zipper_datastructure;
+#[path = "combine-and-quote-strings-semantics.rs"]
+mod combine_and_quote_strings_semantics;
 #[path = "command-modes.rs"]
 mod command_modes;
 #[path = "commandp-functionp-advanced.rs"]
