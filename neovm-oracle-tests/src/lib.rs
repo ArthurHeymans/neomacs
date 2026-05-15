@@ -817,6 +817,8 @@ mod map_library_semantics;
 mod map_operations;
 #[path = "map-operations-advanced.rs"]
 mod map_operations_advanced;
+#[path = "map-semantics.rs"]
+mod map_semantics;
 #[path = "mapatoms-obarray-comprehensive.rs"]
 mod mapatoms_obarray_comprehensive;
 #[path = "mapc-operations.rs"]
