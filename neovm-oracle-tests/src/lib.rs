@@ -896,6 +896,8 @@ mod oclosure_advanced;
 mod r#or;
 #[path = "overlay-comprehensive-patterns.rs"]
 mod overlay_comprehensive_patterns;
+#[path = "parse-time-semantics.rs"]
+mod parse_time_semantics;
 #[path = "pcase-comprehensive-patterns.rs"]
 mod pcase_comprehensive_patterns;
 mod plist;
