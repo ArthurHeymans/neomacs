@@ -121,3 +121,91 @@ fn oracle_prop_special_forms_semantics_inline() {
     let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
+
+#[test]
+fn oracle_prop_special_forms_semantics_progn_prog1_eval_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((log nil))
+  (list
+   (progn)
+   (prog1 (progn (push 'first log) 'value)
+     (push 'second log)
+     (push 'third log))
+   (nreverse log)
+   (condition-case err
+       (eval '(progn . bad-tail))
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (eval '(prog1))
+     (error (list (car err) (cdr err))))))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+}
+
+#[test]
+fn oracle_prop_special_forms_semantics_quote_function_arity_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (eval '(quote a b))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (eval '(quote))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (eval '(function (lambda () t) extra))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (eval '(function))
+   (error (list (car err) (cdr err)))))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+}
+
+#[test]
+fn oracle_prop_eval_lexical_environment_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (eval 'x '((x . 42)))
+ (condition-case err
+     (eval 'x nil)
+   (error (list (car err) (cdr err))))
+ (eval '(let ((x 1))
+          (let ((f (lambda () x)))
+            (let ((x 2))
+              (funcall f))))
+       t)
+ (eval '(let ((x 1))
+          (let ((f (lambda () x)))
+            (let ((x 2))
+              (funcall f))))
+       nil))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+}
+
+#[test]
+fn oracle_prop_eval_invalid_function_position_does_not_evaluate_args() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((log nil))
+  (list
+   (condition-case err
+       (eval '((prog1 (lambda (x) x) (push 'fun log))
+               (prog1 1 (push 'arg log))))
+     (error (list (car err) (cdr err))))
+   log))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+}
