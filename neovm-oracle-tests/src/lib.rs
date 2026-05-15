@@ -1182,6 +1182,8 @@ mod thing_at_point_comprehensive;
 mod r#throw;
 #[path = "timer-list-comprehensive.rs"]
 mod timer_list_comprehensive;
+#[path = "transpose-command-semantics.rs"]
+mod transpose_command_semantics;
 mod trigonometry;
 #[path = "trigonometry-advanced.rs"]
 mod trigonometry_advanced;
