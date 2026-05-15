@@ -969,6 +969,8 @@ mod read_print;
 mod read_print_advanced;
 #[path = "read-print-comprehensive.rs"]
 mod read_print_comprehensive;
+#[path = "rectangle-semantics.rs"]
+mod rectangle_semantics;
 mod recursion;
 #[path = "recursion-advanced.rs"]
 mod recursion_advanced;
