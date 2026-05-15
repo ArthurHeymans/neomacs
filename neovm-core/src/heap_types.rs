@@ -132,6 +132,11 @@ fn lookup_static_rodata(key: u64, len: usize) -> Option<*const u8> {
     }
 }
 
+fn empty_text_property_table() -> &'static TextPropertyTable {
+    static EMPTY: OnceLock<TextPropertyTable> = OnceLock::new();
+    EMPTY.get_or_init(TextPropertyTable::new)
+}
+
 impl LispStringStorage {
     fn owned_from_payload(mut data: Vec<u8>) -> Self {
         data.push(0);
@@ -251,7 +256,7 @@ impl LispString {
         Self {
             size,
             size_byte,
-            intervals: Some(Box::new(TextPropertyTable::new())),
+            intervals: None,
             data,
             storage: Some(Box::new(storage)),
         }
@@ -384,7 +389,6 @@ impl LispString {
     ) -> Result<(), String> {
         self.validate_storage_install(ptr, len)?;
         self.storage = Some(Box::new(LispStringStorage::Mapped { ptr, len }));
-        self.ensure_intervals();
         Ok(())
     }
 
@@ -407,7 +411,6 @@ impl LispString {
         self.validate_storage_install(ptr, len)?;
         self.data = ptr;
         self.storage = Some(Box::new(LispStringStorage::Static { key, ptr, len }));
-        self.ensure_intervals();
         Ok(())
     }
 
@@ -525,9 +528,10 @@ impl LispString {
     /// Text-property interval tree attached to this string, like GNU's
     /// `Lisp_String.u.s.intervals`.
     pub fn intervals(&self) -> &TextPropertyTable {
-        self.intervals
-            .as_deref()
-            .expect("LispString intervals sidecar must be installed")
+        match self.intervals.as_deref() {
+            Some(intervals) => intervals,
+            None => empty_text_property_table(),
+        }
     }
 
     /// Mutable text-property interval tree attached to this string.
@@ -665,7 +669,10 @@ impl Clone for LispString {
         let mut cloned = Self {
             size: self.size,
             size_byte: self.size_byte,
-            intervals: Some(Box::new(self.intervals().clone())),
+            intervals: self
+                .intervals
+                .as_ref()
+                .map(|intervals| Box::new((**intervals).clone())),
             data: std::ptr::null(),
             storage: Some(Box::new(LispStringStorage::owned_from_payload(
                 self.as_bytes().to_vec(),
