@@ -108,6 +108,31 @@ fn oracle_prop_fillarray_advanced_string_chars() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_fillarray_multibyte_string_preserves_byte_length() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((ascii (copy-sequence "abc"))
+      (multi (copy-sequence "ééé")))
+  (list
+   (progn
+     (fillarray ascii ?Z)
+     (list ascii (length ascii) (string-bytes ascii)))
+   (progn
+     (fillarray multi ?ß)
+     (list multi (length multi) (string-bytes multi)))
+   (condition-case err
+       (fillarray multi ?x)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (fillarray ascii ?é)
+     (error (list (car err) (cdr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // fillarray on bool-vectors with size edge cases
 // ---------------------------------------------------------------------------
