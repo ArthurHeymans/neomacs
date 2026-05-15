@@ -1938,12 +1938,15 @@ fn run_gui_evaluator_worker(
     render_waker.wake();
 
     if let Some(request) = evaluator.shutdown_request() {
-        return EvaluatorExit {
+        let exit = EvaluatorExit {
             exit_code: request.exit_code,
             restart: request.restart,
         };
+        leak_evaluator_for_process_exit(evaluator);
+        return exit;
     }
 
+    leak_evaluator_for_process_exit(evaluator);
     EvaluatorExit::OK
 }
 
@@ -2213,6 +2216,15 @@ pub fn run(mode: RuntimeMode) {
             std::process::exit(request.exit_code);
         }
     }
+
+    leak_evaluator_for_process_exit(evaluator);
+}
+
+fn leak_evaluator_for_process_exit(evaluator: Context) {
+    // GNU Emacs does not walk the Lisp heap and free every object on normal
+    // process exit; the OS reclaims the image.  Keep Rust from doing a deep
+    // `Context` destructor pass after the command loop has already shut down.
+    std::mem::forget(evaluator);
 }
 
 fn log_clean_process_exit(started_at: Instant, args: &[OsString]) {

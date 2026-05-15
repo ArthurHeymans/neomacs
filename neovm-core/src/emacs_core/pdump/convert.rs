@@ -1312,7 +1312,7 @@ impl<'a> LoadDecoder<'a> {
                         .into_iter()
                         .map(|key| load_hash_key_owned(self, key))
                         .collect();
-                    table.ensure_all_hash_keys_iterable();
+                    table.rebuild_iterable_hash_keys_from_data();
                 });
             }
             DumpHeapObject::Str { text_props, .. } => {
@@ -3776,7 +3776,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         entry_slots: Vec::new(),
         free_slots: Vec::new(),
     };
-    table.ensure_all_hash_keys_iterable();
+    table.rebuild_iterable_hash_keys_from_data();
     table
 }
 

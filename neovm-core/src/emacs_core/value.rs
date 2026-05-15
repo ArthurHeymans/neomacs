@@ -17,7 +17,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
@@ -796,6 +796,31 @@ impl LispHashTable {
         for key in keys {
             self.ensure_hash_key_iterable(&key);
         }
+    }
+
+    pub fn rebuild_iterable_hash_keys_from_data(&mut self) {
+        let live_len = self.data.len();
+        let mut seen = FxHashSet::with_capacity_and_hasher(live_len, Default::default());
+        let original_order = std::mem::take(&mut self.insertion_order);
+        let mut insertion_order = Vec::with_capacity(original_order.len().max(live_len));
+
+        for key in original_order {
+            if self.data.contains_key(&key) && seen.insert(key.clone()) {
+                insertion_order.push(key);
+            }
+        }
+        for key in self.data.keys() {
+            if seen.insert(key.clone()) {
+                insertion_order.push(key.clone());
+            }
+        }
+
+        self.entry_slots.clear();
+        self.entry_slots.reserve(insertion_order.len());
+        self.entry_slots
+            .extend(insertion_order.iter().cloned().map(Some));
+        self.free_slots.clear();
+        self.insertion_order = insertion_order;
     }
 
     pub fn note_hash_key_removed(&mut self, key: &HashKey) {
