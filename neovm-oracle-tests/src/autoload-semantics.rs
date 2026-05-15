@@ -110,3 +110,24 @@ fn oracle_autoload_do_load_macro_only_ordering_without_file_load() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_autoload_do_load_macro_only_requires_literal_macro_symbol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((function-autoload '(autoload "missing-function-file" nil nil nil)))
+  (list
+   (condition-case err
+       (autoload-do-load function-autoload 42 t)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (autoload-do-load function-autoload 42 'not-macro)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (autoload-do-load function-autoload 42 17)
+     (error (list (car err) (cdr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
