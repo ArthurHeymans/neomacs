@@ -909,6 +909,8 @@ mod predicates;
 mod prin1_comprehensive_patterns;
 #[path = "prin1-to-string-advanced.rs"]
 mod prin1_to_string_advanced;
+#[path = "process-environment-semantics.rs"]
+mod process_environment_semantics;
 #[path = "process-string-comprehensive.rs"]
 mod process_string_comprehensive;
 mod prog1;
