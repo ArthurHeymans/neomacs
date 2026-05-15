@@ -996,6 +996,8 @@ mod regexp_quote_patterns;
 mod regexp_replace_advanced;
 #[path = "regexp-replace-comprehensive.rs"]
 mod regexp_replace_comprehensive;
+#[path = "register-semantics.rs"]
+mod register_semantics;
 #[path = "remove-text-properties-patterns.rs"]
 mod remove_text_properties_patterns;
 #[path = "rename-buffer-patterns.rs"]
