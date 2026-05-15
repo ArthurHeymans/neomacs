@@ -506,6 +506,7 @@ impl<'a> Vm<'a> {
         let ops = &func.ops;
         let constants = &func.constants;
         let mut pc_local = *pc;
+        let mut quitcounter: u8 = 1;
 
         macro_rules! stk {
             () => {
@@ -549,6 +550,33 @@ impl<'a> Vm<'a> {
                         continue;
                     }
                 }
+            }};
+        }
+
+        macro_rules! branch_to {
+            ($target:expr) => {{
+                let target = $target;
+                if target < pc_local {
+                    quitcounter = quitcounter.wrapping_add(1);
+                    if quitcounter == 0 {
+                        quitcounter = 1;
+                        vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
+                    }
+                }
+                pc_local = target;
+            }};
+        }
+
+        macro_rules! invalid_bytecode {
+            () => {{
+                self.resume_nonlocal(
+                    func,
+                    &mut pc_local,
+                    handlers,
+                    bind_stack,
+                    signal("error", vec![Value::string("Invalid byte-code")]),
+                )?;
+                continue;
             }};
         }
 
@@ -791,57 +819,34 @@ impl<'a> Vm<'a> {
                 }
 
                 // -- Control flow --
-                // Backward branches poll quit/input, mirroring GNU
-                // `bytecode.c:861-866` where the `quitcounter` fires
-                // `maybe_gc()` + `maybe_quit()` when the target is
-                // behind the current pc. Without this, `(while t)` in
-                // bytecode is uninterruptible: `C-g` never gets to run
-                // `maybe_quit` because control never leaves the VM.
+                // Backward branches mirror GNU `bytecode.c:op_branch`: an
+                // unsigned byte `quitcounter` is incremented only for backward
+                // jumps, and `maybe_gc(); maybe_quit();` runs when it wraps.
                 Op::Goto(addr) => {
-                    let target = *addr as usize;
-                    if target < pc_local {
-                        vm_try!(self.ctx.maybe_quit());
-                    }
-                    pc_local = target;
+                    branch_to!(*addr as usize);
                 }
                 Op::GotoIfNil(addr) => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     if val.is_nil() {
-                        let target = *addr as usize;
-                        if target < pc_local {
-                            vm_try!(self.ctx.maybe_quit());
-                        }
-                        pc_local = target;
+                        branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNotNil(addr) => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     if val.is_truthy() {
-                        let target = *addr as usize;
-                        if target < pc_local {
-                            vm_try!(self.ctx.maybe_quit());
-                        }
-                        pc_local = target;
+                        branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNilElsePop(addr) => {
                     if stk!().last().is_none_or(|v| v.is_nil()) {
-                        let target = *addr as usize;
-                        if target < pc_local {
-                            vm_try!(self.ctx.maybe_quit());
-                        }
-                        pc_local = target;
+                        branch_to!(*addr as usize);
                     } else {
                         stk!().pop();
                     }
                 }
                 Op::GotoIfNotNilElsePop(addr) => {
                     if stk!().last().is_some_and(|v| v.is_truthy()) {
-                        let target = *addr as usize;
-                        if target < pc_local {
-                            vm_try!(self.ctx.maybe_quit());
-                        }
-                        pc_local = target;
+                        branch_to!(*addr as usize);
                     } else {
                         stk!().pop();
                     }
@@ -961,23 +966,34 @@ impl<'a> Vm<'a> {
                 // Inline fixnum fast paths match GNU Emacs bytecode.c design:
                 // the bytecode opcode IS the contract — no override check needed.
                 Op::Add => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
-                        let res = av.wrapping_add(bv);
-                        if res >= Value::MOST_NEGATIVE_FIXNUM && res <= Value::MOST_POSITIVE_FIXNUM
-                        {
-                            stk!()[len - 2] = Value::fixnum(res);
-                            stk!().pop();
-                        } else {
-                            stk!().truncate(len - 2);
-                            let result =
-                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "+", vec![a, b]));
-                            stk_push!(result);
+                    let fallback = {
+                        let stack = &mut self.ctx.bc_buf;
+                        let len = stack.len();
+                        if len < 2 {
+                            invalid_bytecode!();
                         }
-                    } else {
-                        stk!().truncate(len - 2);
+                        let b = unsafe { *stack.get_unchecked(len - 1) };
+                        let a = unsafe { *stack.get_unchecked(len - 2) };
+                        if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                            let res = av.wrapping_add(bv);
+                            if res >= Value::MOST_NEGATIVE_FIXNUM
+                                && res <= Value::MOST_POSITIVE_FIXNUM
+                            {
+                                unsafe {
+                                    *stack.get_unchecked_mut(len - 2) = Value::fixnum(res);
+                                    stack.set_len(len - 1);
+                                }
+                                None
+                            } else {
+                                stack.truncate(len - 2);
+                                Some((a, b))
+                            }
+                        } else {
+                            stack.truncate(len - 2);
+                            Some((a, b))
+                        }
+                    };
+                    if let Some((a, b)) = fallback {
                         let result =
                             vm_try!(self.dispatch_vm_builtin_with_frame(func, "+", vec![a, b]));
                         stk_push!(result);
@@ -1088,18 +1104,33 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Op::Add1 => {
-                    let top = *stk!().last().unwrap();
-                    if let Some(n) = top.as_fixnum() {
-                        if n != Value::MOST_POSITIVE_FIXNUM {
-                            *stk!().last_mut().unwrap() = Value::fixnum(n + 1);
-                        } else {
-                            stk!().pop();
-                            let result =
-                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "1+", vec![top]));
-                            stk_push!(result);
+                    let fallback = {
+                        let stack = &mut self.ctx.bc_buf;
+                        let len = stack.len();
+                        if len == 0 {
+                            invalid_bytecode!();
                         }
-                    } else {
-                        stk!().pop();
+                        let top = unsafe { *stack.get_unchecked(len - 1) };
+                        if let Some(n) = top.as_fixnum() {
+                            if n != Value::MOST_POSITIVE_FIXNUM {
+                                unsafe {
+                                    *stack.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
+                                }
+                                None
+                            } else {
+                                unsafe {
+                                    stack.set_len(len - 1);
+                                }
+                                Some(top)
+                            }
+                        } else {
+                            unsafe {
+                                stack.set_len(len - 1);
+                            }
+                            Some(top)
+                        }
+                    };
+                    if let Some(top) = fallback {
                         let result =
                             vm_try!(self.dispatch_vm_builtin_with_frame(func, "1+", vec![top]));
                         stk_push!(result);
@@ -1173,14 +1204,27 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Op::Lss => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
-                        stk!()[len - 2] = if av < bv { Value::T } else { Value::NIL };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
+                    let fallback = {
+                        let stack = &mut self.ctx.bc_buf;
+                        let len = stack.len();
+                        if len < 2 {
+                            invalid_bytecode!();
+                        }
+                        let b = unsafe { *stack.get_unchecked(len - 1) };
+                        let a = unsafe { *stack.get_unchecked(len - 2) };
+                        if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                            unsafe {
+                                *stack.get_unchecked_mut(len - 2) =
+                                    if av < bv { Value::T } else { Value::NIL };
+                                stack.set_len(len - 1);
+                            }
+                            None
+                        } else {
+                            stack.truncate(len - 2);
+                            Some((a, b))
+                        }
+                    };
+                    if let Some((a, b)) = fallback {
                         let result =
                             vm_try!(self.dispatch_vm_builtin_with_frame(func, "<", vec![a, b]));
                         stk_push!(result);

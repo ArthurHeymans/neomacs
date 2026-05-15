@@ -6540,6 +6540,15 @@ impl Context {
         }
         Ok(())
     }
+
+    /// Match GNU `bytecode.c:op_branch`: after the bytecode loop's unsigned
+    /// quit counter wraps, run `maybe_gc (); maybe_quit ();`.
+    pub(crate) fn bytecode_branch_maybe_gc_and_quit(&mut self) -> Result<(), Flow> {
+        if self.gc_safe_point_exact_should_collect() {
+            self.gc_collect_from_current_roots();
+        }
+        self.maybe_quit()
+    }
 }
 
 impl Context {
