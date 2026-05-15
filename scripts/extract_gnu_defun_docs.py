@@ -86,6 +86,39 @@ def find_doc_block(text: str, start: int) -> tuple[str | None, int]:
     return doc, body_end + 2
 
 
+def decode_doc_escapes(doc: str) -> str:
+    """Decode GNU make-docfile comment escapes.
+
+    `make-docfile.c::read_c_string_or_comment` consumes a backslash and
+    then emits the following character, except that `\n` and `\t` become
+    newline/tab and backslash-newline is discarded.
+    """
+    out = []
+    i = 0
+    while i < len(doc):
+        c = doc[i]
+        if c != "\\":
+            out.append(c)
+            i += 1
+            continue
+
+        i += 1
+        if i >= len(doc):
+            break
+        c = doc[i]
+        if c in "\n\r":
+            i += 1
+            continue
+        if c == "n":
+            out.append("\n")
+        elif c == "t":
+            out.append("\t")
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def parse_c_arglist(c_args: str) -> list[str]:
     """Extract C parameter names from `(register Lisp_Object foo, ...)'.
     Mirrors GNU make-docfile.c::write_c_args. Skips storage qualifiers
@@ -171,7 +204,7 @@ def rewrite_usage_line(doc: str) -> tuple[str, bool]:
         return doc, False
     args = m.group(1).strip()
     fn_line = "(fn " + args + ")" if args else "(fn)"
-    return doc[:m.start()] + fn_line + doc[m.end():], True
+    return doc[:m.start()].rstrip() + "\n\n" + fn_line + doc[m.end():], True
 
 
 def extract_defuns(src: str) -> list[tuple[str, str]]:
@@ -189,6 +222,7 @@ def extract_defuns(src: str) -> list[tuple[str, str]]:
         if doc is None:
             pos = m.end()
             continue
+        doc = decode_doc_escapes(doc)
 
         # Check for `usage:' line first; if present, rewrite it.
         doc, saw_usage = rewrite_usage_line(doc)

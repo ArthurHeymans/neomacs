@@ -685,6 +685,8 @@ mod hash_table_operations_comprehensive;
 mod hash_table_operations_extended;
 #[path = "hash-table-patterns.rs"]
 mod hash_table_patterns;
+#[path = "help-doc-semantics.rs"]
+mod help_doc_semantics;
 #[path = "identity-operations.rs"]
 mod identity_operations;
 mod r#if;

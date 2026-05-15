@@ -20,11 +20,13 @@ Both must be integers or markers.
     (
         r#"*"#,
         r#"Return product of any number of arguments, which are numbers or markers.
+
 (fn &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
         r#"+"#,
         r#"Return sum of any number of arguments, which are numbers or markers.
+
 (fn &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
@@ -32,6 +34,7 @@ Both must be integers or markers.
         r#"Negate number or subtract numbers or markers and return the result.
 With one arg, negates it.  With more than one arg,
 subtracts all but the first from the first.
+
 (fn &optional NUMBER-OR-MARKER &rest MORE-NUMBERS-OR-MARKERS)"#,
     ),
     (
@@ -40,6 +43,7 @@ subtracts all but the first from the first.
 With two or more arguments, return first argument divided by the rest.
 With one argument, return 1 divided by the argument.
 The arguments must be numbers or markers.
+
 (fn NUMBER &rest DIVISORS)"#,
     ),
     (
@@ -65,26 +69,31 @@ Markers are converted to integers.
     (
         r#"<"#,
         r#"Return t if each arg (a number or marker), is less than the next arg.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
         r#"<="#,
         r#"Return t if each arg (a number or marker) is less than or equal to the next.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
         r#"="#,
         r#"Return t if args, all numbers or markers, are equal.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
         r#">"#,
         r#"Return t if each arg (a number or marker) is greater than the next arg.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
         r#">="#,
         r#"Return t if each arg (a number or marker) is greater than or equal to the next.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
@@ -291,6 +300,7 @@ which case that function should itself handle `completion-regexp-list').
         r#"Eval args until one of them yields nil, then return nil.
 The remaining args are not evalled at all.
 If no arg yields nil, return the last arg's value.
+
 (fn CONDITIONS...)"#,
     ),
     (
@@ -471,7 +481,7 @@ This may be thought of as an atomic action performed in two steps: The
 first step removes FRAME1's window-step window from the display.  The
 second step reinserts FRAME1's window below (above if ABOVE is true)
 that of FRAME2.  Hence the position of FRAME2 in its display's Z
-\(stacking) order relative to all other frames excluding FRAME1 remains
+(stacking) order relative to all other frames excluding FRAME1 remains
 unaltered.
 
 Android does not facilitate restacking top-level windows managed by
@@ -639,7 +649,8 @@ unaltered, not a list.
 Then return the value FUNCTION returns.
 With a single argument, call the argument's first element using the
 other elements as args.
-Thus, (apply \\='+ 1 2 \\='(3 4)) returns 10.
+Thus, (apply \='+ 1 2 \='(3 4)) returns 10.
+
 (fn FUNCTION &rest ARGUMENTS)"#,
     ),
     (
@@ -822,14 +833,14 @@ If N is omitted or nil, move point 1 character backward.
 
 Depending on the bidirectional context, the movement may be to the
 right or to the left on the screen.  This is in contrast with
-\\[left-char], which see.
+\[left-char], which see.
 
 (fn N)"#,
     ),
     (
         r#"backward-prefix-chars"#,
         r#"Move point backward over any number of chars with prefix syntax.
-This includes chars with expression prefix syntax class (\\=') and those with
+This includes chars with expression prefix syntax class (\=') and those with
 the prefix syntax flag (p).
 
 (fn)"#,
@@ -1022,10 +1033,10 @@ Emacs UBA implementation, in particular with the test suite.
         r#"bitmap-spec-p"#,
         r#"Value is non-nil if OBJECT is a valid bitmap specification.
 A bitmap specification is either a string, a file name, or a list
-\(WIDTH HEIGHT DATA) where WIDTH is the pixel width of the bitmap,
+(WIDTH HEIGHT DATA) where WIDTH is the pixel width of the bitmap,
 HEIGHT is its height, and DATA is a string containing the bits of
 the pixmap.  Bits are stored row by row, each row occupies
-\(WIDTH + 7)/8 bytes.
+(WIDTH + 7)/8 bytes.
 
 (fn OBJECT)"#,
     ),
@@ -1046,6 +1057,7 @@ If the buffer is narrowed, this means the beginning of the narrowed part.
         r#"bool-vector"#,
         r#"Return a new bool-vector with specified arguments as elements.
 Allows any number of arguments, including zero.
+
 (fn &rest OBJECTS)"#,
     ),
     (
@@ -1409,19 +1421,19 @@ Otherwise, this is done only if an arg is read using the minibuffer.
 Optional third arg KEYS, if given, specifies the sequence of events to
 supply, as a vector, if FUNCTION inquires which events were used to
 invoke it (via an `interactive' spec that contains, for instance, an
-\"e\" code letter).  If KEYS is omitted or nil, the return value of
+"e" code letter).  If KEYS is omitted or nil, the return value of
 `this-command-keys-vector' is used.
 
 (fn FUNCTION RECORD-FLAG KEYS)"#,
     ),
     (
         r#"call-last-kbd-macro"#,
-        r#"Call the last keyboard macro that you defined with \\[start-kbd-macro].
+        r#"Call the last keyboard macro that you defined with \[start-kbd-macro].
 
 A prefix argument serves as a repeat count.  Zero means repeat until error.
 
 To make a macro permanent so you can call it even after
-defining others, use \\[name-last-kbd-macro].
+defining others, use \[name-last-kbd-macro].
 
 In Lisp, optional second arg LOOPFUNC may be a function that is called prior to
 each iteration of the macro.  Iteration stops if LOOPFUNC returns nil.
@@ -1439,7 +1451,7 @@ directory where the process is run (see below).  If you want to make the
 input come from an Emacs buffer, use `call-process-region' instead.
 
 Third argument DESTINATION specifies how to handle program's output.
-(\"Output\" here means both standard output and standard error
+("Output" here means both standard output and standard error
 output.)
 If DESTINATION is a buffer or the name of a buffer, or t (which stands for
 the current buffer), it means insert output in that buffer before point.
@@ -1596,6 +1608,7 @@ Then the BODY is executed.
 Within BODY, a call to `throw' with the same TAG exits BODY and this `catch'.
 If no throw happens, `catch' returns the value of the last BODY form.
 If a throw happens, it specifies the value to return from `catch'.
+
 (fn TAG BODY...)"#,
     ),
     (
@@ -1609,7 +1622,7 @@ category table.
     (
         r#"category-set-mnemonics"#,
         r#"Return a string containing mnemonics of the categories in CATEGORY-SET.
-CATEGORY-SET is a bool-vector, and the categories \"in\" it are those
+CATEGORY-SET is a bool-vector, and the categories "in" it are those
 that are indexes where t occurs in the bool-vector.
 The return value is a string containing those same categories.
 
@@ -1674,6 +1687,7 @@ If the optional 5th arg UNIBYTE-P is non-nil, the returned string
 is a unibyte string.  By default it is a multibyte string.
 
 See the documentation of `define-ccl-program' for the detail of CCL program.
+
 (fn CCL-PROGRAM STATUS STRING &optional CONTINUE UNIBYTE-P)"#,
     ),
     (
@@ -1726,6 +1740,7 @@ If POS is out of range, the value is nil.
     (
         r#"char-category-set"#,
         r#"Return the category set of CHAR.
+
 (fn CHAR)"#,
     ),
     (
@@ -1747,6 +1762,7 @@ Case is ignored if `case-fold-search' is non-nil in the current buffer.
         r#"Resolve modifiers in the character CHAR.
 The value is a character with modifiers resolved into the character
 code.  Unresolved modifiers are kept in the value.
+
 (fn CHAR)"#,
     ),
     (
@@ -1782,7 +1798,7 @@ this is probably the wrong function to use, because it can't take
 The value is either nil or another char-table.
 If CHAR-TABLE holds nil for a given character,
 then the actual applicable value is inherited from the parent char-table
-\(or from its parents, if necessary).
+(or from its parents, if necessary).
 
 (fn CHAR-TABLE)"#,
     ),
@@ -1805,6 +1821,7 @@ Return the subtype of char-table CHAR-TABLE.  The value is a symbol.
     (
         r#"char-to-string"#,
         r#"Convert arg CHAR to a string containing that character.
+
 (fn CHAR)"#,
     ),
     (
@@ -1816,6 +1833,7 @@ metrics of the character's glyph as determined by its font.
 If the display table in effect replaces CHAR on display with
 something else, the function returns the width of the replacement.
 Tab is taken to occupy `tab-width' columns.
+
 (fn CHAR)"#,
     ),
     (
@@ -1824,6 +1842,7 @@ Tab is taken to occupy `tab-width' columns.
 In Emacs Lisp, characters are represented by character codes, which
 are non-negative integers.  The function `max-char' returns the
 maximum character code.
+
 (fn OBJECT)"#,
     ),
     (
@@ -2247,7 +2266,7 @@ If BASE-DIR is omitted or nil, look for the first writable directory
 in `native-comp-eln-load-path', and use as BASE-DIR its subdirectory
 whose name is given by `comp-native-version-dir'.
 If FILENAME specifies a preloaded file, the directory for the .eln
-file is the \"preloaded/\" subdirectory of the directory determined
+file is the "preloaded/" subdirectory of the directory determined
 as described above.  FILENAME is considered to be a preloaded file if
 the value of `comp-file-preloaded-p' is non-nil, or if FILENAME
 appears in the value of the environment variable LISP_PRELOADED;
@@ -2259,7 +2278,7 @@ the latter is supposed to be used by the Emacs build procedure.
         r#"comp-el-to-eln-rel-filename"#,
         r#"Return the relative name of the .eln file for FILENAME.
 FILENAME must exist, and if it's a symlink, the target must exist.
-If FILENAME is compressed, it must have the \".gz\" extension,
+If FILENAME is compressed, it must have the ".gz" extension,
 and Emacs must have been compiled with zlib; the file will be
 uncompressed on the fly to hash its contents.
 Value includes the original base name, followed by 2 hash values,
@@ -2310,7 +2329,7 @@ determines whether case is significant or ignored.
 The arguments START1, END1, START2, and END2, if non-nil, are
 positions specifying which parts of STR1 or STR2 to compare.  In
 string STR1, compare the part between START1 (inclusive) and END1
-\(exclusive).  If START1 is nil, it defaults to 0, the beginning of
+(exclusive).  If START1 is nil, it defaults to 0, the beginning of
 the string; if END1 is nil, it defaults to the length of the string.
 Likewise, in string STR2, compare the part between START2 and END2.
 Like in `substring', negative values are counted from the end.
@@ -2332,9 +2351,9 @@ If string STR1 is greater, the value is a positive number N;
     (
         r#"completing-read"#,
         r#"Read a string in the minibuffer, with completion.
-While in the minibuffer, you can use \\<minibuffer-local-completion-map>\\[minibuffer-complete] and \\[minibuffer-complete-word] to complete your input.
-You can also use \\<minibuffer-local-map>\\[minibuffer-complete-history] to complete using history items in the
-input history HIST, and you can use \\[minibuffer-complete-defaults] to complete using
+While in the minibuffer, you can use \<minibuffer-local-completion-map>\[minibuffer-complete] and \[minibuffer-complete-word] to complete your input.
+You can also use \<minibuffer-local-map>\[minibuffer-complete-history] to complete using history items in the
+input history HIST, and you can use \[minibuffer-complete-defaults] to complete using
 the default items in DEFAULT-VALUE.
 
 PROMPT is a string to prompt with; normally it ends in a colon and a space.
@@ -2375,7 +2394,7 @@ If INITIAL-INPUT is non-nil, insert it in the minibuffer initially,
   for POSITION.)  This feature is deprecated--it is best to pass nil
   for INITIAL-INPUT and supply the default value DEF instead.  The
   user can yank the default value into the minibuffer easily using
-  \\<minibuffer-local-map>\\[next-history-element].
+  \<minibuffer-local-map>\[next-history-element].
 
 HIST, if non-nil, specifies a history list and optionally the initial
   position in the list.  It can be a symbol, which is the history list
@@ -2533,6 +2552,7 @@ Each argument may be a string or a list or vector of characters (integers).
 
 Values of the `composition' property of the result are not guaranteed
 to be `eq'.
+
 (fn &rest SEQUENCES)"#,
     ),
     (
@@ -2545,6 +2565,7 @@ value is the value of the cond-form.
 If a clause has one element, as in (CONDITION), then the cond-form
 returns CONDITION's value, if that is non-nil.
 If no clause succeeds, cond returns nil.
+
 (fn CLAUSES...)"#,
     ),
     (
@@ -2570,7 +2591,7 @@ suppresses the debugger).
 When a handler handles an error, control returns to the `condition-case'
 and it executes the handler's BODY...
 with VAR bound to (ERROR-SYMBOL . SIGNAL-DATA) from the error.
-\(If VAR is nil, the handler can't access that information.)
+(If VAR is nil, the handler can't access that information.)
 Then the value of the last BODY form is returned from the `condition-case'
 expression.
 
@@ -2579,6 +2600,7 @@ without signaling an error.  BODY is then evaluated with VAR bound to
 the value returned by BODYFORM.
 
 See also the function `signal' for more info.
+
 (fn VAR BODYFORM &rest HANDLERS)"#,
     ),
     (
@@ -2664,7 +2686,7 @@ also considered to be `on the boundary'.
 If the optional argument ONLY-IN-LINE is non-nil and constraining
 NEW-POS would move it to a different line, NEW-POS is returned
 unconstrained.  This is useful for commands that move by line, like
-\\[next-line] or \\[beginning-of-line], which should generally respect field boundaries
+\[next-line] or \[beginning-of-line], which should generally respect field boundaries
 only in the case where they can still move to the right line.
 
 If the optional argument INHIBIT-CAPTURE-PROPERTY is non-nil, and OLD-POS has
@@ -2699,7 +2721,7 @@ TERMINAL is not on a tty device.
 WINDOW must be a live window and defaults to the selected one.
 COORDINATES is a cons of the form (X . Y), X and Y being distances
 measured in characters from the upper-left corner of the frame.
-\(0 . 0) denotes the character in the upper left corner of the
+(0 . 0) denotes the character in the upper left corner of the
 frame.
 If COORDINATES are in the text portion of WINDOW,
    the coordinates relative to the window are returned.
@@ -2712,7 +2734,7 @@ If they are in the left fringe of WINDOW, `left-fringe' is returned.
 If they are in the right fringe of WINDOW, `right-fringe' is returned.
 If they are on the border between WINDOW and its right sibling,
   `vertical-line' is returned.
-If they are in the windows's left or right marginal areas, `left-margin'\n\
+If they are in the windows's left or right marginal areas, `left-margin'
   or `right-margin' is returned.
 
 (fn COORDINATES WINDOW)"#,
@@ -3260,11 +3282,11 @@ although this usage is obsolescent.
 Interactively, prompt for the coding system to decode the region, and
 replace the region with the decoded text.
 
-\"Decoding\" means transforming bytes into readable text (characters).
+"Decoding" means transforming bytes into readable text (characters).
 If, for instance, you have a region that contains data that represents
 the two bytes #xc2 #xa9, after calling this function with the utf-8
 coding system, the region will contain the single
-character ?\\N{COPYRIGHT SIGN}.
+character ?\N{COPYRIGHT SIGN}.
 
 When called from a program, takes four arguments:
 	START, END, CODING-SYSTEM, and DESTINATION.
@@ -3335,7 +3357,7 @@ accessors can be used.
 
 The list has the following nine members: SEC is an integer or
 Lisp timestamp representing a nonnegative value less than 60
-\(or less than 61 if the operating system supports leap seconds).
+(or less than 61 if the operating system supports leap seconds).
 MINUTE is an integer between 0 and 59.  HOUR is an integer
 between 0 and 23.  DAY is an integer between 1 and 31.  MONTH is an
 integer between 1 and 12.  YEAR is the year number, an integer; 0
@@ -3412,12 +3434,13 @@ However, you should normally not make local bindings for variables
 defined with this form.
 
 The optional DOCSTRING specifies the variable's documentation string.
+
 (fn SYMBOL INITVALUE [DOCSTRING])"#,
     ),
     (
         r#"defconst-1"#,
         r#"Like `defconst' but as a function.
-More specifically, behaves like (defconst SYM \\='INITVALUE DOCSTRING).
+More specifically, behaves like (defconst SYM \='INITVALUE DOCSTRING).
 
 (fn SYM INITVALUE DOCSTRING)"#,
     ),
@@ -3536,9 +3559,9 @@ buffer-local values are not affected.  If INITVALUE is missing,
 SYMBOL's value is not set.
 
 If INITVALUE is provided, the `defvar' form also declares the variable
-as \"special\", so that it is always dynamically bound even if
+as "special", so that it is always dynamically bound even if
 `lexical-binding' is t.  If INITVALUE is missing, the form marks the
-variable \"special\" locally (i.e., within the current
+variable "special" locally (i.e., within the current
 lexical scope, or the current file, if the form is at top-level),
 and does nothing if `lexical-binding' is nil.
 
@@ -3553,12 +3576,13 @@ variable.
 To define a user option, use `defcustom' instead of `defvar'.
 
 To define a buffer-local variable, use `defvar-local'.
+
 (fn SYMBOL &optional INITVALUE DOCSTRING)"#,
     ),
     (
         r#"defvar-1"#,
         r#"Like `defvar' but as a function.
-More specifically behaves like (defvar SYM \\='INITVALUE DOCSTRING).
+More specifically behaves like (defvar SYM \='INITVALUE DOCSTRING).
 
 (fn SYM INITVALUE DOCSTRING)"#,
     ),
@@ -3748,7 +3772,7 @@ looked up in BUFFER.
 The optional argument PREFIX, if non-nil, should be a key sequence;
 then we display only bindings that start with that prefix.
 The optional argument MENUS, if non-nil, says to mention menu bindings.
-\(Ordinarily these are omitted from the output.)
+(Ordinarily these are omitted from the output.)
 
 (fn BUFFER PREFIX MENUS)"#,
     ),
@@ -3899,7 +3923,7 @@ nil (meaning the selected frame's display).
 
 For instance, to check whether the display supports underlining:
 
-  (display-supports-face-attributes-p \\='(:underline t))
+  (display-supports-face-attributes-p \='(:underline t))
 
 The definition of `supported' is somewhat heuristic, but basically means
 that a face containing all the attributes in ATTRIBUTES, when merged
@@ -3909,7 +3933,7 @@ with the default face for display, can be represented in a way that's
  (2) `close in spirit' to what the attributes specify, if not exact.
 
 Point (2) implies that a `:weight black' attribute will be satisfied by
-any display that can display bold, and a `:foreground \"yellow\"' as long
+any display that can display bold, and a `:foreground "yellow"' as long
 as it can display a yellowish color, but `:slant italic' will _not_ be
 satisfied by the tty display code's automatic substitution of a `dim'
 face for italic.
@@ -3972,7 +3996,7 @@ including the multibyteness of the string.
 This means that if this function is called with a unibyte string
 argument, and downcasing it would turn it into a multibyte string
 (according to the current locale), the downcasing is done using ASCII
-\"C\" rules instead.  To accurately downcase according to the current
+"C" rules instead.  To accurately downcase according to the current
 locale, the string must be converted into multibyte first.
 
 The argument object is not altered--the value is a copy.
@@ -4122,9 +4146,9 @@ or nil if CHARSET doesn't support CH.
 Interactively, prompt for the coding system to encode the region, and
 replace the region with the bytes that are the result of the encoding.
 
-What's meant by \"encoding\" is transforming textual data (characters)
+What's meant by "encoding" is transforming textual data (characters)
 into bytes.  If, for instance, you have a region that contains the
-single character ?\\N{COPYRIGHT SIGN}, after calling this function with
+single character ?\N{COPYRIGHT SIGN}, after calling this function with
 the utf-8 coding system, the data in the region will represent the two
 bytes #xc2 #xa9.
 
@@ -4192,7 +4216,7 @@ As an obsolescent calling convention, if this function is called with
 DAY, MONTH, and YEAR, and specify the components of a decoded time.
 If there are more than 6 arguments the *last* argument is used as ZONE
 and any other extra arguments are ignored, so that (apply
-#\\='encode-time (decode-time ...)) works.  In this obsolescent
+#\='encode-time (decode-time ...)) works.  In this obsolescent
 convention, DST is -1 and ZONE defaults to nil.
 
 The range of supported years is at least 1970 to the near future.
@@ -4205,9 +4229,9 @@ DST; see Info node `(elisp)Time Conversion' for details and caveats.
     (
         r#"end-kbd-macro"#,
         r#"Finish defining a keyboard macro.
-The definition was started by \\[start-kbd-macro].
-The macro is now available for use via \\[call-last-kbd-macro],
-or it can be given a name with \\[name-last-kbd-macro] and then invoked
+The definition was started by \[start-kbd-macro].
+The macro is now available for use via \[call-last-kbd-macro],
+or it can be given a name with \[name-last-kbd-macro] and then invoked
 under that name.
 
 With numeric arg, repeat macro now that many times,
@@ -4260,7 +4284,7 @@ If the buffer is narrowed, this means the end of the narrowed part.
 Integers with the same value are `eql'.
 Floating-point values with the same sign, exponent and fraction are `eql'.
 This differs from numeric comparison: (eql 0.0 -0.0) returns nil and
-\(eql 0.0e+NaN 0.0e+NaN) returns t, whereas `=' does the opposite.
+(eql 0.0e+NaN 0.0e+NaN) returns t, whereas `=' does the opposite.
 
 (fn OBJ1 OBJ2)"#,
     ),
@@ -4271,7 +4295,7 @@ They must have the same data type.
 Conses are compared by comparing the cars and the cdrs.
 Vectors and strings are compared element by element.
 Numbers are compared via `eql', so integers do not equal floats.
-\(Use `=' if you want integers and floats to be able to be equal.)
+(Use `=' if you want integers and floats to be able to be equal.)
 Symbols must match exactly.
 
 (fn O1 O2)"#,
@@ -4316,7 +4340,7 @@ node `(elisp)Eval' for details.
     (
         r#"eval-buffer"#,
         r#"Execute the accessible portion of current buffer as Lisp code.
-You can use \\[narrow-to-region] to limit the part of buffer to be evaluated.
+You can use \[narrow-to-region] to limit the part of buffer to be evaluated.
 When called from a Lisp program (i.e., not interactively), this
 function accepts up to five optional arguments:
 BUFFER is the buffer to evaluate (nil means use current buffer),
@@ -4412,7 +4436,7 @@ buffer before the macro is executed.
         r#"expand-file-name"#,
         r#"Convert filename NAME to absolute, and canonicalize it.
 Second arg DEFAULT-DIRECTORY is directory to start with if NAME is relative
-\(does not start with slash or tilde); both the directory name and
+(does not start with slash or tilde); both the directory name and
 a directory's file name are accepted.  If DEFAULT-DIRECTORY is nil or
 missing, the current buffer's value of `default-directory' is used.
 NAME should be a string that is a valid file name for the underlying
@@ -4427,17 +4451,17 @@ Multiple consecutive slashes are collapsed into a single slash, except
 at the beginning of the file name when they are significant (e.g., UNC
 file names on MS-Windows.)
 
-An initial \"~\" in NAME expands to your home directory.
+An initial "~" in NAME expands to your home directory.
 
-An initial \"~USER\" in NAME expands to USER's home directory.  If
-USER doesn't exist, \"~USER\" is not expanded.
+An initial "~USER" in NAME expands to USER's home directory.  If
+USER doesn't exist, "~USER" is not expanded.
 
 To do other file name substitutions, see `substitute-in-file-name'.
 
 For technical reasons, this function can return correct but
 non-intuitive results for the root directory; for instance,
-\(expand-file-name ".." "/") returns "/..".  For this reason, use
-\(directory-file-name (file-name-directory dirname)) to traverse a
+(expand-file-name ".." "/") returns "/..".  For this reason, use
+(directory-file-name (file-name-directory dirname)) to traverse a
 filesystem tree, not (expand-file-name ".." dirname).  Note: make
 sure DIRNAME in this example doesn't end in a slash, unless it's
 the root directory.
@@ -4500,7 +4524,7 @@ is given, return the font name used by FACE for CHARACTER on FRAME.
     (
         r#"fceiling"#,
         r#"Return the smallest integer no less than ARG, as a float.
-\(Round toward +inf.)
+(Round toward +inf.)
 
 (fn ARG)"#,
     ),
@@ -4519,7 +4543,7 @@ SUBFEATURE can be used to check a specific subfeature of FEATURE.
     (
         r#"ffloor"#,
         r#"Return the largest integer no greater than ARG, as a float.
-\(Round toward -inf.)
+(Round toward -inf.)
 
 (fn ARG)"#,
     ),
@@ -4570,8 +4594,8 @@ This means that FILENAME must specify the name of a directory, and the
 directory must allow you to open files in it.  If this isn't the case,
 return nil.
 
-FILENAME can either be a directory name (eg. \"/tmp/foo/\") or the
-file name of a file which is a directory (eg. \"/tmp/foo\", without
+FILENAME can either be a directory name (eg. "/tmp/foo/") or the
+file name of a file which is a directory (eg. "/tmp/foo", without
 the final slash).
 
 In order to use a directory as a buffer's current directory, this
@@ -4651,7 +4675,7 @@ Return nil if FILENAME does not name a directory, or if there
 was trouble determining whether FILENAME is a directory.
 
 As a special case, this function will also return t if FILENAME is the
-empty string (\"\").  This quirk is due to Emacs interpreting the
+empty string ("").  This quirk is due to Emacs interpreting the
 empty string (in some cases) as the current directory.
 
 Symbolic links to directories count as directories.
@@ -4663,7 +4687,7 @@ See `file-symlink-p' to distinguish symlinks.
         r#"file-executable-p"#,
         r#"Return t if FILENAME can be executed by you.
 For a directory, this means you can access files in that directory.
-\(It is generally better to use `file-accessible-directory-p' for that
+(It is generally better to use `file-accessible-directory-p' for that
 purpose, though.)
 
 (fn FILENAME)"#,
@@ -4765,6 +4789,7 @@ In most cases, one or more calls to `expand-file-name' are better
 suited for the job than this function.  Use this function only if
 some of the special expansions done by `expand-file-name' get in
 the way of what your program needs to do.
+
 (fn DIRECTORY &rest COMPONENTS)"#,
     ),
     (
@@ -4924,7 +4949,7 @@ Optional 2nd argument FRAME, if non-nil, specifies the target frame.
         r#"Choose a coding system for an operation based on the target name.
 The value names a pair of coding systems: (DECODING-SYSTEM . ENCODING-SYSTEM).
 DECODING-SYSTEM is the coding system to use for decoding
-\(in case OPERATION does decoding), and ENCODING-SYSTEM is the coding system
+(in case OPERATION does decoding), and ENCODING-SYSTEM is the coding system
 for encoding (in case OPERATION does encoding).
 
 The first argument OPERATION specifies an I/O primitive:
@@ -5073,7 +5098,7 @@ glyph-string.
 FONT is a font name, a font-spec, a font-entity, or a font-object.
 The return value is a list of the form
 
-\(:family FAMILY :height HEIGHT :weight WEIGHT :slant SLANT :width WIDTH)
+(:family FAMILY :height HEIGHT :weight WEIGHT :slant SLANT :width WIDTH)
 
 where FAMILY, HEIGHT, WEIGHT, SLANT, and WIDTH are face attribute values
 compatible with `set-face-attribute'.  Some of these key-attribute pairs
@@ -5479,8 +5504,8 @@ The - and 0 flags affect the width specifier, as described below.
 
 The # flag means to use an alternate display form for %b, %B, %o, %x,
 %X, %e, %f, and %g sequences: for %b and %B, it prefixes nonzero results
-with \"0b\" or \"0B\"; for %o, it ensures that the result begins with
-\"0\"; for %x and %X, it prefixes nonzero results with \"0x\" or \"0X\";
+with "0b" or "0B"; for %o, it ensures that the result begins with
+"0"; for %x and %X, it prefixes nonzero results with "0x" or "0X";
 for %e and %f, it causes a decimal point to be included even if the
 precision is zero; for %g, it causes a decimal point to be
 included even if the precision is zero, and also forces trailing
@@ -5511,8 +5536,8 @@ produced text.
 The first argument is a format control string.
 The other arguments are substituted into it to make the result, a string.
 
-This acts like `format', except it also replaces each grave accent (\\=`)
-by a left quote, and each apostrophe (\\=') by a right quote.  The left
+This acts like `format', except it also replaces each grave accent (\=`)
+by a left quote, and each apostrophe (\=') by a right quote.  The left
 and right quote replacement characters are specified by
 `text-quoting-style'.
 
@@ -5638,7 +5663,7 @@ If N is omitted or nil, move point 1 character forward.
 
 Depending on the bidirectional context, the movement may be to the
 right or to the left on the screen.  This is in contrast with
-\\[right-char], which see.
+\[right-char], which see.
 
 (fn N)"#,
     ),
@@ -5657,7 +5682,7 @@ between them, return t; otherwise return nil.
         r#"forward-line"#,
         r#"Move N lines forward (backward if N is negative).
 Precisely, if point is on line I, move to the start of line I + N
-\("start of line" in the logical order).
+("start of line" in the logical order).
 If there isn't room, go as far as possible (no error).
 Interactively, N is the numeric prefix argument and defaults to 1.
 
@@ -5907,7 +5932,7 @@ exists, FRAME is considered a child frame of that frame.
 Return nil if FRAME has no parent frame.  This means that FRAME's
 window-system window is either a "top-level" window (a window whose
 parent window is the window-system's root window) or an embedded window
-\(a window whose parent window is owned by some other application).
+(a window whose parent window is owned by some other application).
 
 (fn FRAME)"#,
     ),
@@ -6036,11 +6061,11 @@ The terminal device is represented by its integer identifier.
     ),
     (
         r#"frame-visible-p"#,
-        r#"Return t if FRAME is \"visible\" (actually in use for display).
-Return the symbol `icon' if FRAME is iconified or \"minimized\".
+        r#"Return t if FRAME is "visible" (actually in use for display).
+Return the symbol `icon' if FRAME is iconified or "minimized".
 Return nil if FRAME was made invisible, via `make-frame-invisible'.
 On graphical displays, invisible frames are not updated and are
-usually not displayed at all, even in a window system's \"taskbar\".
+usually not displayed at all, even in a window system's "taskbar".
 
 (fn FRAME)"#,
     ),
@@ -6083,7 +6108,7 @@ See also `frame-live-p'.
         r#"frexp"#,
         r#"Get significand and exponent of a floating point number.
 Breaks the floating point number X into its binary significand SGNFCAND
-\(a floating point value between 0.5 (included) and 1.0 (excluded))
+(a floating point value between 0.5 (included) and 1.0 (excluded))
 and an integral exponent EXP for 2, such that:
 
   X = SGNFCAND * 2^EXP
@@ -6122,7 +6147,7 @@ signal a `cyclic-function-indirection' error.
     (
         r#"ftruncate"#,
         r#"Truncate a floating point number to an integral float value.
-\(Round toward zero.)
+(Round toward zero.)
 
 (fn ARG)"#,
     ),
@@ -6145,7 +6170,8 @@ list dynamically.
         r#"funcall"#,
         r#"Call first argument as a function, passing remaining arguments to it.
 Return the value that function returns.
-Thus, (funcall \\='cons \\='x \\='y) returns (x . y).
+Thus, (funcall \='cons \='x \='y) returns (x . y).
+
 (fn FUNCTION &rest ARGUMENTS)"#,
     ),
     (
@@ -6251,7 +6277,7 @@ Returns non-nil if GC happened, and nil otherwise.
         r#"Return a string that is the name of no existing buffer based on NAME.
 If there is no live buffer named NAME, then return NAME.
 Otherwise modify name by appending `<NUMBER>', incrementing NUMBER
-\(starting at 2) until an unused name is found, and then return that name.
+(starting at 2) until an unused name is found, and then return that name.
 Optional second argument IGNORE specifies a name that is okay to use (if
 it is in the sequence to be tried) even if a buffer with that name exists.
 
@@ -6412,8 +6438,7 @@ does the same thing as `current-time'.
     ),
     (
         r#"get-load-suffixes"#,
-        r#"Return the suffixes that `load' should try if a suffix is \
-required.
+        r#"Return the suffixes that `load' should try if a suffix is required.
 This uses the variables `load-suffixes' and `load-file-rep-suffixes'.
 
 (fn)"#,
@@ -6512,7 +6537,7 @@ This function searches `process-environment' for VARIABLE.
 
 If optional parameter ENV is a list, then search this list instead of
 `process-environment', and return t when encountering a negative entry
-\(an entry for a variable with no value).
+(an entry for a variable with no value).
 
 (fn VARIABLE ENV)"#,
     ),
@@ -6620,7 +6645,7 @@ GnuTLS MACs             : the list will contain `macs'.
 GnuTLS digests          : the list will contain `digests'.
 GnuTLS symmetric ciphers: the list will contain `ciphers'.
 GnuTLS AEAD ciphers     : the list will contain `AEAD-ciphers'.
-%DUMBFW                 : the list will contain `ClientHello\\ Padding'.
+%DUMBFW                 : the list will contain `ClientHello\ Padding'.
 Any GnuTLS extension with ID up to 100
                         : the list will contain its name.
 
@@ -6759,12 +6784,14 @@ Usage: (gnutls-error-fatalp ERROR)
         r#"gnutls-error-string"#,
         r#"Return a description of ERROR.
 ERROR is an integer or a symbol with an integer `gnutls-code' property.
+
 (fn ERROR)"#,
     ),
     (
         r#"gnutls-errorp"#,
         r#"Return t if ERROR indicates a GnuTLS problem.
 ERROR is an integer or a symbol with an integer `gnutls-code' property.
+
 (fn ERROR)"#,
     ),
     (
@@ -7371,6 +7398,7 @@ for how to proceed.
 Returns the value of THEN or the value of the last of the ELSE's.
 THEN must be one expression, but ELSE... can be zero or more expressions.
 If COND yields nil, and there are no ELSE's, the value is nil.
+
 (fn COND THEN ELSE...)"#,
     ),
     (
@@ -7539,7 +7567,7 @@ onlydir
 Watching a directory is not recursive.  CALLBACK is passed a single argument
 EVENT which contains an event structure of the format
 
-\(WATCH-DESCRIPTOR ASPECTS NAME COOKIE)
+(WATCH-DESCRIPTOR ASPECTS NAME COOKIE)
 
 WATCH-DESCRIPTOR is the same object that was returned by this function.  It can
 be tested for equality using `equal'.  ASPECTS describes the event.  It is a
@@ -7719,7 +7747,7 @@ from adjoining text, if those properties are sticky.
 Interactively, prompt for CHARACTER using `read-char-by-name'.
 You can specify CHARACTER at the prompt in one of these ways:
 
- - As its Unicode character name, e.g. \"LATIN SMALL LETTER A\".
+ - As its Unicode character name, e.g. "LATIN SMALL LETTER A".
    Completion is available; if you type a substring of the name
    preceded by an asterisk `*', Emacs shows all names which include
    that substring, not necessarily at the beginning of the name.
@@ -7829,7 +7857,7 @@ REGISTERS should be a vector produced by `dos-make-register' and
         r#"interactive"#,
         r#"Specify a way of parsing arguments for interactive use of a function.
 For example, write
- (defun foo (arg buf) "Doc string" (interactive "P\\nbbuffer: ") .... )
+ (defun foo (arg buf) "Doc string" (interactive "P\nbbuffer: ") .... )
  to make ARG be the raw prefix argument, and set BUF to an existing buffer,
  when `foo' is called as a command.
 
@@ -8327,6 +8355,7 @@ faster, and with the difference that Unicode characters are inserted as
 themselves into multibyte buffers, and as UTF-8 byte sequences into
 unibyte buffers.
 See the function `json-serialize' for allowed values of OBJECT and ARGS.
+
 (fn OBJECT &rest ARGS)"#,
     ),
     (
@@ -8359,6 +8388,7 @@ The arguments ARGS are a list of keyword/argument pairs:
 
 :false-object OBJ -- use OBJ to represent a JSON false value.
   It defaults to `:false'.
+
 (fn &rest args)"#,
     ),
     (
@@ -8387,6 +8417,7 @@ The arguments ARGS are a list of keyword/argument pairs:
 
 :false-object OBJ -- use OBJ to represent a JSON false value.
   It defaults to `:false'.
+
 (fn STRING &rest ARGS)"#,
     ),
     (
@@ -8418,6 +8449,7 @@ configurable in the arguments ARGS, a list of keyword/argument pairs:
 In you specify the same value for `:null-object' and `:false-object',
 a potentially ambiguous situation, the JSON output will not contain
 any JSON false values.
+
 (fn OBJECT &rest ARGS)"#,
     ),
     (
@@ -8453,7 +8485,7 @@ specified buffer position instead of point are used.
         r#"key-description"#,
         r#"Return a pretty description of key-sequence KEYS.
 Optional arg PREFIX is the sequence of keys leading up to KEYS.
-For example, [?\\C-x ?l] is converted into the string \"C-x l\".
+For example, [?\C-x ?l] is converted into the string "C-x l".
 
 For an approximate inverse of this, see `kbd'.
 
@@ -8796,6 +8828,7 @@ The value of the last form in BODY is returned.
 Each element of VARLIST is a symbol (which is bound to nil)
 or a list (SYMBOL VALUEFORM) (which binds SYMBOL to the value of VALUEFORM).
 All the VALUEFORMs are evalled before any symbols are bound.
+
 (fn VARLIST BODY...)"#,
     ),
     (
@@ -8805,6 +8838,7 @@ The value of the last form in BODY is returned.
 Each element of VARLIST is a symbol (which is bound to nil)
 or a list (SYMBOL VALUEFORM) (which binds SYMBOL to the value of VALUEFORM).
 Each VALUEFORM can refer to the symbols already bound by this VARLIST.
+
 (fn VARLIST BODY...)"#,
     ),
     (
@@ -8919,6 +8953,7 @@ Value is the height in pixels of the line at point.
         r#"list"#,
         r#"Return a newly created list with specified arguments as elements.
 Allows any number of arguments, including zero.
+
 (fn &rest OBJECTS)"#,
     ),
     (
@@ -9110,6 +9145,7 @@ If the optional argument BASE is given, return log ARG using that base.
         r#"logand"#,
         r#"Return bitwise-and of all the arguments.
 Arguments may be integers, or markers converted to integers.
+
 (fn &rest INTS-OR-MARKERS)"#,
     ),
     (
@@ -9132,6 +9168,7 @@ representation.
         r#"logior"#,
         r#"Return bitwise-or of all the arguments.
 Arguments may be integers, or markers converted to integers.
+
 (fn &rest INTS-OR-MARKERS)"#,
     ),
     (
@@ -9144,6 +9181,7 @@ Arguments may be integers, or markers converted to integers.
         r#"logxor"#,
         r#"Return bitwise-exclusive-or of all the arguments.
 Arguments may be integers, or markers converted to integers.
+
 (fn &rest INTS-OR-MARKERS)"#,
     ),
     (
@@ -9270,6 +9308,7 @@ of arguments (ignoring &rest) and the R bit specifies whether there is a &rest
 argument to catch the left-over arguments.  If such an integer is used, the
 arguments will not be dynamically bound but will be instead pushed on the
 stack before executing the byte-code.
+
 (fn ARGLIST BYTE-CODE CONSTANTS DEPTH &optional DOCSTRING INTERACTIVE-SPEC &rest ELEMENTS)"#,
     ),
     (
@@ -9315,6 +9354,7 @@ the char-table has no extra slot.
         r#"Create a byte-code closure from PROTOTYPE and CLOSURE-VARS.
 Return a copy of PROTOTYPE, a byte-code object, with CLOSURE-VARS
 replacing the elements in the beginning of the constant-vector.
+
 (fn PROTOTYPE &rest CLOSURE-VARS)"#,
     ),
     (
@@ -9351,7 +9391,7 @@ FUNCTION.  FUNCTION will be run once per finalizer object.
         r#"Make the frame FRAME invisible.
 If omitted, FRAME defaults to the currently selected frame.
 On graphical displays, invisible frames are not updated and are
-usually not displayed at all, even in a window system's \"taskbar\".
+usually not displayed at all, even in a window system's "taskbar".
 
 Normally you may not make FRAME invisible if all other frames are
 invisible, but if the second optional argument FORCE is non-nil, you may
@@ -9456,7 +9496,7 @@ in case you use it as a menu with `x-popup-menu'.
         r#"make-local-variable"#,
         r#"Make VARIABLE have a separate value in the current buffer.
 Other buffers will continue to share a common default value.
-\(The buffer-local value of VARIABLE starts out as the same value
+(The buffer-local value of VARIABLE starts out as the same value
 VARIABLE previously had.  If VARIABLE was void, it remains void.)
 Return VARIABLE.
 
@@ -9465,7 +9505,7 @@ this function causes a local value to exist for this buffer,
 just as setting the variable would do.
 
 This function returns VARIABLE, and therefore
-  (set (make-local-variable \\='VARIABLE) VALUE-EXP)
+  (set (make-local-variable \='VARIABLE) VALUE-EXP)
 works.
 
 See also `make-variable-buffer-local'.
@@ -9520,9 +9560,9 @@ also nil, meaning that this process is not associated with any buffer.
 address.  The symbol `local' specifies the local host.  If specified
 for a server process, it must be a valid name or address for the local
 host, and only clients connecting to that address will be accepted.
-If all interfaces should be bound, an address of \"0.0.0.0\" (for
-IPv4) or \"::\" (for IPv6) can be used.  (On some operating systems,
-using \"::\" listens on both IPv4 and IPv6.)  `local' will use IPv4 by
+If all interfaces should be bound, an address of "0.0.0.0" (for
+IPv4) or "::" (for IPv6) can be used.  (On some operating systems,
+using "::" listens on both IPv4 and IPv6.)  `local' will use IPv4 by
 default, use a FAMILY of `ipv6' to override this.
 
 :service SERVICE -- SERVICE is name of the service desired, or an
@@ -9671,10 +9711,10 @@ If omitted, BUFFER defaults to the current buffer.
 BEG and END may be integers or markers.
 The fourth arg FRONT-ADVANCE, if non-nil, makes the marker
 for the front of the overlay advance when text is inserted there
-\(which means the text *is not* included in the overlay).
+(which means the text *is not* included in the overlay).
 The fifth arg REAR-ADVANCE, if non-nil, makes the marker
 for the rear of the overlay advance when text is inserted there
-\(which means the text *is* included in the overlay).
+(which means the text *is* included in the overlay).
 
 (fn BEG END BUFFER FRONT-ADVANCE REAR-ADVANCE)"#,
     ),
@@ -9799,7 +9839,7 @@ process id, it cannot be signaled, and the status codes are different
 from normal processes.
 
 `make-serial-process' creates a process and a buffer, on which you
-probably want to use `process-send-string'.  Try \\[serial-term] for
+probably want to use `process-send-string'.  Try \[serial-term] for
 an interactive terminal.  See below for examples.
 
 Arguments are specified as keyword/argument pairs.  The following
@@ -9807,7 +9847,7 @@ arguments are defined:
 
 :port PORT -- (mandatory) PORT is the path or name of the serial port.
 For example, this could be "/dev/ttyS0" on Unix.  On Windows, this
-could be "COM1", or "\\\\.\\COM10" for ports higher than COM9 (double
+could be "COM1", or "\\.\COM10" for ports higher than COM9 (double
 the backslashes in strings).
 
 :speed SPEED -- (mandatory) is handled by `serial-process-configure',
@@ -9852,13 +9892,13 @@ is available via the function `process-contact'.
 
 Examples:
 
-\(make-serial-process :port "/dev/ttyS0" :speed 9600)
+(make-serial-process :port "/dev/ttyS0" :speed 9600)
 
-\(make-serial-process :port "COM1" :speed 115200 :stopbits 2)
+(make-serial-process :port "COM1" :speed 115200 :stopbits 2)
 
-\(make-serial-process :port "\\\\.\\COM13" :speed 1200 :bytesize 7 :parity \\='odd)
+(make-serial-process :port "\\.\COM13" :speed 1200 :bytesize 7 :parity \='odd)
 
-\(make-serial-process :port "/dev/tty.BlueConsole-SPP-1" :speed nil)
+(make-serial-process :port "/dev/tty.BlueConsole-SPP-1" :speed nil)
 
 (fn &rest ARGS)"#,
     ),
@@ -9949,7 +9989,7 @@ except when you want to create a new frame on another terminal.
 In that case, the `tty' parameter specifies the device file to open,
 and the `tty-type' parameter specifies the terminal type.  Example:
 
-   (make-terminal-frame \\='((tty . "/dev/pts/5") (tty-type . "xterm")))
+   (make-terminal-frame \='((tty . "/dev/pts/5") (tty-type . "xterm")))
 
 Note that changing the size of one terminal frame automatically
 affects all frames on the same terminal device.
@@ -10263,7 +10303,7 @@ Note that non-matching optional groups at the end of the regexp are
 elided instead of being represented with two `nil's each.  For instance:
 
   (progn
-    (string-match "^\\(a\\)?\\(b\\)\\(c\\)?$" "b")
+    (string-match "^\(a\)?\(b\)\(c\)?$" "b")
     (match-data))
   => (0 1 nil nil 0 1)
 
@@ -10310,6 +10350,7 @@ Return value is undefined if the last search failed.
         r#"max"#,
         r#"Return largest of all the arguments (which must be numbers or markers).
 The value is always a number; markers are converted to numbers.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
@@ -10460,7 +10501,7 @@ displayed, only logged in the `*Messages*' buffer.
 
 The first argument is a format control string, and the rest are data
 to be formatted under control of the string.  Percent sign (%), grave
-accent (\\=`) and apostrophe (\\=') are special in the format; see
+accent (\=`) and apostrophe (\=') are special in the format; see
 `format-message' for details.  To display STRING without special
 treatment, use (message "%s" STRING).
 
@@ -10502,6 +10543,7 @@ message; let the minibuffer contents show.
         r#"min"#,
         r#"Return smallest of all the arguments (which must be numbers or markers).
 The value is always a number; markers are converted to numbers.
+
 (fn NUMBER-OR-MARKER &rest NUMBERS-OR-MARKERS)"#,
     ),
     (
@@ -10632,8 +10674,8 @@ The first character of NEWENTRY should be one of the following:
   Space or -  whitespace syntax.    w   word constituent.
   _           symbol constituent.   .   punctuation.
   (           open-parenthesis.     )   close-parenthesis.
-  "           string quote.         \\   escape.
-  $           paired delimiter.     \\='   expression quote or prefix operator.
+  "           string quote.         \   escape.
+  $           paired delimiter.     \='   expression quote or prefix operator.
   <           comment starter.      >   comment ender.
   /           character-quote.      @   inherit from parent table.
   |           generic string fence. !   generic comment fence.
@@ -10661,6 +10703,7 @@ c (on any of its chars) using this flag:
  p means CHAR is a prefix character for `backward-prefix-chars';
    such characters are treated as whitespace when they occur
    between expressions.
+
 (fn CHAR NEWENTRY &optional SYNTAX-TABLE)"#,
     ),
     (
@@ -10903,7 +10946,7 @@ release MUTEX.
         r#"Restrict editing in this buffer to the current region.
 The rest of the text becomes temporarily invisible and untouchable
 but is not deleted; if you save the buffer in a file, the invisible
-text is included in the file.  \\[widen] makes all visible again.
+text is included in the file.  \[widen] makes all visible again.
 See also `save-restriction'.
 
 When calling from Lisp, pass two arguments START and END:
@@ -10954,6 +10997,7 @@ LATE-LOAD has to be non-nil when loading for deferred compilation.
         r#"nconc"#,
         r#"Concatenate any number of lists by altering them.
 Only the last argument is not altered, and need not be a list.
+
 (fn &rest LISTS)"#,
     ),
     (
@@ -11363,6 +11407,7 @@ equivalent and can be merged.  It defaults to `equal'.
         r#"Eval args until one of them yields non-nil, then return that value.
 The remaining args are not evalled at all.
 If all args return nil, return nil.
+
 (fn CONDITIONS...)"#,
     ),
     (
@@ -11383,7 +11428,7 @@ exists, return the buffer `*scratch*' (creating it if necessary).
     ),
     (
         r#"other-window-for-scrolling"#,
-        r#"Return \"the other\" window for \"other window scroll\" commands.
+        r#"Return "the other" window for "other window scroll" commands.
 If in the minibuffer, and `minibuffer-scroll-window' is non-nil,
 it specifies the window to use.
 Otherwise, if `other-window-scroll-buffer' is a buffer, a window
@@ -11590,7 +11635,7 @@ In addition to the standard attribute keys listed in
 the attributes:
 
  source -- String describing the source from which multi-monitor
-	   information is obtained, \"Gdk\"
+	   information is obtained, "Gdk"
 
 Internal use only, use `display-monitor-attributes-list' instead.
 
@@ -11692,7 +11737,7 @@ This may be thought of as an atomic action performed in two steps: The
 first step removes FRAME1's window-step window from the display.  The
 second step reinserts FRAME1's window below (above if ABOVE is true)
 that of FRAME2.  Hence the position of FRAME2 in its display's Z
-\(stacking) order relative to all other frames excluding FRAME1 remains
+(stacking) order relative to all other frames excluding FRAME1 remains
 unaltered.
 
 Some window managers may refuse to restack windows.
@@ -11725,7 +11770,7 @@ height, left-margin, and right-margin values.
         r#"pgtk-get-selection-internal"#,
         r#"Return text selected from some X window.
 SELECTION-SYMBOL is typically `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what X expects.)
+(Those are literal upper-case symbol names, since that's what X expects.)
 TARGET-TYPE is the type of data desired, typically `STRING'.
 
 TIME-STAMP is the time to use in the XConvertSelection call for foreign
@@ -11750,7 +11795,7 @@ position (0, 0) of the selected frame's terminal.
         r#"pgtk-own-selection-internal"#,
         r#"Assert a selection of type SELECTION and value VALUE.
 SELECTION is a symbol, typically `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what GDK expects.)
+(Those are literal upper-case symbol names, since that's what GDK expects.)
 VALUE is typically a string, or a cons of two markers, but may be
 anything that the functions on `selection-converter-alist' know about.
 
@@ -11802,7 +11847,7 @@ frame's display, or the first available X display.
         r#"Whether the current Emacs process owns the given selection.
 The arg should be the name of the selection in question, typically one of
 the symbols `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what GDK expects.)
+(Those are literal upper-case symbol names, since that's what GDK expects.)
 For convenience, the symbol nil is the same as `PRIMARY',
 and t is the same as `SECONDARY'.
 
@@ -11828,7 +11873,7 @@ scale factor.
         r#"pgtk-set-mouse-absolute-pixel-position"#,
         r#"Move mouse pointer to absolute pixel position (X, Y).
 The coordinates X and Y are interpreted in pixels relative to a position
-\(0, 0) of the selected frame's display.
+(0, 0) of the selected frame's display.
 
 (fn X Y)"#,
     ),
@@ -11864,7 +11909,7 @@ Internal use only, use `play-sound' instead.
         r#"plist-get"#,
         r#"Extract a value from a property list.
 PLIST is a property list, which is a list of the form
-\(PROP1 VALUE1 PROP2 VALUE2...).
+(PROP1 VALUE1 PROP2 VALUE2...).
 
 This function returns the value corresponding to the given PROP, or
 nil if PROP is not one of the properties on the list.  The comparison
@@ -11878,7 +11923,7 @@ This function doesn't signal an error if PLIST is invalid.
         r#"plist-member"#,
         r#"Return non-nil if PLIST has the property PROP.
 PLIST is a property list, which is a list of the form
-\(PROP1 VALUE1 PROP2 VALUE2 ...).
+(PROP1 VALUE1 PROP2 VALUE2 ...).
 
 The comparison with PROP is done using PREDICATE, which defaults to
 `eq'.
@@ -11893,7 +11938,7 @@ The value is actually the tail of PLIST whose car is PROP.
         r#"plist-put"#,
         r#"Change value in PLIST of PROP to VAL.
 PLIST is a property list, which is a list of the form
-\(PROP1 VALUE1 PROP2 VALUE2 ...).
+(PROP1 VALUE1 PROP2 VALUE2 ...).
 
 The comparison with PROP is done using PREDICATE, which defaults to `eq'.
 
@@ -11997,7 +12042,7 @@ of the window.  The remaining elements are omitted if the character after
 POS is fully visible; otherwise, RTOP and RBOT are the number of pixels
 off-window at the top and bottom of the screen line ("row") containing
 POS, ROWH is the visible height of that row, and VPOS is the row number
-\(zero-based).
+(zero-based).
 
 (fn POS WINDOW PARTIALLY)"#,
     ),
@@ -12313,7 +12358,7 @@ value of the setting to use for this `prin1' call.
 
 For instance:
 
-  (prin1 object nil \\='((length . 100) (circle . t))).
+  (prin1 object nil \='((length . 100) (circle . t))).
 
 See Info node `(elisp)Output Overrides' for a list of possible values.
 
@@ -12492,7 +12537,7 @@ a socket connection.
         r#"Return the contact info of PROCESS; t for a real child.
 For a network or serial or pipe connection, the value depends on the
 optional KEY arg.  If KEY is nil, value is a cons cell of the form
-\(HOST SERVICE) for a network connection or (PORT SPEED) for a serial
+(HOST SERVICE) for a network connection or (PORT SPEED) for a serial
 connection; it is t for a pipe connection.  If KEY is t, the complete
 contact information for the connection is returned, else the specific
 value for the keyword KEY is returned.  See `make-network-process',
@@ -12774,11 +12819,13 @@ Return non-nil if the profiler was running.
         r#"Eval FIRST and BODY sequentially; return value from FIRST.
 The value of FIRST is saved during the evaluation of the remaining args,
 whose values are discarded.
+
 (fn FIRST BODY...)"#,
     ),
     (
         r#"progn"#,
         r#"Eval BODY forms sequentially and return value of last one.
+
 (fn BODY...)"#,
     ),
     (
@@ -12796,6 +12843,7 @@ Remaining arguments form a sequence of PROPERTY VALUE pairs for text
 properties to add to the result.
 
 See Info node `(elisp) Text Properties' for more information.
+
 (fn STRING &rest PROPERTIES)"#,
     ),
     (
@@ -12907,11 +12955,12 @@ See function `interrupt-process' for more details on usage.
 Warning: `quote' does not construct its return value, but just returns
 the value that was pre-constructed by the Lisp reader (see info node
 `(elisp)Printed Representation').
-This means that \\='(a . b) is not identical to (cons \\='a \\='b): the former
+This means that \='(a . b) is not identical to (cons \='a \='b): the former
 does not cons.  Quoting should be reserved for constants that will
 never be modified by side-effects, unless you like self-modifying code.
 See the common pitfall in info node `(elisp)Rearrangement' for an example
 of unexpected results when a quoted object is modified.
+
 (fn ARG)"#,
     ),
     (
@@ -13054,7 +13103,7 @@ If you want to read non-character events, or ignore them, call
 `read-event' or `read-char-exclusive' instead.
 
 If the optional argument PROMPT is non-nil, display that as a prompt.
-If PROMPT is nil or the string \"\", the key sequence/events that led
+If PROMPT is nil or the string "", the key sequence/events that led
 to the current command is used as the prompt.
 
 If the optional argument INHERIT-INPUT-METHOD is non-nil and some
@@ -13083,7 +13132,7 @@ character code: it will fail the `characterp' test.  Use `event-basic-type'
 to recover the character code with the modifiers removed.
 
 If the optional argument PROMPT is non-nil, display that as a prompt.
-If PROMPT is nil or the string \"\", the key sequence/events that led
+If PROMPT is nil or the string "", the key sequence/events that led
 to the current command is used as the prompt.
 
 If the optional argument INHERIT-INPUT-METHOD is non-nil and some
@@ -13130,7 +13179,7 @@ instead.  `read-key' will decode events via `input-decode-map' that
 as <F7> and <RIGHT>, or mouse events generated by `xterm-mouse-mode'.
 
 If the optional argument PROMPT is non-nil, display that as a prompt.
-If PROMPT is nil or the string \"\", the key sequence/events that led
+If PROMPT is nil or the string "", the key sequence/events that led
 to the current command is used as the prompt.
 
 If the optional argument INHERIT-INPUT-METHOD is non-nil and some
@@ -13217,7 +13266,7 @@ Returns a cons: (OBJECT-READ . FINAL-STRING-INDEX).
 FINAL-STRING-INDEX is an integer giving the position of the next
 remaining character in STRING.  START and END optionally delimit
 a substring of STRING from which to read;  they default to 0 and
-\(length STRING) respectively.  Negative values are counted from
+(length STRING) respectively.  Negative values are counted from
 the end of STRING.
 
 (fn STRING START END)"#,
@@ -13413,6 +13462,7 @@ have changed.
 TYPE is its type as returned by `type-of'; it should be either a
 symbol or a type descriptor.  SLOTS is used to initialize the record
 slots with shallow copies of the arguments.
+
 (fn TYPE &rest SLOTS)"#,
     ),
     (
@@ -13431,10 +13481,10 @@ slots with shallow copies of the arguments.
         r#"recursive-edit"#,
         r#"Invoke the editor command loop recursively.
 To get out of the recursive edit, a command can throw to `exit' -- for
-instance (throw \\='exit nil).
+instance (throw \='exit nil).
 
 The following values (last argument to `throw') can be used when
-throwing to \\='exit:
+throwing to \='exit:
 
 - t causes `recursive-edit' to quit, so that control returns to the
   command loop one level up.
@@ -13587,7 +13637,7 @@ if ARG is not a symbol.
         r#"Remove some properties from text from START to END.
 The third argument PROPERTIES is a property list
 whose property names specify the properties to remove.
-\(The values stored in PROPERTIES are ignored.)
+(The values stored in PROPERTIES are ignored.)
 If the optional fourth argument OBJECT is a buffer (or nil, which means
 the current buffer), START and END are buffer positions (integers or
 markers).  If OBJECT is a string, START and END are 0-based indices into it.
@@ -13648,14 +13698,14 @@ what exactly is a word is determined by the syntax tables in effect
 in the current buffer, and the variable `case-symbols-as-words'.
 
 If optional third arg LITERAL is non-nil, insert NEWTEXT literally.
-Otherwise treat `\\' as special:
-  `\\&' in NEWTEXT means substitute original matched text.
-  `\\N' means substitute what matched the Nth `\\(...\\)'.
+Otherwise treat `\' as special:
+  `\&' in NEWTEXT means substitute original matched text.
+  `\N' means substitute what matched the Nth `\(...\)'.
        If Nth parens didn't match, substitute nothing.
-  `\\\\' means insert one `\\'.
-  `\\?' is treated literally
+  `\\' means insert one `\'.
+  `\?' is treated literally
        (for compatibility with `query-replace-regexp').
-  Any other character following `\\' signals an error.
+  Any other character following `\' signals an error.
 Case conversion does not apply to these substitutions.
 
 If optional fourth argument STRING is non-nil, it should be a string
@@ -13667,8 +13717,8 @@ STRING that was matched (the original STRING itself is not altered).
 The optional fifth argument SUBEXP specifies a subexpression;
 it says to replace just that subexpression with NEWTEXT,
 rather than replacing the entire matched text.
-This is, in a vague sense, the inverse of using `\\N' in NEWTEXT;
-`\\N' copies subexp N into NEWTEXT, but using N as SUBEXP puts
+This is, in a vague sense, the inverse of using `\N' in NEWTEXT;
+`\N' copies subexp N into NEWTEXT, but using N as SUBEXP puts
 NEWTEXT in place of subexp N.
 This is useful only after a regular expression search or match,
 since only regular expressions have distinguished subexpressions.
@@ -13819,6 +13869,7 @@ is unspecified.
 
 Do not use `make-local-variable' to make a hook variable buffer-local.
 Instead, use `add-hook' and specify t for the LOCAL argument.
+
 (fn HOOK &rest ARGS)"#,
     ),
     (
@@ -13829,10 +13880,11 @@ may be nil, a function, or a list of functions.  Call each
 function in order with arguments ARGS, stopping at the first
 one that returns nil, and return nil.  Otherwise (if all functions
 return non-nil, or if there are no functions to call), return non-nil
-\(do not rely on the precise return value in this case).
+(do not rely on the precise return value in this case).
 
 Do not use `make-local-variable' to make a hook variable buffer-local.
 Instead, use `add-hook' and specify t for the LOCAL argument.
+
 (fn HOOK &rest ARGS)"#,
     ),
     (
@@ -13847,6 +13899,7 @@ return nil.
 
 Do not use `make-local-variable' to make a hook variable buffer-local.
 Instead, use `add-hook' and specify t for the LOCAL argument.
+
 (fn HOOK &rest ARGS)"#,
     ),
     (
@@ -13856,6 +13909,7 @@ I.e. instead of calling each function FUN directly with arguments ARGS,
 it calls WRAP-FUNCTION with arguments FUN and ARGS.
 As soon as a call to WRAP-FUNCTION returns non-nil, `run-hook-wrapped'
 aborts and returns that value.
+
 (fn HOOK WRAP-FUNCTION &rest ARGS)"#,
     ),
     (
@@ -13873,6 +13927,7 @@ hook; they should use `run-mode-hooks' instead.
 
 Do not use `make-local-variable' to make a hook variable buffer-local.
 Instead, use `add-hook' and specify t for the LOCAL argument.
+
 (fn &rest HOOKS)"#,
     ),
     (
@@ -13908,6 +13963,7 @@ least the number of distinct elements.
         r#"save-current-buffer"#,
         r#"Record which buffer is current; execute BODY; make that buffer current.
 BODY is executed just like `progn'.
+
 (fn &rest BODY)"#,
     ),
     (
@@ -13930,13 +13986,13 @@ To save the mark state as well as point and the current buffer, use
         r#"save-restriction"#,
         r#"Execute BODY, saving and restoring current buffer's restrictions.
 The buffer's restrictions make parts of the beginning and end invisible.
-\(They are set up with `narrow-to-region' and eliminated with `widen'.)
+(They are set up with `narrow-to-region' and eliminated with `widen'.)
 This special form, `save-restriction', saves the current buffer's
 restrictions, including those that were set by `with-restriction' with a
 label argument, when it is entered, and restores them when it is exited.
 So any `narrow-to-region' within BODY lasts only until the end of the form.
 The old restrictions settings are restored even in case of abnormal exit
-\(throw or error).
+(throw or error).
 
 The value returned is the value of the last form in BODY.
 
@@ -13952,7 +14008,7 @@ use `save-excursion' outermost:
 Scan forward if COUNT is positive, backward if COUNT is negative.
 Return the character number of the position thus found.
 
-A \"list", in this context, refers to a balanced parenthetical
+A "list", in this context, refers to a balanced parenthetical
 grouping, as determined by the syntax table.
 
 If DEPTH is nonzero, treat that as the nesting depth of the starting
@@ -14240,7 +14296,7 @@ is not given or nil, 1 stopbit is used.
 :flowcontrol FLOWCONTROL -- FLOWCONTROL determines the type of
 flowcontrol to be used, which is either nil (don't use flowcontrol),
 the symbol `hw' (use RTS/CTS hardware flowcontrol), or the symbol `sw'
-\(use XON/XOFF software flowcontrol).  If FLOWCONTROL is not given, no
+(use XON/XOFF software flowcontrol).  If FLOWCONTROL is not given, no
 flowcontrol is used.
 
 `serial-process-configure' is called by `make-serial-process' for the
@@ -14248,12 +14304,12 @@ initial configuration of the serial port.
 
 Examples:
 
-\(serial-process-configure :process "/dev/ttyS0" :speed 1200)
+(serial-process-configure :process "/dev/ttyS0" :speed 1200)
 
-\(serial-process-configure
-    :buffer "COM1" :stopbits 1 :parity \\='odd :flowcontrol \\='hw)
+(serial-process-configure
+    :buffer "COM1" :stopbits 1 :parity \='odd :flowcontrol \='hw)
 
-\(serial-process-configure :port "\\\\.\\COM13" :bytesize 7)
+(serial-process-configure :port "\\.\COM13" :bytesize 7)
 
 (fn &rest ARGS)"#,
     ),
@@ -14369,7 +14425,7 @@ This function may be passed to `add-variable-watcher'.
         r#"set-case-table"#,
         r#"Select a new case table for the current buffer.
 A case table is a char-table which maps characters
-to their lower-case equivalents.  It also has three \"extra\" slots
+to their lower-case equivalents.  It also has three "extra" slots
 which may be additional char-tables or nil.
 These slots are called UPCASE, CANONICALIZE and EQUIVALENCES.
 UPCASE maps each non-upper-case character to its upper-case equivalent.
@@ -14424,6 +14480,7 @@ or a character code.  Return VALUE.
     (
         r#"set-charset-priority"#,
         r#"Assign higher priority to the charsets given as arguments.
+
 (fn &rest charsets)"#,
     ),
     (
@@ -15087,7 +15144,7 @@ former.
 Useful if the buffer was not read from the file normally
 or if the file itself has been changed for some known benign reason.
 An argument specifies the modification time value to use
-\(instead of that of the visited file), in the form of a time value as
+(instead of that of the visited file), in the form of a time value as
 in `current-time' or an integer flag as returned by `visited-file-modtime'.
 
 (fn TIME-FLAG)"#,
@@ -15118,7 +15175,7 @@ This function runs `window-scroll-functions' before running
 WINDOW must be a valid window used in horizontal or vertical combination.
 If LIMIT is nil, child windows of WINDOW can be recombined with WINDOW's
 siblings.  LIMIT t means that child windows of WINDOW are never
-\(re-)combined with WINDOW's siblings.  Other values are reserved for
+(re-)combined with WINDOW's siblings.  Other values are reserved for
 future use.
 
 (fn WINDOW LIMIT)"#,
@@ -15355,7 +15412,7 @@ winds up in a partially-visible line.
 The setting of the WINDOW's start position takes effect during the
 next redisplay cycle, not immediately.  If NOFORCE is nil or
 omitted, forcing the display of WINDOW to start at POS cancels
-any setting of WINDOW's vertical scroll (\"vscroll\") amount
+any setting of WINDOW's vertical scroll ("vscroll") amount
 set by `set-window-vscroll' and by scrolling functions.
 
 (fn WINDOW POS NOFORCE)"#,
@@ -15427,6 +15484,7 @@ Thus, (setq x (1+ y)) sets `x' to the value of `(1+ y)'.
 The second VAL is not computed until after the first SYM is set, and so on;
 each VAL can use the new value of variables set earlier in the `setq'.
 The return value of the `setq' form is the value of the last VAL.
+
 (fn [SYM VAL]...)"#,
     ),
     (
@@ -15502,7 +15560,7 @@ Returns the distance traveled, either zero or negative.
         r#"skip-chars-forward"#,
         r#"Move point forward, stopping before a char not in STRING, or at pos LIM.
 STRING is like the inside of a `[...]' in a regular expression
-except that `]' is never special and `\\' quotes `^', `-' or `\\'
+except that `]' is never special and `\' quotes `^', `-' or `\'
  (but not at the end of a range; quoting is never needed there).
 Thus, with arg "a-zA-Z", this skips letters stopping before first nonletter.
 With arg "^a-zA-Z", skips nonletters stopping before first letter.
@@ -15779,8 +15837,8 @@ This is the one used for new buffers.
         r#"start-kbd-macro"#,
         r#"Record subsequent keyboard input, defining a keyboard macro.
 The commands are recorded even as they are executed.
-Use \\[end-kbd-macro] to finish recording and make the macro available.
-Use \\[name-last-kbd-macro] to give it a permanent name.
+Use \[end-kbd-macro] to finish recording and make the macro available.
+Use \[name-last-kbd-macro] to give it a permanent name.
 Non-nil arg (prefix arg) means append to last macro defined;
 this begins by re-executing that macro as if you typed it again.
 If optional second arg, NO-EXEC, is non-nil, do not re-execute last
@@ -15807,6 +15865,7 @@ of incoming traffic.
         r#"string"#,
         r#"
 Concatenate all the argument characters and make the result a string.
+
 (fn &rest CHARACTERS)"#,
     ),
     (
@@ -15821,7 +15880,7 @@ multibyte character of charset `eight-bit'.
 See also `string-to-multibyte'.
 
 Beware, this often doesn't really do what you think it does.
-It is similar to (decode-coding-string STRING \\='utf-8-emacs).
+It is similar to (decode-coding-string STRING \='utf-8-emacs).
 If you're not sure, whether to use `string-as-multibyte' or
 `string-to-multibyte', use `string-to-multibyte'.
 
@@ -15854,20 +15913,20 @@ settings.  For example, characters with different coding points but
 the same meaning might be considered as equal, like different grave
 accent Unicode characters:
 
-\(string-collate-equalp (string ?\\uFF40) (string ?\\u1FEF))
+(string-collate-equalp (string ?\uFF40) (string ?\u1FEF))
   => t
 
 The optional argument LOCALE, a string, overrides the setting of your
 current locale identifier for collation.  The value is system
-dependent; a LOCALE \"en_US.UTF-8\" is applicable on POSIX systems,
-while it would be \"enu_USA.1252\" on MS Windows systems.
+dependent; a LOCALE "en_US.UTF-8" is applicable on POSIX systems,
+while it would be "enu_USA.1252" on MS Windows systems.
 
 If IGNORE-CASE is non-nil, characters are converted to lower-case
 before comparing them.
 
 To emulate Unicode-compliant collation on MS-Windows systems,
 bind `w32-collate-ignore-punctuation' to a non-nil value, since
-the codeset part of the locale cannot be \"UTF-8\" on MS-Windows.
+the codeset part of the locale cannot be "UTF-8" on MS-Windows.
 
 If your system does not support a locale environment, this function
 behaves like `string-equal', and in that case the IGNORE-CASE argument
@@ -15886,20 +15945,20 @@ This function obeys the conventions for collation order in your
 locale settings.  For example, punctuation and whitespace characters
 might be considered less significant for sorting:
 
-\(sort \\='("11" "12" "1 1" "1 2" "1.1" "1.2") \\='string-collate-lessp)
+(sort \='("11" "12" "1 1" "1 2" "1.1" "1.2") \='string-collate-lessp)
   => ("11" "1 1" "1.1" "12" "1 2" "1.2")
 
 The optional argument LOCALE, a string, overrides the setting of your
 current locale identifier for collation.  The value is system
-dependent; a LOCALE \"en_US.UTF-8\" is applicable on POSIX systems,
-while it would be, e.g., \"enu_USA.1252\" on MS-Windows systems.
+dependent; a LOCALE "en_US.UTF-8" is applicable on POSIX systems,
+while it would be, e.g., "enu_USA.1252" on MS-Windows systems.
 
 If IGNORE-CASE is non-nil, characters are converted to lower-case
 before comparing them.
 
 To emulate Unicode-compliant collation on MS-Windows systems,
 bind `w32-collate-ignore-punctuation' to a non-nil value, since
-the codeset part of the locale cannot be \"UTF-8\" on MS-Windows.
+the codeset part of the locale cannot be "UTF-8" on MS-Windows.
 
 Some operating systems do not implement correct collation (in specific
 locale environments or at all).  Then, this functions falls back to
@@ -15945,7 +16004,7 @@ to a multibyte character.  In this case, the returned string is a
 newly created string with no text properties.  If STRING is multibyte
 or entirely ASCII, it is returned unchanged.  In particular, when
 STRING is unibyte and entirely ASCII, the returned string is unibyte.
-\(When the characters are all ASCII, Emacs primitives will treat the
+(When the characters are all ASCII, Emacs primitives will treat the
 string the same way whether it is unibyte or multibyte.)
 
 (fn STRING)"#,
@@ -16053,7 +16112,7 @@ This function compares version strings S1 and S2:
       Leading zeros in version numbers are ignored.
    3) If both prefix and version are equal, compare as ordinary strings.
 
-For example, \"foo2.png\" compares less than \"foo12.png\".
+For example, "foo2.png" compares less than "foo12.png".
 Case is significant.
 Symbols are also allowed; their print names are used instead.
 
@@ -16081,6 +16140,7 @@ For these reasons, the results are just an approximation, especially
 on GUI frames; for accurate dimensions of text as it will be
 displayed, use `string-pixel-width' or `window-text-pixel-size'
 instead.
+
 (fn STRING &optional FROM TO)"#,
     ),
     (
@@ -16165,14 +16225,14 @@ is discarded.
         r#"substring"#,
         r#"Return a new string whose contents are a substring of STRING.
 The returned string consists of the characters between index FROM
-\(inclusive) and index TO (exclusive) of STRING.  FROM and TO are
+(inclusive) and index TO (exclusive) of STRING.  FROM and TO are
 zero-indexed: 0 means the first character of STRING.  Negative values
 are counted from the end of STRING.  If TO is nil, the substring runs
 to the end of STRING.
 
 The STRING argument may also be a vector.  In that case, the return
 value is a new vector that contains the elements between index FROM
-\(inclusive) and index TO (exclusive) of that vector argument.
+(inclusive) and index TO (exclusive) of that vector argument.
 
 With one argument, just copy STRING (with properties, if any).
 
@@ -16764,6 +16824,7 @@ With ARG, turn tracing on if and only if ARG is positive.
     (
         r#"trace-to-stderr"#,
         r#"Like `format', but print result to stderr.
+
 (fn STRING &rest OBJECTS)"#,
     ),
     (
@@ -17277,7 +17338,7 @@ PATTERN can be
     @CAPTURE-NAME
     (_)
     _
-    \"TYPE\"
+    "TYPE"
 
 See Info node `(elisp)Pattern Matching' for detailed explanation.
 
@@ -17369,7 +17430,7 @@ A PATTERN in QUERY can be
     @CAPTURE-NAME
     (_)
     _
-    \"TYPE\"
+    "TYPE"
 
 See Info node `(elisp)Pattern Matching' for detailed explanation.
 
@@ -17692,7 +17753,7 @@ to the string and treated as in `substring'.
 A `directly usable' directory name is one that may be used without the
 intervention of any file name handler.
 If FILENAME is a directly usable file itself, return
-\(file-name-as-directory FILENAME).
+(file-name-as-directory FILENAME).
 If FILENAME refers to a file which is not accessible from a local process,
 then this should return nil.
 The `call-process' and `start-process' functions use this function to
@@ -17709,6 +17770,7 @@ get a current directory to run processes in.
     (
         r#"unibyte-string"#,
         r#"Concatenate all the argument bytes and make the result a unibyte string.
+
 (fn &rest BYTES)"#,
     ),
     (
@@ -17773,6 +17835,7 @@ error did not occur.
 If BODYFORM completes normally, its value is returned
 after executing the UNWINDFORMS.
 If BODYFORM exits nonlocally, the UNWINDFORMS are executed anyway.
+
 (fn BODYFORM UNWINDFORMS...)"#,
     ),
     (
@@ -17861,7 +17924,7 @@ If UID is a string, return the full name of the user with that login
 name, or nil if there is no such user.
 
 If the full name includes commas, remove everything starting with
-the first comma, because the \\='gecos\\=' field of the \\='/etc/passwd\\=' file
+the first comma, because the \='gecos\=' field of the \='/etc/passwd\=' file
 is in general a comma-separated list.
 
 (fn UID)"#,
@@ -17930,12 +17993,14 @@ If the current binding is global (the default), the value is nil.
         r#"Concatenate all the arguments and make the result a vector.
 The result is a vector whose elements are the elements of all the arguments.
 Each argument may be a list, vector or string.
+
 (fn &rest SEQUENCES)"#,
     ),
     (
         r#"vector"#,
         r#"Return a newly created vector with specified arguments as elements.
 Allows any number of arguments, including zero.
+
 (fn &rest OBJECTS)"#,
     ),
     (
@@ -18010,7 +18075,7 @@ buffer, whether or not it is currently displayed in some window.
     ),
     (
         r#"visible-frame-list"#,
-        r#"Return a list of all frames now \"visible\" (being updated).
+        r#"Return a list of all frames now "visible" (being updated).
 
 (fn)"#,
     ),
@@ -18100,7 +18165,7 @@ The value is one of the following:
                 name is not encodable in the current ANSI codepage.
 
 Note that for .bat and .cmd batch files the function returns the type
-of their command interpreter, as specified by the \"COMSPEC\"
+of their command interpreter, as specified by the "COMSPEC"
 environment variable.
 
 This function returns `unknown' for programs whose file names
@@ -18111,7 +18176,7 @@ such programs cannot be invoked by Emacs anyway.
     ),
     (
         r#"w32-badge"#,
-        "Display a taskbar icon overlay image on the selected frame.\nBADGE is a string.  If BADGE is nil, remove the overlay.  Do nothing if\nWindows does not support the ITaskbarList3 interface and return nil,\notherwise return t.  Do nothing if the selected frame is not (yet)\nassociated with a window handle.  BACKGROUND and FOREGROUND are RGB\ntriplet strings of the form \\\"#RRGGBB\\\".\n\n(fn BADGE BACKGROUND FOREGROUND)",
+        "Display a taskbar icon overlay image on the selected frame.\nBADGE is a string.  If BADGE is nil, remove the overlay.  Do nothing if\nWindows does not support the ITaskbarList3 interface and return nil,\notherwise return t.  Do nothing if the selected frame is not (yet)\nassociated with a window handle.  BACKGROUND and FOREGROUND are RGB\ntriplet strings of the form \"#RRGGBB\".\n\n(fn BADGE BACKGROUND FOREGROUND)",
     ),
     (
         r#"w32-battery-status"#,
@@ -18266,7 +18331,7 @@ This may be thought of as an atomic action performed in two steps: The
 first step removes FRAME1's window-system window from the display.  The
 second step reinserts FRAME1's window below (above if ABOVE is true)
 that of FRAME2.  Hence the position of FRAME2 in its display's Z
-\(stacking) order relative to all other frames excluding FRAME1 remains
+(stacking) order relative to all other frames excluding FRAME1 remains
 unaltered.
 
 Some window managers may refuse to restack windows.
@@ -18421,7 +18486,7 @@ Value is the integer unique ID of the notification that can be used
 to remove the notification using `w32-notification-close', which see.
 If the function fails, the return value is nil.
 
-Tray notifications, a.k.a. \"taskbar messages\", are messages that
+Tray notifications, a.k.a. "taskbar messages", are messages that
 inform the user about events unrelated to the current user activity,
 such as a significant system event, by briefly displaying informative
 text in a balloon from an icon in the notification area of the taskbar.
@@ -18443,7 +18508,7 @@ The following parameters are supported:
                     be shown when the mouse pointer hovers over the tray
                     icon added by the notification.  If TIP is not a
                     string, or if this parameter is not specified, the
-                    default tooltip text is \"Emacs notification\".  The
+                    default tooltip text is "Emacs notification".  The
                     tooltip text can be up to 127 characters long (63
                     on Windows versions before W2K).  Longer strings
                     will be truncated.
@@ -18529,6 +18594,7 @@ to be converted to forward slashes by the caller.
     (
         r#"w32-reconstruct-hot-key"#,
         r#"Convert hot-key ID to a lisp key combination.
+
 (fn ID)"#,
     ),
     (
@@ -18673,7 +18739,7 @@ If successful, the new layout id is returned, otherwise nil.
         r#"w32-set-mouse-absolute-pixel-position"#,
         r#"Move mouse pointer to absolute pixel position (X, Y).
 The coordinates X and Y are interpreted in pixels relative to a position
-\(0, 0) of the selected frame's display.
+(0, 0) of the selected frame's display.
 
 (fn X Y)"#,
     ),
@@ -18706,37 +18772,37 @@ What operations can be used depends on the particular DOCUMENT and its
 handler application, but typically it is one of the following common
 operations:
 
- \"open\"    - open DOCUMENT, which could be a file, a directory, or an
+ "open"    - open DOCUMENT, which could be a file, a directory, or an
 	       executable program (application).  If it is an application,
 	       that application is launched in the current buffer's default
 	       directory.  Otherwise, the application associated with
 	       DOCUMENT is launched in the buffer's default directory.
- \"opennew\" - like \"open\", but instruct the application to open
+ "opennew" - like "open", but instruct the application to open
 	       DOCUMENT in a new window.
- \"openas\"  - open the \"Open With\" dialog for DOCUMENT.
- \"print\"   - print DOCUMENT, which must be a file.
- \"printto\" - print DOCUMENT, which must be a file, to a specified printer.
+ "openas"  - open the "Open With" dialog for DOCUMENT.
+ "print"   - print DOCUMENT, which must be a file.
+ "printto" - print DOCUMENT, which must be a file, to a specified printer.
 	       The printer should be provided in PARAMETERS, see below.
- \"explore\" - start the Windows Explorer on DOCUMENT.
- \"edit\"    - launch an editor and open DOCUMENT for editing; which
+ "explore" - start the Windows Explorer on DOCUMENT.
+ "edit"    - launch an editor and open DOCUMENT for editing; which
 	       editor is launched depends on the association for the
 	       specified DOCUMENT.
- \"find\"    - initiate search starting from DOCUMENT, which must specify
+ "find"    - initiate search starting from DOCUMENT, which must specify
 	       a directory.
- \"delete\"  - move DOCUMENT, a file or a directory, to Recycle Bin.
- \"copy\"    - copy DOCUMENT, which must be a file or a directory, into
+ "delete"  - move DOCUMENT, a file or a directory, to Recycle Bin.
+ "copy"    - copy DOCUMENT, which must be a file or a directory, into
 	       the clipboard.
- \"cut\"     - move DOCUMENT, a file or a directory, into the clipboard.
- \"paste\"   - paste the file whose name is in the clipboard into DOCUMENT,
+ "cut"     - move DOCUMENT, a file or a directory, into the clipboard.
+ "paste"   - paste the file whose name is in the clipboard into DOCUMENT,
 	       which must be a directory.
- \"pastelink\"
+ "pastelink"
 	   - create a shortcut in DOCUMENT (which must be a directory)
 	       the file or directory whose name is in the clipboard.
- \"runas\"   - run DOCUMENT, which must be an executable file, with
-	       elevated privileges (a.k.a. \"as Administrator\").
- \"properties\"
+ "runas"   - run DOCUMENT, which must be an executable file, with
+	       elevated privileges (a.k.a. "as Administrator").
+ "properties"
 	   - open the property sheet dialog for DOCUMENT.
- nil       - invoke the default OPERATION, or \"open\" if default is
+ nil       - invoke the default OPERATION, or "open" if default is
 	       not defined or unavailable.
 
 DOCUMENT is typically the name of a document file or a URL, but can
@@ -18747,9 +18813,9 @@ one; this function does not support remote file names.
 If DOCUMENT is an executable program, the optional third arg PARAMETERS
 can be a string containing command line parameters, separated by blanks,
 that will be passed to the program.  Some values of OPERATION also require
-parameters (e.g., \"printto\" requires the printer address).  Otherwise,
+parameters (e.g., "printto" requires the printer address).  Otherwise,
 PARAMETERS should be nil or unspecified.  Note that double quote characters
-in PARAMETERS must each be enclosed in 2 additional quotes, as in \"\"\".
+in PARAMETERS must each be enclosed in 2 additional quotes, as in """.
 
 Optional fourth argument SHOW-FLAG can be used to control how the
 application will be displayed when it is invoked.  If SHOW-FLAG is nil
@@ -18934,7 +19000,7 @@ If FIRSTONLY is the symbol `non-ascii', return the first binding found,
 no matter what it is.
 If FIRSTONLY has another non-nil value, prefer bindings
 that use the modifier key specified in `where-is-preferred-modifier'
-\(or their meta variants) and entirely reject menu bindings.
+(or their meta variants) and entirely reject menu bindings.
 
 If optional 4th arg NOINDIRECT is non-nil, don't extract the commands inside
 menu-items.  This makes it possible to search for a menu-item itself.
@@ -19950,7 +20016,7 @@ If VISIT is a string, it is a second file name;
   the output goes to FILENAME, but the buffer is marked as visiting VISIT.
   VISIT is also the file name to lock and unlock for clash detection.
 If VISIT is neither t nor nil nor a string, or if Emacs is in batch mode,
-  do not display the \"Wrote file\" message.
+  do not display the "Wrote file" message.
 The optional sixth arg LOCKNAME, if non-nil, specifies the name to
   use for locking and unlocking, overriding FILENAME and VISIT.
 The optional seventh arg MUSTBENEW, if non-nil, insists on a check
@@ -20134,8 +20200,8 @@ In addition to the standard attribute keys listed in
 the attributes:
 
  source -- String describing the source from which multi-monitor
-	   information is obtained, one of \"Gdk\", \"XRandR 1.5\",
-	   \"XRandr\", \"Xinerama\", or \"fallback\"
+	   information is obtained, one of "Gdk", "XRandR 1.5",
+	   "XRandr", "Xinerama", or "fallback"
 
 Internal use only, use `display-monitor-attributes-list' instead.
 
@@ -20340,7 +20406,7 @@ This may be thought of as an atomic action performed in two steps: The
 first step removes FRAME1's window-step window from the display.  The
 second step reinserts FRAME1's window below (above if ABOVE is true)
 that of FRAME2.  Hence the position of FRAME2 in its display's Z
-\(stacking) order relative to all other frames excluding FRAME1 remains
+(stacking) order relative to all other frames excluding FRAME1 remains
 unaltered.
 
 Some window managers may refuse to restack windows.
@@ -20426,7 +20492,7 @@ and the class is `Emacs.CLASS.SUBCLASS'.
         r#"x-get-selection-internal"#,
         r#"Return text selected from some X window.
 SELECTION-SYMBOL is typically `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what X expects.)
+(Those are literal upper-case symbol names, since that's what X expects.)
 TARGET-TYPE is the type of data desired, typically `STRING'.
 
 TIME-STAMP is the time to use in the XConvertSelection call for foreign
@@ -20529,7 +20595,7 @@ selected frame's display.
         r#"x-own-selection-internal"#,
         r#"Assert an X selection of type SELECTION and value VALUE.
 SELECTION is a symbol, typically `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what X expects.)
+(Those are literal upper-case symbol names, since that's what X expects.)
 VALUE is typically a string, or a cons of two markers, but may be
 anything that the functions on `selection-converter-alist' know about.
 
@@ -20575,7 +20641,7 @@ The return value is VALUE from the chosen item.
 An ITEM may also be just a string--that makes a nonselectable item.
 An ITEM may also be nil--that means to put all preceding items
 on the left of the dialog box and all following items on the right.
-\(By default, approximately half appear on each side.)
+(By default, approximately half appear on each side.)
 
 If HEADER is non-nil, the frame title for the box is "Information",
 otherwise it is "Question".
@@ -20599,7 +20665,7 @@ If POSITION is t, it means to use the current mouse position.
 MENU is a specifier for a menu.  For the simplest case, MENU is a keymap.
 The menu items come from key bindings that have a menu string as well as
 a definition; actually, the "definition" in such a key binding looks like
-\(STRING . REAL-DEFINITION).  To give the menu a title, put a string into
+(STRING . REAL-DEFINITION).  To give the menu a title, put a string into
 the keymap as a top-level element.
 
 If REAL-DEFINITION is nil, that puts a nonselectable string in the menu.
@@ -20686,7 +20752,7 @@ On Nextstep, TERMINAL is unused.
         r#"Whether the current Emacs process owns the given X Selection.
 The arg should be the name of the selection in question, typically one of
 the symbols `PRIMARY', `SECONDARY', or `CLIPBOARD'.
-\(Those are literal upper-case symbol names, since that's what X expects.)
+(Those are literal upper-case symbol names, since that's what X expects.)
 For convenience, the symbol nil is the same as `PRIMARY',
 and t is the same as `SECONDARY'.
 
@@ -20763,7 +20829,7 @@ server.
         r#"x-set-mouse-absolute-pixel-position"#,
         r#"Move mouse pointer to absolute pixel position (X, Y).
 The coordinates X and Y are interpreted in pixels relative to a position
-\(0, 0) of the selected frame's display.
+(0, 0) of the selected frame's display.
 
 (fn X Y)"#,
     ),
@@ -21037,7 +21103,7 @@ with QUERY.
 Return t if answer is yes, and nil if the answer is no.
 
 PROMPT is the string to display to ask the question; `yes-or-no-p'
-appends `yes-or-no-prompt' (default \"(yes or no) \") to it.  If
+appends `yes-or-no-prompt' (default "(yes or no) ") to it.  If
 PROMPT is a non-empty string, and it ends with a non-space character,
 a space character will be appended to it.
 
@@ -21045,7 +21111,7 @@ The user must confirm the answer with RET, and can edit it until it
 has been confirmed.
 
 If the `use-short-answers' variable is non-nil, instead of asking for
-\"yes\" or \"no\", this function will ask for \"y\" or \"n\" (and
+"yes" or "no", this function will ask for "y" or "n" (and
 ignore the value of `yes-or-no-prompt').
 
 If dialog boxes are supported, this function will use a dialog box
