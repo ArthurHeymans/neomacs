@@ -92,3 +92,48 @@ fn oracle_point_min_max_markers_reflect_current_restriction() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_goto_char_clips_point_but_returns_requested_position() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "0123456789")
+  (narrow-to-region 4 8)
+  (let ((low-ret (goto-char -100))
+        (low-point (point))
+        (high-ret (goto-char 999))
+        (high-point (point))
+        (inside-ret (goto-char 6))
+        (inside-point (point)))
+    (list low-ret low-point high-ret high-point inside-ret inside-point
+          (point-min) (point-max))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_goto_char_marker_uses_marker_position_and_type_checks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "0123456789")
+  (let ((m (copy-marker 6)))
+    (narrow-to-region 4 8)
+    (list
+     (eq (goto-char m) m)
+     (point)
+     (progn
+       (set-marker m 2)
+       (eq (goto-char m) m))
+     (point)
+     (condition-case err
+         (goto-char "not-position")
+       (error (list (car err) (cdr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
