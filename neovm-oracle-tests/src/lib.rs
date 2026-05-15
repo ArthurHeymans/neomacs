@@ -1223,6 +1223,8 @@ mod syntax_table_comprehensive;
 #[path = "syntax-table-operations.rs"]
 mod syntax_table_operations;
 mod take;
+#[path = "take-ntake-semantics.rs"]
+mod take_ntake_semantics;
 #[path = "text-properties.rs"]
 mod text_properties;
 #[path = "text-properties-advanced.rs"]
