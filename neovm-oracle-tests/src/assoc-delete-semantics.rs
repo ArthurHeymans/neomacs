@@ -47,6 +47,23 @@ fn oracle_prop_assoc_delete_all_custom_test_and_non_cons_elements() {
 }
 
 #[test]
+fn oracle_assoc_delete_all_improper_alist_mutates_before_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((alist (cons (cons 'keep 1)
+                   (cons (cons 'drop 2) 'tail))))
+  (list
+   (condition-case err
+       (assoc-delete-all 'drop alist)
+     (error (list (car err) (cdr err))))
+   alist))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_assq_delete_all_uses_eq_not_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
