@@ -82,6 +82,8 @@ mod buffer_string;
 mod buffer_substring;
 #[path = "buffer-substring-advanced.rs"]
 mod buffer_substring_advanced;
+#[path = "button-semantics.rs"]
+mod button_semantics;
 #[path = "byte-operations-comprehensive.rs"]
 mod byte_operations_comprehensive;
 #[path = "car-cdr-combinations.rs"]
