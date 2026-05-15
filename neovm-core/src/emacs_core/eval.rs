@@ -10285,6 +10285,26 @@ impl Context {
         self.unbind_to_with_result(count, result)
     }
 
+    #[inline]
+    pub(crate) fn pop_fast_bytecode_backtrace_frame(&mut self, count: usize) {
+        debug_assert!(
+            self.specpdl.len() == count + 1
+                && matches!(
+                    self.specpdl.last(),
+                    Some(SpecBinding::Backtrace {
+                        args: BacktraceArgs::Evaluated0
+                            | BacktraceArgs::Evaluated1(_)
+                            | BacktraceArgs::Evaluated2(_, _)
+                            | BacktraceArgs::EvaluatedBcStack { .. },
+                        debug_on_exit: false,
+                        ..
+                    })
+                ),
+            "fast bytecode subr call should only pop its own trivial backtrace frame"
+        );
+        self.specpdl.pop();
+    }
+
     fn apply_internal(
         &mut self,
         function: Value,
