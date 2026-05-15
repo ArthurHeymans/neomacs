@@ -885,6 +885,8 @@ mod next_property_change_advanced;
 mod next_property_change_patterns;
 mod r#not;
 mod nreverse;
+#[path = "nreverse-reverse-semantics.rs"]
+mod nreverse_reverse_semantics;
 mod nthcdr;
 #[path = "nthcdr-advanced.rs"]
 mod nthcdr_advanced;
