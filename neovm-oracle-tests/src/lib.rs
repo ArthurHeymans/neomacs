@@ -574,6 +574,8 @@ mod delete_and_extract_advanced;
 mod delete_char_patterns;
 #[path = "delete-consecutive-dups-semantics.rs"]
 mod delete_consecutive_dups_semantics;
+#[path = "delete-dups-semantics.rs"]
+mod delete_dups_semantics;
 #[path = "delete-operations.rs"]
 mod delete_operations;
 #[path = "delete-operations-advanced.rs"]
