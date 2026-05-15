@@ -1247,6 +1247,8 @@ mod text_properties_advanced;
 mod text_properties_comprehensive;
 #[path = "text-properties-patterns.rs"]
 mod text_properties_patterns;
+#[path = "text-property-api-semantics.rs"]
+mod text_property_api_semantics;
 #[path = "text-property-comprehensive.rs"]
 mod text_property_comprehensive;
 #[path = "text-property-manipulation.rs"]
