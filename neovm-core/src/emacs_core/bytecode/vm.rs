@@ -38,6 +38,12 @@ type BindStack = SmallVec<[usize; 8]>;
 
 use crate::emacs_core::eval::SpecBinding;
 
+#[cold]
+#[inline(never)]
+fn invalid_bytecode_flow() -> Flow {
+    signal("error", vec![Value::string("Invalid byte-code")])
+}
+
 #[derive(Clone, Copy)]
 enum DirectSubrCallee {
     Symbol(SymId),
@@ -369,8 +375,27 @@ impl<'a> Vm<'a> {
             ));
         }
 
+        let frame_limit = match frame_base.checked_add(func.max_stack as usize) {
+            Some(limit) => limit,
+            None => {
+                self.ctx.bc_buf.truncate(frame_base);
+                self.ctx.bc_frames.pop();
+                return Err(invalid_bytecode_flow());
+            }
+        };
+        if self.ctx.bc_buf.capacity() < frame_limit {
+            self.ctx
+                .bc_buf
+                .reserve_exact(frame_limit - self.ctx.bc_buf.len());
+        }
+
         // Push required + optional args (pad with nil for missing optionals)
         for i in 0..nonrest {
+            if self.ctx.bc_buf.len() >= frame_limit {
+                self.ctx.bc_buf.truncate(frame_base);
+                self.ctx.bc_frames.pop();
+                return Err(invalid_bytecode_flow());
+            }
             if i < nargs {
                 let v = args[i];
                 if v.is_string() {
@@ -400,6 +425,11 @@ impl<'a> Vm<'a> {
 
         // If &rest, collect remaining args into a list
         if has_rest {
+            if self.ctx.bc_buf.len() >= frame_limit {
+                self.ctx.bc_buf.truncate(frame_base);
+                self.ctx.bc_frames.pop();
+                return Err(invalid_bytecode_flow());
+            }
             let rest_list = if nargs > nonrest {
                 Value::list_from_slice(&args[nonrest..])
             } else {
@@ -437,8 +467,14 @@ impl<'a> Vm<'a> {
                 if let Some(env) = func.env {
                     self.ctx.lexenv = env;
                 }
-                let result =
-                    self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+                let result = self.run_loop(
+                    func,
+                    frame_base,
+                    frame_limit,
+                    &mut pc,
+                    &mut handlers,
+                    &mut bind_stack,
+                );
                 return self.cleanup_bytecode_frame(
                     result,
                     condition_stack_base,
@@ -493,7 +529,14 @@ impl<'a> Vm<'a> {
                     rest_list,
                 );
             }
-            let result = self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+            let result = self.run_loop(
+                func,
+                frame_base,
+                frame_limit,
+                &mut pc,
+                &mut handlers,
+                &mut bind_stack,
+            );
             return self.cleanup_bytecode_frame(
                 result,
                 condition_stack_base,
@@ -516,7 +559,14 @@ impl<'a> Vm<'a> {
             }
         }
 
-        let result = self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+        let result = self.run_loop(
+            func,
+            frame_base,
+            frame_limit,
+            &mut pc,
+            &mut handlers,
+            &mut bind_stack,
+        );
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
@@ -524,6 +574,7 @@ impl<'a> Vm<'a> {
         &mut self,
         func: &ByteCodeFunction,
         frame_base: usize,
+        frame_limit: usize,
         pc: &mut usize,
         handlers: &mut HandlerStack,
         bind_stack: &mut BindStack,
@@ -562,7 +613,23 @@ impl<'a> Vm<'a> {
                         );
                     }
                 }
-                self.ctx.bc_buf.push(v);
+                let len = self.ctx.bc_buf.len();
+                if len >= frame_limit {
+                    self.resume_nonlocal(
+                        func,
+                        &mut pc_local,
+                        handlers,
+                        bind_stack,
+                        invalid_bytecode_flow(),
+                    )?;
+                    continue;
+                }
+                let stack = &mut self.ctx.bc_buf;
+                debug_assert!(len < stack.capacity());
+                unsafe {
+                    stack.as_mut_ptr().add(len).write(v);
+                    stack.set_len(len + 1);
+                }
             }};
         }
 
@@ -599,7 +666,7 @@ impl<'a> Vm<'a> {
                     &mut pc_local,
                     handlers,
                     bind_stack,
-                    signal("error", vec![Value::string("Invalid byte-code")]),
+                    invalid_bytecode_flow(),
                 )?;
                 continue;
             }};
@@ -618,7 +685,7 @@ impl<'a> Vm<'a> {
                             &mut pc_local,
                             handlers,
                             bind_stack,
-                            signal("error", vec![Value::string("Invalid byte-code")]),
+                            invalid_bytecode_flow(),
                         )?;
                         continue;
                     };
@@ -654,7 +721,7 @@ impl<'a> Vm<'a> {
                             &mut pc_local,
                             handlers,
                             bind_stack,
-                            signal("error", vec![Value::string("Invalid byte-code")]),
+                            invalid_bytecode_flow(),
                         )?;
                         continue;
                     }
@@ -1051,8 +1118,10 @@ impl<'a> Vm<'a> {
                         }
                         let b = unsafe { *stack.get_unchecked(len - 1) };
                         let a = unsafe { *stack.get_unchecked(len - 2) };
-                        if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
-                            let res = av.wrapping_add(bv);
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
+                            let res = av + bv;
                             if res >= Value::MOST_NEGATIVE_FIXNUM
                                 && res <= Value::MOST_POSITIVE_FIXNUM
                             {
@@ -1080,8 +1149,10 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
-                        let res = av.wrapping_sub(bv);
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
+                        let res = av - bv;
                         if res >= Value::MOST_NEGATIVE_FIXNUM && res <= Value::MOST_POSITIVE_FIXNUM
                         {
                             stk!()[len - 2] = Value::fixnum(res);
@@ -1103,7 +1174,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         if let Some(res) = av.checked_mul(bv) {
                             if res >= Value::MOST_NEGATIVE_FIXNUM
                                 && res <= Value::MOST_POSITIVE_FIXNUM
@@ -1136,7 +1209,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         if bv != 0 {
                             // Emacs truncation division (towards zero), matching C semantics
                             let res = if (av < 0) != (bv < 0) && av % bv != 0 {
@@ -1163,7 +1238,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         if bv != 0 {
                             stk!()[len - 2] = Value::fixnum(av % bv);
                             stk!().pop();
@@ -1188,7 +1265,8 @@ impl<'a> Vm<'a> {
                             invalid_bytecode!();
                         }
                         let top = unsafe { *stack.get_unchecked(len - 1) };
-                        if let Some(n) = top.as_fixnum() {
+                        if top.is_fixnum() {
+                            let n = top.xfixnum();
                             if n != Value::MOST_POSITIVE_FIXNUM {
                                 unsafe {
                                     *stack.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
@@ -1215,7 +1293,8 @@ impl<'a> Vm<'a> {
                 }
                 Op::Sub1 => {
                     let top = *stk!().last().unwrap();
-                    if let Some(n) = top.as_fixnum() {
+                    if top.is_fixnum() {
+                        let n = top.xfixnum();
                         if n != Value::MOST_NEGATIVE_FIXNUM {
                             *stk!().last_mut().unwrap() = Value::fixnum(n - 1);
                         } else {
@@ -1233,7 +1312,8 @@ impl<'a> Vm<'a> {
                 }
                 Op::Negate => {
                     let top = *stk!().last().unwrap();
-                    if let Some(n) = top.as_fixnum() {
+                    if top.is_fixnum() {
+                        let n = top.xfixnum();
                         if n != Value::MOST_NEGATIVE_FIXNUM {
                             *stk!().last_mut().unwrap() = Value::fixnum(-n);
                         } else {
@@ -1270,7 +1350,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         stk!()[len - 2] = if av > bv { Value::T } else { Value::NIL };
                         stk!().pop();
                     } else {
@@ -1289,7 +1371,9 @@ impl<'a> Vm<'a> {
                         }
                         let b = unsafe { *stack.get_unchecked(len - 1) };
                         let a = unsafe { *stack.get_unchecked(len - 2) };
-                        if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
                             unsafe {
                                 *stack.get_unchecked_mut(len - 2) =
                                     if av < bv { Value::T } else { Value::NIL };
@@ -1311,7 +1395,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         stk!()[len - 2] = if av <= bv { Value::T } else { Value::NIL };
                         stk!().pop();
                     } else {
@@ -1325,7 +1411,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         stk!()[len - 2] = if av >= bv { Value::T } else { Value::NIL };
                         stk!().pop();
                     } else {
@@ -1339,7 +1427,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         stk!()[len - 2] = if av >= bv { a } else { b };
                         stk!().pop();
                     } else {
@@ -1353,7 +1443,9 @@ impl<'a> Vm<'a> {
                     let len = stk!().len();
                     let b = stk!()[len - 1];
                     let a = stk!()[len - 2];
-                    if let (Some(av), Some(bv)) = (a.as_fixnum(), b.as_fixnum()) {
+                    if a.is_fixnum() && b.is_fixnum() {
+                        let av = a.xfixnum();
+                        let bv = b.xfixnum();
                         stk!()[len - 2] = if av <= bv { a } else { b };
                         stk!().pop();
                     } else {
@@ -4123,7 +4215,30 @@ impl<'a> Vm<'a> {
         let mut handlers = HandlerStack::new();
         let specpdl_base = self.ctx.specpdl.len();
         let mut bind_stack = BindStack::new();
-        let result = self.run_loop(func, frame_base, &mut pc, &mut handlers, &mut bind_stack);
+        let frame_limit = match frame_base.checked_add(func.max_stack as usize) {
+            Some(limit) => limit,
+            None => {
+                return self.cleanup_bytecode_frame(
+                    Err(invalid_bytecode_flow()),
+                    condition_stack_base,
+                    specpdl_base,
+                    frame_base,
+                );
+            }
+        };
+        if self.ctx.bc_buf.capacity() < frame_limit {
+            self.ctx
+                .bc_buf
+                .reserve_exact(frame_limit - self.ctx.bc_buf.len());
+        }
+        let result = self.run_loop(
+            func,
+            frame_base,
+            frame_limit,
+            &mut pc,
+            &mut handlers,
+            &mut bind_stack,
+        );
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 

@@ -1021,7 +1021,7 @@ fn vm_arithmetic_bcall_fast_path_observes_live_function_cell() {
     });
     let replacement_value_idx = replacement.add_constant(Value::fixnum(99));
     replacement.ops = vec![Op::Constant(replacement_value_idx), Op::Return];
-    replacement.max_stack = 1;
+    replacement.max_stack = 3;
 
     let plus = intern("+");
     eval.obarray
