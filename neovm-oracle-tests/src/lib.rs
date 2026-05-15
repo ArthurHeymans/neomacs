@@ -993,6 +993,8 @@ mod replace_regexp_advanced;
 mod reverse;
 #[path = "ring-buffer-comprehensive.rs"]
 mod ring_buffer_comprehensive;
+#[path = "ring-semantics.rs"]
+mod ring_semantics;
 #[path = "safe-length-operations.rs"]
 mod safe_length_operations;
 #[path = "safe-length-patterns.rs"]
