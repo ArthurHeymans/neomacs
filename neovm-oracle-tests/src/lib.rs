@@ -1154,6 +1154,8 @@ mod string_processing_advanced;
 mod string_replace;
 #[path = "string-replace-patterns.rs"]
 mod string_replace_patterns;
+#[path = "string-replace-semantics.rs"]
+mod string_replace_semantics;
 #[path = "string-search-advanced.rs"]
 mod string_search_advanced;
 #[path = "string-to-char-advanced.rs"]
