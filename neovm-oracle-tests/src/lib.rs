@@ -58,6 +58,8 @@ mod beginning_of_line;
 mod bitwise;
 #[path = "bool-vector-comprehensive.rs"]
 mod bool_vector_comprehensive;
+#[path = "bool-vector-edge-semantics.rs"]
+mod bool_vector_edge_semantics;
 #[path = "bool-vector-operations.rs"]
 mod bool_vector_operations;
 #[path = "bootstrap-library-require.rs"]
