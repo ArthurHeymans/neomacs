@@ -1169,6 +1169,8 @@ mod text_properties_patterns;
 mod text_property_comprehensive;
 #[path = "text-property-manipulation.rs"]
 mod text_property_manipulation;
+#[path = "text-property-search.rs"]
+mod text_property_search;
 #[path = "thing-at-point-comprehensive.rs"]
 mod thing_at_point_comprehensive;
 mod r#throw;
