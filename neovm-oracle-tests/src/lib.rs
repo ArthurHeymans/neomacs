@@ -523,6 +523,8 @@ mod copy_keymap_advanced;
 mod copy_sequence;
 #[path = "copy-sequence-advanced.rs"]
 mod copy_sequence_advanced;
+#[path = "copy-sequence-semantics.rs"]
+mod copy_sequence_semantics;
 #[path = "copy-syntax-table-advanced.rs"]
 mod copy_syntax_table_advanced;
 #[path = "count-lines-advanced.rs"]
