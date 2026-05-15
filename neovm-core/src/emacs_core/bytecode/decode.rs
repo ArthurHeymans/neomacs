@@ -93,10 +93,12 @@ pub fn decode_gnu_bytecode(
 pub fn decode_gnu_bytecode_with_offset_map(
     bytecodes: &[u8],
     constants: &mut Vec<Value>,
-) -> Result<(Vec<Op>, HashMap<usize, usize>), DecodeError> {
+) -> Result<(Vec<Op>, Vec<(usize, usize)>), DecodeError> {
     let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, constants)?;
     let ops = patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?;
-    Ok((ops, offset_map))
+    let mut offset_pairs: Vec<_> = offset_map.into_iter().collect();
+    offset_pairs.sort_unstable_by_key(|(byte_offset, _)| *byte_offset);
+    Ok((ops, offset_pairs))
 }
 
 /// Intermediate instruction that may contain raw byte-offset jump targets.

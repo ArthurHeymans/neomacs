@@ -888,6 +888,20 @@ fn discard_buffers_from_window_history(
     Ok(())
 }
 
+fn live_frame_buffer_parameter_ids(buffers: &BufferManager, mut value: Value) -> Vec<BufferId> {
+    let mut ids = Vec::new();
+    while value.is_cons() {
+        let car = value.cons_car();
+        if let Some(id) = car.as_buffer_id()
+            && buffers.get(id).is_some()
+        {
+            ids.push(id);
+        }
+        value = value.cons_cdr();
+    }
+    ids
+}
+
 fn should_record_window_history_buffer(
     frames: &FrameManager,
     minibuffers: &MinibufferManager,
@@ -7496,6 +7510,23 @@ pub(crate) fn builtin_modify_frame_parameters(
                                 frame.z_order = z_order;
                             }
                             frame.set_parameter(Value::symbol("parent-frame"), parent);
+                        }
+                    }
+                    "buffer-list" => {
+                        let ids = live_frame_buffer_parameter_ids(&eval.buffers, pair_cdr);
+                        if let Some(frame) = eval.frames.get_mut(fid) {
+                            // GNU `store_frame_param` keeps these in
+                            // `struct frame`, not in the generic parameter
+                            // alist, and silently drops non-live entries.
+                            frame.buffer_list = ids;
+                            frame.remove_parameter(Value::symbol("buffer-list"));
+                        }
+                    }
+                    "buried-buffer-list" => {
+                        let ids = live_frame_buffer_parameter_ids(&eval.buffers, pair_cdr);
+                        if let Some(frame) = eval.frames.get_mut(fid) {
+                            frame.buried_buffer_list = ids;
+                            frame.remove_parameter(Value::symbol("buried-buffer-list"));
                         }
                     }
                     "visibility" => {

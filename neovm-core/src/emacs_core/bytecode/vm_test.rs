@@ -1968,7 +1968,7 @@ fn vm_switch_branches_using_hash_table_jump_table() {
         arglist: Value::NIL,
         lexical: false,
         env: None,
-        gnu_byte_offset_map: Some(std::collections::HashMap::from([(8usize, 5usize)])),
+        gnu_byte_offset_map: Some(vec![(8usize, 5usize)]),
         gnu_bytecode_bytes: None,
         docstring: None,
         doc_form: None,

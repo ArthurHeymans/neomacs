@@ -972,7 +972,7 @@ impl TaggedHeap {
             .saturating_add(
                 data.gnu_byte_offset_map
                     .as_ref()
-                    .map_or(0, Self::hash_map_storage_bytes),
+                    .map_or(0, Self::vector_storage_bytes),
             )
             .saturating_add(
                 data.gnu_bytecode_bytes

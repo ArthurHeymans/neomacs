@@ -4402,6 +4402,44 @@ fn modify_frame_parameters_icon_name_tracks_frame_field() {
 }
 
 #[test]
+fn modify_frame_parameters_buffer_lists_use_gnu_special_storage() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        r#"(let* ((b1 (get-buffer-create "frame-bl-one"))
+                  (b2 (get-buffer-create "frame-bl-two"))
+                  (dead (get-buffer-create "frame-bl-dead")))
+             (kill-buffer dead)
+             (modify-frame-parameters
+              nil
+              (list
+               (cons 'buffer-list
+                     (cons b2 (cons 'not-a-buffer (cons dead (cons b1 'dotted-tail)))))
+               (cons 'buried-buffer-list (list b1 dead b2))))
+             (list
+              (mapcar #'buffer-name (frame-parameter nil 'buffer-list))
+              (mapcar #'buffer-name (frame-parameter nil 'buried-buffer-list))
+              (let ((count 0)
+                    (tail (frame-parameters)))
+                (while tail
+                  (if (eq (car (car tail)) 'buffer-list)
+                      (setq count (1+ count)))
+                  (setq tail (cdr tail)))
+                count)
+              (let ((count 0)
+                    (tail (frame-parameters)))
+                (while tail
+                  (if (eq (car (car tail)) 'buried-buffer-list)
+                      (setq count (1+ count)))
+                  (setq tail (cdr tail)))
+                count)))"#,
+    );
+    assert_eq!(
+        results[0],
+        r#"OK (("frame-bl-two" "frame-bl-one") ("frame-bl-one" "frame-bl-two") 1 1)"#
+    );
+}
+
+#[test]
 fn divider_width_builtins_read_frame_parameters_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
@@ -5162,6 +5200,24 @@ fn set_window_buffer_updates_history_lists_on_real_buffer_switches() {
         results[2],
         "OK (\"swb-hist-d1\" \"swb-hist-d2\" \"swb-hist-b\")"
     );
+}
+
+#[test]
+fn current_window_configuration_roots_window_history_across_gc() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        r#"(let* ((w (selected-window))
+                  (b1 (get-buffer-create "wcfg-next-a"))
+                  (b2 (get-buffer-create "wcfg-next-b"))
+                  (cfg nil))
+             (set-window-next-buffers w (list b2 b1))
+             (setq cfg (current-window-configuration))
+             (set-window-next-buffers w nil)
+             (garbage-collect)
+             (set-window-configuration cfg)
+             (mapcar #'buffer-name (window-next-buffers w)))"#,
+    );
+    assert_eq!(results[0], r#"OK ("wcfg-next-b" "wcfg-next-a")"#);
 }
 
 #[test]

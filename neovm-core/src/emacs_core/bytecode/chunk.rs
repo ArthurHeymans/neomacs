@@ -1,6 +1,5 @@
 //! ByteCode chunk — compiled function representation.
 
-use std::collections::HashMap;
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -49,8 +48,12 @@ pub struct ByteCodeFunction {
     pub env: Option<Value>,
     /// GNU `.elc` bytecode stores branch targets as byte offsets.
     /// Decoded runtime uses instruction indices, so GNU-decoded functions
-    /// retain the byte-offset -> instruction-index map for `switch`.
-    pub gnu_byte_offset_map: Option<HashMap<usize, usize>>,
+    /// retain a sorted byte-offset -> instruction-index table for `switch`.
+    ///
+    /// GNU does not allocate a hash table for this: it executes directly from
+    /// the byte string.  Keep Neomacs' bridge representation compact and cheap
+    /// to restore; `Bswitch` is the only runtime user.
+    pub gnu_byte_offset_map: Option<Vec<(usize, usize)>>,
     /// Original GNU-format bytecode bytes from the .elc file or `make-byte-code`
     /// call.  NeoVM normally executes from `ops` (decoded IR), but elisp code
     /// like `byte-compile-make-closure` does `(aref FUN 1)` to read the raw

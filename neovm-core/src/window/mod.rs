@@ -3403,44 +3403,50 @@ impl GcTrace for FrameManager {
             roots.push(frame.name);
             roots.push(frame.icon_name);
             roots.push(frame.focus_frame);
+            roots.push(frame.parent_frame);
             roots.push(frame.title);
+            if let Some(window_system) = frame.window_system {
+                roots.push(window_system);
+            }
             roots.extend(frame.parameters.keys().copied());
             for v in frame.parameters.values() {
                 roots.push(*v);
             }
             roots.push(frame.face_hash_table);
             roots.extend(frame.realized_faces.keys().copied());
-            trace_window(&frame.root_window, roots);
+            frame.root_window.trace_roots(roots);
             if let Some(mb) = &frame.minibuffer_leaf {
-                trace_window(mb, roots);
+                mb.trace_roots(roots);
             }
         }
     }
 }
 
-fn trace_window(window: &Window, roots: &mut Vec<Value>) {
-    match window {
-        Window::Leaf { display, .. } => {
-            for (key, value) in window.parameters() {
-                roots.push(*key);
-                roots.push(*value);
+impl GcTrace for Window {
+    fn trace_roots(&self, roots: &mut Vec<Value>) {
+        match self {
+            Window::Leaf { display, .. } => {
+                for (key, value) in self.parameters() {
+                    roots.push(*key);
+                    roots.push(*value);
+                }
+                if let Some(history) = self.history() {
+                    roots.push(history.prev_buffers);
+                    roots.push(history.next_buffers);
+                }
+                roots.push(display.display_table);
+                roots.push(display.cursor_type);
+                roots.push(display.vertical_scroll_bar_type);
+                roots.push(display.horizontal_scroll_bar_type);
             }
-            if let Some(history) = window.history() {
-                roots.push(history.prev_buffers);
-                roots.push(history.next_buffers);
-            }
-            roots.push(display.display_table);
-            roots.push(display.cursor_type);
-            roots.push(display.vertical_scroll_bar_type);
-            roots.push(display.horizontal_scroll_bar_type);
-        }
-        Window::Internal { children, .. } => {
-            for (key, value) in window.parameters() {
-                roots.push(*key);
-                roots.push(*value);
-            }
-            for child in children {
-                trace_window(child, roots);
+            Window::Internal { children, .. } => {
+                for (key, value) in self.parameters() {
+                    roots.push(*key);
+                    roots.push(*value);
+                }
+                for child in children {
+                    child.trace_roots(roots);
+                }
             }
         }
     }

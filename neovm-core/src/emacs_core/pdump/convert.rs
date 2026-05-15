@@ -3694,6 +3694,18 @@ fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
     }
 }
 
+fn load_byte_offset_map<I>(pairs: I) -> Vec<(usize, usize)>
+where
+    I: IntoIterator<Item = (u32, u32)>,
+{
+    let mut pairs: Vec<_> = pairs
+        .into_iter()
+        .map(|(byte_off, instr_idx)| (byte_off as usize, instr_idx as usize))
+        .collect();
+    pairs.sort_unstable_by_key(|(byte_off, _)| *byte_off);
+    pairs
+}
+
 pub(crate) fn load_bytecode(
     decoder: &mut LoadDecoder,
     bc: &DumpByteCodeFunction,
@@ -3716,12 +3728,10 @@ pub(crate) fn load_bytecode(
         arglist,
         lexical: bc.lexical,
         env: decoder.load_opt_value(&bc.env),
-        gnu_byte_offset_map: bc.gnu_byte_offset_map.as_ref().map(|pairs| {
-            pairs
-                .iter()
-                .map(|(byte_off, instr_idx)| (*byte_off as usize, *instr_idx as usize))
-                .collect()
-        }),
+        gnu_byte_offset_map: bc
+            .gnu_byte_offset_map
+            .as_ref()
+            .map(|pairs| load_byte_offset_map(pairs.iter().copied())),
         gnu_bytecode_bytes: bc.gnu_bytecode_bytes.clone(),
         docstring: bc.docstring.as_ref().map(load_lisp_string),
         doc_form: decoder.load_opt_value(&bc.doc_form),
@@ -3760,12 +3770,9 @@ fn load_bytecode_owned(
         arglist,
         lexical: bc.lexical,
         env: decoder.load_opt_value_owned(bc.env),
-        gnu_byte_offset_map: bc.gnu_byte_offset_map.map(|pairs| {
-            pairs
-                .into_iter()
-                .map(|(byte_off, instr_idx)| (byte_off as usize, instr_idx as usize))
-                .collect()
-        }),
+        gnu_byte_offset_map: bc
+            .gnu_byte_offset_map
+            .map(|pairs| load_byte_offset_map(pairs)),
         gnu_bytecode_bytes: bc.gnu_bytecode_bytes,
         docstring: bc.docstring.map(load_lisp_string_owned),
         doc_form: decoder.load_opt_value_owned(bc.doc_form),

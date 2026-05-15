@@ -1,5 +1,6 @@
 use super::*;
 use crate::emacs_core::hook_runtime;
+use crate::gc_trace::GcTrace;
 
 // ===========================================================================
 // Hook system
@@ -529,6 +530,21 @@ struct WindowConfigurationSnapshot {
     minibuffer_leaf: Option<crate::window::Window>,
 }
 
+impl WindowConfigurationSnapshot {
+    fn trace_roots(&self, roots: &mut Vec<Value>) {
+        self.root_window.trace_roots(roots);
+        if let Some(minibuffer) = &self.minibuffer_leaf {
+            minibuffer.trace_roots(roots);
+        }
+    }
+}
+
+fn window_configuration_snapshot_roots(snapshot: &WindowConfigurationSnapshot) -> Value {
+    let mut roots = Vec::new();
+    snapshot.trace_roots(&mut roots);
+    Value::vector(roots)
+}
+
 fn normalize_selected_window_point_in_snapshot(
     snapshot: &mut WindowConfigurationSnapshot,
     buffers: &crate::buffer::BufferManager,
@@ -588,7 +604,7 @@ fn window_configuration_parts_from_value(value: &Value) -> Option<(Value, i64)> 
         return None;
     };
     let items = value.as_vector_data()?;
-    if items.len() != 3 || items[0].as_symbol_name() != Some(WINDOW_CONFIGURATION_TAG) {
+    if items.len() != 4 || items[0].as_symbol_name() != Some(WINDOW_CONFIGURATION_TAG) {
         return None;
     }
     match (items[1].kind(), items[2].kind()) {
@@ -610,11 +626,17 @@ fn next_window_configuration_serial() -> i64 {
     NEXT_WINDOW_CONFIGURATION_ID.fetch_add(1, Ordering::Relaxed) as i64
 }
 
-fn make_window_configuration_value(frame: Value, serial: i64) -> Value {
+fn make_window_configuration_value(frame: Value, serial: i64, roots: Value) -> Value {
+    // GNU stores saved windows inside the opaque window-configuration
+    // pseudovector (`src/window.c:Fcurrent_window_configuration`), so the
+    // saved Lisp values are traced as part of the object.  Neomacs keeps the
+    // Rust window tree in a serial side table; this hidden slot makes the
+    // object's GC ownership match GNU's saved-data ownership.
     Value::vector(vec![
         Value::symbol(WINDOW_CONFIGURATION_TAG),
         frame,
         Value::fixnum(serial),
+        roots,
     ])
 }
 
@@ -673,12 +695,14 @@ pub(crate) fn builtin_current_window_configuration(
         return Ok(make_window_configuration_value(
             frame,
             next_window_configuration_serial(),
+            Value::vector(Vec::new()),
         ));
     };
     let Some(fid) = frame.as_frame_id() else {
         return Ok(make_window_configuration_value(
             frame,
             next_window_configuration_serial(),
+            Value::vector(Vec::new()),
         ));
     };
     let frame_id = crate::window::FrameId(fid);
@@ -692,6 +716,7 @@ pub(crate) fn builtin_current_window_configuration(
             minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
         };
         normalize_selected_window_point_in_snapshot(&mut snapshot, &mut eval.buffers);
+        let roots = window_configuration_snapshot_roots(&snapshot);
         let serial = next_window_configuration_serial();
         WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| {
             let mut store = slot.borrow_mut();
@@ -702,12 +727,13 @@ pub(crate) fn builtin_current_window_configuration(
                 }
             }
         });
-        return Ok(make_window_configuration_value(frame, serial));
+        return Ok(make_window_configuration_value(frame, serial, roots));
     }
 
     Ok(make_window_configuration_value(
         frame,
         next_window_configuration_serial(),
+        Value::vector(Vec::new()),
     ))
 }
 

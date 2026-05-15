@@ -5393,15 +5393,18 @@ fn resolve_switch_target(func: &ByteCodeFunction, raw_addr: i64) -> Result<usize
     })?;
 
     if let Some(offset_map) = &func.gnu_byte_offset_map {
-        offset_map.get(&raw_addr).copied().ok_or_else(|| {
-            signal(
-                "error",
-                vec![Value::string(format!(
-                    "invalid GNU switch target byte offset {}",
-                    raw_addr
-                ))],
-            )
-        })
+        offset_map
+            .binary_search_by_key(&raw_addr, |(byte_offset, _)| *byte_offset)
+            .map(|index| offset_map[index].1)
+            .map_err(|_| {
+                signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "invalid GNU switch target byte offset {}",
+                        raw_addr
+                    ))],
+                )
+            })
     } else {
         Ok(raw_addr)
     }

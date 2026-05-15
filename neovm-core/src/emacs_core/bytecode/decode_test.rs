@@ -221,7 +221,12 @@ fn decode_switch_preserves_hash_table_byte_targets() {
             .expect("switch table target")
     };
     assert_eq!(raw_target, Value::fixnum(8));
-    assert_eq!(offset_map.get(&8), Some(&6));
+    assert_eq!(
+        offset_map
+            .binary_search_by_key(&8, |(byte_offset, _)| *byte_offset)
+            .map(|index| offset_map[index].1),
+        Ok(6)
+    );
 }
 
 #[test]
