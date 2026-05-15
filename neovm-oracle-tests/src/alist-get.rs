@@ -42,6 +42,30 @@ fn oracle_prop_alist_get_with_equal_test() {
 }
 
 #[test]
+fn oracle_setf_alist_get_remove_uses_eql_default() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (let* ((default (list 'same))
+        (al (list (cons 'k 'old))))
+   (setf (alist-get 'k al default t) (list 'same))
+   al)
+ (let* ((default (copy-sequence "same"))
+        (al (list (cons 'k 'old))))
+   (setf (alist-get 'k al default t) (copy-sequence "same"))
+   al)
+ (let ((al (list (cons 'k 'old))))
+   (setf (alist-get 'k al 7 t) 7)
+   al)
+ (let ((al (list (cons 'k 'old))))
+   (setf (alist-get 'k al 'gone t) 'gone)
+   al))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_assoc_vs_assq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
