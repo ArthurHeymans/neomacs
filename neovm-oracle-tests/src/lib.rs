@@ -1238,6 +1238,8 @@ mod symbol;
 mod symbol_advanced;
 #[path = "symbol-comprehensive-patterns.rs"]
 mod symbol_comprehensive_patterns;
+#[path = "symbol-file-semantics.rs"]
+mod symbol_file_semantics;
 #[path = "symbol-plist-patterns.rs"]
 mod symbol_plist_patterns;
 #[path = "symbol-properties-advanced.rs"]
