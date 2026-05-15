@@ -680,6 +680,8 @@ mod fset_symbol_function;
 mod funcall;
 #[path = "funcall-apply-comprehensive.rs"]
 mod funcall_apply_comprehensive;
+#[path = "function-cell-semantics.rs"]
+mod function_cell_semantics;
 #[path = "function-get-semantics.rs"]
 mod function_get_semantics;
 #[path = "generator-semantics.rs"]
