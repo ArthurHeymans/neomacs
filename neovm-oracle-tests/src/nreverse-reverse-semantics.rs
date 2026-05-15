@@ -116,3 +116,34 @@ fn oracle_reverse_and_nreverse_error_payloads() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_reverse_and_nreverse_circular_list_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((r (list 'a 'b 'c))
+       (_ (setcdr (last r) r))
+       (n (list 'x 'y 'z))
+       (_ (setcdr (last n) n)))
+  (list
+   (condition-case err
+       (reverse r)
+     (error (let ((arg (cadr err)))
+              (list (car err)
+                    (length (cdr err))
+                    (eq arg r)
+                    (listp arg)
+                    (car arg)))))
+   (condition-case err
+       (nreverse n)
+     (error (let ((arg (cadr err)))
+              (list (car err)
+                    (length (cdr err))
+                    (eq arg n)
+                    (listp arg)
+                    (car arg)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
