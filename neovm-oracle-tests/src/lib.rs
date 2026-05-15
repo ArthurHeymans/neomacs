@@ -841,6 +841,8 @@ mod nconc_advanced;
 mod nconc_nreverse_comprehensive;
 #[path = "nconc-nreverse-patterns.rs"]
 mod nconc_nreverse_patterns;
+#[path = "next-line-goal-column.rs"]
+mod next_line_goal_column;
 #[path = "next-property-change-advanced.rs"]
 mod next_property_change_advanced;
 #[path = "next-property-change-patterns.rs"]
