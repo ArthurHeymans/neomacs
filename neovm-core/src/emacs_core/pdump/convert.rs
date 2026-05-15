@@ -906,6 +906,25 @@ impl<'a> LoadDecoder<'a> {
         }
     }
 
+    fn install_restored_bytecode_data(
+        value: Value,
+        data: ByteCodeFunction,
+    ) -> Result<(), DumpError> {
+        if value.veclike_type() != Some(VecLikeType::ByteCode) {
+            return Err(DumpError::ImageFormatError(
+                "pdump bytecode descriptor resolved to non-bytecode object".into(),
+            ));
+        }
+        let ptr = value.as_veclike_ptr().unwrap() as *mut ByteCodeObj;
+        // This is pdump restore-time initialization of a freshly allocated
+        // placeholder.  GNU applies dump relocations directly into restored
+        // objects here; no user-observable heap mutation has happened yet.
+        unsafe {
+            (*ptr).data = data;
+        }
+        Ok(())
+    }
+
     fn mapped_raw_word_available(&self, value: &DumpValue) -> bool {
         match value {
             DumpValue::Nil | DumpValue::True | DumpValue::Int(_) | DumpValue::Unbound => true,
@@ -1350,12 +1369,8 @@ impl<'a> LoadDecoder<'a> {
                 }
             }
             DumpHeapObject::ByteCode(bc) => {
-                let _ = value
-                    .with_bytecode_data_mut(|data| {
-                        *data = load_bytecode_owned(self, bc)?;
-                        Ok::<(), DumpError>(())
-                    })
-                    .transpose()?;
+                let data = load_bytecode_owned(self, bc)?;
+                Self::install_restored_bytecode_data(value, data)?;
             }
             DumpHeapObject::Record(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
