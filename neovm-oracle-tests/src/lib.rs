@@ -1198,6 +1198,8 @@ mod thing_at_point_api_semantics;
 #[path = "thing-at-point-comprehensive.rs"]
 mod thing_at_point_comprehensive;
 mod r#throw;
+#[path = "time-date-semantics.rs"]
+mod time_date_semantics;
 #[path = "timer-list-comprehensive.rs"]
 mod timer_list_comprehensive;
 #[path = "transpose-command-semantics.rs"]
