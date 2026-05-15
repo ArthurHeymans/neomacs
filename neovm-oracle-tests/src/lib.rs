@@ -994,6 +994,8 @@ mod regexp_gnu_divergence;
 mod regexp_operations;
 #[path = "regexp-operations-advanced.rs"]
 mod regexp_operations_advanced;
+#[path = "regexp-opt-semantics.rs"]
+mod regexp_opt_semantics;
 #[path = "regexp-quote-advanced.rs"]
 mod regexp_quote_advanced;
 #[path = "regexp-quote-patterns.rs"]
