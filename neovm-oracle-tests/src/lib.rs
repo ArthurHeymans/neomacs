@@ -872,6 +872,8 @@ mod narrow_widen_comprehensive;
 mod narrow_widen_patterns;
 #[path = "nbutlast-butlast-advanced.rs"]
 mod nbutlast_butlast_advanced;
+#[path = "nbutlast-butlast-semantics.rs"]
+mod nbutlast_butlast_semantics;
 mod nconc;
 #[path = "nconc-advanced.rs"]
 mod nconc_advanced;
