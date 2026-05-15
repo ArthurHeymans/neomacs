@@ -43,6 +43,8 @@ mod assoc;
 mod assoc_alist_comprehensive;
 #[path = "assoc-assq-advanced.rs"]
 mod assoc_assq_advanced;
+#[path = "assoc-delete-semantics.rs"]
+mod assoc_delete_semantics;
 mod assq;
 mod backquote;
 #[path = "backquote-advanced.rs"]
