@@ -840,6 +840,8 @@ mod maphash_patterns;
 mod marker_comprehensive_patterns;
 #[path = "marker-operations.rs"]
 mod marker_operations;
+#[path = "marker-semantics.rs"]
+mod marker_semantics;
 #[path = "match-beginning.rs"]
 mod match_beginning;
 #[path = "match-data.rs"]
