@@ -1,0 +1,91 @@
+//! Oracle parity tests for GNU `nthcdr`, `nth`, and `last` edge semantics.
+//!
+//! GNU implements `nthcdr`/`nth` in `src/fns.c`; negative N returns the input
+//! list unchanged, and improper-list errors report the original list object.
+//! GNU implements `last` in `lisp/subr.el`, where negative N returns nil.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_nthcdr_negative_and_oversized_counts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((lst '(a b c)))
+  (list (nthcdr -3 lst)
+        (eq (nthcdr -1 lst) lst)
+        (nthcdr 0 lst)
+        (nthcdr 99 lst)
+        (nth -2 lst)
+        (nth 99 lst)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_nthcdr_improper_list_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (nthcdr 0 '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nthcdr 1 '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nthcdr 2 '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nthcdr 3 '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nth 3 '(a b . c))
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_nthcdr_argument_type_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (nthcdr 'x '(a b))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nthcdr 1 42)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (nth 'x '(a b))
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_last_negative_zero_and_improper_cases() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (last '(a b c) -1)
+ (last '(a b c) 0)
+ (last '(a b c) 99)
+ (condition-case err
+     (last '(a b . c))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (last '(a b . c) 1)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

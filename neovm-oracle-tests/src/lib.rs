@@ -892,6 +892,8 @@ mod nreverse_reverse_semantics;
 mod nthcdr;
 #[path = "nthcdr-advanced.rs"]
 mod nthcdr_advanced;
+#[path = "nthcdr-last-semantics.rs"]
+mod nthcdr_last_semantics;
 #[path = "number-arithmetic-comprehensive.rs"]
 mod number_arithmetic_comprehensive;
 #[path = "number-conversion-comprehensive.rs"]
