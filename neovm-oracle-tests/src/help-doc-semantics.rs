@@ -92,6 +92,88 @@ fn oracle_prop_documentation_property_eval_raw_and_substitution() {
 }
 
 #[test]
+fn oracle_prop_documentation_property_value_evaluation_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((p (cons 'neomacs-oracle-doc-key nil)))
+  (put 'neomacs-oracle-doc-string 'function-documentation "Static doc")
+  (put 'neomacs-oracle-doc-list 'function-documentation
+       '(concat "Dynamic " "doc"))
+  (put 'neomacs-oracle-doc-vector 'function-documentation
+       ["vector-value"])
+  (put 'neomacs-oracle-doc-zero 'function-documentation 0)
+  (put 'neomacs-oracle-doc-unbound 'function-documentation
+       'neomacs-oracle-doc-unbound-value)
+  (put 'neomacs-oracle-doc-invalid 'function-documentation
+       '(neomacs-oracle-doc-missing-fn))
+  (put 'neomacs-oracle-doc-non-symbol-prop p "Non-symbol prop doc")
+  (list
+   (documentation-property 'neomacs-oracle-doc-string
+                           'function-documentation t)
+   (documentation-property 'neomacs-oracle-doc-list
+                           'function-documentation t)
+   (documentation-property 'neomacs-oracle-doc-vector
+                           'function-documentation t)
+   (documentation-property 'neomacs-oracle-doc-zero
+                           'function-documentation t)
+   (condition-case err
+       (documentation-property 'neomacs-oracle-doc-unbound
+                               'function-documentation t)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (documentation-property 'neomacs-oracle-doc-invalid
+                               'function-documentation t)
+     (error (list (car err) (cdr err))))
+   (documentation-property 'neomacs-oracle-doc-non-symbol-prop p t)
+   (documentation-property 'neomacs-oracle-doc-non-symbol-prop
+                           (cons 'neomacs-oracle-doc-key nil) t)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_documentation_property_variable_alias_fallback_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(unwind-protect
+    (progn
+      (defvaralias 'neomacs-oracle-doc-alias-empty
+        'neomacs-oracle-doc-base)
+      (defvaralias 'neomacs-oracle-doc-alias-zero
+        'neomacs-oracle-doc-base)
+      (defvaralias 'neomacs-oracle-doc-alias-direct
+        'neomacs-oracle-doc-base)
+      (put 'neomacs-oracle-doc-base
+           'variable-documentation "Base variable doc")
+      (put 'neomacs-oracle-doc-alias-zero
+           'variable-documentation 0)
+      (put 'neomacs-oracle-doc-alias-direct
+           'variable-documentation "Direct alias doc")
+      (list
+       (documentation-property 'neomacs-oracle-doc-alias-empty
+                               'variable-documentation t)
+       (documentation-property 'neomacs-oracle-doc-alias-zero
+                               'variable-documentation t)
+       (documentation-property 'neomacs-oracle-doc-alias-direct
+                               'variable-documentation t)
+       (documentation-property 'neomacs-oracle-doc-alias-empty
+                               'function-documentation t)))
+  (dolist (sym '(neomacs-oracle-doc-base
+                 neomacs-oracle-doc-alias-empty
+                 neomacs-oracle-doc-alias-zero
+                 neomacs-oracle-doc-alias-direct))
+    (setplist sym nil)
+    (when (boundp sym)
+      (makunbound sym))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_substitute_command_keys_keymap_quote_and_faces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
