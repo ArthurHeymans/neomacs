@@ -1138,6 +1138,8 @@ mod string_builder_comprehensive;
 mod string_bytes_width_advanced;
 #[path = "string-comparison-comprehensive.rs"]
 mod string_comparison_comprehensive;
+#[path = "string-core-semantics.rs"]
+mod string_core_semantics;
 #[path = "string-distance.rs"]
 mod string_distance;
 #[path = "string-distance-advanced.rs"]

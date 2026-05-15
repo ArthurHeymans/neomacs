@@ -1,0 +1,137 @@
+//! Oracle parity tests for GNU core string and sequence construction semantics.
+//!
+//! GNU implements `string-equal`, `string-lessp`, `concat`, `vconcat`,
+//! `copy-sequence`, `substring`, and `substring-no-properties` in `src/fns.c`.
+//! These tests focus on symbol coercion, text-property behavior, negative
+//! subarray validation, vector substrings, and character-sequence validation.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_string_comparison_symbol_coercion_and_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (string-equal 'alpha "alpha")
+ (string= 'alpha 'alpha)
+ (string-equal (propertize "alpha" 'face 'bold) "alpha")
+ (string-lessp 'alpha "beta")
+ (string-lessp "beta" 'alpha)
+ (string< 'alpha 'beta)
+ (condition-case err
+     (string-equal 42 "42")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-lessp "x" 42)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_substring_properties_and_no_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((s (propertize "abcdef" 'face 'bold 'tag 'source))
+       (sub (substring s 1 5))
+       (plain (substring-no-properties s 1 5)))
+  (list
+   sub
+   (get-text-property 0 'face sub)
+   (get-text-property 3 'tag sub)
+   (text-properties-at 0 sub)
+   plain
+   (text-properties-at 0 plain)
+   (equal-including-properties sub plain)
+   (string= sub plain)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_substring_vector_negative_and_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (substring [a b c d e] -4 -1)
+ (substring [a b c d e] 2 nil)
+ (substring "aébcd" -4 -1)
+ (condition-case err
+     (substring [a b c] 'bad 2)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring [a b c] 0 4)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring-no-properties [a b c] 0 1)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_concat_and_vconcat_character_sequence_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((s (propertize "ab" 'face 'bold))
+       (joined (concat s '(?c ?d) [?e ?f]))
+       (vec (vconcat "ab" '(c d) [e f])))
+  (list
+   joined
+   (get-text-property 0 'face joined)
+   (get-text-property 1 'face joined)
+   (get-text-property 2 'face joined)
+   vec
+   (condition-case err
+       (concat '(?a bad ?c))
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (concat [65 4194304])
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (vconcat 42)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_copy_sequence_text_properties_and_shallow_copy() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((cell (list 'shared))
+       (lst (list cell))
+       (lst-copy (copy-sequence lst))
+       (str (propertize "abc" 'face 'bold))
+       (str-copy (copy-sequence str))
+       (vec (vector cell))
+       (vec-copy (copy-sequence vec)))
+  (setcar cell 'changed)
+  (list
+   (eq lst lst-copy)
+   (eq (car lst) (car lst-copy))
+   lst-copy
+   (eq str str-copy)
+   str-copy
+   (text-properties-at 0 str-copy)
+   (eq vec vec-copy)
+   (eq (aref vec 0) (aref vec-copy 0))
+   vec-copy
+   (copy-sequence nil)
+   (condition-case err
+       (copy-sequence 42)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
