@@ -20,6 +20,8 @@ mod alist_operations_advanced_patterns;
 #[path = "alist-operations-comprehensive.rs"]
 mod alist_operations_comprehensive;
 mod r#and;
+#[path = "append-nconc-semantics.rs"]
+mod append_nconc_semantics;
 mod apply;
 #[path = "apply-advanced.rs"]
 mod apply_advanced;
