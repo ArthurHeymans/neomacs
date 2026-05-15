@@ -1187,6 +1187,8 @@ mod text_property_comprehensive;
 mod text_property_manipulation;
 #[path = "text-property-search.rs"]
 mod text_property_search;
+#[path = "thing-at-point-api-semantics.rs"]
+mod thing_at_point_api_semantics;
 #[path = "thing-at-point-comprehensive.rs"]
 mod thing_at_point_comprehensive;
 mod r#throw;
