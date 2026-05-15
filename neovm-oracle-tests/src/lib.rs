@@ -947,6 +947,8 @@ mod plist_advanced;
 mod plist_comprehensive_patterns;
 #[path = "plist-member-advanced.rs"]
 mod plist_member_advanced;
+#[path = "plist-semantics.rs"]
+mod plist_semantics;
 mod point;
 #[path = "point-max.rs"]
 mod point_max;
