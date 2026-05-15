@@ -1044,6 +1044,8 @@ mod regexp_quote_patterns;
 mod regexp_replace_advanced;
 #[path = "regexp-replace-comprehensive.rs"]
 mod regexp_replace_comprehensive;
+#[path = "region-mark-semantics.rs"]
+mod region_mark_semantics;
 #[path = "register-semantics.rs"]
 mod register_semantics;
 #[path = "remove-text-properties-patterns.rs"]
