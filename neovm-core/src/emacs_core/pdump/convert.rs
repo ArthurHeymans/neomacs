@@ -463,6 +463,11 @@ impl<'a> LoadDecoder<'a> {
         if self.object_is_fully_mapped_without_load_work(index) {
             return true;
         }
+        if matches!(self.state.objects[index], DumpHeapObject::Free)
+            && self.state.spans.vectorlike(index).is_some()
+        {
+            return true;
+        }
         match &self.state.objects[index] {
             DumpHeapObject::Vector(_)
             | DumpHeapObject::Lambda(_)
@@ -622,6 +627,131 @@ impl<'a> LoadDecoder<'a> {
             Ok(())
         })?;
         Ok(())
+    }
+
+    fn allocate_mapped_self_contained_veclike(
+        &mut self,
+        id: TaggedHeapRef,
+    ) -> Result<Option<Value>, DumpError> {
+        let index = id.index as usize;
+        if !matches!(self.state.objects[index], DumpHeapObject::Free) {
+            return Ok(None);
+        }
+        let Some(span) = self.state.spans.vectorlike(index) else {
+            return Ok(None);
+        };
+        let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
+            DumpError::ImageFormatError(
+                "dump reserves mapped vectorlike objects but image has no heap section".into(),
+            )
+        })?;
+        let slot_count = self.mapped_slot_count_or(id, 0)?;
+        let value = match mapped_heap.veclike_type(span)? {
+            VecLikeType::Vector => {
+                let ptr = self
+                    .mapped_typed_object_for_object::<VectorObj>(id, "vector")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped vector span disappeared during restore".into(),
+                        )
+                    })?;
+                let data = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; slot_count]));
+                unsafe {
+                    std::ptr::write(
+                        ptr,
+                        VectorObj {
+                            header: VecLikeHeader::new(VecLikeType::Vector),
+                            data,
+                        },
+                    );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::Lambda => {
+                let len = slot_count.max(CLOSURE_MIN_SLOTS);
+                let ptr = self
+                    .mapped_typed_object_for_object::<LambdaObj>(id, "lambda")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped lambda span disappeared during restore".into(),
+                        )
+                    })?;
+                let data = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; len]));
+                unsafe {
+                    std::ptr::write(
+                        ptr,
+                        LambdaObj {
+                            header: VecLikeHeader::new(VecLikeType::Lambda),
+                            data,
+                            parsed_params: std::sync::OnceLock::new(),
+                        },
+                    );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::Macro => {
+                let len = slot_count.max(CLOSURE_MIN_SLOTS);
+                let ptr = self
+                    .mapped_typed_object_for_object::<MacroObj>(id, "macro")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped macro span disappeared during restore".into(),
+                        )
+                    })?;
+                let data = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; len]));
+                unsafe {
+                    std::ptr::write(
+                        ptr,
+                        MacroObj {
+                            header: VecLikeHeader::new(VecLikeType::Macro),
+                            data,
+                            parsed_params: std::sync::OnceLock::new(),
+                        },
+                    );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::Record => {
+                let ptr = self
+                    .mapped_typed_object_for_object::<RecordObj>(id, "record")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped record span disappeared during restore".into(),
+                        )
+                    })?;
+                let data = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; slot_count]));
+                unsafe {
+                    std::ptr::write(
+                        ptr,
+                        RecordObj {
+                            header: VecLikeHeader::new(VecLikeType::Record),
+                            data,
+                        },
+                    );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::Marker | VecLikeType::Overlay => {
+                return Err(DumpError::ImageFormatError(
+                    "mapped marker/overlay is missing ObjectExtra descriptor".into(),
+                ));
+            }
+            other => {
+                return Err(DumpError::ImageFormatError(format!(
+                    "unexpected self-contained mapped vectorlike type {other:?}"
+                )));
+            }
+        };
+        self.state.values[index] = Some(value);
+        Ok(Some(value))
     }
 
     fn heap_ref_to_value(&mut self, id: TaggedHeapRef) -> Value {
@@ -1049,6 +1179,9 @@ impl<'a> LoadDecoder<'a> {
         if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
             let value = unsafe { Value::from_float_ptr(ptr) };
             self.state.values[id.index as usize] = Some(value);
+            return Ok(value);
+        }
+        if let Some(value) = self.allocate_mapped_self_contained_veclike(id)? {
             return Ok(value);
         }
         let value = match &self.state.objects[id.index as usize] {

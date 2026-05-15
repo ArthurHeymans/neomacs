@@ -239,8 +239,8 @@ pub(crate) fn load_object_extra(section: &[u8]) -> Result<Vec<ObjectExtra>, Dump
 ///
 /// GNU's pdumper does not serialize semantic descriptors for objects already in
 /// the mapped image. Neomacs still needs a per-object descriptor vector while
-/// the loader is transitional, but Category A descriptors are synthesized from
-/// ObjectStarts and mapped heap headers.
+/// the loader is transitional, but mapped vectorlike objects are now treated as
+/// self-contained heap-image records instead of semantic ObjectExtra entries.
 pub(crate) fn load_compact_heap_objects_from_object_extra(
     section: &[u8],
     spans: &LoadedSpans<'_>,
@@ -253,18 +253,11 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
             spans.len()
         )));
     }
-    let mut objects = Vec::with_capacity(count);
-    let mut present = Vec::with_capacity(count);
+    let mut objects = vec![DumpHeapObject::Free; count];
+    let mut present = vec![false; count];
     for index in 0..count {
-        match mapped_object_from_span(spans.get(index), mapped_heap)? {
-            Some(object) => {
-                objects.push(object);
-                present.push(true);
-            }
-            None => {
-                objects.push(DumpHeapObject::Free);
-                present.push(false);
-            }
+        if mapped_object_is_self_contained(spans.get(index), mapped_heap)? {
+            present[index] = true;
         }
     }
 
@@ -359,12 +352,12 @@ fn object_extra_into_heap_object(extra: ObjectExtra) -> DumpHeapObject {
     }
 }
 
-fn mapped_object_from_span(
+fn mapped_object_is_self_contained(
     span: LoadedObjectSpan,
     mapped_heap: Option<MappedHeapView>,
-) -> Result<Option<DumpHeapObject>, DumpError> {
+) -> Result<bool, DumpError> {
     match span {
-        LoadedObjectSpan::Cons(_) | LoadedObjectSpan::Float(_) => Ok(Some(DumpHeapObject::Free)),
+        LoadedObjectSpan::Cons(_) | LoadedObjectSpan::Float(_) => Ok(true),
         LoadedObjectSpan::Vectorlike { object, .. } => {
             let mapped_heap = mapped_heap.ok_or_else(|| {
                 DumpError::ImageFormatError(
@@ -372,18 +365,18 @@ fn mapped_object_from_span(
                 )
             })?;
             match mapped_heap.veclike_type(object)? {
-                VecLikeType::Vector => Ok(Some(DumpHeapObject::Vector(Vec::new()))),
-                VecLikeType::Lambda => Ok(Some(DumpHeapObject::Lambda(Vec::new()))),
-                VecLikeType::Macro => Ok(Some(DumpHeapObject::Macro(Vec::new()))),
-                VecLikeType::Record => Ok(Some(DumpHeapObject::Record(Vec::new()))),
-                VecLikeType::Marker | VecLikeType::Overlay => Ok(None),
+                VecLikeType::Vector
+                | VecLikeType::Lambda
+                | VecLikeType::Macro
+                | VecLikeType::Record => Ok(true),
+                VecLikeType::Marker | VecLikeType::Overlay => Ok(false),
                 other => Err(DumpError::ImageFormatError(format!(
                     "unexpected mapped vectorlike type {other:?} in object-starts"
                 ))),
             }
         }
         LoadedObjectSpan::None | LoadedObjectSpan::String(_) | LoadedObjectSpan::Unmapped => {
-            Ok(None)
+            Ok(false)
         }
     }
 }
@@ -678,7 +671,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_object_extra_infers_mapped_vectorlike_descriptors_from_headers() {
+    fn compact_object_extra_leaves_mapped_vectorlike_objects_self_contained() {
         let objects = vec![
             DumpHeapObject::Vector(vec![DumpValue::Nil, DumpValue::True]),
             DumpHeapObject::Lambda(vec![DumpValue::Nil, DumpValue::True]),
@@ -719,10 +712,11 @@ mod tests {
             load_compact_heap_objects_from_object_extra(&bytes, &spans, Some(mapped_heap))
                 .expect("load compact heap objects from extra");
 
-        assert!(matches!(objects[0], DumpHeapObject::Vector(ref slots) if slots.is_empty()));
-        assert!(matches!(objects[1], DumpHeapObject::Lambda(ref slots) if slots.is_empty()));
-        assert!(matches!(objects[2], DumpHeapObject::Macro(ref slots) if slots.is_empty()));
-        assert!(matches!(objects[3], DumpHeapObject::Record(ref slots) if slots.is_empty()));
+        assert!(
+            objects
+                .iter()
+                .all(|object| matches!(object, DumpHeapObject::Free))
+        );
     }
 
     #[test]
