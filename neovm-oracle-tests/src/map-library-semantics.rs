@@ -1,0 +1,108 @@
+//! Oracle parity tests for GNU `emacs-lisp/map.el` generic map semantics.
+//!
+//! `map.el` dispatches over alists, plists, hash tables, and arrays.  These
+//! tests focus on exact lookup, conversion, pcase binding, and mutation
+//! behavior exposed by the public API.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_prop_map_lookup_contains_and_nested_elt() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  (let ((ht (make-hash-table :test 'equal)))
+    (puthash "name" "gnu" ht)
+    (puthash "nested" '(:answer 42) ht)
+    (list
+     (map-elt '((a . 1) ("b" . 2)) "b")
+     (map-elt '(:a 1 :b nil) :b 'missing)
+     (map-contains-key '(:a 1 :b nil) :b)
+     (map-elt [zero one two] 1 'missing)
+     (map-contains-key [zero one two] 3)
+     (map-elt ht "name")
+     (map-nested-elt ht '("nested" :answer))
+     (map-nested-elt ht '("nested" :missing) 'fallback))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_map_keys_values_pairs_and_apply_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  (list
+   (map-keys '((a . 1) (b . 2) (a . 3)))
+   (map-values '(:a 1 :b 2 :c 3))
+   (map-pairs [x y z])
+   (map-apply (lambda (k v) (list k v)) '(:a 1 :b 2))
+   (map-filter (lambda (_k v) (> v 1)) '((a . 1) (b . 2) (c . 3)))
+   (map-remove (lambda (k _v) (eq k 'b)) '((a . 1) (b . 2) (c . 3)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_map_into_merge_and_merge_with() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  (let* ((alist '((a . 1) (b . 2)))
+         (plist '(:b 20 :c 30))
+         (merged-alist (map-merge 'alist alist '((a . 10) (d . 4))))
+         (merged-plist (map-merge 'plist plist '(:b 5 :d 6)))
+         (summed (map-merge-with 'alist #'+ '((a . 1) (b . 2))
+                                 '((a . 10) (c . 30)))))
+    (list
+     (map-into alist 'plist)
+     (map-into plist 'alist)
+     (let ((ht (map-into alist '(hash-table :test equal))))
+       (list (hash-table-test ht) (gethash 'a ht) (gethash 'b ht)))
+     merged-alist
+     merged-plist
+     summed)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_map_let_and_mutation_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  (let ((alist '((a . 1) (b . 2)))
+        (plist '(:a 1 :b 2))
+        (vec [a b c]))
+    (list
+     (map-let (a (b-val b) (missing fallback 99)) alist
+       (list a b-val fallback))
+     (map-let (:a :b (:missing missing 'fallback)) plist
+       (list a b missing))
+     (let ((copy (map-insert alist 'c 3)))
+       (list alist copy))
+     (condition-case err
+         (map-put! nil 'a 1)
+       (error (car err)))
+     (progn
+       (map-put! plist :b 22)
+       plist)
+     (progn
+       (map-put! vec 1 'B)
+       vec))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

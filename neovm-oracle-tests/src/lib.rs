@@ -787,6 +787,8 @@ mod make_symbol;
 mod make_vector_advanced;
 #[path = "make-vector-patterns.rs"]
 mod make_vector_patterns;
+#[path = "map-library-semantics.rs"]
+mod map_library_semantics;
 #[path = "map-operations.rs"]
 mod map_operations;
 #[path = "map-operations-advanced.rs"]
