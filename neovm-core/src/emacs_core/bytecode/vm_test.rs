@@ -154,6 +154,34 @@ fn vm_invalid_stack_ref_signals_instead_of_panicking() {
 }
 
 #[test]
+fn vm_branch_underflow_signals_invalid_bytecode() {
+    crate::test_utils::init_test_tracing();
+    let rendered = vm_eval_str(
+        r#"(mapcar
+            (lambda (bytes)
+              (condition-case err
+                  (funcall (make-byte-code 0 bytes [] 0))
+                (error (list 'caught (car err) (car (cdr err))))))
+            '("\203\003\000\207"
+              "\204\003\000\207"
+              "\205\003\000\207"
+              "\206\003\000\207"))"#,
+    );
+    assert_eq!(
+        rendered,
+        "OK ((caught error \"Invalid byte-code\") (caught error \"Invalid byte-code\") (caught error \"Invalid byte-code\") (caught error \"Invalid byte-code\"))"
+    );
+}
+
+#[test]
+fn vm_stack_set_zero_discards_tos_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let rendered =
+        vm_eval_str(r#"(funcall (make-byte-code 0 "\300\301\262\000\207" [kept dropped] 2))"#);
+    assert_eq!(rendered, "OK kept");
+}
+
+#[test]
 fn vm_integer_arg_descriptor_does_not_dynamic_bind_dummy_args_like_gnu() {
     crate::test_utils::init_test_tracing();
     let rendered = vm_eval_str(

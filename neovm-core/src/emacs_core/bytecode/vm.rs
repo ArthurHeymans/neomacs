@@ -627,11 +627,16 @@ impl<'a> Vm<'a> {
                 Op::Nil => stk_push!(Value::NIL),
                 Op::True => stk_push!(Value::T),
                 Op::Pop => {
+                    if stk!().is_empty() {
+                        invalid_bytecode!();
+                    }
                     stk!().pop();
                 }
                 Op::Dup => {
                     if let Some(&top) = stk!().last() {
                         stk_push!(top);
+                    } else {
+                        invalid_bytecode!();
                     }
                 }
                 Op::StackRef(n) => {
@@ -655,34 +660,51 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Op::StackSet(n) => {
-                    if stk!().is_empty() {
-                        continue;
+                    let len = stk!().len();
+                    if len == 0 {
+                        invalid_bytecode!();
                     }
                     let n = *n as usize;
-                    let val = stk!().pop().unwrap_or(Value::NIL);
                     if n == 0 {
+                        stk!().pop();
                         continue;
                     }
-                    if n <= stk!().len() {
-                        let idx = stk!().len() - n;
-                        stk!()[idx] = val;
+                    if n < len {
+                        let stack = &mut self.ctx.bc_buf;
+                        let val = unsafe { *stack.get_unchecked(len - 1) };
+                        let idx = len - 1 - n;
+                        unsafe {
+                            *stack.get_unchecked_mut(idx) = val;
+                            stack.set_len(len - 1);
+                        }
+                    } else {
+                        invalid_bytecode!();
                     }
                 }
                 Op::DiscardN(raw) => {
                     let preserve_tos = (raw & 0x80) != 0;
-                    let mut n = (raw & 0x7F) as usize;
+                    let n = (raw & 0x7F) as usize;
                     if n == 0 {
                         continue;
                     }
-                    n = n.min(stk!().len());
-                    if preserve_tos && n < stk!().len() {
-                        if let Some(&top) = stk!().last() {
-                            let target = stk!().len() - 1 - n;
-                            stk!()[target] = top;
+                    let len = stk!().len();
+                    if n > len {
+                        invalid_bytecode!();
+                    }
+                    let stack = &mut self.ctx.bc_buf;
+                    if preserve_tos {
+                        if n >= len {
+                            invalid_bytecode!();
+                        }
+                        let top = unsafe { *stack.get_unchecked(len - 1) };
+                        let target = len - 1 - n;
+                        unsafe {
+                            *stack.get_unchecked_mut(target) = top;
                         }
                     }
-                    let new_len = stk!().len().saturating_sub(n);
-                    stk!().truncate(new_len);
+                    unsafe {
+                        stack.set_len(len - n);
+                    }
                 }
 
                 // -- Variable access --
@@ -851,29 +873,59 @@ impl<'a> Vm<'a> {
                     branch_to!(*addr as usize);
                 }
                 Op::GotoIfNil(addr) => {
-                    let val = stk!().pop().unwrap_or(Value::NIL);
+                    let stack = &mut self.ctx.bc_buf;
+                    let len = stack.len();
+                    if len == 0 {
+                        invalid_bytecode!();
+                    }
+                    let val = unsafe { *stack.get_unchecked(len - 1) };
+                    unsafe {
+                        stack.set_len(len - 1);
+                    }
                     if val.is_nil() {
                         branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNotNil(addr) => {
-                    let val = stk!().pop().unwrap_or(Value::NIL);
+                    let stack = &mut self.ctx.bc_buf;
+                    let len = stack.len();
+                    if len == 0 {
+                        invalid_bytecode!();
+                    }
+                    let val = unsafe { *stack.get_unchecked(len - 1) };
+                    unsafe {
+                        stack.set_len(len - 1);
+                    }
                     if val.is_truthy() {
                         branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNilElsePop(addr) => {
-                    if stk!().last().is_none_or(|v| v.is_nil()) {
+                    let stack = &mut self.ctx.bc_buf;
+                    let len = stack.len();
+                    if len == 0 {
+                        invalid_bytecode!();
+                    }
+                    if unsafe { stack.get_unchecked(len - 1) }.is_nil() {
                         branch_to!(*addr as usize);
                     } else {
-                        stk!().pop();
+                        unsafe {
+                            stack.set_len(len - 1);
+                        }
                     }
                 }
                 Op::GotoIfNotNilElsePop(addr) => {
-                    if stk!().last().is_some_and(|v| v.is_truthy()) {
+                    let stack = &mut self.ctx.bc_buf;
+                    let len = stack.len();
+                    if len == 0 {
+                        invalid_bytecode!();
+                    }
+                    if unsafe { stack.get_unchecked(len - 1) }.is_truthy() {
                         branch_to!(*addr as usize);
                     } else {
-                        stk!().pop();
+                        unsafe {
+                            stack.set_len(len - 1);
+                        }
                     }
                 }
                 Op::Switch => {
