@@ -681,6 +681,8 @@ mod forward_line;
 mod forward_line_advanced;
 #[path = "fset-symbol-function.rs"]
 mod fset_symbol_function;
+#[path = "func-arity-semantics.rs"]
+mod func_arity_semantics;
 mod funcall;
 #[path = "funcall-apply-comprehensive.rs"]
 mod funcall_apply_comprehensive;
