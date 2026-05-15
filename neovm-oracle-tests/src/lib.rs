@@ -981,6 +981,8 @@ mod re_search_patterns;
 mod read_from_string_advanced;
 #[path = "read-from-string-patterns.rs"]
 mod read_from_string_patterns;
+#[path = "read-from-string-semantics.rs"]
+mod read_from_string_semantics;
 #[path = "read-print.rs"]
 mod read_print;
 #[path = "read-print-advanced.rs"]
