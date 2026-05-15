@@ -1,0 +1,77 @@
+//! Oracle parity tests for GNU `subr.el` tree/list helper semantics.
+//!
+//! GNU `flatten-tree` performs an iterative cons-tree traversal that drops nil
+//! leaves, keeps dotted tails, and is also exposed as `flatten-list`.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_prop_flatten_tree_basic_nil_and_dotted_leaves() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (flatten-tree '(1 (2 . 3) nil (4 5 (6)) 7))
+ (flatten-tree '(nil (a nil (b . c)) ((nil)) d))
+ (flatten-tree '((a . b) . c))
+ (flatten-tree nil)
+ (flatten-tree 42)
+ (flatten-tree '(nil . tail)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_flatten_list_alias_and_ordering() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((tree '((alpha beta) ((gamma . delta) nil) epsilon)))
+  (list
+   (eq (symbol-function 'flatten-list) (symbol-function 'flatten-tree))
+   (flatten-tree tree)
+   (flatten-list tree)
+   (equal (flatten-tree tree) (flatten-list tree))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_ensure_list_wraps_atoms_and_preserves_lists() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((proper '(a b))
+      (dotted '(a . b))
+      (empty nil)
+      (vector [a b])
+      (string "abc"))
+  (list
+   (eq (ensure-list proper) proper)
+   (eq (ensure-list dotted) dotted)
+   (eq (ensure-list empty) empty)
+   (ensure-list vector)
+   (car (ensure-list string))
+   (eq (car (ensure-list string)) string)
+   (ensure-list 17)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_flatten_tree_after_mutating_dotted_structure() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((tail (list 'd 'e))
+       (tree (list (cons 'a 'b) (list 'c tail))))
+  (setcdr tail 'f)
+  (list tree (flatten-tree tree)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

@@ -624,6 +624,8 @@ mod file_name_semantics;
 mod fillarray_advanced;
 #[path = "fillarray-operations.rs"]
 mod fillarray_operations;
+#[path = "flatten-tree-semantics.rs"]
+mod flatten_tree_semantics;
 #[path = "float-operations-comprehensive.rs"]
 mod float_operations_comprehensive;
 #[path = "following-char-operations.rs"]
