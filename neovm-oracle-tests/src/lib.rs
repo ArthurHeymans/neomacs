@@ -854,6 +854,8 @@ mod max;
 #[path = "max-char-operations.rs"]
 mod max_char_operations;
 mod member;
+#[path = "member-alist-semantics.rs"]
+mod member_alist_semantics;
 mod memq;
 #[path = "message-format-advanced.rs"]
 mod message_format_advanced;
