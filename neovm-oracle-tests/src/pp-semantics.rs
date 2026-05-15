@@ -1,0 +1,78 @@
+//! Oracle parity tests for GNU `pp.el` pretty-printing semantics.
+//!
+//! GNU `pp-to-string` dispatches through `pp-default-function`, binds printing
+//! variables such as `print-escape-newlines`, and preserves the traditional
+//! trailing newline behavior.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_prop_pp_to_string_basic_objects_and_trailing_newline() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'pp)
+  (list
+   (pp-to-string '(alpha beta gamma))
+   (pp-to-string [1 2 (three . four)])
+   (pp-to-string '(quote symbol))
+   (string-suffix-p "\n" (pp-to-string '(a b)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_pp_escape_newlines_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'pp)
+  (let ((pp-escape-newlines t))
+    (setq a (pp-to-string "a\nb")))
+  (let ((pp-escape-newlines nil))
+    (setq b (pp-to-string "a\nb")))
+  (list a b))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_pp_to_string_custom_function_dispatch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'pp)
+  (let ((calls nil))
+    (list
+     (pp-to-string '(one two)
+                   (lambda (object)
+                     (push (list 'object object) calls)
+                     (prin1 (list 'custom object) (current-buffer))))
+     calls))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_pp_buffer_multiple_objects_and_comments() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'pp)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; first\n(a b c)\n;; second\n(d e f)")
+    (pp-buffer)
+    (buffer-string)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

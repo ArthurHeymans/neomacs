@@ -906,6 +906,8 @@ mod point;
 mod point_max;
 #[path = "point-min.rs"]
 mod point_min;
+#[path = "pp-semantics.rs"]
+mod pp_semantics;
 #[path = "predicate-logic-comprehensive.rs"]
 mod predicate_logic_comprehensive;
 mod predicates;
