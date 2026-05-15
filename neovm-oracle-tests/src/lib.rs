@@ -930,6 +930,8 @@ mod progn_advanced;
 mod progn_ast;
 #[path = "progn-prog1-prog2-comprehensive.rs"]
 mod progn_prog1_prog2_comprehensive;
+#[path = "progress-reporter-semantics.rs"]
+mod progress_reporter_semantics;
 #[path = "proper-list-predicates.rs"]
 mod proper_list_predicates;
 #[path = "propertize-advanced.rs"]
