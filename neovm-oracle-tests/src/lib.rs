@@ -569,6 +569,8 @@ mod delete_region_advanced;
 #[path = "delete-region-comprehensive.rs"]
 mod delete_region_comprehensive;
 mod delq;
+#[path = "derived-mode-semantics.rs"]
+mod derived_mode_semantics;
 mod dolist;
 #[path = "dolist-dotimes-advanced.rs"]
 mod dolist_dotimes_advanced;
