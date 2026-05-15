@@ -1242,6 +1242,8 @@ mod symbol_plist_patterns;
 mod symbol_properties_advanced;
 #[path = "symbol-property-semantics.rs"]
 mod symbol_property_semantics;
+#[path = "symbol-value-edge-semantics.rs"]
+mod symbol_value_edge_semantics;
 #[path = "symbol-with-pos-semantics.rs"]
 mod symbol_with_pos_semantics;
 #[path = "syntax-parse-state.rs"]
