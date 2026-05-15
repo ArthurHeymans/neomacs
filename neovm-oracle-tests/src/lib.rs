@@ -1232,6 +1232,8 @@ mod symbol_comprehensive_patterns;
 mod symbol_plist_patterns;
 #[path = "symbol-properties-advanced.rs"]
 mod symbol_properties_advanced;
+#[path = "symbol-property-semantics.rs"]
+mod symbol_property_semantics;
 #[path = "syntax-parse-state.rs"]
 mod syntax_parse_state;
 #[path = "syntax-table.rs"]
