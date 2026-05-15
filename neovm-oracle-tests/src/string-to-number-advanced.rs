@@ -177,6 +177,29 @@ fn oracle_prop_string_to_number_floats() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_to_number_trailing_dot_large_integers() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((nums (list (* most-negative-fixnum most-negative-fixnum)
+                  (1- most-negative-fixnum)
+                  most-negative-fixnum
+                  (1+ most-negative-fixnum)
+                  -1 0 1
+                  (1- most-positive-fixnum)
+                  most-positive-fixnum
+                  (1+ most-positive-fixnum)
+                  (* most-positive-fixnum most-positive-fixnum))))
+  (mapcar (lambda (n)
+            (let ((parsed (string-to-number (format "%d." n))))
+              (list n parsed (eq (type-of n) (type-of parsed)) (= n parsed))))
+          nums))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Roundtrip: number-to-string -> string-to-number and back
 // ---------------------------------------------------------------------------
