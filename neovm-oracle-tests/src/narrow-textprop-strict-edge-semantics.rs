@@ -11,7 +11,7 @@ fn oracle_narrow_and_widen() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*nw*")) (erase-buffer) (insert "0123456789") (narrow-to-region 3 6) (prog1 (buffer-string) (widen)))"#,
     );
-    assert_ok_eq("\"2345\"", &o, &n);
+    assert_ok_eq("\"234\"", &o, &n);
 }
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_narrowed_point_min_max() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*nw3*")) (erase-buffer) (insert "0123456789") (narrow-to-region 5 9) (prog1 (list (point-min) (point-max)) (widen)))"#,
     );
-    assert_ok_eq("(1 5)", &o, &n);
+    assert_ok_eq("(5 9)", &o, &n);
 }
 
 #[test]

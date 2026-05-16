@@ -38,7 +38,7 @@ fn oracle_insert_char_inserts_single() {
 fn oracle_insert_byte_inserts_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(
-        r#"(progn (switch-to-buffer (get-buffer-create "*ed4*")) (erase-buffer) (insert-byte 65) (buffer-string))"#,
+        r#"(progn (switch-to-buffer (get-buffer-create "*ed4*")) (erase-buffer) (insert-byte 65 1) (buffer-string))"#,
     );
     assert_ok_eq("\"A\"", &o, &n);
 }
@@ -67,7 +67,7 @@ fn oracle_delete_region_removes() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*ed7*")) (erase-buffer) (insert "0123456789") (delete-region 3 6) (buffer-string))"#,
     );
-    assert_ok_eq("\"016789\"", &o, &n);
+    assert_ok_eq("\"0156789\"", &o, &n);
 }
 
 #[test]
@@ -85,5 +85,5 @@ fn oracle_delete_char_negative_backward() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*ed9*")) (erase-buffer) (insert "abcde") (goto-char 4) (delete-char -2) (buffer-string))"#,
     );
-    assert_ok_eq("\"ae\"", &o, &n);
+    assert_ok_eq("\"ade\"", &o, &n);
 }

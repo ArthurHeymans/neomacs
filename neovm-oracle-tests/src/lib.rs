@@ -90,8 +90,6 @@ mod boolean_helper_semantics;
 mod bootstrap_library_require;
 #[path = "buffer-base-buffer-semantics.rs"]
 mod buffer_base_buffer_semantics;
-#[path = "delete-consecutive-dups-semantics.rs"]
-#[path = "buffer-edit-strict-edge-semantics.rs"]
 #[path = "buffer-edit-strict-edge-semantics.rs"]
 mod buffer_edit_strict_edge_semantics;
 #[path = "buffer-file-name-semantics.rs"]
