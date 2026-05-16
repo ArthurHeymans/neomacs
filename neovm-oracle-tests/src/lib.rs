@@ -559,6 +559,8 @@ mod condition_case;
 mod condition_case_advanced2;
 #[path = "condition-case-comprehensive.rs"]
 mod condition_case_comprehensive;
+#[path = "condition-case-error-data-strict-semantics.rs"]
+mod condition_case_error_data_strict_semantics;
 #[path = "condition-case-extended.rs"]
 mod condition_case_extended;
 #[path = "condition-case-nested-edge-semantics.rs"]
@@ -1392,6 +1394,8 @@ mod string_distance_patterns;
 mod string_encoding_comprehensive;
 #[path = "string-equal.rs"]
 mod string_equal;
+#[path = "string-equal-propertize-strict-semantics.rs"]
+mod string_equal_propertize_strict_semantics;
 #[path = "string-join-patterns.rs"]
 mod string_join_patterns;
 #[path = "string-length-value-comparison-semantics.rs"]
