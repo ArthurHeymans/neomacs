@@ -1038,6 +1038,8 @@ mod maphash_patterns;
 mod marker_comprehensive_patterns;
 #[path = "marker-edge-semantics.rs"]
 mod marker_edge_semantics;
+#[path = "marker-event-strict-edge-semantics.rs"]
+mod marker_event_strict_edge_semantics;
 #[path = "marker-operations.rs"]
 mod marker_operations;
 #[path = "marker-semantics.rs"]
@@ -1171,6 +1173,8 @@ mod plist_advanced;
 mod plist_comprehensive_patterns;
 #[path = "plist-member-advanced.rs"]
 mod plist_member_advanced;
+#[path = "plist-obarray-strict-edge-semantics.rs"]
+mod plist_obarray_strict_edge_semantics;
 #[path = "plist-semantics.rs"]
 mod plist_semantics;
 mod point;
@@ -1292,6 +1296,8 @@ mod regexp_quote_patterns;
 mod regexp_replace_advanced;
 #[path = "regexp-replace-comprehensive.rs"]
 mod regexp_replace_comprehensive;
+#[path = "regexp-replace-match-strict-edge-semantics.rs"]
+mod regexp_replace_match_strict_edge_semantics;
 #[path = "region-mark-semantics.rs"]
 mod region_mark_semantics;
 #[path = "register-semantics.rs"]
