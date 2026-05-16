@@ -138,6 +138,23 @@ fn oracle_set_text_properties_reports_noop_on_unpropertized_string_like_gnu() {
 }
 
 #[test]
+fn oracle_add_face_text_property_preserves_dotted_face_list_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c:add_properties treats a cons face value as a
+    // face list unless it is an anonymous face plist, so prepending conses onto
+    // even a dotted face list instead of wrapping that dotted list as one face.
+    let form = r#"
+(let ((s (copy-sequence "abc")))
+  (set-text-properties 0 3 '(face (bold . italic)) s)
+  (add-face-text-property 0 3 'underline nil s)
+  (get-text-property 0 'face s))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
