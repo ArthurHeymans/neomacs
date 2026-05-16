@@ -5046,12 +5046,13 @@ pub(crate) fn builtin_handler_bind_1(
         ));
     }
     if args.len() % 2 == 0 {
-        return Err(signal(
-            "error",
-            vec![Value::string(
+        let message = super::strings::builtin_format_message_slice(
+            eval,
+            &[Value::string(
                 "Trailing CONDITIONS without HANDLER in `handler-bind`",
             )],
-        ));
+        )?;
+        return Err(signal("error", vec![message]));
     }
 
     let scope = eval.save_specpdl_roots();

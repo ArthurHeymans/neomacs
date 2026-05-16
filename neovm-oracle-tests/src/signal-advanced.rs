@@ -165,6 +165,41 @@ fn oracle_prop_signal_adv_builtin_hierarchy_catch() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_signal_adv_handler_bind_normal_return_continues_search() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU eval.c:Fhandler_bind_1 installs dynamic handlers that observe a
+    // signal before condition-case.  If a handler returns normally, it does
+    // not consume the signal; handler search continues from where it left off.
+    // GNU lisp/subr.el:handler-bind is the public macro over handler-bind-1.
+    let form = r#"
+(list
+ (let ((log nil))
+   (condition-case err
+       (handler-bind
+           ((error (lambda (e)
+                     (push (list :first e) log)
+                     :first-return))
+            (error (lambda (e)
+                     (push (list :second e) log)
+                     :second-return)))
+         (signal 'error '("boom")))
+     (error (list :caught err :log log))))
+ (catch 'done
+   (handler-bind
+       ((error (lambda (e)
+                 (throw 'done (list :thrown e)))))
+     (signal 'error '("nonlocal"))))
+ (condition-case err
+     (handler-bind-1
+      (lambda () (signal 'error '("missing-handler")))
+      '(error))
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // error function (convenient string-based signaling)
 // ---------------------------------------------------------------------------
