@@ -893,6 +893,8 @@ mod list_creation_comprehensive;
 mod list_manipulation_comprehensive;
 #[path = "list-operations-advanced.rs"]
 mod list_operations_advanced;
+#[path = "list-tail-helper-semantics.rs"]
+mod list_tail_helper_semantics;
 #[path = "listify-key-sequence-semantics.rs"]
 mod listify_key_sequence_semantics;
 #[path = "load-history-semantics.rs"]

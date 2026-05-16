@@ -401,6 +401,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "internal--thread-argument",
     "json-available-p",
     "list-of-strings-p",
+    "butlast",
+    "last",
     "listify-key-sequence",
     "load-history-filename-element",
     "load-history-regexp",
