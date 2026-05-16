@@ -129,6 +129,24 @@ fn read_from_string_string_value() {
 }
 
 #[test]
+fn read_from_string_unterminated_string_signals_end_of_file_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let unterminated = builtin_read_from_string(&mut ev, vec![Value::string(r#""unterminated"#)]);
+    assert!(
+        matches!(unterminated, Err(Flow::Signal(ref sig)) if sig.symbol_name() == "end-of-file"),
+        "GNU read-from-string signals end-of-file for an unterminated string, got {unterminated:?}"
+    );
+
+    let escape_at_eof = builtin_read_from_string(&mut ev, vec![Value::string(r#""abc\"#)]);
+    assert!(
+        matches!(escape_at_eof, Err(Flow::Signal(ref sig)) if sig.symbol_name() == "end-of-file"),
+        "GNU read-from-string signals end-of-file for an unterminated string escape, got {escape_at_eof:?}"
+    );
+}
+
+#[test]
 fn read_from_string_ascii_string_literals_are_unibyte() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -355,6 +373,17 @@ fn read_from_string_vector() {
         }
         _ => panic!("Expected cons"),
     }
+}
+
+#[test]
+fn read_from_string_unterminated_vector_signals_end_of_file_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("[1 2")]);
+    assert!(
+        matches!(result, Err(Flow::Signal(ref sig)) if sig.symbol_name() == "end-of-file"),
+        "GNU read-from-string signals end-of-file for an unterminated vector, got {result:?}"
+    );
 }
 
 #[test]

@@ -662,7 +662,7 @@ impl<'a> Reader<'a> {
                 }
                 None => {
                     restore_scratch_gc_roots(saved);
-                    return Err(self.error("unterminated vector"));
+                    return Err(self.end_of_file_error());
                 }
             }
         }
@@ -689,7 +689,7 @@ impl<'a> Reader<'a> {
         let mut unibyte_buf = Some(Vec::new());
         loop {
             let Some(ch) = self.current_code() else {
-                return Err(self.error("unterminated string"));
+                return Err(self.end_of_file_error());
             };
             self.bump();
             match ch {
@@ -703,7 +703,7 @@ impl<'a> Reader<'a> {
                 }
                 x if x == b'\\' as u32 => {
                     let Some(esc) = self.current_code() else {
-                        return Err(self.error("unterminated escape in string"));
+                        return Err(self.end_of_file_error());
                     };
                     self.bump();
                     match esc {
