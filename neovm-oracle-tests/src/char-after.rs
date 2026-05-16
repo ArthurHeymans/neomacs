@@ -4,7 +4,10 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{
+    ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity_with_bootstrap,
+    eval_oracle_and_neovm,
+};
 
 #[test]
 fn oracle_prop_char_after_basics() {
@@ -39,6 +42,18 @@ fn oracle_prop_char_after_wrong_type_error() {
 
     let (oracle, neovm) = eval_oracle_and_neovm(r#"(char-after "x")"#);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
+}
+
+#[test]
+fn oracle_prop_char_after_bignum_position_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs editfns.c:Fchar_after uses buffer.c:fix_position for explicit
+    // integer POS, so huge bignums saturate and then fall outside BEGV..ZV.
+    let form = r#"(with-temp-buffer
+  (insert "abc")
+  (char-after 1000000000000000000000000000000))"#;
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 proptest! {

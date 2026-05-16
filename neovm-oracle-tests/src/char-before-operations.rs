@@ -52,6 +52,18 @@ fn oracle_prop_char_before_optional_pos() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_char_before_bignum_position_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs editfns.c:Fchar_before uses buffer.c:fix_position for
+    // explicit integer POS, so huge bignums saturate before the range check.
+    let form = r#"(with-temp-buffer
+  (insert "abc")
+  (char-before 1000000000000000000000000000000))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // char-before at beginning of buffer returns nil
 // ---------------------------------------------------------------------------
