@@ -30,15 +30,16 @@ fn oracle_gethash_nil_default_when_missing() {
 }
 
 #[test]
-fn oracle_remhash_returns_t_when_key_present() {
+fn oracle_remhash_returns_nil_on_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU: remhash returns nil on success (not t).
     let (oracle, neovm) = eval_oracle_and_neovm(
         r#"(progn
   (let ((h (make-hash-table)))
     (puthash 'key 42 h)
     (remhash 'key h)))"#,
     );
-    assert_ok_eq("t", &oracle, &neovm);
+    assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
@@ -107,8 +108,9 @@ fn oracle_hash_table_eql_test_strings_not_found() {
 }
 
 #[test]
-fn oracle_hash_table_size_is_positive() {
+fn oracle_hash_table_size_is_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(> (hash-table-size (make-hash-table)) 0)");
+    // GNU: default hash-table-size is 0 (meaning "use default size").
+    let (oracle, neovm) = eval_oracle_and_neovm("(integerp (hash-table-size (make-hash-table)))");
     assert_ok_eq("t", &oracle, &neovm);
 }
