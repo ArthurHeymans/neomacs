@@ -63,3 +63,28 @@ fn oracle_remq_leading_match_sharing_and_copy_boundary() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_delete_remove_reject_bool_vector_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs implements `delete` in src/fns.c:Fdelete.  That code accepts
+    // nil, cons, vector, and string inputs explicitly, then calls
+    // wrong_type_argument(Qsequencep, seq) for all other objects; bool-vectors
+    // are not treated as vectors here.  `remove` is the Lisp wrapper in
+    // lisp/subr.el and inherits the same boundary.
+    let form = r#"
+(list
+ (condition-case e
+     (delete t (bool-vector t nil t nil))
+   (error (list (car e) (cdr e))))
+ (condition-case e
+     (remove nil (bool-vector t nil t nil))
+   (error (list (car e) (cdr e))))
+ (condition-case e
+     (delq t (bool-vector t nil t nil))
+   (error (list (car e) (cdr e)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
