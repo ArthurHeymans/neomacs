@@ -47,6 +47,53 @@ fn oracle_prop_hash_table_ops_make_all_kwargs() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_hash_table_ops_make_keyword_validation_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fmake_hash_table parses keyword/value pairs from the end
+    // while assigning to one slot per supported keyword.  That makes duplicate
+    // keyword arguments first-one-wins from Lisp's left-to-right call shape.
+    // Obsolete rehash keywords are accepted and ignored, while invalid
+    // keywords, tests, weakness values, sizes, and odd argument counts signal
+    // their exact GNU error data.
+    let form = r#"
+(list
+ (condition-case err
+     (make-hash-table :test)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (make-hash-table :bogus 1)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (make-hash-table :test 'missing-test)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (make-hash-table :weakness 'missing-weakness)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (make-hash-table :size -1)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (make-hash-table :size 1.0)
+   (error (cons (car err) (cdr err))))
+ (hash-table-test
+  (make-hash-table :test 'eq :test 'equal))
+ (hash-table-weakness
+  (make-hash-table :weakness 'key :weakness t))
+ (hash-table-test
+  (make-hash-table :test 'equal
+                   :rehash-size 'ignored
+                   :rehash-threshold 'ignored
+                   :purecopy 'ignored))
+ (hash-table-rehash-size
+  (make-hash-table :rehash-size 'ignored))
+ (hash-table-rehash-threshold
+  (make-hash-table :rehash-threshold 'ignored)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // gethash: default value behavior
 // ---------------------------------------------------------------------------
