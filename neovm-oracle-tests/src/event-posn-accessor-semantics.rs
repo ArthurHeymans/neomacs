@@ -25,6 +25,34 @@ fn oracle_event_start_end_click_drag_and_touchscreen_shapes() {
 }
 
 #[test]
+fn oracle_event_accessors_ignore_touchscreen_update_posn_payloads() {
+    let form = r#"
+(let* ((w (selected-window))
+       (start (list w 11 '(12 . 34) 99 nil 11 '(3 . 4)))
+       (end (list w 22 '(56 . 78) 100 nil 22 '(5 . 6)))
+       (update (list 'touchscreen-update
+                     (list (cons 1 start) (cons 2 end))))
+       (nonpos (list 'mouse-1 nil 'not-a-posn))
+       (drag-with-count (list 'drag-mouse-1 start 3 end))
+       (wheel-with-bad-count (list 'wheel-up start nil 'four))
+       (wheel-with-count (list 'wheel-up start nil 4)))
+  (list
+   ;; GNU `event-start' and `event-end' intentionally ignore
+   ;; touchscreen-update payloads and fall back to point.
+   (posnp (event-start update))
+   (posnp (event-end update))
+   (eq (event-end nonpos) nil)
+   (posn-point (event-start nil))
+   (posn-x-y (event-start nil))
+   (event-click-count nil)
+   (event-click-count drag-with-count)
+   (event-line-count nil)
+   (event-line-count wheel-with-bad-count)
+   (event-line-count wheel-with-count)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_posn_accessors_prefer_documented_slots() {
     let form = r#"
 (let* ((w (selected-window))
@@ -48,6 +76,17 @@ fn oracle_posn_accessors_prefer_documented_slots() {
 fn oracle_window_print_includes_live_buffer_name() {
     let form = r#"
 (prin1-to-string (selected-window))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_window_print_in_nested_structures_includes_live_buffer_name() {
+    let form = r#"
+(let ((w (selected-window)))
+  (list
+   (prin1-to-string (list w))
+   (prin1-to-string (vector w))
+   (prin1-to-string (cons w w))))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
 
