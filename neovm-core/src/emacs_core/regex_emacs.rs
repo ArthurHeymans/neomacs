@@ -672,7 +672,7 @@ pub(crate) fn regex_compile_lisp(
             b'\\' => {
                 if p >= plen {
                     return Err(RegexCompileError {
-                        message: "trailing backslash".to_string(),
+                        message: "Trailing backslash".to_string(),
                     });
                 }
                 let c2 = pattern_bytes[p];
@@ -1977,7 +1977,7 @@ fn parse_interval(
         *p += 2;
     } else {
         return Err(RegexCompileError {
-            message: "unterminated \\{".to_string(),
+            message: "Unmatched \\{".to_string(),
         });
     }
 

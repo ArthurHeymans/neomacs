@@ -251,6 +251,24 @@ fn test_unterminated_charset_reports_gnu_ebrack() {
 }
 
 #[test]
+fn test_trailing_backslash_reports_gnu_eescape() {
+    crate::test_utils::init_test_tracing();
+    match regex_compile("a\\", false, false) {
+        Ok(_) => panic!("trailing backslash should fail"),
+        Err(err) => assert_eq!(err.message, "Trailing backslash"),
+    }
+}
+
+#[test]
+fn test_unmatched_interval_reports_gnu_ebrace() {
+    crate::test_utils::init_test_tracing();
+    match regex_compile("a\\{2", false, false) {
+        Ok(_) => panic!("unmatched interval should fail"),
+        Err(err) => assert_eq!(err.message, "Unmatched \\{"),
+    }
+}
+
+#[test]
 fn test_multibyte_charset() {
     crate::test_utils::init_test_tracing();
     let syn = DefaultSyntaxLookup;
