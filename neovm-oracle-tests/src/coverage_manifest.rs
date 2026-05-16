@@ -456,6 +456,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "rx-let",
     "rx-let-eval",
     "rx-to-string",
+    "shell-command-to-string",
     "shell-quote-argument",
     "special-form-p",
     "string-to-list",
