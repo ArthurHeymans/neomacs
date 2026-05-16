@@ -92,6 +92,8 @@ mod buffer_last_name_semantics;
 mod buffer_line_statistics_semantics;
 #[path = "buffer-list-other-buffer-semantics.rs"]
 mod buffer_list_other_buffer_semantics;
+#[path = "buffer-local-default-value-edge-semantics.rs"]
+mod buffer_local_default_value_edge_semantics;
 #[path = "buffer-local-set-state-semantics.rs"]
 mod buffer_local_set_state_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
@@ -681,6 +683,8 @@ mod elt_aref_aset_patterns;
 mod encode_decode_coding_advanced;
 #[path = "end-of-line.rs"]
 mod end_of_line;
+#[path = "eq-eql-equal-edge-semantics.rs"]
+mod eq_eql_equal_edge_semantics;
 mod equality;
 #[path = "equality-advanced.rs"]
 mod equality_advanced;
@@ -705,6 +709,8 @@ mod eval_advanced;
 mod eval_advanced_2;
 #[path = "eval-apply-advanced.rs"]
 mod eval_apply_advanced;
+#[path = "eval-buffer-region-semantics.rs"]
+mod eval_buffer_region_semantics;
 #[path = "eval-comprehensive-patterns.rs"]
 mod eval_comprehensive_patterns;
 #[path = "event-convert-advanced.rs"]
@@ -1181,6 +1187,8 @@ mod re_search_backward_advanced;
 mod re_search_forward;
 #[path = "re-search-patterns.rs"]
 mod re_search_patterns;
+#[path = "read-char-semantics.rs"]
+mod read_char_semantics;
 #[path = "read-from-string-advanced.rs"]
 mod read_from_string_advanced;
 #[path = "read-from-string-patterns.rs"]
@@ -1380,6 +1388,8 @@ mod string_encoding_comprehensive;
 mod string_equal;
 #[path = "string-join-patterns.rs"]
 mod string_join_patterns;
+#[path = "string-length-value-comparison-semantics.rs"]
+mod string_length_value_comparison_semantics;
 #[path = "string-lessp.rs"]
 mod string_lessp;
 #[path = "string-lines-semantics.rs"]

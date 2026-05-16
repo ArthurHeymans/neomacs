@@ -1,0 +1,100 @@
+//! Oracle parity tests for buffer-local ↔ default value interactions.
+//!
+//! GNU src/data.c and src/buffer.c implement intricate interactions between
+//! `set`, `setq-default`, `make-local-variable`, `kill-local-variable`,
+//! `default-value`, `default-boundp`, and `buffer-local-value`.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_make_local_variable_then_set() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-mlv-defvar 100)
+  (make-variable-buffer-local 'neovm--test-mlv-defvar)
+  (set 'neovm--test-mlv-defvar 200)
+  (list neovm--test-mlv-defvar
+        (default-value 'neovm--test-mlv-defvar)))"#,
+    );
+    assert_ok_eq("(200 100)", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_set_in_buffer_after_make_local() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-set-local 50)
+  (make-variable-buffer-local 'neovm--test-set-local)
+  (setq neovm--test-set-local 99)
+  (list neovm--test-set-local
+        (default-value 'neovm--test-set-local)))"#,
+    );
+    assert_ok_eq("(99 50)", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_kill_local_restores_default() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU: kill-local-variable returns the variable symbol.
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-kill-local 10)
+  (make-variable-buffer-local 'neovm--test-kill-local)
+  (setq neovm--test-kill-local 20)
+  (prog1
+      (list (kill-local-variable 'neovm--test-kill-local)
+            neovm--test-kill-local)
+    (kill-local-variable 'neovm--test-kill-local)))"#,
+    );
+    assert_ok_eq("(neovm--test-kill-local 10)", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_default_boundp_after_make_local_without_set() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-dbp-local 77)
+  (make-variable-buffer-local 'neovm--test-dbp-local)
+  (list (default-boundp 'neovm--test-dbp-local)
+        (boundp 'neovm--test-dbp-local)))"#,
+    );
+    assert_ok_eq("(t t)", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_buffer_local_value_returns_default_when_no_local() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-blv-default 42)
+  (make-variable-buffer-local 'neovm--test-blv-default)
+  (let ((buf (get-buffer-create "*neovm-test-blv*")))
+    (buffer-local-value 'neovm--test-blv-default buf)))"#,
+    );
+    assert_ok_eq("42", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_buffer_local_value_in_different_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-blv-diff 1)
+  (make-variable-buffer-local 'neovm--test-blv-diff)
+  (let ((other-buf (get-buffer-create "neovm-test-blv-diff")))
+    (unwind-protect
+        (progn
+          (set-buffer other-buf)
+          (setq neovm--test-blv-diff 99)
+          (list (buffer-local-value 'neovm--test-blv-diff other-buf)
+                (progn (set-buffer (get-buffer-create "*scratch*"))
+                       neovm--test-blv-diff)))
+      (kill-buffer other-buf))))"#,
+    );
+    assert_ok_eq("(99 1)", &oracle, &neovm);
+}
