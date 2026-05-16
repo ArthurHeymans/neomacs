@@ -1035,6 +1035,8 @@ mod make_symbol;
 mod make_vector_advanced;
 #[path = "make-vector-patterns.rs"]
 mod make_vector_patterns;
+#[path = "map-dedup-tree-strict-edge-semantics.rs"]
+mod map_dedup_tree_strict_edge_semantics;
 #[path = "map-library-semantics.rs"]
 mod map_library_semantics;
 #[path = "map-operations.rs"]
@@ -1168,6 +1170,9 @@ mod number_predicate_edge_semantics;
 mod number_predicates;
 #[path = "number-predicates-advanced.rs"]
 mod number_predicates_advanced;
+#[path = "number-sequence-advanced.rs"]
+#[path = "number-seq-concat-strict-edge-semantics.rs"]
+mod number_seq_concat_strict_edge_semantics;
 #[path = "number-sequence-advanced.rs"]
 mod number_sequence_advanced;
 #[path = "number-sequence-operations.rs"]
