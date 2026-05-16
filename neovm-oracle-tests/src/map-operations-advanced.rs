@@ -524,6 +524,58 @@ fn oracle_prop_map_adv_list_mutation_replaces_tail_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_map_adv_vector_mutation_reads_live_slots_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c:mapcar1` reads each vector element with AREF during
+    // traversal.  If FUNCTION mutates a later slot, mapcar/mapc/mapcan and
+    // mapconcat observe the new slot value; they must not traverse a cloned
+    // snapshot of the vector's old contents.
+    let form = r####"(list
+  (let* ((v (vector 1 2 3 4))
+         (seen nil))
+    (list (mapcar (lambda (x)
+                    (push x seen)
+                    (when (= x 1)
+                      (aset v 1 9))
+                    x)
+                  v)
+          (nreverse seen)
+          v))
+  (let* ((v (vector 1 2 3 4))
+         (seen nil))
+    (list (mapc (lambda (x)
+                  (push x seen)
+                  (when (= x 1)
+                    (aset v 1 9)))
+                v)
+          (nreverse seen)
+          v))
+  (let* ((v (vector 1 2 3 4))
+         (seen nil))
+    (list (mapcan (lambda (x)
+                    (push x seen)
+                    (when (= x 1)
+                      (aset v 1 9))
+                    (list x))
+                  v)
+          (nreverse seen)
+          v))
+  (let* ((v (vector 1 2 3 4))
+         (seen nil))
+    (list (mapconcat (lambda (x)
+                       (push x seen)
+                       (when (= x 1)
+                         (aset v 1 9))
+                       (number-to-string x))
+                     v
+                     ",")
+          (nreverse seen)
+          v)))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // mapconcat: advanced separator and transform patterns
 // ---------------------------------------------------------------------------
