@@ -374,6 +374,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "copy-overlay",
     "collapse-delayed-warnings",
     "define-error",
+    "define-symbol-prop",
     "defmacro",
     "delay-warning",
     "delete-line",

@@ -93,3 +93,61 @@ fn oracle_symbol_property_type_errors() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_define_symbol_prop_updates_load_list_and_symbol_plist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((current-load-list nil))
+  (unwind-protect
+      (progn
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-a
+          'neomacs-prop-one "first")
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-a
+          'neomacs-prop-one "updated")
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-b
+          'neomacs-prop-one "second")
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-a
+          'neomacs-prop-two "third")
+        (list
+         current-load-list
+         (get 'neomacs-oracle-define-symbol-prop-a 'neomacs-prop-one)
+         (get 'neomacs-oracle-define-symbol-prop-b 'neomacs-prop-one)
+         (get 'neomacs-oracle-define-symbol-prop-a 'neomacs-prop-two)))
+    (setplist 'neomacs-oracle-define-symbol-prop-a nil)
+    (setplist 'neomacs-oracle-define-symbol-prop-b nil)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_define_symbol_prop_preserves_existing_load_list_entries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((current-load-list
+       '((define-symbol-props
+          (neomacs-prop-one neomacs-oracle-define-symbol-prop-existing))
+         (defun . neomacs-oracle-define-symbol-prop-function)
+         neomacs-oracle-define-symbol-prop-variable)))
+  (unwind-protect
+      (progn
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-existing
+          'neomacs-prop-one "existing")
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-new
+          'neomacs-prop-one "new")
+        (define-symbol-prop 'neomacs-oracle-define-symbol-prop-new
+          'neomacs-prop-two "other")
+        (list
+         current-load-list
+         (get 'neomacs-oracle-define-symbol-prop-existing 'neomacs-prop-one)
+         (get 'neomacs-oracle-define-symbol-prop-new 'neomacs-prop-one)
+         (get 'neomacs-oracle-define-symbol-prop-new 'neomacs-prop-two)))
+    (setplist 'neomacs-oracle-define-symbol-prop-existing nil)
+    (setplist 'neomacs-oracle-define-symbol-prop-new nil)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
