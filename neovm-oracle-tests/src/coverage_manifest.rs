@@ -265,6 +265,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "string-lessp",
     "string-limit",
     "string-lines",
+    "string-make-multibyte",
+    "string-make-unibyte",
     "string-match",
     "string-pad",
     "string-remove-prefix",

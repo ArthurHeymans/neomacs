@@ -29,3 +29,52 @@ fn oracle_prop_gnu_string_to_list_vector_byte_and_property_edges() {
 "#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_string_make_multibyte_unibyte_identity_copy_and_low_byte_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:string-make-multibyte returns the original object for
+    // multibyte strings and all-ASCII unibyte strings, but copies non-ASCII
+    // unibyte storage into multibyte raw-byte characters with no properties.
+    // string-make-unibyte always requires a string and converts each multibyte
+    // character to its low 8 bits.
+    let form = r#"
+(let* ((ascii-uni (unibyte-string 65 66 67))
+       (raw-uni (unibyte-string 65 200 66))
+       (ascii-prop (propertize "ABC" 'face 'bold))
+       (multi-prop (propertize "éĀ" 'face 'bold)))
+  (list
+   (let ((r (string-make-multibyte ascii-uni)))
+     (list (eq r ascii-uni)
+           (multibyte-string-p r)
+           (string-to-list r)))
+   (let ((r (string-make-multibyte raw-uni)))
+     (list (eq r raw-uni)
+           (multibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)
+           (text-properties-at 0 r)))
+   (let ((r (string-make-multibyte ascii-prop)))
+     (list (eq r ascii-prop)
+           (multibyte-string-p r)
+           (mapcar (lambda (i) (get-text-property i 'face r))
+                   (number-sequence 0 (1- (length r))))))
+   (let ((r (string-make-unibyte multi-prop)))
+     (list (eq r multi-prop)
+           (unibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)
+           (text-properties-at 0 r)
+           (text-properties-at 1 r)))
+   (condition-case err
+       (string-make-multibyte 42)
+     (error err))
+   (condition-case err
+       (string-make-unibyte nil)
+     (error err))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
