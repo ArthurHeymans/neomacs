@@ -460,6 +460,32 @@ fn oracle_prop_subr_x_thread_first_last() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_subr_x_thread_macroexpansion_and_named_let_lexical_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr-x.el implements thread-first/thread-last through
+    // internal--thread-argument, and named-let rejects expansion through eval
+    // without lexical binding.
+    let form = r#"(progn
+  (require 'subr-x)
+  (list
+    (macroexpand-all '(thread-first 5 (+ 3) (* 2) -))
+    (macroexpand-all '(thread-last 5 (+ 3) (* 2) -))
+    (macroexpand-1 '(thread-first x f))
+    (macroexpand-1 '(thread-last x f))
+    (macroexpand-all '(thread-first (list 1 2)
+                       (append '(3))
+                       car))
+    (condition-case err
+        (eval '(named-let f ((x 1)) x) nil)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (macroexpand '(named-let f ((x 1)) x))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // named-let (tail-recursive loop pattern)
 // ---------------------------------------------------------------------------
