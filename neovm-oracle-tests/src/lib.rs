@@ -666,6 +666,8 @@ mod event_convert_list;
 mod expt_sqrt_log_patterns;
 #[path = "file-name-semantics.rs"]
 mod file_name_semantics;
+#[path = "file-repository-version-semantics.rs"]
+mod file_repository_version_semantics;
 #[path = "fillarray-advanced.rs"]
 mod fillarray_advanced;
 #[path = "fillarray-operations.rs"]
