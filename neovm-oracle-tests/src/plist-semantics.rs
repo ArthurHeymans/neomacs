@@ -50,6 +50,35 @@ fn oracle_plist_member_and_put_validate_malformed_tails() {
 }
 
 #[test]
+fn oracle_plist_member_matches_key_before_tail_validation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:plist_member checks the property key before validating
+    // the tail shape.  A malformed tail that starts with the searched key is
+    // returned verbatim; a missing key on the same malformed plist still
+    // signals `wrong-type-argument plistp'.
+    let form = r#"
+(list
+ (plist-get '(a 1 b) 'b)
+ (condition-case err
+     (plist-member '(a 1 b) 'b)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (plist-put '(a 1 b) 'b 2)
+   (error (cons (car err) (cdr err))))
+ (plist-get '(a 1 b . bad-tail) 'b)
+ (condition-case err
+     (plist-member '(a 1 b . bad-tail) 'b)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (plist-member '(a 1 b . bad-tail) 'missing)
+   (error (cons (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_plist_put_preserves_tail_and_mutates_existing_pair() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
