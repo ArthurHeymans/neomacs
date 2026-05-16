@@ -488,7 +488,16 @@ pub(crate) fn pos_bol_compute(ctx: &super::eval::Context, n: i64) -> Result<(i64
         pos = new_pos;
         moved = actual_moved;
     }
-    let bol = line_beginning_byte_narrowed(&text, pos, begv);
+    // GNU `bol` (editfns.c) asks `scan_newline_from_point` for N - 1 lines.
+    // If a forward scan reaches ZV before finding enough newlines, the
+    // returned position is ZV itself, not the beginning of the final
+    // unterminated line containing ZV.  `delete-line` relies on this via
+    // `(pos-bol 2)` to delete the last line of a buffer.
+    let bol = if n != 1 && n > 1 && moved != n - 1 && pos == zv {
+        zv
+    } else {
+        line_beginning_byte_narrowed(&text, pos, begv)
+    };
     Ok((
         byte_to_char_pos(buf, bol),
         byte_to_char_pos(buf, buf.pt_byte),

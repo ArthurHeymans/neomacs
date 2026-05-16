@@ -278,6 +278,18 @@ fn test_line_beginning_position_with_offset() {
 }
 
 #[test]
+fn test_pos_bol_forward_past_final_unterminated_line_returns_point_max() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_text("one\ntwo\nthree");
+    eval_str(&mut ev, "(goto-char 9)"); // beginning of final line
+    assert_eq!(eval_int(&mut ev, "(pos-bol 2)"), 14);
+
+    let mut single = eval_with_text("single");
+    eval_str(&mut single, "(goto-char 1)");
+    assert_eq!(eval_int(&mut single, "(pos-bol 2)"), 7);
+}
+
+#[test]
 fn test_line_end_position_with_offset() {
     crate::test_utils::init_test_tracing();
     let mut ev = eval_with_text("aaa\nbbb\nccc");
