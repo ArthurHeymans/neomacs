@@ -419,6 +419,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "rx-let",
     "rx-let-eval",
     "rx-to-string",
+    "shell-quote-argument",
     "subr-primitive-p",
     "take-while",
     "seq-contains",

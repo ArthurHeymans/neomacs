@@ -1235,6 +1235,8 @@ mod setq;
 mod setq_advanced;
 #[path = "setq-setf-comprehensive.rs"]
 mod setq_setf_comprehensive;
+#[path = "shell-quote-semantics.rs"]
+mod shell_quote_semantics;
 mod signal;
 #[path = "signal-advanced.rs"]
 mod signal_advanced;
