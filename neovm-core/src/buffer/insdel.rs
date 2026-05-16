@@ -108,15 +108,17 @@ impl Buffer {
         }
         let byte_len = bytes.len();
 
-        // GNU: undo-in-progress prevents undo-boundary and
-        // record_first_change, but record_insert still creates redo
-        // records so that an undo can itself be undone.
-        if !self.undo_state.in_progress() {
-            self.undo_prepare_change(insert_pos, self.pt_byte);
-        }
+        // GNU `record_insert` always calls `record_point`, and that path
+        // records the first-change sentinel when the buffer was unmodified.
+        self.undo_prepare_change(insert_pos, self.pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            undo::undo_list_record_insert(&mut ul, insert_pos, byte_len, self.pt_byte);
+            undo::undo_list_record_insert(
+                &mut ul,
+                insert_pos,
+                byte_len,
+                self.undo_state.point_before_command_or_undo(),
+            );
             self.set_undo_list(ul);
         }
 
@@ -283,11 +285,14 @@ impl Buffer {
     /// Prepare to record a buffer change: ensure the first-change sentinel
     /// has been recorded if needed.
     fn undo_ensure_first_change(&mut self) {
-        if self.undo_state.recorded_first_change() {
+        let mut ul = self.get_undo_list();
+        if self.undo_state.recorded_first_change() && undo::undo_list_contains_first_change(&ul) {
             return;
         }
-        let mut ul = self.get_undo_list();
         if undo::undo_list_is_disabled(&ul) {
+            return;
+        }
+        if self.modified_tick() > self.save_modified_tick() {
             return;
         }
         undo::undo_list_record_first_change(&mut ul);
@@ -298,7 +303,7 @@ impl Buffer {
     /// Prepare undo recording for a buffer edit at `beg` with point at `pt`.
     fn undo_prepare_change(&mut self, beg: usize, pt: usize) {
         let ul = self.get_undo_list();
-        if undo::undo_list_is_disabled(&ul) || self.undo_state.in_progress() {
+        if undo::undo_list_is_disabled(&ul) {
             return;
         }
         let _ = (beg, pt);
@@ -367,15 +372,18 @@ impl Buffer {
         self.text
             .copy_emacs_bytes_to(start, end, &mut deleted_bytes);
         let deleted_text = lisp_string_from_buffer_bytes(deleted_bytes, self.get_multibyte());
-        // GNU: undo-in-progress prevents undo-boundary and
-        // record_first_change, but record_delete still creates redo
-        // records so that an undo can itself be undone.
-        if !self.undo_state.in_progress() {
-            self.undo_prepare_change(start, self.pt_byte);
-        }
+        // GNU `record_delete` always calls `record_point`, and that path
+        // records the first-change sentinel when the buffer was unmodified.
+        self.undo_prepare_change(start, self.pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            undo::undo_list_record_delete(&mut ul, start, deleted_text, self.pt_byte);
+            undo::undo_list_record_delete(
+                &mut ul,
+                start,
+                deleted_text,
+                self.pt_byte,
+                self.undo_state.point_before_command_or_undo(),
+            );
             self.set_undo_list(ul);
         }
 
@@ -452,19 +460,23 @@ impl Buffer {
         }
 
         if !noundo {
-            if !self.undo_state.in_progress() {
-                self.undo_prepare_change(start, self.pt_byte);
-            }
+            self.undo_prepare_change(start, self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 let deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
-                undo::undo_list_record_delete(&mut ul, start, deleted, self.pt_byte);
+                undo::undo_list_record_delete(
+                    &mut ul,
+                    start,
+                    deleted,
+                    self.pt_byte,
+                    self.undo_state.point_before_command_or_undo(),
+                );
                 undo::undo_list_record_insert(
                     &mut ul,
                     start,
                     replacement_bytes.len(),
-                    self.pt_byte,
+                    self.undo_state.point_before_command_or_undo(),
                 );
                 self.set_undo_list(ul);
             }
@@ -550,18 +562,22 @@ impl Buffer {
         replacement.extend_from_slice(&mid);
         replacement.extend_from_slice(&region1);
 
-        if !self.undo_state.in_progress() {
-            self.undo_prepare_change(start1_byte, self.pt_byte);
-        }
+        self.undo_prepare_change(start1_byte, self.pt_byte);
         let mut undo_list = self.get_undo_list();
         if !undo::undo_list_is_disabled(&undo_list) {
             let deleted = lisp_string_from_buffer_bytes(old_span, self.get_multibyte());
-            undo::undo_list_record_delete(&mut undo_list, start1_byte, deleted, self.pt_byte);
+            undo::undo_list_record_delete(
+                &mut undo_list,
+                start1_byte,
+                deleted,
+                self.pt_byte,
+                self.undo_state.point_before_command_or_undo(),
+            );
             undo::undo_list_record_insert(
                 &mut undo_list,
                 start1_byte,
                 replacement.len(),
-                self.pt_byte,
+                self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(undo_list);
         }

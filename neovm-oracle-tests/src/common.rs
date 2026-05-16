@@ -801,6 +801,7 @@ fn render_neovm_oracle_result(eval: &Context, result: Result<Value, EvalError>) 
     let saved_roots = neovm_core::emacs_core::eval::save_scratch_gc_roots();
     let rendered = match result {
         Ok(value) => {
+            neovm_core::emacs_core::eval::push_scratch_gc_root(value);
             let value = normalize_neovm_oracle_value(value);
             format!("OK {}", print_value_with_buffers(&value, &eval.buffers))
         }
@@ -808,10 +809,14 @@ fn render_neovm_oracle_result(eval: &Context, result: Result<Value, EvalError>) 
             let mut values = Vec::with_capacity(data.len() + 1);
             values.push(Value::symbol(symbol));
             values.extend(data);
-            let payload = normalize_neovm_oracle_value(Value::list(values));
+            let payload = Value::list(values);
+            neovm_core::emacs_core::eval::push_scratch_gc_root(payload);
+            let payload = normalize_neovm_oracle_value(payload);
             format!("ERR {}", print_value_with_buffers(&payload, &eval.buffers))
         }
         Err(EvalError::UncaughtThrow { tag, value }) => {
+            neovm_core::emacs_core::eval::push_scratch_gc_root(tag);
+            neovm_core::emacs_core::eval::push_scratch_gc_root(value);
             let tag = normalize_neovm_oracle_value(tag);
             let value = normalize_neovm_oracle_value(value);
             format!(

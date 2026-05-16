@@ -1333,6 +1333,8 @@ mod type_predicates;
 mod type_predicates_advanced;
 #[path = "type-predicates-comprehensive.rs"]
 mod type_predicates_comprehensive;
+#[path = "undo-core-semantics.rs"]
+mod undo_core_semantics;
 mod unless;
 #[path = "unwind-protect.rs"]
 mod unwind_protect;

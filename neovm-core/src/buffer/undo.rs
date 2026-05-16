@@ -16,8 +16,19 @@
 //! - `(t . MODTIME)` — first-change marker
 //! - `nil` — undo boundary
 
+use crate::emacs_core::eval::{
+    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+};
 use crate::emacs_core::value::{Value, ValueKind};
 use crate::heap_types::LispString;
+
+fn prepend_undo_entry(undo_list: &mut Value, entry: Value) {
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
+    push_scratch_gc_root(entry);
+    *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
+}
 
 /// Returns `true` when `buffer-undo-list` is `t` (undo disabled).
 pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
@@ -33,14 +44,22 @@ pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
 /// Consecutive adjacent inserts are merged when the head entry is an
 /// insert whose END equals `beg+1` (the 1-indexed start of the new
 /// insert).
-pub fn undo_list_record_insert(undo_list: &mut Value, beg: usize, len: usize, pt: usize) {
+pub fn undo_list_record_insert(
+    undo_list: &mut Value,
+    beg: usize,
+    len: usize,
+    point_before_command_or_undo: Option<usize>,
+) {
     if undo_list_is_disabled(undo_list) || len == 0 {
         return;
     }
 
     let at_boundary = undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil());
-    if at_boundary && pt != beg {
-        undo_list_record_point(undo_list, pt);
+    if let Some(point) = point_before_command_or_undo
+        && at_boundary
+        && point != beg
+    {
+        undo_list_record_point(undo_list, point);
     }
 
     let beg1 = (beg + 1) as i64;
@@ -68,8 +87,12 @@ pub fn undo_list_record_insert(undo_list: &mut Value, beg: usize, len: usize, pt
         }
     }
 
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
     let entry = Value::cons(Value::fixnum(beg1), Value::fixnum(end1));
+    push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
 }
 
 /// Record a deletion.  `beg` is the 0-indexed byte position, `text` is
@@ -78,14 +101,23 @@ pub fn undo_list_record_insert(undo_list: &mut Value, beg: usize, len: usize, pt
 ///
 /// The stored position is 1-indexed and negative when `pt` was at the
 /// END of the deleted region (i.e. `pt == beg + text.len()`).
-pub fn undo_list_record_delete(undo_list: &mut Value, beg: usize, text: LispString, pt: usize) {
+pub fn undo_list_record_delete(
+    undo_list: &mut Value,
+    beg: usize,
+    text: LispString,
+    pt: usize,
+    point_before_command_or_undo: Option<usize>,
+) {
     if undo_list_is_disabled(undo_list) || text.is_empty() {
         return;
     }
 
     let at_boundary = undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil());
-    if at_boundary && pt != beg {
-        undo_list_record_point(undo_list, pt);
+    if let Some(point) = point_before_command_or_undo
+        && at_boundary
+        && point != beg
+    {
+        undo_list_record_point(undo_list, point);
     }
 
     let pos1 = (beg + 1) as i64;
@@ -95,8 +127,14 @@ pub fn undo_list_record_delete(undo_list: &mut Value, beg: usize, text: LispStri
         pos1
     };
 
-    let entry = Value::cons(Value::heap_string(text), Value::fixnum(stored_pos));
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
+    let text = Value::heap_string(text);
+    push_scratch_gc_root(text);
+    let entry = Value::cons(text, Value::fixnum(stored_pos));
+    push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
 }
 
 /// Record the cursor position (0-indexed `pt`) as a 1-indexed integer.
@@ -115,7 +153,7 @@ pub fn undo_list_record_point(undo_list: &mut Value, pt: usize) {
         }
     }
 
-    *undo_list = Value::cons(pt1, *undo_list);
+    prepend_undo_entry(undo_list, pt1);
 }
 
 /// Record a text-property change: `(nil PROP VAL BEG . END)`.
@@ -133,14 +171,23 @@ pub fn undo_list_record_property_change(
     if undo_list_is_disabled(undo_list) || beg >= end {
         return;
     }
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
+    push_scratch_gc_root(prop);
+    push_scratch_gc_root(val);
     let beg1 = Value::fixnum((beg + 1) as i64);
     let end1 = Value::fixnum((end + 1) as i64);
     // Build (nil PROP VAL BEG . END)
     let inner = Value::cons(beg1, end1);
+    push_scratch_gc_root(inner);
     let inner = Value::cons(val, inner);
+    push_scratch_gc_root(inner);
     let inner = Value::cons(prop, inner);
+    push_scratch_gc_root(inner);
     let entry = Value::cons(Value::NIL, inner);
+    push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
 }
 
 /// Record the first-change sentinel `(t . 0)`.
@@ -148,8 +195,25 @@ pub fn undo_list_record_first_change(undo_list: &mut Value) {
     if undo_list_is_disabled(undo_list) {
         return;
     }
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
     let entry = Value::cons(Value::T, Value::fixnum(0));
+    push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
+}
+
+/// Return true if LIST contains a GNU first-change sentinel `(t . MODTIME)`.
+pub fn undo_list_contains_first_change(undo_list: &Value) -> bool {
+    let mut cursor = *undo_list;
+    while cursor.is_cons() {
+        let entry = cursor.cons_car();
+        if entry.is_cons() && entry.cons_car().is_t() {
+            return true;
+        }
+        cursor = cursor.cons_cdr();
+    }
+    false
 }
 
 /// Insert an undo boundary (`nil`).  Skips if the list is empty/nil or
@@ -165,7 +229,7 @@ pub fn undo_list_boundary(undo_list: &mut Value) {
     if undo_list.is_cons() && undo_list.cons_car().is_nil() {
         return;
     }
-    *undo_list = Value::cons(Value::NIL, *undo_list);
+    prepend_undo_entry(undo_list, Value::NIL);
 }
 
 /// Pop one undo group from the front of the list.

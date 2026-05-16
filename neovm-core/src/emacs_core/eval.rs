@@ -5503,6 +5503,9 @@ impl Context {
             if self.obarray.fboundp("undo-auto--add-boundary") {
                 let _ = self.apply(Value::symbol("undo-auto--add-boundary"), vec![]);
             }
+            if let Some(current_id) = self.buffers.current_buffer_id() {
+                let _ = self.buffers.record_undo_point_before_command(current_id);
+            }
 
             // Execute the remapped command, matching GNU's
             // `calln (Qcommand_execute, Vthis_command)`.
@@ -7425,22 +7428,21 @@ impl Context {
         if let Some((sym_id, entry)) = direct_subr_entry {
             if Self::subr_entry_uses_fixed_value_call(entry) {
                 self.set_backtrace_args_evalled_owned(outer_bt_count, args);
-                self.unbind_to(args_roots_base);
 
-                return self.maybe_grow_eval_stack(|ctx| {
+                let result = self.maybe_grow_eval_stack(|ctx| {
                     ctx.dispatch_subr_entry_from_backtrace_unchecked(entry, outer_bt_count)
                         .unwrap_or_else(|| {
                             Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
                         })
                 });
+                return self.unbind_to_with_result(args_roots_base, result);
             }
         }
 
         self.set_backtrace_args_evalled(outer_bt_count, &args);
-        self.unbind_to(args_roots_base);
 
         if let Some((sym_id, entry)) = direct_subr_entry {
-            return self.maybe_grow_eval_stack(|ctx| {
+            let result = self.maybe_grow_eval_stack(|ctx| {
                 if entry.dispatch_kind == SubrDispatchKind::ContextCallable {
                     return ctx.apply_evaluator_callable_by_id(sym_id, args);
                 }
@@ -7449,9 +7451,11 @@ impl Context {
                         Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
                     })
             });
+            return self.unbind_to_with_result(args_roots_base, result);
         }
 
-        self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(func, args))
+        let result = self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(func, args));
+        self.unbind_to_with_result(args_roots_base, result)
     }
 
     /// Legacy eval_value: delegates to eval_sub.

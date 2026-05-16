@@ -13,6 +13,7 @@ struct SharedUndoStateInner {
     list: Value,
     in_progress: bool,
     recorded_first_change: bool,
+    point_before_command_or_undo: Option<usize>,
 }
 
 impl SharedUndoState {
@@ -26,6 +27,7 @@ impl SharedUndoState {
                 list,
                 in_progress,
                 recorded_first_change,
+                point_before_command_or_undo: None,
             })),
         }
     }
@@ -56,6 +58,14 @@ impl SharedUndoState {
 
     pub fn set_recorded_first_change(&self, recorded_first_change: bool) {
         self.inner.borrow_mut().recorded_first_change = recorded_first_change;
+    }
+
+    pub fn point_before_command_or_undo(&self) -> Option<usize> {
+        self.inner.borrow().point_before_command_or_undo
+    }
+
+    pub fn set_point_before_command_or_undo(&self, point: Option<usize>) {
+        self.inner.borrow_mut().point_before_command_or_undo = point;
     }
 
     pub fn trace_roots(&self, roots: &mut Vec<Value>) {

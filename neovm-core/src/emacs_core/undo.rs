@@ -133,23 +133,7 @@ pub(crate) fn builtin_primitive_undo(
     let saved_inhibit = ctx.obarray.symbol_value("inhibit-read-only").copied();
     ctx.obarray.set_symbol_value("inhibit-read-only", Value::T);
 
-    // Mark undo as in-progress so that the buffer edits we make
-    // do NOT record new undo entries (they are reverse-operations).
-    let previous_undoing = ctx
-        .buffers
-        .get(buf_id)
-        .map(|b| b.undo_state.in_progress())
-        .unwrap_or(false);
-    if let Some(buf) = ctx.buffers.get_mut(buf_id) {
-        buf.undo_state.set_in_progress(true);
-    }
-
     let result = primitive_undo_inner(ctx, buf_id, count, args[1]);
-
-    // Restore undo-in-progress flag.
-    if let Some(buf) = ctx.buffers.get_mut(buf_id) {
-        buf.undo_state.set_in_progress(previous_undoing);
-    }
 
     // Restore inhibit-read-only.
     match saved_inhibit {
