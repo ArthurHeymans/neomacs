@@ -1090,6 +1090,8 @@ mod number_arithmetic_comprehensive;
 mod number_conversion_comprehensive;
 #[path = "number-operations-comprehensive.rs"]
 mod number_operations_comprehensive;
+#[path = "number-predicate-edge-semantics.rs"]
+mod number_predicate_edge_semantics;
 #[path = "number-predicates.rs"]
 mod number_predicates;
 #[path = "number-predicates-advanced.rs"]
