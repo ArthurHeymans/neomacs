@@ -252,6 +252,38 @@ fn oracle_prop_seq_ext_set_operations_order_and_type_contracts() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_set_equal_p_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-set-equal-p is two seq-every-p passes through seq-contains-p.
+    // It ignores order and duplicates, returns canonical t/nil, and uses the
+    // optional equality predicate only for containment checks.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Order and duplicate count are irrelevant.
+    (seq-set-equal-p '(1 2 2) '(2 1))
+    ;; Missing elements make the sets unequal.
+    (seq-set-equal-p '(1 2) '(1 2 3))
+    ;; Vectors and strings are valid sequence inputs.
+    (seq-set-equal-p [1 2] [2 1])
+    (seq-set-equal-p "aba" "ba")
+    ;; Custom test function may return any non-nil value; final result is t.
+    (seq-set-equal-p '("A" "b") '("a" "B")
+                     (lambda (a b)
+                       (and (string= (downcase a) (downcase b)) 'matched)))
+    ;; Failed equality short-circuits through seq-every-p.
+    (let ((calls nil))
+      (list
+        (seq-set-equal-p '(a b) '(b c)
+                         (lambda (a b)
+                           (push (list a b) calls)
+                           (eq a b)))
+        calls))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-subseq with negative indices and all types
 // ---------------------------------------------------------------------------
