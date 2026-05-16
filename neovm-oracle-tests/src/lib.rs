@@ -1453,6 +1453,8 @@ mod while_loop_patterns;
 mod while_patterns;
 #[path = "window-operations-comprehensive.rs"]
 mod window_operations_comprehensive;
+#[path = "window-tree-primitive-semantics.rs"]
+mod window_tree_primitive_semantics;
 #[path = "with-current-buffer-comprehensive.rs"]
 mod with_current_buffer_comprehensive;
 #[path = "with-current-buffer-patterns.rs"]
