@@ -78,6 +78,27 @@ fn oracle_remove_text_properties_odd_plist_is_noop_like_gnu() {
 }
 
 #[test]
+fn oracle_remove_list_of_text_properties_allows_dotted_tail_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c:Fremove_list_of_text_properties scans property
+    // names with the interval helpers and does not require LIST-OF-PROPERTIES
+    // to be a proper list when no listed property remains to remove.
+    let form = r#"
+(let ((s (propertize "abc" 'face 'bold 'help-echo "tip")))
+  (list
+   (remove-list-of-text-properties 0 1 '(face) s)
+   (text-properties-at 0 s)
+   (condition-case err
+       (remove-list-of-text-properties 0 1 '(face . bold) s)
+     (error (list (car err) (cdr err))))
+   (text-properties-at 0 s)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
