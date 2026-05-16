@@ -30,6 +30,19 @@ fn oracle_prop_buffer_substring_error_kinds() {
     assert_err_kind(&range_oracle, &range_neovm, "args-out-of-range");
 }
 
+#[test]
+fn oracle_prop_buffer_substring_bignum_start_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs buffer.c:validate_region uses fix_position for START/END,
+    // so a huge bignum START is saturated before args-out-of-range is signaled.
+    let form = r#"(progn
+  (erase-buffer)
+  (insert "abc")
+  (buffer-substring 1000000000000000000000000000000 1))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
