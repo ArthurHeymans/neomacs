@@ -59,6 +59,27 @@ fn oracle_prop_line_position_n_argument_forward_backward() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_line_position_accepts_bignum_n_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU editfns.c accepts any integer for line-beginning-position and
+    // line-end-position, clipping bignums to the accessible buffer bounds.
+    // This differs from beginning-of-line/end-of-line commands in cmds.c,
+    // which use CHECK_FIXNUM.
+    let form = r#"(with-temp-buffer
+  (insert "first\nsecond\nthird")
+  (goto-char 8)
+  (let ((huge 1000000000000000000000000000000)
+        (tiny -1000000000000000000000000000000))
+    (list (line-beginning-position huge)
+          (line-end-position huge)
+          (line-beginning-position tiny)
+          (line-end-position tiny)
+          (point))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // line-beginning/end-position at buffer boundaries
 // ---------------------------------------------------------------------------
