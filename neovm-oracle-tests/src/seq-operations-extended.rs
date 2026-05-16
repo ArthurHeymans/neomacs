@@ -254,6 +254,41 @@ fn oracle_prop_seq_ext_position_and_contains() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_contains_obsolete_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-contains is obsolete but still part of the Elisp contract.  It
+    // calls TESTFN as (TESTFN ELT ELEMENT) and returns the matching element,
+    // unlike seq-contains-p which calls (TESTFN ELEMENT ELT) and returns the
+    // predicate's non-nil value.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    (seq-contains '(a b c) 'b)
+    (seq-contains '(a nil c) nil)
+    (seq-contains [10 20 30] 20)
+    (seq-contains "abc" ?b)
+    (seq-contains '(1 2 3) 2
+                  (lambda (target element)
+                    (list target element)))
+    (seq-contains-p '(1 2 3) 2
+                    (lambda (element target)
+                      (list element target)))
+    (let ((calls nil))
+      (list (seq-contains '(a b c) 'b
+                          (lambda (target element)
+                            (push (list target element) calls)
+                            (eq target element)))
+            (nreverse calls)))
+    (condition-case err
+        (seq-contains '(1 2 3) 2
+                      (lambda (_target _element)
+                        (signal 'wrong-type-argument '(integerp bad))))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-difference, seq-intersection
 // ---------------------------------------------------------------------------

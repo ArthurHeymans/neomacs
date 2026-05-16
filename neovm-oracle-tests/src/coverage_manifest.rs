@@ -335,6 +335,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "nbutlast",
     "not",
     "prog2",
+    "seq-contains",
     "seq-contains-p",
     "seq-concatenate",
     "seq-count",
