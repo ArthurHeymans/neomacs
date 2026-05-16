@@ -1273,6 +1273,8 @@ mod setq_advanced;
 mod setq_setf_comprehensive;
 #[path = "shell-command-to-string-semantics.rs"]
 mod shell_command_to_string_semantics;
+#[path = "shell-process-command-semantics.rs"]
+mod shell_process_command_semantics;
 #[path = "shell-quote-semantics.rs"]
 mod shell_quote_semantics;
 mod signal;
