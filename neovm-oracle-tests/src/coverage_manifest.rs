@@ -342,6 +342,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "frame-configuration-p",
     "ignore",
     "internal--thread-argument",
+    "listify-key-sequence",
     "minusp",
     "map-delete",
     "map-elt",
