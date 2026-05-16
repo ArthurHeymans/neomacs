@@ -278,6 +278,26 @@ fn length_predicate_circular_list_reports_gnu_for_each_tail_cycle_cell() {
 }
 
 #[test]
+fn nthcdr_positive_bignum_reduces_over_circular_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let list = Value::cons(Value::symbol("a"), Value::NIL);
+    let second = Value::cons(Value::symbol("b"), Value::NIL);
+    let third = Value::cons(Value::symbol("c"), list);
+    list.set_cdr(second);
+    second.set_cdr(third);
+
+    let count = Value::make_integer(
+        rug::Integer::parse("100000000000000000000000000000000000001")
+            .expect("valid bignum")
+            .into(),
+    );
+    let tail = crate::emacs_core::builtins::builtin_nthcdr(vec![count, list]).unwrap();
+
+    assert!(eq_value(&tail, &third));
+    assert_eq!(tail.cons_car(), Value::symbol("c"));
+}
+
+#[test]
 fn external_debugging_rejects_negative_fixnum() {
     crate::test_utils::init_test_tracing();
     let err =

@@ -748,8 +748,7 @@ pub(crate) fn builtin_nth_2(
 }
 
 fn builtin_nth_values(n_value: Value, list: Value) -> EvalResult {
-    let n = expect_int(&n_value)?;
-    let tail = nthcdr_impl(n, list)?;
+    let tail = nthcdr_impl(n_value, list)?;
     match tail.kind() {
         ValueKind::Cons => Ok(tail.cons_car()),
         ValueKind::Nil => Ok(Value::NIL),
@@ -760,31 +759,128 @@ fn builtin_nth_values(n_value: Value, list: Value) -> EvalResult {
     }
 }
 
-fn nthcdr_impl(n: i64, list: Value) -> EvalResult {
-    if n <= 0 {
+enum NthcdrCount {
+    Fixnum(i64),
+    NegativeBignum,
+    PositiveBignum(rug::Integer),
+}
+
+fn expect_nthcdr_count(value: Value) -> Result<NthcdrCount, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(NthcdrCount::Fixnum(n)),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            let n = value.as_bignum().expect("bignum kind").clone();
+            if n.cmp0().is_lt() {
+                Ok(NthcdrCount::NegativeBignum)
+            } else {
+                Ok(NthcdrCount::PositiveBignum(n))
+            }
+        }
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integerp"), value],
+        )),
+    }
+}
+
+fn nthcdr_impl(n_value: Value, list: Value) -> EvalResult {
+    let count = expect_nthcdr_count(n_value)?;
+
+    if matches!(count, NthcdrCount::Fixnum(n) if n <= 0)
+        || matches!(count, NthcdrCount::NegativeBignum)
+    {
         return Ok(list);
     }
 
-    // Convert Lambda to cons list for traversal.
-    let mut cursor = match list.kind() {
+    let mut tail = match list.kind() {
         ValueKind::Veclike(VecLikeType::Lambda) => lambda_to_cons_list(&list).unwrap_or(Value::NIL),
         _ => list,
     };
-    for _ in 0..(n as usize) {
-        match cursor.kind() {
-            ValueKind::Cons => {
-                cursor = cursor.cons_cdr();
+
+    if let NthcdrCount::Fixnum(n) = &count {
+        if *n <= 127 {
+            for _ in 0..(*n as usize) {
+                match tail.kind() {
+                    ValueKind::Cons => {
+                        tail = tail.cons_cdr();
+                    }
+                    ValueKind::Nil => return Ok(Value::NIL),
+                    _ => {
+                        return Err(signal(
+                            "wrong-type-argument",
+                            vec![Value::symbol("listp"), list],
+                        ));
+                    }
+                }
             }
-            ValueKind::Nil => return Ok(Value::NIL),
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("listp"), list],
-                ));
-            }
+            return Ok(tail);
         }
     }
-    Ok(cursor)
+
+    nthcdr_large_or_bignum(count, tail, list)
+}
+
+fn nthcdr_large_or_bignum(count: NthcdrCount, mut tail: Value, list: Value) -> EvalResult {
+    let large_num = i64::MAX;
+    let (mut num, original_bignum) = match count {
+        NthcdrCount::Fixnum(n) => (n, None),
+        NthcdrCount::PositiveBignum(n) => (large_num, Some(n)),
+        NthcdrCount::NegativeBignum => unreachable!("negative bignum returns before large path"),
+    };
+
+    let mut tortoise_num = num;
+    let mut saved_tail = tail;
+    let mut tortoise = tail;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
+    let mut found_cycle = false;
+
+    while tail.is_cons() {
+        if tail.bits() == tortoise.bits() {
+            tortoise_num = num;
+        }
+
+        saved_tail = tail.cons_cdr();
+        num -= 1;
+        if num == 0 {
+            return Ok(saved_tail);
+        }
+
+        tail = saved_tail;
+        if tail.is_cons()
+            && for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q).is_some()
+        {
+            found_cycle = true;
+            break;
+        }
+    }
+
+    tail = saved_tail;
+    if !found_cycle {
+        return if tail.is_nil() {
+            Ok(Value::NIL)
+        } else {
+            Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("listp"), list],
+            ))
+        };
+    }
+
+    let cycle_length = tortoise_num - num;
+    if let Some(big) = original_bignum.as_ref() {
+        let modulus = rug::Integer::from(cycle_length);
+        let remainder = rug::Integer::from(big % &modulus);
+        num += remainder.to_i64().expect("remainder fits in cycle length");
+        num += cycle_length - large_num % cycle_length;
+    }
+    num %= cycle_length;
+
+    for _ in 0..num {
+        tail = tail.cons_cdr();
+    }
+    Ok(tail)
 }
 
 pub(crate) fn builtin_nthcdr(args: Vec<Value>) -> EvalResult {
@@ -801,8 +897,7 @@ pub(crate) fn builtin_nthcdr_2(
 }
 
 fn builtin_nthcdr_values(n_value: Value, list: Value) -> EvalResult {
-    let n = expect_int(&n_value)?;
-    nthcdr_impl(n, list)
+    nthcdr_impl(n_value, list)
 }
 
 pub(crate) fn builtin_append(args: Vec<Value>) -> EvalResult {

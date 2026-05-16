@@ -71,6 +71,24 @@ fn oracle_nthcdr_argument_type_error_payloads() {
 }
 
 #[test]
+fn oracle_nthcdr_circular_large_and_bignum_counts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((x (list 'a 'b 'c))
+       (_ (setcdr (last x) x)))
+  (list (eq (nthcdr 3 x) x)
+        (car (nthcdr 4 x))
+        (car (nthcdr 100000 x))
+        (car (nthcdr 100000000000000000000000000000000000001 x))
+        (nth 100000 x)
+        (nth 100000000000000000000000000000000000001 x)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_last_negative_zero_and_improper_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
