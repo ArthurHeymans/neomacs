@@ -976,6 +976,8 @@ mod number_sequence_operations;
 mod number_to_string;
 #[path = "number-to-string-advanced.rs"]
 mod number_to_string_advanced;
+#[path = "obarray-buckets-semantics.rs"]
+mod obarray_buckets_semantics;
 #[path = "obarray-comprehensive-patterns.rs"]
 mod obarray_comprehensive_patterns;
 #[path = "obarray-patterns.rs"]
