@@ -1101,6 +1101,8 @@ mod prin1_to_string_advanced;
 mod process_environment_semantics;
 #[path = "process-lines-semantics.rs"]
 mod process_lines_semantics;
+#[path = "process-property-semantics.rs"]
+mod process_property_semantics;
 #[path = "process-string-comprehensive.rs"]
 mod process_string_comprehensive;
 #[path = "profiler-memory-semantics.rs"]
