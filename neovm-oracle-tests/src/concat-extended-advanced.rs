@@ -69,6 +69,25 @@ fn oracle_prop_concat_mixed_types() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_concat_bool_vector_rejected_as_sequence_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/fns.c:concat_to_string accepts strings, vectors, nil, and
+    // conses as character sequences.  A bool-vector is rejected at the argument
+    // kind check with `sequencep`, while `vconcat` and `append` still accept it.
+    let form = r#"
+(let ((bv #&3"\5"))
+  (list
+   (condition-case err
+       (concat bv)
+     (error (list (car err) (cdr err))))
+   (vconcat bv)
+   (append bv nil)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // concat vs mapconcat for joining
 // ---------------------------------------------------------------------------
