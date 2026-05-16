@@ -86,6 +86,19 @@ fn oracle_prop_line_number_at_pos_no_arg() {
 }
 
 #[test]
+fn oracle_prop_line_number_at_pos_accepts_marker_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs fns.c:Fline_number_at_pos has an explicit marker branch and
+    // uses the marker position when POSITION is a marker.
+    let form = r#"(with-temp-buffer
+  (insert "one\ntwo\nthree\n")
+  (let ((m (copy-marker 6)))
+    (line-number-at-pos m)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_line_number_at_pos_bignum_position_error_like_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
