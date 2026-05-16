@@ -59,6 +59,8 @@ mod backquote;
 mod backquote_advanced;
 #[path = "backquote-comprehensive-patterns.rs"]
 mod backquote_comprehensive_patterns;
+#[path = "base64-semantics.rs"]
+mod base64_semantics;
 #[path = "beginning-of-line.rs"]
 mod beginning_of_line;
 mod bitwise;
