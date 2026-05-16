@@ -1372,6 +1372,8 @@ mod shell_quote_semantics;
 mod signal;
 #[path = "signal-advanced.rs"]
 mod signal_advanced;
+#[path = "signal-error-strict-edge-semantics.rs"]
+mod signal_error_strict_edge_semantics;
 #[path = "signal-throw-patterns.rs"]
 mod signal_throw_patterns;
 #[path = "single-key-description-advanced.rs"]
