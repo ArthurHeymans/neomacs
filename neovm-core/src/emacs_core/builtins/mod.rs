@@ -5235,7 +5235,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-event-symbol-parse-modifiers",
-        |_ctx, args| builtin_internal_event_symbol_parse_modifiers(args),
+        |ctx, args| builtin_internal_event_symbol_parse_modifiers(ctx, args),
         1,
         Some(1),
     );

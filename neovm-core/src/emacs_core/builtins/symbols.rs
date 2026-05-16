@@ -3,7 +3,7 @@ use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
 use crate::emacs_core::fontset;
-use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, is_canonical_id};
+use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::{indent, xdisp};
@@ -4316,8 +4316,12 @@ pub(crate) fn builtin_internal_describe_syntax_value(
     Ok(syntax)
 }
 
-pub(crate) fn builtin_internal_event_symbol_parse_modifiers(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_internal_event_symbol_parse_modifiers(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("internal-event-symbol-parse-modifiers", &args, 1)?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let name = args[0].as_symbol_name().ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -4325,83 +4329,116 @@ pub(crate) fn builtin_internal_event_symbol_parse_modifiers(args: Vec<Value>) ->
         )
     })?;
 
-    // Parse GNU-compatible modifiers including multi-letter ones
-    // (down-, double-, triple-, drag-) and implicit click for mouse events.
     let (modifiers_bits, base) = parse_event_modifiers_gnu(name);
-    let mut out = vec![Value::symbol(base)];
-    // Build modifier list in GNU's canonical order
-    for (bit, sym) in [
-        (1 << 0, "meta"),
-        (1 << 1, "control"),
-        (1 << 2, "shift"),
-        (1 << 3, "hyper"),
-        (1 << 4, "super"),
-        (1 << 5, "alt"),
-        (1 << 6, "click"),
-        (1 << 7, "down"),
-        (1 << 8, "drag"),
-        (1 << 9, "double"),
-        (1 << 10, "triple"),
-        (1 << 11, "up"),
-    ] {
-        if modifiers_bits & bit != 0 {
-            out.push(Value::symbol(sym));
-        }
-    }
-    Ok(Value::list(out))
+    let base = Value::symbol(base);
+    let elements = event_symbol_elements(base, modifiers_bits);
+    let mask = Value::list(vec![base, Value::fixnum(modifiers_bits as i64)]);
+
+    // GNU `parse_modifiers' caches both properties before returning
+    // `event-symbol-elements' (`src/keyboard.c:7523-7578`).  Lisp
+    // `event-basic-type' reads the latter directly.
+    eval.obarray_mut()
+        .put_property_id(symbol, intern("event-symbol-element-mask"), mask)?;
+    eval.obarray_mut()
+        .put_property_id(symbol, intern("event-symbol-elements"), elements)?;
+
+    Ok(elements)
 }
 
 /// Parse event symbol modifiers matching GNU keyboard.c logic.
 /// Returns (modifier_bitmask, base_event_name).
 fn parse_event_modifiers_gnu(name: &str) -> (u32, &str) {
+    const UP: u32 = 1 << 0;
+    const DOWN: u32 = 1 << 1;
+    const DRAG: u32 = 1 << 2;
+    const CLICK: u32 = 1 << 3;
+    const DOUBLE: u32 = 1 << 4;
+    const TRIPLE: u32 = 1 << 5;
+    const ALT: u32 = 1 << 22;
+    const SUPER: u32 = 1 << 23;
+    const HYPER: u32 = 1 << 24;
+    const SHIFT: u32 = 1 << 25;
+    const CONTROL: u32 = 1 << 26;
+    const META: u32 = 1 << 27;
+
     let mut bits: u32 = 0;
     let mut rest = name;
 
     loop {
         if let Some(r) = rest.strip_prefix("M-") {
-            bits |= 1 << 0;
+            bits |= META;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("C-") {
-            bits |= 1 << 1;
+            bits |= CONTROL;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("S-") {
-            bits |= 1 << 2;
+            bits |= SHIFT;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("H-") {
-            bits |= 1 << 3;
+            bits |= HYPER;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("s-") {
-            bits |= 1 << 4;
+            bits |= SUPER;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("A-") {
-            bits |= 1 << 5;
+            bits |= ALT;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("down-") {
-            bits |= 1 << 7;
+            bits |= DOWN;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("drag-") {
-            bits |= 1 << 8;
+            bits |= DRAG;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("double-") {
-            bits |= 1 << 9;
+            bits |= DOUBLE;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("triple-") {
-            bits |= 1 << 10;
+            bits |= TRIPLE;
             rest = r;
         } else if let Some(r) = rest.strip_prefix("up-") {
-            bits |= 1 << 11;
+            bits |= UP;
             rest = r;
         } else {
             break;
         }
     }
 
-    // GNU: mouse-N events without down/drag/up get implicit click
-    if rest.starts_with("mouse-") && (bits & ((1 << 7) | (1 << 8) | (1 << 11))) == 0 {
-        bits |= 1 << 6; // click
+    if bits & (DOWN | DRAG | DOUBLE | TRIPLE) == 0
+        && rest.len() == 7
+        && rest.starts_with("mouse-")
+        && rest.as_bytes()[6].is_ascii_digit()
+    {
+        bits |= CLICK;
+    }
+
+    if bits & (DOUBLE | TRIPLE) == 0 && rest.len() > 6 && rest.starts_with("wheel-") {
+        bits |= CLICK;
     }
 
     (bits, rest)
+}
+
+fn event_symbol_elements(base: Value, modifiers_bits: u32) -> Value {
+    let mut out = vec![base];
+    for (bit, sym) in [
+        (1 << 27, "meta"),
+        (1 << 26, "control"),
+        (1 << 25, "shift"),
+        (1 << 24, "hyper"),
+        (1 << 23, "super"),
+        (1 << 22, "alt"),
+        (1 << 5, "triple"),
+        (1 << 4, "double"),
+        (1 << 3, "click"),
+        (1 << 2, "drag"),
+        (1 << 1, "down"),
+        (1 << 0, "up"),
+    ] {
+        if modifiers_bits & bit != 0 {
+            out.push(Value::symbol(sym));
+        }
+    }
+    Value::list(out)
 }
 
 pub(crate) fn builtin_internal_handle_focus_in(
