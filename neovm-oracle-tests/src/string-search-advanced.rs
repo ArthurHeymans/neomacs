@@ -74,6 +74,31 @@ fn oracle_string_search_start_pos_range_signal_data_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_search_text_properties_ignored() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(let* ((plain "alpha beta alpha")
+       (haystack (copy-sequence plain))
+       (needle (copy-sequence "beta"))
+       (empty (copy-sequence ""))
+       (missing (copy-sequence "gamma")))
+  (add-text-properties 0 (length haystack) '(face bold mouse-face highlight) haystack)
+  (add-text-properties 0 (length needle) '(category marked) needle)
+  (add-text-properties 0 (length missing) '(category absent) missing)
+  (list
+   ;; GNU src/fns.c:Fstring_search says text properties are ignored.
+   (string-search needle haystack)
+   (string-search needle haystack 6)
+   (string-search "alpha" haystack)
+   (string-search "alpha" haystack 1)
+   (string-search missing haystack)
+   (string-search empty haystack)
+   (string-search empty haystack (length haystack))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Case sensitivity behavior
 // ---------------------------------------------------------------------------
