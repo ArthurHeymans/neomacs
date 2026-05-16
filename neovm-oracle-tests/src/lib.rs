@@ -1089,6 +1089,8 @@ mod ring_semantics;
 mod run_hook_with_args_semantics;
 #[path = "run-hook-wrapped-semantics.rs"]
 mod run_hook_wrapped_semantics;
+#[path = "run-mode-hooks-semantics.rs"]
+mod run_mode_hooks_semantics;
 #[path = "rx-semantics.rs"]
 mod rx_semantics;
 #[path = "safe-length-operations.rs"]
