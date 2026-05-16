@@ -577,6 +577,8 @@ mod defalias_advanced;
 mod defalias_fset_patterns;
 #[path = "define-key-advanced.rs"]
 mod define_key_advanced;
+#[path = "define-key-after-semantics.rs"]
+mod define_key_after_semantics;
 #[path = "defmacro-advanced.rs"]
 mod defmacro_advanced;
 #[path = "defmacro-comprehensive-patterns.rs"]
