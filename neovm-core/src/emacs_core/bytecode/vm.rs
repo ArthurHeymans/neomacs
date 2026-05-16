@@ -2478,20 +2478,28 @@ impl<'a> Vm<'a> {
                         let buf_fwd = unsafe { &*(fwd as *const LispBufferObjFwd) };
                         let offset = buf_fwd.offset as usize;
                         let flags_idx = buf_fwd.local_flags_idx;
-                        if let Some(buf) = self.ctx.buffers.get_mut(buf_id)
-                            && offset < buf.slots.len()
-                        {
-                            buf.slots[offset] = value;
-                            if flags_idx >= 0 {
-                                buf.set_slot_local_flag(offset, true);
-                            }
-                            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-                            return self.run_variable_watchers_by_id(
+                        let slot_exists = self
+                            .ctx
+                            .buffers
+                            .get(buf_id)
+                            .is_some_and(|buf| offset < buf.slots.len());
+                        if slot_exists {
+                            let where_value = Value::make_buffer(buf_id);
+                            self.run_variable_watchers_by_id_with_where(
                                 resolved,
                                 &value,
                                 &Value::NIL,
                                 "set",
-                            );
+                                &where_value,
+                            )?;
+                            if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
+                                buf.slots[offset] = value;
+                                if flags_idx >= 0 {
+                                    buf.set_slot_local_flag(offset, true);
+                                }
+                            }
+                            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+                            return Ok(());
                         }
                     }
                 }
@@ -2510,6 +2518,14 @@ impl<'a> Vm<'a> {
                 // as shadowing. SPECPDL_LET_LOCAL is explicitly excluded
                 // by bug#62419.
                 let let_shadows = self.ctx.let_shadows_buffer_binding_p(resolved);
+                let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
+                self.run_variable_watchers_by_id_with_where(
+                    resolved,
+                    &value,
+                    &Value::NIL,
+                    "set",
+                    &where_value,
+                )?;
                 let new_alist = self.ctx.obarray.set_internal_localized(
                     resolved,
                     value,
@@ -2523,7 +2539,7 @@ impl<'a> Vm<'a> {
                     buf.local_var_alist = new_alist;
                 }
                 self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-                return self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set");
+                return Ok(());
             }
         }
 
@@ -2531,9 +2547,17 @@ impl<'a> Vm<'a> {
         // either BufferLocals or the obarray value cell. Phase 10
         // deletes this call once every LOCALIZED symbol is
         // exclusively served by the new BLV path above.
+        let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
+        self.run_variable_watchers_by_id_with_where(
+            resolved,
+            &value,
+            &Value::NIL,
+            "set",
+            &where_value,
+        )?;
         crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
         self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-        self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")
+        Ok(())
     }
 
     fn lookup_var(&mut self, name: &str) -> EvalResult {
@@ -2598,8 +2622,16 @@ impl<'a> Vm<'a> {
             return Err(signal("setting-constant", vec![Value::symbol(name)]));
         }
 
+        let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
+        self.run_variable_watchers_by_id_with_where(
+            resolved,
+            &value,
+            &Value::NIL,
+            "set",
+            &where_value,
+        )?;
         crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
-        self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")
+        Ok(())
     }
 
     fn run_variable_watchers_by_id(
@@ -2629,13 +2661,21 @@ impl<'a> Vm<'a> {
         if !self.ctx.watchers.has_watchers(sym_id) {
             return Ok(());
         }
+        if self.ctx.active_variable_watchers.contains(&sym_id) {
+            return Ok(());
+        }
         let calls =
             self.ctx
                 .watchers
                 .notify_watchers(sym_id, new_value, old_value, operation, where_value);
+        self.ctx.active_variable_watchers.insert(sym_id);
         for (callback, args) in calls {
-            let _ = self.call_function_with_roots(callback, &args)?;
+            if let Err(err) = self.call_function_with_roots(callback, &args) {
+                self.ctx.active_variable_watchers.remove(&sym_id);
+                return Err(err);
+            }
         }
+        self.ctx.active_variable_watchers.remove(&sym_id);
         Ok(())
     }
 
@@ -2735,10 +2775,7 @@ impl<'a> Vm<'a> {
         ) {
             return result;
         }
-        let where_value =
-            crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)
-                .map(Value::make_buffer)
-                .unwrap_or(Value::NIL);
+        let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
         self.run_variable_watchers_by_id_with_where(
             resolved,
             &value,
@@ -2746,6 +2783,7 @@ impl<'a> Vm<'a> {
             "set",
             &where_value,
         )?;
+        crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
         Ok(value)
     }
 
@@ -2778,6 +2816,7 @@ impl<'a> Vm<'a> {
         }
         let value = args[1];
 
+        self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
         // GNU PLAINVAL path: for non-LOCALIZED variables, `set-default`
         // behaves like `set` — writes to dynamic frame if let-bound.
         let is_buffer_local =
@@ -2790,16 +2829,10 @@ impl<'a> Vm<'a> {
             self.ctx.obarray.set_symbol_value_id(resolved, value);
         }
 
-        // Fire watchers AFTER the write.
-        self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
         Ok(value)
     }
 
     fn builtin_set_default_toplevel_value_shared(&mut self, args: &[Value]) -> EvalResult {
-        crate::emacs_core::builtins::symbols::set_default_toplevel_value_impl(
-            &mut *self.ctx,
-            args.to_vec(),
-        )?;
         let symbol = crate::emacs_core::builtins::symbols::expect_symbol_id(&args[0])?;
         let resolved = crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
             &self.ctx.obarray,
@@ -2810,6 +2843,10 @@ impl<'a> Vm<'a> {
         if resolved != symbol {
             self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
         }
+        crate::emacs_core::builtins::symbols::set_default_toplevel_value_impl(
+            &mut *self.ctx,
+            args.to_vec(),
+        )?;
         Ok(Value::NIL)
     }
 
@@ -2864,6 +2901,10 @@ impl<'a> Vm<'a> {
             &Value::NIL,
             "defvaralias",
         )?;
+        crate::emacs_core::builtins::symbols::install_defvaralias_state(
+            &mut *self.ctx,
+            &state_change,
+        );
         self.ctx.watchers.clear_watchers(state_change.alias_id);
         crate::emacs_core::builtins::symbols::builtin_put(
             &mut *self.ctx,
@@ -2886,6 +2927,7 @@ impl<'a> Vm<'a> {
         if self.ctx.obarray.is_constant_id(resolved) {
             return Err(signal("setting-constant", vec![args[0]]));
         }
+        self.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
         crate::emacs_core::eval::makunbound_runtime_binding_in_state(
             &mut self.ctx.obarray,
             &mut self.ctx.buffers,
@@ -2893,7 +2935,6 @@ impl<'a> Vm<'a> {
             &[],
             resolved,
         );
-        self.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
         Ok(args[0])
     }
 

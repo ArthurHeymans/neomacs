@@ -335,7 +335,6 @@ pub(crate) fn builtin_set_default_toplevel_value(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    set_default_toplevel_value_impl(eval, args.clone())?;
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     let value = args[1];
@@ -343,6 +342,7 @@ pub(crate) fn builtin_set_default_toplevel_value(
     if resolved != symbol {
         eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
     }
+    set_default_toplevel_value_impl(eval, args.clone())?;
     Ok(Value::NIL)
 }
 
@@ -372,10 +372,17 @@ pub(crate) fn set_default_toplevel_value_impl(
 
 pub(crate) fn builtin_defvaralias(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let state_change = defvaralias_impl(eval, args.clone())?;
-    // GNU order (`data.c:Fdefvaralias`): install alias, put documentation,
-    // THEN notify variable watchers. A malformed raw plist on the alias
-    // symbol raises `(wrong-type-argument plistp ...)` from the `put`
-    // step; watchers must not fire when the put errors.
+    // GNU order (`eval.c:Fdefvaralias`): after validation and possible value
+    // migration, notify watchers while NEW-ALIAS is still in its old state;
+    // only then install the alias edge and write variable-documentation.
+    eval.run_variable_watchers_by_id(
+        state_change.previous_target_id,
+        &state_change.base_variable,
+        &Value::NIL,
+        "defvaralias",
+    )?;
+    install_defvaralias_state(eval, &state_change);
+    eval.watchers.clear_watchers(state_change.alias_id);
     builtin_put(
         eval,
         vec![
@@ -384,18 +391,12 @@ pub(crate) fn builtin_defvaralias(eval: &mut super::eval::Context, args: Vec<Val
             state_change.docstring,
         ],
     )?;
-    eval.run_variable_watchers_by_id(
-        state_change.previous_target_id,
-        &state_change.base_variable,
-        &Value::NIL,
-        "defvaralias",
-    )?;
-    eval.watchers.clear_watchers(state_change.alias_id);
     Ok(state_change.result)
 }
 
 pub(crate) struct DefvaraliasStateChange {
     pub(crate) alias_id: SymId,
+    pub(crate) base_id: SymId,
     pub(crate) previous_target_id: SymId,
     pub(crate) base_variable: Value,
     pub(crate) docstring: Value,
@@ -422,19 +423,35 @@ pub(crate) fn defvaralias_impl(
         return Err(signal("cyclic-variable-indirection", vec![args[1]]));
     }
     let previous_target_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, new_symbol)?;
+    if ctx.obarray.find_symbol_value(old_symbol).is_none()
+        && let Some(alias_value) = ctx.obarray.find_symbol_value(new_symbol)
+    {
+        let target = resolve_variable_alias_id_in_obarray(&ctx.obarray, old_symbol)?;
+        ctx.obarray.set_symbol_value_id(target, alias_value);
+        ctx.sync_cached_runtime_binding_by_id(target, alias_value);
+        ctx.refresh_gc_runtime_settings_after_change_by_id(target);
+    }
     ctx.note_macro_expansion_mutation();
-    ctx.obarray.make_special_id(new_symbol);
-    ctx.obarray.make_alias(new_symbol, old_symbol);
-    ctx.obarray.make_special_id(old_symbol);
-    ctx.refresh_gc_runtime_settings_after_change_by_id(new_symbol);
     let docstring = args.get(2).cloned().unwrap_or(Value::NIL);
     Ok(DefvaraliasStateChange {
         alias_id: new_symbol,
+        base_id: old_symbol,
         previous_target_id,
         base_variable: args[1],
         docstring,
         result: args[1],
     })
+}
+
+pub(crate) fn install_defvaralias_state(
+    ctx: &mut crate::emacs_core::eval::Context,
+    state_change: &DefvaraliasStateChange,
+) {
+    ctx.obarray.make_special_id(state_change.alias_id);
+    ctx.obarray
+        .make_alias(state_change.alias_id, state_change.base_id);
+    ctx.obarray.make_special_id(state_change.base_id);
+    ctx.refresh_gc_runtime_settings_after_change_by_id(state_change.alias_id);
 }
 
 pub(crate) fn builtin_indirect_variable(
@@ -597,10 +614,7 @@ pub(crate) fn builtin_set_2(
     {
         return result;
     }
-    let where_value = eval
-        .set_runtime_binding_by_id(resolved, value)
-        .map(Value::make_buffer)
-        .unwrap_or(Value::NIL);
+    let where_value = eval.variable_watcher_where_for_set_by_id(resolved);
     eval.run_variable_watchers_by_id_with_where(
         resolved,
         &value,
@@ -608,6 +622,7 @@ pub(crate) fn builtin_set_2(
         "set",
         &where_value,
     )?;
+    eval.set_runtime_binding_by_id(resolved, value);
     Ok(value)
 }
 
@@ -689,8 +704,8 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
         return Err(signal("setting-constant", vec![args[0]]));
     }
     eval.note_macro_expansion_mutation();
-    eval.makunbound_runtime_binding_by_id(resolved);
     eval.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
+    eval.makunbound_runtime_binding_by_id(resolved);
     Ok(args[0])
 }
 

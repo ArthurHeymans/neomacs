@@ -630,19 +630,19 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
                 }
             })
     };
+    // GNU `set_default_internal` calls `notify_variable_watchers` before the
+    // value cell is changed, so callbacks observe the previous value through
+    // `symbol-value`.
+    eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
+    if resolved != symbol {
+        eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
+    }
     if let Some((info, _off)) = forwarded_slot {
         eval.buffers.set_buffer_default_slot(info, value);
     } else {
         eval.obarray_mut().set_symbol_value_id(resolved, value);
     }
 
-    // Fire watchers AFTER the write with operation="set".
-    // When the symbol was resolved through an alias, fire watchers twice
-    // (matching GNU where both set_default_internal and set_internal notify).
-    eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
-    if resolved != symbol {
-        eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
-    }
     Ok(value)
 }
 

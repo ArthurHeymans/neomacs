@@ -103,6 +103,60 @@ fn oracle_variable_watchers_follow_defvaralias_base_variable() {
 }
 
 #[test]
+fn oracle_defvaralias_watcher_runs_before_alias_install_and_doc_put() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((log nil))
+  (defvar neomacs--oracle-vw-order-base 'base-value)
+  (defvar neomacs--oracle-vw-order-alias 'alias-value)
+  (fset 'neomacs--oracle-vw-order-watch
+        (lambda (symbol newval operation where)
+          (setq log
+                (cons
+                 (list symbol
+                       newval
+                       operation
+                       (eq (indirect-variable symbol)
+                           'neomacs--oracle-vw-order-base)
+                       (symbol-value symbol)
+                       (documentation-property
+                        symbol 'variable-documentation t)
+                       where)
+                 log))))
+  (add-variable-watcher 'neomacs--oracle-vw-order-alias
+                        'neomacs--oracle-vw-order-watch)
+  (unwind-protect
+      (list
+       (defvaralias 'neomacs--oracle-vw-order-alias
+         'neomacs--oracle-vw-order-base
+         "Alias doc installed after watcher.")
+       (symbol-value 'neomacs--oracle-vw-order-alias)
+       (documentation-property 'neomacs--oracle-vw-order-alias
+                               'variable-documentation t)
+       (nreverse log))
+    (condition-case nil
+        (remove-variable-watcher 'neomacs--oracle-vw-order-base
+                                 'neomacs--oracle-vw-order-watch)
+      (error nil))
+    (condition-case nil
+        (remove-variable-watcher 'neomacs--oracle-vw-order-alias
+                                 'neomacs--oracle-vw-order-watch)
+      (error nil))
+    (fmakunbound 'neomacs--oracle-vw-order-watch)
+    (condition-case nil
+        (internal-delete-indirect-variable 'neomacs--oracle-vw-order-alias)
+      (error nil))
+    (dolist (sym '(neomacs--oracle-vw-order-base
+                   neomacs--oracle-vw-order-alias))
+      (when (boundp sym)
+        (makunbound sym)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_variable_watchers_report_buffer_local_where() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

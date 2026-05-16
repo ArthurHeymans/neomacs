@@ -1634,6 +1634,12 @@ pub struct Context {
     pub(crate) timers: TimerManager,
     /// Variable watcher list — callbacks on variable changes.
     pub(crate) watchers: VariableWatcherList,
+    /// Symbols whose variable watchers are currently running.
+    ///
+    /// GNU `notify_variable_watchers` temporarily sets the symbol's trapped
+    /// write state to `SYMBOL_UNTRAPPED_WRITE` to suppress recursive watcher
+    /// notification while a watcher callback mutates the same symbol.
+    pub(crate) active_variable_watchers: HashSet<SymId>,
     /// Canonical Lisp object returned by `standard-syntax-table`.
     ///
     /// GNU Emacs stores this in `Vstandard_syntax_table`; NeoVM keeps the
@@ -4378,6 +4384,7 @@ impl Context {
             processes: ProcessManager::new(),
             timers: TimerManager::new(),
             watchers: VariableWatcherList::new(),
+            active_variable_watchers: HashSet::new(),
             standard_syntax_table,
             standard_category_table,
             current_local_map: Value::NIL,
@@ -4543,6 +4550,7 @@ impl Context {
             processes: ProcessManager::new(),
             timers: TimerManager::new(),
             watchers,
+            active_variable_watchers: HashSet::new(),
             standard_syntax_table,
             standard_category_table,
             current_local_map,
@@ -12986,12 +12994,20 @@ impl Context {
         if !self.watchers.has_watchers(sym_id) {
             return Ok(());
         }
+        if self.active_variable_watchers.contains(&sym_id) {
+            return Ok(());
+        }
         let calls =
             self.watchers
                 .notify_watchers(sym_id, new_value, old_value, operation, where_value);
+        self.active_variable_watchers.insert(sym_id);
         for (callback, args) in calls {
-            let _ = self.apply(callback, args)?;
+            if let Err(err) = self.apply(callback, args) {
+                self.active_variable_watchers.remove(&sym_id);
+                return Err(err);
+            }
         }
+        self.active_variable_watchers.remove(&sym_id);
         Ok(())
     }
 
@@ -13037,10 +13053,7 @@ impl Context {
         value: Value,
         operation: &str,
     ) -> EvalResult {
-        let where_value = self
-            .assign_by_id_with_locus(sym_id, value)
-            .map(Value::make_buffer)
-            .unwrap_or(Value::NIL);
+        let where_value = self.variable_watcher_where_for_set_by_id(sym_id);
         self.run_variable_watchers_by_id_with_where(
             sym_id,
             &value,
@@ -13048,7 +13061,43 @@ impl Context {
             operation,
             &where_value,
         )?;
+        self.assign_by_id_with_locus(sym_id, value);
         Ok(value)
+    }
+
+    pub(crate) fn variable_watcher_where_for_set_by_id(&self, sym_id: SymId) -> Value {
+        use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
+        use crate::emacs_core::symbol::SymbolRedirect;
+
+        let Some(current_id) = self.buffers.current_buffer_id() else {
+            return Value::NIL;
+        };
+        let Some(sym) = self.obarray.get_by_id(sym_id) else {
+            return Value::NIL;
+        };
+        match sym.redirect() {
+            SymbolRedirect::Localized => {
+                if self.obarray.blv(sym_id).is_some_and(|blv| blv.local_if_set)
+                    || self
+                        .buffers
+                        .get(current_id)
+                        .is_some_and(|buf| buf.has_buffer_local_by_sym_id(sym_id))
+                {
+                    Value::make_buffer(current_id)
+                } else {
+                    Value::NIL
+                }
+            }
+            SymbolRedirect::Forwarded => {
+                let fwd = unsafe { &*sym.val.fwd };
+                if matches!(fwd.ty, LispFwdType::BufferObj) {
+                    let _buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
+                    return Value::make_buffer(current_id);
+                }
+                Value::NIL
+            }
+            _ => Value::NIL,
+        }
     }
 }
 

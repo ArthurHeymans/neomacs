@@ -13474,7 +13474,7 @@ fn defvaralias_triggers_variable_watchers_and_clears_alias_entry() {
 }
 
 #[test]
-fn defvaralias_raw_plist_errors_skip_variable_watcher_callbacks() {
+fn defvaralias_raw_plist_error_preserves_gnu_watcher_order() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     install_variable_watcher_probe(&mut eval, "vm-defvaralias-watch-probe");
@@ -13510,9 +13510,17 @@ fn defvaralias_raw_plist_errors_skip_variable_watcher_callbacks() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let callback_state = builtin_boundp(&mut eval, vec![Value::symbol("vm-watcher-last-op")])
-        .expect("boundp should report watcher state symbol");
-    assert!(callback_state.is_nil());
+    let op = builtin_symbol_value(&mut eval, vec![Value::symbol("vm-watcher-last-op")])
+        .expect("watcher should run before variable-documentation put");
+    let value = builtin_symbol_value(&mut eval, vec![Value::symbol("vm-watcher-last-value")])
+        .expect("watcher should record target before plistp error");
+    assert_eq!(op, Value::symbol("defvaralias"));
+    assert_eq!(value, Value::symbol("vm-defvaralias-watch-target"));
+
+    let target =
+        builtin_indirect_variable(&mut eval, vec![Value::symbol("vm-defvaralias-watch-bad")])
+            .expect("GNU installs the alias before the failing documentation put");
+    assert_eq!(target, Value::symbol("vm-defvaralias-watch-target"));
 }
 
 #[test]
