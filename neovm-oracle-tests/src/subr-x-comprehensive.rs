@@ -50,6 +50,29 @@ fn oracle_prop_subr_x_string_trim_variants() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn oracle_prop_string_empty_p_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(let ((empty (copy-sequence ""))
+      (nonempty (copy-sequence "x")))
+  (add-text-properties 0 (length nonempty) '(face bold) nonempty)
+  (list
+   ;; GNU lisp/simple.el defines string-empty-p as (string= string "").
+   (string-empty-p "")
+   (string-empty-p empty)
+   (string-empty-p nonempty)
+   (string-empty-p "\0")
+   (string-empty-p " ")
+   (condition-case err
+       (string-empty-p nil)
+     (error (list (car err) (cadr err))))
+   (condition-case err
+       (string-empty-p 'symbol)
+     (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_subr_x_string_blank_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -66,6 +89,31 @@ fn oracle_prop_subr_x_string_blank_p() {
     (string-blank-p "\n")
     ;; Technically not blank
     (string-blank-p "0")))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_subr_x_string_blank_p_argument_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'subr-x)
+  (let ((blank (copy-sequence " \t\n\r"))
+        (vertical-tab "\v")
+        (form-feed "\f"))
+    (add-text-properties 0 (length blank) '(face shadow) blank)
+    (list
+     ;; GNU subr-x.el only treats space, tab, newline, and carriage return as blank.
+     (string-blank-p blank)
+     (string-blank-p vertical-tab)
+     (string-blank-p form-feed)
+     (string-blank-p " \t\n\rx")
+     (condition-case err
+         (string-blank-p nil)
+       (error (list (car err) (cadr err))))
+     (condition-case err
+         (string-blank-p 'symbol)
+       (error (list (car err) (cadr err)))))))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
 
