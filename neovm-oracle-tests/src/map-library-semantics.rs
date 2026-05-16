@@ -106,3 +106,42 @@ fn oracle_prop_map_let_and_mutation_semantics() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_map_nested_and_inplace_edge_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  (let ((alist (list (cons 'a 1)))
+        (plist (list :a 1 :b nil))
+        (vec [a b c]))
+    (list
+     ;; GNU map-nested-elt uses `or', so a found nil value returns DEFAULT.
+     (map-nested-elt '(:a (:b nil)) '(:a :b) 'fallback)
+     (map-nested-elt '(:a (:b 0)) '(:a :b) 'fallback)
+     ;; Inserting a new alist key cannot mutate the original cons cell and
+     ;; therefore signals map-not-inplace.
+     (condition-case err
+         (map-put! alist 'b 2)
+       (error (list (car err) (cadr err))))
+     alist
+     ;; Existing alist keys and plists are updated in place.
+     (let ((alist2 (list (cons 'a 1))))
+       (list (map-put! alist2 'a 9) alist2))
+     (let ((p (list :a 1)))
+       (list (map-put! p :b 2) p))
+     ;; List deletion return values may differ from the original list object.
+     (let ((p (list :a 1 :b 2)))
+       (list (map-delete p :a) p))
+     (let ((a (list (cons 'a 1) (cons 'b 2))))
+       (list (map-delete a 'b) a))
+     ;; Array lookup outside bounds returns DEFAULT through map-contains-key.
+     (condition-case err
+         (map-elt vec 9 'missing)
+       (error (list (car err) (cadr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
