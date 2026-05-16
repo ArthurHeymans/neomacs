@@ -90,6 +90,10 @@ mod boolean_helper_semantics;
 mod bootstrap_library_require;
 #[path = "buffer-base-buffer-semantics.rs"]
 mod buffer_base_buffer_semantics;
+#[path = "delete-consecutive-dups-semantics.rs"]
+#[path = "buffer-edit-strict-edge-semantics.rs"]
+#[path = "buffer-edit-strict-edge-semantics.rs"]
+mod buffer_edit_strict_edge_semantics;
 #[path = "buffer-file-name-semantics.rs"]
 mod buffer_file_name_semantics;
 #[path = "buffer-hash-semantics.rs"]
@@ -116,6 +120,8 @@ mod buffer_match_semantics;
 mod buffer_modification_comprehensive;
 #[path = "buffer-modified-p-semantics.rs"]
 mod buffer_modified_p_semantics;
+#[path = "buffer-movement-strict-edge-semantics.rs"]
+mod buffer_movement_strict_edge_semantics;
 #[path = "buffer-multi-operations.rs"]
 mod buffer_multi_operations;
 #[path = "buffer-name.rs"]
@@ -1088,6 +1094,8 @@ mod multibyte_string_comprehensive;
 mod narrow_advanced;
 #[path = "narrow-point-semantics.rs"]
 mod narrow_point_semantics;
+#[path = "narrow-textprop-strict-edge-semantics.rs"]
+mod narrow_textprop_strict_edge_semantics;
 #[path = "narrow-widen-comprehensive.rs"]
 mod narrow_widen_comprehensive;
 #[path = "narrow-widen-patterns.rs"]
