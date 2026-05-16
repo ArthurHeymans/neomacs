@@ -10,6 +10,42 @@ use super::common::{
 };
 
 #[test]
+fn oracle_prop_gnu_buffer_local_boundp_uses_buffer_local_value_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el:buffer-local-boundp is a thin condition-case around
+    // buffer-local-value.  It is true for a default binding even without a
+    // local binding, false for void globals, and follows the queried buffer.
+    let form = r#"
+(progn
+  (defvar neomacs--oracle-blbp-global 'global-value)
+  (defvar neomacs--oracle-blbp-local 'default-local)
+  (makunbound 'neomacs--oracle-blbp-void)
+  (let ((buf-a (get-buffer-create " *oracle-blbp-a*"))
+        (buf-b (get-buffer-create " *oracle-blbp-b*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf-a
+            (set (make-local-variable 'neomacs--oracle-blbp-local) 'a-local)
+            (set (make-local-variable 'neomacs--oracle-blbp-void) 'a-void-local))
+          (list
+           (buffer-local-boundp 'neomacs--oracle-blbp-global buf-a)
+           (buffer-local-boundp 'neomacs--oracle-blbp-global buf-b)
+           (buffer-local-boundp 'neomacs--oracle-blbp-local buf-a)
+           (buffer-local-boundp 'neomacs--oracle-blbp-local buf-b)
+           (buffer-local-boundp 'neomacs--oracle-blbp-void buf-a)
+           (buffer-local-boundp 'neomacs--oracle-blbp-void buf-b)
+           (condition-case err
+               (buffer-local-boundp 'neomacs--oracle-blbp-global (kill-buffer buf-b))
+             (error (list (car err) (cadr err))))))
+      (when (buffer-live-p buf-a) (kill-buffer buf-a))
+      (when (buffer-live-p buf-b) (kill-buffer buf-b)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_gnu_buffer_local_set_state_restores_local_global_and_void_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
