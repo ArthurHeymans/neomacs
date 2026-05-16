@@ -668,6 +668,8 @@ mod eval_comprehensive_patterns;
 #[path = "event-convert-advanced.rs"]
 mod event_convert_advanced;
 mod event_convert_list;
+#[path = "event-posn-accessor-semantics.rs"]
+mod event_posn_accessor_semantics;
 #[path = "expt-sqrt-log-patterns.rs"]
 mod expt_sqrt_log_patterns;
 #[path = "file-name-semantics.rs"]
