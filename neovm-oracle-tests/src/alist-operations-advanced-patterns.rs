@@ -769,3 +769,43 @@ fn oracle_prop_alist_with_atom_elements() {
                      (seq-filter #'consp mixed)))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_copy_alist_shallow_copy_and_malformed_inputs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fcopy_alist checks LISTP first, then copies the alist
+    // spine via Fcopy_sequence, then copies only cons elements one level deep.
+    // Non-cons elements remain shared, and improper-tail errors come from
+    // copy-sequence's final CHECK_LIST_END.
+    let form = r#"
+(list
+ (condition-case e
+     (copy-alist 'atom)
+   (error (list (car e) (cdr e))))
+ (let* ((key (list 'k))
+        (value (list 'v))
+        (pair (cons key value))
+        (loose (list 'loose))
+        (alist (list pair loose (cons 'x (list 'y))))
+        (copy (copy-alist alist)))
+   (setcar (car copy) 'new-key)
+   (setcdr (car copy) 'new-value)
+   (list
+    alist
+    copy
+    (eq alist copy)
+    (eq (car alist) (car copy))
+    (eq (caar alist) key)
+    (eq (cdar alist) value)
+    (eq (cadr alist) (cadr copy))))
+ (let ((alist (cons (cons 'a 1) (cons 'loose 'tail))))
+   (list
+    (condition-case e
+        (copy-alist alist)
+      (error (list (car e) (cdr e))))
+    alist)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
