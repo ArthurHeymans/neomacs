@@ -576,6 +576,48 @@ fn oracle_prop_map_adv_vector_mutation_reads_live_slots_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_map_adv_string_mutation_reads_live_chars_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c:mapcar1` fetches string characters during
+    // traversal.  If FUNCTION mutates a later character with aset, subsequent
+    // mapcar/mapc/mapconcat callbacks see the new character, not a snapshot
+    // captured before mapping began.
+    let form = r####"(list
+  (let* ((s (string ?a ?b ?c ?d))
+         (seen nil))
+    (list (mapcar (lambda (x)
+                    (push x seen)
+                    (when (= x ?a)
+                      (aset s 1 ?z))
+                    x)
+                  s)
+          (nreverse seen)
+          s))
+  (let* ((s (string ?a ?b ?c ?d))
+         (seen nil))
+    (list (mapc (lambda (x)
+                  (push x seen)
+                  (when (= x ?a)
+                    (aset s 1 ?z)))
+                s)
+          (nreverse seen)
+          s))
+  (let* ((s (string ?a ?b ?c ?d))
+         (seen nil))
+    (list (mapconcat (lambda (x)
+                       (push x seen)
+                       (when (= x ?a)
+                         (aset s 1 ?z))
+                       (string x))
+                     s
+                     ",")
+          (nreverse seen)
+          s)))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // mapconcat: advanced separator and transform patterns
 // ---------------------------------------------------------------------------
