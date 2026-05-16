@@ -65,6 +65,47 @@ fn oracle_remq_leading_match_sharing_and_copy_boundary() {
 }
 
 #[test]
+fn oracle_remq_improper_list_error_payloads_follow_gnu_wrapper_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:remq first strips leading eq elements with `car' and
+    // `cdr', then calls `memq', and only copies/delqs the tail if memq finds
+    // another match.  These paths expose different exact error payloads.
+    let form = r#"
+(list
+ (condition-case e
+     (remq 'x 'tail)
+   (error (list (car e) (cdr e))))
+ (let ((xs (cons 'x 'tail)))
+   (list
+    (condition-case e
+        (remq 'x xs)
+      (error (list (car e) (cdr e))))
+    xs))
+ (let ((xs (cons 'x (cons 'a 'tail))))
+   (list
+    (condition-case e
+        (remq 'x xs)
+      (error (list (car e) (cdr e))))
+    xs))
+ (let ((xs (cons 'a (cons 'x 'tail))))
+   (list
+    (condition-case e
+        (remq 'x xs)
+      (error (list (car e) (cdr e))))
+    xs))
+ (let ((xs (cons 'a (cons 'b 'tail))))
+   (list
+    (condition-case e
+        (remq 'x xs)
+      (error (list (car e) (cdr e))))
+    xs)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_delq_delete_dotted_list_mutation_before_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
