@@ -82,6 +82,8 @@ mod bootstrap_library_require;
 mod buffer_hash_semantics;
 #[path = "buffer-line-statistics-semantics.rs"]
 mod buffer_line_statistics_semantics;
+#[path = "buffer-local-set-state-semantics.rs"]
+mod buffer_local_set_state_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
 mod buffer_local_symbol_identity_semantics;
 #[path = "buffer-local-toplevel-value-semantics.rs"]

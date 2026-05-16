@@ -1,0 +1,86 @@
+//! Oracle parity tests for GNU buffer-local state save/restore helpers.
+//!
+//! GNU implements `buffer-local-set-state`, `buffer-local-set-state--get`,
+//! and `buffer-local-restore-state` in `lisp/subr.el`.  These helpers are
+//! small, but they combine macro expansion, buffer-local bindings, void
+//! variables, and restoration via `kill-local-variable`.
+
+use super::common::{
+    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
+};
+
+#[test]
+fn oracle_prop_gnu_buffer_local_set_state_restores_local_global_and_void_vars() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defvar neomacs--oracle-blss-a 'global-a)
+  (defvar neomacs--oracle-blss-b 'global-b)
+  (makunbound 'neomacs--oracle-blss-c)
+  (with-temp-buffer
+    (set (make-local-variable 'neomacs--oracle-blss-a) 'local-a)
+    (let ((state (buffer-local-set-state
+                  neomacs--oracle-blss-a 'new-a
+                  neomacs--oracle-blss-b 'new-b
+                  neomacs--oracle-blss-c 'new-c)))
+      (let ((during (list state
+                          neomacs--oracle-blss-a
+                          neomacs--oracle-blss-b
+                          neomacs--oracle-blss-c
+                          (local-variable-p 'neomacs--oracle-blss-a)
+                          (local-variable-p 'neomacs--oracle-blss-b)
+                          (local-variable-p 'neomacs--oracle-blss-c))))
+        (buffer-local-restore-state state)
+        (list
+         during
+         (list neomacs--oracle-blss-a
+               neomacs--oracle-blss-b
+               (boundp 'neomacs--oracle-blss-c)
+               (local-variable-p 'neomacs--oracle-blss-a)
+               (local-variable-p 'neomacs--oracle-blss-b)
+               (local-variable-p 'neomacs--oracle-blss-c)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_gnu_buffer_local_set_state_get_records_current_buffer_only() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defvar neomacs--oracle-blss-current 'global-current)
+  (defvar neomacs--oracle-blss-other 'global-other)
+  (let ((other (get-buffer-create " *oracle-blss-other*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer other
+            (set (make-local-variable 'neomacs--oracle-blss-current) 'other-local)
+            (set (make-local-variable 'neomacs--oracle-blss-other) 'other-local))
+          (with-temp-buffer
+            (set (make-local-variable 'neomacs--oracle-blss-current) 'current-local)
+            (list
+             (buffer-local-set-state--get
+              '(neomacs--oracle-blss-current neomacs--oracle-blss-other))
+             (buffer-local-value 'neomacs--oracle-blss-current other)
+             (buffer-local-value 'neomacs--oracle-blss-other other))))
+      (kill-buffer other))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_gnu_buffer_local_set_state_rejects_odd_pairs_at_macroexpand() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(condition-case err
+    (macroexpand '(buffer-local-set-state neomacs--oracle-blss-x 1 neomacs--oracle-blss-y))
+  (error err))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
