@@ -996,6 +996,8 @@ mod mapconcat_patterns;
 mod maphash_patterns;
 #[path = "marker-comprehensive-patterns.rs"]
 mod marker_comprehensive_patterns;
+#[path = "marker-edge-semantics.rs"]
+mod marker_edge_semantics;
 #[path = "marker-operations.rs"]
 mod marker_operations;
 #[path = "marker-semantics.rs"]
