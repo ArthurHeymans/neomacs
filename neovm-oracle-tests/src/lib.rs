@@ -778,6 +778,8 @@ mod file_repository_version_semantics;
 mod fillarray_advanced;
 #[path = "fillarray-operations.rs"]
 mod fillarray_operations;
+#[path = "final-gaps-strict-edge-semantics.rs"]
+mod final_gaps_strict_edge_semantics;
 #[path = "find-buffer-semantics.rs"]
 mod find_buffer_semantics;
 #[path = "flatten-tree-semantics.rs"]
