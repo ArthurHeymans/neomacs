@@ -65,6 +65,39 @@ fn oracle_remq_leading_match_sharing_and_copy_boundary() {
 }
 
 #[test]
+fn oracle_delq_delete_dotted_list_mutation_before_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fdelq and Fdelete splice matching cons cells while walking
+    // the list, then call CHECK_LIST_END.  On dotted inputs, the signaled
+    // `wrong-type-argument' payload is the post-splice list, and earlier
+    // destructive edits remain visible.
+    let form = r#"
+(list
+ (let ((xs (cons 'keep (cons 'drop 'tail))))
+   (list
+    (condition-case e
+        (delq 'drop xs)
+      (error (list (car e) (cdr e))))
+    xs))
+ (let ((xs (cons (copy-sequence "drop") (cons 'keep 'tail))))
+   (list
+    (condition-case e
+        (delete "drop" xs)
+      (error (list (car e) (cdr e))))
+    xs))
+ (let ((xs (cons 'drop (cons 'keep 'tail))))
+   (list
+    (condition-case e
+        (delq 'drop xs)
+      (error (list (car e) (cdr e))))
+    xs)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_delete_remove_reject_bool_vector_like_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

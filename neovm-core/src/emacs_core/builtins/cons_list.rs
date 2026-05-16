@@ -1527,54 +1527,48 @@ fn delete_from_list_in_place_result<F>(seq: &Value, mut should_delete: F) -> Res
 where
     F: FnMut(&Value) -> Result<bool, Flow>,
 {
-    for_each_proper_list_tail(*seq, *seq, |_| Ok(None))?;
+    let mut list = *seq;
+    let mut prev = Value::NIL;
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
 
-    let mut head = *seq;
-    loop {
-        match head.kind() {
-            ValueKind::Nil => return Ok(Value::NIL),
-            ValueKind::Cons => {
-                let remove = {
-                    let pair_car = head.cons_car();
-                    should_delete(&pair_car)?
-                };
-                if remove {
-                    head = head.cons_cdr();
-                } else {
-                    break;
-                }
+    while tail.is_cons() {
+        let remove = {
+            let pair_car = tail.cons_car();
+            should_delete(&pair_car)?
+        };
+        let next = tail.cons_cdr();
+        if remove {
+            if prev.is_nil() {
+                list = next;
+            } else {
+                prev.set_cdr(next);
             }
-            _ => unreachable!("list shape checked above"),
+        } else {
+            prev = tail;
+        }
+
+        tail = next;
+        if tail.is_cons() {
+            if let Some(cycle_tail) =
+                for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+            {
+                return Err(signal("circular-list", vec![cycle_tail]));
+            }
         }
     }
 
-    if head.is_nil() {
-        return Ok(Value::NIL);
+    if tail.is_nil() {
+        Ok(list)
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), list],
+        ))
     }
-
-    let mut prev = head;
-
-    loop {
-        let next = prev.cons_cdr();
-        match next.kind() {
-            ValueKind::Nil => break,
-            ValueKind::Cons => {
-                let remove = {
-                    let pair_car = next.cons_car();
-                    should_delete(&pair_car)?
-                };
-                if remove {
-                    let after = next.cons_cdr();
-                    prev.set_cdr(after);
-                } else {
-                    prev = next;
-                }
-            }
-            _ => unreachable!("list shape checked above"),
-        }
-    }
-
-    Ok(head)
 }
 
 fn delete_from_list_in_place<F>(seq: &Value, should_delete: F) -> Result<Value, Flow>
@@ -1603,7 +1597,7 @@ fn builtin_delete_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
         ValueKind::Cons => delete_from_list_in_place(&args[1], |item| {
             equal_value_swp(elt, item, 0, symbols_with_pos_enabled)
         }),
-        ValueKind::Veclike(VecLikeType::Vector) => {
+        ValueKind::Veclike(VecLikeType::Vector) if !super::chartable::is_bool_vector(&args[1]) => {
             let items = args[1].as_vector_data().unwrap().clone();
             let mut changed = false;
             let mut kept = Vec::with_capacity(items.len());
