@@ -1290,6 +1290,8 @@ mod string_equal;
 mod string_join_patterns;
 #[path = "string-lessp.rs"]
 mod string_lessp;
+#[path = "string-lines-semantics.rs"]
+mod string_lines_semantics;
 #[path = "string-manipulation.rs"]
 mod string_manipulation;
 #[path = "string-manipulation-advanced.rs"]
