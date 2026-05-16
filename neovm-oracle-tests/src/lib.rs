@@ -35,6 +35,8 @@ mod apply_advanced;
 mod apply_funcall_advanced;
 #[path = "apply-funcall-comprehensive.rs"]
 mod apply_funcall_comprehensive;
+#[path = "apply-funcall-edge-semantics.rs"]
+mod apply_funcall_edge_semantics;
 #[path = "apply-funcall-patterns.rs"]
 mod apply_funcall_patterns;
 #[path = "apply-lambda-comprehensive.rs"]
@@ -1242,6 +1244,8 @@ mod regexp_comprehensive_patterns;
 mod regexp_context_semantics;
 #[path = "regexp-gnu-divergence.rs"]
 mod regexp_gnu_divergence;
+#[path = "regexp-match-strict-edge-semantics.rs"]
+mod regexp_match_strict_edge_semantics;
 #[path = "regexp-operations.rs"]
 mod regexp_operations;
 #[path = "regexp-operations-advanced.rs"]
