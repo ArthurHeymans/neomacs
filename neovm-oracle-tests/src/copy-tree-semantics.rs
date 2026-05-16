@@ -81,6 +81,40 @@ fn oracle_copy_tree_with_vector_flag_recurses_into_vectors_and_records() {
 }
 
 #[test]
+fn oracle_copy_tree_vector_and_record_dotted_tails_follow_flag() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:copy-tree handles an improper cons tail after the main
+    // cons walk.  With VECTORS-AND-RECORDS nil, vector/record tails are shared;
+    // with it non-nil, the tail is recursively copied.
+    let form = r#"
+(let* ((vec-tail (vector (list 'vec-cell)))
+       (rec-tail (record 'tag (list 'rec-cell)))
+       (vec-tree (cons 'head vec-tail))
+       (rec-tree (cons 'head rec-tail))
+       (vec-default (copy-tree vec-tree))
+       (rec-default (copy-tree rec-tree))
+       (vec-deep (copy-tree vec-tree t))
+       (rec-deep (copy-tree rec-tree t)))
+  (setcar (aref (cdr vec-deep) 0) 'changed-vec-copy)
+  (setcar (aref (cdr rec-deep) 1) 'changed-rec-copy)
+  (list
+   (eq (cdr vec-tree) (cdr vec-default))
+   (eq (cdr rec-tree) (cdr rec-default))
+   (eq (cdr vec-tree) (cdr vec-deep))
+   (eq (aref (cdr vec-tree) 0) (aref (cdr vec-deep) 0))
+   (eq (cdr rec-tree) (cdr rec-deep))
+   (eq (aref (cdr rec-tree) 1) (aref (cdr rec-deep) 1))
+   vec-tree
+   vec-deep
+   rec-tree
+   rec-deep))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_copy_tree_non_cons_leaf_identity_and_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
