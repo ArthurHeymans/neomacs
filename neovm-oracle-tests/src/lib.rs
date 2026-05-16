@@ -1569,6 +1569,8 @@ mod with_temp_buffer;
 mod with_temp_buffer_advanced_patterns;
 #[path = "with-temp-buffer-comprehensive.rs"]
 mod with_temp_buffer_comprehensive;
+#[path = "with-temp-file-semantics.rs"]
+mod with_temp_file_semantics;
 #[path = "wrapper-hook-semantics.rs"]
 mod wrapper_hook_semantics;
 #[path = "xml-semantics.rs"]

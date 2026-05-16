@@ -543,5 +543,6 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "with-current-buffer",
     "with-output-to-string",
     "with-temp-buffer",
+    "with-temp-file",
     "xor",
 ];
