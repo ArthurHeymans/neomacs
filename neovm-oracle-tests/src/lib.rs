@@ -1385,6 +1385,8 @@ mod sort_algorithms;
 mod sort_command_semantics;
 #[path = "sort-extended.rs"]
 mod sort_extended;
+#[path = "sort-mapcar-append-strict-edge-semantics.rs"]
+mod sort_mapcar_append_strict_edge_semantics;
 #[path = "sort-semantics.rs"]
 mod sort_semantics;
 #[path = "sort-stable-patterns.rs"]
