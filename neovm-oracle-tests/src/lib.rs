@@ -833,6 +833,8 @@ mod hash_table_comprehensive_patterns;
 mod hash_table_contains_semantics;
 #[path = "hash-table-extended.rs"]
 mod hash_table_extended;
+#[path = "hash-table-mutate-strict-edge-semantics.rs"]
+mod hash_table_mutate_strict_edge_semantics;
 #[path = "hash-table-operations-comprehensive.rs"]
 mod hash_table_operations_comprehensive;
 #[path = "hash-table-operations-extended.rs"]
