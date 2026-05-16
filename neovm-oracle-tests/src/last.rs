@@ -43,6 +43,25 @@ fn oracle_prop_last_dotted() {
 }
 
 #[test]
+fn oracle_last_circular_list_uses_safe_length_tail() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((cycle (list 'a 'b 'c))
+       (_ (setcdr (last cycle) cycle))
+       (detected-length (safe-length cycle)))
+  (list detected-length
+        (eq (last cycle) (nthcdr (1- detected-length) cycle))
+        (car (last cycle))
+        (car (last cycle 2))
+        (eq (last cycle detected-length) cycle)
+        (eq (last cycle (1+ detected-length)) cycle)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_butlast_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

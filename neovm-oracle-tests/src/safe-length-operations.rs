@@ -50,6 +50,26 @@ fn oracle_prop_safe_length_circular_single() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_safe_length_circular_exact_detector_counts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((self (cons 'a nil))
+       (_ (setcdr self self))
+       (cycle3 (list 1 2 3))
+       (_ (setcdr (last cycle3) cycle3))
+       (lasso (list 'head 'a 'b 'c))
+       (cycle-start (cdr lasso))
+       (_ (setcdr (last cycle-start) cycle-start)))
+  (list (safe-length self)
+        (safe-length cycle3)
+        (safe-length lasso)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // safe-length on dotted pair / improper lists
 // ---------------------------------------------------------------------------

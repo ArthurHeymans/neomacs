@@ -34,6 +34,29 @@ fn oracle_prop_nthcdr_wrong_type() {
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
+#[test]
+fn oracle_nthcdr_circular_and_improper_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((cycle (list 'a 'b 'c))
+       (_ (setcdr (last cycle) cycle))
+       (big (expt 10 40)))
+  (list
+   (eq (nthcdr 3 cycle) cycle)
+   (car (nthcdr 4 cycle))
+   (car (nthcdr big cycle))
+   (condition-case err
+       (nthcdr 2 '(a . b))
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (nth 2 '(a . b))
+     (error (list (car err) (cdr err))))))
+"#;
+
+    super::common::assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
