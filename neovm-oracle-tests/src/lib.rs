@@ -796,6 +796,8 @@ mod let_star;
 mod let_star_advanced;
 #[path = "let-star-advanced-2.rs"]
 mod let_star_advanced_2;
+#[path = "letrec-semantics.rs"]
+mod letrec_semantics;
 #[path = "lexical-binding-comprehensive.rs"]
 mod lexical_binding_comprehensive;
 #[path = "lexical-vs-dynamic-comprehensive.rs"]
