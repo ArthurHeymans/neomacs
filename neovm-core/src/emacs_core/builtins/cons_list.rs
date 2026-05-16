@@ -1451,8 +1451,37 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => {
-            let items = collect_proper_list_items(args[0])?;
-            Ok(Value::list(items))
+            let copy = Value::cons(args[0].cons_car(), Value::NIL);
+            let mut prev = copy;
+            let mut tail = args[0].cons_cdr();
+            let mut tortoise = tail;
+            let mut max = 2i64;
+            let mut n = 0i64;
+            let mut q = 2i64;
+
+            while tail.is_cons() {
+                let next = Value::cons(tail.cons_car(), Value::NIL);
+                prev.set_cdr(next);
+                prev = next;
+
+                tail = tail.cons_cdr();
+                if tail.is_cons() {
+                    if let Some(cycle_tail) =
+                        for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+                    {
+                        return Err(signal("circular-list", vec![cycle_tail]));
+                    }
+                }
+            }
+
+            if tail.is_nil() {
+                Ok(copy)
+            } else {
+                Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("listp"), tail],
+                ))
+            }
         }
         ValueKind::String => {
             let string = args[0]

@@ -29,6 +29,21 @@ fn oracle_copy_sequence_shallow_list_spine_and_dotted_error() {
 }
 
 #[test]
+fn oracle_copy_sequence_circular_list_error_payload() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((x (list 'a 'b 'c)))
+  (setcdr (last x) x)
+  (condition-case err
+      (copy-sequence x)
+    (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_copy_sequence_string_intervals_are_copied() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
