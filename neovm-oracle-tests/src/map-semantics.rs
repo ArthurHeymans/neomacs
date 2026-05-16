@@ -148,6 +148,33 @@ fn oracle_mapconcat_separator_and_return_validation() {
 }
 
 #[test]
+fn oracle_mapconcat_follows_callback_rewritten_cdr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fmapconcat maps through mapcar1.  mapcar1 reads XCDR
+    // after FUNCTION returns, so rewiring the current cons cdr changes the
+    // next mapped element before concat assembles the string.
+    let form = r#"
+(let ((seq (list "a" "b"))
+      (replacement (list "z"))
+      (seen nil))
+  (list
+   (mapconcat (lambda (x)
+                (push x seen)
+                (when (equal x "a")
+                  (setcdr seq replacement))
+                x)
+              seq
+              ",")
+   (nreverse seen)
+   seq
+   replacement))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapcan_destructive_nconc_semantics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
