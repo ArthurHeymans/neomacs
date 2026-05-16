@@ -1599,10 +1599,22 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))
                 .map(|v| self.runtime.float(v.tan())),
-            "log" => self
-                .exact_arity(name, args, 1)
-                .and_then(|_| self.number_arg(name, args[0]))
-                .map(|v| self.runtime.float(v.ln())),
+            "log" => self.min_max_arity(name, args, 1, 2).and_then(|_| {
+                let value = self.number_arg(name, args[0])?;
+                let result = if let Some(base) = args.get(1).copied() {
+                    let base = self.number_arg(name, base)?;
+                    if base == 10.0 {
+                        value.log10()
+                    } else if base == 2.0 {
+                        value.log2()
+                    } else {
+                        value.ln() / base.ln()
+                    }
+                } else {
+                    value.ln()
+                };
+                Some(self.runtime.float(result))
+            }),
             "exp" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.number_arg(name, args[0]))

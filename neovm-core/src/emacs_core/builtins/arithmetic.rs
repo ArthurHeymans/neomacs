@@ -1508,7 +1508,14 @@ pub(crate) fn builtin_log(args: Vec<Value>) -> EvalResult {
     let val = expect_number(&args[0])?;
     if args.len() == 2 {
         let base = expect_number(&args[1])?;
-        Ok(Value::make_float(val.ln() / base.ln()))
+        let result = if base == 10.0 {
+            val.log10()
+        } else if base == 2.0 {
+            val.log2()
+        } else {
+            val.ln() / base.ln()
+        };
+        Ok(Value::make_float(result))
     } else {
         Ok(Value::make_float(val.ln()))
     }
