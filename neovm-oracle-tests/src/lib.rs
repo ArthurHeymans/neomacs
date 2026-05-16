@@ -1485,6 +1485,8 @@ mod subst_char_in_string_semantics;
 mod substring;
 #[path = "substring-advanced.rs"]
 mod substring_advanced;
+#[path = "substring-strict-edge-semantics.rs"]
+mod substring_strict_edge_semantics;
 mod symbol;
 #[path = "symbol-advanced.rs"]
 mod symbol_advanced;
