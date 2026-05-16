@@ -799,6 +799,8 @@ mod lambda_anonymous;
 #[path = "lambda-anonymous-advanced.rs"]
 mod lambda_anonymous_advanced;
 mod last;
+#[path = "lcms-feature-availability-semantics.rs"]
+mod lcms_feature_availability_semantics;
 #[path = "length-operations.rs"]
 mod length_operations;
 #[path = "length-semantics.rs"]
