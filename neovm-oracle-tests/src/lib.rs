@@ -581,6 +581,8 @@ mod decode_char_encode_char_advanced;
 mod defalias_advanced;
 #[path = "defalias-fset-patterns.rs"]
 mod defalias_fset_patterns;
+#[path = "define-error-semantics.rs"]
+mod define_error_semantics;
 #[path = "define-key-advanced.rs"]
 mod define_key_advanced;
 #[path = "define-key-after-semantics.rs"]

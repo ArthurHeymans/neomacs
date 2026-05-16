@@ -360,6 +360,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "cddddr",
     "cdddr",
     "cddr",
+    "define-error",
     "defmacro",
     "dolist",
     "dotimes",
