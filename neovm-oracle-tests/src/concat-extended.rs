@@ -41,6 +41,19 @@ fn oracle_prop_concat_many() {
 }
 
 #[test]
+fn oracle_prop_concat_rejects_bool_vector_as_sequence_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:concat_to_string accepts strings, vectors, nil, and conses,
+    // but not bool-vectors.  Bool-vectors are accepted by append/vconcat, so
+    // this is an observable concat-specific sequence predicate boundary.
+    let form = r#"(let ((bv (make-bool-vector 3 nil)))
+                    (aset bv 1 t)
+                    (concat bv))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_concat_with_empty_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
