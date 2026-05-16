@@ -1,0 +1,68 @@
+//! Oracle parity for buffer ops: current-buffer, set-buffer,
+//! get-buffer-create, buffer-name, buffer-size, buffer-live-p.
+//! GNU src/buffer.c.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_current_buffer_is_live() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(buffer-live-p (current-buffer))"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_set_buffer_returns_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(bufferp (set-buffer (get-buffer-create "*sb*")))"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_get_buffer_create_creates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (get-buffer-create "*gbc*") (buffer-live-p (get-buffer "*gbc*")))"#,
+    );
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_buffer_name_returns_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(stringp (buffer-name))"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_buffer_size_returns_integer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (switch-to-buffer (get-buffer-create "*bsz*")) (erase-buffer) (insert "hello") (buffer-size))"#,
+    );
+    assert_ok_eq("5", &o, &n);
+}
+
+#[test]
+fn oracle_buffer_live_p_dead() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (let ((b (get-buffer-create "*blp*"))) (kill-buffer b) (buffer-live-p b)))"#,
+    );
+    assert_ok_eq("nil", &o, &n);
+}
+
+#[test]
+fn oracle_set_buffer_wrong_type() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(set-buffer 42)"#);
+    assert_err_kind(&o, &n, "wrong-type-argument");
+}
+
+#[test]
+fn oracle_buffer_name_buffer_arg() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(stringp (buffer-name (current-buffer)))"#);
+    assert_ok_eq("t", &o, &n);
+}

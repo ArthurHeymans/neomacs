@@ -114,6 +114,8 @@ mod buffer_local_toplevel_value_semantics;
 mod buffer_local_variable_patterns;
 #[path = "buffer-match-semantics.rs"]
 mod buffer_match_semantics;
+#[path = "buffer-mgmt-strict-edge-semantics.rs"]
+mod buffer_mgmt_strict_edge_semantics;
 #[path = "buffer-modification-comprehensive.rs"]
 mod buffer_modification_comprehensive;
 #[path = "buffer-modified-p-semantics.rs"]
@@ -128,6 +130,8 @@ mod buffer_name;
 mod buffer_operations;
 #[path = "buffer-operations-advanced.rs"]
 mod buffer_operations_advanced;
+#[path = "buffer-ops-strict-edge-semantics.rs"]
+mod buffer_ops_strict_edge_semantics;
 #[path = "buffer-position.rs"]
 mod buffer_position;
 #[path = "buffer-position-patterns.rs"]
@@ -1363,6 +1367,8 @@ mod save_excursion_advanced;
 mod save_excursion_comprehensive;
 #[path = "save-excursion-patterns.rs"]
 mod save_excursion_patterns;
+#[path = "save-excursion-restriction-strict-edge-semantics.rs"]
+mod save_excursion_restriction_strict_edge_semantics;
 #[path = "save-mark-and-excursion-semantics.rs"]
 mod save_mark_and_excursion_semantics;
 #[path = "save-restriction-advanced.rs"]
