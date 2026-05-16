@@ -1070,6 +1070,8 @@ mod recursion;
 mod recursion_advanced;
 #[path = "recursion-comprehensive-patterns.rs"]
 mod recursion_comprehensive_patterns;
+#[path = "redirect-debugging-output-semantics.rs"]
+mod redirect_debugging_output_semantics;
 #[path = "regexp-advanced.rs"]
 mod regexp_advanced;
 #[path = "regexp-comprehensive-advanced.rs"]
