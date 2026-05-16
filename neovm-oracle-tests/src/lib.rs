@@ -1097,6 +1097,8 @@ mod prin1_comprehensive_patterns;
 mod prin1_to_string_advanced;
 #[path = "process-environment-semantics.rs"]
 mod process_environment_semantics;
+#[path = "process-lines-semantics.rs"]
+mod process_lines_semantics;
 #[path = "process-string-comprehensive.rs"]
 mod process_string_comprehensive;
 #[path = "profiler-memory-semantics.rs"]
