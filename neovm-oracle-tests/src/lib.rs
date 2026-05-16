@@ -82,6 +82,8 @@ mod bool_vector_comprehensive;
 mod bool_vector_edge_semantics;
 #[path = "bool-vector-operations.rs"]
 mod bool_vector_operations;
+#[path = "bool-vector-syntax-strict-edge-semantics.rs"]
+mod bool_vector_syntax_strict_edge_semantics;
 #[path = "boolean-helper-semantics.rs"]
 mod boolean_helper_semantics;
 #[path = "bootstrap-library-require.rs"]
@@ -629,6 +631,8 @@ mod current_column_advanced;
 mod current_idle_time_message_semantics;
 #[path = "cxxr-semantics.rs"]
 mod cxxr_semantics;
+#[path = "data-construction-strict-edge-semantics.rs"]
+mod data_construction_strict_edge_semantics;
 #[path = "dbus-inhibitor-lock-semantics.rs"]
 mod dbus_inhibitor_lock_semantics;
 #[path = "decode-char-encode-char-advanced.rs"]
@@ -1189,6 +1193,8 @@ mod primitive_function_p_semantics;
 mod prin1_comprehensive_patterns;
 #[path = "prin1-to-string-advanced.rs"]
 mod prin1_to_string_advanced;
+#[path = "print-eval-strict-edge-semantics.rs"]
+mod print_eval_strict_edge_semantics;
 #[path = "process-environment-semantics.rs"]
 mod process_environment_semantics;
 #[path = "process-lines-semantics.rs"]
