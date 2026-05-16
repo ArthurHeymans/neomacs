@@ -1700,9 +1700,7 @@ fn builtin_delq_values(elt: Value, list: Value, symbols_with_pos_enabled: bool) 
 pub(crate) fn builtin_elt(args: Vec<Value>) -> EvalResult {
     expect_args("elt", &args, 2)?;
     match args[0].kind() {
-        ValueKind::Cons | ValueKind::Nil | ValueKind::Veclike(VecLikeType::Lambda) => {
-            builtin_nth(vec![args[1], args[0]])
-        }
+        ValueKind::Cons | ValueKind::Nil => builtin_nth(vec![args[1], args[0]]),
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
             builtin_aref(vec![args[0], args[1]])
         }
@@ -1719,9 +1717,7 @@ pub(crate) fn builtin_elt_2(
     n: Value,
 ) -> EvalResult {
     match sequence.kind() {
-        ValueKind::Cons | ValueKind::Nil | ValueKind::Veclike(VecLikeType::Lambda) => {
-            builtin_nth_2(eval, n, sequence)
-        }
+        ValueKind::Cons | ValueKind::Nil => builtin_nth_2(eval, n, sequence),
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
             builtin_aref_2(eval, sequence, n)
         }

@@ -50,6 +50,39 @@ fn oracle_elt_lambda_is_not_sequence_like_gnu() {
 }
 
 #[test]
+fn oracle_elt_arraylike_acceptance_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Felt accepts list/nil specially, then CHECK_ARRAY with
+    // `sequencep' before delegating to src/data.c:Faref.  That admits
+    // bool-vectors and char-tables, but not records or byte-code objects.
+    let form = r#"
+(let ((bits (make-bool-vector 3 nil))
+      (table (make-char-table 'generic 'default)))
+  (aset bits 1 t)
+  (aset table ?A 'letter-a)
+  (list
+   (elt bits 0)
+   (elt bits 1)
+   (elt table ?A)
+   (elt table ?B)
+   (condition-case err
+       (elt (record 'neovm--elt-record 1 2) 0)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (elt #[257 "\300\207" [42] 1] 0)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (elt bits 3)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (elt table #x400000)
+     (error (list (car err) (cdr err))))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_aref_type_index_and_bounds_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
