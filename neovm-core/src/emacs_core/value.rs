@@ -1959,6 +1959,9 @@ pub fn eql_value(left: &Value, right: &Value) -> bool {
     }
     match (left.kind(), right.kind()) {
         (ValueKind::Float, ValueKind::Float) => left.xfloat().to_bits() == right.xfloat().to_bits(),
+        (ValueKind::Veclike(VecLikeType::Bignum), ValueKind::Veclike(VecLikeType::Bignum)) => {
+            left.as_bignum().expect("left bignum") == right.as_bignum().expect("right bignum")
+        }
         _ => false,
     }
 }
@@ -1970,6 +1973,9 @@ pub fn eql_value_swp(left: &Value, right: &Value, symbols_with_pos_enabled: bool
     }
     match (left.kind(), right.kind()) {
         (ValueKind::Float, ValueKind::Float) => left.xfloat().to_bits() == right.xfloat().to_bits(),
+        (ValueKind::Veclike(VecLikeType::Bignum), ValueKind::Veclike(VecLikeType::Bignum)) => {
+            left.as_bignum().expect("left bignum") == right.as_bignum().expect("right bignum")
+        }
         _ => false,
     }
 }
