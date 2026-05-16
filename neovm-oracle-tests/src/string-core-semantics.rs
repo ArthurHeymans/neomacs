@@ -77,6 +77,21 @@ fn oracle_substring_vector_negative_and_error_payloads() {
 }
 
 #[test]
+fn oracle_substring_rejects_record_without_crashing_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Fsubstring starts with CHECK_VECTOR_OR_STRING, so records are
+    // rejected with `arrayp` and must not be treated as vector storage.
+    let form = r#"
+(condition-case err
+    (substring (record 'a 1 2) 0 1)
+  (error (list (car err) (cdr err))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_concat_and_vconcat_character_sequence_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
