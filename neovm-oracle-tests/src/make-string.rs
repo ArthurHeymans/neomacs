@@ -50,6 +50,16 @@ fn oracle_prop_make_string_length_check() {
     assert_ok_eq("10", &o, &n);
 }
 
+#[test]
+fn oracle_prop_make_string_bignum_length_error_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs alloc.c:Fmake_string validates LENGTH with CHECK_FIXNAT:
+    // bignum lengths are rejected as `wholenump`, not as generic `integerp`.
+    let form = r#"(make-string 1000000000000000000000000000000 ?x)"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
