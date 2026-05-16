@@ -156,6 +156,39 @@ fn oracle_fillarray_char_table_rewrites_top_level_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_fillarray_type_and_character_error_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Ffillarray accepts vectors, strings, char-tables, and
+    // bool-vectors.  Strings check ITEM with CHECK_CHARACTER before testing
+    // whether the string is empty; unsupported arrays such as records signal
+    // arrayp, not vectorp or sequencep.
+    let form = r#"
+(list
+ (condition-case err
+     (fillarray (record 'tag 1 2) 'x)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (fillarray (lambda (x) x) 'x)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (fillarray nil 'x)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (fillarray (copy-sequence "") 'not-a-character)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (fillarray (copy-sequence "abc") #x400000)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (fillarray (copy-sequence "abc") -1)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // fillarray on bool-vectors with size edge cases
 // ---------------------------------------------------------------------------
