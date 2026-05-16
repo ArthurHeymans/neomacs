@@ -162,6 +162,8 @@ mod called_interactively_semantics;
 mod car_cdr_combinations;
 #[path = "car-safe.rs"]
 mod car_safe;
+#[path = "case-convert-string-char-strict-edge-semantics.rs"]
+mod case_convert_string_char_strict_edge_semantics;
 mod r#catch;
 #[path = "catch-throw-advanced.rs"]
 mod catch_throw_advanced;
