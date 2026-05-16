@@ -298,6 +298,24 @@ fn nthcdr_positive_bignum_reduces_over_circular_list_like_gnu() {
 }
 
 #[test]
+fn rassoc_improper_tail_reports_original_alist_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let entry = Value::cons(Value::symbol("a"), Value::string("one"));
+    let list = Value::cons(entry, Value::symbol("tail"));
+
+    let err =
+        crate::emacs_core::misc::builtin_rassoc(vec![Value::string("missing"), list]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data[0], Value::symbol("listp"));
+            assert!(eq_value(&sig.data[1], &list));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn external_debugging_rejects_negative_fixnum() {
     crate::test_utils::init_test_tracing();
     let err =

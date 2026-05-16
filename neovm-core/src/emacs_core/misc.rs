@@ -154,7 +154,7 @@ fn builtin_rassoc_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
             _ => {
                 return Err(signal(
                     "wrong-type-argument",
-                    vec![Value::symbol("listp"), cursor],
+                    vec![Value::symbol("listp"), *alist],
                 ));
             }
         }
