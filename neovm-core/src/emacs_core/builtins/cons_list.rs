@@ -921,10 +921,32 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
     }
 
     fn append_proper_list(result: &mut Value, last: &mut Value, list: Value) -> Result<(), Flow> {
-        for_each_proper_list_tail(list, list, |tail| {
+        let mut tail = list;
+        let mut tortoise = list;
+        let mut max = 2i64;
+        let mut n = 0i64;
+        let mut q = 2i64;
+
+        while tail.is_cons() {
             append_element(result, last, tail.cons_car());
-            Ok(None)
-        })?;
+
+            tail = tail.cons_cdr();
+            if tail.is_cons() {
+                if let Some(cycle_tail) =
+                    for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+                {
+                    return Err(signal("circular-list", vec![cycle_tail]));
+                }
+            }
+        }
+
+        if !tail.is_nil() {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("listp"), tail],
+            ));
+        }
+
         Ok(())
     }
 

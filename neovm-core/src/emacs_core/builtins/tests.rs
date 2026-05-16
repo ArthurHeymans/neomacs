@@ -520,6 +520,25 @@ fn pure_dispatch_typed_append_preserves_dotted_tail() {
 }
 
 #[test]
+fn pure_dispatch_typed_append_reports_final_improper_tail_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let improper = Value::cons(Value::symbol("a"), Value::symbol("bad-tail"));
+    let result = dispatch_builtin_pure("append", vec![improper, Value::NIL])
+        .expect("builtin append should resolve");
+
+    match result {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("listp"), Value::symbol("bad-tail")]
+            );
+        }
+        other => panic!("expected wrong-type-argument listp bad-tail, got {other:?}"),
+    }
+}
+
+#[test]
 fn pure_dispatch_typed_append_flattens_vector_and_string() {
     crate::test_utils::init_test_tracing();
     let vector = Value::vector(vec![Value::fixnum(1), Value::fixnum(2)]);
