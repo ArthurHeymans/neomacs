@@ -451,6 +451,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "remove-from-invisibility-spec",
     "remove-overlays",
     "remove-yank-excluded-properties",
+    "replace-regexp-in-region",
+    "replace-string-in-region",
     "rx",
     "rx-define",
     "rx-let",
