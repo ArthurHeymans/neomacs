@@ -306,6 +306,22 @@ fn oracle_prop_string_collate_argument_semantics() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_collate_invalid_locale_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(list
+  ;; GNU's str_collate opens explicit locale strings with newlocale.
+  ;; Invalid locale names signal `error' instead of falling back to byte comparison.
+  (condition-case err
+      (string-collate-lessp "a" "b" "neomacs-invalid-locale")
+    (error (car err)))
+  (condition-case err
+      (string-collate-equalp "a" "a" "neomacs-invalid-locale")
+    (error (car err))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Edge cases and comprehensive combination tests
 // ---------------------------------------------------------------------------
