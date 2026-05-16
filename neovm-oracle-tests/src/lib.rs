@@ -688,6 +688,8 @@ mod event_posn_accessor_semantics;
 mod event_predicate_semantics;
 #[path = "expt-sqrt-log-patterns.rs"]
 mod expt_sqrt_log_patterns;
+#[path = "field-at-pos-semantics.rs"]
+mod field_at_pos_semantics;
 #[path = "file-name-semantics.rs"]
 mod file_name_semantics;
 #[path = "file-repository-version-semantics.rs"]

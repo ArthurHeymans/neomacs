@@ -380,6 +380,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "event-modifiers",
     "event-start",
     "eventp",
+    "field-at-pos",
     "frame-configuration-p",
     "function-alias-p",
     "ignore",
