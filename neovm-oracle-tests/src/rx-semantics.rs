@@ -67,6 +67,37 @@ fn oracle_prop_rx_let_and_rx_let_eval_definitions() {
 }
 
 #[test]
+fn oracle_prop_rx_let_rest_and_binding_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'rx)
+  (list
+   (rx-to-string '(seq (literal "a.b") (regexp "[0-9]+")) t)
+   (condition-case err
+       (let ((suffix "END"))
+         (rx-to-string '(seq "pre" (literal (eval suffix))) t))
+     (error (list (car err) (cadr err))))
+   (rx-let ((word+ (&rest parts) (seq bow parts eow))
+            (braced (x) (seq "{" x "}")))
+     (list
+      (rx (word+ (+ alpha) "-" (+ digit)))
+      (rx (braced (word+ "x")))))
+   (condition-case err
+       (rx-let ((any anything))
+         (rx any))
+     (error (list (car err) (cadr err))))
+   (condition-case err
+       (rx-let ((bad (x . y) (seq x y)))
+         (rx bad))
+     (error (list (car err) (cadr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_rx_define_and_error_signaling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
