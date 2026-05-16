@@ -597,6 +597,8 @@ mod coverage_manifest;
 mod current_buffer;
 #[path = "current-column-advanced.rs"]
 mod current_column_advanced;
+#[path = "current-idle-time-message-semantics.rs"]
+mod current_idle_time_message_semantics;
 #[path = "cxxr-semantics.rs"]
 mod cxxr_semantics;
 #[path = "dbus-inhibitor-lock-semantics.rs"]
@@ -941,6 +943,8 @@ mod lsh_semantics;
 mod macro_comprehensive_patterns;
 #[path = "macroexpand-advanced.rs"]
 mod macroexpand_advanced;
+#[path = "macrop-obarrayp-daemonp-semantics.rs"]
+mod macrop_obarrayp_daemonp_semantics;
 #[path = "make-composed-keymap-semantics.rs"]
 mod make_composed_keymap_semantics;
 #[path = "make-hash-table-advanced.rs"]
@@ -1137,6 +1141,8 @@ mod process_lines_semantics;
 mod process_property_semantics;
 #[path = "process-string-comprehensive.rs"]
 mod process_string_comprehensive;
+#[path = "process-thread-mutex-overlay-predicates-semantics.rs"]
+mod process_thread_mutex_overlay_predicates_semantics;
 #[path = "profiler-memory-semantics.rs"]
 mod profiler_memory_semantics;
 mod prog1;
