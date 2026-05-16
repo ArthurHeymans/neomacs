@@ -762,6 +762,8 @@ mod image_feature_availability_semantics;
 mod indent_to;
 #[path = "indirect-function.rs"]
 mod indirect_function;
+#[path = "inotify-debug-availability-semantics.rs"]
+mod inotify_debug_availability_semantics;
 mod insert;
 #[path = "insert-advanced.rs"]
 mod insert_advanced;
