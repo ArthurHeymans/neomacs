@@ -254,6 +254,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "string",
     "string-blank-p",
     "string-bytes",
+    "string-clean-whitespace",
     "string-collate-equalp",
     "string-collate-lessp",
     "string-distance",

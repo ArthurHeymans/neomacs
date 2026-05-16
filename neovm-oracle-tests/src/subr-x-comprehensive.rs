@@ -256,6 +256,31 @@ fn oracle_prop_subr_x_string_clean_chop_replace() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_subr_x_string_clean_whitespace_exact_blank_regexp() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'subr-x)
+  (let ((vertical-tab (string 11))
+        (form-feed (string 12)))
+    (list
+      ;; GNU lisp/emacs-lisp/subr-x.el uses exactly
+      ;; "[[:blank:]\r\n]+": space, tab, CR, and LF are collapsed/trimmed.
+      (string-clean-whitespace " \t alpha \r\n beta \t ")
+      ;; Vertical tab and form feed are not matched by that regexp.
+      (string-clean-whitespace (concat " " vertical-tab "alpha" form-feed " "))
+      (string-clean-whitespace (concat "alpha" vertical-tab " \t " form-feed "beta"))
+      (string-clean-whitespace (concat vertical-tab " \t " form-feed))
+      (condition-case err
+          (string-clean-whitespace nil)
+        (error (list (car err) (cadr err))))
+      (condition-case err
+          (string-clean-whitespace 'symbol)
+        (error (list (car err) (cadr err)))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // string-fill, string-limit, string-pad
 // ---------------------------------------------------------------------------
