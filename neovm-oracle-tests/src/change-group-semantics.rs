@@ -1,10 +1,11 @@
 //! Oracle parity tests for GNU change-group and silent-modification semantics.
 //!
 //! These target `atomic-change-group`, `prepare-change-group`, and
-//! `with-silent-modifications`.  They also pin `combine-after-change-calls`,
-//! whose public macro lives in `lisp/subr.el` but whose coalescing behavior is
-//! implemented by GNU `src/insdel.c` on top of buffer change state.  These
-//! tests compare the observable Elisp contract rather than approximating it.
+//! `with-silent-modifications`.  They also pin `combine-change-calls` and
+//! `combine-after-change-calls`, whose public macros live in `lisp/subr.el`.
+//! The latter's coalescing behavior is implemented by GNU `src/insdel.c` on
+//! top of buffer change state.  These tests compare the observable Elisp
+//! contract rather than approximating it.
 
 use super::common::assert_oracle_parity_with_bootstrap;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
@@ -225,6 +226,83 @@ fn oracle_prop_nested_combine_after_change_calls_defers_until_outer_exit() {
      (buffer-string)
      (nreverse inside-log)
      (nreverse after-log))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_combine_change_calls_runs_hooks_once_and_suppresses_body_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((before-log nil)
+        (after-log nil)
+        (inside-log nil))
+    (add-hook 'before-change-functions
+              (lambda (beg end)
+                (push (list beg end (buffer-string)) before-log))
+              nil t)
+    (add-hook 'after-change-functions
+              (lambda (beg end len)
+                (push (list beg end len (buffer-string)) after-log))
+              nil t)
+    (let ((result
+           (combine-change-calls 2 5
+             (setq inside-log
+                   (list :entry before-log after-log
+                         (local-variable-p 'before-change-functions)
+                         (local-variable-p 'after-change-functions)
+                         before-change-functions
+                         after-change-functions))
+             (goto-char 3)
+             (delete-char 2)
+             (insert "XY")
+             (setq inside-log
+                   (cons (list :exit before-log after-log (buffer-string))
+                         inside-log))
+             :body-value)))
+      (list result
+            (buffer-string)
+            (nreverse inside-log)
+            (nreverse before-log)
+            (nreverse after-log)
+            (local-variable-p 'before-change-functions)
+            (local-variable-p 'after-change-functions)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_combine_change_calls_records_single_undo_apply_entry() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (buffer-enable-undo)
+  (insert "abcdef")
+  (setq buffer-undo-list nil)
+  (combine-change-calls 2 5
+    (goto-char 3)
+    (delete-char 2)
+    (insert "XY")
+    (goto-char (point-max))
+    (insert "!"))
+  (list (buffer-string)
+        (mapcar (lambda (entry)
+                  (cond
+                   ((and (consp entry) (eq (car entry) 'apply))
+                    (list 'apply (nth 1 entry) (nth 2 entry) (nth 3 entry)
+                          (eq (nth 4 entry) 'undo--wrap-and-run-primitive-undo)
+                          (nth 5 entry) (nth 6 entry)
+                          (consp (nth 7 entry))))
+                   ((integerp entry) :boundary)
+                   ((eq entry nil) :nil)
+                   (t (if (consp entry) (car entry) entry))))
+                buffer-undo-list)))
 "#;
 
     assert_oracle_parity_with_bootstrap(form);
