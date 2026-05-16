@@ -54,6 +54,39 @@ fn oracle_prop_string_to_number_multi_base() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_to_number_base_validation_and_integer_radix() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c:Fstring_to_number checks STRING before BASE, rejects BASE
+    // outside 2..16 with args-out-of-range, and parses non-decimal bases only
+    // as integers even when the input contains decimal/exponent syntax.
+    let form = r#"
+(list
+ (string-to-number "10.75" 10)
+ (string-to-number "10.75" 16)
+ (string-to-number "1e2" 10)
+ (string-to-number "1e2" 16)
+ (string-to-number "1e2" 15)
+ (condition-case err
+     (string-to-number 42 'bad-base)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-to-number "42" 'bad-base)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-to-number "42" 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-to-number "42" 17)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-to-number "42" -2)
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Leading whitespace and trailing garbage behavior
 // ---------------------------------------------------------------------------
