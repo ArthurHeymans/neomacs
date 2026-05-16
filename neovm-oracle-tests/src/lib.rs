@@ -1531,5 +1531,7 @@ mod with_temp_buffer_comprehensive;
 mod wrapper_hook_semantics;
 #[path = "xml-semantics.rs"]
 mod xml_semantics;
+#[path = "yank-properties-semantics.rs"]
+mod yank_properties_semantics;
 #[path = "zlib-decompress-region-semantics.rs"]
 mod zlib_decompress_region_semantics;

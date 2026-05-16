@@ -425,6 +425,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "primitive-function-p",
     "prog2",
     "readablep",
+    "remove-yank-excluded-properties",
     "rx",
     "rx-define",
     "rx-let",
