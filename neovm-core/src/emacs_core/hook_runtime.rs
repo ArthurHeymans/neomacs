@@ -70,24 +70,21 @@ fn collect_hook_functions_impl(
         ValueKind::Nil => {}
         ValueKind::Cons => {
             let mut cursor = hook_value;
-            let mut saw_global_marker = false;
             while cursor.is_cons() {
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
                 if pair_car.as_symbol_name() == Some("t") {
-                    saw_global_marker = true;
+                    if inherit_global {
+                        let global_value = obarray
+                            .default_value_id(hook_sym)
+                            .copied()
+                            .unwrap_or(Value::NIL);
+                        collect_hook_functions_impl(obarray, hook_sym, global_value, false, out);
+                    }
                 } else {
                     out.push(pair_car);
                 }
                 cursor = pair_cdr;
-            }
-
-            if saw_global_marker && inherit_global {
-                let global_value = obarray
-                    .default_value_id(hook_sym)
-                    .copied()
-                    .unwrap_or(Value::NIL);
-                collect_hook_functions_impl(obarray, hook_sym, global_value, false, out);
             }
         }
         value => out.push(hook_value),
