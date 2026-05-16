@@ -389,6 +389,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "if-let*",
     "integer-or-null-p",
     "internal--thread-argument",
+    "json-available-p",
     "list-of-strings-p",
     "listify-key-sequence",
     "log10",
