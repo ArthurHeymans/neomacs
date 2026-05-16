@@ -78,3 +78,46 @@ fn oracle_string_make_multibyte_unibyte_identity_copy_and_low_byte_edges() {
 "#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_byte_to_string_unibyte_boundaries_and_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/editfns.c:byte-to-string accepts only fixnums in 0..255,
+    // signals a plain "Invalid byte" error outside that range, and always
+    // returns a one-byte unibyte string.
+    let form = r#"
+(list
+ (let ((s (byte-to-string 0)))
+   (list s
+         (length s)
+         (string-bytes s)
+         (multibyte-string-p s)
+         (aref s 0)))
+ (let ((s (byte-to-string 65)))
+   (list s
+         (length s)
+         (string-bytes s)
+         (multibyte-string-p s)
+         (aref s 0)))
+ (let ((s (byte-to-string 255)))
+   (list (length s)
+         (string-bytes s)
+         (multibyte-string-p s)
+         (aref s 0)
+         (string-make-multibyte s)))
+ (condition-case err
+     (byte-to-string -1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (byte-to-string 256)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (byte-to-string 1.0)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (byte-to-string nil)
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
