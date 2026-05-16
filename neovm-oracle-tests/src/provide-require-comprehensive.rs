@@ -176,6 +176,35 @@ fn oracle_prop_provide_reprovide_subfeature_replacement() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_featurep_subfeatures_use_equal_member() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Ffeaturep checks subfeatures with `member', not `memq'.
+    // The subfeature argument can therefore match non-symbol objects by
+    // structural `equal' even though `provide' documents symbol subfeatures.
+    let form = r#"(let ((features (delq 'neovm--test-feat-equal-sub features)))
+  (unwind-protect
+      (progn
+        (put 'neovm--test-feat-equal-sub 'subfeatures nil)
+        (provide 'neovm--test-feat-equal-sub
+                 (list (copy-sequence "sub")
+                       (list 1 2)
+                       [neovm--test-a neovm--test-b]))
+        (list
+         (featurep 'neovm--test-feat-equal-sub
+                   (copy-sequence "sub"))
+         (featurep 'neovm--test-feat-equal-sub
+                   (list 1 2))
+         (featurep 'neovm--test-feat-equal-sub
+                   [neovm--test-a neovm--test-b])
+         (featurep 'neovm--test-feat-equal-sub
+                   (copy-sequence "missing"))))
+    (setq features (delq 'neovm--test-feat-equal-sub features))
+    (put 'neovm--test-feat-equal-sub 'subfeatures nil)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // eval-after-load with already-loaded feature
 // ---------------------------------------------------------------------------
