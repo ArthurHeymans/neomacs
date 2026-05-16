@@ -561,6 +561,8 @@ mod condition_case_advanced2;
 mod condition_case_comprehensive;
 #[path = "condition-case-error-data-strict-semantics.rs"]
 mod condition_case_error_data_strict_semantics;
+#[path = "condition-case-error-data-via-binary-semantics.rs"]
+mod condition_case_error_data_via_binary_semantics;
 #[path = "condition-case-extended.rs"]
 mod condition_case_extended;
 #[path = "condition-case-nested-edge-semantics.rs"]
@@ -825,6 +827,8 @@ mod hash_table_operations_comprehensive;
 mod hash_table_operations_extended;
 #[path = "hash-table-patterns.rs"]
 mod hash_table_patterns;
+#[path = "hash-table-strict-edge-semantics.rs"]
+mod hash_table_strict_edge_semantics;
 #[path = "help-doc-semantics.rs"]
 mod help_doc_semantics;
 #[path = "history-semantics.rs"]
