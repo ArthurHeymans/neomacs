@@ -14,6 +14,7 @@ use super::keymap::{
     list_keymap_set_parent, lookup_key_in_keymaps_in_obarray, make_list_keymap,
     make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
+use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
 fn map_keymap_binding_value(binding: Value) -> Value {
     if binding == Value::T {
@@ -137,6 +138,16 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
             Ok(key_events.iter().map(key_event_to_emacs_event).collect())
         }
     }
+}
+
+fn cache_key_event_symbol_properties(
+    eval: &mut super::eval::Context,
+    events: &[Value],
+) -> EvalResult {
+    for event in events {
+        cache_event_symbol_value_properties_in_obarray(eval.obarray_mut(), *event)?;
+    }
+    Ok(Value::NIL)
 }
 
 fn lucid_event_type_list_p(value: &Value) -> bool {
@@ -304,6 +315,7 @@ pub(super) fn builtin_define_key(eval: &mut super::eval::Context, args: Vec<Valu
     expect_max_args("define-key", &args, 4)?;
     let keymap = expect_keymap(eval, &args[0])?;
     let mut events = expect_key_events(&args[1])?;
+    cache_key_event_symbol_properties(eval, &events)?;
     let def = args[2];
     let remove = args.get(3).is_some_and(|v| v.is_truthy());
     // Expand meta-prefixed events to ESC + base, matching GNU Emacs
@@ -325,6 +337,7 @@ pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Valu
     expect_max_args("lookup-key", &args, 3)?;
     let t_ok = args.get(2).is_some_and(|v| v.is_truthy());
     let events = expect_key_events(&args[1])?;
+    cache_key_event_symbol_properties(eval, &events)?;
     let keymaps = resolve_lookup_keymaps_in_runtime(eval, &args[0])?;
 
     if events.is_empty() {
@@ -500,6 +513,7 @@ pub(super) fn builtin_global_set_key(
     expect_args("global-set-key", &args, 2)?;
     let global = ensure_global_keymap(eval);
     let events = expect_key_events(&args[0])?;
+    cache_key_event_symbol_properties(eval, &events)?;
     let def = args[1];
     if let Err(msg) = list_keymap_define_seq_in_obarray(eval.obarray(), global, &events, def) {
         return Err(signal("error", vec![Value::string(msg)]));
@@ -521,6 +535,7 @@ pub(super) fn builtin_local_set_key(
         eval.buffers.current_local_map()
     };
     let events = expect_key_events(&args[0])?;
+    cache_key_event_symbol_properties(eval, &events)?;
     let def = args[1];
     if let Err(msg) = list_keymap_define_seq_in_obarray(eval.obarray(), local, &events, def) {
         return Err(signal("error", vec![Value::string(msg)]));

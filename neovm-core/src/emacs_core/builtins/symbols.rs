@@ -4322,10 +4322,36 @@ pub(crate) fn builtin_internal_event_symbol_parse_modifiers(
 ) -> EvalResult {
     expect_args("internal-event-symbol-parse-modifiers", &args, 1)?;
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
-    let name = args[0].as_symbol_name().ok_or_else(|| {
+    cache_event_symbol_properties_in_obarray(eval.obarray_mut(), symbol)?;
+    Ok(eval
+        .obarray()
+        .get_property_id(symbol, intern("event-symbol-elements"))
+        .unwrap_or(Value::NIL))
+}
+
+pub(crate) fn cache_event_symbol_value_properties_in_obarray(
+    obarray: &mut Obarray,
+    value: Value,
+) -> EvalResult {
+    if let Some(symbol) = symbol_id(&value) {
+        cache_event_symbol_properties_in_obarray(obarray, symbol)?;
+    } else if value.is_cons()
+        && let Some(symbol) = symbol_id(&value.cons_car())
+    {
+        cache_event_symbol_properties_in_obarray(obarray, symbol)?;
+    }
+    Ok(Value::NIL)
+}
+
+pub(crate) fn cache_event_symbol_properties_in_obarray(
+    obarray: &mut Obarray,
+    symbol: SymId,
+) -> EvalResult {
+    let symbol_value = Value::from_sym_id(symbol);
+    let name = symbol_value.as_symbol_name().ok_or_else(|| {
         signal(
             "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
+            vec![Value::symbol("symbolp"), symbol_value],
         )
     })?;
 
@@ -4337,12 +4363,144 @@ pub(crate) fn builtin_internal_event_symbol_parse_modifiers(
     // GNU `parse_modifiers' caches both properties before returning
     // `event-symbol-elements' (`src/keyboard.c:7523-7578`).  Lisp
     // `event-basic-type' reads the latter directly.
-    eval.obarray_mut()
-        .put_property_id(symbol, intern("event-symbol-element-mask"), mask)?;
-    eval.obarray_mut()
-        .put_property_id(symbol, intern("event-symbol-elements"), elements)?;
+    obarray.put_property_id(symbol, intern("event-symbol-element-mask"), mask)?;
+    obarray.put_property_id(symbol, intern("event-symbol-elements"), elements)?;
 
-    Ok(elements)
+    Ok(Value::NIL)
+}
+
+pub(crate) fn init_event_symbol_properties(obarray: &mut Obarray) {
+    // GNU `syms_of_keyboard' initializes fixed event heads with
+    // `(EVENT)' elements.  During loadup, `modify_event_symbol' also
+    // fills properties for the preloaded keymap mouse/wheel/function-key
+    // symbols.  These properties are what Lisp `event-basic-type' reads.
+    for (symbol, kind) in [
+        ("mouse-movement", "mouse-movement"),
+        ("scroll-bar-movement", "mouse-movement"),
+        ("switch-frame", "switch-frame"),
+        ("focus-in", "focus-in"),
+        ("focus-out", "focus-out"),
+        ("move-frame", "move-frame"),
+        ("delete-frame", "delete-frame"),
+        ("iconify-frame", "iconify-frame"),
+        ("make-frame-visible", "make-frame-visible"),
+        ("select-window", "switch-frame"),
+        ("touchscreen-begin", "touchscreen"),
+        ("touchscreen-end", "touchscreen"),
+    ] {
+        let sym = intern(symbol);
+        let value = Value::from_sym_id(sym);
+        let _ = obarray.put_property_id(sym, intern("event-kind"), Value::symbol(kind));
+        let _ = obarray.put_property_id(
+            sym,
+            intern("event-symbol-elements"),
+            Value::list(vec![value]),
+        );
+    }
+
+    for name in [
+        "backspace",
+        "tab",
+        "linefeed",
+        "clear",
+        "return",
+        "pause",
+        "escape",
+        "home",
+        "left",
+        "up",
+        "right",
+        "down",
+        "prior",
+        "next",
+        "end",
+        "begin",
+        "select",
+        "print",
+        "execute",
+        "insert",
+        "undo",
+        "redo",
+        "menu",
+        "find",
+        "cancel",
+        "help",
+        "break",
+        "backtab",
+        "delete",
+        "kp-space",
+        "kp-tab",
+        "kp-enter",
+        "kp-f1",
+        "kp-f2",
+        "kp-f3",
+        "kp-f4",
+        "kp-home",
+        "kp-left",
+        "kp-up",
+        "kp-right",
+        "kp-down",
+        "kp-prior",
+        "kp-next",
+        "kp-end",
+        "kp-begin",
+        "kp-insert",
+        "kp-delete",
+        "kp-multiply",
+        "kp-add",
+        "kp-separator",
+        "kp-subtract",
+        "kp-decimal",
+        "kp-divide",
+        "kp-0",
+        "kp-1",
+        "kp-2",
+        "kp-3",
+        "kp-4",
+        "kp-5",
+        "kp-6",
+        "kp-7",
+        "kp-8",
+        "kp-9",
+        "kp-equal",
+    ] {
+        init_standard_event_symbol(obarray, name, Some("function-key"));
+    }
+
+    for n in 1..=35 {
+        init_standard_event_symbol(obarray, &format!("f{n}"), Some("function-key"));
+    }
+
+    for n in 1..=5 {
+        init_standard_event_symbol(obarray, &format!("mouse-{n}"), None);
+        init_standard_event_symbol(obarray, &format!("down-mouse-{n}"), None);
+        init_standard_event_symbol(obarray, &format!("drag-mouse-{n}"), None);
+    }
+
+    for name in [
+        "M-drag-mouse-1",
+        "C-M-drag-mouse-1",
+        "S-drag-mouse-1",
+        "C-M-mouse-1",
+        "C-M-down-mouse-1",
+        "S-mouse-1",
+        "wheel-up",
+        "wheel-down",
+        "wheel-left",
+        "wheel-right",
+        "S-wheel-up",
+        "M-wheel-up",
+    ] {
+        init_standard_event_symbol(obarray, name, None);
+    }
+}
+
+fn init_standard_event_symbol(obarray: &mut Obarray, name: &str, kind: Option<&str>) {
+    let sym = intern(name);
+    let _ = cache_event_symbol_properties_in_obarray(obarray, sym);
+    if let Some(kind) = kind {
+        let _ = obarray.put_property_id(sym, intern("event-kind"), Value::symbol(kind));
+    }
 }
 
 /// Parse event symbol modifiers matching GNU keyboard.c logic.
