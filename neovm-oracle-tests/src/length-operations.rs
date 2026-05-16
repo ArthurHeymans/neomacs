@@ -41,6 +41,31 @@ fn oracle_prop_length_vector() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_length_and_sequencep_vectorlike_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Flength accepts char-tables, bool-vectors, closures, and
+    // records.  GNU data.c:Fsequencep is narrower: lists or arrays only, so
+    // records and closures are not sequences even though `length` accepts them.
+    let form = r#"
+(let ((table (make-char-table 'generic 65))
+      (rec (record 'tag 1 2))
+      (fun (lambda (x) x))
+      (bv (make-bool-vector 3 t)))
+  (list
+   (sequencep table)
+   (length table)
+   (sequencep rec)
+   (length rec)
+   (sequencep fun)
+   (length fun)
+   (sequencep bv)
+   (length bv)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // safe-length (handles circular/dotted lists)
 // ---------------------------------------------------------------------------
