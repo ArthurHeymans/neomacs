@@ -99,6 +99,28 @@ fn oracle_copy_marker_nil_number_marker_and_insertion_type() {
 }
 
 #[test]
+fn oracle_copy_marker_number_clips_to_buffer_bounds_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs marker.c:Fcopy_marker creates a marker and delegates numeric
+    // positions to Fset_marker, so out-of-range fixnums are clipped to the
+    // current buffer's full bounds.
+    let form = r#"
+(with-temp-buffer
+  (insert "abc")
+  (let ((low (copy-marker -10))
+        (high (copy-marker 999)))
+    (list
+     (marker-position low)
+     (marker-position high)
+     (point-min)
+     (point-max))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_set_marker_insertion_type_returns_requested_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
