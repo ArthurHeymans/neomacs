@@ -1690,11 +1690,38 @@ impl<'a> Reader<'a> {
 
     fn read_hash_skip_bytes(&mut self) -> Result<Value, ReadError> {
         self.expect('@')?;
-        if !matches!(self.current_code(), Some(c) if is_ascii_digit_code(c)) {
-            return Err(self.error("end of input"));
+        let mut len = 0usize;
+        let mut digits = 0usize;
+        loop {
+            match self.current_code() {
+                Some(c) if is_ascii_digit_code(c) => {
+                    self.bump();
+                    len = len
+                        .checked_mul(10)
+                        .and_then(|n| n.checked_add((c as u8 - b'0') as usize))
+                        .ok_or_else(|| self.error("#@"))?;
+                    digits += 1;
+                    if digits == 2 && len == 0 {
+                        self.skip_to_limit();
+                        return Ok(Value::NIL);
+                    }
+                }
+                Some(_) if len > 0 => {
+                    self.bump();
+                    len -= 1;
+                    break;
+                }
+                Some(_) => return Err(self.end_of_file_error()),
+                None => return Err(self.end_of_file_error()),
+            }
         }
-        let len = self.parse_decimal_usize()?;
-        self.skip_exact_source_bytes(len)?;
+
+        match self.source {
+            ReaderSource::Runtime(_) => self.skip_exact_source_bytes(len)?,
+            ReaderSource::LispString(_) | ReaderSource::Buffer(_) => {
+                self.skip_dynamic_doc_string_in_non_file_source();
+            }
+        }
         self.read_form()
     }
 
@@ -2122,17 +2149,17 @@ impl<'a> Reader<'a> {
             .is_none_or(|value| !value.is_nil())
     }
 
-    fn parse_decimal_usize(&mut self) -> Result<usize, ReadError> {
-        let start = self.pos;
-        while matches!(self.current_code(), Some(c) if is_ascii_digit_code(c)) {
+    fn skip_to_limit(&mut self) {
+        self.pos = self.limit;
+    }
+
+    fn skip_dynamic_doc_string_in_non_file_source(&mut self) {
+        while let Some(c) = self.current_code() {
             self.bump();
+            if c == 0x1F {
+                break;
+            }
         }
-        if self.pos == start {
-            return Err(self.error("expected decimal length"));
-        }
-        self.source_slice_string(start, self.pos)
-            .parse::<usize>()
-            .map_err(|_| self.error("invalid decimal length"))
     }
 
     /// Advance `pos` past `len` source bytes from a `.elc` file.

@@ -681,14 +681,6 @@ fn read_from_string_impl_inner(
         end_char
     };
 
-    let substring = read_source.storage_slice_range(start_byte, end_byte);
-    if starts_with_hash_skip_dispatch(&substring) {
-        return Err(signal(
-            "end-of-file",
-            vec![Value::string("End of file during parsing")],
-        ));
-    }
-
     let read_result =
         read_source.read_one_range_with_locate_syms(start_byte, end_byte, locate_syms, obarray);
 
@@ -703,54 +695,6 @@ fn read_from_string_impl_inner(
     };
 
     Ok(Value::cons(value, Value::fixnum(absolute_end_char as i64)))
-}
-
-fn starts_with_hash_skip_dispatch(input: &str) -> bool {
-    let bytes = input.as_bytes();
-    let pos = skip_ws_comments(input, 0);
-    pos + 1 < bytes.len() && bytes[pos] == b'#' && bytes[pos + 1] == b'@'
-}
-
-fn skip_ws_comments(input: &str, mut pos: usize) -> usize {
-    let bytes = input.as_bytes();
-    loop {
-        if pos >= bytes.len() {
-            return pos;
-        }
-        let ch = bytes[pos];
-        if ch.is_ascii_whitespace() {
-            pos += 1;
-            continue;
-        }
-        if ch == b';' {
-            // line comment
-            while pos < bytes.len() && bytes[pos] != b'\n' {
-                pos += 1;
-            }
-            if pos < bytes.len() {
-                pos += 1; // skip newline
-            }
-            continue;
-        }
-        if ch == b'#' && pos + 1 < bytes.len() && bytes[pos + 1] == b'|' {
-            // block comment
-            pos += 2;
-            let mut depth = 1;
-            while depth > 0 && pos < bytes.len() {
-                if bytes[pos] == b'#' && pos + 1 < bytes.len() && bytes[pos + 1] == b'|' {
-                    depth += 1;
-                    pos += 2;
-                } else if bytes[pos] == b'|' && pos + 1 < bytes.len() && bytes[pos + 1] == b'#' {
-                    depth -= 1;
-                    pos += 2;
-                } else {
-                    pos += 1;
-                }
-            }
-            continue;
-        }
-        return pos;
-    }
 }
 
 // ---------------------------------------------------------------------------

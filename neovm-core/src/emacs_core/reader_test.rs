@@ -3597,10 +3597,14 @@ fn read_from_string_hash_skip_without_length_signals_eof() {
     let mut ev = Context::new();
 
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
 
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@x")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
 }
 
 #[test]
@@ -3609,10 +3613,29 @@ fn read_from_string_hash_skip_with_payload_signals_eof() {
     let mut ev = Context::new();
 
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@0x")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
 
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@4data42")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
+}
+
+#[test]
+fn read_from_string_hash_skip_zero_zero_reads_nil_and_skips_to_end() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#@00abc")]).unwrap();
+    match result.kind() {
+        ValueKind::Cons => {
+            assert!(result.cons_car().is_nil());
+            assert_eq!(result.cons_cdr().as_fixnum(), Some(7));
+        }
+        _ => panic!("Expected cons"),
+    }
 }
 
 #[test]
@@ -3652,7 +3675,9 @@ fn read_from_string_hash_skip_then_hash_dollar_signals_eof() {
     let mut ev = Context::new();
     ev.set_variable("load-file-name", Value::string("/tmp/reader-skip.elc"));
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@4data#$")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
 }
 
 #[test]
@@ -3692,7 +3717,9 @@ fn read_from_string_hash_skip_bytes_signals_eof() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let result = builtin_read_from_string(&mut ev, vec![Value::string("#@4data42 rest")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(
+        matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" && sig.data.is_empty())
+    );
 }
 
 #[test]
