@@ -67,6 +67,18 @@ fn oracle_prop_narrow_marker_outside_region() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_narrow_to_region_bignum_start_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs editfns.c:Fnarrow_to_region validates START and END through
+    // buffer.c:fix_position, so bignums saturate before the range check.
+    let form = r#"(with-temp-buffer
+  (insert "abc")
+  (narrow-to-region 1000000000000000000000000000000 2))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Point clamping: goto-char outside narrowed region clamps to boundaries
 // ---------------------------------------------------------------------------
