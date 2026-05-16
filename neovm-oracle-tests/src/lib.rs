@@ -928,6 +928,8 @@ mod narrow_point_semantics;
 mod narrow_widen_comprehensive;
 #[path = "narrow-widen-patterns.rs"]
 mod narrow_widen_patterns;
+#[path = "native-comp-available-semantics.rs"]
+mod native_comp_available_semantics;
 #[path = "nbutlast-butlast-advanced.rs"]
 mod nbutlast_butlast_advanced;
 #[path = "nbutlast-butlast-semantics.rs"]
