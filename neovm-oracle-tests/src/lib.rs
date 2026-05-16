@@ -72,6 +72,8 @@ mod bool_vector_edge_semantics;
 mod bool_vector_operations;
 #[path = "bootstrap-library-require.rs"]
 mod bootstrap_library_require;
+#[path = "buffer-hash-semantics.rs"]
+mod buffer_hash_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
 mod buffer_local_symbol_identity_semantics;
 #[path = "buffer-local-variable-patterns.rs"]
