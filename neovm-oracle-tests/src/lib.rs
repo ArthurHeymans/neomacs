@@ -804,6 +804,8 @@ mod key_description;
 mod keymap;
 #[path = "keymap-advanced.rs"]
 mod keymap_advanced;
+#[path = "keymap-canonicalize-semantics.rs"]
+mod keymap_canonicalize_semantics;
 #[path = "keymap-comprehensive-patterns.rs"]
 mod keymap_comprehensive_patterns;
 #[path = "keymap-operations-extended.rs"]
