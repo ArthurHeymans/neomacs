@@ -1272,6 +1272,8 @@ mod symbol_advanced;
 mod symbol_comprehensive_patterns;
 #[path = "symbol-file-semantics.rs"]
 mod symbol_file_semantics;
+#[path = "symbol-plist-identity-semantics.rs"]
+mod symbol_plist_identity_semantics;
 #[path = "symbol-plist-patterns.rs"]
 mod symbol_plist_patterns;
 #[path = "symbol-properties-advanced.rs"]
