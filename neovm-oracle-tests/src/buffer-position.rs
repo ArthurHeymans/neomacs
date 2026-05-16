@@ -34,6 +34,22 @@ fn oracle_prop_count_lines_no_trailing_newline() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_count_lines_accepts_marker_bounds_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs lisp/simple.el:count-lines delegates to narrow-to-region;
+    // its START and END arguments are documented and declared as integer or
+    // marker values.
+    let form = r#"(with-temp-buffer
+  (insert "line1\nline2\nline3\nline4")
+  (let ((start (copy-marker 1))
+        (end (copy-marker (point-max))))
+    (list (count-lines start end)
+          (count-lines end start))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // line-number-at-pos
 // ---------------------------------------------------------------------------
