@@ -198,6 +198,26 @@ fn oracle_prop_char_syntax_adv_string_to_syntax() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_to_syntax_invalid_descriptor_errors_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/syntax.c:Fstring_to_syntax reads the first descriptor
+    // byte and formats invalid class errors as
+    // "Invalid syntax description letter: %c", including the NUL byte for an
+    // empty descriptor string.
+    let form = r#"
+(list
+ (condition-case err
+     (string-to-syntax "")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-to-syntax "?")
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Complex: build a syntax-aware tokenizer using char-syntax
 // ---------------------------------------------------------------------------
