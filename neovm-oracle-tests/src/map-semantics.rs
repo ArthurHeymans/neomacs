@@ -33,6 +33,29 @@ fn oracle_mapcar_mapc_sequence_types_and_char_table_error() {
 }
 
 #[test]
+fn oracle_map_functions_accept_byte_code_sequence_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:mapcar1 accepts CLOSUREP sequences, which includes
+    // byte-code functions.  The byte-code object is traversed as its vector of
+    // slots, while char-tables still take the explicit `listp' error path.
+    let form = r#"
+(let ((bc #[257 "\300\207" [42] 1]))
+  (list
+   (type-of bc)
+   (length bc)
+   (mapcar #'type-of bc)
+   (let ((seen nil))
+     (list (eq (mapc (lambda (x) (push (type-of x) seen)) bc) bc)
+           (nreverse seen)))
+   (mapcan (lambda (x) (list (type-of x))) bc)
+   (mapconcat (lambda (x) (symbol-name (type-of x))) bc ",")))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_mapcar_stops_when_list_shortened_by_callback() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
