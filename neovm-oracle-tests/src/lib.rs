@@ -37,6 +37,8 @@ mod apply_funcall_comprehensive;
 mod apply_funcall_patterns;
 #[path = "apply-lambda-comprehensive.rs"]
 mod apply_lambda_comprehensive;
+#[path = "apply-partially-semantics.rs"]
+mod apply_partially_semantics;
 #[path = "aref-aset.rs"]
 mod aref_aset;
 mod arithmetic;

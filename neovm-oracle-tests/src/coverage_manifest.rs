@@ -329,6 +329,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "advice-add",
     "advice-member-p",
     "advice-remove",
+    "apply-partially",
     "defmacro",
     "dolist",
     "dotimes",
