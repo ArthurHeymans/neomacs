@@ -312,6 +312,53 @@ fn oracle_prop_subr_x_string_fill_limit_pad() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_subr_x_string_limit_pad_identity_errors_and_coding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'subr-x)
+  (let ((ascii (copy-sequence "hello"))
+        (wide (copy-sequence "éé"))
+        (pad-source (copy-sequence "pad")))
+    (list
+      ;; GNU string-limit returns STRING itself when no truncation is needed.
+      (eq (string-limit ascii 5) ascii)
+      (eq (string-limit ascii 6) ascii)
+      (string-limit ascii 0)
+      (string-limit ascii 0 t)
+      (string-limit ascii 2)
+      (string-limit ascii 2 t)
+      ;; With CODING-SYSTEM, LENGTH is a byte limit and partial encoded
+      ;; characters must not be returned.
+      (string-limit wide 1 nil 'utf-8)
+      (string-limit wide 2 nil 'utf-8)
+      (string-limit wide 3 nil 'utf-8)
+      (string-limit wide 4 nil 'utf-8)
+      (string-limit wide 2 t 'utf-8)
+      (string-bytes (string-limit wide 3 nil 'utf-8))
+      (multibyte-string-p (string-limit wide 3 nil 'utf-8))
+      ;; GNU string-pad also returns STRING itself when no padding is needed.
+      (eq (string-pad pad-source 3) pad-source)
+      (eq (string-pad pad-source 2) pad-source)
+      (string-pad pad-source 5)
+      (string-pad pad-source 5 ?.)
+      (string-pad pad-source 5 ?. t)
+      (condition-case err
+          (string-limit ascii -1)
+        (error (list (car err) (cadr err))))
+      (condition-case err
+          (string-limit ascii 1.5)
+        (error (list (car err) (cadr err))))
+      (condition-case err
+          (string-pad pad-source -1)
+        (error (list (car err) (cadr err))))
+      (condition-case err
+          (string-pad pad-source 5 "x")
+        (error (list (car err) (cadr err)))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // when-let and if-let macros
 // ---------------------------------------------------------------------------
