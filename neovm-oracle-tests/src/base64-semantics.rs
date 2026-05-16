@@ -24,3 +24,21 @@ fn oracle_base64_decode_string_url_and_ignore_invalid_args() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_base64_encode_string_rejects_multibyte_non_ascii_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (base64-encode-string "é" t)
+   (error (list (car err) (cdr err))))
+ (base64-encode-string (string-make-unibyte "é") t)
+ (condition-case err
+     (base64url-encode-string "é" t)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
