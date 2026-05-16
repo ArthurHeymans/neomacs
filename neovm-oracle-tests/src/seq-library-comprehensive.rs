@@ -421,6 +421,39 @@ fn oracle_prop_seq_lib_random_elt_seeded_and_empty_errors() {
 }
 
 // ---------------------------------------------------------------------------
+// seq-split and seq-keep
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_seq_lib_split_keep_type_and_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-split chunks with seq-subseq, so each chunk has the same type as
+    // the input sequence.  seq-keep is delq nil over seq-map, so only nil is
+    // removed; values such as 0 are retained.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    (seq-split '(a b c d e) 2)
+    (seq-split [1 2 3 4 5] 2)
+    (seq-split "abcde" 2)
+    (seq-split nil 3)
+    (condition-case err
+        (seq-split '(a b) 0)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-split '(a b) -1)
+      (error (list (car err) (cadr err))))
+    (seq-keep (lambda (x)
+                (and (numberp x) (* x 10)))
+              '(a 1 nil 2 b 0))
+    (seq-keep (lambda (c)
+                (and (<= ?a c ?z) (char-to-string c)))
+              "aBz")))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // seq-take, seq-drop, seq-take-while, seq-drop-while
 // ---------------------------------------------------------------------------
 
