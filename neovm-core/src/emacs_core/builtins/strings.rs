@@ -183,8 +183,10 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
 
             Ok(new_val)
         }
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record)
-            if name == "substring" =>
+        ValueKind::Veclike(VecLikeType::Vector)
+            if name == "substring"
+                && !super::chartable::is_char_table(&args[0])
+                && !super::chartable::is_bool_vector(&args[0]) =>
         {
             let items = args[0].as_vector_data().unwrap().clone();
             let len = items.len() as i64;

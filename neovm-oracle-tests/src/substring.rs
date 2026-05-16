@@ -80,3 +80,34 @@ fn oracle_prop_substring_on_empty_string() {
     let (o, n) = eval_oracle_and_neovm(r#"(substring "" 0)"#);
     assert_ok_eq(r#""""#, &o, &n);
 }
+
+#[test]
+fn oracle_substring_rejects_non_vector_arraylikes_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fsubstring uses CHECK_VECTOR_OR_STRING: strings and
+    // ordinary vectors are accepted, but records, byte-code objects,
+    // bool-vectors, and char-tables are rejected with `arrayp`.
+    // Fsubstring_no_properties starts with CHECK_STRING.
+    let form = r#"
+(list
+ (substring [1 2 3] 0 2)
+ (condition-case err
+     (substring (record 'neovm--substring-record 1 2) 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring #[257 "\300\207" [42] 1] 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring (make-bool-vector 3 t) 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring (make-char-table 'generic 65) 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring-no-properties [1 2 3] 0 1)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
