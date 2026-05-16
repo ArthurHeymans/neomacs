@@ -70,6 +70,8 @@ mod bool_vector_comprehensive;
 mod bool_vector_edge_semantics;
 #[path = "bool-vector-operations.rs"]
 mod bool_vector_operations;
+#[path = "boolean-helper-semantics.rs"]
+mod boolean_helper_semantics;
 #[path = "bootstrap-library-require.rs"]
 mod bootstrap_library_require;
 #[path = "buffer-hash-semantics.rs"]

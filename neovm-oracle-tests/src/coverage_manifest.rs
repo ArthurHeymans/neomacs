@@ -333,6 +333,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "dolist",
     "dotimes",
     "gensym",
+    "always",
+    "ignore",
     "internal--thread-argument",
     "map-delete",
     "map-elt",
@@ -398,4 +400,5 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "when",
     "with-current-buffer",
     "with-temp-buffer",
+    "xor",
 ];
