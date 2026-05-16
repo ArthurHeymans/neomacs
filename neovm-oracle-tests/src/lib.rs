@@ -1108,6 +1108,8 @@ mod obarray_buckets_semantics;
 mod obarray_comprehensive_patterns;
 #[path = "obarray-patterns.rs"]
 mod obarray_patterns;
+#[path = "obarray-strict-edge-semantics.rs"]
+mod obarray_strict_edge_semantics;
 #[path = "obarray-symbol-interning.rs"]
 mod obarray_symbol_interning;
 #[path = "object-intervals-semantics.rs"]
