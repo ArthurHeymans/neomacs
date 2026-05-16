@@ -1,0 +1,55 @@
+//! Oracle parity tests for `buffer-last-name`.
+//!
+//! GNU implements `buffer-last-name` in `src/buffer.c` — returns the name
+//! a buffer had before the last rename (or the current name if never renamed).
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_buffer_last_name_fresh_buffer_returns_its_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (get-buffer-create "*neovm-test-bln-fresh*")
+  (buffer-last-name (get-buffer "*neovm-test-bln-fresh*")))"#,
+    );
+    assert_ok_eq("\"*neovm-test-bln-fresh*\"", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_buffer_last_name_after_rename_returns_old_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (get-buffer-create "*neovm-test-bln-orig*")
+  (let ((b (get-buffer "*neovm-test-bln-orig*")))
+    (rename-buffer "*neovm-test-bln-new*")
+    (buffer-last-name b)))"#,
+    );
+    assert_ok_eq("\"*neovm-test-bln-orig*\"", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_buffer_last_name_nil_arg_means_current() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (get-buffer-create "*neovm-test-bln-cur*")
+  (set-buffer (get-buffer "*neovm-test-bln-cur*"))
+  (eq (buffer-last-name) (buffer-last-name nil)))"#,
+    );
+    assert_ok_eq("t", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_buffer_last_name_wrong_type_arg() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let (oracle, neovm) = eval_oracle_and_neovm("(buffer-last-name 42)");
+    assert_err_kind(&oracle, &neovm, "wrong-type-argument");
+}

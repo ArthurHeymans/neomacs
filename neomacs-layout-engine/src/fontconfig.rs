@@ -1560,8 +1560,11 @@ fn query_xft_dpi() -> Option<f32> {
             let result = query_xft_dpi_inner();
             let _ = tx.send(result);
         });
-    // Wait at most 3 seconds for the X server to respond.
-    match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+    // If the X server hasn't responded in 100 ms, it is either
+    // broken or unreachable; a healthy local X connection resolves
+    // in <10 ms.  A 3 s timeout made `emacs -nw` startup stall
+    // when DISPLAY is set but X11 is not available.
+    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
         Ok(result) => result,
         Err(_) => {
             tracing::warn!(

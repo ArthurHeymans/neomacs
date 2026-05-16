@@ -5399,6 +5399,13 @@ impl Context {
             return Ok(Value::NIL);
         }
 
+        // GNU keyboard.c:738: specbind (Qinhibit_redisplay, Qnil)
+        // ensures redisplay is never blocked across command-loop
+        // iterations. Without this, inhibit-redisplay leaked from
+        // startup or set-message can permanently suppress the first
+        // TTY paint (user-visible ~3 s blank scratch buffer).
+        self.specbind(intern("inhibit-redisplay"), Value::NIL);
+
         self.command_loop_1_entry_prologue()?;
 
         loop {

@@ -86,6 +86,8 @@ mod buffer_base_buffer_semantics;
 mod buffer_file_name_semantics;
 #[path = "buffer-hash-semantics.rs"]
 mod buffer_hash_semantics;
+#[path = "buffer-last-name-semantics.rs"]
+mod buffer_last_name_semantics;
 #[path = "buffer-line-statistics-semantics.rs"]
 mod buffer_line_statistics_semantics;
 #[path = "buffer-list-other-buffer-semantics.rs"]
@@ -124,6 +126,8 @@ mod buffer_string;
 mod buffer_substring;
 #[path = "buffer-substring-advanced.rs"]
 mod buffer_substring_advanced;
+#[path = "bufferp-semantics.rs"]
+mod bufferp_semantics;
 #[path = "button-semantics.rs"]
 mod button_semantics;
 #[path = "byte-operations-comprehensive.rs"]
@@ -1376,6 +1380,8 @@ mod string_manipulation_comprehensive;
 mod string_match;
 #[path = "string-match-p.rs"]
 mod string_match_p;
+#[path = "string-match-p-semantics.rs"]
+mod string_match_p_semantics;
 #[path = "string-prefix-suffix-patterns.rs"]
 mod string_prefix_suffix_patterns;
 #[path = "string-processing.rs"]
