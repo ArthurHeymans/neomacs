@@ -887,6 +887,8 @@ mod listify_key_sequence_semantics;
 mod looking_at_advanced;
 #[path = "lookup-key-advanced.rs"]
 mod lookup_key_advanced;
+#[path = "lsh-semantics.rs"]
+mod lsh_semantics;
 #[path = "macro-comprehensive-patterns.rs"]
 mod macro_comprehensive_patterns;
 #[path = "macroexpand-advanced.rs"]

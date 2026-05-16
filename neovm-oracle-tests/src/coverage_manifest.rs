@@ -390,6 +390,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "internal--thread-argument",
     "list-of-strings-p",
     "listify-key-sequence",
+    "lsh",
     "minusp",
     "mouse-event-p",
     "mouse-movement-p",
