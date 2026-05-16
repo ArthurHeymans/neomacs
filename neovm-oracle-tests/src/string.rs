@@ -38,6 +38,23 @@ fn oracle_prop_string_wrong_type_error() {
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
+#[test]
+fn oracle_string_rejects_character_above_gnu_max_char() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/character.c:Fstring validates every argument with
+    // CHECK_CHARACTER before building the string.  The character range ends at
+    // #x3fffff, so #x400000 must signal `characterp`.
+    let form = r#"
+(list
+ (length (string #x3fffff))
+ (condition-case err
+     (string #x400000)
+   (error (list (car err) (cdr err)))))
+"#;
+    super::common::assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
