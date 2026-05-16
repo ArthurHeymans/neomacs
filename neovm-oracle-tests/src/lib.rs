@@ -805,6 +805,8 @@ mod iso8601_semantics;
 mod json_semantics;
 #[path = "kbd-event-advanced.rs"]
 mod kbd_event_advanced;
+#[path = "kbd-key-parse-edge-semantics.rs"]
+mod kbd_key_parse_edge_semantics;
 #[path = "key-description.rs"]
 mod key_description;
 mod keymap;
