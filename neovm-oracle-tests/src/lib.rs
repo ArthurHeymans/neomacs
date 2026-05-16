@@ -712,6 +712,8 @@ mod funcall;
 mod funcall_apply_comprehensive;
 #[path = "function-cell-semantics.rs"]
 mod function_cell_semantics;
+#[path = "function-equal-semantics.rs"]
+mod function_equal_semantics;
 #[path = "function-get-semantics.rs"]
 mod function_get_semantics;
 #[path = "generator-semantics.rs"]
