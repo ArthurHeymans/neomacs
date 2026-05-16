@@ -105,6 +105,48 @@ fn oracle_prop_nreverse_vs_reverse_semantics() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_reverse_nreverse_sequence_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fnreverse mutates vectors and bool-vectors in place,
+    // delegates strings to Freverse, and reports invalid objects as `arrayp'.
+    // GNU src/fns.c:Freverse reports invalid objects as `sequencep'.
+    let form = r#"
+(let* ((s (propertize "abé" 'face 'bold))
+       (s-rev (reverse s))
+       (s-nrev (nreverse s))
+       (v [a b c])
+       (v-result (nreverse v))
+       (bits (bool-vector t nil nil t))
+       (bits-result (nreverse bits)))
+  (list
+   (eq s-rev s)
+   s-rev
+   (text-properties-at 0 s-rev)
+   (eq s-nrev s)
+   s-nrev
+   (text-properties-at 0 s-nrev)
+   (eq v-result v)
+   v
+   (eq bits-result bits)
+   (list (aref bits 0) (aref bits 1) (aref bits 2) (aref bits 3))
+   (condition-case err
+       (nreverse 42)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (reverse 42)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (nreverse (record 'neovm--test-record 'a 'b))
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (reverse (record 'neovm--test-record 'a 'b))
+     (error (list (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // append with various arg counts and nil handling
 // ---------------------------------------------------------------------------
