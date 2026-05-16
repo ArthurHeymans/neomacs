@@ -595,6 +595,8 @@ mod delete_remove_semantics;
 mod delq;
 #[path = "derived-mode-semantics.rs"]
 mod derived_mode_semantics;
+#[path = "dlet-semantics.rs"]
+mod dlet_semantics;
 mod dolist;
 #[path = "dolist-dotimes-advanced.rs"]
 mod dolist_dotimes_advanced;
