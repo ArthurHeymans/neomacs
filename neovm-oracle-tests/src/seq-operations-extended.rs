@@ -111,6 +111,41 @@ fn oracle_prop_seq_ext_into_and_concatenate() {
 }
 
 // ---------------------------------------------------------------------------
+// seq-mapcat: map then concatenate
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_seq_ext_mapcat_type_and_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-mapcat is implemented as seq-map followed by seq-concatenate.
+    // The mapper must therefore return sequences, and TYPE controls the final
+    // seq-concatenate target type.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Default TYPE is list.
+    (seq-mapcat (lambda (x) (list x (- x))) '(1 2 3))
+    ;; Mapper may return vectors; optional TYPE chooses vector output.
+    (seq-mapcat (lambda (x) (vector x (* x 10))) [1 2 3] 'vector)
+    ;; String output is produced by concatenating character sequences.
+    (seq-mapcat (lambda (c) (list c ?-)) "ab" 'string)
+    ;; Empty mapper results concatenate to the empty sequence of TYPE.
+    (seq-mapcat (lambda (_x) nil) '(1 2 3) 'list)
+    (seq-mapcat (lambda (_x) nil) '(1 2 3) 'vector)
+    (seq-mapcat (lambda (_x) nil) '(1 2 3) 'string)
+    ;; A non-sequence mapper result signals through seq-into-sequence.
+    (condition-case err
+        (seq-mapcat (lambda (x) x) '(1 2))
+      (error (list (car err) (cadr err))))
+    ;; Invalid output TYPE signals through seq-concatenate.
+    (condition-case err
+        (seq-mapcat (lambda (x) (list x)) '(1 2) 'hash-table)
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // seq-position and seq-contains-p
 // ---------------------------------------------------------------------------
 
