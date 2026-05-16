@@ -8,6 +8,29 @@ use super::common::assert_oracle_parity_with_bootstrap;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
+fn oracle_plistp_matches_gnu_proper_even_length_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el:plistp is `(and (proper-list-p object) even-length)`.
+    // It returns the boolean nil for non-lists, dotted tails, odd lengths, and
+    // circular lists; it does not validate key/value types.
+    let form = r#"
+(let ((circle (list 'a 1 'b 2)))
+  (setcdr (last circle) circle)
+  (list
+   (plistp nil)
+   (plistp '(a 1 b 2))
+   (plistp '(a 1 b))
+   (plistp '(a 1 b . bad-tail))
+   (plistp 'not-a-list)
+   (plistp '("key" nil :keyword (1 2)))
+   (plistp circle)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_plist_get_tolerates_malformed_plists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

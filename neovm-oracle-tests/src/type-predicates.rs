@@ -141,6 +141,34 @@ fn oracle_prop_string_or_null_p() {
 }
 
 // ---------------------------------------------------------------------------
+// list-of-strings-p
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_list_of_strings_p_subr_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el:list-of-strings-p accepts nil and proper lists whose every
+    // element is a string.  It returns nil, without signaling, for non-string
+    // elements, dotted string tails, and non-list objects.
+    let form = r#"
+(list
+ (list-of-strings-p nil)
+ (list-of-strings-p '())
+ (list-of-strings-p '("a" "b" ""))
+ (list-of-strings-p '("a" 1 "b"))
+ (list-of-strings-p '("a" . "tail"))
+ (list-of-strings-p '("a" "b" . nil))
+ (list-of-strings-p "not-a-list")
+ (list-of-strings-p '(symbol))
+ (let ((x (list "loop")))
+   (setcdr x (list 1))
+   (list-of-strings-p x)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // integer-or-null-p (called integer-or-marker-p in some contexts)
 // ---------------------------------------------------------------------------
 
@@ -148,12 +176,12 @@ fn oracle_prop_string_or_null_p() {
 fn oracle_prop_integer_or_null_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(integerp 42)");
-    assert_oracle_parity_with_bootstrap("(integerp 0)");
-    assert_oracle_parity_with_bootstrap("(integerp -7)");
-    assert_oracle_parity_with_bootstrap("(integerp nil)");
-    assert_oracle_parity_with_bootstrap("(integerp 3.14)");
-    assert_oracle_parity_with_bootstrap(r#"(integerp "42")"#);
+    assert_oracle_parity_with_bootstrap("(integer-or-null-p 42)");
+    assert_oracle_parity_with_bootstrap("(integer-or-null-p 0)");
+    assert_oracle_parity_with_bootstrap("(integer-or-null-p -7)");
+    assert_oracle_parity_with_bootstrap("(integer-or-null-p nil)");
+    assert_oracle_parity_with_bootstrap("(integer-or-null-p 3.14)");
+    assert_oracle_parity_with_bootstrap(r#"(integer-or-null-p "42")"#);
 }
 
 // ---------------------------------------------------------------------------
