@@ -55,3 +55,24 @@ fn oracle_letrec_runtime_omitted_initializers_and_scope() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_letrec_nonrecursive_rewrite_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (macroexpand '(letrec () 1 2 3))
+ (macroexpand '(letrec ((neovm--lr-x 1)) neovm--lr-x))
+ (macroexpand '(letrec ((neovm--lr-x 1)
+                        (neovm--lr-y 2))
+                 neovm--lr-y))
+ (letrec () 1 2 3)
+ (letrec ((x 1)) x)
+ (letrec ((x 1)
+          (y (+ x 2)))
+   (list x y)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

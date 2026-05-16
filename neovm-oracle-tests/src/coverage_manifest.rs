@@ -433,6 +433,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "called-interactively-p",
     "command-execute",
     "last",
+    "letrec",
     "listify-key-sequence",
     "load-history-filename-element",
     "load-history-regexp",
