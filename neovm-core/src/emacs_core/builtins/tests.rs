@@ -13257,6 +13257,29 @@ fn boundp_and_symbol_value_see_dynamic_and_current_buffer_local_bindings() {
 }
 
 #[test]
+fn boundp_buffer_local_lookup_uses_symbol_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let uninterned = crate::emacs_core::intern::intern_uninterned("vm-bound-shadow");
+    let interned = intern("vm-bound-shadow");
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+
+    eval.obarray_mut()
+        .set_symbol_value_id(uninterned, Value::fixnum(11));
+    eval.set_buffer_local_binding_by_id(current, interned, Value::fixnum(22))
+        .expect("interned buffer-local binding");
+
+    let bound = builtin_boundp(&mut eval, vec![Value::from_sym_id(uninterned)])
+        .expect("boundp should accept uninterned symbol");
+    assert!(bound.is_truthy());
+
+    let value = builtin_symbol_value(&mut eval, vec![Value::from_sym_id(uninterned)])
+        .expect("symbol-value should read uninterned value cell");
+    assert_eq!(value, Value::fixnum(11));
+}
+
+#[test]
 fn defvaralias_and_indirect_variable_follow_runtime_aliases() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

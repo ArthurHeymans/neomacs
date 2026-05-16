@@ -233,9 +233,8 @@ pub(crate) fn builtin_boundp_1(eval: &mut super::eval::Context, arg: Value) -> E
         expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?,
     )?;
     // specbind writes directly to obarray, so no dynamic stack lookup needed.
-    let resolved_name = resolve_sym(resolved);
     if let Some(buf) = eval.buffers.current_buffer() {
-        if let Some(binding) = buf.get_buffer_local_binding(resolved_name) {
+        if let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved) {
             return Ok(Value::bool_val(binding.as_value().is_some()));
         }
     }

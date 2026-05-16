@@ -729,6 +729,8 @@ mod hash_table_patterns;
 mod help_doc_semantics;
 #[path = "history-semantics.rs"]
 mod history_semantics;
+#[path = "hook-mutation-semantics.rs"]
+mod hook_mutation_semantics;
 #[path = "identity-operations.rs"]
 mod identity_operations;
 mod r#if;
