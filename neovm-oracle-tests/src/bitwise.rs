@@ -128,6 +128,21 @@ fn oracle_prop_lognot_double_negation() {
     assert_ok_eq("42", &o, &n);
 }
 
+#[test]
+fn oracle_prop_logcount_accepts_bignum_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c uses CHECK_INTEGER and has a BIGNUMP path for logcount.  For
+    // negative integers it counts zero bits by complementing the value first.
+    let form = r#"(let ((big (ash 1 100))
+      (mask (1- (ash 1 100))))
+  (list (logcount big)
+        (logcount mask)
+        (logcount (- big))
+        (logcount (- -1 mask))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // ash (arithmetic shift)
 // ---------------------------------------------------------------------------
