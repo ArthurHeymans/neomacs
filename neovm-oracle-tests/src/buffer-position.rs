@@ -69,6 +69,19 @@ fn oracle_prop_line_number_at_pos_no_arg() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_line_number_at_pos_bignum_position_error_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs fns.c:Fline_number_at_pos validates a numeric POSITION with
+    // CHECK_FIXNUM, unlike line-beginning-position/line-end-position which
+    // accept bignum line offsets.
+    let form = r#"(with-temp-buffer
+  (insert "one\ntwo\n")
+  (line-number-at-pos 1000000000000000000000000000000))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // line-beginning-position / line-end-position
 // ---------------------------------------------------------------------------
