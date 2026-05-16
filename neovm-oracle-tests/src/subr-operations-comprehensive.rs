@@ -230,6 +230,38 @@ fn oracle_prop_subr_ops_special_form_p() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_subr_ops_function_classification_matches_gnu_subr_el() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el:special-form-p resolves symbol function aliases via
+    // indirect-function.  macrop returns the macro cons or matching autoload
+    // tail, not necessarily canonical t.  compiled-function-p accepts ordinary
+    // subrs but rejects unevalled special forms.
+    let form = r#"
+(let ((results nil))
+  (defalias 'neovm--sf-alias 'if)
+  (autoload 'neovm--autoload-macro "no-such-file" nil nil 'macro)
+  (autoload 'neovm--autoload-fn "no-such-file" nil nil nil)
+  (unwind-protect
+      (setq results
+            (list
+             (special-form-p 'neovm--sf-alias)
+             (special-form-p 'car)
+             (macrop 'neovm--autoload-macro)
+             (macrop 'neovm--autoload-fn)
+             (macrop (symbol-function 'neovm--autoload-macro))
+             (compiled-function-p 'car)
+             (compiled-function-p (symbol-function 'car))
+             (compiled-function-p (symbol-function 'if))))
+    (fmakunbound 'neovm--sf-alias)
+    (fmakunbound 'neovm--autoload-macro)
+    (fmakunbound 'neovm--autoload-fn))
+  results)
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // closurep: detect closure objects
 // ---------------------------------------------------------------------------
