@@ -530,6 +530,24 @@ fn oracle_prop_assoc_string_advanced_patterns() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_assoc_string_matches_atom_string_and_symbol_entries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/minibuf.c:Fassoc_string uses the element itself when an alist
+    // item is not a cons cell.  Single string and symbol entries can therefore
+    // match and are returned directly, before any later cons entry.
+    let form = r#"
+(list
+ (assoc-string "solo" '("solo" ("solo" . pair-hit)))
+ (assoc-string "SOLO" '("solo" ("SOLO" . pair-hit)) t)
+ (assoc-string 'symbol-key '(symbol-key (symbol-key . pair-hit)))
+ (assoc-string "symbol-key" '(symbol-key ("symbol-key" . string-pair)))
+ (assoc-string "missing" '("other" symbol-key . bad-tail)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Alist deduplication and key canonicalization
 // ---------------------------------------------------------------------------
