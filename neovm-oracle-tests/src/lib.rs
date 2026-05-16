@@ -80,10 +80,16 @@ mod bool_vector_operations;
 mod boolean_helper_semantics;
 #[path = "bootstrap-library-require.rs"]
 mod bootstrap_library_require;
+#[path = "buffer-base-buffer-semantics.rs"]
+mod buffer_base_buffer_semantics;
+#[path = "buffer-file-name-semantics.rs"]
+mod buffer_file_name_semantics;
 #[path = "buffer-hash-semantics.rs"]
 mod buffer_hash_semantics;
 #[path = "buffer-line-statistics-semantics.rs"]
 mod buffer_line_statistics_semantics;
+#[path = "buffer-list-other-buffer-semantics.rs"]
+mod buffer_list_other_buffer_semantics;
 #[path = "buffer-local-set-state-semantics.rs"]
 mod buffer_local_set_state_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
@@ -96,6 +102,8 @@ mod buffer_local_variable_patterns;
 mod buffer_match_semantics;
 #[path = "buffer-modification-comprehensive.rs"]
 mod buffer_modification_comprehensive;
+#[path = "buffer-modified-p-semantics.rs"]
+mod buffer_modified_p_semantics;
 #[path = "buffer-multi-operations.rs"]
 mod buffer_multi_operations;
 #[path = "buffer-name.rs"]
@@ -595,6 +603,8 @@ mod decode_char_encode_char_advanced;
 mod defalias_advanced;
 #[path = "defalias-fset-patterns.rs"]
 mod defalias_fset_patterns;
+#[path = "default-boundp-semantics.rs"]
+mod default_boundp_semantics;
 #[path = "define-error-semantics.rs"]
 mod define_error_semantics;
 #[path = "define-key-advanced.rs"]
@@ -775,6 +785,8 @@ mod generic_function_comprehensive;
 mod r#get;
 #[path = "get-buffer-semantics.rs"]
 mod get_buffer_semantics;
+#[path = "get-file-buffer-semantics.rs"]
+mod get_file_buffer_semantics;
 #[path = "goto-char.rs"]
 mod goto_char;
 #[path = "goto-char-advanced.rs"]
@@ -1227,6 +1239,8 @@ mod ring_semantics;
 mod run_hook_with_args_semantics;
 #[path = "run-hook-wrapped-semantics.rs"]
 mod run_hook_wrapped_semantics;
+#[path = "run-hooks-semantics.rs"]
+mod run_hooks_semantics;
 #[path = "run-mode-hooks-semantics.rs"]
 mod run_mode_hooks_semantics;
 #[path = "rx-semantics.rs"]
