@@ -55,6 +55,26 @@ fn oracle_delq_mutates_before_improper_tail_error() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_delq_reports_current_improper_tail_after_leading_matches_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fdelq updates LIST as leading matches are skipped, then
+    // CHECK_LIST_END reports the final improper tail object rather than the
+    // original dotted cons.
+    let form = r#"
+(list
+ (condition-case err
+     (delq 1 (cons 1 2))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (delq 3 (cons 1 2))
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
