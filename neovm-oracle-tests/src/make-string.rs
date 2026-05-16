@@ -60,6 +60,20 @@ fn oracle_prop_make_string_bignum_length_error_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_make_string_float_length_error_predicate_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs alloc.c:Fmake_string uses CHECK_FIXNAT for LENGTH, so both
+    // non-integer and negative lengths signal `wholenump`.
+    let form = r#"
+(condition-case err
+    (make-string 1.0 ?a)
+  (error (list (car err) (cdr err))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
