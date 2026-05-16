@@ -577,6 +577,8 @@ mod condition_case_unless_debug_semantics;
 mod conditional_binding_macros_semantics;
 #[path = "cons-list-dotted-comprehensive.rs"]
 mod cons_list_dotted_comprehensive;
+#[path = "cons-mutation-edge-semantics.rs"]
+mod cons_mutation_edge_semantics;
 #[path = "conversion-format-semantics.rs"]
 mod conversion_format_semantics;
 #[path = "copy-alist.rs"]
