@@ -506,14 +506,6 @@ pub(crate) fn execute_combined_after_change(
     ctx.combine_after_change_list.clear();
     ctx.combine_after_change_buffer = None;
 
-    // GNU temporarily clears `combine-after-change-calls` while replaying.
-    let combine_sym =
-        crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, "combine-after-change-calls");
-    let saved_combine =
-        crate::emacs_core::hook_runtime::hook_value_by_id(ctx, combine_sym).unwrap_or(Value::NIL);
-    let specpdl_count = ctx.specpdl.len();
-    ctx.specbind(intern("combine-after-change-calls"), Value::NIL);
-
     let _ = list_len;
 
     // Convert merged 1-based char range back into byte positions for our
@@ -530,9 +522,6 @@ pub(crate) fn execute_combined_after_change(
     let old_len = (endpos - begpos - change_total).max(0) as usize;
 
     let result = signal_after_change(ctx, beg_byte, end_byte, old_len);
-
-    ctx.unbind_to(specpdl_count);
-    let _ = saved_combine; // specbind already restores; explicit to mark intent.
 
     if let Some(prev) = saved_buffer
         && prev != target_id

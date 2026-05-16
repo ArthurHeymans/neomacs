@@ -193,3 +193,39 @@ fn oracle_prop_combine_after_change_calls_flushes_during_unwind() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_nested_combine_after_change_calls_defers_until_outer_exit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((after-log nil)
+        (inside-log nil))
+    (add-hook 'after-change-functions
+              (lambda (beg end len)
+                (push (list beg end len (buffer-string)) after-log))
+              nil t)
+    (list
+     (combine-after-change-calls
+       (goto-char 2)
+       (insert "X")
+       (setq inside-log (list :after-first after-log))
+       (let ((inner
+              (combine-after-change-calls
+                (goto-char (point-max))
+                (insert "Y")
+                (setq inside-log
+                      (cons (list :inside-inner after-log) inside-log))
+                :inner-value)))
+         (setq inside-log
+               (cons (list :after-inner inner after-log) inside-log)))
+       :outer-value)
+     (buffer-string)
+     (nreverse inside-log)
+     (nreverse after-log))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
