@@ -38,6 +38,18 @@ fn oracle_elt_list_and_array_error_payloads() {
 }
 
 #[test]
+fn oracle_elt_lambda_is_not_sequence_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Felt accepts cons/nil specially, otherwise CHECK_ARRAY
+    // with the sequencep predicate before delegating to Faref.  A lambda
+    // closure is not an `elt` sequence, even though GNU Faref handles
+    // closures directly for lower-level closure-slot access.
+    let form = r#"(elt (lambda (x) x) 0)"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_aref_type_index_and_bounds_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
