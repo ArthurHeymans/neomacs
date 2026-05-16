@@ -1231,6 +1231,8 @@ mod special_forms_semantics;
 mod split_string_advanced;
 #[path = "split-string-patterns.rs"]
 mod split_string_patterns;
+#[path = "sqlite-values-validation-semantics.rs"]
+mod sqlite_values_validation_semantics;
 mod string;
 #[path = "string-builder-comprehensive.rs"]
 mod string_builder_comprehensive;
