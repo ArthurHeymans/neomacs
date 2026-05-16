@@ -100,6 +100,30 @@ fn oracle_prop_make_symbol_gensym_pattern() {
 }
 
 #[test]
+fn oracle_prop_gensym_counter_prefix_and_uninterned_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el:gensym formats PREFIX with %s, defaults nil to "g", and
+    // increments the global gensym-counter after every generated symbol.
+    let form = r#"(let ((gensym-counter 7))
+  (let ((a (gensym))
+        (b (gensym "tmp"))
+        (c (gensym nil))
+        (d (gensym 42)))
+    (list
+     (mapcar (lambda (s)
+               (list (symbol-name s)
+                     (intern-soft (symbol-name s))
+                     (symbolp s)))
+             (list a b c d))
+     gensym-counter
+     (eq a (make-symbol (symbol-name a)))
+     (equal (symbol-name a)
+            (symbol-name (make-symbol (symbol-name a)))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_make_symbol_as_unique_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

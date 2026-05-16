@@ -332,6 +332,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "defmacro",
     "dolist",
     "dotimes",
+    "gensym",
     "internal--thread-argument",
     "map-delete",
     "map-elt",
