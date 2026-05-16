@@ -194,6 +194,32 @@ fn oracle_prop_tpm_malformed_plist_validation_order() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_tpm_string_range_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU textprop.c validate_interval_range keeps both original BEGIN and
+    // END values for args-out-of-range, even for point queries where the same
+    // Lisp_Object is passed as both BEGIN and END.
+    let form = r#"(let ((s (copy-sequence "abc")))
+  (list
+   (condition-case err
+       (put-text-property -1 1 'face 'bold s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (put-text-property 2 1 'face 'bold s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (put-text-property 0 4 'face 'bold s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (text-properties-at -1 s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (text-properties-at 3 s)
+     (error (list (car err) (cdr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Buffer text properties: put/add/remove/set in a buffer with positions
 // ---------------------------------------------------------------------------
