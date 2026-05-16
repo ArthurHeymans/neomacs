@@ -336,6 +336,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "gensym",
     "always",
     "evenp",
+    "frame-configuration-p",
     "ignore",
     "internal--thread-argument",
     "minusp",

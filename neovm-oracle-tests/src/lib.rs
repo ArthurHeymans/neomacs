@@ -725,6 +725,8 @@ mod forward_comment_patterns;
 mod forward_line;
 #[path = "forward-line-advanced.rs"]
 mod forward_line_advanced;
+#[path = "frame-configuration-semantics.rs"]
+mod frame_configuration_semantics;
 #[path = "frame-windows-min-size-semantics.rs"]
 mod frame_windows_min_size_semantics;
 #[path = "fset-symbol-function.rs"]
