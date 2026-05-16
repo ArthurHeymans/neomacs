@@ -352,6 +352,43 @@ fn oracle_prop_seq_lib_min_max_string_and_error_contracts() {
 }
 
 // ---------------------------------------------------------------------------
+// seq-random-elt
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_seq_lib_random_elt_seeded_and_empty_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-random-elt delegates to random over seq-length, then seq-elt.
+    // The random primitive supports string seeding, making representative
+    // element selection deterministic enough for oracle parity.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Reseed before each call so each sequence type observes the same random index.
+    (progn
+      (random "seq-random-elt-oracle")
+      (seq-random-elt '(a b c d)))
+    (progn
+      (random "seq-random-elt-oracle")
+      (seq-random-elt [10 20 30 40]))
+    (progn
+      (random "seq-random-elt-oracle")
+      (seq-random-elt "abcd"))
+    ;; Empty sequences signal a plain error with GNU's exact message.
+    (condition-case err
+        (seq-random-elt nil)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-random-elt [])
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-random-elt "")
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // seq-take, seq-drop, seq-take-while, seq-drop-while
 // ---------------------------------------------------------------------------
 
