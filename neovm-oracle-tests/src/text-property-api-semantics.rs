@@ -99,6 +99,26 @@ fn oracle_remove_list_of_text_properties_allows_dotted_tail_like_gnu() {
 }
 
 #[test]
+fn oracle_text_property_search_uses_eq_not_equal_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c:Ftext_property_any and
+    // Ftext_property_not_all compare property values with EQ, not equal.
+    let form = r#"
+(let* ((stored (copy-sequence "tip"))
+       (needle (copy-sequence "tip"))
+       (s (propertize "abc" 'help-echo stored)))
+  (list
+   (eq stored needle)
+   (equal stored needle)
+   (text-property-any 0 3 'help-echo needle s)
+   (text-property-not-all 0 3 'help-echo needle s)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
