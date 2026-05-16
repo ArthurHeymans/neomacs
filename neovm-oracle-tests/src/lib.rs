@@ -1115,6 +1115,8 @@ mod read_print;
 mod read_print_advanced;
 #[path = "read-print-comprehensive.rs"]
 mod read_print_comprehensive;
+#[path = "readable-function-alias-semantics.rs"]
+mod readable_function_alias_semantics;
 #[path = "rectangle-semantics.rs"]
 mod rectangle_semantics;
 mod recursion;
