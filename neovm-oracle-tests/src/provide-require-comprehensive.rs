@@ -135,6 +135,47 @@ fn oracle_prop_provide_require_featurep_subfeature() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_provide_reprovide_subfeature_replacement() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fprovide only writes the `subfeatures' property when the
+    // second argument is non-nil.  Re-providing an already-present feature with
+    // nil subfeatures therefore preserves the previous subfeature list, while
+    // a later non-nil list replaces it.
+    let form = r#"(let ((features (delq 'neovm--test-feat-reprovide-sub features)))
+  (unwind-protect
+      (progn
+        (put 'neovm--test-feat-reprovide-sub 'subfeatures nil)
+        (provide 'neovm--test-feat-reprovide-sub
+                 '(neovm--test-sub-a neovm--test-sub-b))
+        (let ((after-first
+               (list
+                (featurep 'neovm--test-feat-reprovide-sub)
+                (featurep 'neovm--test-feat-reprovide-sub
+                          'neovm--test-sub-a)
+                (get 'neovm--test-feat-reprovide-sub 'subfeatures))))
+          (provide 'neovm--test-feat-reprovide-sub nil)
+          (let ((after-nil
+                 (list
+                  (featurep 'neovm--test-feat-reprovide-sub
+                            'neovm--test-sub-a)
+                  (get 'neovm--test-feat-reprovide-sub 'subfeatures))))
+            (provide 'neovm--test-feat-reprovide-sub
+                     '(neovm--test-sub-c))
+            (list
+             after-first
+             after-nil
+             (featurep 'neovm--test-feat-reprovide-sub
+                       'neovm--test-sub-a)
+             (featurep 'neovm--test-feat-reprovide-sub
+                       'neovm--test-sub-c)
+             (get 'neovm--test-feat-reprovide-sub 'subfeatures)))))
+    (setq features (delq 'neovm--test-feat-reprovide-sub features))
+    (put 'neovm--test-feat-reprovide-sub 'subfeatures nil)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // eval-after-load with already-loaded feature
 // ---------------------------------------------------------------------------
