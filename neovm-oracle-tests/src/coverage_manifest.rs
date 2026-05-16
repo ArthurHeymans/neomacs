@@ -350,6 +350,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "seq-into",
     "seq-map",
     "seq-mapcat",
+    "seq-mapn",
     "seq-max",
     "seq-min",
     "seq-partition",

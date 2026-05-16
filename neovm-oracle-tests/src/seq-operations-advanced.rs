@@ -31,6 +31,39 @@ fn oracle_prop_seq_mapn_multiple_sequences() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_mapn_truncation_strings_and_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-mapn first converts every input with seq-into 'list, then maps
+    // until any converted sequence is nil.  This pins truncation, string char
+    // handling, single-sequence behavior, call order, and non-sequence errors.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Mapping stops at the shortest sequence across list/vector/list inputs.
+    (seq-mapn #'list '(a b c d) '(1 2) [x y z])
+    ;; Strings contribute character codes.
+    (seq-mapn (lambda (c n) (list c n)) "abc" '(10 20 30 40))
+    ;; A single sequence degenerates to seq-map-like behavior.
+    (seq-mapn (lambda (x) (* x 2)) '(1 2 3))
+    ;; Empty leading sequence stops immediately.
+    (seq-mapn #'list nil '(1 2))
+    ;; FUNCTION receives arguments in sequence order for each row.
+    (let ((calls nil))
+      (list
+        (seq-mapn (lambda (&rest args)
+                    (push args calls)
+                    args)
+                  '(a b) '(1 2 3))
+        calls))
+    ;; Non-sequence input signals through seq-into.
+    (condition-case err
+        (seq-mapn #'list 42 '(1 2))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-group-by: group elements by a classifier function
 // ---------------------------------------------------------------------------
