@@ -118,6 +118,8 @@ mod buffer_substring_advanced;
 mod button_semantics;
 #[path = "byte-operations-comprehensive.rs"]
 mod byte_operations_comprehensive;
+#[path = "call-shell-region-semantics.rs"]
+mod call_shell_region_semantics;
 #[path = "called-interactively-semantics.rs"]
 mod called_interactively_semantics;
 #[path = "car-cdr-combinations.rs"]
