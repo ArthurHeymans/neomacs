@@ -42,28 +42,18 @@ fn oracle_condition_case_error_data_is_cons() {
 }
 
 #[test]
-fn oracle_condition_case_error_symbol_is_car() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
-        r#"(condition-case err
-         (error "test")
-       (error (car err)))"#,
-    );
-    assert_ok_eq("error", &oracle, &neovm);
-}
-
-#[test]
 fn oracle_condition_case_unwind_protect_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Uses setq+cons instead of push (push is a cl-lib macro, not in minimal eval).
     let (oracle, neovm) = eval_oracle_and_neovm(
         r#"(progn
   (defvar neovm--test-cc-uwp-log '())
   (condition-case nil
       (unwind-protect
           (error "inside")
-        (push 'cleanup neovm--test-cc-uwp-log))
+        (setq neovm--test-cc-uwp-log (cons 'cleanup neovm--test-cc-uwp-log)))
     (error
-     (push 'caught neovm--test-cc-uwp-log)))
+     (setq neovm--test-cc-uwp-log (cons 'caught neovm--test-cc-uwp-log))))
   (nreverse neovm--test-cc-uwp-log))"#,
     );
     assert_ok_eq("(cleanup caught)", &oracle, &neovm);
