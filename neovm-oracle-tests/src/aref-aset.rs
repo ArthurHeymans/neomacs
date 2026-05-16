@@ -150,6 +150,37 @@ fn oracle_aref_aset_record_and_bool_vector_boundaries() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_aref_aset_byte_code_and_validation_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c:Faref accepts byte-code objects through CLOSUREP, but
+    // Faset first checks IDX and then CHECK_ARRAY, so byte-code objects are
+    // not mutable arrays and an invalid index type wins over array type.
+    let form = r#"
+(let ((bc #[257 "\300\207" [42] 1]))
+  (list
+   (type-of bc)
+   (length bc)
+   (aref bc 0)
+   (aref bc 2)
+   (aref bc 3)
+   (condition-case err
+       (aref 42 'not-a-fixnum)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (aset bc 0 'changed)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (aset bc 'not-a-fixnum 'changed)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (aref bc 99)
+     (error (list (car err) (cdr err))))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // aset on strings
 // ---------------------------------------------------------------------------

@@ -185,6 +185,9 @@ pub(crate) fn aset_string_replacement(
 
 pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
     expect_args("aset", &args, 3)?;
+    // GNU src/data.c:Faset starts with CHECK_FIXNUM (idx) before checking
+    // whether ARRAY is mutable by `aset`.
+    let idx_fixnum = expect_fixnum(&args[1])?;
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(&args[0]) => {
             let ch = expect_char_table_index(&args[1])?;
@@ -195,7 +198,7 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
             ])
         }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
-            let idx = expect_fixnum(&args[1])? as usize;
+            let idx = idx_fixnum as usize;
             let items = args[0]
                 .as_vector_data()
                 .or_else(|| args[0].as_record_data())
