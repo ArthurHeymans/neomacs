@@ -249,6 +249,37 @@ fn oracle_prop_seq_count_complex_predicates() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_count_predicate_values_calls_and_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; GNU seq-count increments for any non-nil predicate value, not only t.
+    (seq-count (lambda (x) (and (> x 1) (list 'truth x))) '(0 1 2 3))
+    ;; Predicate is called once per element in sequence order.
+    (let ((calls nil))
+      (list
+       (seq-count (lambda (x)
+                    (push x calls)
+                    (memq x '(b d)))
+                  '(a b c d))
+       (nreverse calls)))
+    ;; Empty sequences return 0 without calling the predicate.
+    (let ((called nil))
+      (list
+       (seq-count (lambda (_x) (setq called t)) nil)
+       called))
+    ;; Strings are iterated as characters.
+    (seq-count (lambda (c) (and (>= c ?0) (<= c ?9))) "a1b23")
+    ;; Predicate errors propagate unchanged.
+    (condition-case err
+        (seq-count (lambda (_x) (signal 'wrong-type-argument '(integerp bad))) '(1 2))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-uniq with custom test functions
 // ---------------------------------------------------------------------------
