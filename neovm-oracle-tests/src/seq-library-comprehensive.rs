@@ -175,6 +175,38 @@ fn oracle_prop_seq_lib_contains_position_testfn_return_values() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_lib_positions_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; GNU seq-positions returns all zero-based matching indices in order.
+    (seq-positions '(a b a c a) 'a)
+    (seq-positions '(a b c) 'z)
+    (seq-positions [1 2 1 3 1] 1)
+    (seq-positions "banana" ?a)
+    (seq-positions nil 'x)
+    ;; TESTFN is called as (TESTFN element elt), like seq-position.
+    (let ((calls nil))
+      (list
+       (seq-positions '(1 2 3 4) 2
+                      (lambda (element target)
+                        (push (list element target) calls)
+                        (>= element target)))
+       (nreverse calls)))
+    ;; Nil TESTFN falls back to equal.
+    (seq-positions '((a . 1) (b . 2) (b . 2)) '(b . 2) nil)
+    ;; Predicate errors propagate unchanged.
+    (condition-case err
+        (seq-positions '(1 2 3) 2
+                       (lambda (_element _target)
+                         (signal 'wrong-type-argument '(integerp bad))))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-concatenate across types
 // ---------------------------------------------------------------------------
