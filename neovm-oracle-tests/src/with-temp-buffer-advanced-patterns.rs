@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::assert_oracle_parity_with_bootstrap;
 
 // ---------------------------------------------------------------------------
 // Multiple insert/delete/search cycles
@@ -310,12 +310,9 @@ fn oracle_prop_with_temp_buffer_adv_return_nested_lists() {
                    (when (> (length line) 0)
                      (let ((fields nil)
                            (pos 0))
-                       (while (string-match "\\([^,]*\\)" line pos)
+                       (while (string-match "\\([^,\n]+\\)\\(?:,\\|\\'\\)" line pos)
                          (push (match-string 1 line) fields)
-                         (setq pos (match-end 0))
-                         (when (and (< pos (length line))
-                                    (= (aref line pos) ?,))
-                           (setq pos (1+ pos))))
+                         (setq pos (match-end 0)))
                        (push (nreverse fields) rows))))
                  (forward-line 1)))
              (nreverse rows)))))
