@@ -811,6 +811,8 @@ mod forward_line;
 mod forward_line_advanced;
 #[path = "frame-configuration-semantics.rs"]
 mod frame_configuration_semantics;
+#[path = "frame-window-strict-edge-semantics.rs"]
+mod frame_window_strict_edge_semantics;
 #[path = "frame-windows-min-size-semantics.rs"]
 mod frame_windows_min_size_semantics;
 #[path = "fset-symbol-function.rs"]
@@ -917,6 +919,8 @@ mod kbd_event_advanced;
 mod kbd_key_parse_edge_semantics;
 #[path = "key-description.rs"]
 mod key_description;
+#[path = "key-subr-meta-strict-edge-semantics.rs"]
+mod key_subr_meta_strict_edge_semantics;
 mod keymap;
 #[path = "keymap-advanced.rs"]
 mod keymap_advanced;
@@ -1439,6 +1443,8 @@ mod sort_semantics;
 mod sort_stable_patterns;
 #[path = "special-forms-semantics.rs"]
 mod special_forms_semantics;
+#[path = "special-forms-strict-edge-semantics.rs"]
+mod special_forms_strict_edge_semantics;
 #[path = "split-string-advanced.rs"]
 mod split_string_advanced;
 #[path = "split-string-patterns.rs"]
