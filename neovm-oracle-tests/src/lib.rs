@@ -896,6 +896,8 @@ mod if_cond_when_unless_comprehensive;
 mod ignore_error_semantics;
 #[path = "image-feature-availability-semantics.rs"]
 mod image_feature_availability_semantics;
+#[path = "increment-compare-pred-strict-edge-semantics.rs"]
+mod increment_compare_pred_strict_edge_semantics;
 #[path = "indent-to.rs"]
 mod indent_to;
 #[path = "indirect-function.rs"]
