@@ -23,6 +23,28 @@ fn oracle_prop_zerop() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_gnu_subr_numeric_sign_and_parity_predicates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el implements plusp/minusp using >/< on numbers, while
+    // oddp/evenp are integer predicates implemented through `%`.
+    let form = r#"(list
+ (mapcar (lambda (x)
+           (list x (plusp x) (minusp x)))
+         (list -1 0 1 -0.0 0.0 0.5 -0.5))
+ (mapcar (lambda (x)
+           (list x
+                 (condition-case e (oddp x)
+                   (error (list 'error (car e))))
+                 (condition-case e (evenp x)
+                   (error (list 'error (car e))))))
+         (list -3 -2 -1 0 1 2 3 0.0 1.5 nil))
+ (condition-case e (plusp nil)
+   (error (list 'plusp-error (car e)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // natnump / wholenump
 // ---------------------------------------------------------------------------
