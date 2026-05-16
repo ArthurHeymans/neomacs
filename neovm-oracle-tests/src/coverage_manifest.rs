@@ -400,6 +400,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "if-let",
     "if-let*",
     "integer-or-null-p",
+    "internal--fill-string-single-line",
+    "internal--format-docstring-line",
     "interactive-p",
     "internal--thread-argument",
     "json-available-p",

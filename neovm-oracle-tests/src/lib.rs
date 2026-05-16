@@ -641,6 +641,8 @@ mod delq;
 mod derived_mode_semantics;
 #[path = "dlet-semantics.rs"]
 mod dlet_semantics;
+#[path = "docstring-format-semantics.rs"]
+mod docstring_format_semantics;
 mod dolist;
 #[path = "dolist-dotimes-advanced.rs"]
 mod dolist_dotimes_advanced;
