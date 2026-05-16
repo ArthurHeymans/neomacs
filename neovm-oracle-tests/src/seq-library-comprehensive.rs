@@ -321,6 +321,36 @@ fn oracle_prop_seq_lib_min_max() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_lib_min_max_string_and_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-min/seq-max are apply min/max over (seq-into SEQUENCE 'list).
+    // That makes strings sequences of character codes and lets min/max own
+    // empty-sequence and non-number error semantics.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Strings are sequences of character codes.
+    (seq-min "bAc")
+    (seq-max "bAc")
+    ;; Empty inputs signal exactly as min/max do with no arguments.
+    (condition-case err
+        (seq-min nil)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-max [])
+      (error (list (car err) (cadr err))))
+    ;; Non-number/non-marker elements signal through min/max.
+    (condition-case err
+        (seq-min '(1 a))
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-max [1 "x"])
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-take, seq-drop, seq-take-while, seq-drop-while
 // ---------------------------------------------------------------------------
