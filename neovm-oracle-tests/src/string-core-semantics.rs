@@ -92,6 +92,21 @@ fn oracle_substring_rejects_record_without_crashing_like_gnu() {
 }
 
 #[test]
+fn oracle_substring_rejects_char_table_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Fsubstring uses CHECK_VECTOR_OR_STRING; char-tables are
+    // rejected here even though `copy-sequence` has a char-table-specific path.
+    let form = r#"
+(condition-case err
+    (substring (make-char-table 'generic 65) 0 1)
+  (error (list (car err) (cdr err))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_concat_and_vconcat_character_sequence_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
