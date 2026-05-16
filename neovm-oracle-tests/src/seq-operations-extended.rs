@@ -78,6 +78,32 @@ fn oracle_prop_seq_ext_let_destructuring() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_let_setq_rest_destructuring_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-let/seq-setq build pcase `(seq ...)' patterns.  &rest is backed
+    // by seq-drop, so the rest binding keeps the source sequence type.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    (macroexpand-1 '(seq-let (a b &rest rest) [1 2 3 4]
+                      (list a b rest)))
+    (seq-let (a b &rest rest) '(1 2 3 4)
+      (list a b rest))
+    (seq-let (a b &rest rest) [1 2 3 4]
+      (list a b rest))
+    (seq-let (a b &rest rest) "abcd"
+      (list a b rest))
+    (let ((a nil) (b nil) (rest nil))
+      (seq-setq (a b &rest rest) '(x y z w))
+      (list a b rest))
+    (let ((a nil) (b nil) (rest nil))
+      (seq-setq (a b &rest rest) [x y z w])
+      (list a b rest))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-into and seq-concatenate: type conversion
 // ---------------------------------------------------------------------------
