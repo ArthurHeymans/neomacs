@@ -793,6 +793,8 @@ mod intern_soft_advanced;
 mod internal_event_symbol_advanced;
 #[path = "iso8601-semantics.rs"]
 mod iso8601_semantics;
+#[path = "json-semantics.rs"]
+mod json_semantics;
 #[path = "kbd-event-advanced.rs"]
 mod kbd_event_advanced;
 #[path = "key-description.rs"]
