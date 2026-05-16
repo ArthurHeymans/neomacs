@@ -173,6 +173,28 @@ fn oracle_prop_number_sequence_edge_cases() {
 }
 
 #[test]
+fn oracle_number_sequence_zero_increment_error_payload() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:number-sequence returns (FROM) before consulting INC
+    // when TO is nil or numerically equal to FROM.  Only a non-equal endpoint
+    // with zero INC signals this exact `error' payload.
+    let form = r#"
+(list
+ (number-sequence 7 7 0)
+ (number-sequence 7 nil 0)
+ (condition-case err
+     (number-sequence 1 10 0)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (number-sequence 10 1 0)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_number_sequence_fixnum_boundary_lengths() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
