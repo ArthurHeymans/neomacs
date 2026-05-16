@@ -617,8 +617,9 @@ fn list_length_internal_for_predicate(mut sequence: Value, mut len: i64) -> Resu
     }
 
     let mut tortoise = sequence;
-    let mut power = 1usize;
-    let mut distance = 0usize;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
     while sequence.is_cons() {
         len -= 1;
         if len <= 0 {
@@ -627,14 +628,10 @@ fn list_length_internal_for_predicate(mut sequence: Value, mut len: i64) -> Resu
 
         sequence = sequence.cons_cdr();
         if sequence.is_cons() {
-            distance = distance.saturating_add(1);
-            if sequence.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![sequence]));
-            }
-            if distance == power {
-                tortoise = sequence;
-                power = power.saturating_mul(2).max(1);
-                distance = 0;
+            if let Some(cycle_tail) =
+                for_each_tail_cycle_tail(sequence, &mut tortoise, &mut max, &mut n, &mut q)
+            {
+                return Err(signal("circular-list", vec![cycle_tail]));
             }
         }
     }

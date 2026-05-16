@@ -75,6 +75,35 @@ fn oracle_length_comparisons_on_circular_lists() {
 }
 
 #[test]
+fn oracle_length_circular_list_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((x (list 'a 'b 'c))
+       (_ (setcdr (last x) x)))
+  (list
+   (condition-case err
+       (length x)
+     (error (let ((arg (cadr err)))
+              (list (car err)
+                    (length (cdr err))
+                    (eq arg (cddr x))
+                    (listp arg)
+                    (car arg)))))
+   (condition-case err
+       (length< x 65535)
+     (error (let ((arg (cadr err)))
+              (list (car err)
+                    (length (cdr err))
+                    (eq arg (cddr x))
+                    (listp arg)
+                    (car arg)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_safe_length_and_proper_list_exact_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
