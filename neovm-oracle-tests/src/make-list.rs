@@ -40,6 +40,33 @@ fn oracle_prop_make_list_negative_length() {
 }
 
 #[test]
+fn oracle_make_list_fixnat_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/alloc.c:Fmake_list validates LENGTH with CHECK_FIXNAT, so all
+    // invalid length classes signal `wrong-type-argument' with `wholenump'.
+    let form = r#"
+(list
+ (condition-case err
+     (make-list -1 'x)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (make-list 1.2 'x)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (make-list nil 'x)
+   (error (list (car err) (cdr err))))
+ (let* ((cell (list 'shared))
+        (made (make-list 3 cell)))
+   (list made
+         (eq (car made) cell)
+         (eq (car made) (cadr made))
+         (eq (cadr made) (caddr made)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_make_list_with_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
