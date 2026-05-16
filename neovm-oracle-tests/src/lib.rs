@@ -1105,6 +1105,8 @@ mod save_excursion_advanced;
 mod save_excursion_comprehensive;
 #[path = "save-excursion-patterns.rs"]
 mod save_excursion_patterns;
+#[path = "save-mark-and-excursion-semantics.rs"]
+mod save_mark_and_excursion_semantics;
 #[path = "save-restriction-advanced.rs"]
 mod save_restriction_advanced;
 #[path = "save-restriction-comprehensive.rs"]
