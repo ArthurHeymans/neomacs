@@ -9602,6 +9602,22 @@ fn post_self_insert_hook_is_special_and_dynamically_bound_like_gnu_cmds() {
 }
 
 #[test]
+fn delayed_warning_defvars_are_special_and_dynamically_bound_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(list (special-variable-p 'delayed-warnings-list)
+               (special-variable-p 'delayed-warnings-hook))
+         (let ((delayed-warnings-list 'local)
+               (delayed-warnings-hook 'hook-local))
+           (list delayed-warnings-list delayed-warnings-hook))
+         (list delayed-warnings-list delayed-warnings-hook)",
+    );
+    assert_eq!(results[0], "OK (t t)");
+    assert_eq!(results[1], "OK (local hook-local)");
+    assert_eq!(results[2], "OK (nil nil)");
+}
+
+#[test]
 fn while_no_input_ignore_events_bootstraps_monitors_changed_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

@@ -7866,6 +7866,10 @@ fn ensure_startup_compat_variables_backfills_xfaces_bootstrap_state() {
             .copied(),
         Some(Value::NIL)
     );
+    assert!(
+        eval.obarray().is_special("delayed-warnings-list"),
+        "delayed-warnings-list should match GNU DEFVAR_LISP dynamic binding"
+    );
 
     let table = eval
         .obarray()

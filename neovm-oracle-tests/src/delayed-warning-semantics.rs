@@ -1,0 +1,48 @@
+//! Oracle parity tests for GNU delayed warning helper semantics.
+//!
+//! GNU implements `delay-warning` and `collapse-delayed-warnings` in
+//! `lisp/subr.el`.  These helpers mutate `delayed-warnings-list`; exact
+//! ordering and duplicate collapse behavior matters during startup.
+
+use super::common::{
+    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
+};
+
+#[test]
+fn oracle_prop_gnu_delay_warning_pushes_full_warning_records() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((delayed-warnings-list nil))
+  (list
+   (delay-warning 'alpha "one")
+   delayed-warnings-list
+   (delay-warning 'beta "two" :warning "*buf*")
+   delayed-warnings-list
+   (delay-warning 'gamma "three" nil nil)
+   delayed-warnings-list))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_gnu_collapse_delayed_warnings_only_merges_adjacent_duplicates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((delayed-warnings-list
+       '((alpha "one" :warning nil)
+         (alpha "one" :warning nil)
+         (beta "two" nil "*buf*")
+         (alpha "one" :warning nil)
+         (gamma "three" nil nil)
+         (gamma "three" nil nil)
+         (gamma "three" nil nil))))
+  (list
+   (collapse-delayed-warnings)
+   delayed-warnings-list))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

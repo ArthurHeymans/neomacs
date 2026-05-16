@@ -3004,12 +3004,14 @@ impl Context {
             "operating-system-release",
             super::builtins_extra::operating_system_release_value(),
         );
+        // GNU `keyboard.c` defines this with DEFVAR_LISP, so lexical-binding
+        // Lisp must treat it as dynamically scoped.
         obarray.set_symbol_value("delayed-warnings-list", Value::NIL);
-        // GNU `keyboard.c:14070` (`DEFVAR_LISP ("delayed-warnings-hook", ...)`)
-        // — Lisp callers `display-warning` etc. expect this symbol
-        // to exist as a hook list. Keyboard audit Finding 17 in
-        // `drafts/keyboard-command-loop-audit.md`.
+        obarray.make_special("delayed-warnings-list");
+        // GNU `subr.el` defines this with `defvar`; seed it for early warning
+        // paths while preserving the same special-variable semantics.
         obarray.set_symbol_value("delayed-warnings-hook", Value::NIL);
+        obarray.make_special("delayed-warnings-hook");
         obarray.set_symbol_value(
             "command-line-ns-option-alist",
             Value::list(vec![Value::list(vec![

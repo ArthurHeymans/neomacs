@@ -608,6 +608,8 @@ mod defvar;
 mod defvar_advanced;
 #[path = "defvar-setq-comprehensive.rs"]
 mod defvar_setq_comprehensive;
+#[path = "delayed-warning-semantics.rs"]
+mod delayed_warning_semantics;
 #[path = "delete-and-extract-advanced.rs"]
 mod delete_and_extract_advanced;
 #[path = "delete-char-patterns.rs"]

@@ -2583,6 +2583,7 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
         "exec-directory",
         "configure-info-directory",
         "shared-game-score-directory",
+        "delayed-warnings-list",
     ] {
         eval.obarray.make_special(name);
     }
