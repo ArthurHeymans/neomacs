@@ -123,6 +123,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "floatp",
     "floor",
     "fmakunbound",
+    "framep",
     "following-char",
     "format",
     "forward-char",
@@ -273,6 +274,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "skip-syntax-backward",
     "skip-syntax-forward",
     "sort",
+    "sleep-for",
     "sqrt",
     "standard-syntax-table",
     "string",
@@ -328,6 +330,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "vector-or-char-table-p",
     "vectorp",
     "widen",
+    "windowp",
 ];
 
 pub(crate) const ORACLE_TESTED_SPECIAL_FORM_NAMES: &[&str] = &[

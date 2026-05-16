@@ -1324,6 +1324,8 @@ mod skip_chars_advanced;
 mod skip_chars_patterns;
 #[path = "skip-syntax-advanced.rs"]
 mod skip_syntax_advanced;
+#[path = "sleep-for-semantics.rs"]
+mod sleep_for_semantics;
 mod sort;
 #[path = "sort-algorithms.rs"]
 mod sort_algorithms;
@@ -1581,6 +1583,8 @@ mod while_patterns;
 mod window_operations_comprehensive;
 #[path = "window-tree-primitive-semantics.rs"]
 mod window_tree_primitive_semantics;
+#[path = "windowp-framep-semantics.rs"]
+mod windowp_framep_semantics;
 #[path = "with-current-buffer-comprehensive.rs"]
 mod with_current_buffer_comprehensive;
 #[path = "with-current-buffer-patterns.rs"]
