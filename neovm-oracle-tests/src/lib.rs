@@ -78,6 +78,8 @@ mod buffer_hash_semantics;
 mod buffer_line_statistics_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
 mod buffer_local_symbol_identity_semantics;
+#[path = "buffer-local-toplevel-value-semantics.rs"]
+mod buffer_local_toplevel_value_semantics;
 #[path = "buffer-local-variable-patterns.rs"]
 mod buffer_local_variable_patterns;
 #[path = "buffer-modification-comprehensive.rs"]
