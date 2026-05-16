@@ -167,6 +167,8 @@ mod change_group_semantics;
 mod char_after;
 #[path = "char-before-operations.rs"]
 mod char_before_operations;
+#[path = "char-byte-strict-edge-semantics.rs"]
+mod char_byte_strict_edge_semantics;
 #[path = "char-literal.rs"]
 mod char_literal;
 #[path = "char-literal-advanced.rs"]
@@ -232,6 +234,8 @@ mod coding_string_advanced;
 mod coding_system_comprehensive;
 #[path = "coding-system-put-advanced.rs"]
 mod coding_system_put_advanced;
+#[path = "coding-textprop-strict-edge-semantics.rs"]
+mod coding_textprop_strict_edge_semantics;
 #[path = "coding-utf8-test-availability-semantics.rs"]
 mod coding_utf8_test_availability_semantics;
 mod combination;
@@ -963,6 +967,8 @@ mod list_creation_comprehensive;
 mod list_manipulation_comprehensive;
 #[path = "list-operations-advanced.rs"]
 mod list_operations_advanced;
+#[path = "list-seq-strict-edge-semantics.rs"]
+mod list_seq_strict_edge_semantics;
 #[path = "list-tail-helper-semantics.rs"]
 mod list_tail_helper_semantics;
 #[path = "listify-key-sequence-semantics.rs"]
