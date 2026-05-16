@@ -34,6 +34,19 @@ fn oracle_prop_memq_float_uses_eq_identity() {
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
+#[test]
+fn oracle_memq_reports_improper_tail_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fmemq walks with FOR_EACH_TAIL and then calls
+    // CHECK_LIST_END, so a missed search through a dotted list reports the
+    // original dotted cons as the offending list object.
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        "(condition-case err (memq 1 (cons 2 3)) (error (list (car err) (cdr err))))",
+    );
+    assert_ok_eq("(wrong-type-argument (listp (2 . 3)))", &oracle, &neovm);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
