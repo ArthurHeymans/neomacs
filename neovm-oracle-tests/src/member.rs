@@ -4,7 +4,10 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{
+    ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity_with_bootstrap,
+    eval_oracle_and_neovm,
+};
 
 #[test]
 fn oracle_prop_member_basics() {
@@ -23,6 +26,28 @@ fn oracle_prop_member_wrong_type_error() {
 
     let (oracle, neovm) = eval_oracle_and_neovm("(member 1 2)");
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
+}
+
+#[test]
+fn oracle_member_ignore_case_ignores_non_strings_and_returns_tail() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:member-ignore-case is a Lisp loop over LIST.  It skips
+    // non-string elements, returns the original list tail at the first
+    // string-equal-ignore-case match, and only signals if cdr traversal reaches
+    // a malformed tail before any match.
+    let form = r#"
+(list
+ (member-ignore-case "foo" '(1 "bar" foo "FoO" "later"))
+ (member-ignore-case "foo" '(1 foo "FoO" . bad-tail))
+ (condition-case err
+     (member-ignore-case "missing" '(1 "bar" foo . bad-tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (member-ignore-case 'foo '("foo"))
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 proptest! {
