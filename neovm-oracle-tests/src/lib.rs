@@ -1060,6 +1060,8 @@ mod point;
 mod point_max;
 #[path = "point-min.rs"]
 mod point_min;
+#[path = "posn-object-semantics.rs"]
+mod posn_object_semantics;
 #[path = "pp-semantics.rs"]
 mod pp_semantics;
 #[path = "predicate-logic-comprehensive.rs"]

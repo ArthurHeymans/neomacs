@@ -412,6 +412,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "posn-area",
     "posn-image",
     "posn-object",
+    "posn-object-width-height",
+    "posn-object-x-y",
     "posn-point",
     "posn-string",
     "posn-timestamp",
