@@ -133,6 +133,48 @@ fn oracle_prop_seq_lib_contains_position() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_lib_contains_position_testfn_return_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; GNU lisp/emacs-lisp/seq.el calls TESTFN as (TESTFN element elt),
+    ;; and seq-contains-p returns TESTFN's actual non-nil value.
+    (seq-contains-p '(1 2 3) 2
+                    (lambda (element target)
+                      (and (= element target) 'found-token)))
+    (seq-position '(1 2 3) 2
+                  (lambda (element target)
+                    (and (= element target) 'found-token)))
+    (let ((calls nil))
+      (list
+       (seq-contains-p '(a b c) 'b
+                       (lambda (element target)
+                         (push (list element target) calls)
+                         (eq element target)))
+       (nreverse calls)))
+    (let ((calls nil))
+      (list
+       (seq-position '(a b c) 'b
+                     (lambda (element target)
+                       (push (list element target) calls)
+                       (eq element target)))
+       (nreverse calls)))
+    ;; Nil TESTFN falls back to equal.
+    (seq-contains-p '((a . 1) (b . 2)) '(b . 2) nil)
+    (seq-position '((a . 1) (b . 2)) '(b . 2) nil)
+    ;; Predicate errors should propagate unchanged through seq.
+    (condition-case err
+        (seq-contains-p '(1 2 3) 2 (lambda (_element _target) (signal 'wrong-type-argument '(integerp bad))))
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-position '(1 2 3) 2 (lambda (_element _target) (signal 'wrong-type-argument '(integerp bad))))
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-concatenate across types
 // ---------------------------------------------------------------------------
