@@ -54,6 +54,28 @@ fn oracle_prop_next_property_change() {
 }
 
 #[test]
+fn oracle_prop_next_property_change_bignum_position_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs textprop.c:Fnext_property_change also validates POSITION via
+    // validate_interval_range, so bignums are saturated by buffer.c:fix_position
+    // before the object range check.
+    let form =
+        r####"(next-property-change 1000000000000000000000000000000 (propertize "hi" 'a 1))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_previous_property_change_bignum_position_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs textprop.c:Fprevious_property_change shares the same
+    // validate_interval_range path for POSITION.
+    let form = r####"(previous-property-change 1000000000000000000000000000000 (propertize "hi" 'a 1))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_propertize_multiple_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
