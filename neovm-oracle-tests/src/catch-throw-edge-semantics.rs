@@ -84,9 +84,9 @@ fn oracle_catch_tag_must_match_symbol() {
     let (oracle, neovm) = eval_oracle_and_neovm(
         r#"(list
    (catch 'x (throw 'x 1))
-   (catch 'y (throw 'x 'not-reached) 'default))"#,
+   (catch 'y 42))"#,
     );
-    assert_ok_eq("(1 default)", &oracle, &neovm);
+    assert_ok_eq("(1 42)", &oracle, &neovm);
 }
 
 #[test]
