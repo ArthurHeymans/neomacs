@@ -763,6 +763,8 @@ mod format_comprehensive_patterns;
 mod format_extended;
 #[path = "format-extended-advanced.rs"]
 mod format_extended_advanced;
+#[path = "format-message-edge-semantics.rs"]
+mod format_message_edge_semantics;
 #[path = "format-message-patterns.rs"]
 mod format_message_patterns;
 #[path = "format-patterns.rs"]
