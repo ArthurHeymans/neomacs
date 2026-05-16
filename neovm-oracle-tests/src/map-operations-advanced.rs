@@ -483,6 +483,47 @@ fn oracle_prop_map_adv_list_mutation_shortens_traversal_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_map_adv_list_mutation_replaces_tail_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c:mapcar1` reads XCDR(tail) after the callback.  If
+    // FUNCTION replaces the current cons tail, mapc/mapcan/mapconcat traverse
+    // the newly installed tail, not a cdr value captured before the callback.
+    let form = r####"(list
+  (let* ((xs (list 1 2 3 4))
+         (seen nil))
+    (list (mapc (lambda (x)
+                  (push x seen)
+                  (when (= x 1)
+                    (setcdr xs (list 9 10 11))))
+                xs)
+          (nreverse seen)
+          xs))
+  (let* ((xs (list 1 2 3 4))
+         (seen nil))
+    (list (mapcan (lambda (x)
+                    (push x seen)
+                    (when (= x 1)
+                      (setcdr xs (list 9 10 11)))
+                    (list x))
+                  xs)
+          (nreverse seen)
+          xs))
+  (let* ((xs (list 1 2 3 4))
+         (seen nil))
+    (list (mapconcat (lambda (x)
+                       (push x seen)
+                       (when (= x 1)
+                         (setcdr xs (list 9 10 11)))
+                       (number-to-string x))
+                     xs
+                     ",")
+          (nreverse seen)
+          xs)))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // mapconcat: advanced separator and transform patterns
 // ---------------------------------------------------------------------------
