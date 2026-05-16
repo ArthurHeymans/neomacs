@@ -136,6 +136,35 @@ fn oracle_prop_byte_ops_get_byte_empty_string_position_validation_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_byte_ops_buffer_byte_position_boundaries_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/editfns.c:Fposition_bytes/Fbyte_to_position use whole-buffer
+    // BEG/Z bounds.  byte-to-position also backs up from a byte offset inside a
+    // multibyte character to that character's start before converting.
+    let form = r#"
+(with-temp-buffer
+  (insert "AéB")
+  (let ((mark (copy-marker 2)))
+    (narrow-to-region 2 3)
+    (list
+     (mapcar #'position-bytes '(0 1 2 3 4 5))
+     (mapcar #'byte-to-position '(0 1 2 3 4 5 6))
+     (position-bytes mark)
+     (condition-case err
+         (byte-to-position mark)
+       (error (list (car err) (cdr err))))
+     (condition-case err
+         (position-bytes "2")
+       (error (list (car err) (cdr err))))
+     (condition-case err
+         (byte-to-position "2")
+       (error (list (car err) (cdr err)))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // string-to-multibyte / string-to-unibyte conversions
 // ---------------------------------------------------------------------------
