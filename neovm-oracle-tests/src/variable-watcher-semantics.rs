@@ -192,3 +192,89 @@ fn oracle_variable_watchers_report_buffer_local_where() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_variable_watchers_set_default_reports_set_operation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((log nil))
+  (defvar neomacs--oracle-vw-default-base 'base)
+  (defvaralias 'neomacs--oracle-vw-default-alias
+    'neomacs--oracle-vw-default-base)
+  (fset 'neomacs--oracle-vw-default-watch
+        (lambda (symbol newval operation where)
+          (setq log
+                (cons
+                 (list symbol
+                       (if (boundp symbol) (symbol-value symbol) :unbound)
+                       newval operation where)
+                 log))))
+  (add-variable-watcher 'neomacs--oracle-vw-default-base
+                        'neomacs--oracle-vw-default-watch)
+  (unwind-protect
+      (list
+       (set-default 'neomacs--oracle-vw-default-base 'via-base)
+       (set-default 'neomacs--oracle-vw-default-alias 'via-alias)
+       (default-value 'neomacs--oracle-vw-default-base)
+       (default-value 'neomacs--oracle-vw-default-alias)
+       (nreverse log))
+    (condition-case nil
+        (remove-variable-watcher 'neomacs--oracle-vw-default-base
+                                 'neomacs--oracle-vw-default-watch)
+      (error nil))
+    (fmakunbound 'neomacs--oracle-vw-default-watch)
+    (condition-case nil
+        (internal-delete-indirect-variable
+         'neomacs--oracle-vw-default-alias)
+      (error nil))
+    (dolist (sym '(neomacs--oracle-vw-default-base
+                   neomacs--oracle-vw-default-alias))
+      (when (boundp sym)
+        (makunbound sym)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_variable_watchers_kill_local_variable_notifies_before_local_removal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((log nil)
+      (buf (generate-new-buffer " *neomacs-oracle-vw-kill-local*")))
+  (defvar neomacs--oracle-vw-kill-local 'default)
+  (fset 'neomacs--oracle-vw-kill-local-watch
+        (lambda (symbol newval operation where)
+          (setq log
+                (cons
+                 (list symbol newval operation
+                       (and (bufferp where) (buffer-name where))
+                       (if (boundp symbol) (symbol-value symbol) :unbound))
+                 log))))
+  (add-variable-watcher 'neomacs--oracle-vw-kill-local
+                        'neomacs--oracle-vw-kill-local-watch)
+  (unwind-protect
+      (list
+       (with-current-buffer buf
+         (list
+          (kill-local-variable 'neomacs--oracle-vw-kill-local)
+          (make-variable-buffer-local 'neomacs--oracle-vw-kill-local)
+          (kill-local-variable 'neomacs--oracle-vw-kill-local)
+          (make-local-variable 'neomacs--oracle-vw-kill-local)
+          (setq neomacs--oracle-vw-kill-local 'local)
+          (kill-local-variable 'neomacs--oracle-vw-kill-local)
+          neomacs--oracle-vw-kill-local))
+       (nreverse log))
+    (remove-variable-watcher 'neomacs--oracle-vw-kill-local
+                             'neomacs--oracle-vw-kill-local-watch)
+    (fmakunbound 'neomacs--oracle-vw-kill-local-watch)
+    (when (boundp 'neomacs--oracle-vw-kill-local)
+      (makunbound 'neomacs--oracle-vw-kill-local))
+    (when (buffer-live-p buf)
+      (kill-buffer buf))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

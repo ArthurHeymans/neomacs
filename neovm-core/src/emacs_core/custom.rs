@@ -351,17 +351,6 @@ pub(crate) fn builtin_kill_local_variable(
     args: Vec<Value>,
 ) -> EvalResult {
     let outcome = builtin_kill_local_variable_impl(ctx, &args)?;
-    if outcome.removed {
-        if let Some(buffer_id) = outcome.buffer_id {
-            ctx.run_variable_watchers_by_id_with_where(
-                outcome.resolved_id,
-                &Value::NIL,
-                &Value::NIL,
-                "makunbound",
-                &Value::make_buffer(buffer_id),
-            )?;
-        }
-    }
     Ok(outcome.result)
 }
 
@@ -454,6 +443,17 @@ pub(crate) fn builtin_kill_local_variable_impl(
             .map(|s| s.redirect() == SymbolRedirect::Localized)
             .unwrap_or(false);
         if is_localized {
+            // GNU `Fkill_local_variable` notifies watchers before removing the
+            // buffer's local alist entry or swapping the BLV back to the
+            // global binding, so the callback still observes the local value.
+            ctx.run_variable_watchers_by_id_with_where(
+                resolved,
+                &Value::NIL,
+                &Value::NIL,
+                "makunbound",
+                &Value::make_buffer(buffer_id),
+            )?;
+
             // Reset the BLV cache so subsequent reads re-swap to
             // the global default. Equivalent to GNU's
             // `swap_in_global_binding`.
