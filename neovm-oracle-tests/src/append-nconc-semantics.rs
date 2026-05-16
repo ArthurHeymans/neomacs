@@ -69,6 +69,28 @@ fn oracle_append_rejects_char_table_like_gnu() {
 }
 
 #[test]
+fn oracle_append_vconcat_accept_byte_code_but_concat_rejects() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:concat_to_list and concat_to_vector accept CLOSUREP
+    // arguments, which includes byte-code functions.  concat_to_string does
+    // not accept CLOSUREP and signals `wrong-type-argument' with `sequencep'.
+    let form = r#"
+(let ((bc #[257 "\300\207" [42] 1]))
+  (list
+   (type-of bc)
+   (length bc)
+   (append bc nil)
+   (vconcat bc)
+   (condition-case err
+       (concat bc)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_nconc_mutates_prefix_and_shares_tail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
