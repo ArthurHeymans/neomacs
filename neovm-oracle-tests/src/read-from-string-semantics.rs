@@ -51,6 +51,31 @@ fn oracle_read_from_string_malformed_error_payloads() {
 }
 
 #[test]
+fn oracle_read_from_string_hash_skip_lazy_string_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r###"
+(let ((inputs '("#@"
+                "#@x"
+                "#@0x"
+                "#@01abc"
+                "#@4data42"
+                "#@5abc"))
+      (zero-zero "#@00abc"))
+  (list
+   (mapcar
+    (lambda (input)
+      (condition-case err
+          (read-from-string input)
+        (error (list input (car err) (cdr err)))))
+    inputs)
+   (read-from-string zero-zero)))
+"###;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_read_from_string_empty_and_whitespace_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
