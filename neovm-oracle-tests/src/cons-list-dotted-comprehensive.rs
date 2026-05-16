@@ -316,6 +316,50 @@ fn oracle_prop_nthcdr_on_dotted_lists() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_nthcdr_circular_and_improper_tail_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fnthcdr validates improper list ends with CHECK_LIST_END
+    // and reduces large/bignum indexes modulo the detected cycle length.
+    let form = r#"
+(list
+ ;; Improper tails are accepted while N lands on a cons or the dotted tail.
+ (nthcdr 2 '(a b . c))
+ ;; But stepping past the dotted tail signals against the original list.
+ (condition-case err
+     (nthcdr 3 '(a b . c))
+   (wrong-type-argument err))
+ (condition-case err
+     (nth 2 '(a b . c))
+   (wrong-type-argument err))
+ ;; Negative counts return the original object, including improper lists.
+ (let ((d '(x y . z)))
+   (list (eq (nthcdr -1 d) d)
+         (nthcdr -1 d)))
+ ;; Circular lists: check finite, large fixnum, and bignum counts by the
+ ;; element reached, avoiding printing the circular tail itself.
+ (let ((c (list 'a 'b 'c 'd)))
+   (setcdr (last c) c)
+   (list (car (nthcdr 0 c))
+         (car (nthcdr 1 c))
+         (car (nthcdr 4 c))
+         (car (nthcdr 127 c))
+         (car (nthcdr 128 c))
+         (car (nthcdr (ash 1 80) c))))
+ ;; Lasso: prefix plus cycle.  Positions after the prefix wrap in the cycle.
+ (let ((l (list 'p0 'p1 'c0 'c1 'c2)))
+   (setcdr (last l) (nthcdr 2 l))
+   (list (car (nthcdr 0 l))
+         (car (nthcdr 1 l))
+         (car (nthcdr 2 l))
+         (car (nthcdr 5 l))
+         (car (nthcdr 6 l))
+         (car (nthcdr (1+ (ash 1 80)) l)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // length vs safe-length on dotted and circular lists
 // ---------------------------------------------------------------------------
