@@ -897,6 +897,8 @@ mod math_functions;
 mod max;
 #[path = "max-char-operations.rs"]
 mod max_char_operations;
+#[path = "md5-semantics.rs"]
+mod md5_semantics;
 mod member;
 #[path = "member-alist-semantics.rs"]
 mod member_alist_semantics;
