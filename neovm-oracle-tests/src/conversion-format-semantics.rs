@@ -129,3 +129,40 @@ fn oracle_format_precision_properties_and_errors() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_format_argument_text_property_propagation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU `styled_format` in src/editfns.c records each substituted span
+    // and then copies text properties from both the format string and string
+    // arguments, extending argument properties across right padding.
+    let form = r#"
+(list
+ (let ((s (format "%s" (propertize "abc" 'face 'bold))))
+   (list s
+         (text-properties-at 0 s)
+         (text-properties-at 1 s)
+         (text-properties-at 2 s)))
+ (let ((s (format "[%5s]" (propertize "abc" 'face 'bold))))
+   (list s
+         (mapcar (lambda (i) (text-properties-at i s))
+                 (number-sequence 0 (1- (length s))))))
+ (let ((s (format "%-5s" (propertize "abc" 'face 'bold))))
+   (list s
+         (mapcar (lambda (i) (text-properties-at i s))
+                 (number-sequence 0 (1- (length s))))))
+ (let ((s (format "%.2s" (propertize "abcdef" 'face 'bold))))
+   (list s
+         (mapcar (lambda (i) (text-properties-at i s))
+                 (number-sequence 0 (1- (length s))))))
+ (let* ((fmt (propertize "[%s]" 'face 'italic))
+        (arg (propertize "abc" 'face 'bold))
+        (s (format fmt arg)))
+   (list s
+         (mapcar (lambda (i) (text-properties-at i s))
+                 (number-sequence 0 (1- (length s)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
