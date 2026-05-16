@@ -435,6 +435,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "string-or-null-p",
     "subr-primitive-p",
     "take-while",
+    "values--store-value",
     "seq-contains",
     "seq-contains-p",
     "seq-concatenate",
