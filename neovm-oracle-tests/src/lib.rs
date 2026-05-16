@@ -1062,6 +1062,8 @@ mod marker_edge_semantics;
 mod marker_event_strict_edge_semantics;
 #[path = "marker-operations.rs"]
 mod marker_operations;
+#[path = "marker-region-strict-edge-semantics.rs"]
+mod marker_region_strict_edge_semantics;
 #[path = "marker-semantics.rs"]
 mod marker_semantics;
 #[path = "match-beginning.rs"]
@@ -1663,6 +1665,8 @@ mod type_predicates;
 mod type_predicates_advanced;
 #[path = "type-predicates-comprehensive.rs"]
 mod type_predicates_comprehensive;
+#[path = "type-system-strict-edge-semantics.rs"]
+mod type_system_strict_edge_semantics;
 #[path = "undo-core-semantics.rs"]
 mod undo_core_semantics;
 mod unless;
