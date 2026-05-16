@@ -1436,6 +1436,8 @@ mod string_length_value_comparison_semantics;
 mod string_lessp;
 #[path = "string-lines-semantics.rs"]
 mod string_lines_semantics;
+#[path = "string-list-strict-edge-semantics.rs"]
+mod string_list_strict_edge_semantics;
 #[path = "string-manipulation.rs"]
 mod string_manipulation;
 #[path = "string-manipulation-advanced.rs"]
@@ -1500,6 +1502,8 @@ mod substring_advanced;
 #[path = "substring-strict-edge-semantics.rs"]
 mod substring_strict_edge_semantics;
 mod symbol;
+#[path = "symbol-accessor-strict-edge-semantics.rs"]
+mod symbol_accessor_strict_edge_semantics;
 #[path = "symbol-advanced.rs"]
 mod symbol_advanced;
 #[path = "symbol-comprehensive-patterns.rs"]

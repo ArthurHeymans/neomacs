@@ -1,0 +1,68 @@
+//! Oracle parity tests for symbol accessors — strict edge cases.
+//!
+//! GNU src/data.c: `symbol-name`, `symbol-function`, `symbol-value`,
+//! `symbol-plist`, `boundp`, `fboundp`, `makunbound`, `fmakunbound`.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_symbol_name_of_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(symbol-name nil)"#);
+    assert_ok_eq("\"nil\"", &o, &n);
+}
+
+#[test]
+fn oracle_symbol_name_of_t() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(symbol-name t)"#);
+    assert_ok_eq("\"t\"", &o, &n);
+}
+
+#[test]
+fn oracle_symbol_function_of_subr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(subrp (symbol-function 'car))"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_symbol_function_of_void() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(symbol-function 'nonexistent-symbol-xyz999)"#);
+    assert_ok_eq("nil", &o, &n);
+}
+
+#[test]
+fn oracle_symbol_value_of_t() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(symbol-value t)"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_boundp_on_bound() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) =
+        eval_oracle_and_neovm(r#"(progn (set 'neovm--test-bp 42) (boundp 'neovm--test-bp))"#);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_boundp_on_void() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) =
+        eval_oracle_and_neovm(r#"(progn (makunbound 'neovm--test-bp2) (boundp 'neovm--test-bp2))"#);
+    assert_ok_eq("nil", &o, &n);
+}
+
+#[test]
+fn oracle_signal_void_variable_for_unbound() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(condition-case err (symbol-value 'neovm--test-void-xy) (void-variable 'void))"#,
+    );
+    assert_ok_eq("void", &o, &n);
+}
