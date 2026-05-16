@@ -116,6 +116,40 @@ fn oracle_prop_aset_checks_index_before_array_type_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_aref_aset_record_and_bool_vector_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c:Faref supports records and bool-vectors.  GNU data.c:Faset
+    // also has an explicit RECORDP branch and stores truth values in
+    // bool-vectors while still returning the original NEWELT object.
+    let form = r#"(let ((record (record 'neovm--test-record 'a 'b))
+      (bits (make-bool-vector 4 nil)))
+  (list
+   (aref record 0)
+   (aref record 1)
+   (aref record 2)
+   (aset record 2 'changed)
+   (aref record 2)
+   record
+   (aref bits 0)
+   (aset bits 1 42)
+   (aref bits 1)
+   (aset bits 2 nil)
+   (aref bits 2)
+   (eq (fillarray bits t) bits)
+   (list (aref bits 0) (aref bits 1) (aref bits 2) (aref bits 3))
+   (eq (fillarray bits nil) bits)
+   (list (aref bits 0) (aref bits 1) (aref bits 2) (aref bits 3))
+   (condition-case err
+       (aset record -1 'bad)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (aref bits 4)
+     (error (list (car err) (cdr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // aset on strings
 // ---------------------------------------------------------------------------
