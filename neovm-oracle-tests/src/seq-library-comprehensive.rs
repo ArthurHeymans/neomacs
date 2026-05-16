@@ -250,21 +250,15 @@ fn oracle_prop_seq_lib_partition() {
     let form = r#"((require (quote cl-lib)) progn
   (require 'seq)
   (list
-    ;; Partition into evens and odds
-    (seq-partition #'cl-evenp '(1 2 3 4 5 6 7 8 9 10))
-    ;; Partition by positive/non-positive
-    (seq-partition (lambda (x) (> x 0)) '(-3 -2 -1 0 1 2 3))
-    ;; Partition on vector
-    (seq-partition (lambda (x) (> x 50)) [10 60 20 70 30 80 40 90])
-    ;; Partition with all matching
-    (seq-partition #'cl-evenp '(2 4 6 8))
-    ;; Partition with none matching
-    (seq-partition #'cl-evenp '(1 3 5 7))
-    ;; Partition empty
-    (seq-partition #'identity nil)
-    ;; Partition on string (vowels vs consonants)
-    (seq-partition (lambda (c) (memq c '(?a ?e ?i ?o ?u)))
-                   "hello world")))"#;
+    ;; GNU seq-partition groups SEQUENCE into chunks of length N.
+    (seq-partition '(1 2 3 4 5 6 7 8) 3)
+    (seq-partition '(1 2 3) 10)
+    (seq-partition nil 3)
+    (seq-partition [10 20 30 40 50] 2)
+    (seq-partition "abcde" 2)
+    ;; If N is nonpositive, GNU returns nil.
+    (seq-partition '(1 2 3) 0)
+    (seq-partition '(1 2 3) -1)))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
 

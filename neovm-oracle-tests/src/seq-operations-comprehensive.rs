@@ -442,16 +442,14 @@ fn oracle_prop_seq_group_by_partition_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(progn (require (quote cl-lib)) (list
-  ;; seq-partition: split by predicate
-  (seq-partition #'cl-evenp '(1 2 3 4 5 6 7 8 9 10))
-  ;; seq-partition: all match
-  (seq-partition #'numberp '(1 2 3))
-  ;; seq-partition: none match
-  (seq-partition #'stringp '(1 2 3))
-  ;; seq-partition: empty
-  (seq-partition #'identity nil)
-  ;; seq-partition on vector
-  (seq-partition (lambda (x) (> x 5)) [1 8 3 9 2 7 4 6])
+  ;; GNU seq-partition: split into same-type chunks of length N.
+  (seq-partition '(1 2 3 4 5 6 7 8 9 10) 4)
+  (seq-partition '(1 2 3) 10)
+  (seq-partition nil 2)
+  (seq-partition [1 8 3 9 2 7 4 6] 3)
+  (seq-partition "abcdefg" 3)
+  (seq-partition '(1 2 3) 0)
+  (seq-partition '(1 2 3) -2)
   ;; seq-group-by: group numbers by sign
   (let ((groups (seq-group-by (lambda (x) (cond ((> x 0) 'pos)
                                                   ((< x 0) 'neg)

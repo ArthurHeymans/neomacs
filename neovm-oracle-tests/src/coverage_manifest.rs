@@ -343,6 +343,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "seq-filter",
     "seq-find",
     "seq-map",
+    "seq-partition",
     "seq-position",
     "seq-positions",
     "seq-remove",
