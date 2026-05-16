@@ -1114,6 +1114,8 @@ mod point;
 mod point_max;
 #[path = "point-min.rs"]
 mod point_min;
+#[path = "pos-bol-eol-semantics.rs"]
+mod pos_bol_eol_semantics;
 #[path = "posn-object-semantics.rs"]
 mod posn_object_semantics;
 #[path = "pp-semantics.rs"]
@@ -1161,6 +1163,8 @@ mod provide_require_comprehensive;
 mod put;
 #[path = "put-text-property-patterns.rs"]
 mod put_text_property_patterns;
+#[path = "random-garbage-collect-semantics.rs"]
+mod random_garbage_collect_semantics;
 #[path = "random-operations-comprehensive.rs"]
 mod random_operations_comprehensive;
 #[path = "re-search-backward-advanced.rs"]
