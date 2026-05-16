@@ -1418,6 +1418,8 @@ mod url_parse_semantics;
 mod url_util_file_semantics;
 #[path = "url-util-semantics.rs"]
 mod url_util_semantics;
+#[path = "value-order-semantics.rs"]
+mod value_order_semantics;
 #[path = "variable-alias-semantics.rs"]
 mod variable_alias_semantics;
 #[path = "variable-watcher-semantics.rs"]
