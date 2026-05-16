@@ -928,6 +928,8 @@ mod keymap_comprehensive_patterns;
 mod keymap_operations_extended;
 #[path = "keymap-prompt-patterns.rs"]
 mod keymap_prompt_patterns;
+#[path = "keymap-strict-edge-semantics.rs"]
+mod keymap_strict_edge_semantics;
 #[path = "labeled-restriction.rs"]
 mod labeled_restriction;
 #[path = "lambda-anonymous.rs"]
@@ -1078,6 +1080,10 @@ mod merge_ordered_lists_semantics;
 #[path = "message-format-advanced.rs"]
 mod message_format_advanced;
 mod min;
+#[path = "missing-subrs-batch-semantics.rs"]
+#[path = "misc-core-strict-edge-semantics.rs"]
+#[path = "misc-core-strict-edge-semantics.rs"]
+mod misc_core_strict_edge_semantics;
 #[path = "missing-subrs-batch-semantics.rs"]
 mod missing_subrs_batch_semantics;
 #[path = "modify-syntax-entry.rs"]
@@ -1558,6 +1564,8 @@ mod symbol_property_semantics;
 mod symbol_value_edge_semantics;
 #[path = "symbol-with-pos-semantics.rs"]
 mod symbol_with_pos_semantics;
+#[path = "syntax-local-strict-edge-semantics.rs"]
+mod syntax_local_strict_edge_semantics;
 #[path = "syntax-parse-state.rs"]
 mod syntax_parse_state;
 #[path = "syntax-table.rs"]
