@@ -220,6 +220,31 @@ fn oracle_prop_tpm_string_range_error_payloads() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_tpm_buffer_range_error_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU textprop.c uses the same validate_interval_range path for buffers,
+    // with buffer positions being 1-based and the end position accepted.
+    let form = r#"(with-temp-buffer
+  (insert "abc")
+  (list
+   (point-min)
+   (point-max)
+   (condition-case err
+       (text-properties-at 0)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (text-properties-at 4)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (put-text-property 0 1 'face 'bold)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (put-text-property 1 5 'face 'bold)
+     (error (list (car err) (cdr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Buffer text properties: put/add/remove/set in a buffer with positions
 // ---------------------------------------------------------------------------
