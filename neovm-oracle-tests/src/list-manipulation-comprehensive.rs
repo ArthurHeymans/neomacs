@@ -196,6 +196,33 @@ fn oracle_prop_append_comprehensive() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_append_bool_vector_and_final_tail_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fappend delegates to concat_to_list.  That path accepts
+    // bool-vectors as non-final sequences, but always uses the final argument
+    // as an unaltered tail, even when that tail is itself a bool-vector.
+    let form = r#"
+(let ((tail (bool-vector t nil)))
+  (list
+   (append (bool-vector t nil t) nil)
+   (let ((result (append nil tail)))
+     (list (eq result tail) result))
+   (let ((result (append nil nil tail)))
+     (list (eq result tail) result))
+   (append [a b] tail)
+   (append (bool-vector t nil) 'tail)
+   (condition-case err
+       (append 42 nil)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (append (cons 'a 'bad-tail) nil)
+     (error (list (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // last with N parameter
 // ---------------------------------------------------------------------------
