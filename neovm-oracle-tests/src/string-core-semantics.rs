@@ -165,3 +165,28 @@ fn oracle_copy_sequence_text_properties_and_shallow_copy() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_copy_sequence_vectorlike_type_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Fcopy_sequence has explicit record, char-table, and
+    // bool-vector branches, but no closure branch.
+    let form = r#"
+(let ((bv (make-bool-vector 3 t))
+      (rec (record 'tag 1 2))
+      (table (make-char-table 'generic 65)))
+  (list
+   (bool-vector-p (copy-sequence bv))
+   (equal bv (copy-sequence bv))
+   (recordp (copy-sequence rec))
+   (equal rec (copy-sequence rec))
+   (char-table-p (copy-sequence table))
+   (char-table-range (copy-sequence table) ?A)
+   (condition-case err
+       (copy-sequence (lambda (x) x))
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
