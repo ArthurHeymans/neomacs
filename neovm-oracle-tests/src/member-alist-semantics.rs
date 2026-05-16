@@ -118,6 +118,32 @@ fn oracle_alist_lookup_skips_non_cons_but_checks_tail() {
 }
 
 #[test]
+fn oracle_alist_lookup_leading_non_cons_improper_tail_payloads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c uses FOR_EACH_TAIL plus CHECK_LIST_END for these alist
+    // lookups.  A leading non-cons entry is skipped, but the final signal
+    // data still reports the original improper list object.
+    let form = r#"
+(list
+ (condition-case err
+     (assq 'z (cons 'loose 'tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (assoc 'z (cons 'loose 'tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (rassq 'z (cons 'loose 'tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (rassoc 'z (cons 'loose 'tail))
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_assoc_testfn_argument_order_and_tail_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
