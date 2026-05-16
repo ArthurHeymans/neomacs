@@ -194,6 +194,34 @@ fn oracle_prop_format_message_curly_quotes() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_format_message_quoting_style_branches() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU `format-message` uses `text-quoting-style` from src/doc.c and
+    // the quote-rewriting branch in src/editfns.c `styled_format`.
+    let form = r#"
+(let ((quoted (string 96 120 39)))
+  (list
+   (let ((text-quoting-style 'grave))
+     (list (text-quoting-style) (format-message quoted)))
+   (let ((text-quoting-style 'straight))
+     (list (text-quoting-style) (format-message quoted)))
+   (let ((text-quoting-style 'curve))
+     (list (text-quoting-style) (format-message quoted)))
+   (let ((text-quoting-style 'unknown-non-nil-style))
+     (list (text-quoting-style) (format-message quoted)))
+   (let ((text-quoting-style 'curve)
+         (fmt (concat (string 96) "%s" (string 39))))
+     (let ((s (format-message (propertize fmt 'face 'italic)
+                              (propertize "abc" 'face 'bold))))
+       (list s
+             (mapcar (lambda (i) (text-properties-at i s))
+                     (number-sequence 0 (1- (length s)))))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Message-based logging system with levels and formatting
 // ---------------------------------------------------------------------------
