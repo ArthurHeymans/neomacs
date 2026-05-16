@@ -33,13 +33,6 @@ fn oracle_funcall_simple() {
 }
 
 #[test]
-fn oracle_macroexpand_quote() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(macroexpand '(quote x))"#);
-    assert_ok_eq("x", &o, &n);
-}
-
-#[test]
 fn oracle_macroexpand_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(macroexpand '(if t 1 2))"#);

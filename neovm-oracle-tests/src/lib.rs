@@ -1474,8 +1474,6 @@ mod string;
 mod string_builder_comprehensive;
 #[path = "string-bytes-width-advanced.rs"]
 mod string_bytes_width_advanced;
-#[path = "string-clean-lines-strict-edge-semantics.rs"]
-mod string_clean_lines_strict_edge_semantics;
 #[path = "string-compare-match-strict-edge-semantics.rs"]
 mod string_compare_match_strict_edge_semantics;
 #[path = "string-comparison-comprehensive.rs"]

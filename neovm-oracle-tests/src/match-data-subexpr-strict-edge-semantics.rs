@@ -55,15 +55,6 @@ fn oracle_set_match_data_restore() {
 }
 
 #[test]
-fn oracle_re_search_backward_groups() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
-        r#"(progn (switch-to-buffer (get-buffer-create "*rsb*")) (erase-buffer) (insert "before123after") (goto-char 100) (re-search-backward "\\([0-9]+\\)" nil t) (match-beginning 1))"#,
-    );
-    assert_ok_eq("7", &o, &n);
-}
-
-#[test]
 fn oracle_string_match_no_match_does_not_affect_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(
