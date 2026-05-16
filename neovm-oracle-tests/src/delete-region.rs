@@ -31,6 +31,19 @@ fn oracle_prop_delete_region_error_kinds() {
     assert_err_kind(&range_oracle, &range_neovm, "args-out-of-range");
 }
 
+#[test]
+fn oracle_prop_delete_region_bignum_start_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs editfns.c:Fdelete_region delegates to buffer.c:validate_region,
+    // which uses fix_position for START/END before range validation.
+    let form = r#"(progn
+  (erase-buffer)
+  (insert "abc")
+  (delete-region 1000000000000000000000000000000 1))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
