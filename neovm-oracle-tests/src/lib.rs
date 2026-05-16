@@ -1471,3 +1471,5 @@ mod with_temp_buffer_advanced_patterns;
 mod with_temp_buffer_comprehensive;
 #[path = "wrapper-hook-semantics.rs"]
 mod wrapper_hook_semantics;
+#[path = "zlib-decompress-region-semantics.rs"]
+mod zlib_decompress_region_semantics;
