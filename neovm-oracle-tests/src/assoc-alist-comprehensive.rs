@@ -141,6 +141,33 @@ fn oracle_prop_assoc_alist_assoc_default_params() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_assoc_default_pseudo_alist_and_tail_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:assoc-default walks a pseudo-alist in Lisp: atom
+    // elements compare directly with KEY and return DEFAULT when they match,
+    // while malformed tails are only touched if no earlier element matches.
+    let form = r#"
+(list
+ (assoc-default 'foo '(bar foo (foo . pair-value)) nil 'atom-default)
+ (assoc-default 'foo '((bar . no) foo (foo . pair-value)) nil 'atom-default)
+ (assoc-default 'foo '((foo . pair-value) foo) nil 'atom-default)
+ (assoc-default "needle"
+                '(("prefix-needle" . hit))
+                (lambda (element key)
+                  (string-match-p (symbol-name key) element))
+                'miss)
+ (condition-case err
+     (assoc-default 'missing '((a . 1) loose . bad-tail) nil 'fallback)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (assoc-default 'loose '((a . 1) loose . bad-tail) nil 'fallback)
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // alist-get: with default, testfn, and remove
 // ---------------------------------------------------------------------------
