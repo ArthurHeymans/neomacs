@@ -133,6 +133,29 @@ fn oracle_fillarray_multibyte_string_preserves_byte_length() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_fillarray_char_table_rewrites_top_level_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Ffillarray sets the 64 top-level char-table contents and
+    // the default slot.  It does not recursively overwrite already allocated
+    // subtables, so an ASCII subtable created before fillarray keeps its
+    // element values while codepoints outside that subtable see the new fill.
+    let form = r#"
+(let ((table (make-char-table 'generic 0)))
+  (set-char-table-range table ?A 1)
+  (let ((ret (fillarray table 'filled)))
+    (list
+     (eq ret table)
+     (char-table-range table ?A)
+     (char-table-range table ?B)
+     (char-table-range table #x100)
+     (aref table #x100))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // fillarray on bool-vectors with size edge cases
 // ---------------------------------------------------------------------------
