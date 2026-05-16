@@ -678,6 +678,8 @@ mod flatten_tree_semantics;
 mod float_operations_comprehensive;
 #[path = "following-char-operations.rs"]
 mod following_char_operations;
+#[path = "font-otf-availability-semantics.rs"]
+mod font_otf_availability_semantics;
 mod format;
 #[path = "format-advanced.rs"]
 mod format_advanced;
