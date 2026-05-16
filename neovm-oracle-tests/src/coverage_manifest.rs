@@ -334,6 +334,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "and-let*",
     "any",
     "apply-partially",
+    "bidi-string-mark-left-to-right",
     "booleanp",
     "buffer-match-p",
     "caaaar",

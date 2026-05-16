@@ -65,6 +65,8 @@ mod backquote_comprehensive_patterns;
 mod base64_semantics;
 #[path = "beginning-of-line.rs"]
 mod beginning_of_line;
+#[path = "bidi-string-semantics.rs"]
+mod bidi_string_semantics;
 mod bitwise;
 #[path = "bool-vector-comprehensive.rs"]
 mod bool_vector_comprehensive;
