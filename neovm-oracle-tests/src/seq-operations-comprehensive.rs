@@ -124,6 +124,58 @@ fn oracle_prop_seq_take_while_drop_while_complex() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_take_drop_while_call_boundary_and_identity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'seq)
+  (let ((lst '(1 2 3 0 4))
+        (vec [1 2 3 0 4])
+        (str (copy-sequence "abcDef")))
+    (list
+      ;; GNU seq--count-successive calls PRED through the first failing
+      ;; element, then stops.
+      (let ((calls nil))
+        (list
+         (seq-take-while (lambda (x)
+                           (push x calls)
+                           (> x 0))
+                         lst)
+         (nreverse calls)))
+      (let ((calls nil))
+        (list
+         (seq-drop-while (lambda (x)
+                           (push x calls)
+                           (> x 0))
+                         vec)
+         (nreverse calls)))
+      (let ((calls nil))
+        (list
+         (seq-take-while (lambda (c)
+                           (push c calls)
+                           (and (>= c ?a) (<= c ?z)))
+                         str)
+         (nreverse calls)))
+      ;; If the first predicate result is nil, seq-drop-while delegates to
+      ;; seq-drop with N=0 and returns the original sequence object.
+      (eq (seq-drop-while #'null lst) lst)
+      (eq (seq-drop-while #'null vec) vec)
+      (eq (seq-drop-while #'null str) str)
+      ;; Predicate errors propagate from seq--count-successive.
+      (condition-case err
+          (seq-take-while (lambda (_x)
+                            (signal 'wrong-type-argument '(integerp bad)))
+                          lst)
+        (error (list (car err) (cadr err))))
+      (condition-case err
+          (seq-drop-while (lambda (_x)
+                            (signal 'wrong-type-argument '(integerp bad)))
+                          lst)
+        (error (list (car err) (cadr err)))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-empty-p on various types
 // ---------------------------------------------------------------------------
