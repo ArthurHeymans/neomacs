@@ -87,6 +87,38 @@ fn oracle_equal_handles_circular_lists_and_vectors() {
 }
 
 #[test]
+fn oracle_equal_including_properties_recurses_through_cycles() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((left-string (propertize "abc" 'face 'bold))
+       (same-string (propertize "abc" 'face 'bold))
+       (different-string (propertize "abc" 'face 'italic))
+       (left-list (list left-string))
+       (same-list (list same-string))
+       (different-list (list different-string))
+       (left-vector (vector left-string nil))
+       (same-vector (vector same-string nil))
+       (different-vector (vector different-string nil)))
+  (setcdr left-list left-list)
+  (setcdr same-list same-list)
+  (setcdr different-list different-list)
+  (aset left-vector 1 left-vector)
+  (aset same-vector 1 same-vector)
+  (aset different-vector 1 different-vector)
+  (list
+   (equal left-list different-list)
+   (equal-including-properties left-list same-list)
+   (equal-including-properties left-list different-list)
+   (equal left-vector different-vector)
+   (equal-including-properties left-vector same-vector)
+   (equal-including-properties left-vector different-vector)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_sxhash_equal_invariants_for_properties_and_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
