@@ -1200,6 +1200,8 @@ mod point_max;
 mod point_min;
 #[path = "pos-bol-eol-semantics.rs"]
 mod pos_bol_eol_semantics;
+#[path = "pos-read-byte-strict-edge-semantics.rs"]
+mod pos_read_byte_strict_edge_semantics;
 #[path = "posn-object-semantics.rs"]
 mod posn_object_semantics;
 #[path = "pp-semantics.rs"]
@@ -1422,6 +1424,8 @@ mod single_key_description_advanced;
 mod skip_chars;
 #[path = "skip-chars-advanced.rs"]
 mod skip_chars_advanced;
+#[path = "skip-chars-field-strict-edge-semantics.rs"]
+mod skip_chars_field_strict_edge_semantics;
 #[path = "skip-chars-patterns.rs"]
 mod skip_chars_patterns;
 #[path = "skip-syntax-advanced.rs"]
@@ -1433,6 +1437,8 @@ mod sort;
 mod sort_algorithms;
 #[path = "sort-command-semantics.rs"]
 mod sort_command_semantics;
+#[path = "sort-compare-strict-edge-semantics.rs"]
+mod sort_compare_strict_edge_semantics;
 #[path = "sort-extended.rs"]
 mod sort_extended;
 #[path = "sort-mapcar-append-strict-edge-semantics.rs"]
