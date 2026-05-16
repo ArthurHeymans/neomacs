@@ -1052,6 +1052,8 @@ mod merge_ordered_lists_semantics;
 #[path = "message-format-advanced.rs"]
 mod message_format_advanced;
 mod min;
+#[path = "missing-subrs-batch-semantics.rs"]
+mod missing_subrs_batch_semantics;
 #[path = "modify-syntax-entry.rs"]
 mod modify_syntax_entry;
 #[path = "move-to-column-advanced.rs"]
