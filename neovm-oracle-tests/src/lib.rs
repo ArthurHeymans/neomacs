@@ -48,6 +48,8 @@ mod aref_aset;
 mod arithmetic;
 #[path = "arithmetic-advanced.rs"]
 mod arithmetic_advanced;
+#[path = "arithmetic-bitwise-strict-edge-semantics.rs"]
+mod arithmetic_bitwise_strict_edge_semantics;
 #[path = "ash-logand-logior-patterns.rs"]
 mod ash_logand_logior_patterns;
 mod assoc;
@@ -126,6 +128,8 @@ mod buffer_position;
 mod buffer_position_patterns;
 #[path = "buffer-search-comprehensive.rs"]
 mod buffer_search_comprehensive;
+#[path = "buffer-search-replace-strict-edge-semantics.rs"]
+mod buffer_search_replace_strict_edge_semantics;
 #[path = "buffer-string.rs"]
 mod buffer_string;
 #[path = "buffer-substring.rs"]
@@ -1108,6 +1112,8 @@ mod nthcdr_last_semantics;
 mod number_arithmetic_comprehensive;
 #[path = "number-conversion-comprehensive.rs"]
 mod number_conversion_comprehensive;
+#[path = "number-conversion-strict-edge-semantics.rs"]
+mod number_conversion_strict_edge_semantics;
 #[path = "number-operations-comprehensive.rs"]
 mod number_operations_comprehensive;
 #[path = "number-predicate-edge-semantics.rs"]
