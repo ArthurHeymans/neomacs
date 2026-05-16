@@ -541,6 +541,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "when-let*",
     "while-let",
     "with-current-buffer",
+    "with-output-to-string",
     "with-temp-buffer",
     "xor",
 ];

@@ -1559,6 +1559,8 @@ mod window_tree_primitive_semantics;
 mod with_current_buffer_comprehensive;
 #[path = "with-current-buffer-patterns.rs"]
 mod with_current_buffer_patterns;
+#[path = "with-output-to-string-semantics.rs"]
+mod with_output_to_string_semantics;
 #[path = "with-output-to-temp-buffer.rs"]
 mod with_output_to_temp_buffer;
 #[path = "with-temp-buffer.rs"]
