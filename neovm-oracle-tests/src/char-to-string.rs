@@ -54,6 +54,28 @@ fn oracle_prop_char_to_string_roundtrip() {
 }
 
 #[test]
+fn oracle_prop_char_to_string_raw_byte_character_roundtrip_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU editfns.c:Fchar_to_string validates with CHECK_CHARACTER and then
+    // uses CHAR_STRING/make_string_from_bytes, preserving raw-byte character
+    // codes as multibyte characters rather than collapsing them to unibyte
+    // byte values.
+    let form = r#"
+(let ((raw (char-to-string #x3fff80))
+      (unicode (char-to-string 233)))
+  (list
+   (multibyte-string-p raw)
+   (string-bytes raw)
+   (string-to-char raw)
+   (multibyte-string-p unicode)
+   (string-bytes unicode)
+   (string-to-char unicode)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_char_to_string_in_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
