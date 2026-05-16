@@ -562,6 +562,107 @@ pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
     (oracle, neovm)
 }
 
+/// Evaluate a form with both the GNU Emacs binary AND the Neomacs release
+/// binary, giving true end-to-end parity.  Prefer this for tests that need
+/// the full Lisp library (defun, defmacro, push, etc.) without risking
+/// in-process stack overflows from bootstrap loading.
+///
+/// Requires a Neomacs release binary at `target/release/neomacs` (set
+/// `NEOVM_BINARY_PATH` to override).
+pub(crate) fn eval_oracle_and_neovm_via_binary(form: &str) -> (String, String) {
+    let neovm = run_neovm_eval_via_binary(form).expect("neovm binary eval should run");
+    let oracle = run_oracle_eval(form).expect("oracle eval should run");
+    (oracle, neovm)
+}
+
+/// Run a form through the Neomacs release binary (`--batch -Q --eval`).
+fn run_neovm_eval_via_binary(form: &str) -> Result<String, String> {
+    let form_path = write_oracle_form_file(form)?;
+    let lisp_dir = project_lisp_dir();
+
+    // Simple eval program: load the form file and eval each top-level
+    // expression, printing the last result like the oracle does.
+    let program = r#"(condition-case err
+    (progn
+      (let* ((coding-system-for-read 'utf-8-unix)
+             (coding-system-for-write 'utf-8-unix)
+             (form-file (getenv "NEOVM_ORACLE_FORM_FILE"))
+             (load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
+             (result
+              (let ((source-buf (generate-new-buffer " *neovm-binary-form*")))
+                (unwind-protect
+                    (progn
+                      (when load-root
+                        (let ((extra-load-path nil))
+                          (dolist (sub '("" "emacs-lisp" "progmodes" "language"
+                                         "international" "textmodes" "vc" "leim"))
+                            (let ((dir (if (equal sub "")
+                                           load-root
+                                         (expand-file-name sub load-root))))
+                              (when (file-directory-p dir)
+                                (push dir extra-load-path))))
+                          (setq load-path (append (nreverse extra-load-path) load-path))))
+                      (with-current-buffer source-buf
+                        (insert-file-contents form-file)
+                        (goto-char (point-min)))
+                      (let ((last nil))
+                        (condition-case nil
+                            (while t
+                              (setq last (eval (read source-buf) t)))
+                          (end-of-file last))))
+                  (when (buffer-live-p source-buf)
+                    (kill-buffer source-buf))))))
+        (princ (concat "OK " (prin1-to-string result)))))
+  (error
+   (princ
+    (concat "ERR "
+            (prin1-to-string (cons (car err) (cdr err)))))))"#;
+
+    let neovm_bin = std::env::var("NEOVM_BINARY_PATH").unwrap_or_else(|_| {
+        let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        manifest
+            .parent()
+            .expect("project root")
+            .join("target/release/neomacs")
+            .to_string_lossy()
+            .into_owned()
+    });
+
+    let mem_limit = oracle_mem_limit_bytes();
+    let mut cmd = Command::new(&neovm_bin);
+    cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
+        .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
+        .args(["--batch", "-Q", "--eval", &program]);
+
+    unsafe {
+        cmd.pre_exec(move || {
+            let rlim = libc::rlimit {
+                rlim_cur: mem_limit as libc::rlim_t,
+                rlim_max: mem_limit as libc::rlim_t,
+            };
+            if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("failed to run Neomacs binary: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Neomacs binary failed: status={}\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 pub(crate) fn eval_oracle_and_neovm_with_bootstrap(form: &str) -> (String, String) {
     let neovm = run_neovm_eval_with_bootstrap(form).expect("neovm eval should run");
     let oracle = run_oracle_eval_with_bootstrap(form).expect("oracle eval should run");

@@ -945,6 +945,8 @@ mod macro_comprehensive_patterns;
 mod macroexpand_advanced;
 #[path = "macrop-obarrayp-daemonp-semantics.rs"]
 mod macrop_obarrayp_daemonp_semantics;
+#[path = "macrop-via-binary-semantics.rs"]
+mod macrop_via_binary_semantics;
 #[path = "make-composed-keymap-semantics.rs"]
 mod make_composed_keymap_semantics;
 #[path = "make-hash-table-advanced.rs"]
