@@ -54,6 +54,34 @@ fn oracle_prop_skip_chars_patterns_charset_varieties() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_skip_chars_patterns_iso_character_classes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU syntax.c parses ISO C character classes in skip_chars via
+    // re_wctype_parse, e.g. [:alpha:] and [:digit:], using the same syntax as
+    // regexp bracket contents.
+    let form = r#"(with-temp-buffer
+  (insert "abc123 DEF_456!")
+  (let ((results nil))
+    (goto-char (point-min))
+    (push (list 'alpha (skip-chars-forward "[:alpha:]") (point)) results)
+    (push (list 'digit (skip-chars-forward "[:digit:]") (point)) results)
+    (push (list 'blank-stop (skip-chars-forward "[:alpha:]") (point)) results)
+    (skip-chars-forward " ")
+    (push (list 'upper-alpha (skip-chars-forward "[:alpha:]") (point)) results)
+    (push (list 'symbol-stop (skip-chars-forward "[:alnum:]") (point)) results)
+    (goto-char (point-min))
+    (push (list 'neg-alpha (skip-chars-forward "^[:alpha:]") (point)) results)
+    (goto-char 4)
+    (push (list 'neg-digit (skip-chars-forward "^[:digit:]") (point)) results)
+    (goto-char (point-max))
+    (push (list 'back-punct (skip-chars-backward "^[:alnum:]") (point)) results)
+    (push (list 'back-alnum (skip-chars-backward "[:alnum:]") (point)) results)
+    (nreverse results)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // LIM parameter: various limit positions
 // ---------------------------------------------------------------------------
