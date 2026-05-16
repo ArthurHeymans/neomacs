@@ -57,6 +57,8 @@ mod assoc_alist_comprehensive;
 mod assoc_assq_advanced;
 #[path = "assoc-delete-semantics.rs"]
 mod assoc_delete_semantics;
+#[path = "assoc-member-strict-edge-semantics.rs"]
+mod assoc_member_strict_edge_semantics;
 mod assq;
 #[path = "autoload-semantics.rs"]
 mod autoload_semantics;
