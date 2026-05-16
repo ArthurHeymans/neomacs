@@ -793,6 +793,8 @@ mod format;
 mod format_advanced;
 #[path = "format-comprehensive-patterns.rs"]
 mod format_comprehensive_patterns;
+#[path = "format-delete-insert-strict-edge-semantics.rs"]
+mod format_delete_insert_strict_edge_semantics;
 #[path = "format-extended.rs"]
 mod format_extended;
 #[path = "format-extended-advanced.rs"]

@@ -1,0 +1,51 @@
+//! Oracle parity for format edges + delete/insert strict edges.
+//! GNU src/editfns.c, src/cmds.c.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_format_c_char() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(format "%c" 65)"#);
+    assert_ok_eq("\"A\"", &o, &n);
+}
+
+#[test]
+fn oracle_format_x_hex() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(format "%x" 255)"#);
+    assert_ok_eq("\"ff\"", &o, &n);
+}
+
+#[test]
+fn oracle_format_percent_literal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(format "100%%")"#);
+    assert_ok_eq("\"100%\"", &o, &n);
+}
+
+#[test]
+fn oracle_format_mixed() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(format "%s=%d" "x" 42)"#);
+    assert_ok_eq("\"x=42\"", &o, &n);
+}
+
+#[test]
+fn oracle_insert_integer_char() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (switch-to-buffer (get-buffer-create "*ii*")) (erase-buffer) (insert 65) (buffer-string))"#,
+    );
+    assert_ok_eq("\"A\"", &o, &n);
+}
+
+#[test]
+fn oracle_insert_mixed() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (switch-to-buffer (get-buffer-create "*im*")) (erase-buffer) (insert 72 73 ?!) (buffer-string))"#,
+    );
+    assert_ok_eq("\"HI!\"", &o, &n);
+}
