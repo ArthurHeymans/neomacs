@@ -1,4 +1,9 @@
-//! Oracle parity tests for `reverse`.
+//! Oracle parity tests for `reverse` and `nreverse`.
+//!
+//! GNU implements both primitives in `src/fns.c`.  `reverse` returns a
+//! reversed copy for supported sequences, while `nreverse` destructively
+//! reverses lists, vectors, and bool-vectors but returns a reversed copy for
+//! strings.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
@@ -84,6 +89,92 @@ fn oracle_prop_reverse_vector() {
     // reverse works on vectors too
     let (o, n) = eval_oracle_and_neovm("(reverse [1 2 3 4])");
     assert_ok_eq("[4 3 2 1]", &o, &n);
+}
+
+#[test]
+fn oracle_reverse_copies_supported_sequences_without_mutating_originals() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((list (list 'a (list 'b) 'c))
+       (vec (vector 'a (list 'b) 'c))
+       (str "ab\u00e9")
+       (boolv (bool-vector t nil t nil))
+       (rlist (reverse list))
+       (rvec (reverse vec))
+       (rstr (reverse str))
+       (rboolv (reverse boolv)))
+  (list
+   list rlist (eq list rlist) (eq (cadr list) (cadr rlist))
+   vec rvec (eq vec rvec) (eq (aref vec 1) (aref rvec 1))
+   str rstr (eq str rstr)
+   boolv rboolv (eq boolv rboolv)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_nreverse_mutates_lists_vectors_and_bool_vectors_but_copies_strings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((list (list 'a 'b 'c))
+       (first list)
+       (second (cdr list))
+       (vec (vector 'a 'b 'c))
+       (boolv (bool-vector t nil t nil))
+       (str "ab\u00e9")
+       (rlist (nreverse list))
+       (rvec (nreverse vec))
+       (rboolv (nreverse boolv))
+       (rstr (nreverse str)))
+  (list
+   rlist list
+   (eq first (last rlist))
+   (eq second (cdr (last rlist)))
+   vec rvec (eq vec rvec)
+   boolv rboolv (eq boolv rboolv)
+   str rstr (eq str rstr)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_reverse_and_nreverse_improper_list_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (reverse (cons 'a 'tail))
+   (error err))
+ (condition-case err
+     (nreverse (cons 'a 'tail))
+   (error err)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_nreverse_self_circular_list_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((x (list 'a)))
+  (setcdr x x)
+  (condition-case err
+      (nreverse x)
+    (error (let ((arg (cadr err)))
+             (list (car err)
+                   (eq arg x)
+                   (listp arg)
+                   (car arg))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 proptest! {

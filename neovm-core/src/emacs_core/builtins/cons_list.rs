@@ -22,6 +22,36 @@ fn builtin_cons_values(car: Value, cdr: Value) -> EvalResult {
     Ok(Value::cons(car, cdr))
 }
 
+fn for_each_tail_cycle_tail(
+    tail: Value,
+    tortoise: &mut Value,
+    max: &mut i64,
+    n: &mut i64,
+    q: &mut i64,
+) -> Option<Value> {
+    *q -= 1;
+    let check_against_tortoise = if *q != 0 {
+        true
+    } else {
+        *n -= 1;
+        if *n > 0 {
+            true
+        } else {
+            *max = max.saturating_mul(2);
+            *q = *max;
+            *n = *max >> u16::BITS;
+            *tortoise = tail;
+            false
+        }
+    };
+
+    if check_against_tortoise && tail.bits() == tortoise.bits() {
+        Some(tail)
+    } else {
+        None
+    }
+}
+
 fn for_each_proper_list_tail<F>(
     list: Value,
     improper_error_object: Value,
@@ -32,8 +62,9 @@ where
 {
     let mut tail = list;
     let mut tortoise = list;
-    let mut power = 1usize;
-    let mut distance = 0usize;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
 
     while tail.is_cons() {
         if let Some(result) = visit(tail)? {
@@ -42,14 +73,10 @@ where
 
         tail = tail.cons_cdr();
         if tail.is_cons() {
-            distance = distance.saturating_add(1);
-            if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
-            }
-            if distance == power {
-                tortoise = tail;
-                power = power.saturating_mul(2).max(1);
-                distance = 0;
+            if let Some(cycle_tail) =
+                for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+            {
+                return Err(signal("circular-list", vec![cycle_tail]));
             }
         }
     }
@@ -68,22 +95,19 @@ pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
     let mut len = 0usize;
     let mut tail = list;
     let mut tortoise = list;
-    let mut power = 1usize;
-    let mut distance = 0usize;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
 
     while tail.is_cons() {
         len = len.saturating_add(1);
 
         tail = tail.cons_cdr();
         if tail.is_cons() {
-            distance = distance.saturating_add(1);
-            if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
-            }
-            if distance == power {
-                tortoise = tail;
-                power = power.saturating_mul(2).max(1);
-                distance = 0;
+            if let Some(cycle_tail) =
+                for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+            {
+                return Err(signal("circular-list", vec![cycle_tail]));
             }
         }
     }
@@ -102,22 +126,19 @@ pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow>
     let mut items = Vec::new();
     let mut tail = list;
     let mut tortoise = list;
-    let mut power = 1usize;
-    let mut distance = 0usize;
+    let mut max = 2i64;
+    let mut n = 0i64;
+    let mut q = 2i64;
 
     while tail.is_cons() {
         items.push(tail.cons_car());
 
         tail = tail.cons_cdr();
         if tail.is_cons() {
-            distance = distance.saturating_add(1);
-            if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
-            }
-            if distance == power {
-                tortoise = tail;
-                power = power.saturating_mul(2).max(1);
-                distance = 0;
+            if let Some(cycle_tail) =
+                for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
+            {
+                return Err(signal("circular-list", vec![cycle_tail]));
             }
         }
     }

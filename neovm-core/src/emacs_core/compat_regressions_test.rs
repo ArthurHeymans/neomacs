@@ -239,6 +239,25 @@ fn nreverse_circular_list_signals_circular_list_like_gnu() {
 }
 
 #[test]
+fn reverse_circular_list_reports_gnu_for_each_tail_cycle_cell() {
+    crate::test_utils::init_test_tracing();
+    let list = Value::cons(Value::fixnum(1), Value::NIL);
+    let second = Value::cons(Value::fixnum(2), Value::NIL);
+    let third = Value::cons(Value::fixnum(3), list);
+    list.set_cdr(second);
+    second.set_cdr(third);
+
+    let err = crate::emacs_core::builtins::builtin_reverse(vec![list]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "circular-list");
+            assert!(eq_value(&sig.data[0], &third));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn external_debugging_rejects_negative_fixnum() {
     crate::test_utils::init_test_tracing();
     let err =
