@@ -45,3 +45,45 @@ fn oracle_delete_dups_small_list_mutates_before_improper_tail_error() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_delete_dups_large_list_uses_hash_path_and_keeps_first() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((first (list 'same))
+       (middle (list 'same))
+       (last (list 'same))
+       (xs (append (list first)
+                   (number-sequence 0 100)
+                   (list middle last)))
+       (result (delete-dups xs)))
+  (list
+   (eq result xs)
+   (eq (car result) first)
+   (memq middle result)
+   (memq last result)
+   (length result)
+   (nth 1 result)
+   (nth 101 result)
+   xs))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_delete_dups_large_list_rejects_improper_tail_before_hash_walk() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((xs (append (number-sequence 0 100) 'tail)))
+  (list
+   (condition-case err
+       (delete-dups xs)
+     (error (list (car err) (cdr err))))
+   xs))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

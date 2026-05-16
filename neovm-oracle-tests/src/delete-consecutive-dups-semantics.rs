@@ -78,3 +78,32 @@ fn oracle_prop_delete_consecutive_dups_circular_option() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_delete_consecutive_dups_improper_tail_errors_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (let ((xs (cons 'a 'tail)))
+   (list
+    (condition-case err
+        (delete-consecutive-dups xs)
+      (error (list (car err) (cdr err))))
+    xs))
+ (let ((xs (cons 'a (cons 'a 'tail))))
+   (list
+    (condition-case err
+        (delete-consecutive-dups xs)
+      (error (list (car err) (cdr err))))
+    xs))
+ (let ((xs (cons 'a (cons 'b 'tail))))
+   (list
+    (condition-case err
+        (delete-consecutive-dups xs)
+      (error (list (car err) (cdr err))))
+    xs)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
