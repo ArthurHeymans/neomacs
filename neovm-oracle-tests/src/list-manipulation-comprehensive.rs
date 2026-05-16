@@ -378,6 +378,44 @@ fn oracle_prop_delete_delq_destructive_behavior() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_delete_sequence_identity_and_string_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fdelete has separate list, vector, and string branches.
+    // For strings, non-character ELTs and absent characters return the
+    // original string object.  Character deletion builds a fresh string and
+    // does not copy text properties.
+    let form = r#"
+(let* ((s (propertize "abac" 'face 'bold 'tag 'source))
+       (no-char (delete 'a s))
+       (absent (delete ?z s))
+       (deleted (delete ?a s))
+       (v [1 2 3])
+       (v-absent (delete 9 v))
+       (v-deleted (delete 2 v)))
+  (list
+   (eq no-char s)
+   no-char
+   (text-properties-at 0 no-char)
+   (eq absent s)
+   absent
+   (text-properties-at 0 absent)
+   (eq deleted s)
+   deleted
+   (text-properties-at 0 deleted)
+   (text-properties-at 1 deleted)
+   (eq v-absent v)
+   v-absent
+   (eq v-deleted v)
+   v-deleted
+   (condition-case err
+       (delete 'x 42)
+     (error (list (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // sort with complex comparison functions
 // ---------------------------------------------------------------------------
