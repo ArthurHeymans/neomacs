@@ -1131,6 +1131,8 @@ mod save_restriction_comprehensive;
 mod search_backward_advanced;
 #[path = "search-operations.rs"]
 mod search_operations;
+#[path = "secure-hash-semantics.rs"]
+mod secure_hash_semantics;
 #[path = "seq-comprehensive-patterns.rs"]
 mod seq_comprehensive_patterns;
 #[path = "seq-library-comprehensive.rs"]

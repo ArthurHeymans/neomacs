@@ -1,0 +1,30 @@
+//! Oracle parity tests for GNU `secure-hash` primitive semantics.
+//!
+//! GNU implements `Fsecure_hash` in `src/fns.c`.  It accepts a symbol
+//! algorithm, string or buffer object, optional character-position bounds, and
+//! an optional BINARY flag that returns a unibyte digest string.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_secure_hash_ranges_binary_and_error_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (secure-hash 'sha256 "abcdef" 1 4)
+ (secure-hash 'sha256 "abcdef" -5 -2)
+ (length (secure-hash 'sha256 "abc" nil nil t))
+ (multibyte-string-p (secure-hash 'sha256 "abc" nil nil t))
+ (secure-hash 'sha256 "é")
+ (condition-case err
+     (secure-hash 42 "abc")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (secure-hash 'bad "abc")
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
