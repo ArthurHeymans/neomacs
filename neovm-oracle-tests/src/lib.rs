@@ -130,6 +130,8 @@ mod buffer_string;
 mod buffer_substring;
 #[path = "buffer-substring-advanced.rs"]
 mod buffer_substring_advanced;
+#[path = "buffer-undo-posix-semantics.rs"]
+mod buffer_undo_posix_semantics;
 #[path = "bufferp-semantics.rs"]
 mod bufferp_semantics;
 #[path = "button-semantics.rs"]
