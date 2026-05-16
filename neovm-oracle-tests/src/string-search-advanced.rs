@@ -51,6 +51,29 @@ fn oracle_prop_string_search_adv_bignum_start_pos_error_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_search_start_pos_range_signal_data_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/fns.c:Fstring_search signals `args-out-of-range` with
+    // exactly START-POS as the signal datum when START-POS is negative or past
+    // the haystack length.
+    let form = r#"
+(list
+ (condition-case err
+     (string-search "a" "abc" -1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-search "" "abc" -1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (string-search "" "abc" 4)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Case sensitivity behavior
 // ---------------------------------------------------------------------------
