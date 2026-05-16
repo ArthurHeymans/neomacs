@@ -223,6 +223,27 @@ fn oracle_prop_string_builder_substring_extraction() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_builder_substring_bignum_index_errors_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c validates substring indexes through validate_subarray, which
+    // uses CHECK_FIXNUM rather than CHECK_INTEGER.  Bignum FROM/TO arguments
+    // therefore signal wrong-type-argument fixnump before range clipping.
+    let form = r#"(let ((big (ash 1 100))
+      (s "abcdef"))
+  (list (condition-case err
+            (substring s big)
+          (error (list (car err) (cadr err))))
+        (condition-case err
+            (substring s 0 big)
+          (error (list (car err) (cadr err))))
+        (condition-case err
+            (substring [a b c] big)
+          (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Test 7: string-join from subr-x
 // ---------------------------------------------------------------------------
