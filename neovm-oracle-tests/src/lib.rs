@@ -773,6 +773,8 @@ mod generator_semantics;
 #[path = "generic-function-comprehensive.rs"]
 mod generic_function_comprehensive;
 mod r#get;
+#[path = "get-buffer-semantics.rs"]
+mod get_buffer_semantics;
 #[path = "goto-char.rs"]
 mod goto_char;
 #[path = "goto-char-advanced.rs"]

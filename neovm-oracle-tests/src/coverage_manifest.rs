@@ -124,6 +124,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "funcall",
     "functionp",
     "get",
+    "get-buffer",
     "get-buffer-create",
     "get-byte",
     "get-text-property",
