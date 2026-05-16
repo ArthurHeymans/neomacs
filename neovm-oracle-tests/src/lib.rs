@@ -539,6 +539,8 @@ mod condition_case_patterns;
 mod condition_case_patterns_advanced;
 #[path = "condition-case-unless-debug-semantics.rs"]
 mod condition_case_unless_debug_semantics;
+#[path = "conditional-binding-macros-semantics.rs"]
+mod conditional_binding_macros_semantics;
 #[path = "cons-list-dotted-comprehensive.rs"]
 mod cons_list_dotted_comprehensive;
 #[path = "conversion-format-semantics.rs"]
