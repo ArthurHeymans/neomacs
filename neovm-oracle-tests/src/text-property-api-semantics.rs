@@ -119,6 +119,25 @@ fn oracle_text_property_search_uses_eq_not_equal_like_gnu() {
 }
 
 #[test]
+fn oracle_set_text_properties_reports_noop_on_unpropertized_string_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c:set_text_properties returns nil when removing
+    // all properties from a whole string that has no intervals to remove.
+    let form = r#"
+(let ((plain (copy-sequence "abc"))
+      (styled (propertize "abc" 'face 'bold)))
+  (list
+   (set-text-properties 0 3 nil plain)
+   (text-properties-at 0 plain)
+   (set-text-properties 0 3 nil styled)
+   (text-properties-at 0 styled)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
