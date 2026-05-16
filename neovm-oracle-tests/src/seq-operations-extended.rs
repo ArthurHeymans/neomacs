@@ -322,6 +322,40 @@ fn oracle_prop_seq_ext_subseq_comprehensive() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_subseq_bounds_error_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-subseq delegates strings/vectors to substring, but handles lists
+    // itself.  That means list bounds produce plain errors with exact messages,
+    // while string/vector bounds produce args-out-of-range.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; List start bounds.
+    (condition-case err
+        (seq-subseq '(a b c) 4)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-subseq '(a b c) -4)
+      (error (list (car err) (cadr err))))
+    ;; List end bounds.
+    (condition-case err
+        (seq-subseq '(a b c) 1 5)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-subseq '(a b c) 2 1)
+      (error (list (car err) (cadr err))))
+    ;; Vector/string route through substring and therefore signal args-out-of-range.
+    (condition-case err
+        (seq-subseq [a b c] 4)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-subseq "abc" -4)
+      (error (list (car err) (cadr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Complex: multi-step data pipeline with seq operations
 // ---------------------------------------------------------------------------

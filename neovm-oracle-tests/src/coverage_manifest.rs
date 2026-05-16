@@ -358,6 +358,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "seq-random-elt",
     "seq-remove",
     "seq-set-equal-p",
+    "seq-subseq",
     "seq-take",
     "seq-take-while",
     "seq-union",
