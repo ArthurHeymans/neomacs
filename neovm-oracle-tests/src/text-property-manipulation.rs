@@ -171,6 +171,29 @@ fn oracle_prop_tpm_remove_return_value_and_partial() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_tpm_malformed_plist_validation_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU textprop.c validates add/set plists before mutation, but
+    // remove-text-properties first looks for candidate intervals and can
+    // return nil without validating an odd plist when no property exists.
+    let form = r#"(let ((s (copy-sequence "abc")))
+  (list
+   (condition-case err
+       (add-text-properties 0 1 '(face) s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (remove-text-properties 0 1 '(face) s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (set-text-properties 0 1 '(face) s)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (add-text-properties 0 1 '(face . bold) s)
+     (error (list (car err) (cdr err))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Buffer text properties: put/add/remove/set in a buffer with positions
 // ---------------------------------------------------------------------------
