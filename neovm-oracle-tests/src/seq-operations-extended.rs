@@ -40,6 +40,59 @@ fn oracle_prop_seq_ext_map_indexed_and_do() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_iteration_short_circuit_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-some, seq-every-p, and seq-find use catch/throw to stop as soon
+    // as the result is known.  seq-count and seq-reduce traverse strictly
+    // left-to-right through seq-doseq.
+    let form = r#"(progn
+  (require 'seq)
+  (let ((log nil))
+    (list
+      (seq-some (lambda (x)
+                  (push x log)
+                  (and (> x 2) (list 'hit x)))
+                '(1 2 3 4))
+      (nreverse log)
+      (setq log nil)
+      (seq-every-p (lambda (x)
+                     (push x log)
+                     (< x 3))
+                   '(1 2 3 4))
+      (nreverse log)
+      (setq log nil)
+      (seq-find (lambda (x)
+                  (push x log)
+                  (zerop (% x 3)))
+                '(1 2 3 4 5)
+                'fallback)
+      (nreverse log)
+      (seq-find (lambda (_x) nil) '(1 2) 'fallback)
+      (setq log nil)
+      (seq-count (lambda (x)
+                   (push x log)
+                   (zerop (% x 2)))
+                 [1 2 3 4])
+      (nreverse log)
+      (setq log nil)
+      (seq-reduce (lambda (acc x)
+                    (push (list acc x) log)
+                    (+ acc x))
+                  '(1 2 3)
+                  10)
+      (nreverse log)
+      (condition-case err
+          (seq-some (lambda (x)
+                      (if (= x 2)
+                          (signal 'wrong-type-argument '(integerp bad))
+                        nil))
+                    '(1 2 3))
+        (error (list (car err) (cadr err)))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-let: destructure sequences
 // ---------------------------------------------------------------------------
