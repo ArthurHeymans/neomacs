@@ -1120,6 +1120,8 @@ mod regexp_replace_comprehensive;
 mod region_mark_semantics;
 #[path = "register-semantics.rs"]
 mod register_semantics;
+#[path = "remember-mouse-glyph-semantics.rs"]
+mod remember_mouse_glyph_semantics;
 #[path = "remove-text-properties-patterns.rs"]
 mod remove_text_properties_patterns;
 #[path = "rename-buffer-patterns.rs"]
