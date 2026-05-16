@@ -571,6 +571,8 @@ mod coverage_manifest;
 mod current_buffer;
 #[path = "current-column-advanced.rs"]
 mod current_column_advanced;
+#[path = "cxxr-semantics.rs"]
+mod cxxr_semantics;
 #[path = "dbus-inhibitor-lock-semantics.rs"]
 mod dbus_inhibitor_lock_semantics;
 #[path = "decode-char-encode-char-advanced.rs"]
