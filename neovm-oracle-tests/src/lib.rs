@@ -861,6 +861,8 @@ mod lookup_key_advanced;
 mod macro_comprehensive_patterns;
 #[path = "macroexpand-advanced.rs"]
 mod macroexpand_advanced;
+#[path = "make-composed-keymap-semantics.rs"]
+mod make_composed_keymap_semantics;
 #[path = "make-hash-table-advanced.rs"]
 mod make_hash_table_advanced;
 #[path = "make-list.rs"]
