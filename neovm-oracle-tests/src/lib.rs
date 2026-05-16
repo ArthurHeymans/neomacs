@@ -621,6 +621,8 @@ mod copy_sequence;
 mod copy_sequence_advanced;
 #[path = "copy-sequence-semantics.rs"]
 mod copy_sequence_semantics;
+#[path = "copy-syntax-ppss-strict-edge-semantics.rs"]
+mod copy_syntax_ppss_strict_edge_semantics;
 #[path = "copy-syntax-table-advanced.rs"]
 mod copy_syntax_table_advanced;
 #[path = "copy-tree-semantics.rs"]
@@ -809,6 +811,8 @@ mod format_string_advanced_patterns;
 mod forward_char;
 #[path = "forward-comment.rs"]
 mod forward_comment;
+#[path = "forward-comment-charset-strict-edge-semantics.rs"]
+mod forward_comment_charset_strict_edge_semantics;
 #[path = "forward-comment-patterns.rs"]
 mod forward_comment_patterns;
 #[path = "forward-line.rs"]
