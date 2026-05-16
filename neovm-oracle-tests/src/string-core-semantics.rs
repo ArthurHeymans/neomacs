@@ -229,3 +229,38 @@ fn oracle_copy_sequence_vectorlike_type_boundaries() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_copy_sequence_circular_and_improper_list_errors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fcopy_sequence copies conses with FOR_EACH_TAIL and
+    // then CHECK_LIST_END.  Circular data is normalized here by probing the
+    // signaled cycle tail instead of printing the circular object directly.
+    let form = r#"
+(list
+ (condition-case err
+     (copy-sequence '(a b . c))
+   (wrong-type-argument (list (car err) (cdr err))))
+ (let ((c (list 1 2 3)))
+   (setcdr (last c) c)
+   (condition-case err
+       (copy-sequence c)
+     (circular-list
+      (list (car err)
+            (consp (cadr err))
+            (safe-length (cadr err))
+            (car (cadr err))))))
+ (let ((l (list 'p0 'p1 'c0 'c1)))
+   (setcdr (last l) (nthcdr 2 l))
+   (condition-case err
+       (copy-sequence l)
+     (circular-list
+      (list (car err)
+            (consp (cadr err))
+            (safe-length (cadr err))
+            (car (cadr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
