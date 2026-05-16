@@ -41,6 +41,16 @@ fn oracle_prop_string_search_adv_start_pos_systematic() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_search_adv_bignum_start_pos_error_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs fns.c:Fstring_search validates START-POS with CHECK_FIXNUM,
+    // so bignums signal `fixnump` before range checks.
+    let form = r#"(string-search "x" "xyz" 1000000000000000000000000000000)"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Case sensitivity behavior
 // ---------------------------------------------------------------------------
