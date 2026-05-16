@@ -52,6 +52,27 @@ fn oracle_prop_forward_line_return_value_semantics() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_forward_line_accepts_bignum_n_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU cmds.c uses CHECK_INTEGER for forward-line.  For bignums it
+    // saturates the movement count to the accessible buffer size, moves as far
+    // as possible, and returns the arithmetic remainder relative to N.
+    // This differs from forward-char/backward-char, which use CHECK_FIXNUM.
+    let form = r#"(with-temp-buffer
+  (insert "a\nb\nc")
+  (let ((huge 1000000000000000000000000000000)
+        (tiny -1000000000000000000000000000000)
+        (results nil))
+    (goto-char (point-min))
+    (push (list 'huge (forward-line huge) (point)) results)
+    (goto-char (point-max))
+    (push (list 'tiny (forward-line tiny) (point)) results)
+    (nreverse results)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Negative argument: backward line movement
 // ---------------------------------------------------------------------------
