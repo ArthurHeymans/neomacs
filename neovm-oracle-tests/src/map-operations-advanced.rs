@@ -452,6 +452,37 @@ fn oracle_prop_map_adv_mapc_return_and_accumulate() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_map_adv_list_mutation_shortens_traversal_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c` computes the list length before mapping, but
+    // `mapcar1` reads each cons cdr after invoking FUNCTION.  If FUNCTION
+    // shortens the original list, `mapc` and `mapcan` only visit the remaining
+    // reachable prefix; they must not continue through stale cdr values.
+    let form = r####"(list
+  (let* ((xs (list 1 2 3 4))
+         (seen nil))
+    (list (mapc (lambda (x)
+                  (push x seen)
+                  (when (= x 1)
+                    (setcdr xs nil)))
+                xs)
+          (nreverse seen)
+          xs))
+  (let* ((xs (list 1 2 3 4))
+         (seen nil))
+    (list (mapcan (lambda (x)
+                    (push x seen)
+                    (when (= x 1)
+                      (setcdr xs nil))
+                    (list x))
+                  xs)
+          (nreverse seen)
+          xs)))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // mapconcat: advanced separator and transform patterns
 // ---------------------------------------------------------------------------
