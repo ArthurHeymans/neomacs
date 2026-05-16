@@ -1399,3 +1399,5 @@ mod with_temp_buffer;
 mod with_temp_buffer_advanced_patterns;
 #[path = "with-temp-buffer-comprehensive.rs"]
 mod with_temp_buffer_comprehensive;
+#[path = "wrapper-hook-semantics.rs"]
+mod wrapper_hook_semantics;
