@@ -877,6 +877,8 @@ mod interactive_form_comprehensive;
 mod interactive_patterns;
 #[path = "interactive-patterns-advanced.rs"]
 mod interactive_patterns_advanced;
+#[path = "intern-concat-strict-edge-semantics.rs"]
+mod intern_concat_strict_edge_semantics;
 #[path = "intern-soft-advanced.rs"]
 mod intern_soft_advanced;
 #[path = "internal-event-symbol-advanced.rs"]
