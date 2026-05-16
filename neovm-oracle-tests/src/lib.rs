@@ -777,6 +777,8 @@ mod hash_table;
 mod hash_table_advanced;
 #[path = "hash-table-comprehensive-patterns.rs"]
 mod hash_table_comprehensive_patterns;
+#[path = "hash-table-contains-semantics.rs"]
+mod hash_table_contains_semantics;
 #[path = "hash-table-extended.rs"]
 mod hash_table_extended;
 #[path = "hash-table-operations-comprehensive.rs"]

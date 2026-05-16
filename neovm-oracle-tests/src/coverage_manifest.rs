@@ -395,6 +395,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "frame-configuration-p",
     "function-alias-p",
     "funcall-interactively",
+    "hash-table-contains-p",
     "ignore",
     "if-let",
     "if-let*",
