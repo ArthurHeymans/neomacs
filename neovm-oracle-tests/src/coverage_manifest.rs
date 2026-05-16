@@ -110,6 +110,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "expt",
     "fboundp",
     "fillarray",
+    "find-buffer",
     "float",
     "floatp",
     "floor",

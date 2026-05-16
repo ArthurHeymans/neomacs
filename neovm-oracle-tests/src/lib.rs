@@ -712,6 +712,8 @@ mod file_repository_version_semantics;
 mod fillarray_advanced;
 #[path = "fillarray-operations.rs"]
 mod fillarray_operations;
+#[path = "find-buffer-semantics.rs"]
+mod find_buffer_semantics;
 #[path = "flatten-tree-semantics.rs"]
 mod flatten_tree_semantics;
 #[path = "float-operations-comprehensive.rs"]

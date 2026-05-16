@@ -8,7 +8,7 @@ use crate::buffer::{BufferId, BufferManager};
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
 use crate::emacs_core::value::{
-    ValueKind, VecLikeType, get_string_text_properties_table_for_value,
+    ValueKind, VecLikeType, equal_value, get_string_text_properties_table_for_value,
     set_string_text_properties_table_for_value,
 };
 use crate::window::FrameManager;
@@ -362,7 +362,7 @@ pub(crate) fn builtin_find_buffer(eval: &mut super::eval::Context, args: Vec<Val
             .find_in_local_var_alist(key)
             .or_else(|| buf.get_buffer_local(name))
             .unwrap_or(fallback_value);
-        if eq_value(&observed, &target_value) {
+        if equal_value(&observed, &target_value, 0) {
             return Ok(Value::make_buffer(id));
         }
     }
