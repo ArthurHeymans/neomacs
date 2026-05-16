@@ -105,6 +105,37 @@ fn oracle_prop_byte_ops_string_bytes() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_byte_ops_get_byte_empty_string_position_validation_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU character.c:Fget_byte special-cases nil POSITION by reading the
+    // string data pointer, so an empty string yields the terminating NUL.
+    // Non-nil POSITION is still validated against SCHARS and signals
+    // args-out-of-range for every index in an empty string.
+    let form = r#"
+(list
+ (condition-case err
+     (get-byte nil "")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (get-byte 0 "")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (get-byte 1 "")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (get-byte -1 "abc")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (get-byte 3 "abc")
+   (error (list (car err) (cdr err))))
+ (get-byte nil "abc")
+ (get-byte 2 "abc"))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // string-to-multibyte / string-to-unibyte conversions
 // ---------------------------------------------------------------------------
