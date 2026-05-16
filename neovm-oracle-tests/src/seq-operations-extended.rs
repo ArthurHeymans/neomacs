@@ -219,6 +219,39 @@ fn oracle_prop_seq_ext_set_operations() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_set_operations_order_and_type_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU set operations always return lists.  seq-union de-duplicates while
+    // preserving first-seen order; intersection/difference preserve elements
+    // from sequence1, including duplicates.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    ;; Union de-duplicates, keeping first appearances from sequence1 then sequence2.
+    (seq-union '(a b a c) '(b d a e))
+    ;; Intersection preserves sequence1 order and duplicate matching elements.
+    (seq-intersection '(a b a c b) '(b a))
+    ;; Difference preserves sequence1 order and duplicate nonmatching elements.
+    (seq-difference '(a b a c b) '(b))
+    ;; Vector inputs still return a list.
+    (list (seq-union [1 2 1] [2 3 1])
+          (type-of (seq-union [1 2 1] [2 3 1])))
+    ;; String inputs are sequences of character codes and still return lists.
+    (seq-intersection "abacad" "ca")
+    (seq-difference "abacad" "ca")
+    ;; Custom test function participates in union de-duplication.
+    (let ((calls nil))
+      (list
+        (seq-union '("A" "b") '("a" "C")
+                   (lambda (a b)
+                     (push (list a b) calls)
+                     (string= (downcase a) (downcase b))))
+        calls))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-subseq with negative indices and all types
 // ---------------------------------------------------------------------------
