@@ -420,6 +420,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "map-values",
     "match-buffers",
     "macrop",
+    "merge-ordered-lists",
     "named-let",
     "nbutlast",
     "not",

@@ -981,6 +981,8 @@ mod member;
 #[path = "member-alist-semantics.rs"]
 mod member_alist_semantics;
 mod memq;
+#[path = "merge-ordered-lists-semantics.rs"]
+mod merge_ordered_lists_semantics;
 #[path = "message-format-advanced.rs"]
 mod message_format_advanced;
 mod min;
