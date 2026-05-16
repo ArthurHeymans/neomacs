@@ -136,6 +136,51 @@ fn oracle_prop_seq_ext_into_and_concatenate() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_ext_core_copy_reverse_remove_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq.el defines seq-first via seq-elt, seq-rest via seq-drop,
+    // seq-copy via copy-sequence, seq-reverse preserving sequence type, and
+    // seq-remove-at-position as two seq-subseq calls plus seq-concatenate.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    (seq-first [a b])
+    (seq-rest [a b c])
+    (seq-rest "abc")
+    (condition-case err
+        (seq-first nil)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-first "")
+      (error (list (car err) (cadr err))))
+    (let ((x (list (list 1) 2)))
+      (list (equal x (seq-copy x))
+            (eq x (seq-copy x))
+            (eq (car x) (car (seq-copy x)))))
+    (let ((v [1 2 3]))
+      (list (equal v (seq-copy v))
+            (eq v (seq-copy v))))
+    (let ((s "abc"))
+      (list (equal s (seq-copy s))
+            (eq s (seq-copy s))))
+    (seq-reverse '(1 2 3))
+    (seq-reverse [1 2 3])
+    (seq-reverse "abc")
+    (seq-remove-at-position '(a b c d) 2)
+    (seq-remove-at-position [a b c d] 1)
+    (seq-remove-at-position "abcd" 1)
+    (condition-case err
+        (seq-into-sequence 42)
+      (error (list (car err) (cadr err))))
+    (condition-case err
+        (seq-remove-at-position '(a b c) 9)
+      (error (list (car err) (cadr err))))
+    (seq-remove-at-position '(a b c) -1)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-mapcat: map then concatenate
 // ---------------------------------------------------------------------------
