@@ -253,6 +253,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "standard-syntax-table",
     "string",
     "string-bytes",
+    "string-collate-equalp",
+    "string-collate-lessp",
     "string-distance",
     "string-equal",
     "string-lessp",

@@ -288,6 +288,24 @@ fn oracle_prop_string_comparison_collate_functions() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_collate_argument_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(list
+  ;; GNU accepts symbols for S1/S2 by comparing their print names.
+  (string-collate-lessp 'alpha 'beta "POSIX")
+  (string-collate-equalp 'same "same" "POSIX")
+  ;; GNU's fns.c checks that non-nil LOCALE is a string before calling str_collate.
+  (condition-case err
+      (string-collate-lessp "a" "b" 42)
+    (error (list (car err) (cadr err))))
+  (condition-case err
+      (string-collate-equalp "a" "a" 'not-a-locale)
+    (error (list (car err) (cadr err)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Edge cases and comprehensive combination tests
 // ---------------------------------------------------------------------------
