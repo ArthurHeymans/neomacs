@@ -125,3 +125,39 @@ fn oracle_sort_rejects_bool_vector_like_gnu() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_sort_validates_list_before_key_or_lessp_calls() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:sort_list calls list_length before extracting elements or
+    // invoking tim_sort, so malformed/circular lists signal before :key or
+    // :lessp can run.
+    let form = r#"
+(list
+ (let ((key-calls nil)
+       (lessp-calls nil))
+   (list
+    (condition-case err
+        (sort '(3 1 . tail)
+              :key (lambda (x) (push x key-calls) x)
+              :lessp (lambda (a b) (push (list a b) lessp-calls) (< a b)))
+      (error (list (car err) (cdr err))))
+    (nreverse key-calls)
+    (nreverse lessp-calls)))
+ (let ((key-calls nil)
+       (lessp-calls nil)
+       (cycle (list 3 1)))
+   (setcdr (last cycle) cycle)
+   (list
+    (condition-case err
+        (sort cycle
+              :key (lambda (x) (push x key-calls) x)
+              :lessp (lambda (a b) (push (list a b) lessp-calls) (< a b)))
+      (error (list (car err) (cdr err))))
+    (nreverse key-calls)
+    (nreverse lessp-calls))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
