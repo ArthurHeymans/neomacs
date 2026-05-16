@@ -3925,6 +3925,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         test_name: ht.test_name.map(|s| load_sym_id(&s)),
         user_cmp_function: None,
         user_hash_function: None,
+        mutable: true,
         size: ht.size,
         weakness: ht.weakness.as_ref().map(load_hash_table_weakness),
         rehash_size: ht.rehash_size,

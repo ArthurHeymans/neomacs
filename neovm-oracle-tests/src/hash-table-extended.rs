@@ -225,6 +225,69 @@ fn oracle_prop_hash_table_frequency_counter_complex_keys() {
 }
 
 // ---------------------------------------------------------------------------
+// User-defined hash-table tests: GNU mutability guard semantics
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_user_hash_function_cannot_mutate_same_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c marks the table immutable while a user hash function runs.
+    // Mutating that same table from the hash function must signal an error.
+    let form = r#"
+(let ((h nil)
+      (log nil))
+  (define-hash-table-test
+   'neomacs-oracle-mutating-hash
+   (lambda (a b) (equal a b))
+   (lambda (key)
+     (setq log (cons key log))
+     (puthash 'inside 'bad h)
+     0))
+  (setq h (make-hash-table :test 'neomacs-oracle-mutating-hash))
+  (list
+   (condition-case err
+       (puthash 'outer 'value h)
+     (error (list (car err) (cadr err))))
+   (hash-table-count h)
+   (nreverse log)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_user_compare_function_cannot_mutate_same_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // A second insertion with the same user hash reaches the comparison
+    // function; GNU protects the table for that callback too.
+    let form = r#"
+(let ((h nil)
+      (log nil))
+  (define-hash-table-test
+   'neomacs-oracle-mutating-compare
+   (lambda (a b)
+     (setq log (cons (list a b) log))
+     (remhash a h)
+     (equal a b))
+   (lambda (key) 0))
+  (setq h (make-hash-table :test 'neomacs-oracle-mutating-compare))
+  (puthash 'first 'one h)
+  (list
+   (condition-case err
+       (puthash 'second 'two h)
+     (error (list (car err) (cadr err))))
+   (hash-table-count h)
+   (gethash 'first h 'missing)
+   (gethash 'second h 'missing)
+   (nreverse log)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // Nested hash tables (hash of hashes)
 // ---------------------------------------------------------------------------
 

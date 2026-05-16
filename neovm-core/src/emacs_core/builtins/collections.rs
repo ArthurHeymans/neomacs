@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::eval::LispArgVec;
 use crate::emacs_core::hashtab::hash_key_to_visible_value;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -575,12 +576,41 @@ fn table_user_defined_test(table: &LispHashTable) -> Option<(Value, Value)> {
     Some((table.user_cmp_function?, table.user_hash_function?))
 }
 
+fn check_mutable_hash_table(table: Value) -> Result<(), Flow> {
+    if table.as_hash_table().is_some_and(|ht| !ht.mutable) {
+        return Err(signal(
+            "error",
+            vec![Value::string("hash table test modifies table"), table],
+        ));
+    }
+    Ok(())
+}
+
+fn hash_table_user_defined_call(
+    eval: &mut super::eval::Context,
+    table: Value,
+    function: Value,
+    args: impl Into<LispArgVec>,
+) -> EvalResult {
+    if table.as_hash_table().is_some_and(|ht| !ht.mutable) {
+        return eval.apply(function, args);
+    }
+
+    let _ = table.with_hash_table_mut(|ht| ht.mutable = false);
+    let result = eval.apply(function, args);
+    let _ = table.with_hash_table_mut(|ht| ht.mutable = true);
+    result
+}
+
 fn hash_table_user_hash(
     eval: &mut super::eval::Context,
+    table: Value,
     hash_function: Value,
     key: Value,
 ) -> EvalResult {
-    let hash = eval.apply1(hash_function, key)?;
+    let mut args = LispArgVec::new();
+    args.push(key);
+    let hash = hash_table_user_defined_call(eval, table, hash_function, args)?;
     Ok(match hash.kind() {
         ValueKind::Fixnum(n) => Value::fixnum(n),
         _ => Value::fixnum(super::super::hashtab::sxhash_for(
@@ -592,11 +622,15 @@ fn hash_table_user_hash(
 
 fn hash_table_user_keys_equal(
     eval: &mut super::eval::Context,
+    table: Value,
     cmp_function: Value,
     a: Value,
     b: Value,
 ) -> EvalResult {
-    eval.apply2(cmp_function, a, b)
+    let mut args = LispArgVec::new();
+    args.push(a);
+    args.push(b);
+    hash_table_user_defined_call(eval, table, cmp_function, args)
 }
 
 fn builtin_gethash_user_defined(
@@ -613,16 +647,17 @@ fn builtin_gethash_user_defined(
         return Ok(None);
     };
     let ht = ht_ref.clone();
-    let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
+    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
     for key in &ht.insertion_order {
         if !ht.data.contains_key(key) {
             continue;
         }
         let candidate = hash_key_to_visible_value(&ht, key);
-        if hash_table_user_hash(eval, hash_function, candidate)? != wanted_hash {
+        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
             continue;
         }
-        if hash_table_user_keys_equal(eval, cmp_function, key_value, candidate)?.is_truthy() {
+        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
+        {
             return Ok(Some(ht.data.get(key).copied().unwrap_or(default)));
         }
     }
@@ -682,21 +717,23 @@ fn builtin_puthash_user_defined(
         return Ok(None);
     };
     let ht_ref = table.as_hash_table().unwrap();
+    check_mutable_hash_table(table)?;
     let Some((cmp_function, hash_function)) = table_user_defined_test(ht_ref) else {
         return Ok(None);
     };
     let ht_snapshot = ht_ref.clone();
-    let wanted_hash = hash_table_user_hash(eval, hash_function, key_value)?;
+    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
     let mut existing_key = None;
     for key in &ht_snapshot.insertion_order {
         if !ht_snapshot.data.contains_key(key) {
             continue;
         }
         let candidate = hash_key_to_visible_value(&ht_snapshot, key);
-        if hash_table_user_hash(eval, hash_function, candidate)? != wanted_hash {
+        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
             continue;
         }
-        if hash_table_user_keys_equal(eval, cmp_function, key_value, candidate)?.is_truthy() {
+        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
+        {
             existing_key = Some(key.clone());
             break;
         }
@@ -725,6 +762,7 @@ fn builtin_puthash_values(
 ) -> EvalResult {
     match table.kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
+            check_mutable_hash_table(table)?;
             let test = table.as_hash_table().unwrap().test.clone();
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
@@ -774,6 +812,7 @@ fn builtin_remhash_values(
 ) -> EvalResult {
     match table.kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
+            check_mutable_hash_table(table)?;
             let test = table.as_hash_table().unwrap().test.clone();
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
@@ -796,6 +835,7 @@ pub(crate) fn builtin_clrhash(args: Vec<Value>) -> EvalResult {
     expect_args("clrhash", &args, 1)?;
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
+            check_mutable_hash_table(args[0])?;
             let _ = args[0].with_hash_table_mut(|ht| {
                 ht.data.clear();
                 ht.key_snapshots.clear();

@@ -9,8 +9,8 @@ use super::chartable::{bool_vector_length, char_table_external_slots};
 use super::intern::{SymId, lookup_interned_lisp_string, resolve_sym, resolve_sym_lisp_string};
 use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
 use super::value::{
-    HashKey, HashTableTest, StringTextPropertyRun, Value, get_string_text_properties_for_value,
-    list_to_vec,
+    HashKey, HashTableTest, LispHashTable, StringTextPropertyRun, Value,
+    get_string_text_properties_for_value, list_to_vec,
 };
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -29,6 +29,34 @@ pub struct PrintOptions {
     pub print_number_table: Option<Value>,
     pub float_output_format: Option<Value>,
     backquote_output_level: usize,
+}
+
+fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
+    if let Some(test_name) = table.test_name {
+        out.push_str(" test ");
+        out.push_str(resolve_sym(test_name));
+        return;
+    }
+
+    match table.test {
+        HashTableTest::Eq => out.push_str(" test eq"),
+        HashTableTest::Equal => out.push_str(" test equal"),
+        HashTableTest::Eql => {}
+    }
+}
+
+fn append_hash_table_test_bytes(table: &LispHashTable, out: &mut Vec<u8>) {
+    if let Some(test_name) = table.test_name {
+        out.extend_from_slice(b" test ");
+        out.extend_from_slice(resolve_sym(test_name).as_bytes());
+        return;
+    }
+
+    match table.test {
+        HashTableTest::Eq => out.extend_from_slice(b" test eq"),
+        HashTableTest::Equal => out.extend_from_slice(b" test equal"),
+        HashTableTest::Eql => {}
+    }
 }
 
 impl PrintOptions {
@@ -1146,11 +1174,7 @@ fn write_hash_table_stateful(value: &Value, out: &mut String, state: &mut PrintS
     let table = value.as_hash_table().unwrap().clone();
     out.push_str("#s(hash-table");
 
-    match table.test {
-        HashTableTest::Eq => out.push_str(" test eq"),
-        HashTableTest::Equal => out.push_str(" test equal"),
-        HashTableTest::Eql => {}
-    }
+    append_hash_table_test_string(&table, out);
 
     if let Some(ref weakness) = table.weakness {
         let name = match weakness {
@@ -2427,12 +2451,7 @@ fn format_hash_table(value: &Value, options: PrintOptions) -> String {
     let table = value.as_hash_table().unwrap().clone();
     let mut out = String::from("#s(hash-table");
 
-    // GNU Emacs omits test when it's eql (the default).
-    match table.test {
-        HashTableTest::Eq => out.push_str(" test eq"),
-        HashTableTest::Equal => out.push_str(" test equal"),
-        HashTableTest::Eql => {} // default, omitted
-    }
+    append_hash_table_test_string(&table, &mut out);
 
     // GNU Emacs omits weakness when there is none.
     if let Some(ref weakness) = table.weakness {
@@ -2473,11 +2492,7 @@ fn append_hash_table_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptio
     let table = value.as_hash_table().unwrap().clone();
     out.extend_from_slice(b"#s(hash-table");
 
-    match table.test {
-        HashTableTest::Eq => out.extend_from_slice(b" test eq"),
-        HashTableTest::Equal => out.extend_from_slice(b" test equal"),
-        HashTableTest::Eql => {}
-    }
+    append_hash_table_test_bytes(&table, out);
 
     if let Some(ref weakness) = table.weakness {
         let name = match weakness {
