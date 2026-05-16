@@ -618,6 +618,50 @@ fn oracle_prop_map_adv_string_mutation_reads_live_chars_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_map_adv_bool_vector_maps_logical_bits_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c:mapcar1` has a BOOL_VECTOR_P branch that maps
+    // logical bits with bool_vector_ref.  A bool-vector maps to t/nil values
+    // and later callbacks observe aset mutations to later bits.
+    let form = r####"(list
+  (let* ((bv (make-bool-vector 4 nil))
+         (seen nil))
+    (aset bv 0 t)
+    (list (mapcar (lambda (x)
+                    (push x seen)
+                    (when x
+                      (aset bv 1 t))
+                    x)
+                  bv)
+          (nreverse seen)
+          bv))
+  (let* ((bv (make-bool-vector 4 nil))
+         (seen nil))
+    (aset bv 0 t)
+    (list (mapc (lambda (x)
+                  (push x seen)
+                  (when x
+                    (aset bv 1 t)))
+                bv)
+          (nreverse seen)
+          bv))
+  (let* ((bv (make-bool-vector 4 nil))
+         (seen nil))
+    (aset bv 0 t)
+    (list (mapconcat (lambda (x)
+                       (push x seen)
+                       (when x
+                         (aset bv 1 t))
+                       (if x "t" "nil"))
+                     bv
+                     ",")
+          (nreverse seen)
+          bv)))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // mapconcat: advanced separator and transform patterns
 // ---------------------------------------------------------------------------
