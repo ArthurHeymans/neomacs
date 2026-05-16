@@ -48,6 +48,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "char-before",
     "char-charset",
     "char-equal",
+    "char-or-string-p",
     "char-syntax",
     "char-table-extra-slot",
     "char-table-p",

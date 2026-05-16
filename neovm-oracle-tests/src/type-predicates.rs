@@ -1,4 +1,5 @@
 //! Oracle parity tests for type predicates: `booleanp`, `characterp`,
+//! `char-or-string-p`,
 //! `functionp`, `keywordp`, `nlistp`, `string-or-null-p`,
 //! `integer-or-null-p`.
 
@@ -60,6 +61,40 @@ fn oracle_prop_characterp_large_codepoint() {
     assert_oracle_parity_with_bootstrap("(characterp #x10ffff)");
     // Beyond max
     assert_oracle_parity_with_bootstrap("(characterp #x110000)");
+}
+
+#[test]
+fn oracle_prop_char_or_string_p_boundaries_and_arity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c:Fchar_or_string_p is true for valid character fixnums and
+    // strings, false for every other object.  It uses GNU's full MAX_CHAR
+    // range, not just Unicode scalar values.
+    let form = r#"
+(list
+ (char-or-string-p 0)
+ (char-or-string-p ?A)
+ (char-or-string-p #x10ffff)
+ (char-or-string-p (max-char))
+ (char-or-string-p (1+ (max-char)))
+ (char-or-string-p -1)
+ (char-or-string-p "A")
+ (char-or-string-p "")
+ (char-or-string-p (string-as-unibyte "é"))
+ (char-or-string-p nil)
+ (char-or-string-p t)
+ (char-or-string-p 1.0)
+ (char-or-string-p 'A)
+ (char-or-string-p '(65))
+ (char-or-string-p [65])
+ (condition-case err
+     (char-or-string-p)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (char-or-string-p ?A "A")
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 // ---------------------------------------------------------------------------
