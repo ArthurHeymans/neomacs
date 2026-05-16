@@ -172,6 +172,25 @@ fn oracle_prop_arith_adv_ash_power_of_two() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_arith_adv_bignum_results_remain_integers_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c arithmetic promotes overflow and large shifts to GMP-backed
+    // bignums; those results are still integers and must be accepted by
+    // integer primitives such as `logcount` and `number-to-string`.
+    let form = r#"
+(list
+ (+ 1000000000000000000000000000000 1)
+ (* 1000000000000000000000000000000 2)
+ (ash 1 100)
+ (integerp (ash 1 100))
+ (logcount (ash 1 100))
+ (number-to-string (ash 1 100)))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Combined bitwise operations
 // ---------------------------------------------------------------------------
