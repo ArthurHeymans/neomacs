@@ -116,3 +116,34 @@ fn oracle_set_marker_insertion_type_returns_requested_type() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_set_marker_from_marker_in_other_buffer_recomputes_target_position() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs marker.c:set_marker_internal copies charpos from a marker in
+    // another buffer, but recomputes bytepos in the target buffer.
+    let form = r#"
+(let ((src-buf (generate-new-buffer " *marker-src-oracle*"))
+      (dst-buf (generate-new-buffer " *marker-dst-oracle*"))
+      src dst)
+  (unwind-protect
+      (progn
+        (with-current-buffer src-buf
+          (insert "aébc")
+          (setq src (copy-marker 4)))
+        (with-current-buffer dst-buf
+          (insert "αβγδε")
+          (setq dst (make-marker))
+          (set-marker dst src (current-buffer))
+          (list (marker-position src)
+                (eq (marker-buffer src) src-buf)
+                (marker-position dst)
+                (eq (marker-buffer dst) dst-buf)
+                (char-after dst))))
+    (kill-buffer src-buf)
+    (kill-buffer dst-buf)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
