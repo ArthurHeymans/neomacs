@@ -190,6 +190,8 @@ mod coding_string_advanced;
 mod coding_system_comprehensive;
 #[path = "coding-system-put-advanced.rs"]
 mod coding_system_put_advanced;
+#[path = "coding-utf8-test-availability-semantics.rs"]
+mod coding_utf8_test_availability_semantics;
 mod combination;
 mod combination_a_star_search;
 mod combination_abstract_algebra;
