@@ -411,6 +411,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "internal--format-docstring-line",
     "interactive-p",
     "internal--thread-argument",
+    "insert-buffer-substring-as-yank",
     "json-available-p",
     "list-of-strings-p",
     "butlast",
