@@ -1323,6 +1323,8 @@ mod seq_operations_comprehensive;
 mod seq_operations_extended;
 #[path = "sequence-access-semantics.rs"]
 mod sequence_access_semantics;
+#[path = "sequence-edge-semantics.rs"]
+mod sequence_edge_semantics;
 #[path = "sequence-operations.rs"]
 mod sequence_operations;
 #[path = "sequence-sorting-comprehensive.rs"]
