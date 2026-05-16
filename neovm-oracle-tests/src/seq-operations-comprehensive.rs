@@ -51,6 +51,37 @@ fn oracle_prop_seq_take_drop_all_types() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_take_drop_nonpositive_identity_and_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'seq)
+  (let ((lst (list 'a 'b 'c))
+        (vec [a b c])
+        (str (copy-sequence "abc")))
+    (list
+      ;; GNU seq-take returns an empty same-type sequence for N <= 0.
+      (seq-take lst -1)
+      (seq-take lst 0)
+      (seq-take vec -1)
+      (seq-take vec 0)
+      (seq-take str -1)
+      (seq-take str 0)
+      ;; GNU seq-drop returns SEQUENCE itself for N <= 0.
+      (eq (seq-drop lst -1) lst)
+      (eq (seq-drop lst 0) lst)
+      (eq (seq-drop vec -1) vec)
+      (eq (seq-drop vec 0) vec)
+      (eq (seq-drop str -1) str)
+      (eq (seq-drop str 0) str)
+      ;; Dropping past end returns an empty same-type sequence.
+      (seq-drop lst 99)
+      (seq-drop vec 99)
+      (seq-drop str 99))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-take-while, seq-drop-while with complex predicates
 // ---------------------------------------------------------------------------
