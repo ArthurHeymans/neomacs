@@ -559,6 +559,8 @@ mod condition_case_advanced2;
 mod condition_case_comprehensive;
 #[path = "condition-case-extended.rs"]
 mod condition_case_extended;
+#[path = "condition-case-nested-edge-semantics.rs"]
+mod condition_case_nested_edge_semantics;
 #[path = "condition-case-patterns.rs"]
 mod condition_case_patterns;
 #[path = "condition-case-patterns-advanced.rs"]
@@ -1460,6 +1462,8 @@ mod symbol_advanced;
 mod symbol_comprehensive_patterns;
 #[path = "symbol-file-semantics.rs"]
 mod symbol_file_semantics;
+#[path = "symbol-plist-edge-semantics.rs"]
+mod symbol_plist_edge_semantics;
 #[path = "symbol-plist-identity-semantics.rs"]
 mod symbol_plist_identity_semantics;
 #[path = "symbol-plist-patterns.rs"]

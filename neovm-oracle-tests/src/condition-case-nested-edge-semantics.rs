@@ -1,0 +1,95 @@
+//! Oracle parity tests for `condition-case` — nested and edge cases.
+//!
+//! GNU src/eval.c: `condition-case` error handling has subtle semantics
+//! around nested handlers, re-signaling, error data propagation, and
+//! interaction with `unwind-protect`.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+
+#[test]
+fn oracle_condition_case_catches_error() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case err
+         (/ 1 0)
+       (arith-error 'caught))"#,
+    );
+    assert_ok_eq("caught", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_no_error_returns_body() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case err
+         42
+       (error 'never-reached))"#,
+    );
+    assert_ok_eq("42", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_error_data_is_cons() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case err
+         (error "test message")
+       (error (consp err)))"#,
+    );
+    assert_ok_eq("t", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_error_symbol_is_car() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case err
+         (error "test")
+       (error (car err)))"#,
+    );
+    assert_ok_eq("error", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_unwind_protect_interaction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(progn
+  (defvar neovm--test-cc-uwp-log '())
+  (condition-case nil
+      (unwind-protect
+          (error "inside")
+        (push 'cleanup neovm--test-cc-uwp-log))
+    (error
+     (push 'caught neovm--test-cc-uwp-log)))
+  (nreverse neovm--test-cc-uwp-log))"#,
+    );
+    assert_ok_eq("(cleanup caught)", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_re_signals_when_no_handler() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case nil
+         (condition-case nil
+             (error "inner")
+           (arith-error 'wrong-handler))
+       (error 'outer-caught))"#,
+    );
+    assert_ok_eq("outer-caught", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_condition_case_multiple_handlers() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (oracle, neovm) = eval_oracle_and_neovm(
+        r#"(condition-case err
+         (error "test")
+       (arith-error 'arith)
+       (error 'generic-error))"#,
+    );
+    assert_ok_eq("generic-error", &oracle, &neovm);
+}
