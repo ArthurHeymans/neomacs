@@ -1345,6 +1345,8 @@ mod syntax_table_comprehensive;
 #[path = "syntax-table-operations.rs"]
 mod syntax_table_operations;
 mod take;
+#[path = "take-drop-while-semantics.rs"]
+mod take_drop_while_semantics;
 #[path = "take-ntake-semantics.rs"]
 mod take_ntake_semantics;
 #[path = "text-properties.rs"]
