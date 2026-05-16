@@ -47,6 +47,30 @@ fn oracle_prop_string_comparison_equal_variants() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_equal_ignore_case_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(list
+  ;; GNU subr.el defines this via compare-strings with IGNORE-CASE non-nil.
+  (string-equal-ignore-case "Hello" "hello")
+  (string-equal-ignore-case "Hello" "HELLO")
+  (string-equal-ignore-case "Hello" "Hell")
+  (string-equal-ignore-case "" "")
+  (string-equal-ignore-case "Straße" "straße")
+  ;; GNU documents that unibyte strings are converted to multibyte.
+  (string-equal-ignore-case (string-as-unibyte "ABC") "abc")
+  (string-equal-ignore-case "abc" (string-as-unibyte "ABC"))
+  ;; Non-string operands reach compare-strings' CHECK_STRING.
+  (condition-case err
+      (string-equal-ignore-case 'abc "abc")
+    (error (list (car err) (cadr err))))
+  (condition-case err
+      (string-equal-ignore-case "abc" 'abc)
+    (error (list (car err) (cadr err)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // string< / string-lessp: lexicographic less-than
 // ---------------------------------------------------------------------------
