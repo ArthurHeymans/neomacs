@@ -86,6 +86,23 @@ fn oracle_prop_vconcat_multiple_types() {
     assert_oracle_parity_with_bootstrap(r#"(vconcat [1 2] '(3 4) "AB")"#);
 }
 
+#[test]
+fn oracle_vconcat_rejects_char_table_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:concat_to_vector accepts vectors, strings, bool-vectors,
+    // closures, nil, and conses.  Char-tables fail the sequence predicate
+    // before any vectorlike storage is exposed.
+    let form = r#"
+(let ((table (make-char-table 'generic 65)))
+  (condition-case err
+      (vconcat table)
+    (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // vectorp / arrayp
 // ---------------------------------------------------------------------------

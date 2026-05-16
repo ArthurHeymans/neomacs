@@ -52,6 +52,23 @@ fn oracle_append_sequence_arguments_and_dotted_tail() {
 }
 
 #[test]
+fn oracle_append_rejects_char_table_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:concat_to_list accepts vectors, strings, bool-vectors,
+    // closures, nil, and conses.  Char-tables are not accepted here even
+    // though `copy-sequence` accepts them.
+    let form = r#"
+(let ((table (make-char-table 'generic 65)))
+  (condition-case err
+      (append table nil)
+    (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_nconc_mutates_prefix_and_shares_tail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
