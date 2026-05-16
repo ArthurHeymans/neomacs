@@ -33,6 +33,18 @@ fn oracle_prop_text_properties_at() {
 }
 
 #[test]
+fn oracle_prop_text_properties_at_bignum_position_saturates_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs textprop.c:validate_interval_range uses
+    // CHECK_FIXNUM_COERCE_MARKER, whose buffer.c:fix_position accepts bignums
+    // and saturates them before the range check.
+    let form =
+        r####"(text-properties-at 1000000000000000000000000000000 (propertize "hi" 'a 1))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
