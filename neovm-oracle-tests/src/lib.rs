@@ -1015,6 +1015,8 @@ mod prin1_to_string_advanced;
 mod process_environment_semantics;
 #[path = "process-string-comprehensive.rs"]
 mod process_string_comprehensive;
+#[path = "profiler-memory-semantics.rs"]
+mod profiler_memory_semantics;
 mod prog1;
 #[path = "prog1-prog2-advanced.rs"]
 mod prog1_prog2_advanced;
