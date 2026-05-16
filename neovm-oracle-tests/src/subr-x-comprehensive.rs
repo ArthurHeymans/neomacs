@@ -184,6 +184,43 @@ fn oracle_prop_subr_x_remove_prefix_suffix() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_subr_x_remove_prefix_suffix_identity_and_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (require 'subr-x)
+  (let ((s (copy-sequence "prefix-body-suffix")))
+    (add-text-properties 0 (length s) '(face bold owner source) s)
+    (let ((no-prefix (string-remove-prefix "missing-" s))
+          (no-suffix (string-remove-suffix ".el" s))
+          (prefix-hit (string-remove-prefix "prefix-" s))
+          (suffix-hit (string-remove-suffix "-suffix" s)))
+      (list
+        ;; GNU lisp/emacs-lisp/subr-x.el returns STRING itself when
+        ;; string-prefix-p/string-suffix-p says there is no match.
+        (eq no-prefix s)
+        (eq no-suffix s)
+        ;; Match paths use substring, producing a distinct string with
+        ;; retained text properties copied from the selected range.
+        (equal prefix-hit "body-suffix")
+        (not (eq prefix-hit s))
+        (get-text-property 0 'face prefix-hit)
+        (get-text-property 0 'owner prefix-hit)
+        (equal suffix-hit "prefix-body")
+        (not (eq suffix-hit s))
+        (get-text-property 0 'face suffix-hit)
+        (get-text-property 0 'owner suffix-hit)
+        ;; Argument checking is inherited from string-prefix-p/suffix-p.
+        (condition-case err
+            (string-remove-prefix 'pre s)
+          (error (list (car err) (cadr err))))
+        (condition-case err
+            (string-remove-suffix 'suf s)
+          (error (list (car err) (cadr err))))))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // string-clean-whitespace, string-chop-newline, string-replace
 // ---------------------------------------------------------------------------

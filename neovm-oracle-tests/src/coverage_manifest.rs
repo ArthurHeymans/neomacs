@@ -262,6 +262,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "string-equal-ignore-case",
     "string-lessp",
     "string-match",
+    "string-remove-prefix",
+    "string-remove-suffix",
     "string-search",
     "string-to-char",
     "string-to-number",
