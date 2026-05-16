@@ -427,6 +427,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "rx-to-string",
     "shell-quote-argument",
     "special-form-p",
+    "string-to-list",
+    "string-to-vector",
     "string-or-null-p",
     "subr-primitive-p",
     "take-while",
