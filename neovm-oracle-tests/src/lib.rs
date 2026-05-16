@@ -86,6 +86,8 @@ mod buffer_local_symbol_identity_semantics;
 mod buffer_local_toplevel_value_semantics;
 #[path = "buffer-local-variable-patterns.rs"]
 mod buffer_local_variable_patterns;
+#[path = "buffer-match-semantics.rs"]
+mod buffer_match_semantics;
 #[path = "buffer-modification-comprehensive.rs"]
 mod buffer_modification_comprehensive;
 #[path = "buffer-multi-operations.rs"]
