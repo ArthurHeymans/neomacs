@@ -105,6 +105,17 @@ fn oracle_prop_aset_return_value() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_aset_checks_index_before_array_type_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c:Faset starts with CHECK_FIXNUM (idx), then checks ARRAY.
+    // When both ARRAY and IDX are invalid, the observable signal must be the
+    // index type error, not the array type error.
+    let form = r#"(aset 42 'not-a-fixnum 'value)"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // aset on strings
 // ---------------------------------------------------------------------------
