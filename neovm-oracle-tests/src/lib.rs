@@ -1055,6 +1055,8 @@ mod pp_semantics;
 #[path = "predicate-logic-comprehensive.rs"]
 mod predicate_logic_comprehensive;
 mod predicates;
+#[path = "primitive-function-p-semantics.rs"]
+mod primitive_function_p_semantics;
 #[path = "prin1-comprehensive-patterns.rs"]
 mod prin1_comprehensive_patterns;
 #[path = "prin1-to-string-advanced.rs"]
