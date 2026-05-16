@@ -1056,6 +1056,8 @@ mod oclosure_advanced;
 mod r#or;
 #[path = "overlay-comprehensive-patterns.rs"]
 mod overlay_comprehensive_patterns;
+#[path = "overlay-helper-semantics.rs"]
+mod overlay_helper_semantics;
 #[path = "parse-time-semantics.rs"]
 mod parse_time_semantics;
 #[path = "pcase-comprehensive-patterns.rs"]
