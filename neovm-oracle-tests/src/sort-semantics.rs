@@ -105,3 +105,23 @@ fn oracle_sort_keyword_errors_and_type_errors() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_sort_rejects_bool_vector_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/fns.c:Fsort only accepts nil, cons lists, and vectors.
+    // Bool-vectors are sequences for some primitives, but `sort` rejects them
+    // before invoking the comparator/key machinery.
+    let form = r#"
+(list
+ (condition-case err
+     (sort (bool-vector t nil t) #'<)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (sort (bool-vector t nil t) :lessp #'<)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
