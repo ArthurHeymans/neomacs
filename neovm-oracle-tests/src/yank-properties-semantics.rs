@@ -89,3 +89,41 @@ fn oracle_insert_buffer_substring_as_yank_processes_inserted_properties() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_yank_property_handlers_match_gnu_merge_rules() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((font-lock-case
+       (with-temp-buffer
+         (insert "abcd")
+         (let ((font-lock-defaults nil))
+           (yank-handle-font-lock-face-property 'bold 1 3))
+         (let ((after-enabled
+                (list (get-text-property 1 'face)
+                      (get-text-property 3 'face))))
+           (let ((font-lock-defaults '(dummy)))
+             (yank-handle-font-lock-face-property 'italic 3 5))
+           (list after-enabled
+                 (get-text-property 1 'face)
+                 (get-text-property 3 'face)))))
+      (category-case
+       (with-temp-buffer
+         (setplist 'neomacs-oracle-yank-category
+                   '(face category-face help-echo category-help custom category-custom))
+         (insert (propertize "ab" 'face 'original-face 'keep 'yes)
+                 (propertize "cd" 'help-echo 'original-help))
+         (unwind-protect
+             (progn
+               (yank-handle-category-property 'neomacs-oracle-yank-category
+                                              (point-min) (point-max))
+               (list
+                (text-properties-at 1)
+                (text-properties-at 3)))
+           (setplist 'neomacs-oracle-yank-category nil)))))
+  (list font-lock-case category-case))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

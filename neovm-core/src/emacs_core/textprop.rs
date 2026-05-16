@@ -1479,7 +1479,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         table.remove_all_properties(char_beg, char_end);
-        for (name, val) in pairs {
+        for (name, val) in pairs.into_iter().rev() {
             table.put_property(char_beg, char_end, name, val);
         }
         save_string_props_for_value(str_val, table);
@@ -1497,7 +1497,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         return Ok(Value::NIL);
     };
     let _ = buffers.clear_buffer_text_properties(buf_id, byte_beg, byte_end);
-    for (name, val) in pairs {
+    for (name, val) in pairs.into_iter().rev() {
         let _ = buffers.put_buffer_text_property(buf_id, byte_beg, byte_end, name, val);
     }
     let _ = buffers.record_buffer_text_property_modification(buf_id);
