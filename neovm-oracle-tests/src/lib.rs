@@ -1085,6 +1085,8 @@ mod reverse;
 mod ring_buffer_comprehensive;
 #[path = "ring-semantics.rs"]
 mod ring_semantics;
+#[path = "run-hook-with-args-semantics.rs"]
+mod run_hook_with_args_semantics;
 #[path = "run-hook-wrapped-semantics.rs"]
 mod run_hook_wrapped_semantics;
 #[path = "rx-semantics.rs"]
