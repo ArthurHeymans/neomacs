@@ -339,6 +339,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "seq-concatenate",
     "seq-count",
     "seq-difference",
+    "seq-do",
+    "seq-doseq",
     "seq-drop",
     "seq-drop-while",
     "seq-elt",

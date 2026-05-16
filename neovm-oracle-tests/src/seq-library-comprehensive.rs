@@ -68,6 +68,38 @@ fn oracle_prop_seq_lib_do_comprehensive() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_seq_lib_doseq_macro_binding_and_return_contracts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU seq-doseq macroexpands to seq-do over a lambda.  This pins its
+    // expansion shape, nil return value, iteration over vectors/strings, and
+    // lambda-local binding behavior.
+    let form = r#"(progn
+  (require 'seq)
+  (list
+    (macroexpand-1 '(seq-doseq (x [1 2]) (push x out)))
+    (let ((out nil))
+      (seq-doseq (x [1 2 3])
+        (push x out))
+      out)
+    (let ((out nil))
+      (list
+        (seq-doseq (c "ab")
+          (push (upcase c) out))
+        out))
+    (let ((x 'outer)
+          (out nil))
+      (seq-doseq (x '(a b))
+        (push x out))
+      (list x out))
+    (let ((out nil))
+      (seq-doseq (x nil)
+        (push x out))
+      out)))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // seq-map-indexed with index tracking
 // ---------------------------------------------------------------------------
