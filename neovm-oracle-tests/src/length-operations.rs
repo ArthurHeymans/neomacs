@@ -66,6 +66,35 @@ fn oracle_length_and_sequencep_vectorlike_boundaries() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_length_comparison_vectorlike_and_error_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:length<, length>, and length= validate LENGTH as a fixnum,
+    // use a list-specific bounded traversal for conses, and otherwise compare
+    // against Flength.  This preserves the same record/closure/char-table
+    // acceptance as `length`, plus dotted-list short-circuit behavior.
+    let form = r#"
+(list
+ (length< (record 'tag 1 2) 4)
+ (length= (lambda (x) x) 3)
+ (length> (make-char-table 'generic 65) 1000)
+ (condition-case err
+     (length< 42 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (length= '(a b . c) 2)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (length< '(a b . c) 3)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (length> '(a b . c) 1)
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // safe-length (handles circular/dotted lists)
 // ---------------------------------------------------------------------------
