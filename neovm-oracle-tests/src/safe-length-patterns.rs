@@ -69,35 +69,31 @@ fn oracle_prop_safe_length_patterns_dotted_lists() {
 fn oracle_prop_safe_length_patterns_circular_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Build circular lists with different cycle lengths and verify
-    // that safe-length always returns an integer (no hang).
+    // GNU src/fns.c:Fsafe_length walks with FOR_EACH_TAIL_SAFE.  Circular
+    // structures return deterministic lengths for a given shape, not just
+    // "some integer"; pin exact values to catch traversal-algorithm drift.
     let form = r#"
 (let ((results nil))
   ;; Cycle of length 1 (self-loop)
   (let ((c1 (cons 'a nil)))
     (setcdr c1 c1)
-    (push (list 'cycle-1 (integerp (safe-length c1))) results))
+    (push (list 'cycle-1 (safe-length c1)) results))
   ;; Cycle of length 2
   (let ((c2 (list 'a 'b)))
     (setcdr (last c2) c2)
-    (push (list 'cycle-2 (integerp (safe-length c2))) results))
+    (push (list 'cycle-2 (safe-length c2)) results))
   ;; Cycle of length 5
   (let ((c5 (list 1 2 3 4 5)))
     (setcdr (last c5) c5)
-    (push (list 'cycle-5 (integerp (safe-length c5))) results))
+    (push (list 'cycle-5 (safe-length c5)) results))
   ;; Lasso shape: 3 elements lead-in, then cycle of 4
   (let ((lasso (list 'a 'b 'c 'd 'e 'f 'g)))
     (setcdr (last lasso) (nthcdr 3 lasso))
-    (push (list 'lasso (integerp (safe-length lasso))) results))
+    (push (list 'lasso (safe-length lasso)) results))
   ;; Cycle of length 10
   (let ((c10 (make-list 10 'x)))
     (setcdr (last c10) c10)
-    (push (list 'cycle-10 (integerp (safe-length c10))) results))
-  ;; All safe-length values should be non-negative integers
-  (let ((all-int t))
-    (dolist (r results)
-      (unless (eq (cadr r) t) (setq all-int nil)))
-    (push (list 'all-integer all-int) results))
+    (push (list 'cycle-10 (safe-length c10)) results))
   (nreverse results))
 "#;
     assert_oracle_parity_with_bootstrap(form);
