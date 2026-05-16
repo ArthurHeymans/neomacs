@@ -1088,6 +1088,8 @@ mod min;
 #[path = "misc-core-strict-edge-semantics.rs"]
 #[path = "misc-core-strict-edge-semantics.rs"]
 mod misc_core_strict_edge_semantics;
+#[path = "misc-fill-strict-edge-semantics.rs"]
+mod misc_fill_strict_edge_semantics;
 #[path = "missing-subrs-batch-semantics.rs"]
 mod missing_subrs_batch_semantics;
 #[path = "modify-syntax-entry.rs"]
@@ -1462,6 +1464,8 @@ mod string;
 mod string_builder_comprehensive;
 #[path = "string-bytes-width-advanced.rs"]
 mod string_bytes_width_advanced;
+#[path = "string-compare-match-strict-edge-semantics.rs"]
+mod string_compare_match_strict_edge_semantics;
 #[path = "string-comparison-comprehensive.rs"]
 mod string_comparison_comprehensive;
 #[path = "string-conversion-semantics.rs"]
@@ -1616,6 +1620,8 @@ mod thing_at_point_api_semantics;
 #[path = "thing-at-point-comprehensive.rs"]
 mod thing_at_point_comprehensive;
 mod r#throw;
+#[path = "throw-unwind-strict-edge-semantics.rs"]
+mod throw_unwind_strict_edge_semantics;
 #[path = "time-date-semantics.rs"]
 mod time_date_semantics;
 #[path = "timer-list-comprehensive.rs"]
