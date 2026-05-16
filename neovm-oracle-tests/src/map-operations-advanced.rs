@@ -488,6 +488,32 @@ fn oracle_prop_map_adv_list_mutation_shortens_traversal_like_gnu() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn oracle_prop_map_adv_mapconcat_list_mutation_error_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs `src/fns.c:Fmapconcat` computes SEQUENCE length before
+    // mapping and uses `mapcar1` to fill the concat argument vector.  If the
+    // callback shortens the original list, the remaining argument slots are
+    // not valid character sequences, so `concat` signals `sequencep`.  This
+    // pins that observable behavior instead of silently walking stale cdrs.
+    let form = r####"(let* ((xs (list 1 2 3 4))
+       (seen nil))
+  (condition-case err
+      (list 'ok
+            (mapconcat (lambda (x)
+                         (push x seen)
+                         (when (= x 1)
+                           (setcdr xs nil))
+                         (number-to-string x))
+                       xs
+                       ",")
+            (nreverse seen)
+            xs)
+    (error (list 'error (car err) (cdr err) (nreverse seen) xs))))"####;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_map_adv_mapconcat_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
