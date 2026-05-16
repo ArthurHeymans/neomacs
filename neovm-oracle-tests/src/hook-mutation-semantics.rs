@@ -204,3 +204,42 @@ fn oracle_add_hook_detects_legacy_local_hook_binding() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_add_hook_local_permanent_hook_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defvar neomacs--oracle-hook-permanent nil)
+  (unwind-protect
+      (progn
+        (setq-default neomacs--oracle-hook-permanent '(global-fn))
+        (put 'neomacs--oracle-hook-permanent 'hook--depth-alist nil)
+        (put 'neomacs--oracle-hook-permanent 'permanent-local nil)
+        (put 'neomacs--oracle-hook-permanent-fn 'permanent-local-hook t)
+        (with-temp-buffer
+          (list
+           (add-hook 'neomacs--oracle-hook-permanent
+                     'neomacs--oracle-hook-permanent-fn
+                     7
+                     t)
+           neomacs--oracle-hook-permanent
+           (local-variable-p 'neomacs--oracle-hook-permanent)
+           (get 'neomacs--oracle-hook-permanent 'permanent-local)
+           (let* ((depth-sym
+                   (get 'neomacs--oracle-hook-permanent 'hook--depth-alist))
+                  (local-depths (and depth-sym (symbol-value depth-sym))))
+             (list (local-variable-p depth-sym)
+                   (alist-get 'neomacs--oracle-hook-permanent-fn
+                              local-depths :missing nil #'eq)))
+           (default-value 'neomacs--oracle-hook-permanent))))
+    (setq-default neomacs--oracle-hook-permanent nil)
+    (put 'neomacs--oracle-hook-permanent 'hook--depth-alist nil)
+    (put 'neomacs--oracle-hook-permanent 'permanent-local nil)
+    (put 'neomacs--oracle-hook-permanent-fn 'permanent-local-hook nil)
+    (makunbound 'neomacs--oracle-hook-permanent)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
