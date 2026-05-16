@@ -887,6 +887,8 @@ mod list_manipulation_comprehensive;
 mod list_operations_advanced;
 #[path = "listify-key-sequence-semantics.rs"]
 mod listify_key_sequence_semantics;
+#[path = "load-history-semantics.rs"]
+mod load_history_semantics;
 #[path = "log10-semantics.rs"]
 mod log10_semantics;
 #[path = "looking-at-advanced.rs"]

@@ -392,6 +392,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "json-available-p",
     "list-of-strings-p",
     "listify-key-sequence",
+    "load-history-filename-element",
+    "load-history-regexp",
     "log10",
     "lsh",
     "minusp",
