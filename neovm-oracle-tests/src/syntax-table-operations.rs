@@ -133,9 +133,15 @@ fn oracle_prop_syntax_table_ops_string_to_syntax_flags() {
   (string-to-syntax "< b")  ;; comment start, style b
   (string-to-syntax "> b")  ;; comment end, style b
   (string-to-syntax "! p")  ;; generic comment + prefix flag
+  (string-to-syntax "< c")  ;; comment start, style c
+  (string-to-syntax "> c")  ;; comment end, style c
   ;; Combined flags
   (string-to-syntax ". 14") ;; both flag 1 and flag 4
   (string-to-syntax ". 23") ;; both flag 2 and flag 3
+  (string-to-syntax ". 12c")
+  (string-to-syntax ". 34bc")
+  (string-to-syntax "\"/")  ;; string delimiter with matching char
+  (string-to-syntax "|e")   ;; generic string delimiter with matching char
   ;; Verify that car of result encodes the class + flags
   (let ((ws (string-to-syntax " "))
         (wd (string-to-syntax "w"))
