@@ -107,6 +107,29 @@ fn oracle_substring_rejects_char_table_like_gnu() {
 }
 
 #[test]
+fn oracle_substring_no_properties_rejects_vectorlike_objects_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Fsubstring_no_properties uses CHECK_STRING, unlike
+    // Fsubstring's CHECK_VECTOR_OR_STRING gate.  Vectorlike objects must signal
+    // `stringp` here rather than being treated as arrays.
+    let form = r#"
+(list
+ (condition-case err
+     (substring-no-properties (make-char-table 'generic 65) 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring-no-properties (make-bool-vector 3 t) 0 1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (substring-no-properties (record 'tag 1 2) 0 1)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_concat_and_vconcat_character_sequence_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
