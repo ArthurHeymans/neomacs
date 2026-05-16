@@ -115,6 +115,31 @@ fn oracle_prop_string_search_adv_empty_strings() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_string_search_adv_raw_byte_multibyte_conversion_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Fstring_search has dedicated conversion branches for
+    // unibyte non-ASCII needles in multibyte haystacks and multibyte raw-byte
+    // needles in unibyte haystacks; these are not plain byte-slice searches.
+    let form = r#"
+(let ((unibyte-e9 (unibyte-string #xe9))
+      (multibyte-eacute "é")
+      (raw-byte-e9 (string-to-multibyte (unibyte-string #xe9))))
+  (list
+   (multibyte-string-p unibyte-e9)
+   (multibyte-string-p multibyte-eacute)
+   (multibyte-string-p raw-byte-e9)
+   (string-search multibyte-eacute unibyte-e9)
+   (string-search raw-byte-e9 unibyte-e9)
+   (string-search unibyte-e9 multibyte-eacute)
+   (string-search unibyte-e9 raw-byte-e9)
+   (string-search "é" "xéy")
+   (string-search (unibyte-string #xe9) "xéy")))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Repeated searches to find all occurrences (tokenizer pattern)
 // ---------------------------------------------------------------------------
