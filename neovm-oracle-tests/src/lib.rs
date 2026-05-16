@@ -1369,6 +1369,8 @@ mod trigonometry;
 mod trigonometry_advanced;
 #[path = "truncate-string-to-width-semantics.rs"]
 mod truncate_string_to_width_semantics;
+#[path = "tty-display-dimensions-semantics.rs"]
+mod tty_display_dimensions_semantics;
 #[path = "type-of.rs"]
 mod type_of;
 #[path = "type-of-advanced.rs"]
