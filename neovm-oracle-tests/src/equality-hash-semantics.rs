@@ -143,6 +143,35 @@ fn oracle_sxhash_equal_invariants_for_properties_and_structures() {
 }
 
 #[test]
+fn oracle_hash_table_equal_including_properties_test_respects_string_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs lisp/emacs-lisp/comp.el registers this test pair with
+    // `define-hash-table-test`; src/fns.c then uses
+    // `equal-including-properties` for key comparison and
+    // `sxhash-equal-including-properties` for bucket selection.
+    let form = r#"
+(progn
+  (define-hash-table-test
+   'neomacs-oracle-eip-test
+   'equal-including-properties
+   'sxhash-equal-including-properties)
+  (let* ((table (make-hash-table :test 'neomacs-oracle-eip-test))
+         (bold-key (propertize "k" 'face 'bold))
+         (same-bold (propertize "k" 'face 'bold))
+         (italic-key (propertize "k" 'face 'italic)))
+    (puthash bold-key 'bold table)
+    (list
+     (hash-table-test table)
+     (gethash same-bold table 'missing)
+     (gethash italic-key table 'missing)
+     (hash-table-count table))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_hash_table_tests_follow_eq_eql_equal_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
