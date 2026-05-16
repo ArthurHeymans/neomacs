@@ -747,6 +747,8 @@ mod eval_advanced;
 mod eval_advanced_2;
 #[path = "eval-apply-advanced.rs"]
 mod eval_apply_advanced;
+#[path = "eval-apply-strict-edge-semantics.rs"]
+mod eval_apply_strict_edge_semantics;
 #[path = "eval-buffer-region-semantics.rs"]
 mod eval_buffer_region_semantics;
 #[path = "eval-comprehensive-patterns.rs"]
@@ -1064,6 +1066,8 @@ mod match_beginning;
 mod match_data;
 #[path = "match-data-advanced.rs"]
 mod match_data_advanced;
+#[path = "match-data-subexpr-strict-edge-semantics.rs"]
+mod match_data_subexpr_strict_edge_semantics;
 #[path = "match-end.rs"]
 mod match_end;
 #[path = "match-string-advanced.rs"]
@@ -1470,6 +1474,8 @@ mod string;
 mod string_builder_comprehensive;
 #[path = "string-bytes-width-advanced.rs"]
 mod string_bytes_width_advanced;
+#[path = "string-clean-lines-strict-edge-semantics.rs"]
+mod string_clean_lines_strict_edge_semantics;
 #[path = "string-compare-match-strict-edge-semantics.rs"]
 mod string_compare_match_strict_edge_semantics;
 #[path = "string-comparison-comprehensive.rs"]
