@@ -241,6 +241,47 @@ fn oracle_prop_byte_ops_char_conversions() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_byte_ops_char_conversion_errors_and_raw_bytes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/character.c uses CHECK_CHARACTER for both functions.
+    // `unibyte-char-to-multibyte` then rejects valid characters above 255,
+    // while `multibyte-char-to-unibyte` passes characters below 256 through,
+    // decodes raw-byte characters, and returns -1 for other multibyte chars.
+    let form = r#"
+(list
+ (let ((raw (unibyte-char-to-multibyte 255)))
+   (list raw
+         (characterp raw)
+         (multibyte-char-to-unibyte raw)))
+ (let ((raw (unibyte-char-to-multibyte 128)))
+   (list raw
+         (characterp raw)
+         (multibyte-char-to-unibyte raw)))
+ (multibyte-char-to-unibyte 255)
+ (multibyte-char-to-unibyte 256)
+ (multibyte-char-to-unibyte ?é)
+ (multibyte-char-to-unibyte ?中)
+ (condition-case err
+     (unibyte-char-to-multibyte 256)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (unibyte-char-to-multibyte -1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (unibyte-char-to-multibyte nil)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (multibyte-char-to-unibyte -1)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (multibyte-char-to-unibyte "A")
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Byte-level substring operations on unibyte strings
 // ---------------------------------------------------------------------------
