@@ -31,3 +31,27 @@ fn oracle_object_intervals_string_and_buffer_interval_shape() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_object_intervals_preserves_adjacent_equal_property_runs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU compares text properties by effective interval values, but
+    // `object-intervals` still exposes the concrete interval run shape.
+    // This follows src/fns.c:Fequal_including_properties/internal_equal and
+    // src/textprop.c interval mutation behavior.
+    let form = r#"
+(let ((split (copy-sequence "xy"))
+      (merged (copy-sequence "xy")))
+  (put-text-property 0 1 'face 'bold split)
+  (put-text-property 1 2 'face 'bold split)
+  (put-text-property 0 2 'face 'bold merged)
+  (list
+   (object-intervals split)
+   (object-intervals merged)
+   (equal split merged)
+   (equal-including-properties split merged)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
