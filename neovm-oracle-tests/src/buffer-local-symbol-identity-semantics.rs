@@ -77,3 +77,42 @@ fn oracle_buffer_local_value_uses_uninterned_symbol_identity() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_make_variable_buffer_local_keeps_uninterned_symbol_identity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((uninterned (make-symbol "neomacs--oracle-auto-local-id"))
+       (interned (intern "neomacs--oracle-auto-local-id"))
+       (buf-a (current-buffer))
+       (buf-b (get-buffer-create " *neomacs oracle auto local id*")))
+  (unwind-protect
+      (progn
+        (set uninterned 'uninterned-default)
+        (set interned 'interned-default)
+        (make-variable-buffer-local uninterned)
+        (with-current-buffer buf-b
+          (set uninterned 'uninterned-local-b)
+          (set interned 'interned-global-from-b))
+        (list
+         (default-value uninterned)
+         (default-value interned)
+         (buffer-local-value uninterned buf-a)
+         (buffer-local-value uninterned buf-b)
+         (buffer-local-value interned buf-a)
+         (buffer-local-value interned buf-b)
+         (with-current-buffer buf-a
+           (list (local-variable-p uninterned)
+                 (local-variable-p interned)))
+         (with-current-buffer buf-b
+           (list (local-variable-p uninterned)
+                 (local-variable-p interned)))))
+    (when (buffer-live-p buf-b)
+      (kill-buffer buf-b))
+    (makunbound uninterned)
+    (makunbound interned)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
