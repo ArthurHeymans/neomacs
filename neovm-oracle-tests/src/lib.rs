@@ -595,6 +595,8 @@ mod copy_alist_advanced;
 mod copy_alist_sequence_patterns;
 #[path = "copy-keymap-advanced.rs"]
 mod copy_keymap_advanced;
+#[path = "copy-read-strict-edge-semantics.rs"]
+mod copy_read_strict_edge_semantics;
 #[path = "copy-sequence.rs"]
 mod copy_sequence;
 #[path = "copy-sequence-advanced.rs"]
