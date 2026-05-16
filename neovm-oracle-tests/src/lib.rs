@@ -147,6 +147,8 @@ mod r#catch;
 mod catch_throw_advanced;
 #[path = "catch-throw-comprehensive.rs"]
 mod catch_throw_comprehensive;
+#[path = "catch-throw-edge-semantics.rs"]
+mod catch_throw_edge_semantics;
 #[path = "catch-throw-patterns.rs"]
 mod catch_throw_patterns;
 #[path = "change-group-semantics.rs"]
