@@ -7351,12 +7351,7 @@ impl Context {
             if entry.dispatch_kind != SubrDispatchKind::SpecialForm {
                 let numargs = match list_length(&original_args) {
                     Some(n) => n,
-                    None => {
-                        return Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("listp"), original_args],
-                        ));
-                    }
+                    None => return Err(self.listp_error(original_args)),
                 };
                 let min = entry.min_args as usize;
                 let max_ok = match entry.max_args {
@@ -7432,6 +7427,9 @@ impl Context {
             self.push_specpdl_root(arg_val);
             args.push(arg_val);
             cursor = cursor.cons_cdr();
+        }
+        if !cursor.is_nil() {
+            return Err(self.listp_error(cursor));
         }
         if let Some((sym_id, entry)) = direct_subr_entry {
             if Self::subr_entry_uses_fixed_value_call(entry) {

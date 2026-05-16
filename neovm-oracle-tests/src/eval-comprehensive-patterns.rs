@@ -152,6 +152,25 @@ fn oracle_prop_eval_comp_function_calls() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_eval_dotted_function_form_checks_raw_argument_list_first() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (condition-case err
+     (eval '(list 1 . tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (eval '(quote value . tail))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (eval '((lambda (x) x) 1 . tail))
+   (error (list (car err) (cdr err)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Evaluating special forms
 // ---------------------------------------------------------------------------

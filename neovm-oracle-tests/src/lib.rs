@@ -545,6 +545,8 @@ mod copy_sequence_advanced;
 mod copy_sequence_semantics;
 #[path = "copy-syntax-table-advanced.rs"]
 mod copy_syntax_table_advanced;
+#[path = "copy-tree-semantics.rs"]
+mod copy_tree_semantics;
 #[path = "count-lines-advanced.rs"]
 mod count_lines_advanced;
 #[path = "count-lines-patterns.rs"]
