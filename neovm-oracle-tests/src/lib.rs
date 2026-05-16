@@ -976,6 +976,8 @@ mod obarray_comprehensive_patterns;
 mod obarray_patterns;
 #[path = "obarray-symbol-interning.rs"]
 mod obarray_symbol_interning;
+#[path = "object-intervals-semantics.rs"]
+mod object_intervals_semantics;
 mod oclosure;
 #[path = "oclosure-advanced.rs"]
 mod oclosure_advanced;
