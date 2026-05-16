@@ -986,6 +986,8 @@ mod lexical_binding_comprehensive;
 mod lexical_vs_dynamic_comprehensive;
 #[path = "line-edit-helper-semantics.rs"]
 mod line_edit_helper_semantics;
+#[path = "line-number-misc-strict-edge-semantics.rs"]
+mod line_number_misc_strict_edge_semantics;
 #[path = "line-position-advanced.rs"]
 mod line_position_advanced;
 mod list;
