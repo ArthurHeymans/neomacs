@@ -1434,6 +1434,8 @@ mod string_to_number;
 mod string_to_number_advanced;
 #[path = "string-to-number-comprehensive.rs"]
 mod string_to_number_comprehensive;
+#[path = "string-to-number-edge-semantics.rs"]
+mod string_to_number_edge_semantics;
 #[path = "string-trim-patterns.rs"]
 mod string_trim_patterns;
 #[path = "string-version-lessp.rs"]
