@@ -810,6 +810,8 @@ mod function_cell_semantics;
 mod function_equal_semantics;
 #[path = "function-get-semantics.rs"]
 mod function_get_semantics;
+#[path = "function-introspect-strict-edge-semantics.rs"]
+mod function_introspect_strict_edge_semantics;
 #[path = "generator-semantics.rs"]
 mod generator_semantics;
 #[path = "generic-function-comprehensive.rs"]
@@ -1581,6 +1583,8 @@ mod type_of;
 mod type_of_advanced;
 #[path = "type-of-patterns.rs"]
 mod type_of_patterns;
+#[path = "type-pred-strict-edge-semantics.rs"]
+mod type_pred_strict_edge_semantics;
 #[path = "type-predicates.rs"]
 mod type_predicates;
 #[path = "type-predicates-advanced.rs"]
