@@ -88,6 +88,28 @@ fn oracle_prop_concat_bool_vector_rejected_as_sequence_like_gnu() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_char_table_is_not_sequence_for_concat_vconcat_append_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/fns.c:concat_to_string, concat_to_vector, and
+    // concat_to_list all reject char-tables as non-sequences.
+    let form = r#"
+(let ((table (make-char-table nil)))
+  (list
+   (condition-case err
+       (concat table)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (vconcat table)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (append table nil)
+     (error (list (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // concat vs mapconcat for joining
 // ---------------------------------------------------------------------------
