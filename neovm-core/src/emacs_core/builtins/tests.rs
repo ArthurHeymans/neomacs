@@ -3892,6 +3892,25 @@ fn pure_dispatch_typed_string_constructor_builds_string() {
 }
 
 #[test]
+fn pure_dispatch_typed_string_constructor_rejects_modified_events() {
+    crate::test_utils::init_test_tracing();
+    let modified_a = crate::emacs_core::keyboard::pure::KEY_CHAR_META | i64::from(b'a');
+    let err = dispatch_builtin_pure("string", vec![Value::fixnum(modified_a)])
+        .expect("builtin string should resolve")
+        .expect_err("GNU string rejects modified event codes");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("characterp"), Value::fixnum(modified_a)]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+#[test]
 fn pure_dispatch_typed_propertize_validates_and_returns_string() {
     crate::test_utils::init_test_tracing();
     let result = dispatch_builtin_pure(

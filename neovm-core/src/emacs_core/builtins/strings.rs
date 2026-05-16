@@ -1893,10 +1893,9 @@ pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
     for arg in args {
         match arg.kind() {
             ValueKind::Fixnum(c) => {
-                // Accept chars with modifier bits (char_string strips them);
-                // reject negatives or values whose base exceeds MAX_CHAR.
-                let base = c & !(emacs_char::CHAR_MODIFIER_MASK as i64);
-                if !(0..=emacs_char::MAX_CHAR as i64).contains(&base) {
+                // GNU `Fstring' checks `CHARACTERP' before encoding; event
+                // modifier bits are not valid character codes here.
+                if !(0..=emacs_char::MAX_CHAR as i64).contains(&c) {
                     return Err(signal(
                         "wrong-type-argument",
                         vec![Value::symbol("characterp"), *arg],
