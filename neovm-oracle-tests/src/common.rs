@@ -3,6 +3,7 @@
 //! These helpers are intentionally test-only and require GNU Emacs
 //! available on PATH (or via `NEOVM_FORCE_ORACLE_PATH`).
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -181,21 +182,38 @@ fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, Stri
     let form_path = write_oracle_form_file(form)?;
     let program = r#"(condition-case err
     (progn
-      (defun neovm--oracle-normalize (v)
+      (defun neovm--oracle-normalize-1 (v seen)
         (cond
          ((and (functionp v) (eq (type-of v) 'interpreted-function))
           (let ((args (aref v 0))
                 (body (aref v 1))
                 (env (aref v 2)))
             (if (null env)
-                (cons 'lambda (cons args body))
-              (cons 'closure (cons env (cons args body))))))
+                (cons 'lambda
+                      (cons (neovm--oracle-normalize-1 args seen)
+                            (neovm--oracle-normalize-1 body seen)))
+              (cons 'closure
+                    (cons (neovm--oracle-normalize-1 env seen)
+                          (cons (neovm--oracle-normalize-1 args seen)
+                                (neovm--oracle-normalize-1 body seen)))))))
          ((consp v)
-          (cons (neovm--oracle-normalize (car v))
-                (neovm--oracle-normalize (cdr v))))
+          (or (gethash v seen)
+              (let ((out (cons nil nil)))
+                (puthash v out seen)
+                (setcar out (neovm--oracle-normalize-1 (car v) seen))
+                (setcdr out (neovm--oracle-normalize-1 (cdr v) seen))
+                out)))
          ((vectorp v)
-          (apply #'vector (mapcar #'neovm--oracle-normalize (append v nil))))
+          (or (gethash v seen)
+              (let* ((len (length v))
+                     (out (make-vector len nil)))
+                (puthash v out seen)
+                (dotimes (i len)
+                  (aset out i (neovm--oracle-normalize-1 (aref v i) seen)))
+                out)))
          (t v)))
+      (defun neovm--oracle-normalize (v)
+        (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
     (let* ((coding-system-for-read 'utf-8-unix)
            (coding-system-for-write 'utf-8-unix)
            (_ (set-language-environment "UTF-8"))
@@ -732,44 +750,66 @@ pub(crate) fn assert_err_kind(oracle: &str, neovm: &str, err_kind: &str) {
 }
 
 fn normalize_neovm_oracle_value(value: Value) -> Value {
+    let mut seen = HashMap::new();
+    normalize_neovm_oracle_value_1(value, &mut seen)
+}
+
+fn normalize_neovm_oracle_value_1(value: Value, seen: &mut HashMap<usize, Value>) -> Value {
     if value.is_lambda() {
-        normalize_interpreted_function_for_oracle(value).unwrap_or(value)
+        normalize_interpreted_function_for_oracle(value, seen).unwrap_or(value)
     } else if value.is_cons() {
-        let car = normalize_neovm_oracle_value(value.cons_car());
-        neovm_core::emacs_core::eval::push_scratch_gc_root(car);
-        let cdr = normalize_neovm_oracle_value(value.cons_cdr());
-        neovm_core::emacs_core::eval::push_scratch_gc_root(cdr);
-        let out = Value::cons(car, cdr);
+        if let Some(out) = seen.get(&value.bits()) {
+            return *out;
+        }
+
+        let out = Value::cons(Value::NIL, Value::NIL);
+        seen.insert(value.bits(), out);
         neovm_core::emacs_core::eval::push_scratch_gc_root(out);
+
+        let car = normalize_neovm_oracle_value_1(value.cons_car(), seen);
+        neovm_core::emacs_core::eval::push_scratch_gc_root(car);
+        let cdr = normalize_neovm_oracle_value_1(value.cons_cdr(), seen);
+        neovm_core::emacs_core::eval::push_scratch_gc_root(cdr);
+        out.set_car(car);
+        out.set_cdr(cdr);
         out
     } else if value.is_vector() {
+        if let Some(out) = seen.get(&value.bits()) {
+            return *out;
+        }
+
         let items: Vec<Value> = value
             .as_vector_data()
             .into_iter()
             .flat_map(|s| s)
             .cloned()
             .collect();
-        let mut normalized = Vec::with_capacity(items.len());
-        for item in items {
-            let item = normalize_neovm_oracle_value(item);
-            neovm_core::emacs_core::eval::push_scratch_gc_root(item);
-            normalized.push(item);
-        }
-        let out = Value::vector(normalized);
+
+        let out = Value::vector(vec![Value::NIL; items.len()]);
+        seen.insert(value.bits(), out);
         neovm_core::emacs_core::eval::push_scratch_gc_root(out);
+
+        for (idx, item) in items.into_iter().enumerate() {
+            let item = normalize_neovm_oracle_value_1(item, seen);
+            neovm_core::emacs_core::eval::push_scratch_gc_root(item);
+            let _ = out.set_vector_slot(idx, item);
+        }
         out
     } else {
         value
     }
 }
 
-fn normalize_interpreted_function_for_oracle(value: Value) -> Option<Value> {
+fn normalize_interpreted_function_for_oracle(
+    value: Value,
+    seen: &mut HashMap<usize, Value>,
+) -> Option<Value> {
     let closure_vec = neovm_core::emacs_core::builtins::lambda_to_closure_vector(&value);
     if closure_vec.len() < 3 {
         return None;
     }
 
-    let args = normalize_neovm_oracle_value(closure_vec[0]);
+    let args = normalize_neovm_oracle_value_1(closure_vec[0], seen);
     neovm_core::emacs_core::eval::push_scratch_gc_root(args);
 
     let body_forms =
@@ -778,7 +818,7 @@ fn normalize_interpreted_function_for_oracle(value: Value) -> Option<Value> {
 
     if value.closure_env().flatten().is_some() {
         elements.push(Value::symbol("closure"));
-        let env = normalize_neovm_oracle_value(closure_vec[2]);
+        let env = normalize_neovm_oracle_value_1(closure_vec[2], seen);
         neovm_core::emacs_core::eval::push_scratch_gc_root(env);
         elements.push(env);
     } else {
@@ -787,7 +827,7 @@ fn normalize_interpreted_function_for_oracle(value: Value) -> Option<Value> {
 
     elements.push(args);
     for form in body_forms {
-        let form = normalize_neovm_oracle_value(form);
+        let form = normalize_neovm_oracle_value_1(form, seen);
         neovm_core::emacs_core::eval::push_scratch_gc_root(form);
         elements.push(form);
     }
