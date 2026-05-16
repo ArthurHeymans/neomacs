@@ -4102,22 +4102,26 @@ pub(crate) fn builtin_buffer_local_value(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    use crate::emacs_core::intern::intern;
+    use crate::emacs_core::intern::{intern, resolve_sym};
     use crate::emacs_core::symbol::SymbolRedirect;
 
     expect_args("buffer-local-value", &args, 2)?;
     let original_arg = args[0];
-    let name = args[0].as_symbol_name().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("symbolp"), args[0]],
-        )
-    })?;
-    let resolved = crate::emacs_core::builtins::symbols::resolve_variable_alias_name_in_obarray(
+    let symbol = match args[0].kind() {
+        ValueKind::Symbol(id) => id,
+        ValueKind::Nil => intern("nil"),
+        ValueKind::T => intern("t"),
+        _ => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("symbolp"), args[0]],
+            ));
+        }
+    };
+    let resolved_id = crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
         eval.obarray(),
-        name,
+        symbol,
     )?;
-    let resolved_id = intern(&resolved);
     let id = expect_buffer_id(&args[1])?;
     let buf = eval
         .buffers
@@ -4146,25 +4150,21 @@ pub(crate) fn builtin_buffer_local_value(
         }
     }
 
-    match buf.get_buffer_local_binding(&resolved) {
+    match buf.get_buffer_local_binding_by_sym_id(resolved_id) {
         Some(binding) => binding
             .as_value()
-            .or_else(|| {
-                (resolved == "buffer-undo-list")
-                    .then(|| buf.buffer_local_value(&resolved))
-                    .flatten()
-            })
             .ok_or_else(|| signal("void-variable", vec![original_arg])),
-        None if crate::buffer::buffer::lookup_buffer_slot(&resolved).is_some() => buf
-            .buffer_local_value(&resolved)
-            .ok_or_else(|| signal("void-variable", vec![original_arg])),
-        None if resolved == "nil" => Ok(Value::NIL),
-        None if resolved == "t" => Ok(Value::T),
-        None if resolved.starts_with(':') => Ok(Value::symbol(resolved)),
+        None if let Some(info) =
+            crate::buffer::buffer::lookup_buffer_slot_by_sym_id(resolved_id) =>
+        {
+            Ok(buf.slots[info.offset])
+        }
+        None if resolved_id == intern("nil") => Ok(Value::NIL),
+        None if resolved_id == intern("t") => Ok(Value::T),
+        None if resolve_sym(resolved_id).starts_with(':') => Ok(Value::from_sym_id(resolved_id)),
         None => eval
             .obarray()
-            .symbol_value(&resolved)
-            .cloned()
+            .find_symbol_value(resolved_id)
             .ok_or_else(|| signal("void-variable", vec![original_arg])),
     }
 }

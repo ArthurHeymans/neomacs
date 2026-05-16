@@ -121,10 +121,10 @@ pub(crate) fn builtin_make_local_variable(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("make-local-variable", &args, 1)?;
-    let name = match args[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        ValueKind::Nil => "nil".to_string(),
-        ValueKind::T => "t".to_string(),
+    let symbol = match args[0].kind() {
+        ValueKind::Symbol(id) => id,
+        ValueKind::Nil => intern("nil"),
+        ValueKind::T => intern("t"),
         _other => {
             return Err(signal(
                 "wrong-type-argument",
@@ -132,11 +132,9 @@ pub(crate) fn builtin_make_local_variable(
             ));
         }
     };
-    let symbol = intern(&name);
     let resolved = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
-    let resolved_name = resolve_sym(resolved);
     if ctx.obarray.is_constant_id(resolved) {
-        return Err(signal("setting-constant", vec![Value::symbol(name)]));
+        return Err(signal("setting-constant", vec![args[0]]));
     }
 
     // Phase 10E: for FORWARDED BUFFER_OBJFWD symbols, just flip the
@@ -226,11 +224,6 @@ pub(crate) fn builtin_make_local_variable(
             }
         }
     }
-    // Silence unused-warning: the legacy BufferLocals dispatch via
-    // `runtime_binding_for_make_local_variable` is gone with
-    // Phase 10F — all reads now flow through `local_var_alist`.
-    let _ = resolved_name;
-    let _ = symbol;
     Ok(args[0])
 }
 
@@ -253,8 +246,6 @@ pub(crate) fn builtin_local_variable_p(
         }
     };
     let resolved_id = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, sym_id)?;
-    let resolved_name = resolve_sym(resolved_id);
-
     let buf = if args.len() > 1 {
         match args[1].kind() {
             ValueKind::Nil => ctx.buffers.current_buffer(),
@@ -292,7 +283,7 @@ pub(crate) fn builtin_local_variable_p(
         )));
     }
 
-    Ok(Value::bool_val(b.has_buffer_local(resolved_name)))
+    Ok(Value::bool_val(b.has_buffer_local_by_sym_id(resolved_id)))
 }
 
 /// `(buffer-local-variables &optional BUFFER)` -- list all local variables.
