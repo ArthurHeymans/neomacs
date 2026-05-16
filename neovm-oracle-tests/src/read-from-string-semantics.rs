@@ -76,6 +76,28 @@ fn oracle_read_from_string_hash_skip_lazy_string_semantics() {
 }
 
 #[test]
+fn oracle_read_from_string_read_circle_and_radix_precedence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r###"
+(let ((read-circle nil)
+      (inputs '("#1=(a)"
+                "#1#"
+                "#2r101"
+                "#36rZ"
+                "#37r10")))
+  (mapcar
+   (lambda (input)
+     (condition-case err
+         (read-from-string input)
+       (error (list input (car err) (cdr err)))))
+   inputs))
+"###;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_read_from_string_empty_and_whitespace_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
