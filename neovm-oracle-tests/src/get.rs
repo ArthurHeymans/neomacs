@@ -27,6 +27,44 @@ fn oracle_prop_get_wrong_type_error() {
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
+#[test]
+fn oracle_prop_get_overriding_plist_environment_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+      (let ((s (make-symbol "oracle-prop-get-shadow")))
+        (put s :k :real)
+        (list
+         :nil-override
+         (let ((overriding-plist-environment
+                (list (cons s (list :k nil :other :override)))))
+           (list (get s :k)
+                 (get s :other)))
+         :put-through
+         (let ((overriding-plist-environment
+                (list (cons s (list :k :shadow)))))
+           (list (get s :k)
+                 (put s :k :new)
+                 (get s :k)
+                 (symbol-plist s)))
+         :malformed-env
+         (let ((overriding-plist-environment
+                (list (cons s (cons :missing (cons :x :bad))))))
+           (list (get s :k)
+                 (condition-case e
+                     (get s :absent)
+                   (error (list (car e) (cdr e))))))
+         :wrong-key
+         (let ((overriding-plist-environment
+                (list (cons (make-symbol "oracle-prop-get-shadow")
+                            (list :k :copy)))))
+           (get s :k))))"#;
+
+    let expected = "(:nil-override (:real :override) :put-through (:shadow :new :shadow (:k :new)) :malformed-env (:new nil) :wrong-key :new)";
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    assert_ok_eq(expected, &oracle, &neovm);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
