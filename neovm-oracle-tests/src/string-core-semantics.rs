@@ -268,6 +268,32 @@ fn oracle_copy_sequence_char_table_deep_subtables_shallow_slots() {
 }
 
 #[test]
+fn oracle_copy_sequence_record_allocates_shallow_slot_copy() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fcopy_sequence copies records with Frecord over the
+    // original vectorlike contents.  The record object and slots are new, but
+    // objects stored in slots remain shared.
+    let form = r#"
+(let* ((cell (list 'shared))
+       (rec (record 'neovm--copy-sequence-record cell 'tail))
+       (copy (copy-sequence rec)))
+  (aset copy 2 'copy-tail)
+  (setcar cell 'mutated)
+  (list
+   (eq rec copy)
+   (recordp copy)
+   (eq (aref rec 1) (aref copy 1))
+   (list (aref rec 0) (aref copy 0))
+   (list (aref rec 1) (aref copy 1))
+   (list (aref rec 2) (aref copy 2))
+   (equal rec copy)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_copy_sequence_circular_and_improper_list_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
