@@ -1968,6 +1968,36 @@ fn sync_selected_gui_chrome_state_tracks_gnu_window_system_defaults() {
 }
 
 #[test]
+fn sync_selected_gui_chrome_state_uses_compact_bar_as_separate_gui_chrome() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
+    eval.set_variable("compact-bar-mode", Value::T);
+
+    sync_selected_gui_chrome_state(&mut eval);
+
+    let frame = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after compact chrome sync");
+    assert_eq!(frame.frame_parameter_int("menu-bar-lines"), Some(0));
+    assert_eq!(frame.frame_parameter_int("tool-bar-lines"), Some(0));
+    assert_eq!(frame.frame_parameter_int("compact-bar-lines"), Some(1));
+    assert_eq!(frame.menu_bar_height, 0);
+    assert_eq!(frame.tool_bar_height, 0);
+    assert_eq!(
+        frame.compact_bar_height,
+        default_gui_tool_bar_line_height(frame.font_pixel_size)
+    );
+}
+
+#[test]
 fn gnu_startup_runtime_load_path_finds_mail_rfc6068() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

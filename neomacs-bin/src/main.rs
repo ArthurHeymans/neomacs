@@ -34,7 +34,9 @@ use neomacs_display_runtime::thread_comm::{
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
-use neomacs_layout_engine::gui_chrome::{collect_gui_menu_bar_items, collect_gui_tool_bar_items};
+use neomacs_layout_engine::gui_chrome::{
+    collect_gui_menu_bar_items, collect_gui_tool_bar_items, compact_bar_mode_enabled,
+};
 
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Value;
@@ -1548,6 +1550,7 @@ fn sync_live_gui_frame_titles(eval: &mut Context) {
 fn seed_gnu_default_gui_chrome_modes(eval: &mut Context) {
     eval.set_variable("menu-bar-mode", Value::T);
     eval.set_variable("tool-bar-mode", Value::T);
+    eval.set_variable("compact-bar-mode", Value::NIL);
 }
 
 fn ensure_gnu_tool_bar_setup(eval: &mut Context) {
@@ -1595,6 +1598,8 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
     } else {
         Vec::new()
     };
+    let compact_bar_enabled =
+        compact_bar_mode_enabled(eval) && (!menu_items.is_empty() || !tool_items.is_empty());
 
     let mut geometry_hints = None;
     if let Some(frame) = eval.frame_manager_mut().selected_frame_mut() {
@@ -1603,14 +1608,27 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
         }
         frame.set_parameter(
             Value::symbol("menu-bar-lines"),
-            Value::fixnum(if menu_items.is_empty() { 0 } else { 1 }),
+            Value::fixnum(if menu_items.is_empty() || compact_bar_enabled {
+                0
+            } else {
+                1
+            }),
         );
         frame.set_parameter(
             Value::symbol("tool-bar-lines"),
-            Value::fixnum(if tool_items.is_empty() { 0 } else { 1 }),
+            Value::fixnum(if tool_items.is_empty() || compact_bar_enabled {
+                0
+            } else {
+                1
+            }),
+        );
+        frame.set_parameter(
+            Value::symbol("compact-bar-lines"),
+            Value::fixnum(if compact_bar_enabled { 1 } else { 0 }),
         );
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
+        frame.sync_compact_bar_height_from_parameters();
         geometry_hints = Some((frame.id, frame.gui_geometry_hints()));
     }
 

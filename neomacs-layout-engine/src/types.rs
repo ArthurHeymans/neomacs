@@ -287,6 +287,8 @@ pub struct FrameParams {
     pub menu_bar_height: f32,
     /// Frame-level tool-bar height in pixels.
     pub tool_bar_height: f32,
+    /// Frame-level compact-bar height in pixels.
+    pub compact_bar_height: f32,
     /// Frame-level tab-bar height in pixels.
     pub tab_bar_height: f32,
     /// Default character cell dimensions

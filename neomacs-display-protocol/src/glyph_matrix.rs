@@ -542,6 +542,8 @@ pub struct FrameDisplayState {
     pub gui_menu_bar: Option<GuiMenuBarState>,
     /// GUI tool-bar overlay state for the primary frame snapshot.
     pub gui_tool_bar: Option<GuiToolBarState>,
+    /// GUI compact-bar overlay state for the primary frame snapshot.
+    pub gui_compact_bar: Option<GuiCompactBarState>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
 }
@@ -610,6 +612,18 @@ pub struct GuiToolBarState {
     pub bg: (f32, f32, f32),
 }
 
+/// GUI compact-bar overlay state carried in a frame snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GuiCompactBarState {
+    pub menu_items: Vec<MenuBarItem>,
+    pub tool_items: Vec<ToolBarItem>,
+    pub height: f32,
+    pub menu_fg: (f32, f32, f32),
+    pub menu_bg: (f32, f32, f32),
+    pub tool_fg: (f32, f32, f32),
+    pub tool_bg: (f32, f32, f32),
+}
+
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
@@ -660,6 +674,7 @@ impl FrameDisplayState {
             menu_bar: None,
             gui_menu_bar: None,
             gui_tool_bar: None,
+            gui_compact_bar: None,
             tab_bar: None,
         }
     }

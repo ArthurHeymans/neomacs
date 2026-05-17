@@ -212,6 +212,7 @@ fn child_frame_origin_is_relative_to_parent_child_frame_viewport() {
         let root = mgr.get_mut(root_id).expect("root");
         root.menu_bar_height = 33;
         root.tool_bar_height = 44;
+        root.compact_bar_height = 12;
         root.tab_bar_height = 22;
     }
     {
@@ -228,8 +229,8 @@ fn child_frame_origin_is_relative_to_parent_child_frame_viewport() {
         nested.top_pos = 7;
     }
 
-    assert_eq!(mgr.frame_origin_in_root(child_id), Some((20.0, 119.0)));
-    assert_eq!(mgr.frame_origin_in_root(nested_id), Some((25.0, 137.0)));
+    assert_eq!(mgr.frame_origin_in_root(child_id), Some((20.0, 131.0)));
+    assert_eq!(mgr.frame_origin_in_root(nested_id), Some((25.0, 149.0)));
 }
 
 #[test]

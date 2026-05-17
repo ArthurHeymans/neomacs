@@ -10,6 +10,14 @@ use neovm_core::emacs_core::{Context, Value};
 
 use crate::tty_menu_bar::collect_tty_menu_bar_items;
 
+pub fn compact_bar_mode_enabled(eval: &Context) -> bool {
+    eval.obarray()
+        .symbol_value("compact-bar-mode")
+        .copied()
+        .unwrap_or(Value::NIL)
+        .is_truthy()
+}
+
 pub fn collect_gui_menu_bar_items(eval: &Context) -> Vec<MenuBarItem> {
     collect_tty_menu_bar_items(eval)
         .into_iter()

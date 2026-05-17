@@ -13,6 +13,7 @@ impl RenderApp {
             let parent_id = display_state.parent_id;
             let gui_menu_bar = display_state.gui_menu_bar.clone();
             let gui_tool_bar = display_state.gui_tool_bar.clone();
+            let gui_compact_bar = display_state.gui_compact_bar.clone();
 
             // Materialize FrameDisplayState → FrameGlyphBuffer for the
             // existing rendering code.  The layout engine populates
@@ -193,6 +194,25 @@ impl RenderApp {
                     self.toolbar_height = 0.0;
                     self.toolbar_hovered = None;
                     self.toolbar_pressed = None;
+                }
+                if let Some(compact_bar) = gui_compact_bar {
+                    self.sync_toolbar_visual_config_from_height(compact_bar.height);
+                    self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
+                    self.compact_bar_menu_items = compact_bar.menu_items;
+                    self.compact_bar_tool_items = compact_bar.tool_items;
+                    self.compact_bar_height = compact_bar.height;
+                    self.compact_bar_menu_fg = compact_bar.menu_fg;
+                    self.compact_bar_menu_bg = compact_bar.menu_bg;
+                    self.compact_bar_tool_fg = compact_bar.tool_fg;
+                    self.compact_bar_tool_bg = compact_bar.tool_bg;
+                } else {
+                    self.compact_bar_menu_items.clear();
+                    self.compact_bar_tool_items.clear();
+                    self.compact_bar_height = 0.0;
+                    self.compact_bar_menu_hovered = None;
+                    self.compact_bar_menu_active = None;
+                    self.compact_bar_tool_hovered = None;
+                    self.compact_bar_tool_pressed = None;
                 }
                 if let Some(tab_bar) = self
                     .current_frame

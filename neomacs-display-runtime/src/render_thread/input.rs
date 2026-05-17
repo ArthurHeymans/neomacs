@@ -137,8 +137,79 @@ impl RenderApp {
         if self.tab_bar_height > 0.0 {
             self.tab_bar_y + self.tab_bar_height
         } else {
-            self.menu_bar_height
+            self.menu_bar_height + self.compact_bar_height
         }
+    }
+
+    pub(super) fn compact_bar_menu_width(&self) -> f32 {
+        let padding_x = 8.0_f32;
+        let char_width = if let Some(ref atlas) = self.glyph_atlas {
+            atlas.default_char_width()
+        } else {
+            8.0
+        };
+        let menu_width = self
+            .compact_bar_menu_items
+            .iter()
+            .fold(padding_x, |x, item| {
+                x + item.label.len() as f32 * char_width + padding_x * 2.0
+            });
+        menu_width + padding_x
+    }
+
+    pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
+        if self.compact_bar_height <= 0.0
+            || y >= self.compact_bar_height
+            || self.compact_bar_menu_items.is_empty()
+        {
+            return None;
+        }
+        let padding_x = 8.0_f32;
+        let char_width = if let Some(ref atlas) = self.glyph_atlas {
+            atlas.default_char_width()
+        } else {
+            8.0
+        };
+        let mut item_x = padding_x;
+        for item in &self.compact_bar_menu_items {
+            let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
+            if x >= item_x && x < item_x + label_width {
+                return Some(item.index);
+            }
+            item_x += label_width;
+        }
+        None
+    }
+
+    pub(super) fn compact_bar_tool_hit_test(&self, x: f32, y: f32) -> Option<u32> {
+        if self.compact_bar_height <= 0.0
+            || y >= self.compact_bar_height
+            || self.compact_bar_tool_items.is_empty()
+        {
+            return None;
+        }
+        let x = x - self.compact_bar_menu_width();
+        if x < 0.0 {
+            return None;
+        }
+        let padding = self.toolbar_padding as f32;
+        let icon_size = self.toolbar_icon_size as f32;
+        let item_size = icon_size + padding * 2.0;
+        let separator_width = 12.0_f32;
+        let item_spacing = 2.0_f32;
+        let mut item_x = padding;
+        for item in &self.compact_bar_tool_items {
+            if item.is_separator {
+                item_x += separator_width;
+                continue;
+            }
+            let right = item_x + item_size;
+            if x >= item_x && x < right {
+                return Some(item.index);
+            }
+            item_x = right + item_spacing;
+        }
+        None
     }
 
     /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.

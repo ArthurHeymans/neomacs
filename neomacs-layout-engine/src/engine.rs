@@ -2765,6 +2765,21 @@ impl LayoutEngine {
                         bg: pixel_to_tuple(tool_bar_face.bg),
                     });
             }
+
+            if frame_params.compact_bar_height > 0.0 {
+                let menu_face = menu_face_resolver.resolve_named_face_without_inverse_video("menu");
+                let tool_bar_face = menu_face_resolver.resolve_named_face("tool-bar");
+                frame_display_state.gui_compact_bar =
+                    Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
+                        menu_items: collect_gui_menu_bar_items(evaluator),
+                        tool_items: collect_gui_tool_bar_items(evaluator),
+                        height: frame_params.compact_bar_height,
+                        menu_fg: pixel_to_tuple(menu_face.fg),
+                        menu_bg: pixel_to_tuple(menu_face.bg),
+                        tool_fg: pixel_to_tuple(tool_bar_face.fg),
+                        tool_bg: pixel_to_tuple(tool_bar_face.bg),
+                    });
+            }
         }
 
         self.last_frame_display_state = Some(frame_display_state);
@@ -6751,14 +6766,17 @@ impl LayoutEngine {
         row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text as usize] = glyphs;
         crate::matrix_builder::GlyphMatrixBuilder::normalize_external_row(&mut row);
 
+        let chrome_before_tab = frame_params.menu_bar_height
+            + frame_params.tool_bar_height
+            + frame_params.compact_bar_height;
         let row_index = if frame_params.char_height > 0.0 {
-            (frame_params.menu_bar_height / frame_params.char_height)
+            (chrome_before_tab / frame_params.char_height)
                 .round()
                 .max(0.0) as u32
         } else {
             0
         };
-        let tab_bar_y = frame_params.menu_bar_height;
+        let tab_bar_y = chrome_before_tab;
 
         self.pending_frame_chrome_rows.push(
             neomacs_display_protocol::glyph_matrix::FrameChromeRow {

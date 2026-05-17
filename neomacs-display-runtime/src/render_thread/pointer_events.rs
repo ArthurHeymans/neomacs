@@ -94,7 +94,25 @@ impl RenderApp {
 
         if let Some(ref mut menu) = self.popup_menu {
             if state == ElementState::Pressed && button == MouseButton::Left {
-                if self.menu_bar_height > 0.0 && self.mouse_pos.1 < self.menu_bar_height {
+                if self.compact_bar_height > 0.0 && self.mouse_pos.1 < self.compact_bar_height {
+                    if let Some(idx) =
+                        self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1)
+                    {
+                        self.comms
+                            .send_input(InputEvent::MenuSelection { index: -1 });
+                        self.popup_menu = None;
+                        self.compact_bar_menu_active = Some(idx);
+                        self.comms
+                            .send_input(InputEvent::MenuBarClick { index: idx as i32 });
+                        self.frame_dirty = true;
+                    } else {
+                        self.comms
+                            .send_input(InputEvent::MenuSelection { index: -1 });
+                        self.popup_menu = None;
+                        self.compact_bar_menu_active = None;
+                        self.frame_dirty = true;
+                    }
+                } else if self.menu_bar_height > 0.0 && self.mouse_pos.1 < self.menu_bar_height {
                     if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -222,6 +240,31 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
+            && self.compact_bar_height > 0.0
+            && self.mouse_pos.1 < self.compact_bar_height
+        {
+            if let Some(idx) = self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+                if self.compact_bar_menu_active == Some(idx) {
+                    self.compact_bar_menu_active = None;
+                } else {
+                    self.compact_bar_menu_active = Some(idx);
+                    self.comms
+                        .send_input(InputEvent::MenuBarClick { index: idx as i32 });
+                }
+                self.frame_dirty = true;
+                return;
+            }
+            if let Some(idx) = self.compact_bar_tool_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+                self.compact_bar_tool_pressed = Some(idx);
+                self.comms
+                    .send_input(InputEvent::ToolBarClick { index: idx as i32 });
+                self.frame_dirty = true;
+                return;
+            }
+        }
+
+        if state == ElementState::Pressed
+            && button == MouseButton::Left
             && self.menu_bar_height > 0.0
             && self.mouse_pos.1 < self.menu_bar_height
         {
@@ -283,6 +326,15 @@ impl RenderApp {
                     .send_input(InputEvent::ToolBarClick { index: idx as i32 });
                 self.frame_dirty = true;
             }
+            return;
+        }
+
+        if state == ElementState::Released
+            && button == MouseButton::Left
+            && self.compact_bar_tool_pressed.is_some()
+        {
+            self.compact_bar_tool_pressed = None;
+            self.frame_dirty = true;
             return;
         }
 
@@ -447,6 +499,35 @@ impl RenderApp {
                 self.menu_bar_hovered = None;
             }
             if self.menu_bar_hovered != old_hover {
+                self.frame_dirty = true;
+            }
+        }
+
+        if self.compact_bar_height > 0.0 {
+            let old_menu_hover = self.compact_bar_menu_hovered;
+            let old_tool_hover = self.compact_bar_tool_hovered;
+            if ly < self.compact_bar_height {
+                let new_menu_hover = self.compact_bar_menu_hit_test(lx, ly);
+                self.compact_bar_menu_hovered = new_menu_hover;
+                self.compact_bar_tool_hovered = if new_menu_hover.is_none() {
+                    self.compact_bar_tool_hit_test(lx, ly)
+                } else {
+                    None
+                };
+                if let (Some(active), Some(hov)) = (self.compact_bar_menu_active, new_menu_hover)
+                    && hov != active
+                {
+                    self.compact_bar_menu_active = Some(hov);
+                    self.comms
+                        .send_input(InputEvent::MenuBarClick { index: hov as i32 });
+                }
+            } else {
+                self.compact_bar_menu_hovered = None;
+                self.compact_bar_tool_hovered = None;
+            }
+            if self.compact_bar_menu_hovered != old_menu_hover
+                || self.compact_bar_tool_hovered != old_tool_hover
+            {
                 self.frame_dirty = true;
             }
         }

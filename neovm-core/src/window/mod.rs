@@ -1392,6 +1392,8 @@ pub struct Frame {
     pub menu_bar_height: u32,
     /// Tool bar height in pixels.
     pub tool_bar_height: u32,
+    /// Compact bar height in pixels.
+    pub compact_bar_height: u32,
     /// Tab bar height in pixels.
     pub tab_bar_height: u32,
     /// Default font size in pixels.
@@ -1542,6 +1544,7 @@ impl Frame {
             title: Value::NIL,
             menu_bar_height: 0,
             tool_bar_height: 0,
+            compact_bar_height: 0,
             tab_bar_height: 0,
             font_pixel_size: 16.0,
             char_width: 8.0,
@@ -1808,6 +1811,7 @@ impl Frame {
         let base_height = height_inc.saturating_add(
             self.menu_bar_height
                 .saturating_add(self.tool_bar_height)
+                .saturating_add(self.compact_bar_height)
                 .saturating_add(self.tab_bar_height),
         );
         GuiFrameGeometryHints {
@@ -1823,6 +1827,7 @@ impl Frame {
     fn chrome_top_height(&self) -> f32 {
         self.menu_bar_height
             .saturating_add(self.tool_bar_height)
+            .saturating_add(self.compact_bar_height)
             .saturating_add(self.tab_bar_height) as f32
     }
 
@@ -1987,6 +1992,20 @@ impl Frame {
             self.char_height.max(1.0).round() as u32
         };
         self.tool_bar_height = lines.saturating_mul(line_height);
+        self.sync_window_area_bounds();
+    }
+
+    pub fn sync_compact_bar_height_from_parameters(&mut self) {
+        let lines = self
+            .frame_parameter_int("compact-bar-lines")
+            .unwrap_or(0)
+            .max(0) as u32;
+        let line_height = if self.effective_window_system().is_some() {
+            default_gui_tool_bar_line_height(self.font_pixel_size)
+        } else {
+            self.char_height.max(1.0).round() as u32
+        };
+        self.compact_bar_height = lines.saturating_mul(line_height);
         self.sync_window_area_bounds();
     }
 

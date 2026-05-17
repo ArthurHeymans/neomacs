@@ -300,6 +300,19 @@ pub(super) struct RenderApp {
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
 
+    // Compact bar state
+    pub(super) compact_bar_menu_items: Vec<MenuBarItem>,
+    pub(super) compact_bar_tool_items: Vec<ToolBarItem>,
+    pub(super) compact_bar_height: f32,
+    pub(super) compact_bar_menu_fg: (f32, f32, f32),
+    pub(super) compact_bar_menu_bg: (f32, f32, f32),
+    pub(super) compact_bar_tool_fg: (f32, f32, f32),
+    pub(super) compact_bar_tool_bg: (f32, f32, f32),
+    pub(super) compact_bar_menu_hovered: Option<u32>,
+    pub(super) compact_bar_menu_active: Option<u32>,
+    pub(super) compact_bar_tool_hovered: Option<u32>,
+    pub(super) compact_bar_tool_pressed: Option<u32>,
+
     // Visual bell state (flash overlay)
     pub(super) visual_bell_start: Option<Instant>,
 
@@ -420,6 +433,17 @@ impl RenderApp {
             toolbar_pressed: None,
             toolbar_icon_size: 24,
             toolbar_padding: 5,
+            compact_bar_menu_items: Vec::new(),
+            compact_bar_tool_items: Vec::new(),
+            compact_bar_height: 0.0,
+            compact_bar_menu_fg: (0.8, 0.8, 0.8),
+            compact_bar_menu_bg: (0.15, 0.15, 0.15),
+            compact_bar_tool_fg: (0.8, 0.8, 0.8),
+            compact_bar_tool_bg: (0.15, 0.15, 0.15),
+            compact_bar_menu_hovered: None,
+            compact_bar_menu_active: None,
+            compact_bar_tool_hovered: None,
+            compact_bar_tool_pressed: None,
             visual_bell_start: None,
             ime_enabled: false,
             ime_preedit_active: false,

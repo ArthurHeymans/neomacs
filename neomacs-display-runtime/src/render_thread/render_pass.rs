@@ -307,6 +307,33 @@ impl RenderApp {
             }
         }
 
+        if self.compact_bar_height > 0.0
+            && (!self.compact_bar_menu_items.is_empty() || !self.compact_bar_tool_items.is_empty())
+        {
+            if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {
+                renderer.render_compact_bar(
+                    &surface_view,
+                    &self.compact_bar_menu_items,
+                    &self.compact_bar_tool_items,
+                    self.compact_bar_height,
+                    self.compact_bar_menu_fg,
+                    self.compact_bar_menu_bg,
+                    self.compact_bar_tool_fg,
+                    self.compact_bar_tool_bg,
+                    &self.toolbar_icon_textures,
+                    self.compact_bar_menu_hovered,
+                    self.compact_bar_menu_active,
+                    self.compact_bar_tool_hovered,
+                    self.compact_bar_tool_pressed,
+                    self.toolbar_icon_size,
+                    self.toolbar_padding,
+                    glyph_atlas,
+                    self.width,
+                    self.height,
+                );
+            }
+        }
+
         // Render popup menu overlay (topmost layer)
         if let Some(ref menu) = self.popup_menu {
             if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {

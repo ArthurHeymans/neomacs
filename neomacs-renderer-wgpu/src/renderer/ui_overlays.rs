@@ -2154,6 +2154,287 @@ impl WgpuRenderer {
     // pipeline (GlyphRowRole::TabBar).  The render_tab_bar() method that
     // was here (~300 lines) has been removed.
 
+    /// Render the compact GUI chrome bar: menu labels followed by tool-bar icons.
+    pub fn render_compact_bar(
+        &self,
+        view: &wgpu::TextureView,
+        menu_items: &[MenuBarItem],
+        tool_items: &[ToolBarItem],
+        compact_bar_height: f32,
+        menu_fg: (f32, f32, f32),
+        menu_bg: (f32, f32, f32),
+        tool_fg: (f32, f32, f32),
+        _tool_bg: (f32, f32, f32),
+        icon_textures: &HashMap<String, u32>,
+        menu_hovered: Option<u32>,
+        menu_active: Option<u32>,
+        tool_hovered: Option<u32>,
+        tool_pressed: Option<u32>,
+        icon_size: u32,
+        padding: u32,
+        glyph_atlas: &mut WgpuGlyphAtlas,
+        surface_width: u32,
+        surface_height: u32,
+    ) {
+        let logical_w = surface_width as f32 / self.scale_factor;
+        let logical_h = surface_height as f32 / self.scale_factor;
+        let uniforms = Uniforms {
+            screen_size: [logical_w, logical_h],
+            time: 0.0,
+            _padding: 0.0,
+        };
+        self.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        let bg_color = Color::new(menu_bg.0, menu_bg.1, menu_bg.2, 1.0).srgb_to_linear();
+        let padding_x = 8.0_f32;
+        let font_size = glyph_atlas.default_font_size();
+        let char_width = glyph_atlas.default_char_width();
+        let font_size_bits = 0.0_f32.to_bits();
+        let icon_sz = icon_size as f32;
+        let pad = padding as f32;
+        let item_size = icon_sz + pad * 2.0;
+        let separator_width = 12.0_f32;
+        let item_spacing = 2.0_f32;
+
+        let mut rect_verts: Vec<RectVertex> = Vec::new();
+        self.add_rect(
+            &mut rect_verts,
+            0.0,
+            0.0,
+            logical_w,
+            compact_bar_height,
+            &bg_color,
+        );
+
+        let mut menu_x = padding_x;
+        for item in menu_items {
+            let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
+            let is_hovered = menu_hovered == Some(item.index);
+            let is_active = menu_active == Some(item.index);
+            if is_active {
+                let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.15).srgb_to_linear();
+                self.add_rect(
+                    &mut rect_verts,
+                    menu_x,
+                    0.0,
+                    label_width,
+                    compact_bar_height,
+                    &c,
+                );
+            } else if is_hovered {
+                let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.1).srgb_to_linear();
+                self.add_rect(
+                    &mut rect_verts,
+                    menu_x,
+                    0.0,
+                    label_width,
+                    compact_bar_height,
+                    &c,
+                );
+            }
+            menu_x += label_width;
+        }
+        let tool_x_origin = menu_x + padding_x;
+
+        let mut item_x = tool_x_origin + pad;
+        for item in tool_items {
+            if item.is_separator {
+                let sep_x = item_x + separator_width / 2.0 - 0.5;
+                let sep_y = pad;
+                let sep_h = compact_bar_height - pad * 2.0;
+                let sep_color = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.2).srgb_to_linear();
+                self.add_rect(&mut rect_verts, sep_x, sep_y, 1.0, sep_h, &sep_color);
+                item_x += separator_width;
+                continue;
+            }
+
+            let is_hovered = tool_hovered == Some(item.index);
+            let is_pressed = tool_pressed == Some(item.index);
+            if is_pressed {
+                let c = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.2).srgb_to_linear();
+                self.add_rect(
+                    &mut rect_verts,
+                    item_x,
+                    0.0,
+                    item_size,
+                    compact_bar_height,
+                    &c,
+                );
+            } else if is_hovered && item.enabled {
+                let c = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.1).srgb_to_linear();
+                self.add_rect(
+                    &mut rect_verts,
+                    item_x,
+                    0.0,
+                    item_size,
+                    compact_bar_height,
+                    &c,
+                );
+            }
+            item_x += item_size + item_spacing;
+        }
+
+        let border_color = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.15).srgb_to_linear();
+        self.add_rect(
+            &mut rect_verts,
+            0.0,
+            compact_bar_height - 1.0,
+            logical_w,
+            1.0,
+            &border_color,
+        );
+
+        if !rect_verts.is_empty() {
+            let buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Compact Bar Rect Buffer"),
+                    contents: bytemuck::cast_slice(&rect_verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Compact Bar Rect Encoder"),
+                });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Compact Bar Rect Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..rect_verts.len() as u32, 0..1);
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        let text_color = {
+            let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 1.0).srgb_to_linear();
+            [c.r, c.g, c.b, c.a]
+        };
+        let text_y = (compact_bar_height - font_size) / 2.0;
+        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut menu_x = padding_x;
+        for item in menu_items {
+            let label_x = menu_x + padding_x;
+            for (ci, ch) in item.label.chars().enumerate() {
+                let key = GlyphKey {
+                    charcode: ch as u32,
+                    face_id: 0,
+                    font_size_bits,
+                    font_identity: glyph_font_identity(None),
+                    x_bin: SubpixelBin::Zero,
+                    y_bin: SubpixelBin::Zero,
+                };
+                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
+                overlay_glyphs.push((key, label_x + (ci as f32) * char_width, text_y, text_color));
+            }
+            menu_x += item.label.len() as f32 * char_width + padding_x * 2.0;
+        }
+        self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Compact Bar Icon Encoder"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Compact Bar Icon Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.image_pipeline);
+            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+
+            let mut item_x = tool_x_origin + pad;
+            for item in tool_items {
+                if item.is_separator {
+                    item_x += separator_width;
+                    continue;
+                }
+                let icon_x = item_x + pad;
+                let icon_y = (compact_bar_height - icon_sz) / 2.0;
+                let alpha = if item.enabled { 1.0 } else { 0.4 };
+                let tint = [tool_fg.0, tool_fg.1, tool_fg.2, alpha];
+                if let Some(&image_id) = icon_textures.get(&item.icon_name)
+                    && let Some(cached) = self.image_cache.get(image_id)
+                {
+                    let vertices = [
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y],
+                            tex_coords: [1.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y + icon_sz],
+                            tex_coords: [0.0, 1.0],
+                            color: tint,
+                        },
+                    ];
+                    let buffer =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("Compact Bar Icon Vertex Buffer"),
+                                contents: bytemuck::cast_slice(&vertices),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            });
+                    pass.set_vertex_buffer(0, buffer.slice(..));
+                    pass.set_bind_group(1, &cached.bind_group, &[]);
+                    pass.draw(0..6, 0..1);
+                }
+                item_x += item_size + item_spacing;
+            }
+        }
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
     /// Render the GPU toolbar overlay at the top of the frame.
     pub fn render_toolbar(
         &self,
