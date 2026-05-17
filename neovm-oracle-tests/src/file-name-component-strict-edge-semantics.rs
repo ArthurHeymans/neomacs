@@ -133,3 +133,43 @@ fn oracle_file_name_with_extension_strict_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_name_split_and_parent_directory_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((default-directory "/tmp/neomacs-oracle-parent/base/"))
+  (list
+   (mapcar (lambda (name)
+             (list name
+                   (file-name-split name)
+                   (string-join (file-name-split name) "/")))
+           '("" "." ".." "plain" "plain/" "a/b" "a/b/"
+             "/"
+             "//"
+             "///"
+             "/a"
+             "/a/"
+             "/a//b"
+             "/a//b/"
+             "a//b"
+             "a/./b"
+             "a/../b"))
+   (mapcar (lambda (name)
+             (list name (file-name-parent-directory name)))
+           '("/" "//" "///" "/a" "/a/" "/a/b" "/a/b/"
+             "plain" "plain/" "a/b" "a/b/" "." ".." ""))
+   (condition-case err
+       (file-name-split 42)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (file-name-parent-directory 42)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (file-name-parent-directory)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
