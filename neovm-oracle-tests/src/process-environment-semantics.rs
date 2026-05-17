@@ -64,6 +64,54 @@ fn oracle_prop_getenv_internal_explicit_env_list_first_match_and_negative() {
 }
 
 #[test]
+fn oracle_prop_getenv_internal_explicit_env_list_strict_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((env '("AA=long" "A=short" 42 "B" ("C=bad") "C=value"
+             "D=one" "D" "E=" "=empty-name" "F")))
+  (list
+   (getenv-internal "A" env)
+   (getenv-internal "AA" env)
+   (getenv-internal "B" env)
+   (getenv-internal "C" env)
+   (getenv-internal "D" env)
+   (getenv-internal "E" env)
+   (getenv-internal "" env)
+   (getenv-internal "F" env)
+   (getenv-internal "G" env)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_prop_setenv_internal_mutation_and_scan_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (let ((env (list "A=old" "B=old" 42 "A=late")))
+   (list (eq (setenv-internal env "A" "new" t) env)
+         env))
+ (let ((env (list "A=old" "B=old" 42 "C=late")))
+   (list (setenv-internal env "C" "new" t)
+         env))
+ (let ((env (list "A=old" "B=old" 42 "B=late")))
+   (list (setenv-internal env "B" nil nil)
+         env))
+ (let ((env (list "A=old" "B=old" 42 "A=late")))
+   (list (eq (setenv-internal env "A" nil t) env)
+         env))
+ (let ((env (list "A=old" "B=old")))
+   (list (setenv-internal env "C" nil nil)
+         env)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_prop_substitute_env_in_file_name_uses_lisp_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
