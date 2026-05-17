@@ -185,6 +185,8 @@ mod change_group_semantics;
 mod char_after;
 #[path = "char-before-operations.rs"]
 mod char_before_operations;
+#[path = "char-bool-math-deep-edge-semantics.rs"]
+mod char_bool_math_deep_edge_semantics;
 #[path = "char-byte-strict-edge-semantics.rs"]
 mod char_byte_strict_edge_semantics;
 #[path = "char-literal.rs"]
