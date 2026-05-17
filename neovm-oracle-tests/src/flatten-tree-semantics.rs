@@ -75,3 +75,33 @@ fn oracle_prop_flatten_tree_after_mutating_dotted_structure() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_flatten_tree_ensure_list_alias_arity_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (eq (symbol-function 'flatten-list) (symbol-function 'flatten-tree))
+ (eq (ensure-list nil) nil)
+ (let ((x (list nil)))
+   (list (eq (ensure-list x) x)
+         (eq (car (ensure-list x)) nil)
+         (flatten-list x)))
+ (flatten-tree '(nil (nil . a) (b nil . c) ((d)) . e))
+ (condition-case err
+     (flatten-tree)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (flatten-list 'a 'b)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (ensure-list)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (ensure-list 'a 'b)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
