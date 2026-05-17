@@ -1498,6 +1498,8 @@ mod sort_mapcar_append_strict_edge_semantics;
 mod sort_semantics;
 #[path = "sort-stable-patterns.rs"]
 mod sort_stable_patterns;
+#[path = "special-form-deep-edge-semantics.rs"]
+mod special_form_deep_edge_semantics;
 #[path = "special-forms-semantics.rs"]
 mod special_forms_semantics;
 #[path = "special-forms-strict-edge-semantics.rs"]
