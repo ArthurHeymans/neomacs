@@ -71,6 +71,34 @@ fn oracle_keywordp_on_symbol() {
 }
 
 #[test]
+fn oracle_keywordp_initial_obarray_strict_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c:Fkeywordp requires a symbol whose print name starts with
+    // ':' and whose symbol object is interned in the initial obarray.
+    let form = r#"
+(let ((local-obarray (make-vector 17 0)))
+  (list
+   (keywordp :)
+   (keywordp :neomacs-oracle-keyword)
+   (keywordp (intern ":neomacs-oracle-keyword"))
+   (keywordp (make-symbol ":neomacs-oracle-keyword"))
+   (keywordp (intern ":neomacs-oracle-keyword" local-obarray))
+   (keywordp (intern-soft ":neomacs-oracle-keyword" local-obarray))
+   (keywordp (intern-soft ":neomacs-oracle-keyword"))
+   (keywordp ':)
+   (keywordp "::double")
+   (condition-case err
+       (keywordp)
+     (error (cons (car err) (cdr err))))
+   (condition-case err
+       (keywordp :x :y)
+     (error (cons (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_sequencep_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(sequencep '(a b))"#);
