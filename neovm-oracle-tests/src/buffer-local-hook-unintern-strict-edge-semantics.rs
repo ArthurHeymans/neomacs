@@ -50,10 +50,10 @@ fn oracle_buffer_local_value_global_var() {
 fn oracle_buffer_local_value_nil_buffer_signals_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(
-        r#"(condition-case err (progn (buffer-local-value 'x nil) (prin1-to-string err)) (error (prin1-to-string (car err)))))"#,
+        r#"(condition-case err (progn (buffer-local-value 'x nil) nil) (error (symbol-name (car err))))"#,
     );
     // Both should signal wrong-type-argument
-    assert_ok_eq("wrong-type-argument", &o, &n);
+    assert_ok_eq("\"wrong-type-argument\"", &o, &n);
 }
 
 // --- unintern ---

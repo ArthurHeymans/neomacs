@@ -1717,6 +1717,8 @@ mod url_parse_semantics;
 mod url_util_file_semantics;
 #[path = "url-util-semantics.rs"]
 mod url_util_semantics;
+#[path = "use-map-buffer-swap-strict-edge-semantics.rs"]
+mod use_map_buffer_swap_strict_edge_semantics;
 #[path = "value-order-semantics.rs"]
 mod value_order_semantics;
 #[path = "values-store-semantics.rs"]
