@@ -95,6 +95,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "consp",
     "constrain-to-field",
     "copy-alist",
+    "copy-file",
     "copy-hash-table",
     "copy-keymap",
     "copy-marker",
