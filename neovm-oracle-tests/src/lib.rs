@@ -1317,6 +1317,8 @@ mod progress_reporter_semantics;
 mod proper_list_predicates;
 #[path = "propertize-advanced.rs"]
 mod propertize_advanced;
+#[path = "propertize-func-narrow-edge-semantics.rs"]
+mod propertize_func_narrow_edge_semantics;
 #[path = "property-list-advanced.rs"]
 mod property_list_advanced;
 #[path = "property-list-comprehensive.rs"]
