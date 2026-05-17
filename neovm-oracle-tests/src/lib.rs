@@ -804,6 +804,8 @@ mod event_modifier_symbol_semantics;
 mod event_posn_accessor_semantics;
 #[path = "event-predicate-semantics.rs"]
 mod event_predicate_semantics;
+#[path = "executable-find-strict-edge-semantics.rs"]
+mod executable_find_strict_edge_semantics;
 #[path = "expand-file-name-strict-edge-semantics.rs"]
 mod expand_file_name_strict_edge_semantics;
 #[path = "expt-sqrt-log-patterns.rs"]
