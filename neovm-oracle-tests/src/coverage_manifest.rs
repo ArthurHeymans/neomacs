@@ -325,6 +325,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "max-char",
     "md5",
     "member",
+    "member-ignore-case",
     "memq",
     "memql",
     "message",

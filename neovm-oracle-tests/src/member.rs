@@ -50,6 +50,34 @@ fn oracle_member_ignore_case_ignores_non_strings_and_returns_tail() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_member_ignore_case_strict_edge_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:member-ignore-case tests (stringp (car list)) before
+    // calling string-equal-ignore-case.  Bad ELT values are therefore delayed
+    // until a string element is encountered, and text properties do not affect
+    // the string comparison result.
+    let form = r#"
+(let ((capture (lambda (form)
+                 (condition-case err
+                     (eval form)
+                   (error (cons (car err) (cdr err)))))))
+  (list
+   (let ((s (copy-sequence "FoO")))
+     (add-text-properties 0 3 '(face bold) s)
+     (member-ignore-case "foo" (list 1 s "later")))
+   (member-ignore-case "" '(nil "" "later"))
+   (member-ignore-case 'bad '(1 nil bad))
+   (funcall capture '(member-ignore-case 'bad '(1 nil "bad")))
+   (funcall capture '(member-ignore-case "missing" '(1 nil . bad-tail)))
+   (funcall capture '(member-ignore-case "x" 42))
+   (funcall capture '(member-ignore-case))
+   (funcall capture '(member-ignore-case "x" nil 'extra))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
 
