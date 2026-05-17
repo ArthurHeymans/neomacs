@@ -147,6 +147,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-exists-p",
     "file-modes",
     "file-name-absolute-p",
+    "file-name-concat",
     "file-newer-than-file-p",
     "file-readable-p",
     "file-regular-p",
