@@ -9753,6 +9753,209 @@ fn while_no_input_catches_pending_key_across_load_boundary() {
 }
 
 #[test]
+fn with_selected_window_restores_after_while_no_input_keyboard_interrupt() {
+    crate::test_utils::init_test_tracing();
+
+    fn queue_key_for_while_no_input_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "queue helper should not receive arguments");
+        ctx.command_loop.keyboard.pending_input_events.push_back(
+            crate::keyboard::InputEvent::KeyPress {
+                key: crate::keyboard::KeyEvent::char_with_mods(
+                    'n',
+                    crate::keyboard::Modifiers::ctrl(),
+                ),
+                emacs_frame_id: 0,
+            },
+        );
+        Ok(Value::NIL)
+    }
+
+    let mut ev = runtime_startup_context();
+    ev.set_variable("noninteractive", Value::NIL);
+    ev.defsubr(
+        "neo-queue-key-for-while-no-input-test",
+        queue_key_for_while_no_input_test,
+        0,
+        Some(0),
+    );
+
+    let result = ev.eval_str(
+        r#"(let* ((w1 (selected-window))
+                  (w2 (split-window))
+                  (body-value
+                   (with-selected-window w2
+                     (while-no-input
+                       (neo-queue-key-for-while-no-input-test)
+                       (eval '(ignore nil) t)
+                       'missed))))
+             (prog1
+                 (list body-value
+                       (eq (selected-window) w1)
+                       (eq (current-buffer) (window-buffer w1))
+                       (read-event nil nil 0))
+               (ignore-errors (delete-window w2))))"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::error::format_eval_result(&result),
+        "OK (t t t nil)"
+    );
+}
+
+#[test]
+fn while_no_input_unwinds_inner_with_selected_window_on_keyboard_input() {
+    crate::test_utils::init_test_tracing();
+
+    fn queue_key_for_while_no_input_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "queue helper should not receive arguments");
+        ctx.command_loop.keyboard.pending_input_events.push_back(
+            crate::keyboard::InputEvent::KeyPress {
+                key: crate::keyboard::KeyEvent::char_with_mods(
+                    'n',
+                    crate::keyboard::Modifiers::ctrl(),
+                ),
+                emacs_frame_id: 0,
+            },
+        );
+        Ok(Value::NIL)
+    }
+
+    let mut ev = runtime_startup_context();
+    ev.set_variable("noninteractive", Value::NIL);
+    ev.defsubr(
+        "neo-queue-key-for-while-no-input-test",
+        queue_key_for_while_no_input_test,
+        0,
+        Some(0),
+    );
+
+    let result = ev.eval_str(
+        r#"(let* ((w1 (selected-window))
+                  (w2 (split-window))
+                  (body-value
+                   (while-no-input
+                     (with-selected-window w2
+                       (neo-queue-key-for-while-no-input-test)
+                       (eval '(ignore nil) t)
+                       'missed))))
+             (prog1
+                 (list body-value
+                       (eq (selected-window) w1)
+                       (eq (current-buffer) (window-buffer w1))
+                       (read-event nil nil 0))
+               (ignore-errors (delete-window w2))))"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::error::format_eval_result(&result),
+        "OK (t t t nil)"
+    );
+}
+
+#[test]
+fn sit_for_requeues_delayed_input_after_with_selected_window_cleanup() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ev = runtime_startup_context();
+    ev.set_variable("noninteractive", Value::NIL);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(10));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char_with_mods('n', crate::keyboard::Modifiers::ctrl()),
+        ))
+        .expect("send delayed C-n");
+    });
+
+    let result = ev.eval_str(
+        r#"(let* ((w1 (selected-window))
+                  (w2 (split-window))
+                  (body-value
+                   (with-selected-window w2
+                     (sit-for 0.2 t))))
+             (prog1
+                 (list body-value
+                       (eq (selected-window) w1)
+                       (eq (current-buffer) (window-buffer w1))
+                       (read-event nil nil 0))
+               (ignore-errors (delete-window w2))))"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::error::format_eval_result(&result),
+        "OK (nil t t 14)"
+    );
+}
+
+#[test]
+fn safe_run_hook_preserves_selected_window_after_while_no_input_interrupt() {
+    crate::test_utils::init_test_tracing();
+
+    fn queue_key_for_while_no_input_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "queue helper should not receive arguments");
+        ctx.command_loop.keyboard.pending_input_events.push_back(
+            crate::keyboard::InputEvent::KeyPress {
+                key: crate::keyboard::KeyEvent::char_with_mods(
+                    'n',
+                    crate::keyboard::Modifiers::ctrl(),
+                ),
+                emacs_frame_id: 0,
+            },
+        );
+        Ok(Value::NIL)
+    }
+
+    let mut ev = runtime_startup_context();
+    ev.set_variable("noninteractive", Value::NIL);
+    ev.defsubr(
+        "neo-queue-key-for-while-no-input-test",
+        queue_key_for_while_no_input_test,
+        0,
+        Some(0),
+    );
+    ev.eval_str(
+        r#"(let ((w1 (selected-window))
+                 (w2 (split-window)))
+             (select-window w2)
+             (setq neo-safe-hook-window w1)
+             (setq neo-safe-hook-result nil)
+             (defalias 'neo-safe-hook-fn
+               #'(lambda ()
+                   (setq neo-safe-hook-result
+                         (with-selected-window neo-safe-hook-window
+                           (while-no-input
+                             (neo-queue-key-for-while-no-input-test)
+                             (eval '(ignore nil) t)
+                             'missed)))))
+             (setq neo-safe-hook '(neo-safe-hook-fn)))"#,
+    )
+    .expect("install hook");
+
+    crate::emacs_core::hook_runtime::safe_run_named_hook(
+        &mut ev,
+        crate::emacs_core::intern::intern("neo-safe-hook"),
+        &[],
+    )
+    .expect("safe hook should finish");
+
+    let result = ev.eval_str(
+        r#"(prog1
+               (list neo-safe-hook-result
+                     (eq (selected-window) (next-window neo-safe-hook-window))
+                     (eq (current-buffer) (window-buffer (selected-window)))
+                     (read-event nil nil 0))
+             (ignore-errors (delete-window (selected-window))))"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::error::format_eval_result(&result),
+        "OK (t t t nil)"
+    );
+}
+
+#[test]
 fn window_and_minibuffer_defvars_are_bound_and_special_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

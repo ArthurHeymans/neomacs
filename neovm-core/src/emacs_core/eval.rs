@@ -1585,6 +1585,14 @@ pub struct Context {
     kill_emacs_symbol: SymId,
     quit_flag: Value,
     inhibit_quit: Value,
+    /// Nonzero while `unbind_to` is running unwind cleanup forms.
+    ///
+    /// GNU `unbind_to` clears `Vquit_flag` and then runs cleanup forms without
+    /// polling the input layer again; input processing sets `Vquit_flag` before
+    /// the evaluator observes it.  Neomacs has an evaluator-side
+    /// `throw-on-input` poll to bridge host input, so suppress that extra poll
+    /// during cleanup to preserve GNU's unwind semantics.
+    unwind_cleanup_depth: usize,
     noninteractive_symbol: SymId,
     noninteractive: bool,
     symbols_with_pos_enabled_symbol: SymId,
@@ -4379,6 +4387,7 @@ impl Context {
             kill_emacs_symbol: core_eval_symbols.kill_emacs_symbol,
             quit_flag,
             inhibit_quit,
+            unwind_cleanup_depth: 0,
             noninteractive_symbol: core_eval_symbols.noninteractive_symbol,
             noninteractive,
             symbols_with_pos_enabled_symbol: core_eval_symbols.symbols_with_pos_enabled_symbol,
@@ -4545,6 +4554,7 @@ impl Context {
             kill_emacs_symbol: core_eval_symbols.kill_emacs_symbol,
             quit_flag,
             inhibit_quit,
+            unwind_cleanup_depth: 0,
             noninteractive_symbol: core_eval_symbols.noninteractive_symbol,
             noninteractive,
             symbols_with_pos_enabled_symbol: core_eval_symbols.symbols_with_pos_enabled_symbol,
@@ -6502,6 +6512,10 @@ impl Context {
 
     fn poll_pending_input_for_throw_on_input(&mut self) -> Result<(), Flow> {
         debug_assert!(self.has_throw_on_input_poll_source());
+
+        if self.unwind_cleanup_depth != 0 {
+            return Ok(());
+        }
 
         let throw_on_input = self
             .obarray
@@ -8901,6 +8915,7 @@ impl Context {
             tag,
             resume: ResumeTarget::InterpreterCatch,
         });
+        let specpdl_count = self.specpdl.len();
         let result = match self.sf_progn_value(tail.cons_cdr()) {
             Ok(value) => Ok(value),
             Err(Flow::Signal(sig)) => match self.dispatch_signal_if_needed(sig) {
@@ -8918,7 +8933,16 @@ impl Context {
             Err(flow) => Err(flow),
         };
         self.pop_condition_frame();
-        result
+        match result {
+            Ok(value) => {
+                self.unbind_to_result(specpdl_count)?;
+                Ok(value)
+            }
+            Err(flow) => {
+                self.unbind_to_result(specpdl_count)?;
+                Err(flow)
+            }
+        }
     }
 
     fn sf_unwind_protect_value(&mut self, tail: Value) -> EvalResult {
@@ -12143,6 +12167,7 @@ impl Context {
                     // Entry already popped — re-entrant errors won't re-unwind.
                     let saved_lexenv = self.lexenv;
                     self.lexenv = lexenv;
+                    self.unwind_cleanup_depth += 1;
                     let cleanup_result = if cleanup.is_cons() || cleanup.is_nil() {
                         // Interpreter path: list of forms
                         self.sf_progn_value(cleanup)
@@ -12150,6 +12175,7 @@ impl Context {
                         // VM path: callable (bytecode function)
                         self.apply(cleanup, vec![])
                     };
+                    self.unwind_cleanup_depth -= 1;
                     self.lexenv = saved_lexenv;
                     cleanup_result?;
                 }
