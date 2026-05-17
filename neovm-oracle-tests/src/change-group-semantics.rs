@@ -7,8 +7,10 @@
 //! top of buffer change state.  These tests compare the observable Elisp
 //! contract rather than approximating it.
 
-use super::common::assert_oracle_parity_with_bootstrap;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm_with_bootstrap,
+};
 
 #[test]
 fn oracle_prop_atomic_change_group_success_keeps_changes() {
@@ -81,6 +83,49 @@ fn oracle_prop_manual_change_group_cancel_and_accept() {
 "#;
 
     assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_with_undo_amalgamate_removes_inner_undo_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:with-undo-amalgamate wraps a change group, then
+    // GNU lisp/simple.el:undo-amalgamate-change-group removes nil undo
+    // boundaries from the recorded group.
+    let form = r#"
+(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (with-undo-amalgamate
+    (insert "a")
+    (undo-boundary)
+    (insert "b")
+    (undo-boundary)
+    (insert "c"))
+  (list (buffer-string) buffer-undo-list))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_ok_eq(
+        r#"("abc" ((3 . 4) (2 . 3) (1 . 2) (t . 0)))"#,
+        &oracle,
+        &neovm,
+    );
+}
+
+#[test]
+fn oracle_with_undo_amalgamate_keeps_disabled_undo_disabled() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (setq buffer-undo-list t)
+  (let ((result (with-undo-amalgamate
+                  (insert "x")
+                  (buffer-string))))
+    (list result (buffer-string) buffer-undo-list)))
+"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_ok_eq(r#"("x" "x" t)"#, &oracle, &neovm);
 }
 
 #[test]
