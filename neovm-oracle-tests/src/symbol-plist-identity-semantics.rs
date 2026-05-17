@@ -111,3 +111,35 @@ fn oracle_symbol_plist_malformed_get_put_semantics() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_symbol_plist_nil_and_t_are_mutable() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((nil-old (symbol-plist nil))
+      (t-old (symbol-plist t)))
+  (unwind-protect
+      (let ((nil-plist (list :nil 1))
+            (t-plist (list :t 3)))
+        (setplist nil nil)
+        (setplist t nil)
+        (let ((nil-set (setplist nil nil-plist))
+              (t-set (setplist t t-plist)))
+          (list
+           (eq nil-set nil-plist)
+           nil-set
+           (put nil :nil 2)
+           (get nil :nil)
+           (symbol-plist nil)
+           (eq t-set t-plist)
+           t-set
+           (put t :t 4)
+           (get t :t)
+           (symbol-plist t))))
+    (setplist nil nil-old)
+    (setplist t t-old)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
