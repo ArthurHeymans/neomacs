@@ -147,6 +147,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "field-beginning",
     "field-end",
     "field-string",
+    "file-attributes",
+    "file-attributes-lessp",
     "file-directory-p",
     "file-executable-p",
     "file-exists-p",
