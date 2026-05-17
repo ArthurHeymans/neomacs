@@ -10,6 +10,8 @@ use winit::platform::wayland::EventLoopBuilderExtWayland;
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 use winit::window::Window;
+#[cfg(target_os = "linux")]
+use x11_dl::xlib;
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeBackend;
@@ -222,6 +224,7 @@ fn build_render_event_loop_impl(
 ) -> Result<EventLoop<RenderUserEvent>, String> {
     #[cfg(target_os = "linux")]
     {
+        validate_linux_display_before_winit()?;
         tracing::info!(
             "Building winit event loop (allow_any_thread={} wayland_display_present={})",
             allow_any_thread,
@@ -249,6 +252,51 @@ fn build_render_event_loop_impl(
             .build()
             .map_err(|err| format!("Failed to create event loop: {err}"))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_linux_display_before_winit() -> Result<(), String> {
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        return Ok(());
+    }
+    let Some(display) = std::env::var_os("DISPLAY") else {
+        return Ok(());
+    };
+    if display.is_empty() {
+        return Ok(());
+    }
+
+    let display_for_error = display.to_string_lossy().into_owned();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _ = std::thread::Builder::new()
+        .name("x11-display-probe".to_string())
+        .spawn(move || {
+            let result = x11_display_responds();
+            let _ = tx.send(result);
+        });
+
+    match rx.recv_timeout(std::time::Duration::from_secs(1)) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!("Cannot open X display {display_for_error}")),
+        Err(_) => Err(format!(
+            "Cannot open X display {display_for_error}: connection timed out"
+        )),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn x11_display_responds() -> bool {
+    let Ok(xlib) = xlib::Xlib::open() else {
+        return false;
+    };
+    let display = unsafe { (xlib.XOpenDisplay)(std::ptr::null()) };
+    if display.is_null() {
+        return false;
+    }
+    unsafe {
+        (xlib.XCloseDisplay)(display);
+    }
+    true
 }
 
 /// Build a render event loop for the current OS thread.
