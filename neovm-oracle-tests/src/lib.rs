@@ -1120,6 +1120,8 @@ mod match_string_advanced;
 mod match_substitute_replacement_semantics;
 #[path = "matching-paren-advanced.rs"]
 mod matching_paren_advanced;
+#[path = "math-deep-edge-semantics.rs"]
+mod math_deep_edge_semantics;
 #[path = "math-equal-strict-edge-semantics.rs"]
 mod math_equal_strict_edge_semantics;
 #[path = "math-functions.rs"]
