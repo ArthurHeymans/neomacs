@@ -22,6 +22,24 @@ fn oracle_symbol_name_of_t() {
 }
 
 #[test]
+fn oracle_symbol_name_returns_live_symbol_name_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+      (let* ((sym (make-symbol "abc"))
+             (name1 (symbol-name sym))
+             (name2 (symbol-name sym)))
+        (aset name1 0 ?X)
+        (list (eq name1 name2)
+              name1
+              name2
+              (symbol-name sym)
+              (eq name1 (symbol-name sym))))"#;
+    let (o, n) = eval_oracle_and_neovm(form);
+    assert_ok_eq(r#"(t "Xbc" "Xbc" "Xbc" t)"#, &o, &n);
+}
+
+#[test]
 fn oracle_symbol_function_of_subr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(subrp (symbol-function 'car))"#);
