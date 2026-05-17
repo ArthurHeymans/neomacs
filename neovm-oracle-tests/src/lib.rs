@@ -1764,6 +1764,8 @@ mod vector_operations;
 mod vector_operations_comprehensive;
 #[path = "vector-or-char-table-operations.rs"]
 mod vector_or_char_table_operations;
+#[path = "vector-plist-gensym-read-edge-semantics.rs"]
+mod vector_plist_gensym_read_edge_semantics;
 #[path = "version-semantics.rs"]
 mod version_semantics;
 #[path = "warning-macro-semantics.rs"]
