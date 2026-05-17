@@ -57,6 +57,23 @@ fn oracle_position_symbol_type_errors() {
 }
 
 #[test]
+fn oracle_position_symbol_accepts_negative_fixnum_positions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((neg (position-symbol 'neomacs--oracle-negative-pos -1))
+       (copied (position-symbol neg (position-symbol 'other 9))))
+  (list
+   (bare-symbol neg)
+   (symbol-with-pos-pos neg)
+   (bare-symbol copied)
+   (symbol-with-pos-pos copied)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_symbol_with_pos_enabled_controls_symbolp_and_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
