@@ -71,6 +71,8 @@ mod backquote;
 mod backquote_advanced;
 #[path = "backquote-comprehensive-patterns.rs"]
 mod backquote_comprehensive_patterns;
+#[path = "backup-file-name-strict-edge-semantics.rs"]
+mod backup_file_name_strict_edge_semantics;
 #[path = "base64-semantics.rs"]
 mod base64_semantics;
 #[path = "beginning-of-line.rs"]
