@@ -20,6 +20,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "acos",
     "add-name-to-file",
     "append",
+    "append-to-file",
     "apply",
     "aref",
     "arrayp",
@@ -248,6 +249,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "insert-before-markers",
     "insert-byte",
     "insert-char",
+    "insert-file-contents",
+    "insert-file-contents-literally",
     "integerp",
     "interactive-form",
     "intern",
@@ -501,6 +504,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "vectorp",
     "widen",
     "windowp",
+    "write-region",
 ];
 
 pub(crate) const ORACLE_TESTED_SPECIAL_FORM_NAMES: &[&str] = &[
