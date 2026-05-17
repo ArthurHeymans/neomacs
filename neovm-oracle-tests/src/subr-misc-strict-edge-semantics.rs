@@ -44,3 +44,27 @@ fn oracle_prop_subr_misc_package_unmsys_prefix_apropos_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_system_type_dynamic_binding_reaches_functions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (special-variable-p 'system-type)
+ (let ((system-type 'windows-nt))
+   (list system-type
+         (symbol-value 'system-type)
+         (funcall (lambda () system-type))))
+ (progn
+   (defun neomacs--oracle-system-type-reader ()
+     system-type)
+   (unwind-protect
+       (let ((system-type 'windows-nt))
+         (list (neomacs--oracle-system-type-reader)
+               (funcall #'neomacs--oracle-system-type-reader)))
+     (fmakunbound 'neomacs--oracle-system-type-reader))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
