@@ -122,6 +122,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "delq",
     "directory-file-name",
     "directory-files",
+    "directory-files-and-attributes",
     "directory-name-p",
     "downcase",
     "elt",
