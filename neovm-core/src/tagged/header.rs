@@ -641,7 +641,7 @@ pub struct ModuleFunctionObj {
     pub header: VecLikeHeader,
     /// Minimum number of required arguments.
     pub min_arity: isize,
-    /// Maximum number of arguments (-1 = variadic/MANY).
+    /// Maximum number of arguments (-2 = GNU `emacs_variadic_function`).
     pub max_arity: isize,
     /// The raw C function pointer (emacs_function from emacs-module.h).
     ///

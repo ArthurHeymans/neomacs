@@ -46,8 +46,8 @@ pub enum emacs_funcall_exit {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum emacs_process_input_result {
-    Quit = 0,
-    Continue = 1,
+    Continue = 0,
+    Quit = 1,
 }
 
 #[repr(C)]
@@ -139,14 +139,6 @@ pub struct emacs_env {
             len: isize,
         ) -> emacs_value,
     >,
-    pub make_unibyte_string: Option<
-        unsafe extern "C" fn(
-            env: *mut emacs_env,
-            str: *const std::ffi::c_char,
-            len: isize,
-        ) -> emacs_value,
-    >,
-
     // User pointer
     pub make_user_ptr: Option<
         unsafe extern "C" fn(
@@ -240,6 +232,15 @@ pub struct emacs_env {
     // Interactive
     pub make_interactive:
         Option<unsafe extern "C" fn(env: *mut emacs_env, function: emacs_value, spec: emacs_value)>,
+
+    // Unibyte string, added at the end of GNU emacs_env_31.
+    pub make_unibyte_string: Option<
+        unsafe extern "C" fn(
+            env: *mut emacs_env,
+            str: *const std::ffi::c_char,
+            len: isize,
+        ) -> emacs_value,
+    >,
 }
 
 // ============================================================================
@@ -401,6 +402,9 @@ fn lisp_to_value(env: *mut emacs_env, val: Value) -> emacs_value {
     }
     unsafe {
         let priv_ = &mut *(*env).private_members;
+        if priv_.pending_non_local_exit != emacs_funcall_exit::Return {
+            return std::ptr::null_mut::<emacs_value_tag>();
+        }
         allocate_emacs_value(&mut priv_.storage, val)
     }
 }
@@ -416,6 +420,30 @@ fn check_pending_non_local_exit(env: *mut emacs_env) -> bool {
     unsafe { (*env).private_members.as_ref() }
         .map(|p| p.pending_non_local_exit != emacs_funcall_exit::Return)
         .unwrap_or(false)
+}
+
+unsafe fn set_pending_signal(env: *mut emacs_env, symbol: &str, data: Value) {
+    if env.is_null() {
+        return;
+    }
+    unsafe {
+        let priv_ = &mut *(*env).private_members;
+        if priv_.pending_non_local_exit == emacs_funcall_exit::Return {
+            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+            priv_.non_local_exit_symbol = Value::from_sym_id(intern(symbol));
+            priv_.non_local_exit_data = data;
+        }
+    }
+}
+
+pub(crate) fn collect_dynamic_module_gc_roots(roots: &mut Vec<Value>) {
+    GLOBAL_REFS.with(|refs| {
+        roots.extend(
+            refs.borrow()
+                .iter()
+                .filter_map(|entry| entry.as_ref().map(|entry| entry.value)),
+        );
+    });
 }
 
 unsafe fn module_handle_nonlocal_exit(env: *mut emacs_env, flow: Flow) {
@@ -498,7 +526,6 @@ unsafe fn initialize_environment(env: *mut emacs_env, priv_: *mut emacs_env_priv
         e.make_float = Some(module_make_float);
         e.copy_string_contents = Some(module_copy_string_contents);
         e.make_string = Some(module_make_string);
-        e.make_unibyte_string = Some(module_make_unibyte_string);
         e.make_user_ptr = Some(module_make_user_ptr);
         e.get_user_ptr = Some(module_get_user_ptr);
         e.set_user_ptr = Some(module_set_user_ptr);
@@ -517,6 +544,7 @@ unsafe fn initialize_environment(env: *mut emacs_env, priv_: *mut emacs_env_priv
         e.set_function_finalizer = Some(module_set_function_finalizer);
         e.open_channel = Some(module_open_channel);
         e.make_interactive = Some(module_make_interactive);
+        e.make_unibyte_string = Some(module_make_unibyte_string);
     }
 }
 
@@ -746,17 +774,28 @@ unsafe extern "C" fn module_extract_integer(env: *mut emacs_env, arg: emacs_valu
     if arg.is_null() {
         return 0;
     }
+    if check_pending_non_local_exit(env) {
+        return 0;
+    }
     let val = value_to_lisp(arg);
     if let Some(n) = val.as_fixnum() {
         return n;
     }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("integerp"), val]);
+    if let Some(big) = val.as_bignum() {
+        if let Some(n) = big.to_i64() {
+            return n;
         }
+        unsafe {
+            set_pending_signal(env, "overflow-error", Value::list(vec![val]));
+        }
+        return 0;
+    }
+    unsafe {
+        set_pending_signal(
+            env,
+            "wrong-type-argument",
+            Value::list(vec![Value::symbol("integerp"), val]),
+        );
     }
     0
 }
@@ -772,20 +811,19 @@ unsafe extern "C" fn module_extract_float(env: *mut emacs_env, arg: emacs_value)
     if arg.is_null() {
         return 0.0;
     }
+    if check_pending_non_local_exit(env) {
+        return 0.0;
+    }
     let val = value_to_lisp(arg);
     if let Some(f) = val.as_float() {
         return f;
     }
-    if let Some(n) = val.as_fixnum() {
-        return n as f64;
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("floatp"), val]);
-        }
+    unsafe {
+        set_pending_signal(
+            env,
+            "wrong-type-argument",
+            Value::list(vec![Value::symbol("floatp"), val]),
+        );
     }
     0.0
 }
@@ -808,44 +846,83 @@ unsafe extern "C" fn module_copy_string_contents(
     if value.is_null() || len.is_null() {
         return false;
     }
+    if check_pending_non_local_exit(env) {
+        return false;
+    }
     let val = value_to_lisp(value);
     let bytes = match val.as_lisp_string() {
-        Some(ls) => ls.as_bytes().to_vec(),
-        None => {
-            if !env.is_null() {
+        Some(ls) => {
+            if !ls.is_multibyte() && !ls.as_bytes().is_ascii() {
                 unsafe {
-                    let priv_ = &mut *(*env).private_members;
-                    priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                    priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-                    priv_.non_local_exit_data = Value::list(vec![Value::symbol("stringp"), val]);
+                    set_pending_signal(
+                        env,
+                        "wrong-type-argument",
+                        Value::list(vec![Value::symbol("unicode-string-p"), val]),
+                    );
                 }
+                return false;
+            }
+            match std::str::from_utf8(ls.as_bytes()) {
+                Ok(s) => s.as_bytes().to_vec(),
+                Err(_) => {
+                    unsafe {
+                        set_pending_signal(
+                            env,
+                            "wrong-type-argument",
+                            Value::list(vec![Value::symbol("unicode-string-p"), val]),
+                        );
+                    }
+                    return false;
+                }
+            }
+        }
+        None => {
+            unsafe {
+                set_pending_signal(
+                    env,
+                    "wrong-type-argument",
+                    Value::list(vec![Value::symbol("stringp"), val]),
+                );
             }
             return false;
         }
     };
-    let byte_len = bytes.len() as isize;
+    let required_len = bytes.len() as isize + 1;
 
     if buf.is_null() {
-        // Query mode: return required length.
         unsafe {
-            *len = byte_len;
+            *len = required_len;
         }
         return true;
     }
 
     let buf_len = unsafe { *len };
-    let copy_len = std::cmp::min(buf_len, byte_len);
-    if copy_len > 0 {
+    if buf_len < required_len {
+        unsafe {
+            *len = required_len;
+            set_pending_signal(
+                env,
+                "memory-buffer-too-small",
+                Value::list(vec![
+                    Value::fixnum(buf_len as i64),
+                    Value::fixnum(required_len as i64),
+                ]),
+            );
+        }
+        return false;
+    }
+    if !bytes.is_empty() {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 bytes.as_ptr() as *const std::ffi::c_char,
                 buf,
-                copy_len as usize,
+                bytes.len(),
             );
         }
     }
     unsafe {
-        *len = copy_len;
+        *buf.add(bytes.len()) = 0;
+        *len = required_len;
     }
     true
 }
@@ -855,12 +932,35 @@ unsafe extern "C" fn module_make_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if env.is_null() || str.is_null() || len < 0 {
+    if env.is_null() || len < 0 || check_pending_non_local_exit(env) {
+        return std::ptr::null_mut();
+    }
+    if len > 0 && str.is_null() {
         return std::ptr::null_mut();
     }
     let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
-    let s = String::from_utf8_lossy(bytes).to_string();
-    lisp_to_value(env, Value::string(s))
+    let s = match std::str::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => {
+            unsafe {
+                set_pending_signal(
+                    env,
+                    "wrong-type-argument",
+                    Value::list(vec![
+                        Value::symbol("utf-8-string-p"),
+                        Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                            bytes.to_vec(),
+                        )),
+                    ]),
+                );
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    lisp_to_value(
+        env,
+        Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
+    )
 }
 
 unsafe extern "C" fn module_make_unibyte_string(
@@ -868,7 +968,10 @@ unsafe extern "C" fn module_make_unibyte_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if env.is_null() || str.is_null() || len < 0 {
+    if env.is_null() || len < 0 || check_pending_non_local_exit(env) {
+        return std::ptr::null_mut();
+    }
+    if len > 0 && str.is_null() {
         return std::ptr::null_mut();
     }
     let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
@@ -1403,11 +1506,52 @@ unsafe extern "C" fn module_make_function(
     if env.is_null() {
         return std::ptr::null_mut();
     }
+    if check_pending_non_local_exit(env) {
+        return std::ptr::null_mut();
+    }
+    const EMACS_VARIADIC_FUNCTION: isize = -2;
+    let most_positive_fixnum = Value::MOST_POSITIVE_FIXNUM as isize;
+    let valid_arity = min_arity >= 0
+        && if max_arity < 0 {
+            min_arity <= most_positive_fixnum && max_arity == EMACS_VARIADIC_FUNCTION
+        } else {
+            min_arity <= max_arity && max_arity <= most_positive_fixnum
+        };
+    if !valid_arity {
+        unsafe {
+            set_pending_signal(
+                env,
+                "invalid-arity",
+                Value::list(vec![
+                    Value::fixnum(min_arity as i64),
+                    Value::fixnum(max_arity as i64),
+                ]),
+            );
+        }
+        return std::ptr::null_mut();
+    }
     let doc_val = if docstring.is_null() {
         Value::NIL
     } else {
         let cstr = unsafe { CStr::from_ptr(docstring) };
-        Value::string(cstr.to_str().unwrap_or(""))
+        match cstr.to_str() {
+            Ok(s) => Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
+            Err(_) => {
+                unsafe {
+                    set_pending_signal(
+                        env,
+                        "wrong-type-argument",
+                        Value::list(vec![
+                            Value::symbol("utf-8-string-p"),
+                            Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                                cstr.to_bytes().to_vec(),
+                            )),
+                        ]),
+                    );
+                }
+                return std::ptr::null_mut();
+            }
+        }
     };
     let val = crate::tagged::gc::with_tagged_heap(|h| {
         h.alloc_module_function(

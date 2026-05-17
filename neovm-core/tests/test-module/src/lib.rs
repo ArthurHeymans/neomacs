@@ -100,13 +100,6 @@ pub struct emacs_env {
             len: isize,
         ) -> emacs_value,
     >,
-    pub make_unibyte_string: Option<
-        unsafe extern "C" fn(
-            env: *mut emacs_env,
-            str: *const std::ffi::c_char,
-            len: isize,
-        ) -> emacs_value,
-    >,
 
     pub make_user_ptr: Option<
         unsafe extern "C" fn(
@@ -192,6 +185,14 @@ pub struct emacs_env {
 
     pub make_interactive:
         Option<unsafe extern "C" fn(env: *mut emacs_env, function: emacs_value, spec: emacs_value)>,
+
+    pub make_unibyte_string: Option<
+        unsafe extern "C" fn(
+            env: *mut emacs_env,
+            str: *const std::ffi::c_char,
+            len: isize,
+        ) -> emacs_value,
+    >,
 }
 
 #[repr(C)]
@@ -266,7 +267,7 @@ unsafe extern "C" fn mod_test_make_string(
     let mut buf = vec![0i8; buf_len as usize];
     let mut actual_len = buf_len;
     e.copy_string_contents.unwrap()(env, val, buf.as_mut_ptr(), &mut actual_len);
-    e.make_string.unwrap()(env, buf.as_ptr(), actual_len)
+    e.make_string.unwrap()(env, buf.as_ptr(), actual_len - 1)
 }
 
 unsafe extern "C" fn mod_test_string_a_to_b(
@@ -282,12 +283,12 @@ unsafe extern "C" fn mod_test_string_a_to_b(
     let mut buf = vec![0i8; buf_len as usize];
     let mut actual_len = buf_len;
     e.copy_string_contents.unwrap()(env, val, buf.as_mut_ptr(), &mut actual_len);
-    for byte in buf.iter_mut() {
+    for byte in buf.iter_mut().take((actual_len - 1) as usize) {
         if *byte == 'a' as i8 {
             *byte = 'b' as i8;
         }
     }
-    e.make_string.unwrap()(env, buf.as_ptr(), actual_len)
+    e.make_string.unwrap()(env, buf.as_ptr(), actual_len - 1)
 }
 
 static mut FINALIZER_CALLED: bool = false;

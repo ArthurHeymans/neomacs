@@ -1211,6 +1211,7 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
     super::font::collect_font_gc_roots(roots);
     super::charset::collect_charset_gc_roots(roots);
     super::ccl::collect_ccl_gc_roots(roots);
+    super::dynamic_module::collect_dynamic_module_gc_roots(roots);
     SCRATCH_GC_ROOTS.with(|scratch| roots.extend(scratch.borrow().iter().copied()));
 }
 
