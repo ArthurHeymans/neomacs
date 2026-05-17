@@ -3959,6 +3959,9 @@ impl Context {
         obarray.set_symbol_value("local-function-key-map", local_function_key_map);
         obarray.make_special("local-function-key-map");
         obarray.set_symbol_value("keyboard-translate-table", Value::NIL);
+        // GNU uses DEFVAR_KBOARD here. NeoVM does not yet split keyboard state
+        // per terminal, so model it as a dynamically scoped runtime variable.
+        obarray.make_special("keyboard-translate-table");
 
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);

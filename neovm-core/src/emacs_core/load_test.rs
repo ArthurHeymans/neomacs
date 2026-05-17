@@ -2085,6 +2085,30 @@ fn bootstrap_runtime_advice_copy_and_add_behavior() {
 }
 
 #[test]
+fn bootstrap_char_table_predicate_and_keyboard_translation_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).unwrap_or_else(|err| {
+        panic!("startup state: {}", format_eval_error(&eval, &err));
+    });
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(list
+             (special-variable-p 'keyboard-translate-table)
+             (char-table-p nil)
+             (let ((keyboard-translate-table nil))
+               (list (keyboard-translate ?a ?b)
+                     (char-table-p keyboard-translate-table)
+                     (aref keyboard-translate-table ?a)))
+             (let ((keyboard-translate-table nil))
+               (list (key-translate "a" "b")
+                     (char-table-p keyboard-translate-table)
+                     (aref keyboard-translate-table ?a))))"#,
+    );
+    assert_eq!(rendered, "OK (t nil (98 t 98) (98 t 98))");
+}
+
+#[test]
 fn bootstrap_runtime_advice_make_preserves_oclosure_type() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

@@ -2086,8 +2086,9 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // represent correctly. V16 invalidates older caches because category-table
 // ownership moved from a parallel manager into dumped Lisp objects. V18
 // refreshes caches after the GNU-matching `cl-lib` runtime surface fix. V19
-// stops serializing dynamic load context bindings as top-level values.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 19;
+// stops serializing dynamic load context bindings as top-level values. V20
+// marks keyboard-translate-table special like GNU's DEFVAR_KBOARD.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
