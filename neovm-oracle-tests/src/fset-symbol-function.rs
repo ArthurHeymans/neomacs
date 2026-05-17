@@ -126,3 +126,33 @@ fn oracle_prop_indirect_function() {
                     (fmakunbound 'neovm--test-alias2)))";
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_indirect_function_follows_long_function_alias_chain() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c:indirect_function follows SYMBOLP function-cell
+    // indirections until a non-symbol or nil is reached; it has no 128-hop
+    // semantic cutoff.
+    let form = r#"
+(let ((syms nil))
+  (unwind-protect
+      (progn
+        (dotimes (i 140)
+          (push (intern (format "neovm--oracle-if-long-%d" i)) syms))
+        (setq syms (nreverse syms))
+        (dotimes (i 139)
+          (fset (nth i syms) (nth (1+ i) syms)))
+        (fset (nth 139 syms) (lambda (x) (list 'tail x)))
+        (let ((resolved (indirect-function (car syms))))
+          (list
+           (functionp resolved)
+           (funcall resolved 17)
+           (eq resolved (symbol-function (nth 139 syms)))
+           (indirect-function (car syms) 'ignored-noerror))))
+    (dolist (sym syms)
+      (ignore-errors (fmakunbound sym)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
