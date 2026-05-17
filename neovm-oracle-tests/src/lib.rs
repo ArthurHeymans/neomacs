@@ -815,6 +815,8 @@ mod format_message_edge_semantics;
 mod format_message_patterns;
 #[path = "format-patterns.rs"]
 mod format_patterns;
+#[path = "format-pred-identity-edge-semantics.rs"]
+mod format_pred_identity_edge_semantics;
 #[path = "format-prompt-semantics.rs"]
 mod format_prompt_semantics;
 #[path = "format-spec-semantics.rs"]
