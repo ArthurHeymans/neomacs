@@ -1647,6 +1647,8 @@ mod symbol_advanced;
 mod symbol_comprehensive_patterns;
 #[path = "symbol-file-semantics.rs"]
 mod symbol_file_semantics;
+#[path = "symbol-obarray-intern-interaction-semantics.rs"]
+mod symbol_obarray_intern_interaction_semantics;
 #[path = "symbol-plist-edge-semantics.rs"]
 mod symbol_plist_edge_semantics;
 #[path = "symbol-plist-identity-semantics.rs"]
