@@ -671,6 +671,8 @@ mod defalias_advanced;
 mod defalias_fset_patterns;
 #[path = "default-boundp-semantics.rs"]
 mod default_boundp_semantics;
+#[path = "default-file-modes-strict-edge-semantics.rs"]
+mod default_file_modes_strict_edge_semantics;
 #[path = "define-error-semantics.rs"]
 mod define_error_semantics;
 #[path = "define-key-advanced.rs"]
