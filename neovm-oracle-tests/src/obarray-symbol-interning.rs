@@ -67,6 +67,25 @@ fn oracle_prop_obarray_intern_identity() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_prop_obarray_intern_reuses_name_string_object() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+      (let* ((obarray (make-vector 17 0))
+             (name (copy-sequence "abc"))
+             (sym (intern name obarray)))
+        (aset name 0 ?X)
+        (list (eq name (symbol-name sym))
+              name
+              (symbol-name sym)
+              (eq sym (intern-soft name obarray))
+              (intern-soft "abc" obarray)
+              (intern-soft "Xbc" obarray)))"#;
+    let (o, n) = eval_oracle_and_neovm(form);
+    assert_ok_eq(r#"(t "Xbc" "Xbc" t nil Xbc)"#, &o, &n);
+}
+
 // ---------------------------------------------------------------------------
 // make-symbol (uninterned) vs intern (interned)
 // ---------------------------------------------------------------------------
