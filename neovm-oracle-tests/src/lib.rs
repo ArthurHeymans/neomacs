@@ -826,6 +826,8 @@ mod file_name_completion_strict_edge_semantics;
 mod file_name_component_strict_edge_semantics;
 #[path = "file-name-concat-strict-edge-semantics.rs"]
 mod file_name_concat_strict_edge_semantics;
+#[path = "file-name-quote-strict-edge-semantics.rs"]
+mod file_name_quote_strict_edge_semantics;
 #[path = "file-name-semantics.rs"]
 mod file_name_semantics;
 #[path = "file-newer-than-strict-edge-semantics.rs"]
