@@ -88,3 +88,39 @@ fn oracle_prop_version_string_comparison_wrappers() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_version_dynamic_separator_regexp_and_error_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (let ((version-separator "-"))
+   (list
+    (version-to-list "-5")
+    (version-to-list "1-2-3")
+    (version-to-list "1-2-beta3")
+    (condition-case err
+        (version-to-list "1.2")
+      (error (list (car err) (cdr err))))))
+ (let ((version-regexp-alist '(("^~$" . -9)
+                               ("^[-._+ ]?dev$" . -8))))
+   (list
+    (version-to-list "1~2")
+    (version-to-list "1.dev4")
+    (version-list-< '(1 -9 9) '(1 -8))
+    (version-list-<= '(1 -8) '(1 -8 0))
+    (version-list-= '(1 -8 0 0) '(1 -8))))
+ (condition-case err
+     (version-to-list nil)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (version-list-< '(1 a) '(1 0))
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (version-list-not-zero '(0 a))
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
