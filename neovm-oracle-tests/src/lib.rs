@@ -1298,6 +1298,8 @@ mod predicate_logic_comprehensive;
 mod predicates;
 #[path = "primitive-function-p-semantics.rs"]
 mod primitive_function_p_semantics;
+#[path = "primitive-predicate-edge-semantics.rs"]
+mod primitive_predicate_edge_semantics;
 #[path = "prin1-comprehensive-patterns.rs"]
 mod prin1_comprehensive_patterns;
 #[path = "prin1-to-string-advanced.rs"]
