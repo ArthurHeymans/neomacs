@@ -52,3 +52,31 @@ fn oracle_key_parse_angle_tokens_with_embedded_spaces() {
  (condition-case err (kbd "<mouse 1>") (error (car err))))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_key_valid_p_strict_textual_syntax_contract() {
+    let form = r#"
+(list
+ (key-valid-p "a")
+ (key-valid-p "C-c o")
+ (key-valid-p "H-<left>")
+ (key-valid-p "C-M-<space>")
+ (key-valid-p "RET")
+ (key-valid-p "M-RET")
+ ;; key-valid-p enforces the documented modifier order and single-space
+ ;; tokenization.  key-parse is more permissive for some historical forms.
+ (key-valid-p "<M-C-down>")
+ (key-valid-p "C-M-a")
+ (key-valid-p "M-C-a")
+ (key-valid-p "3*a")
+ (key-valid-p "a  b")
+ (key-valid-p "")
+ (key-valid-p 42)
+ (condition-case e
+     (key-parse "C-M-foo")
+   (error (list (car e) (cadr e))))
+ (condition-case e
+     (key-parse "M-C-a")
+   (error (list (car e) (cadr e)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}

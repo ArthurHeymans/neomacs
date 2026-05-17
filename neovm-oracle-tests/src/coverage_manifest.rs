@@ -269,6 +269,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "internal-event-symbol-parse-modifiers",
     "isnan",
     "key-description",
+    "key-parse",
+    "key-valid-p",
     "keymap-parent",
     "keymap-prompt",
     "keymapp",
