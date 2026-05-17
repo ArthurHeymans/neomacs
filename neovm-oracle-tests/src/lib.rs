@@ -631,6 +631,8 @@ mod copy_read_strict_edge_semantics;
 mod copy_sequence;
 #[path = "copy-sequence-advanced.rs"]
 mod copy_sequence_advanced;
+#[path = "copy-sequence-hash-alist-deep-semantics.rs"]
+mod copy_sequence_hash_alist_deep_semantics;
 #[path = "copy-sequence-semantics.rs"]
 mod copy_sequence_semantics;
 #[path = "copy-syntax-ppss-strict-edge-semantics.rs"]

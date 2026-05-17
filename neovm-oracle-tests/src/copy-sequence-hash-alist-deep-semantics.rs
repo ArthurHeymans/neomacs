@@ -1,0 +1,94 @@
+//! Oracle parity for copy-sequence, copy-hash-table, copy-alist independence.
+//! GNU src/fns.c.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+
+// --- copy-sequence vector independence ---
+
+#[test]
+fn oracle_copy_sequence_vector_independent() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq v [1 2 3]) (setq cp (copy-sequence v)) (aset v 0 99) (list (aref cp 0) (eq v cp)))"#,
+    );
+    assert_ok_eq("(1 nil)", &o, &n);
+}
+
+#[test]
+fn oracle_copy_sequence_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(copy-sequence "hello")"#);
+    assert_ok_eq("\"hello\"", &o, &n);
+}
+
+#[test]
+fn oracle_copy_sequence_list() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(copy-sequence '(a b c))"#);
+    assert_ok_eq("(a b c)", &o, &n);
+}
+
+// --- copy-hash-table independence ---
+
+#[test]
+fn oracle_copy_hash_table_values_independent() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (setq cp (copy-hash-table ht)) (puthash 'a 99 ht) (list (gethash 'a cp) (gethash 'a ht) (hash-table-count cp)))"#,
+    );
+    assert_ok_eq("(1 99 2)", &o, &n);
+}
+
+// --- hash-table-size ---
+
+#[test]
+fn oracle_hash_table_size_after_inserts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq ht (make-hash-table)) (puthash 'a 1 ht) (puthash 'b 2 ht) (hash-table-count ht))"#,
+    );
+    assert_ok_eq("2", &o, &n);
+}
+
+// --- hash-table-test ---
+
+#[test]
+fn oracle_hash_table_test_returns_eq() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(hash-table-test (make-hash-table :test 'eq))"#);
+    assert_ok_eq("eq", &o, &n);
+}
+
+// --- maphash ---
+
+#[test]
+fn oracle_maphash_iterates_all_entries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (setq count 0) (maphash (lambda (k v) (setq count (+ count 1))) ht) count)"#,
+    );
+    assert_ok_eq("2", &o, &n);
+}
+
+// --- hash-table-count after clrhash ---
+
+#[test]
+fn oracle_hash_table_count_after_clrhash() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (clrhash ht) (hash-table-count ht))"#,
+    );
+    assert_ok_eq("0", &o, &n);
+}
+
+// --- copy-alist nested ---
+
+#[test]
+fn oracle_copy_alist_nested_independent() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (setq orig '((a . 1) (b . 2))) (setq cp (copy-alist orig)) (setcdr (assq 'a orig) '(99)) (list (cdr (assq 'a cp)) (cdr (assq 'a orig))))"#,
+    );
+    assert_ok_eq("(1 (99))", &o, &n);
+}
