@@ -721,6 +721,8 @@ mod delete_remove_semantics;
 mod delq;
 #[path = "derived-mode-semantics.rs"]
 mod derived_mode_semantics;
+#[path = "directory-empty-strict-edge-semantics.rs"]
+mod directory_empty_strict_edge_semantics;
 #[path = "directory-files-and-attributes-strict-edge-semantics.rs"]
 mod directory_files_and_attributes_strict_edge_semantics;
 #[path = "directory-files-strict-edge-semantics.rs"]
