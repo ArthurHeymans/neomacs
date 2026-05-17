@@ -1204,6 +1204,8 @@ mod nthcdr_advanced;
 mod nthcdr_last_semantics;
 #[path = "number-arithmetic-comprehensive.rs"]
 mod number_arithmetic_comprehensive;
+#[path = "number-compare-convert-deep-edge-semantics.rs"]
+mod number_compare_convert_deep_edge_semantics;
 #[path = "number-conversion-comprehensive.rs"]
 mod number_conversion_comprehensive;
 #[path = "number-conversion-strict-edge-semantics.rs"]
