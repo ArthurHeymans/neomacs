@@ -39,6 +39,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "buffer-base-buffer",
     "buffer-enable-undo",
     "buffer-file-name",
+    "buffer-hash",
     "buffer-list",
     "buffer-modified-p",
     "buffer-name",
