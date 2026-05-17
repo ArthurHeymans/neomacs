@@ -685,6 +685,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "internal--format-docstring-line",
     "internal--thread-argument",
     "json-available-p",
+    "keyboard-translate",
     "last",
     "local-key-binding",
     "local-set-key",

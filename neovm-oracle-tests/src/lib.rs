@@ -1063,6 +1063,8 @@ mod kbd_key_parse_edge_semantics;
 mod key_description;
 #[path = "key-subr-meta-strict-edge-semantics.rs"]
 mod key_subr_meta_strict_edge_semantics;
+#[path = "keyboard-translate-semantics.rs"]
+mod keyboard_translate_semantics;
 mod keymap;
 #[path = "keymap-advanced.rs"]
 mod keymap_advanced;
