@@ -143,3 +143,34 @@ fn oracle_identity_nil() {
     let (o, n) = eval_oracle_and_neovm(r#"(identity nil)"#);
     assert_ok_eq("nil", &o, &n);
 }
+
+#[test]
+fn oracle_identity_ignore_always_strict_runtime_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let form = r#"
+(let ((cell (list 'x))
+      (vec (vector 'y))
+      (str (copy-sequence "abc")))
+  (list
+   ;; GNU src/fns.c `identity' returns the exact same Lisp object.
+   (eq (identity cell) cell)
+   (eq (identity vec) vec)
+   (eq (identity str) str)
+   ;; GNU lisp/subr.el defines `ignore' and `always' as Lisp varargs.
+   (ignore)
+   (ignore 1 nil 'x cell vec str)
+   (always)
+   (always nil 1 'x cell vec str)
+   (condition-case err
+       (identity)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (identity 1 2)
+     (error (list (car err) (cdr err))))))"#;
+    let (o, n) = eval_oracle_and_neovm(form);
+    assert_ok_eq(
+        "(t t t nil nil t t (wrong-number-of-arguments (identity 0)) (wrong-number-of-arguments (identity 2)))",
+        &o,
+        &n,
+    );
+}
