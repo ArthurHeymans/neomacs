@@ -89,6 +89,71 @@ fn oracle_prop_defalias_vs_fset_return_values() {
 }
 
 // ---------------------------------------------------------------------------
+// fset permits non-functions but rejects cyclic function indirection; defalias
+// delegates to the defalias-fset-function property when present.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_fset_non_function_cycle_and_defalias_hook_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c:Ffset stores any Lisp object in a function cell after a
+    // cyclic-indirection check.  GNU defalias calls a symbol's
+    // `defalias-fset-function` property instead of fset when that property is
+    // non-nil, while still applying an explicit docstring afterward.
+    let form = r#"
+(let ((a 'neomacs--dfp-fcell-a)
+      (b 'neomacs--dfp-fcell-b)
+      (hook 'neomacs--dfp-fcell-hook)
+      (target 'neomacs--dfp-fcell-target))
+  (dolist (sym (list a b hook target))
+    (ignore-errors (fmakunbound sym))
+    (ignore-errors (makunbound sym))
+    (setplist sym nil))
+  (unwind-protect
+      (progn
+        (fset hook
+              (lambda (sym def)
+                (setq neomacs--dfp-fcell-hook-log
+                      (list sym def (fboundp sym)))
+                'hook-return))
+        (put target 'defalias-fset-function hook)
+        (setq neomacs--dfp-fcell-hook-log nil)
+        (list
+         (condition-case err
+             (fset nil 1)
+           (error (list (car err) (cdr err))))
+         (fset nil nil)
+         (fboundp nil)
+         (condition-case err
+             (fmakunbound nil)
+           (error (list (car err) (cdr err))))
+         (fset a 42)
+         (fboundp a)
+         (symbol-function a)
+         (functionp a)
+         (condition-case err
+             (funcall a)
+           (error (list (car err) (cdr err))))
+         (fset a b)
+         (condition-case err
+             (fset b a)
+           (error (list (car err) (cdr err))))
+         (defalias target (lambda () 'real) "doc")
+         neomacs--dfp-fcell-hook-log
+         (fboundp target)
+         (symbol-function target)
+         (get target 'function-documentation)))
+    (ignore-errors (makunbound 'neomacs--dfp-fcell-hook-log))
+    (dolist (sym (list a b hook target))
+      (ignore-errors (fmakunbound sym))
+      (setplist sym nil))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // symbol-function on various types: subr, lambda, macro, alias (symbol)
 // ---------------------------------------------------------------------------
 
