@@ -1136,6 +1136,8 @@ mod move_to_column_advanced;
 mod move_to_column_patterns;
 #[path = "multibyte-string-comprehensive.rs"]
 mod multibyte_string_comprehensive;
+#[path = "mutex-lockfile-strict-edge-semantics.rs"]
+mod mutex_lockfile_strict_edge_semantics;
 #[path = "narrow-advanced.rs"]
 mod narrow_advanced;
 #[path = "narrow-point-semantics.rs"]
