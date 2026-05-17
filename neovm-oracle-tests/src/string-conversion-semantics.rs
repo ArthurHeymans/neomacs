@@ -121,3 +121,51 @@ fn oracle_byte_to_string_unibyte_boundaries_and_errors() {
 "#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_string_as_vs_to_multibyte_utf8_byte_sequence_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fstring_as_multibyte parses valid UTF-8 byte sequences
+    // from a unibyte string into characters, while Fstring_to_multibyte maps
+    // every non-ASCII byte to an eight-bit character.  Converted copies have
+    // no text properties; already-correct representations are returned by
+    // identity.
+    let form = r#"
+(let* ((utf8-e (unibyte-string 195 169))
+       (invalid (unibyte-string 195 40))
+       (raw (unibyte-string 128 255))
+       (prop-utf8 (propertize utf8-e 'face 'bold)))
+  (list
+   (let ((r (string-as-multibyte utf8-e)))
+     (list (eq r utf8-e)
+           (multibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)))
+   (let ((r (string-to-multibyte utf8-e)))
+     (list (eq r utf8-e)
+           (multibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)))
+   (let ((r (string-as-multibyte invalid)))
+     (list (multibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)))
+   (let ((r (string-as-multibyte raw)))
+     (list (multibyte-string-p r)
+           (length r)
+           (string-bytes r)
+           (string-to-list r)))
+   (let ((r (string-as-multibyte prop-utf8)))
+     (list (text-properties-at 0 r)
+           (text-properties-at 1 r)))
+   (let ((s "é"))
+     (eq s (string-as-multibyte s)))
+   (let ((s (unibyte-string 65 66)))
+     (eq s (string-as-unibyte s)))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
