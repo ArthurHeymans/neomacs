@@ -767,6 +767,8 @@ mod eval_apply_strict_edge_semantics;
 mod eval_buffer_region_semantics;
 #[path = "eval-comprehensive-patterns.rs"]
 mod eval_comprehensive_patterns;
+#[path = "eval-regexp-pcase-edge-semantics.rs"]
+mod eval_regexp_pcase_edge_semantics;
 #[path = "event-convert-advanced.rs"]
 mod event_convert_advanced;
 mod event_convert_list;
