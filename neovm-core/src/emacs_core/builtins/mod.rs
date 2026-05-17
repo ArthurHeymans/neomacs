@@ -7760,7 +7760,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr("arrayp", |_ctx, args| builtin_arrayp(args), 1, Some(1));
     ctx.defsubr("ignore", |_ctx, args| builtin_ignore(args), 0, None);
-    ctx.defsubr("always", |_ctx, args| builtin_always(args), 0, None);
     ctx.defsubr(
         "cl-type-of",
         |_ctx, args| builtin_cl_type_of(args),

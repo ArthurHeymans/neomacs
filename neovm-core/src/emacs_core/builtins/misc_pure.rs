@@ -25,10 +25,6 @@ pub(crate) fn builtin_ignore(_args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_always(_args: Vec<Value>) -> EvalResult {
-    Ok(Value::T)
-}
-
 /// Log a message to the *Messages* buffer, matching GNU Emacs message_dolog
 /// in xdisp.c.  Creates the buffer if it doesn't exist.
 fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispString) {

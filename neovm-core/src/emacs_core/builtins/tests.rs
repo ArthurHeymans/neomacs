@@ -7250,19 +7250,6 @@ fn pure_dispatch_typed_ignore_accepts_any_arity() {
     .expect("builtin ignore should resolve")
     .expect("builtin ignore should evaluate");
     assert!(many.is_nil());
-
-    let always_zero = dispatch_builtin_pure("always", vec![])
-        .expect("builtin always should resolve")
-        .expect("builtin always should evaluate");
-    assert_eq!(always_zero, Value::T);
-
-    let always_many = dispatch_builtin_pure(
-        "always",
-        vec![Value::fixnum(1), Value::string("x"), Value::symbol("foo")],
-    )
-    .expect("builtin always should resolve")
-    .expect("builtin always should evaluate");
-    assert_eq!(always_many, Value::T);
 }
 
 #[test]
