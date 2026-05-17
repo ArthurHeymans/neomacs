@@ -800,6 +800,8 @@ mod field_at_pos_semantics;
 mod file_modes_strict_edge_semantics;
 #[path = "file-name-semantics.rs"]
 mod file_name_semantics;
+#[path = "file-newer-than-strict-edge-semantics.rs"]
+mod file_newer_than_strict_edge_semantics;
 #[path = "file-predicate-strict-edge-semantics.rs"]
 mod file_predicate_strict_edge_semantics;
 #[path = "file-repository-version-semantics.rs"]
