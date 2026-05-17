@@ -141,3 +141,47 @@ fn oracle_prop_defvar_bool_int_runtime_variables_are_special() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_defvar_per_buffer_special_and_local_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (mapcar (lambda (sym)
+           (list sym (boundp sym) (special-variable-p sym) (local-variable-p sym)))
+         '(major-mode
+           mode-name
+           fill-column
+           tab-width
+           default-directory
+           buffer-file-name
+           buffer-read-only
+           buffer-undo-list
+           cursor-type
+           truncate-lines))
+ (let ((fill-column 17)
+       (tab-width 3)
+       (major-mode 'oracle-mode)
+       (mode-name "Oracle"))
+   (list (symbol-value 'fill-column)
+         (funcall (lambda () tab-width))
+         major-mode
+         mode-name))
+ (with-temp-buffer
+   (setq-local fill-column 33)
+   (setq-local tab-width 5)
+   (setq-local major-mode 'temp-oracle-mode)
+   (setq-local mode-name "Temp Oracle")
+   (list fill-column
+         tab-width
+         major-mode
+         mode-name
+         (local-variable-p 'fill-column)
+         (local-variable-p 'major-mode)
+         (buffer-local-value 'fill-column (current-buffer))
+         (default-value 'fill-column))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
