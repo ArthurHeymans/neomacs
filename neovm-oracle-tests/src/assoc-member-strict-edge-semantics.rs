@@ -89,3 +89,31 @@ fn oracle_assoc_empty_alist_returns_nil() {
     let (o, n) = eval_oracle_and_neovm(r#"(assoc 'a nil)"#);
     assert_ok_eq("nil", &o, &n);
 }
+
+#[test]
+fn oracle_assoc_nil_key_found() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(assoc nil '((nil . 1) (2 . 3)))"#);
+    assert_ok_eq("(nil . 1)", &o, &n);
+}
+
+#[test]
+fn oracle_rassq_found_by_value() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(rassq 'x '((a . x) (b . y)))"#);
+    assert_ok_eq("(a . x)", &o, &n);
+}
+
+#[test]
+fn oracle_rassq_not_found() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(rassq 'z '((a . x) (b . y)))"#);
+    assert_ok_eq("nil", &o, &n);
+}
+
+#[test]
+fn oracle_memq_first_match_only() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(memq 'a '(a b a))"#);
+    assert_ok_eq("(a b a)", &o, &n);
+}
