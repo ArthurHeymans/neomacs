@@ -1768,6 +1768,8 @@ mod take;
 mod take_drop_while_semantics;
 #[path = "take-ntake-semantics.rs"]
 mod take_ntake_semantics;
+#[path = "temporary-file-directory-strict-edge-semantics.rs"]
+mod temporary_file_directory_strict_edge_semantics;
 #[path = "text-prop-search-strict-edge-semantics.rs"]
 mod text_prop_search_strict_edge_semantics;
 #[path = "text-properties.rs"]

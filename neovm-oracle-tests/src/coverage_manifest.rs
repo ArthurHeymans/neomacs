@@ -462,6 +462,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "syntax-table-p",
     "take",
     "tan",
+    "temporary-file-directory",
     "text-properties-at",
     "threadp",
     "throw",
