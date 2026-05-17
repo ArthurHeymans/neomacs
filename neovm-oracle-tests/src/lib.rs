@@ -1351,6 +1351,8 @@ mod recursion_advanced;
 mod recursion_comprehensive_patterns;
 #[path = "redirect-debugging-output-semantics.rs"]
 mod redirect_debugging_output_semantics;
+#[path = "regex-macroexpand-via-binary-semantics.rs"]
+mod regex_macroexpand_via_binary_semantics;
 #[path = "regexp-advanced.rs"]
 mod regexp_advanced;
 #[path = "regexp-comprehensive-advanced.rs"]
