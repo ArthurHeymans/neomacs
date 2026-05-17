@@ -257,6 +257,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "list",
     "listp",
     "load",
+    "locate-dominating-file",
     "locate-file",
     "locate-file-internal",
     "lock-file",
