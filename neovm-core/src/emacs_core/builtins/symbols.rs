@@ -1234,7 +1234,7 @@ pub(crate) fn resolve_indirect_symbol_by_id_in_obarray_checked(
     symbols_with_pos_enabled: bool,
 ) -> Option<(SymId, Value)> {
     let mut current = symbol;
-    for _ in 0..128 {
+    loop {
         let function = symbol_function_cell_in_obarray(obarray, current)?;
         if let Some(next) = symbol_id_checked(&function, symbols_with_pos_enabled) {
             if next == NIL_SYM_ID {
@@ -1245,7 +1245,6 @@ pub(crate) fn resolve_indirect_symbol_by_id_in_obarray_checked(
         }
         return Some((current, function));
     }
-    None
 }
 
 pub(crate) fn resolve_indirect_symbol_by_id(

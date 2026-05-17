@@ -1924,11 +1924,7 @@ impl Obarray {
     /// Returns the final function value, following symbol aliases.
     pub fn indirect_function_id(&self, id: SymId) -> Option<Value> {
         let mut current_id = id;
-        let mut depth = 0;
         loop {
-            if depth > 100 {
-                return None; // Circular alias chain
-            }
             let sym = self.slot(current_id)?;
             if sym.function.is_nil() {
                 return None;
@@ -1937,7 +1933,6 @@ impl Obarray {
             match func.kind() {
                 ValueKind::Symbol(id) => {
                     current_id = id;
-                    depth += 1;
                 }
                 _ => return Some(func),
             }

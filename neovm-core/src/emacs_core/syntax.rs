@@ -589,7 +589,7 @@ impl Default for SyntaxTable {
 /// A "word" is a maximal run of characters with syntax class `Word`.
 /// Between words, non-word characters are skipped.
 pub fn forward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> usize {
-    forward_word_with_options(buf, table, count, false)
+    forward_word_with_options(buf, table, count, false).0
 }
 
 fn syntax_char_from_code(code: u32) -> char {
@@ -639,7 +639,7 @@ fn forward_word_with_options(
     table: &SyntaxTable,
     count: i64,
     honor_properties: bool,
-) -> usize {
+) -> (usize, bool) {
     if count < 0 {
         return backward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -671,6 +671,10 @@ fn forward_word_with_options(
         {
             idx += 1;
         }
+        if idx == accessible_len {
+            let abs_char = accessible_char_start + idx;
+            return (buf.text.char_to_emacs_byte(abs_char), false);
+        }
         // Skip word characters
         while idx < accessible_len
             && matches!(
@@ -691,12 +695,12 @@ fn forward_word_with_options(
 
     // Convert char index back to byte position (absolute).
     let abs_char = accessible_char_start + idx;
-    buf.text.char_to_emacs_byte(abs_char)
+    (buf.text.char_to_emacs_byte(abs_char), true)
 }
 
 /// Move backward over `count` words.  Returns the resulting byte position.
 pub fn backward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> usize {
-    backward_word_with_options(buf, table, count, false)
+    backward_word_with_options(buf, table, count, false).0
 }
 
 fn backward_word_with_options(
@@ -704,7 +708,7 @@ fn backward_word_with_options(
     table: &SyntaxTable,
     count: i64,
     honor_properties: bool,
-) -> usize {
+) -> (usize, bool) {
     if count < 0 {
         return forward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -732,6 +736,10 @@ fn backward_word_with_options(
         {
             idx -= 1;
         }
+        if idx == 0 {
+            let abs_char = accessible_char_start + idx;
+            return (buf.text.char_to_emacs_byte(abs_char), false);
+        }
         // Skip word characters backward
         while idx > 0
             && matches!(
@@ -751,7 +759,7 @@ fn backward_word_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    buf.text.char_to_emacs_byte(abs_char)
+    (buf.text.char_to_emacs_byte(abs_char), true)
 }
 
 /// Skip forward over characters whose syntax class matches any character in
@@ -2949,17 +2957,17 @@ pub(crate) fn builtin_forward_word(
         }
     };
 
-    let (raw_byte, orig_char, raw_char) = {
+    let (raw_byte, completed, orig_char, raw_char) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = SyntaxTable::for_buffer(buf);
         let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-        let raw_byte = forward_word_with_options(buf, &table, count, honor_properties);
+        let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
         let orig_char = buf.text.emacs_byte_to_char(buf.point()) as i64 + 1;
         let raw_char = buf.text.emacs_byte_to_char(raw_byte) as i64 + 1;
-        (raw_byte, orig_char, raw_char)
+        (raw_byte, completed, orig_char, raw_char)
     };
 
     // GNU `Fforward_word` (syntax.c:1561) constrains the destination via
@@ -3001,7 +3009,7 @@ pub(crate) fn builtin_forward_word(
 
     // GNU returns t when the requested motion fully succeeded, nil when it
     // stopped early at a buffer edge or a field boundary.
-    Ok(if constrained_char == raw_char {
+    Ok(if completed && constrained_char == raw_char {
         Value::T
     } else {
         Value::NIL
@@ -3066,7 +3074,7 @@ pub(crate) fn builtin_backward_word(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    let new_pos = backward_word_with_options(buf, &table, count, honor_properties);
+    let new_pos = backward_word_with_options(buf, &table, count, honor_properties).0;
 
     let current_id = eval
         .buffers
