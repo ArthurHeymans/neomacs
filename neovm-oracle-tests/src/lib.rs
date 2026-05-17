@@ -875,6 +875,8 @@ mod hash_table_advanced;
 mod hash_table_comprehensive_patterns;
 #[path = "hash-table-contains-semantics.rs"]
 mod hash_table_contains_semantics;
+#[path = "hash-table-deep-edge-semantics.rs"]
+mod hash_table_deep_edge_semantics;
 #[path = "hash-table-extended.rs"]
 mod hash_table_extended;
 #[path = "hash-table-mutate-strict-edge-semantics.rs"]
