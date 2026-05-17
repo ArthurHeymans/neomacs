@@ -750,6 +750,8 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "split-string",
     "split-string-and-unquote",
     "string-or-null-p",
+    "string-prefix-p",
+    "string-suffix-p",
     "string-to-list",
     "string-to-vector",
     "subr-primitive-p",

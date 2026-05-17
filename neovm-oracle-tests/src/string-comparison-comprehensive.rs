@@ -249,6 +249,36 @@ fn oracle_prop_string_comparison_prefix_suffix_ignore_case() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_prefix_suffix_strict_edge_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el:string-prefix-p and string-suffix-p call `length`
+    // before `compare-strings`.  Sequence-like non-strings can therefore
+    // return nil when the affix is too long, but signal once compare-strings
+    // is reached.
+    let form = r#"
+(let ((capture (lambda (form)
+                 (condition-case err
+                     (eval form)
+                   (error (cons (car err) (cdr err)))))))
+  (list
+   (string-prefix-p "abcd" ["a" "b" "c"])
+   (string-suffix-p "abcd" ["a" "b" "c"])
+   (funcall capture '(string-prefix-p "a" ["a" "b"]))
+   (funcall capture '(string-suffix-p "b" ["a" "b"]))
+   (funcall capture '(string-prefix-p "" 42))
+   (funcall capture '(string-suffix-p "" 42))
+   (funcall capture '(string-prefix-p nil "abc"))
+   (funcall capture '(string-suffix-p nil "abc"))
+   (string-prefix-p "A" "abc" '(non-nil-ignore-case))
+   (string-suffix-p "C" "abc" '(non-nil-ignore-case))
+   (funcall capture '(string-prefix-p "x"))
+   (funcall capture '(string-suffix-p "x" "x" nil 'extra))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Mixed case and locale-sensitive comparisons
 // ---------------------------------------------------------------------------
