@@ -1073,6 +1073,9 @@ fn veclike_type_from_tag(tag: u8) -> Result<VecLikeType, DumpError> {
         12 => Ok(VecLikeType::Subr),
         13 => Ok(VecLikeType::Bignum),
         14 => Ok(VecLikeType::SymbolWithPos),
+        15 => Ok(VecLikeType::Sqlite),
+        16 => Ok(VecLikeType::UserPtr),
+        17 => Ok(VecLikeType::ModuleFunction),
         other => Err(DumpError::ImageFormatError(format!(
             "unknown mapped vectorlike type tag {other}"
         ))),

@@ -31,8 +31,8 @@ use crate::emacs_core::intern::{
 use crate::heap_types::LispString;
 
 use super::header::{
-    BignumObj, ConsCell, FloatObj, GcHeader, SqliteObj, StringObj, SubrObj, SymbolWithPosObj,
-    VecLikeHeader, VecLikeType,
+    BignumObj, ConsCell, FloatObj, GcHeader, ModuleFunctionObj, SqliteObj, StringObj, SubrObj,
+    SymbolWithPosObj, UserPtrObj, VecLikeHeader, VecLikeType,
 };
 
 /// Clear the old subr registry on the tagged heap — no-op now that subrs use
@@ -454,6 +454,24 @@ impl TaggedValue {
         }
     }
 
+    /// If this is a user-pointer object, return a reference to the object.
+    pub fn as_user_ptr(&self) -> Option<&UserPtrObj> {
+        if self.veclike_type() == Some(VecLikeType::UserPtr) {
+            Some(unsafe { &*(self.as_veclike_ptr()? as *const UserPtrObj) })
+        } else {
+            None
+        }
+    }
+
+    /// If this is a module-function object, return a reference to the object.
+    pub fn as_module_function(&self) -> Option<&ModuleFunctionObj> {
+        if self.veclike_type() == Some(VecLikeType::ModuleFunction) {
+            Some(unsafe { &*(self.as_veclike_ptr()? as *const ModuleFunctionObj) })
+        } else {
+            None
+        }
+    }
+
     /// If this is a symbol-with-pos, return the bare symbol Value.
     pub fn as_symbol_with_pos_sym(&self) -> Option<TaggedValue> {
         self.as_symbol_with_pos().map(|swp| swp.sym)
@@ -779,13 +797,25 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::Sqlite)
     }
 
-    /// True if this value is callable (lambda, macro, bytecode, subr).
+    /// True if this is a user-pointer object (PVEC_USER_PTR).
+    #[inline]
+    pub fn is_user_ptr(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::UserPtr)
+    }
+
+    /// True if this is a module-function object (PVEC_MODULE_FUNCTION).
+    #[inline]
+    pub fn is_module_function(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::ModuleFunction)
+    }
+
+    /// True if this value is callable (lambda, macro, bytecode, subr, module-function).
     #[inline]
     pub fn is_function(self) -> bool {
         self.is_subr()
             || matches!(
                 self.veclike_type(),
-                Some(VecLikeType::Lambda | VecLikeType::ByteCode)
+                Some(VecLikeType::Lambda | VecLikeType::ByteCode | VecLikeType::ModuleFunction)
             )
     }
 
@@ -819,6 +849,8 @@ impl TaggedValue {
                 VecLikeType::Bignum => "integer",
                 VecLikeType::SymbolWithPos => "symbol-with-pos",
                 VecLikeType::Sqlite => "sqlite",
+                VecLikeType::UserPtr => "user-ptr",
+                VecLikeType::ModuleFunction => "module-function",
             },
             ValueKind::Unbound => "unbound",
             ValueKind::Unknown => "unknown",

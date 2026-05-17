@@ -151,6 +151,10 @@ pub enum VecLikeType {
     SymbolWithPos = 14,
     /// SQLite database or statement object (like GNU's PVEC_SQLITE).
     Sqlite = 15,
+    /// User pointer for dynamic module API (like GNU's PVEC_USER_PTR).
+    UserPtr = 16,
+    /// Dynamic module function (like GNU's PVEC_MODULE_FUNCTION).
+    ModuleFunction = 17,
 }
 
 use std::sync::OnceLock;
@@ -606,6 +610,52 @@ pub struct SqliteObj {
     pub header: VecLikeHeader,
     pub is_statement: bool,
     pub id: i64,
+}
+
+/// Heap-allocated user pointer for dynamic module API.
+///
+/// Mirrors GNU `struct Lisp_User_Ptr` (`emacs-module.c`).
+/// Carries a raw C `void *` pointer plus an optional finalizer.
+/// The GC never traces the raw pointer — it calls the finalizer on sweep.
+///
+/// The finalizer function pointer signature follows GNU Emacs:
+/// `void (*fin)(void *ptr)`.
+pub type EmacsFinalizer = Option<unsafe extern "C" fn(*mut std::ffi::c_void)>;
+
+#[repr(C)]
+pub struct UserPtrObj {
+    pub header: VecLikeHeader,
+    /// The raw C pointer owned by the module.
+    pub ptr: *mut std::ffi::c_void,
+    /// Optional finalizer invoked when the user-ptr is garbage-collected.
+    pub finalizer: EmacsFinalizer,
+}
+
+/// Heap-allocated module function for dynamic module API.
+///
+/// Mirrors GNU `struct Lisp_Module_Function` (`emacs-module.c`).
+/// Stores the C function pointer, closure data, optional finalizer,
+/// arity metadata, and Lisp-visible doc/interactive slots.
+#[repr(C)]
+pub struct ModuleFunctionObj {
+    pub header: VecLikeHeader,
+    /// Minimum number of required arguments.
+    pub min_arity: isize,
+    /// Maximum number of arguments (-1 = variadic/MANY).
+    pub max_arity: isize,
+    /// The raw C function pointer (emacs_function from emacs-module.h).
+    ///
+    /// Signature: `emacs_value (*)(emacs_env *env, ptrdiff_t nargs,
+    ///                              emacs_value *args, void *data)`.
+    pub subr: *const std::ffi::c_void,
+    /// User-supplied closure data pointer.
+    pub data: *mut std::ffi::c_void,
+    /// Optional finalizer invoked when the module-function is GC'd.
+    pub finalizer: EmacsFinalizer,
+    /// Docstring (Lisp string value).
+    pub documentation: TaggedValue,
+    /// Interactive form (Lisp value).
+    pub interactive_form: TaggedValue,
 }
 
 #[cfg(test)]

@@ -3042,7 +3042,14 @@ impl Context {
             Value::list(vec![Value::string(".elc"), Value::string(".el")]),
         );
         obarray.make_special("load-suffixes");
-        obarray.set_symbol_value("module-file-suffix", Value::NIL);
+        let module_suffix = if cfg!(target_os = "macos") {
+            ".dylib"
+        } else if cfg!(target_os = "windows") {
+            ".dll"
+        } else {
+            ".so"
+        };
+        obarray.set_symbol_value("module-file-suffix", Value::make_string(module_suffix));
         obarray.make_special("module-file-suffix");
         obarray.set_symbol_value(
             "dynamic-library-suffixes",
@@ -7877,7 +7884,8 @@ impl Context {
         match function.kind() {
             ValueKind::Veclike(VecLikeType::Lambda)
             | ValueKind::Veclike(VecLikeType::ByteCode)
-            | ValueKind::Veclike(VecLikeType::Macro) => true,
+            | ValueKind::Veclike(VecLikeType::Macro)
+            | ValueKind::Veclike(VecLikeType::ModuleFunction) => true,
             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
                 super::subr_info::subr_is_callable_function_value(function)
             }
@@ -10445,6 +10453,9 @@ impl Context {
             ValueKind::Veclike(VecLikeType::Macro) => self.apply_lambda(function, args),
             ValueKind::Subr(_) => self.apply_subr_object(function, args, true),
             ValueKind::Veclike(VecLikeType::Subr) => self.apply_subr_object(function, args, true),
+            ValueKind::Veclike(VecLikeType::ModuleFunction) => {
+                self.apply_module_function(function, args)
+            }
             ValueKind::Symbol(id) => self.apply_symbol_callable_untraced(id, args, true),
             ValueKind::T => self.apply_symbol_callable_untraced(intern("t"), args, true),
             ValueKind::Nil => Err(signal("void-function", vec![Value::symbol("nil")])),
@@ -10942,6 +10953,12 @@ impl Context {
         } else {
             Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
         }
+    }
+
+    /// Apply a dynamic module function.
+    #[inline]
+    fn apply_module_function(&mut self, function: Value, args: LispArgVec) -> EvalResult {
+        super::dynamic_module::apply_module_function(self, function, args.to_vec())
     }
 
     #[inline]

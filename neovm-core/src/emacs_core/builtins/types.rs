@@ -262,7 +262,9 @@ fn is_macro_marker_list(value: &Value, symbols_with_pos_enabled: bool) -> bool {
 
 fn is_runtime_function_object(value: &Value) -> bool {
     match value.kind() {
-        ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::ByteCode) => true,
+        ValueKind::Veclike(VecLikeType::Lambda)
+        | ValueKind::Veclike(VecLikeType::ByteCode)
+        | ValueKind::Veclike(VecLikeType::ModuleFunction) => true,
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
             super::subr_info::subr_is_callable_function_value(value)
         }
@@ -309,7 +311,10 @@ pub(crate) fn builtin_functionp_1(eval: &mut super::eval::Context, arg: Value) -
             ValueKind::Veclike(VecLikeType::Lambda)
             | ValueKind::Subr(_)
             | ValueKind::Veclike(VecLikeType::Subr)
-            | ValueKind::Veclike(VecLikeType::ByteCode) => is_runtime_function_object(&object),
+            | ValueKind::Veclike(VecLikeType::ByteCode)
+            | ValueKind::Veclike(VecLikeType::ModuleFunction) => {
+                is_runtime_function_object(&object)
+            }
             ValueKind::Cons => {
                 !is_macro_marker_list(&object, eval.symbols_with_pos_enabled)
                     && is_lambda_form_list(&object, eval.symbols_with_pos_enabled)
@@ -410,6 +415,8 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         // GNU `Fcl_type_of` reports symbol-with-pos as `symbol-with-pos`.
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => "symbol-with-pos",
         ValueKind::Veclike(VecLikeType::Sqlite) => "sqlite",
+        ValueKind::Veclike(VecLikeType::UserPtr) => "user-ptr",
+        ValueKind::Veclike(VecLikeType::ModuleFunction) => "module-function",
         // `Qunbound` is internal and should never reach `type-of`
         // from Lisp; treat it as `unknown` if it somehow leaks.
         ValueKind::Unbound | ValueKind::Unknown => "unknown",
@@ -503,12 +510,12 @@ pub(crate) fn builtin_function_equal(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_module_function_p(args: Vec<Value>) -> EvalResult {
     expect_args("module-function-p", &args, 1)?;
-    Ok(Value::NIL)
+    Ok(Value::bool_val(args[0].is_module_function()))
 }
 
 pub(crate) fn builtin_user_ptrp(args: Vec<Value>) -> EvalResult {
     expect_args("user-ptrp", &args, 1)?;
-    Ok(Value::NIL)
+    Ok(Value::bool_val(args[0].is_user_ptr()))
 }
 
 pub(crate) fn builtin_symbol_with_pos_p(args: Vec<Value>) -> EvalResult {

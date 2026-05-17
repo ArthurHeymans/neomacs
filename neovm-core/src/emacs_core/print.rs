@@ -857,6 +857,12 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 write!(out, "#<sqlite db {}>", obj.id).unwrap();
             }
         }
+        ValueKind::Veclike(VecLikeType::UserPtr) => {
+            out.push_str("#<user-ptr>");
+        }
+        ValueKind::Veclike(VecLikeType::ModuleFunction) => {
+            out.push_str("#<module-function>");
+        }
         ValueKind::Unbound => out.push_str("#<unbound>"),
         ValueKind::Unknown => write!(out, "#<unknown {:#x}>", value.0).unwrap(),
     }
@@ -1734,6 +1740,12 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             } else {
                 out.extend_from_slice(format!("#<sqlite db {}>", obj.id).as_bytes());
             }
+        }
+        ValueKind::Veclike(VecLikeType::UserPtr) => {
+            out.extend_from_slice(b"#<user-ptr>");
+        }
+        ValueKind::Veclike(VecLikeType::ModuleFunction) => {
+            out.extend_from_slice(b"#<module-function>");
         }
         ValueKind::Unbound => {
             out.extend_from_slice(b"#<unbound>");

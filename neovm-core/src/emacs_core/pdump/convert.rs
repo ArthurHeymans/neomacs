@@ -255,6 +255,12 @@ impl DumpEncoder {
             ValueKind::Veclike(VecLikeType::Sqlite) => {
                 panic!("pdump: sqlite objects are not portable")
             }
+            ValueKind::Veclike(VecLikeType::UserPtr) => {
+                panic!("pdump: user-ptr objects are not portable")
+            }
+            ValueKind::Veclike(VecLikeType::ModuleFunction) => {
+                panic!("pdump: module-function objects are not portable")
+            }
             ValueKind::Unbound => DumpValue::Unbound,
             ValueKind::Unknown => DumpValue::Nil,
         }

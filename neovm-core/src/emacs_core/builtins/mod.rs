@@ -5528,7 +5528,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "module-load",
-        |_ctx, args| builtin_module_load(args),
+        |ctx, args| builtin_module_load(ctx, args),
         1,
         Some(1),
     );

@@ -4892,30 +4892,13 @@ pub(crate) fn builtin_memory_info(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
-pub(crate) fn builtin_module_load(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_module_load(
+    ctx: &mut super::super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("module-load", &args, 1)?;
     let path = expect_strict_string(&args[0])?;
-
-    let lib = unsafe { libloading::Library::new(&path) }.map_err(|e| {
-        signal(
-            "module-open-failed",
-            vec![Value::string(path.clone()), Value::string(e.to_string())],
-        )
-    })?;
-
-    // Check for GPL compatibility symbol
-    let has_gpl: Result<libloading::Symbol<*const ()>, _> =
-        unsafe { lib.get(b"plugin_is_GPL_compatible") };
-    if has_gpl.is_err() {
-        drop(lib);
-        return Err(signal(
-            "module-not-gpl-compatible",
-            vec![Value::string(path)],
-        ));
-    }
-
-    drop(lib);
-    Ok(Value::T)
+    super::super::dynamic_module::load_module(ctx, path)
 }
 
 pub(crate) fn builtin_dump_emacs_portable(

@@ -1023,6 +1023,8 @@ impl TaggedHeap {
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
                         VecLikeType::Sqlite => size_of::<SqliteObj>(),
+                        VecLikeType::UserPtr => size_of::<UserPtrObj>(),
+                        VecLikeType::ModuleFunction => size_of::<ModuleFunctionObj>(),
                     }
                 }
             }
@@ -1341,6 +1343,51 @@ impl TaggedHeap {
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<SqliteObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a user-pointer object for dynamic module API.
+    pub fn alloc_user_ptr(
+        &mut self,
+        ptr: *mut std::ffi::c_void,
+        finalizer: EmacsFinalizer,
+    ) -> TaggedValue {
+        let obj = Box::new(UserPtrObj {
+            header: VecLikeHeader::new(VecLikeType::UserPtr),
+            ptr,
+            finalizer,
+        });
+        let raw = Box::into_raw(obj);
+        self.link_veclike(raw as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<UserPtrObj>());
+        unsafe { TaggedValue::from_veclike_ptr(raw as *const VecLikeHeader) }
+    }
+
+    /// Allocate a module-function object for dynamic module API.
+    pub fn alloc_module_function(
+        &mut self,
+        min_arity: isize,
+        max_arity: isize,
+        subr: *const std::ffi::c_void,
+        data: *mut std::ffi::c_void,
+        documentation: TaggedValue,
+        interactive_form: TaggedValue,
+    ) -> TaggedValue {
+        let obj = Box::new(ModuleFunctionObj {
+            header: VecLikeHeader::new(VecLikeType::ModuleFunction),
+            min_arity,
+            max_arity,
+            subr,
+            data,
+            finalizer: None,
+            documentation,
+            interactive_form,
+        });
+        let raw = Box::into_raw(obj);
+        self.link_veclike(raw as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<ModuleFunctionObj>());
+        unsafe { TaggedValue::from_veclike_ptr(raw as *const VecLikeHeader) }
     }
 
     // -----------------------------------------------------------------------
@@ -1813,6 +1860,17 @@ impl TaggedHeap {
                     self.gray_queue.push(pos);
                 }
             }
+            VecLikeType::ModuleFunction => {
+                let obj = ptr as *const ModuleFunctionObj;
+                let doc = unsafe { (*obj).documentation };
+                let interactive = unsafe { (*obj).interactive_form };
+                if doc.is_heap_object() {
+                    self.gray_queue.push(doc);
+                }
+                if interactive.is_heap_object() {
+                    self.gray_queue.push(interactive);
+                }
+            }
             VecLikeType::Buffer
             | VecLikeType::Window
             | VecLikeType::Frame
@@ -1820,12 +1878,16 @@ impl TaggedHeap {
             | VecLikeType::Marker
             | VecLikeType::Subr
             | VecLikeType::Bignum
-            | VecLikeType::Sqlite => {
+            | VecLikeType::Sqlite
+            | VecLikeType::UserPtr => {
                 // These have no Value children to trace.
                 //
                 // Bignums own a `rug::Integer`, which owns a libgmp
                 // limb buffer, but no Lisp_Object children — `Drop`
                 // takes care of the GMP memory in `free_gc_object`.
+                //
+                // UserPtr has only a raw C pointer and finalizer, no
+                // Lisp children.
             }
         }
     }
@@ -1945,6 +2007,22 @@ impl TaggedHeap {
                         drop(Box::from_raw(ptr as *mut SymbolWithPosObj))
                     },
                     VecLikeType::Sqlite => unsafe { drop(Box::from_raw(ptr as *mut SqliteObj)) },
+                    VecLikeType::UserPtr => {
+                        // Call the finalizer if present before dropping.
+                        let up = ptr as *mut UserPtrObj;
+                        if let Some(fin) = unsafe { (*up).finalizer } {
+                            unsafe { fin((*up).ptr) };
+                        }
+                        unsafe { drop(Box::from_raw(up)) };
+                    }
+                    VecLikeType::ModuleFunction => {
+                        // Call the finalizer if present before dropping.
+                        let mf = ptr as *mut ModuleFunctionObj;
+                        if let Some(fin) = unsafe { (*mf).finalizer } {
+                            unsafe { fin((*mf).data) };
+                        }
+                        unsafe { drop(Box::from_raw(mf)) };
+                    }
                 }
             }
         }

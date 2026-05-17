@@ -240,7 +240,12 @@ pub(crate) static STANDARD_ARGS: &[StandardArg] = &[
         priority: 63,
         nargs: 0,
     },
-    // -module-assertions omitted (no dynamic modules).
+    StandardArg {
+        name: "-module-assertions",
+        longname: Some("--module-assertions"),
+        priority: 52,
+        nargs: 0,
+    },
     StandardArg {
         name: "-d",
         longname: Some("--display"),
