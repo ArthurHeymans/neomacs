@@ -75,6 +75,8 @@ mod base64_semantics;
 mod beginning_of_line;
 #[path = "bidi-string-semantics.rs"]
 mod bidi_string_semantics;
+#[path = "binding-scoping-deep-edge-semantics.rs"]
+mod binding_scoping_deep_edge_semantics;
 mod bitwise;
 #[path = "bool-vector-comprehensive.rs"]
 mod bool_vector_comprehensive;
