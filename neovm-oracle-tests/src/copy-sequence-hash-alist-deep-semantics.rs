@@ -2,7 +2,7 @@
 //! GNU src/fns.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
 
 // --- copy-sequence vector independence ---
 
@@ -20,6 +20,40 @@ fn oracle_copy_sequence_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(copy-sequence "hello")"#);
     assert_ok_eq("\"hello\"", &o, &n);
+}
+
+#[test]
+fn oracle_copy_sequence_string_copies_intervals_shallowly() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:Fcopy_sequence copies string intervals with
+    // copy_intervals.  GNU src/intervals.c:copy_properties copies the
+    // interval plist spine with Fcopy_sequence, but does not deep-copy plist
+    // values.
+    let form = r#"
+(let* ((shared (list 'front))
+       (orig (copy-sequence "abcdef")))
+  (put-text-property 1 4 'face 'bold orig)
+  (put-text-property 2 5 'payload shared orig)
+  (let* ((copy (copy-sequence orig))
+         (orig-before (object-intervals orig))
+         (copy-before (object-intervals copy))
+         (same-payload (eq (get-text-property 2 'payload orig)
+                           (get-text-property 2 'payload copy))))
+    (put-text-property 1 4 'face 'italic copy)
+    (setcar shared 'mutated)
+    (list
+     (equal-including-properties orig copy)
+     orig-before
+     copy-before
+     same-payload
+     (list (get-text-property 2 'face orig)
+           (get-text-property 2 'face copy))
+     (list (get-text-property 2 'payload orig)
+           (get-text-property 2 'payload copy)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 #[test]
