@@ -1,0 +1,65 @@
+//! Oracle parity for encoding, base64, and related ops via binary.
+//! GNU src/fns.c, src/coding.c.
+
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{assert_ok_eq, eval_oracle_and_neovm_via_binary};
+
+// --- base64 roundtrip ---
+
+#[test]
+fn oracle_base64_encode_decode_roundtrip_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(
+        r#"(progn
+  (setq encoded (base64-encode-string "hello"))
+  (base64-decode-string encoded))"#,
+    );
+    assert_ok_eq("\"hello\"", &o, &n);
+}
+
+#[test]
+fn oracle_base64_encode_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(base64-encode-string "hello")"#);
+    assert_ok_eq("\"aGVsbG8=\"", &o, &n);
+}
+
+// --- decode-coding-string ---
+
+#[test]
+fn oracle_decode_coding_string_utf8_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(decode-coding-string "hello" 'utf-8)"#);
+    assert_ok_eq("\"hello\"", &o, &n);
+}
+
+// --- encode-coding-string ---
+
+#[test]
+fn oracle_encode_coding_string_utf8_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(encode-coding-string "hello" 'utf-8)"#);
+    assert_ok_eq("\"hello\"", &o, &n);
+}
+
+// --- string-bytes ---
+
+#[test]
+fn oracle_string_bytes_ascii_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(string-bytes "hello")"#);
+    assert_ok_eq("5", &o, &n);
+}
+
+// --- string-make-multibyte / unibyte ---
+
+#[test]
+fn oracle_string_make_multibyte_unibyte_via_binary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm_via_binary(
+        r#"(progn
+  (setq s (string-make-unibyte "abc"))
+  (string-make-multibyte s))"#,
+    );
+    assert_ok_eq("\"abc\"", &o, &n);
+}

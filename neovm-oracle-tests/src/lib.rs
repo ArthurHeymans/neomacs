@@ -733,6 +733,8 @@ mod eieio_comprehensive;
 mod elt_aref_aset_patterns;
 #[path = "encode-decode-coding-advanced.rs"]
 mod encode_decode_coding_advanced;
+#[path = "encoding-base64-via-binary-semantics.rs"]
+mod encoding_base64_via_binary_semantics;
 #[path = "end-of-line.rs"]
 mod end_of_line;
 #[path = "eq-eql-equal-edge-semantics.rs"]
