@@ -832,6 +832,8 @@ mod file_name_quote_strict_edge_semantics;
 mod file_name_semantics;
 #[path = "file-newer-than-strict-edge-semantics.rs"]
 mod file_newer_than_strict_edge_semantics;
+#[path = "file-nlinks-strict-edge-semantics.rs"]
+mod file_nlinks_strict_edge_semantics;
 #[path = "file-predicate-strict-edge-semantics.rs"]
 mod file_predicate_strict_edge_semantics;
 #[path = "file-relative-name-strict-edge-semantics.rs"]

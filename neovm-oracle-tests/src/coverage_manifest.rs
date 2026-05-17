@@ -180,6 +180,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-name-unquote",
     "file-name-with-extension",
     "file-newer-than-file-p",
+    "file-nlinks",
     "file-ownership-preserved-p",
     "file-readable-p",
     "file-regular-p",
