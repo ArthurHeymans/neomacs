@@ -270,6 +270,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "isnan",
     "key-description",
     "key-parse",
+    "key-translate",
     "key-valid-p",
     "keymap-parent",
     "keymap-prompt",
