@@ -1187,6 +1187,8 @@ mod make_vector_advanced;
 mod make_vector_patterns;
 #[path = "map-dedup-tree-strict-edge-semantics.rs"]
 mod map_dedup_tree_strict_edge_semantics;
+#[path = "map-keymap-sorted-semantics.rs"]
+mod map_keymap_sorted_semantics;
 #[path = "map-library-semantics.rs"]
 mod map_library_semantics;
 #[path = "map-operations.rs"]

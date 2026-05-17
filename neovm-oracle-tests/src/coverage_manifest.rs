@@ -322,6 +322,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "make-variable-buffer-local",
     "make-vector",
     "makunbound",
+    "map-keymap-sorted",
     "mapatoms",
     "mapbacktrace",
     "mapc",
