@@ -60,6 +60,9 @@ pub struct emacs_time {
 
 pub type emacs_limb_t = u64;
 
+#[allow(non_upper_case_globals)]
+pub const emacs_variadic_function: isize = -2;
+
 // ============================================================================
 // emacs_env — the vtable struct
 // ============================================================================
@@ -1627,11 +1630,10 @@ unsafe extern "C" fn module_make_function(
     if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
-    const EMACS_VARIADIC_FUNCTION: isize = -2;
     let most_positive_fixnum = Value::MOST_POSITIVE_FIXNUM as isize;
     let valid_arity = min_arity >= 0
         && if max_arity < 0 {
-            min_arity <= most_positive_fixnum && max_arity == EMACS_VARIADIC_FUNCTION
+            min_arity <= most_positive_fixnum && max_arity == emacs_variadic_function
         } else {
             min_arity <= max_arity && max_arity <= most_positive_fixnum
         };
