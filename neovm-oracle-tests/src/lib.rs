@@ -1429,6 +1429,8 @@ mod property_list_advanced;
 mod property_list_comprehensive;
 #[path = "provide-require-comprehensive.rs"]
 mod provide_require_comprehensive;
+#[path = "purecopy-strict-edge-semantics.rs"]
+mod purecopy_strict_edge_semantics;
 mod put;
 #[path = "put-text-property-patterns.rs"]
 mod put_text_property_patterns;

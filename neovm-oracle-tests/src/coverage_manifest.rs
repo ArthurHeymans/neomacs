@@ -621,6 +621,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "condition-case-unless-debug",
     "copy-overlay",
     "copy-tree",
+    "purecopy",
     "define-error",
     "define-symbol-prop",
     "defmacro",
