@@ -798,6 +798,8 @@ mod final_gaps_strict_edge_semantics;
 mod find_buffer_semantics;
 #[path = "flatten-tree-semantics.rs"]
 mod flatten_tree_semantics;
+#[path = "float-nan-misc-edge-semantics.rs"]
+mod float_nan_misc_edge_semantics;
 #[path = "float-operations-comprehensive.rs"]
 mod float_operations_comprehensive;
 #[path = "following-char-operations.rs"]
