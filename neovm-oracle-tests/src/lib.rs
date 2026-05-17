@@ -1553,6 +1553,8 @@ mod string_match;
 mod string_match_p;
 #[path = "string-match-p-semantics.rs"]
 mod string_match_p_semantics;
+#[path = "string-number-list-deep-edge-semantics.rs"]
+mod string_number_list_deep_edge_semantics;
 #[path = "string-prefix-suffix-patterns.rs"]
 mod string_prefix_suffix_patterns;
 #[path = "string-processing.rs"]
