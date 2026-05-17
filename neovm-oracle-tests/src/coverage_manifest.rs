@@ -18,6 +18,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "access-file",
     "accessible-keymaps",
     "acos",
+    "add-name-to-file",
     "append",
     "apply",
     "aref",
