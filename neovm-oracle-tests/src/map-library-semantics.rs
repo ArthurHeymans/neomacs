@@ -145,3 +145,76 @@ fn oracle_prop_map_nested_and_inplace_edge_contracts() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_map_predicate_iteration_and_copy_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (require 'map)
+  ;; GNU lisp/emacs-lisp/map.el defines these public functions as generic
+  ;; dispatch over lists, hash tables, and arrays.  This case locks down the
+  ;; details that are easy to miss: plist membership returns a tail object,
+  ;; alist duplicate keys count in map-length, map-some short-circuits, and
+  ;; map-copy uses copy-alist for alists but copy-sequence for plists/arrays.
+  (let ((ht (make-hash-table :test 'equal)))
+    (puthash "nil" nil ht)
+    (puthash "two" 2 ht)
+    (list
+     ;; Presence is distinct from value nil.
+     (map-contains-key '((a . nil)) 'a)
+     (map-contains-key '((a . nil)) 'missing)
+     (map-contains-key '(:a nil :b 2) :a)
+     (map-contains-key ht "nil")
+     ;; Plists default to eq, but the deprecated TESTFN still affects list
+     ;; maps in GNU's compatibility shims.
+     (let ((plist (list (copy-sequence "k") 1)))
+       (list (map-contains-key plist "k")
+             (map-contains-key plist "k" #'equal)
+             (map-elt plist "k" 'missing)
+             (map-elt plist "k" 'missing #'equal)))
+     ;; Length and emptiness per map type.
+     (list (map-empty-p nil)
+           (map-empty-p [])
+           (map-empty-p ht)
+           (map-length '((a . 1) (a . 2)))
+           (map-length '(:a 1 :b 2))
+           (map-length [x y z])
+           (map-length ht))
+     ;; Iteration helpers preserve GNU's map-do / map-apply ordering for
+     ;; sequence maps.
+     (map-keys-apply #'identity '(:a 1 :b 2))
+     (map-values-apply (lambda (v) (and v (* v 10))) [1 nil 3])
+     (let ((seen '()))
+       (list (map-some (lambda (k v)
+                         (push k seen)
+                         (and (= v 2) (list k v)))
+                       '((a . 1) (b . 2) (c . 3)))
+             (nreverse seen)))
+     (let ((seen '()))
+       (list (map-every-p (lambda (k v)
+                            (push k seen)
+                            (< v 3))
+                          '((a . 1) (b . 2) (c . 3)))
+             (nreverse seen)))
+     ;; Copy behavior is observable through later mutation.
+     (let* ((alist (list (cons 'a (cons 'inner 1))))
+            (copy (map-copy alist)))
+       (setcdr (assq 'a copy) 'changed)
+       (list alist copy))
+     (let* ((plist (list :a 1 :b 2))
+            (copy (map-copy plist)))
+       (setcar copy :changed)
+       (list plist copy))
+     (let* ((vec [a b])
+            (copy (map-copy vec)))
+       (aset copy 0 'changed)
+       (list vec copy))
+     (condition-case err
+         (map-put! [a] 2 'x)
+       (error (list (car err) (cadr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
