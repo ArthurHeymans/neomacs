@@ -60,3 +60,36 @@ fn oracle_file_has_changed_cache_tags_missing_and_type_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_has_changed_directory_file_name_cache_key_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-file-changed-slash-" t))
+       (default-directory (file-name-as-directory dir))
+       (file "tracked.txt")
+       (slash "tracked.txt/"))
+  (unwind-protect
+      (progn
+        (clrhash file-has-changed-p--hash-table)
+        (write-region "a" nil file nil 'silent)
+        (set-file-times file 100)
+        (list
+         ;; GNU strips the trailing slash with `directory-file-name` before
+         ;; querying attributes and before building the cache key.
+         (file-has-changed-p file)
+         (file-has-changed-p slash)
+         (hash-table-count file-has-changed-p--hash-table)
+         (progn
+           (write-region "abcdef" nil file nil 'silent)
+           (set-file-times file 200)
+           (file-has-changed-p slash))
+         (file-has-changed-p file)
+         (hash-table-count file-has-changed-p--hash-table)))
+    (ignore-errors (delete-file (expand-file-name file dir)))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
