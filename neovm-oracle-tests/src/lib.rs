@@ -737,6 +737,8 @@ mod directory_files_recursively_strict_edge_semantics;
 mod directory_files_strict_edge_semantics;
 #[path = "directory-name-transform-strict-edge-semantics.rs"]
 mod directory_name_transform_strict_edge_semantics;
+#[path = "directory-wrapper-strict-edge-semantics.rs"]
+mod directory_wrapper_strict_edge_semantics;
 #[path = "dlet-semantics.rs"]
 mod dlet_semantics;
 #[path = "docstring-format-semantics.rs"]
