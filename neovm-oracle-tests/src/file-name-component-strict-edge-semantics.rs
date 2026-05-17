@@ -92,3 +92,44 @@ fn oracle_file_name_extension_and_version_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_name_with_extension_strict_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (file-name-with-extension "plain" "el")
+ (file-name-with-extension "plain" ".el")
+ (file-name-with-extension "plain.txt" "el")
+ (file-name-with-extension "archive.tar.gz" "xz")
+ (file-name-with-extension "/tmp/archive.tar.gz" ".xz")
+ (file-name-with-extension "/tmp/.hidden" "el")
+ (file-name-with-extension "/tmp/.hidden.el" "txt")
+ (file-name-with-extension "foo.~12~" "el")
+ (file-name-with-extension "foo.el.~12~" "txt")
+ (condition-case err
+     (file-name-with-extension "" "el")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension "plain" "")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension "plain" ".")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension "/tmp/dir/" "el")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension 42 "el")
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension "plain" 42)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (file-name-with-extension "plain")
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

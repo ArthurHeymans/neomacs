@@ -158,6 +158,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-name-nondirectory",
     "file-name-sans-extension",
     "file-name-sans-versions",
+    "file-name-with-extension",
     "file-newer-than-file-p",
     "file-readable-p",
     "file-regular-p",
