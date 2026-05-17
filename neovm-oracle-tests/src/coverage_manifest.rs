@@ -320,6 +320,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "obarrayp",
     "other-buffer",
     "overlayp",
+    "parse-colon-path",
     "plist-get",
     "plist-member",
     "plist-put",

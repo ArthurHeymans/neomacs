@@ -1309,6 +1309,8 @@ mod r#or;
 mod overlay_comprehensive_patterns;
 #[path = "overlay-helper-semantics.rs"]
 mod overlay_helper_semantics;
+#[path = "parse-colon-path-strict-edge-semantics.rs"]
+mod parse_colon_path_strict_edge_semantics;
 #[path = "parse-time-semantics.rs"]
 mod parse_time_semantics;
 #[path = "pcase-comprehensive-patterns.rs"]
