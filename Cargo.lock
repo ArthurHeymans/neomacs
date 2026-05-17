@@ -2686,6 +2686,7 @@ name = "neomacs-display-protocol"
 version = "0.0.2"
 dependencies = [
  "bitflags 2.11.1",
+ "tracing",
 ]
 
 [[package]]

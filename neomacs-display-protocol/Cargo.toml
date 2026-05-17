@@ -13,3 +13,4 @@ neo-term = []
 
 [dependencies]
 bitflags.workspace = true
+tracing.workspace = true

@@ -299,6 +299,10 @@ impl TtyRif {
             self.draw_child_border(child, origin_col, origin_row);
             self.rasterize_state_at(child, origin_col, origin_row, true);
         }
+
+        if std::env::var_os("NEOMACS_DUMP_TTY_GLYPHS").is_some() {
+            self.dump_tty_glyphs_to_log();
+        }
     }
 
     fn rasterize_state_at(
@@ -882,5 +886,24 @@ impl TtyRif {
             lines.push(line);
         }
         lines
+    }
+
+    fn dump_tty_glyphs_to_log(&self) {
+        tracing::info!(
+            target: "neomacs_display_protocol::tty_rif",
+            "tty glyph dump: cursor_visible={} cursor_row={} cursor_col={} cursor_shape={:?}",
+            self.cursor_visible,
+            self.cursor_row,
+            self.cursor_col,
+            self.cursor_shape
+        );
+        for (row, line) in self.dump_desired().iter().enumerate() {
+            tracing::info!(
+                target: "neomacs_display_protocol::tty_rif",
+                "tty row {:03}: {:?}",
+                row,
+                line
+            );
+        }
     }
 }

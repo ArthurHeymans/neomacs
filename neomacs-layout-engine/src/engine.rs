@@ -1401,10 +1401,14 @@ fn render_overlay_string(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     text_value: Value,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    base_face: &super::neovm_bridge::ResolvedFace,
+    base_face_id: u32,
     x: &mut f32,
     y: &mut f32,
     col: &mut usize,
     row: &mut usize,
+    cursor_info: &mut Option<CapturedCursorInfo>,
     hit_rows: &mut Vec<HitRow>,
     hit_row_charpos_start: &mut i64,
     anchor_charpos: i64,
@@ -1431,13 +1435,15 @@ fn render_overlay_string(
     let text_bytes = text_string.as_bytes();
     let total_chars = text_string.schars();
     let text_props = get_string_text_properties_table_for_value(text_value);
+    let mut string_face_cache = std::collections::HashMap::new();
 
-    // Overlay face is now handled by the builder; just track the face_id bump.
-    let face_id = if overlay_face.is_some() {
+    let (overlay_base_face, overlay_base_face_id) = if let Some(face) = overlay_face {
+        let face_id = *current_face_id;
+        apply_resolved_face(builder, face_id, face, None);
         *current_face_id += 1;
-        current_face_id.saturating_sub(1)
+        (face, face_id)
     } else {
-        current_face_id.saturating_sub(1)
+        (base_face, base_face_id)
     };
 
     let mut idx = 0;
@@ -1462,10 +1468,14 @@ fn render_overlay_string(
                     evaluator,
                     output_emitter,
                     display_prop,
+                    face_resolver,
+                    overlay_base_face,
+                    overlay_base_face_id,
                     x,
                     y,
                     col,
                     row,
+                    cursor_info,
                     hit_rows,
                     hit_row_charpos_start,
                     anchor_charpos,
@@ -1499,9 +1509,33 @@ fn render_overlay_string(
                     eval_display_space_as_width(&display_prop, *x, content_x, face_char_w, params);
                 if space_width > 0.0 && *x < max_x {
                     let width_cols = (space_width / face_char_w.max(1.0)).ceil().max(1.0) as u16;
+                    let face_id = overlay_string_face_id_at(
+                        text_props.as_ref(),
+                        char_idx,
+                        face_resolver,
+                        overlay_base_face,
+                        overlay_base_face_id,
+                        &mut string_face_cache,
+                        current_face_id,
+                        builder,
+                    );
                     builder.push_stretch(width_cols, face_id);
                     let glyph_start_x = *x;
                     let glyph_start_col = *col;
+                    capture_overlay_string_cursor(
+                        text_props.as_ref(),
+                        char_idx,
+                        cursor_info,
+                        glyph_start_x,
+                        *y,
+                        face_char_w,
+                        char_h,
+                        default_row_ascent,
+                        Color::from_pixel(overlay_base_face.bg),
+                        glyph_start_col,
+                        *row,
+                        Some(space_width.max(1.0)),
+                    );
                     *x += space_width;
                     *col += width_cols as usize;
                     output_emitter.emit_synthetic_text_span(
@@ -1574,6 +1608,17 @@ fn render_overlay_string(
             break;
         }
 
+        let face_id = overlay_string_face_id_at(
+            text_props.as_ref(),
+            char_idx - 1,
+            face_resolver,
+            overlay_base_face,
+            overlay_base_face_id,
+            &mut string_face_cache,
+            current_face_id,
+            builder,
+        );
+
         // Push glyph into the matrix builder (charpos=0 for overlay text).
         // Extenders merge into the preceding Char/Composite inside
         // push_char; emit via the regular entry point either way.
@@ -1585,6 +1630,20 @@ fn render_overlay_string(
 
         let glyph_start_x = *x;
         let glyph_start_col = *col;
+        capture_overlay_string_cursor(
+            text_props.as_ref(),
+            char_idx - 1,
+            cursor_info,
+            glyph_start_x,
+            *y,
+            face_char_w,
+            char_h,
+            default_row_ascent,
+            Color::from_pixel(overlay_base_face.bg),
+            glyph_start_col,
+            *row,
+            Some(ch_advance.max(1.0)),
+        );
         *x += ch_advance;
         *col += if is_extender {
             0
@@ -1603,6 +1662,83 @@ fn render_overlay_string(
             *col,
         );
     }
+}
+
+fn overlay_string_face_id_at(
+    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
+    char_idx: usize,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    base_face: &super::neovm_bridge::ResolvedFace,
+    base_face_id: u32,
+    string_face_cache: &mut std::collections::HashMap<Value, u32>,
+    current_face_id: &mut u32,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+) -> u32 {
+    let Some(props) = text_props else {
+        return base_face_id;
+    };
+    let face_prop = props.get_property(char_idx, Value::symbol("face"));
+    let font_lock_face_prop = props.get_property(char_idx, Value::symbol("font-lock-face"));
+    let Some(value) = face_prop.or(font_lock_face_prop) else {
+        return base_face_id;
+    };
+    if let Some(face_id) = string_face_cache.get(value) {
+        return *face_id;
+    }
+    let Some(resolved) = face_resolver.resolve_face_value_over(base_face, value) else {
+        return base_face_id;
+    };
+
+    let face_id = *current_face_id;
+    apply_resolved_face(builder, face_id, &resolved, None);
+    *current_face_id += 1;
+    string_face_cache.insert(*value, face_id);
+    face_id
+}
+
+fn capture_overlay_string_cursor(
+    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
+    char_idx: usize,
+    cursor_info: &mut Option<CapturedCursorInfo>,
+    x: f32,
+    y: f32,
+    face_w: f32,
+    face_h: f32,
+    face_ascent: f32,
+    bg: Color,
+    col: usize,
+    matrix_row: usize,
+    slot_width: Option<f32>,
+) {
+    if cursor_info.is_some() {
+        return;
+    }
+    let Some(props) = text_props else {
+        return;
+    };
+    let Some(cursor_prop) = props.get_property(char_idx, Value::symbol("cursor")) else {
+        return;
+    };
+    if cursor_prop.is_nil() {
+        return;
+    }
+
+    capture_cursor_info(
+        cursor_info,
+        CapturedCursorInfo {
+            x,
+            y,
+            face_w,
+            face_h,
+            face_ascent,
+            bg,
+            byte_idx: 0,
+            col,
+            matrix_row,
+            slot_width,
+            stretch_like: false,
+        },
+    );
 }
 
 fn measured_face_status_line_face(
@@ -3236,6 +3372,7 @@ impl LayoutEngine {
         let mut current_font_weight = default_resolved.font_weight;
         let mut current_font_italic = default_resolved.italic;
         let mut current_font_size_px = default_resolved.font_size.max(1.0).round() as i32;
+        let mut current_resolved_face = default_resolved.clone();
 
         self.current_resolved_family = current_font_family.clone();
         self.resolved_family_face_id = 0;
@@ -3523,6 +3660,7 @@ impl LayoutEngine {
                     current_font_weight = resolved.font_weight;
                     current_font_italic = resolved.italic;
                     current_font_size_px = resolved.font_size.max(1.0).round() as i32;
+                    current_resolved_face = resolved.clone();
                     self.current_resolved_family = current_font_family.clone();
                     self.resolved_family_face_id = face_id;
                     face_space_w = char_advance(
@@ -3801,10 +3939,14 @@ impl LayoutEngine {
                                     evaluator,
                                     &mut output_emitter,
                                     overlay_string.string,
+                                    face_resolver,
+                                    &current_resolved_face,
+                                    current_face_id.saturating_sub(1),
                                     &mut x,
                                     &mut y,
                                     &mut col,
                                     &mut row,
+                                    &mut cursor_info,
                                     &mut hit_rows,
                                     &mut hit_row_charpos_start,
                                     charpos,
@@ -5508,10 +5650,14 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             overlay_string.string,
+                            face_resolver,
+                            &current_resolved_face,
+                            current_face_id.saturating_sub(1),
                             &mut x,
                             &mut y,
                             &mut col,
                             &mut row,
+                            &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
                             charpos,
@@ -5631,10 +5777,14 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             overlay_string.string,
+                            face_resolver,
+                            &current_resolved_face,
+                            current_face_id.saturating_sub(1),
                             &mut x,
                             &mut y,
                             &mut col,
                             &mut row,
+                            &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
                             charpos,
@@ -5732,10 +5882,14 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     overlay_string.string,
+                    face_resolver,
+                    &current_resolved_face,
+                    current_face_id.saturating_sub(1),
                     &mut x,
                     &mut y,
                     &mut col,
                     &mut row,
+                    &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_charpos_start,
                     charpos,
