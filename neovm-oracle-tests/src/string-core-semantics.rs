@@ -231,6 +231,43 @@ fn oracle_copy_sequence_vectorlike_type_boundaries() {
 }
 
 #[test]
+fn oracle_copy_sequence_char_table_deep_subtables_shallow_slots() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/chartab.c:copy_char_table recursively copies sub-char-tables,
+    // but directly shares the parent/default/purpose/extra-slot values.
+    let form = r#"
+(let* ((payload (list 'shared))
+       (table (make-char-table 'generic 'default))
+       (parent (make-char-table 'generic 'parent-default)))
+  (set-char-table-range parent ?A 'parent-a)
+  (set-char-table-parent table parent)
+  (set-char-table-extra-slot table 0 payload)
+  (set-char-table-range table '(#x0100 . #x01ff) 'latin-extended)
+  (set-char-table-range table #x0101 'special-101)
+  (let ((copy (copy-sequence table)))
+    (set-char-table-range copy #x0101 'copy-101)
+    (setcar payload 'mutated)
+    (list
+     (eq table copy)
+     (eq (char-table-parent table) (char-table-parent copy))
+     (eq (char-table-extra-slot table 0) (char-table-extra-slot copy 0))
+     (list (char-table-range table #x0100)
+           (char-table-range table #x0101)
+           (char-table-range table #x0102))
+     (list (char-table-range copy #x0100)
+           (char-table-range copy #x0101)
+           (char-table-range copy #x0102))
+     (list (char-table-range table ?A)
+           (char-table-range copy ?A))
+     (list (char-table-extra-slot table 0)
+           (char-table-extra-slot copy 0)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_copy_sequence_circular_and_improper_list_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
