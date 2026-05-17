@@ -150,6 +150,8 @@ mod buffer_string;
 mod buffer_substring;
 #[path = "buffer-substring-advanced.rs"]
 mod buffer_substring_advanced;
+#[path = "buffer-text-deep-edge-semantics.rs"]
+mod buffer_text_deep_edge_semantics;
 #[path = "buffer-undo-posix-semantics.rs"]
 mod buffer_undo_posix_semantics;
 #[path = "bufferp-semantics.rs"]
