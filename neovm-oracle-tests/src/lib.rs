@@ -1434,6 +1434,8 @@ mod put_text_property_patterns;
 mod random_garbage_collect_semantics;
 #[path = "random-operations-comprehensive.rs"]
 mod random_operations_comprehensive;
+#[path = "random-seed-strict-edge-semantics.rs"]
+mod random_seed_strict_edge_semantics;
 #[path = "re-search-backward-advanced.rs"]
 mod re_search_backward_advanced;
 #[path = "re-search-forward.rs"]
