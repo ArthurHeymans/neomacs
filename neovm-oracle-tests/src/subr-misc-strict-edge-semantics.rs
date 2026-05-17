@@ -87,19 +87,23 @@ fn oracle_prop_defvar_lisp_runtime_variables_are_special() {
            command-line-args
            user-full-name
            user-login-name
-           user-real-login-name))
+           user-real-login-name
+           overriding-plist-environment))
  (let ((system-configuration "oracle-config")
        (system-configuration-options "oracle-options")
        (emacs-version "99.99-oracle")
        (system-name "oracle-host")
        (operating-system-release "oracle-kernel")
-       (command-line-args '("oracle-emacs" "--flag")))
+       (command-line-args '("oracle-emacs" "--flag"))
+       (overriding-plist-environment '((oracle-symbol oracle-prop oracle-value))))
    (list (symbol-value 'system-configuration)
          (funcall (lambda () system-configuration-options))
          emacs-version
          (funcall (lambda () system-name))
          operating-system-release
-         command-line-args)))
+         command-line-args
+         (symbol-value 'overriding-plist-environment)
+         (funcall (lambda () overriding-plist-environment)))))
 "#;
 
     assert_oracle_parity_with_bootstrap(form);
