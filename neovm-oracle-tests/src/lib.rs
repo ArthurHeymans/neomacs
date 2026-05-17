@@ -1747,6 +1747,8 @@ mod subr_arity_patterns;
 mod subr_basic_macro_semantics;
 #[path = "subr-misc-strict-edge-semantics.rs"]
 mod subr_misc_strict_edge_semantics;
+#[path = "subr-motion-semantics.rs"]
+mod subr_motion_semantics;
 #[path = "subr-operations-comprehensive.rs"]
 mod subr_operations_comprehensive;
 #[path = "subr-predicates.rs"]
