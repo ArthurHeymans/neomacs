@@ -1808,6 +1808,8 @@ mod text_properties_comprehensive;
 mod text_properties_patterns;
 #[path = "text-property-api-semantics.rs"]
 mod text_property_api_semantics;
+#[path = "text-property-boundary-strict-edge-semantics.rs"]
+mod text_property_boundary_strict_edge_semantics;
 #[path = "text-property-comprehensive.rs"]
 mod text_property_comprehensive;
 #[path = "text-property-manipulation.rs"]
