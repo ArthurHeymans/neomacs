@@ -35,6 +35,8 @@ mod apply_advanced;
 mod apply_funcall_advanced;
 #[path = "apply-funcall-comprehensive.rs"]
 mod apply_funcall_comprehensive;
+#[path = "apply-funcall-deep-edge-semantics.rs"]
+mod apply_funcall_deep_edge_semantics;
 #[path = "apply-funcall-edge-semantics.rs"]
 mod apply_funcall_edge_semantics;
 #[path = "apply-funcall-patterns.rs"]
