@@ -1145,6 +1145,8 @@ mod make_string_advanced;
 mod make_string_patterns;
 #[path = "make-symbol.rs"]
 mod make_symbol;
+#[path = "make-temp-file-strict-edge-semantics.rs"]
+mod make_temp_file_strict_edge_semantics;
 #[path = "make-vector-advanced.rs"]
 mod make_vector_advanced;
 #[path = "make-vector-patterns.rs"]
