@@ -1004,6 +1004,8 @@ mod line_edit_helper_semantics;
 mod line_number_misc_strict_edge_semantics;
 #[path = "line-position-advanced.rs"]
 mod line_position_advanced;
+#[path = "lisp-adv-constructs-via-binary-semantics.rs"]
+mod lisp_adv_constructs_via_binary_semantics;
 #[path = "lisp-constructs-via-binary-semantics.rs"]
 mod lisp_constructs_via_binary_semantics;
 mod list;
