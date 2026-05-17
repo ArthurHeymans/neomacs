@@ -77,6 +77,40 @@ fn oracle_prop_functionp_comprehensive() {
 }
 
 // ---------------------------------------------------------------------------
+// byte-code-function-p
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_byte_code_function_p_and_make_byte_code() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU data.c:Fbyte_code_function_p is true only for byte-code function
+    // objects. GNU alloc.c:Fmake_byte_code creates those objects after
+    // validating the slot layout.
+    let form = r#"
+(let ((bc (make-byte-code '() "\300\207" [42] 1)))
+  (list
+   (byte-code-function-p bc)
+   (functionp bc)
+   (closurep bc)
+   (compiled-function-p bc)
+   (funcall bc)
+   (byte-code-function-p (lambda (x) x))
+   (byte-code-function-p '(lambda (x) x))
+   (byte-code-function-p (symbol-function 'car))
+   (byte-code-function-p nil)
+   (condition-case err
+       (make-byte-code)
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (make-byte-code '() "not-byte-code" [] 0)
+     (error (list (car err) (cdr err))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+// ---------------------------------------------------------------------------
 // Complex: function introspection framework
 // ---------------------------------------------------------------------------
 
