@@ -548,6 +548,38 @@ fn oracle_assoc_string_matches_atom_string_and_symbol_entries() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_assoc_string_strict_edge_semantics() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/minibuf.c:Fassoc_string only converts symbol keys up front.
+    // Other key types are accepted until compare-strings is reached; non-string
+    // alist cars are skipped, and non-cons LIST tails terminate the scan.
+    let form = r#"
+(let ((capture (lambda (form)
+                 (condition-case err
+                     (eval form)
+                   (error (cons (car err) (cdr err)))))))
+  (list
+   (assoc-string "hit" '((1 . skip-number)
+                         (nil . skip-nil)
+                         ((hit) . skip-list)
+                         ("hit" . string-hit)))
+   (assoc-string "sym" '(42 sym ("sym" . string-hit)))
+   (assoc-string 'Sym '(("sym" . lower-string)
+                        (Sym . symbol-hit))
+                 '(any-non-nil-case-fold))
+   (assoc-string "x" "not-a-list")
+   (assoc-string 42 nil)
+   (funcall capture '(assoc-string 42 '(("42" . would-error))))
+   (funcall capture '(assoc-string 42 '(not-string-symbol-entry
+                                        ("42" . delayed-error))))
+   (funcall capture '(assoc-string "x"))
+   (funcall capture '(assoc-string "x" nil nil 'extra))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // Alist deduplication and key canonicalization
 // ---------------------------------------------------------------------------

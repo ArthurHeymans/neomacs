@@ -28,6 +28,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "ash",
     "asin",
     "assoc",
+    "assoc-string",
     "assq",
     "atan",
     "atom",
