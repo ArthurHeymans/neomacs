@@ -1442,6 +1442,8 @@ mod save_restriction_advanced;
 mod save_restriction_comprehensive;
 #[path = "search-backward-advanced.rs"]
 mod search_backward_advanced;
+#[path = "search-match-deep-via-binary-semantics.rs"]
+mod search_match_deep_via_binary_semantics;
 #[path = "search-operations.rs"]
 mod search_operations;
 #[path = "secure-hash-semantics.rs"]
