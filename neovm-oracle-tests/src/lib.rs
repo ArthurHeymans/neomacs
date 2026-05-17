@@ -1029,6 +1029,8 @@ mod list_creation_comprehensive;
 mod list_manipulation_comprehensive;
 #[path = "list-operations-advanced.rs"]
 mod list_operations_advanced;
+#[path = "list-seq-deep-interaction-semantics.rs"]
+mod list_seq_deep_interaction_semantics;
 #[path = "list-seq-strict-edge-semantics.rs"]
 mod list_seq_strict_edge_semantics;
 #[path = "list-tail-helper-semantics.rs"]
