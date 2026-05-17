@@ -47,3 +47,30 @@ fn oracle_directory_name_transform_root_and_empty_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_unhandled_file_name_directory_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (unhandled-file-name-directory "")
+ (unhandled-file-name-directory ".")
+ (unhandled-file-name-directory "plain")
+ (unhandled-file-name-directory "plain/")
+ (unhandled-file-name-directory "/")
+ (unhandled-file-name-directory "//")
+ (unhandled-file-name-directory "///")
+ (unhandled-file-name-directory "/tmp/file")
+ (let ((file-name-handler-alist nil))
+   (unhandled-file-name-directory "/tmp/no-handler"))
+ (condition-case err
+     (unhandled-file-name-directory)
+   (error (list (car err) (cdr err))))
+ (condition-case err
+     (unhandled-file-name-directory 42)
+   (error (list (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

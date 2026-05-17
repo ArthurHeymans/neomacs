@@ -429,6 +429,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "truncate",
     "type-of",
     "undo",
+    "unhandled-file-name-directory",
     "unibyte-char-to-multibyte",
     "unintern",
     "upcase",
