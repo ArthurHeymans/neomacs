@@ -8,6 +8,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "/",
     "/=",
     "1+",
+    "1value",
     "1-",
     "<",
     "<=",
