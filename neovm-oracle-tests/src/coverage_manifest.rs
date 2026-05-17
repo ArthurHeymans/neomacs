@@ -176,6 +176,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-ownership-preserved-p",
     "file-readable-p",
     "file-regular-p",
+    "file-size-human-readable",
+    "file-size-human-readable-iec",
     "file-symlink-p",
     "file-truename",
     "file-writable-p",
