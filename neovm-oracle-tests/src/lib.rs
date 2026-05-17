@@ -794,6 +794,8 @@ mod event_predicate_semantics;
 mod expt_sqrt_log_patterns;
 #[path = "field-at-pos-semantics.rs"]
 mod field_at_pos_semantics;
+#[path = "file-modes-strict-edge-semantics.rs"]
+mod file_modes_strict_edge_semantics;
 #[path = "file-name-semantics.rs"]
 mod file_name_semantics;
 #[path = "file-repository-version-semantics.rs"]
