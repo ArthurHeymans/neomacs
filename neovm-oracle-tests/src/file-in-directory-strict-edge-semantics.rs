@@ -63,3 +63,64 @@ fn oracle_file_in_directory_symlink_missing_and_self_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_in_directory_relative_prefix_and_escape_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-file-in-dir-prefix-" t))
+       (default-directory (file-name-as-directory dir))
+       (root (expand-file-name "root" dir))
+       (child (expand-file-name "child" root))
+       (root2 (expand-file-name "root2" dir))
+       (escape (expand-file-name "escape" dir))
+       (file (expand-file-name "file.txt" child))
+       (root2-file (expand-file-name "file.txt" root2))
+       (escape-file (expand-file-name "file.txt" escape))
+       (regular-dir-arg (expand-file-name "regular-dir-arg.txt" dir))
+       (inside-link-to-outside (expand-file-name "outside-link.txt" child)))
+  (unwind-protect
+      (progn
+        (make-directory child t)
+        (make-directory root2)
+        (make-directory escape)
+        (write-region "inside" nil file nil 'silent)
+        (write-region "root2" nil root2-file nil 'silent)
+        (write-region "escape" nil escape-file nil 'silent)
+        (write-region "not a directory" nil regular-dir-arg nil 'silent)
+        (make-symbolic-link "../escape/file.txt" inside-link-to-outside)
+        (list
+         ;; Relative names are expanded by `file-truename` from
+         ;; `default-directory`, and . / .. components are normalized before
+         ;; the component-wise parent comparison.
+         (file-in-directory-p "root/child/./file.txt" "root")
+         (file-in-directory-p "root/child/../child/file.txt" "root")
+         (file-in-directory-p "./root/child/file.txt" "./root/child/..")
+         ;; Textual path prefixes are not enough: root2 is a sibling, not a
+         ;; descendant of root.
+         (file-in-directory-p "root2/file.txt" "root")
+         (file-in-directory-p "root/../root2/file.txt" "root")
+         ;; Parent relation is directional.
+         (file-in-directory-p "root" "root/child")
+         ;; DIR must exist and must be a directory.
+         (file-in-directory-p "root/child/file.txt" regular-dir-arg)
+         ;; FILE is resolved through `file-truename`, so a symlink located
+         ;; under DIR but pointing outside DIR is rejected.
+         (file-in-directory-p inside-link-to-outside root)
+         ;; But the symlink target is accepted under its real parent.
+         (file-in-directory-p inside-link-to-outside escape))))
+    (ignore-errors (delete-file inside-link-to-outside))
+    (ignore-errors (delete-file regular-dir-arg))
+    (ignore-errors (delete-file escape-file))
+    (ignore-errors (delete-file root2-file))
+    (ignore-errors (delete-file file))
+    (ignore-errors (delete-directory escape))
+    (ignore-errors (delete-directory root2))
+    (ignore-errors (delete-directory child))
+    (ignore-errors (delete-directory root))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
