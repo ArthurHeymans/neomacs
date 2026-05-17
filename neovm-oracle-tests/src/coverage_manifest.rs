@@ -121,6 +121,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "delete-region",
     "delq",
     "directory-file-name",
+    "directory-files",
     "directory-name-p",
     "downcase",
     "elt",
