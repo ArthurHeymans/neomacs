@@ -6378,6 +6378,12 @@ impl Context {
         self.quit_flag
     }
 
+    /// GNU `QUITP`: true only when a quit is pending and `inhibit-quit` is nil.
+    #[inline(always)]
+    pub(crate) fn quit_pending(&self) -> bool {
+        !self.quit_flag.is_nil() && self.inhibit_quit.is_nil()
+    }
+
     #[inline(always)]
     pub(crate) fn set_quit_flag_value(&mut self, value: Value) {
         self.quit_flag = value;
@@ -6439,6 +6445,10 @@ impl Context {
             .copied()
             .unwrap_or(Value::NIL)
             .is_truthy()
+    }
+
+    pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
+        self.processes.open_channel_for_module(process)
     }
 
     fn should_ignore_while_no_input_event(&self, event: &crate::keyboard::InputEvent) -> bool {

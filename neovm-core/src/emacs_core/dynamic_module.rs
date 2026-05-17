@@ -13,8 +13,9 @@ use libloading::Library;
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
-use super::intern::{intern, resolve_sym};
+use super::intern::{intern, intern_lisp_string, resolve_sym};
 use super::value::Value;
+use crate::heap_types::LispString;
 use crate::tagged::header::{EmacsFinalizer, ModuleFunctionObj, UserPtrObj, VecLikeType};
 
 // ============================================================================
@@ -53,8 +54,8 @@ pub enum emacs_process_input_result {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct emacs_time {
-    pub seconds: i64,
-    pub nanoseconds: i64,
+    pub tv_sec: libc::time_t,
+    pub tv_nsec: libc::c_long,
 }
 
 pub type emacs_limb_t = u64;
@@ -319,6 +320,8 @@ static LOADED_MODULES: Mutex<Option<HashMap<String, LoadedModule>>> = Mutex::new
 thread_local! {
     static GLOBAL_REFS: std::cell::RefCell<Vec<Option<GlobalRefEntry>>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    static ACTIVE_ENVS: std::cell::RefCell<Vec<*mut emacs_env_private>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 struct GlobalRefEntry {
@@ -409,6 +412,16 @@ fn lisp_to_value(env: *mut emacs_env, val: Value) -> emacs_value {
     }
 }
 
+fn lisp_to_value_ignoring_pending_exit(env: *mut emacs_env, val: Value) -> emacs_value {
+    if env.is_null() {
+        return std::ptr::null_mut::<emacs_value_tag>();
+    }
+    unsafe {
+        let priv_ = &mut *(*env).private_members;
+        allocate_emacs_value(&mut priv_.storage, val)
+    }
+}
+
 // ============================================================================
 // Non-local exits
 // ============================================================================
@@ -420,6 +433,10 @@ fn check_pending_non_local_exit(env: *mut emacs_env) -> bool {
     unsafe { (*env).private_members.as_ref() }
         .map(|p| p.pending_non_local_exit != emacs_funcall_exit::Return)
         .unwrap_or(false)
+}
+
+fn module_function_begin(env: *mut emacs_env) -> bool {
+    !env.is_null() && !check_pending_non_local_exit(env)
 }
 
 unsafe fn set_pending_signal(env: *mut emacs_env, symbol: &str, data: Value) {
@@ -444,6 +461,49 @@ pub(crate) fn collect_dynamic_module_gc_roots(roots: &mut Vec<Value>) {
                 .filter_map(|entry| entry.as_ref().map(|entry| entry.value)),
         );
     });
+    ACTIVE_ENVS.with(|envs| {
+        for &env_priv in envs.borrow().iter() {
+            if env_priv.is_null() {
+                continue;
+            }
+            unsafe {
+                let priv_ = &*env_priv;
+                roots.push(priv_.non_local_exit_symbol);
+                roots.push(priv_.non_local_exit_data);
+                let mut frame = &priv_.storage.initial as *const emacs_value_frame;
+                while !frame.is_null() {
+                    let frame_ref = &*frame;
+                    for item in frame_ref.objects.iter().take(frame_ref.offset) {
+                        roots.push(item.v);
+                    }
+                    frame = frame_ref.next;
+                }
+            }
+        }
+    });
+}
+
+struct ActiveModuleEnv {
+    env_priv: *mut emacs_env_private,
+}
+
+impl ActiveModuleEnv {
+    fn push(env_priv: *mut emacs_env_private) -> Self {
+        ACTIVE_ENVS.with(|envs| envs.borrow_mut().push(env_priv));
+        Self { env_priv }
+    }
+}
+
+impl Drop for ActiveModuleEnv {
+    fn drop(&mut self) {
+        ACTIVE_ENVS.with(|envs| {
+            let mut envs = envs.borrow_mut();
+            let last = envs
+                .pop()
+                .expect("active module environment stack underflow");
+            debug_assert_eq!(last, self.env_priv);
+        });
+    }
 }
 
 unsafe fn module_handle_nonlocal_exit(env: *mut emacs_env, flow: Flow) {
@@ -647,10 +707,10 @@ unsafe extern "C" fn module_non_local_exit_get(
         let status = priv_.pending_non_local_exit;
         if status != emacs_funcall_exit::Return {
             if !symbol.is_null() {
-                *symbol = lisp_to_value(env, priv_.non_local_exit_symbol);
+                *symbol = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_symbol);
             }
             if !data.is_null() {
-                *data = lisp_to_value(env, priv_.non_local_exit_data);
+                *data = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_data);
             }
         }
         status
@@ -695,31 +755,19 @@ unsafe extern "C" fn module_intern(
     env: *mut emacs_env,
     name: *const std::ffi::c_char,
 ) -> emacs_value {
-    if name.is_null() || env.is_null() {
+    if name.is_null() || !module_function_begin(env) {
         return std::ptr::null_mut();
     }
     let cstr = unsafe { CStr::from_ptr(name) };
-    let s = match cstr.to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            unsafe {
-                let priv_ = &mut *(*env).private_members;
-                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                priv_.non_local_exit_symbol = Value::from_sym_id(intern("error"));
-                priv_.non_local_exit_data =
-                    Value::from_sym_id(intern("non-utf-8-string-in-intern"));
-            }
-            return std::ptr::null_mut();
-        }
-    };
-    let val = Value::from_sym_id(intern(s));
+    let name = LispString::from_emacs_bytes(cstr.to_bytes().to_vec());
+    let val = Value::from_sym_id(intern_lisp_string(&name));
     lisp_to_value(env, val)
 }
 
 // --- Type conversion ---
 
 unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> emacs_value {
-    if env.is_null() || arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return std::ptr::null_mut();
     }
     let val = value_to_lisp(arg);
@@ -756,25 +804,22 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
     lisp_to_value(env, sym)
 }
 
-unsafe extern "C" fn module_is_not_nil(_env: *mut emacs_env, arg: emacs_value) -> bool {
-    if arg.is_null() {
+unsafe extern "C" fn module_is_not_nil(env: *mut emacs_env, arg: emacs_value) -> bool {
+    if !module_function_begin(env) || arg.is_null() {
         return false;
     }
     !value_to_lisp(arg).is_nil()
 }
 
-unsafe extern "C" fn module_eq(_env: *mut emacs_env, a: emacs_value, b: emacs_value) -> bool {
-    if a.is_null() || b.is_null() {
+unsafe extern "C" fn module_eq(env: *mut emacs_env, a: emacs_value, b: emacs_value) -> bool {
+    if !module_function_begin(env) || a.is_null() || b.is_null() {
         return false;
     }
     value_to_lisp(a) == value_to_lisp(b)
 }
 
 unsafe extern "C" fn module_extract_integer(env: *mut emacs_env, arg: emacs_value) -> i64 {
-    if arg.is_null() {
-        return 0;
-    }
-    if check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || arg.is_null() {
         return 0;
     }
     let val = value_to_lisp(arg);
@@ -801,17 +846,14 @@ unsafe extern "C" fn module_extract_integer(env: *mut emacs_env, arg: emacs_valu
 }
 
 unsafe extern "C" fn module_make_integer(env: *mut emacs_env, n: i64) -> emacs_value {
-    if env.is_null() {
+    if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
     lisp_to_value(env, Value::fixnum(n))
 }
 
 unsafe extern "C" fn module_extract_float(env: *mut emacs_env, arg: emacs_value) -> f64 {
-    if arg.is_null() {
-        return 0.0;
-    }
-    if check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || arg.is_null() {
         return 0.0;
     }
     let val = value_to_lisp(arg);
@@ -829,7 +871,7 @@ unsafe extern "C" fn module_extract_float(env: *mut emacs_env, arg: emacs_value)
 }
 
 unsafe extern "C" fn module_make_float(env: *mut emacs_env, d: f64) -> emacs_value {
-    if env.is_null() {
+    if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
     lisp_to_value(env, Value::make_float(d))
@@ -843,10 +885,7 @@ unsafe extern "C" fn module_copy_string_contents(
     buf: *mut std::ffi::c_char,
     len: *mut isize,
 ) -> bool {
-    if value.is_null() || len.is_null() {
-        return false;
-    }
-    if check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || value.is_null() || len.is_null() {
         return false;
     }
     let val = value_to_lisp(value);
@@ -932,7 +971,7 @@ unsafe extern "C" fn module_make_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if env.is_null() || len < 0 || check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || len < 0 {
         return std::ptr::null_mut();
     }
     if len > 0 && str.is_null() {
@@ -968,7 +1007,7 @@ unsafe extern "C" fn module_make_unibyte_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if env.is_null() || len < 0 || check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || len < 0 {
         return std::ptr::null_mut();
     }
     if len > 0 && str.is_null() {
@@ -988,7 +1027,7 @@ unsafe extern "C" fn module_make_user_ptr(
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
     ptr: *mut c_void,
 ) -> emacs_value {
-    if env.is_null() {
+    if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
     let val = crate::tagged::gc::with_tagged_heap(|h| h.alloc_user_ptr(ptr, fin));
@@ -996,7 +1035,7 @@ unsafe extern "C" fn module_make_user_ptr(
 }
 
 unsafe extern "C" fn module_get_user_ptr(env: *mut emacs_env, arg: emacs_value) -> *mut c_void {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return std::ptr::null_mut();
     }
     let val = value_to_lisp(arg);
@@ -1017,7 +1056,7 @@ unsafe extern "C" fn module_get_user_ptr(env: *mut emacs_env, arg: emacs_value) 
 }
 
 unsafe extern "C" fn module_set_user_ptr(env: *mut emacs_env, arg: emacs_value, ptr: *mut c_void) {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return;
     }
     let val = value_to_lisp(arg);
@@ -1044,7 +1083,7 @@ unsafe extern "C" fn module_get_user_finalizer(
     env: *mut emacs_env,
     uptr: emacs_value,
 ) -> Option<unsafe extern "C" fn(*mut c_void)> {
-    if uptr.is_null() {
+    if !module_function_begin(env) || uptr.is_null() {
         return None;
     }
     let val = value_to_lisp(uptr);
@@ -1069,7 +1108,7 @@ unsafe extern "C" fn module_set_user_finalizer(
     arg: emacs_value,
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return;
     }
     let val = value_to_lisp(arg);
@@ -1099,7 +1138,7 @@ unsafe extern "C" fn module_vec_get(
     vector: emacs_value,
     index: isize,
 ) -> emacs_value {
-    if env.is_null() || vector.is_null() || index < 0 {
+    if !module_function_begin(env) || vector.is_null() || index < 0 {
         return std::ptr::null_mut();
     }
     let val = value_to_lisp(vector);
@@ -1131,7 +1170,7 @@ unsafe extern "C" fn module_vec_set(
     index: isize,
     value: emacs_value,
 ) {
-    if env.is_null() || vector.is_null() || index < 0 {
+    if !module_function_begin(env) || vector.is_null() || index < 0 {
         return;
     }
     let val = value_to_lisp(vector);
@@ -1164,7 +1203,7 @@ unsafe extern "C" fn module_vec_set(
 }
 
 unsafe extern "C" fn module_vec_size(env: *mut emacs_env, vector: emacs_value) -> isize {
-    if vector.is_null() {
+    if !module_function_begin(env) || vector.is_null() {
         return 0;
     }
     let val = value_to_lisp(vector);
@@ -1185,7 +1224,9 @@ unsafe extern "C" fn module_vec_size(env: *mut emacs_env, vector: emacs_value) -
 // --- Quit / Input ---
 
 unsafe extern "C" fn module_should_quit(env: *mut emacs_env) -> bool {
-    let _ = env;
+    if env.is_null() || check_pending_non_local_exit(env) {
+        return false;
+    }
     MODULE_CTX.with(|ctx_cell| {
         let ctx_ptr = ctx_cell.get();
         if ctx_ptr.is_null() {
@@ -1193,13 +1234,15 @@ unsafe extern "C" fn module_should_quit(env: *mut emacs_env) -> bool {
         }
         unsafe {
             let ctx = &*ctx_ptr;
-            !ctx.quit_flag_value().is_nil()
+            ctx.quit_pending()
         }
     })
 }
 
 unsafe extern "C" fn module_process_input(env: *mut emacs_env) -> emacs_process_input_result {
-    let _ = env;
+    if !module_function_begin(env) {
+        return emacs_process_input_result::Quit;
+    }
     MODULE_CTX.with(|ctx_cell| {
         let ctx_ptr = ctx_cell.get();
         if ctx_ptr.is_null() {
@@ -1207,11 +1250,12 @@ unsafe extern "C" fn module_process_input(env: *mut emacs_env) -> emacs_process_
         }
         unsafe {
             let ctx = &mut *ctx_ptr;
-            let _ = ctx.maybe_quit();
-            if !ctx.quit_flag_value().is_nil() {
-                emacs_process_input_result::Quit
-            } else {
-                emacs_process_input_result::Continue
+            match ctx.maybe_quit() {
+                Ok(()) => emacs_process_input_result::Continue,
+                Err(flow) => {
+                    module_handle_nonlocal_exit(env, flow);
+                    emacs_process_input_result::Quit
+                }
             }
         }
     })
@@ -1220,10 +1264,10 @@ unsafe extern "C" fn module_process_input(env: *mut emacs_env) -> emacs_process_
 // --- Time ---
 
 unsafe extern "C" fn module_extract_time(env: *mut emacs_env, arg: emacs_value) -> emacs_time {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return emacs_time {
-            seconds: 0,
-            nanoseconds: 0,
+            tv_sec: 0,
+            tv_nsec: 0,
         };
     }
     let val = value_to_lisp(arg);
@@ -1244,15 +1288,15 @@ unsafe extern "C" fn module_extract_time(env: *mut emacs_env, arg: emacs_value) 
             let seconds = (sec_high << 16) | (sec_low as u16 as i64);
             let nanoseconds = micros * 1000 + picos / 1000;
             return emacs_time {
-                seconds,
-                nanoseconds,
+                tv_sec: seconds as libc::time_t,
+                tv_nsec: nanoseconds as libc::c_long,
             };
         }
     }
     if let Some(n) = val.as_fixnum() {
         return emacs_time {
-            seconds: n,
-            nanoseconds: 0,
+            tv_sec: n as libc::time_t,
+            tv_nsec: 0,
         };
     }
     if !env.is_null() {
@@ -1264,20 +1308,22 @@ unsafe extern "C" fn module_extract_time(env: *mut emacs_env, arg: emacs_value) 
         }
     }
     emacs_time {
-        seconds: 0,
-        nanoseconds: 0,
+        tv_sec: 0,
+        tv_nsec: 0,
     }
 }
 
 unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> emacs_value {
-    if env.is_null() {
+    if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
+    let seconds = time.tv_sec as i64;
+    let nanoseconds = time.tv_nsec as i64;
     let list = Value::list(vec![
-        Value::fixnum((time.seconds >> 16) & 0xFFFF),
-        Value::fixnum(time.seconds & 0xFFFF),
-        Value::fixnum(time.nanoseconds / 1000),
-        Value::fixnum((time.nanoseconds % 1000) * 1000),
+        Value::fixnum((seconds >> 16) & 0xFFFF),
+        Value::fixnum(seconds & 0xFFFF),
+        Value::fixnum(nanoseconds / 1000),
+        Value::fixnum((nanoseconds % 1000) * 1000),
     ]);
     lisp_to_value(env, list)
 }
@@ -1291,23 +1337,39 @@ unsafe extern "C" fn module_extract_big_integer(
     count: *mut isize,
     magnitude: *mut emacs_limb_t,
 ) -> bool {
-    if arg.is_null() || sign.is_null() || count.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return false;
     }
     let val = value_to_lisp(arg);
     if let Some(n) = val.as_fixnum() {
-        let abs_val = n.unsigned_abs();
-        if magnitude.is_null() || unsafe { *count } < 1 {
-            unsafe {
-                *sign = if n >= 0 { 1 } else { -1 };
+        unsafe {
+            if !sign.is_null() {
+                *sign = (n > 0) as std::ffi::c_int - (n < 0) as std::ffi::c_int;
             }
+        }
+        if n == 0 || count.is_null() {
+            return true;
+        }
+        let abs_val = n.unsigned_abs();
+        if magnitude.is_null() {
             unsafe {
                 *count = 1;
             }
             return true;
         }
+        if unsafe { *count } < 1 {
+            let actual = unsafe { *count };
+            unsafe {
+                *count = 1;
+                set_pending_signal(
+                    env,
+                    "memory-buffer-too-small",
+                    Value::list(vec![Value::fixnum(actual as i64), Value::fixnum(1)]),
+                );
+            }
+            return false;
+        }
         unsafe {
-            *sign = if n >= 0 { 1 } else { -1 };
             *magnitude = abs_val;
             *count = 1;
         }
@@ -1315,25 +1377,51 @@ unsafe extern "C" fn module_extract_big_integer(
     }
     if val.veclike_type() == Some(VecLikeType::Bignum) {
         let b = val.as_bignum().unwrap();
-        let is_neg = b.cmp0().is_lt();
+        let signum = b.cmp0();
+        let is_neg = signum.is_lt();
         let abs_b = if is_neg {
             rug::Integer::from(-b)
         } else {
             b.clone()
         };
+        unsafe {
+            if !sign.is_null() {
+                *sign = if signum.is_gt() {
+                    1
+                } else if signum.is_lt() {
+                    -1
+                } else {
+                    0
+                };
+            }
+        }
+        if count.is_null() {
+            return true;
+        }
         let digits = abs_b.to_digits::<u8>(rug::integer::Order::LsfLe);
         let num_limbs = (digits.len() + 7) / 8;
-        if magnitude.is_null() || unsafe { *count } < num_limbs as isize {
-            unsafe {
-                *sign = if is_neg { -1 } else { 1 };
-            }
+        if magnitude.is_null() {
             unsafe {
                 *count = num_limbs as isize;
             }
             return true;
         }
+        if unsafe { *count } < num_limbs as isize {
+            let actual = unsafe { *count };
+            unsafe {
+                *count = num_limbs as isize;
+                set_pending_signal(
+                    env,
+                    "memory-buffer-too-small",
+                    Value::list(vec![
+                        Value::fixnum(actual as i64),
+                        Value::fixnum(num_limbs as i64),
+                    ]),
+                );
+            }
+            return false;
+        }
         unsafe {
-            *sign = if is_neg { -1 } else { 1 };
             *count = num_limbs as isize;
             let mut padded = digits.clone();
             padded.resize(num_limbs * 8, 0);
@@ -1364,7 +1452,16 @@ unsafe extern "C" fn module_make_big_integer(
     count: isize,
     magnitude: *const emacs_limb_t,
 ) -> emacs_value {
-    if env.is_null() || magnitude.is_null() || count <= 0 {
+    if !module_function_begin(env) {
+        return std::ptr::null_mut();
+    }
+    if sign == 0 {
+        return lisp_to_value(env, Value::fixnum(0));
+    }
+    if count == 0 {
+        return lisp_to_value(env, Value::fixnum(0));
+    }
+    if magnitude.is_null() || count < 0 {
         return std::ptr::null_mut();
     }
     let mut bytes = Vec::with_capacity(count as usize * 8);
@@ -1396,7 +1493,7 @@ unsafe extern "C" fn module_get_function_finalizer(
     env: *mut emacs_env,
     arg: emacs_value,
 ) -> Option<unsafe extern "C" fn(*mut c_void)> {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return None;
     }
     let val = value_to_lisp(arg);
@@ -1422,7 +1519,7 @@ unsafe extern "C" fn module_set_function_finalizer(
     arg: emacs_value,
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {
-    if arg.is_null() {
+    if !module_function_begin(env) || arg.is_null() {
         return;
     }
     let val = value_to_lisp(arg);
@@ -1449,17 +1546,37 @@ unsafe extern "C" fn module_set_function_finalizer(
 
 unsafe extern "C" fn module_open_channel(
     env: *mut emacs_env,
-    _pipe_process: emacs_value,
+    pipe_process: emacs_value,
 ) -> std::ffi::c_int {
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("error"));
-            priv_.non_local_exit_data = Value::string("module channel support not yet implemented");
-        }
+    if !module_function_begin(env) || pipe_process.is_null() {
+        return -1;
     }
-    -1
+    let process = value_to_lisp(pipe_process);
+    MODULE_CTX.with(|ctx_cell| {
+        let ctx_ptr = ctx_cell.get();
+        if ctx_ptr.is_null() {
+            unsafe {
+                set_pending_signal(
+                    env,
+                    "error",
+                    Value::list(vec![Value::string(
+                        "no evaluator context available for module open_channel",
+                    )]),
+                );
+            }
+            return -1;
+        }
+        unsafe {
+            let ctx = &mut *ctx_ptr;
+            match ctx.open_channel_for_module(process) {
+                Ok(fd) => fd,
+                Err(flow) => {
+                    module_handle_nonlocal_exit(env, flow);
+                    -1
+                }
+            }
+        }
+    })
 }
 
 // --- Interactive ---
@@ -1469,7 +1586,7 @@ unsafe extern "C" fn module_make_interactive(
     function: emacs_value,
     spec: emacs_value,
 ) {
-    if function.is_null() || env.is_null() {
+    if !module_function_begin(env) || function.is_null() {
         return;
     }
     let func_val = value_to_lisp(function);
@@ -1478,7 +1595,11 @@ unsafe extern "C" fn module_make_interactive(
         if func_val.veclike_type() == Some(VecLikeType::ModuleFunction) {
             unsafe {
                 let mf = veclike_ptr as *mut ModuleFunctionObj;
-                (*mf).interactive_form = spec_val;
+                (*mf).interactive_form = if spec_val.is_nil() {
+                    Value::list(vec![Value::symbol("interactive")])
+                } else {
+                    Value::list(vec![Value::symbol("interactive"), spec_val])
+                };
             }
             return;
         }
@@ -1503,10 +1624,7 @@ unsafe extern "C" fn module_make_function(
     docstring: *const std::ffi::c_char,
     data: *mut c_void,
 ) -> emacs_value {
-    if env.is_null() {
-        return std::ptr::null_mut();
-    }
-    if check_pending_non_local_exit(env) {
+    if !module_function_begin(env) {
         return std::ptr::null_mut();
     }
     const EMACS_VARIADIC_FUNCTION: isize = -2;
@@ -1576,10 +1694,7 @@ unsafe extern "C" fn module_funcall(
     nargs: isize,
     args: *mut emacs_value,
 ) -> emacs_value {
-    if env.is_null() || func.is_null() {
-        return std::ptr::null_mut();
-    }
-    if check_pending_non_local_exit(env) {
+    if !module_function_begin(env) || func.is_null() {
         return std::ptr::null_mut();
     }
     let func_val = value_to_lisp(func);
@@ -1652,16 +1767,6 @@ unsafe extern "C" fn module_get_environment(rt: *mut emacs_runtime) -> *mut emac
 // ============================================================================
 
 pub fn load_module(ctx: &mut Context, path_str: String) -> EvalResult {
-    // Prevent loading the same module twice.
-    {
-        let guard = LOADED_MODULES.lock().unwrap();
-        if let Some(ref modules) = *guard {
-            if modules.contains_key(&path_str) {
-                return Ok(Value::T);
-            }
-        }
-    }
-
     let lib = unsafe { Library::new(&path_str) }.map_err(|e| {
         signal(
             "module-open-failed",
@@ -1757,11 +1862,14 @@ pub fn load_module(ctx: &mut Context, path_str: String) -> EvalResult {
     });
 
     set_module_context(ctx as *mut Context);
+    let active_env = ActiveModuleEnv::push(env_priv_ptr);
     let init_code = unsafe { init_fn_ptr(&mut *rt as *mut emacs_runtime) };
     clear_module_context();
 
+    ctx.maybe_quit()?;
     let env_priv_ref = unsafe { &*env_priv_ptr };
     module_signal_or_throw(env_priv_ref)?;
+    drop(active_env);
 
     if init_code != 0 {
         return Err(signal(
@@ -1873,15 +1981,20 @@ pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -
     }
 
     set_module_context(ctx as *mut Context);
+    let active_env = ActiveModuleEnv::push(priv_ptr);
     let result = unsafe { subr_fn(env_ptr, nargs, emacs_args.as_mut_ptr(), data) };
     clear_module_context();
 
-    ctx.maybe_quit().ok();
+    if let Err(flow) = ctx.maybe_quit() {
+        unsafe {
+            module_handle_nonlocal_exit(env_ptr, flow);
+        }
+    }
 
     let priv_ref = unsafe { &*priv_ptr };
-    module_signal_or_throw(priv_ref)?;
-
     let ret = value_to_lisp(result);
+    let exit = module_signal_or_throw(priv_ref);
+    drop(active_env);
 
     unsafe {
         finalize_storage(&mut env_priv.storage);
@@ -1889,5 +2002,173 @@ pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -
     drop(env);
     drop(env_priv);
 
+    exit?;
     Ok(ret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::emacs_core::value::list_to_vec;
+
+    unsafe extern "C" fn dummy_module_function(
+        _env: *mut emacs_env,
+        _nargs: isize,
+        _args: *mut emacs_value,
+        _data: *mut c_void,
+    ) -> emacs_value {
+        std::ptr::null_mut()
+    }
+
+    struct TestEnv {
+        env: Box<emacs_env>,
+        priv_: Box<emacs_env_private>,
+    }
+
+    impl TestEnv {
+        fn new() -> Self {
+            let mut priv_ = Box::new(emacs_env_private {
+                pending_non_local_exit: emacs_funcall_exit::Return,
+                non_local_exit_symbol: Value::NIL,
+                non_local_exit_data: Value::NIL,
+                storage: emacs_value_storage::new(),
+            });
+            let mut env = Box::new(unsafe { std::mem::zeroed::<emacs_env>() });
+            let env_ptr = &mut *env as *mut emacs_env;
+            let priv_ptr = &mut *priv_ as *mut emacs_env_private;
+            unsafe {
+                initialize_environment(env_ptr, priv_ptr);
+            }
+            Self { env, priv_ }
+        }
+
+        fn env_ptr(&mut self) -> *mut emacs_env {
+            &mut *self.env
+        }
+
+        fn priv_ptr(&mut self) -> *mut emacs_env_private {
+            &mut *self.priv_
+        }
+    }
+
+    impl Drop for TestEnv {
+        fn drop(&mut self) {
+            unsafe {
+                finalize_storage(&mut self.priv_.storage);
+            }
+        }
+    }
+
+    #[test]
+    fn module_make_interactive_wraps_specs_like_gnu() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+        let func = unsafe {
+            module_make_function(
+                env,
+                0,
+                0,
+                dummy_module_function,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+            )
+        };
+
+        unsafe {
+            module_make_interactive(env, func, lisp_to_value(env, Value::NIL));
+        }
+        let form = value_to_lisp(func)
+            .as_module_function()
+            .unwrap()
+            .interactive_form;
+        assert_eq!(
+            list_to_vec(&form).unwrap(),
+            vec![Value::symbol("interactive")]
+        );
+
+        let spec = lisp_to_value(env, Value::string("p"));
+        unsafe {
+            module_make_interactive(env, func, spec);
+        }
+        let form = value_to_lisp(func)
+            .as_module_function()
+            .unwrap()
+            .interactive_form;
+        assert_eq!(
+            list_to_vec(&form).unwrap(),
+            vec![Value::symbol("interactive"), Value::string("p")]
+        );
+    }
+
+    #[test]
+    fn active_module_environment_values_are_gc_roots() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+        let priv_ptr = fixture.priv_ptr();
+        let rooted = Value::string("module-local-root");
+        let _value = lisp_to_value(env, rooted);
+        unsafe {
+            (*priv_ptr).pending_non_local_exit = emacs_funcall_exit::Signal;
+            (*priv_ptr).non_local_exit_symbol = Value::symbol("error");
+            (*priv_ptr).non_local_exit_data = Value::list(vec![rooted]);
+        }
+
+        let active = ActiveModuleEnv::push(priv_ptr);
+        let mut roots = Vec::new();
+        collect_dynamic_module_gc_roots(&mut roots);
+        drop(active);
+
+        assert!(roots.contains(&rooted));
+        assert!(roots.contains(&Value::symbol("error")));
+    }
+
+    #[test]
+    fn module_big_integer_zero_and_null_outputs_match_gnu() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+
+        let zero = unsafe { module_make_big_integer(env, 0, 0, std::ptr::null()) };
+        assert_eq!(value_to_lisp(zero), Value::fixnum(0));
+
+        let zero_value = lisp_to_value(env, Value::fixnum(0));
+        let ok = unsafe {
+            module_extract_big_integer(
+                env,
+                zero_value,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        assert!(ok);
+        assert_eq!(
+            unsafe { (*fixture.priv_ptr()).pending_non_local_exit },
+            emacs_funcall_exit::Return
+        );
+    }
+
+    #[test]
+    fn module_extract_big_integer_reports_too_small_buffer() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+        let large = Value::make_integer(rug::Integer::from(1) << 80);
+        let value = lisp_to_value(env, large);
+        let mut sign = 0;
+        let mut count = 1;
+        let mut magnitude = [0_u64; 1];
+
+        let ok = unsafe {
+            module_extract_big_integer(env, value, &mut sign, &mut count, magnitude.as_mut_ptr())
+        };
+
+        assert!(!ok);
+        assert_eq!(sign, 1);
+        assert_eq!(count, 2);
+        let priv_ = unsafe { &*fixture.priv_ptr() };
+        assert_eq!(priv_.pending_non_local_exit, emacs_funcall_exit::Signal);
+        assert_eq!(
+            priv_.non_local_exit_symbol,
+            Value::symbol("memory-buffer-too-small")
+        );
+    }
 }

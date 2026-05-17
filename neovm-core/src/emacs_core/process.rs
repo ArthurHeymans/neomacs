@@ -1160,6 +1160,46 @@ impl ProcessManager {
         }
     }
 
+    pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
+        let id = resolve_process_or_wrong_type_any_in_manager(self, &process)?;
+        let proc = self
+            .get_any(id)
+            .ok_or_else(|| signal_wrong_type_processp(process))?;
+        if proc.kind != ProcessKind::Pipe {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("pipe-process-p"), process],
+            ));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let stdout = proc.child_stdout.as_ref().ok_or_else(|| {
+                signal(
+                    "error",
+                    vec![Value::string("Pipe process has no stdout file descriptor")],
+                )
+            })?;
+            let fd = unsafe { libc::dup(stdout.as_raw_fd()) };
+            if fd == -1 {
+                return Err(signal(
+                    "file-error",
+                    vec![Value::string("Cannot duplicate file descriptor")],
+                ));
+            }
+            Ok(fd)
+        }
+        #[cfg(not(unix))]
+        {
+            Err(signal(
+                "file-error",
+                vec![Value::string(
+                    "Cannot duplicate file descriptor on this platform",
+                )],
+            ))
+        }
+    }
+
     /// List all process ids.
     pub fn list_processes(&self) -> Vec<ProcessId> {
         self.processes.keys().copied().collect()
