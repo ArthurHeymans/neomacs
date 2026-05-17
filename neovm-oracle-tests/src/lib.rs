@@ -704,6 +704,8 @@ mod delete_char_patterns;
 mod delete_consecutive_dups_semantics;
 #[path = "delete-dups-semantics.rs"]
 mod delete_dups_semantics;
+#[path = "delete-file-strict-edge-semantics.rs"]
+mod delete_file_strict_edge_semantics;
 #[path = "delete-member-assoc-deep-interaction-semantics.rs"]
 mod delete_member_assoc_deep_interaction_semantics;
 #[path = "delete-operations.rs"]
