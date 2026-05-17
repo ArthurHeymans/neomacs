@@ -746,6 +746,8 @@ mod equality_hash_semantics;
 mod erase_buffer_advanced;
 #[path = "erase-buffer-patterns.rs"]
 mod erase_buffer_patterns;
+#[path = "error-flow-loop-via-binary-semantics.rs"]
+mod error_flow_loop_via_binary_semantics;
 #[path = "error-handling-comprehensive.rs"]
 mod error_handling_comprehensive;
 #[path = "error-handling-patterns.rs"]
