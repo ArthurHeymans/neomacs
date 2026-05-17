@@ -849,6 +849,8 @@ mod frame_configuration_semantics;
 mod frame_window_strict_edge_semantics;
 #[path = "frame-windows-min-size-semantics.rs"]
 mod frame_windows_min_size_semantics;
+#[path = "fset-marker-alias-edge-semantics.rs"]
+mod fset_marker_alias_edge_semantics;
 #[path = "fset-symbol-function.rs"]
 mod fset_symbol_function;
 #[path = "func-arity-semantics.rs"]
