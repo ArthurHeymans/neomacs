@@ -151,6 +151,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-accessible-directory-p",
     "file-attributes",
     "file-attributes-lessp",
+    "file-chase-links",
     "file-directory-p",
     "file-equal-p",
     "file-executable-p",

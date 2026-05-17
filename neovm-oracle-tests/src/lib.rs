@@ -808,6 +808,8 @@ mod field_at_pos_semantics;
 mod file_access_ownership_strict_edge_semantics;
 #[path = "file-attributes-strict-edge-semantics.rs"]
 mod file_attributes_strict_edge_semantics;
+#[path = "file-chase-links-strict-edge-semantics.rs"]
+mod file_chase_links_strict_edge_semantics;
 #[path = "file-has-changed-strict-edge-semantics.rs"]
 mod file_has_changed_strict_edge_semantics;
 #[path = "file-in-directory-strict-edge-semantics.rs"]
