@@ -155,6 +155,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-equal-p",
     "file-executable-p",
     "file-exists-p",
+    "file-has-changed-p",
     "file-in-directory-p",
     "file-modes",
     "file-name-absolute-p",
