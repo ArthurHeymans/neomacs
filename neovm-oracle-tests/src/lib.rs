@@ -1145,6 +1145,8 @@ mod macrop_obarrayp_daemonp_semantics;
 mod macrop_via_binary_semantics;
 #[path = "make-composed-keymap-semantics.rs"]
 mod make_composed_keymap_semantics;
+#[path = "make-empty-file-strict-edge-semantics.rs"]
+mod make_empty_file_strict_edge_semantics;
 #[path = "make-hash-table-advanced.rs"]
 mod make_hash_table_advanced;
 #[path = "make-list.rs"]

@@ -283,6 +283,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "make-byte-code",
     "make-char-table",
     "make-directory",
+    "make-empty-file",
     "make-hash-table",
     "make-keymap",
     "make-list",
