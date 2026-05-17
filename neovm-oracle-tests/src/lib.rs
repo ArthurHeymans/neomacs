@@ -725,6 +725,8 @@ mod derived_mode_semantics;
 mod directory_empty_strict_edge_semantics;
 #[path = "directory-files-and-attributes-strict-edge-semantics.rs"]
 mod directory_files_and_attributes_strict_edge_semantics;
+#[path = "directory-files-recursively-strict-edge-semantics.rs"]
+mod directory_files_recursively_strict_edge_semantics;
 #[path = "directory-files-strict-edge-semantics.rs"]
 mod directory_files_strict_edge_semantics;
 #[path = "directory-name-transform-strict-edge-semantics.rs"]

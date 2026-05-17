@@ -125,6 +125,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "directory-file-name",
     "directory-files",
     "directory-files-and-attributes",
+    "directory-files-recursively",
     "directory-name-p",
     "downcase",
     "elt",
