@@ -1527,6 +1527,28 @@ fn test_face_resolver_inverse_video() {
 }
 
 #[test]
+fn test_face_resolver_can_ignore_inverse_video_for_gui_menu_bar() {
+    let mut table = FaceTable::new();
+
+    let mut menu_face = NeoFace::new("menu");
+    menu_face.foreground = Some(NeoColor::rgb(0x12, 0x34, 0x56));
+    menu_face.background = Some(NeoColor::rgb(0xAB, 0xCD, 0xEF));
+    menu_face.inverse_video = Some(true);
+    table.define("menu", menu_face);
+
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("neo".into()));
+
+    let normal = resolver.resolve_named_face("menu");
+    assert_eq!(normal.fg, 0x00ABCDEF);
+    assert_eq!(normal.bg, 0x00123456);
+
+    let gui_menu = resolver.resolve_named_face_without_inverse_video("menu");
+    assert_eq!(gui_menu.fg, 0x00123456);
+    assert_eq!(gui_menu.bg, 0x00ABCDEF);
+    assert!(!gui_menu.terminal_inverse_video);
+}
+
+#[test]
 fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
     let _evaluator = neovm_core::emacs_core::Context::new();
 

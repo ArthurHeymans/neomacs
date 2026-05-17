@@ -1948,6 +1948,31 @@ impl FaceResolver {
         resolved
     }
 
+    /// Resolve a named face while ignoring its final `:inverse-video`
+    /// attribute.
+    ///
+    /// GNU's toolkit-backed menu bars use the `menu` face resources for
+    /// foreground/background/font, but the default `menu` defface has an
+    /// empty `x-toolkit` branch instead of the TTY/fallback inverse-video
+    /// branch.  Neomacs' GUI menu bar is custom-rendered, so use this helper
+    /// at that toolkit boundary: preserve the face's concrete attributes, but
+    /// do not swap foreground/background for `:inverse-video`.
+    pub fn resolve_named_face_without_inverse_video(&self, name: &str) -> ResolvedFace {
+        use neomacs_display_protocol::face::BasicFaceId;
+        let mut face = self.face_table.resolve(name);
+        face.inverse_video = None;
+        let mut resolved = self.realize_face(&face);
+        if let Some(basic) = BasicFaceId::from_name(name) {
+            resolved.face_id = basic.into();
+        } else {
+            let id = self.next_dynamic_id.get();
+            self.next_dynamic_id.set(id + 1);
+            resolved.face_id = id;
+        }
+        resolved.terminal_inverse_video = false;
+        resolved
+    }
+
     fn apply_inline_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
         // Resolve `:inherit` first so the inline face's own attributes
         // below override the inherited ones. Mirrors GNU

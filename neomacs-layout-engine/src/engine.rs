@@ -2745,7 +2745,7 @@ impl LayoutEngine {
             };
 
             if frame_params.menu_bar_height > 0.0 {
-                let menu_face = menu_face_resolver.resolve_named_face("menu");
+                let menu_face = menu_face_resolver.resolve_named_face_without_inverse_video("menu");
                 frame_display_state.gui_menu_bar =
                     Some(neomacs_display_protocol::glyph_matrix::GuiMenuBarState {
                         items: collect_gui_menu_bar_items(evaluator),
