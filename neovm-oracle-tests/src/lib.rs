@@ -824,6 +824,8 @@ mod file_expand_wildcards_strict_edge_semantics;
 mod file_has_changed_strict_edge_semantics;
 #[path = "file-in-directory-strict-edge-semantics.rs"]
 mod file_in_directory_strict_edge_semantics;
+#[path = "file-lock-strict-edge-semantics.rs"]
+mod file_lock_strict_edge_semantics;
 #[path = "file-modes-strict-edge-semantics.rs"]
 mod file_modes_strict_edge_semantics;
 #[path = "file-name-absolute-strict-edge-semantics.rs"]
