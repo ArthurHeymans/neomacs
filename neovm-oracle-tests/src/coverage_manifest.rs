@@ -499,6 +499,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "subrp",
     "suppress-keymap",
     "substitute-in-file-name",
+    "substitute-key-definition",
     "substring",
     "symbol-file",
     "symbol-function",
