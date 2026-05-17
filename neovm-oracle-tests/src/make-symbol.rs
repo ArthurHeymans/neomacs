@@ -25,6 +25,21 @@ fn oracle_prop_make_symbol_name() {
 }
 
 #[test]
+fn oracle_prop_make_symbol_reuses_name_string_object() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+      (let* ((name (copy-sequence "abc"))
+             (sym (make-symbol name)))
+        (aset name 1 ?Z)
+        (list (eq name (symbol-name sym))
+              name
+              (symbol-name sym)))"#;
+    let (o, n) = eval_oracle_and_neovm(form);
+    assert_ok_eq(r#"(t "aZc" "aZc")"#, &o, &n);
+}
+
+#[test]
 fn oracle_prop_make_symbol_not_interned() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
