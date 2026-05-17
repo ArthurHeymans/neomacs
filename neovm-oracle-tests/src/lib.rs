@@ -971,6 +971,8 @@ mod r#get;
 mod get_buffer_semantics;
 #[path = "get-file-buffer-semantics.rs"]
 mod get_file_buffer_semantics;
+#[path = "global-local-keymap-semantics.rs"]
+mod global_local_keymap_semantics;
 #[path = "goto-char.rs"]
 mod goto_char;
 #[path = "goto-char-advanced.rs"]
