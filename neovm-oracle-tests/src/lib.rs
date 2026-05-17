@@ -1239,6 +1239,8 @@ mod point_min;
 mod pos_bol_eol_semantics;
 #[path = "pos-read-byte-strict-edge-semantics.rs"]
 mod pos_read_byte_strict_edge_semantics;
+#[path = "posix-ntake-keymap-final-strict-edge-semantics.rs"]
+mod posix_ntake_keymap_final_strict_edge_semantics;
 #[path = "posn-object-semantics.rs"]
 mod posn_object_semantics;
 #[path = "pp-semantics.rs"]
