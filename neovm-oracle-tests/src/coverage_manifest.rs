@@ -184,6 +184,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-name-all-completions",
     "file-name-as-directory",
     "file-name-base",
+    "file-name-case-insensitive-p",
     "file-name-completion",
     "file-name-concat",
     "file-name-directory",

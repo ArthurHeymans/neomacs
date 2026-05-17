@@ -844,6 +844,8 @@ mod file_mode_symbolic_strict_edge_semantics;
 mod file_modes_strict_edge_semantics;
 #[path = "file-name-absolute-strict-edge-semantics.rs"]
 mod file_name_absolute_strict_edge_semantics;
+#[path = "file-name-case-insensitive-strict-edge-semantics.rs"]
+mod file_name_case_insensitive_strict_edge_semantics;
 #[path = "file-name-completion-strict-edge-semantics.rs"]
 mod file_name_completion_strict_edge_semantics;
 #[path = "file-name-component-strict-edge-semantics.rs"]
