@@ -1735,6 +1735,8 @@ mod string_width_advanced;
 mod subr_arity_advanced;
 #[path = "subr-arity-patterns.rs"]
 mod subr_arity_patterns;
+#[path = "subr-misc-strict-edge-semantics.rs"]
+mod subr_misc_strict_edge_semantics;
 #[path = "subr-operations-comprehensive.rs"]
 mod subr_operations_comprehensive;
 #[path = "subr-predicates.rs"]
