@@ -40,6 +40,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "beginning-of-line",
     "bobp",
     "bolp",
+    "bool-vector-p",
     "booleanp",
     "boundp",
     "buffer-base-buffer",

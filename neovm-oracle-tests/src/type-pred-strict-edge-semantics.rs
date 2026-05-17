@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_arrayp_vector() {
@@ -82,4 +82,36 @@ fn oracle_sequencep_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(sequencep 42)"#);
     assert_ok_eq("nil", &o, &n);
+}
+
+#[test]
+fn oracle_data_c_sequence_array_vector_predicate_matrix() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/data.c defines these as primitive tag predicates.  The matrix
+    // locks down the exact object-family split, especially bool-vectors and
+    // char-tables, which are easy to accidentally classify like normal vectors.
+    let form = r#"
+(let* ((ct (make-char-table 'syntax-table nil))
+       (bv (bool-vector t nil t))
+       (rec (record 'neovm-oracle-record 'a 'b))
+       (values (list nil '(a b) '(a . b) [] [a b] "abc" bv ct rec 42 'sym)))
+  (list
+   (mapcar (lambda (v)
+             (list (sequencep v)
+                   (arrayp v)
+                   (vectorp v)
+                   (vector-or-char-table-p v)
+                   (char-table-p v)
+                   (bool-vector-p v)
+                   (recordp v)))
+           values)
+   (condition-case err
+       (bool-vector-p)
+     (error (cons (car err) (cdr err))))
+   (condition-case err
+       (sequencep nil nil)
+     (error (cons (car err) (cdr err))))))
+"#;
+    assert_oracle_parity_with_bootstrap(form);
 }
