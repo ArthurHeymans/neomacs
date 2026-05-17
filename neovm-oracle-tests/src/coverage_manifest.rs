@@ -151,6 +151,8 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-name-absolute-p",
     "file-name-as-directory",
     "file-name-concat",
+    "file-name-directory",
+    "file-name-nondirectory",
     "file-newer-than-file-p",
     "file-readable-p",
     "file-regular-p",

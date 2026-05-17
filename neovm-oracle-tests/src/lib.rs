@@ -802,6 +802,8 @@ mod field_at_pos_semantics;
 mod file_modes_strict_edge_semantics;
 #[path = "file-name-absolute-strict-edge-semantics.rs"]
 mod file_name_absolute_strict_edge_semantics;
+#[path = "file-name-component-strict-edge-semantics.rs"]
+mod file_name_component_strict_edge_semantics;
 #[path = "file-name-concat-strict-edge-semantics.rs"]
 mod file_name_concat_strict_edge_semantics;
 #[path = "file-name-semantics.rs"]
