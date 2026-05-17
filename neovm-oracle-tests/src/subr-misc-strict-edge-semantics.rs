@@ -104,3 +104,40 @@ fn oracle_prop_defvar_lisp_runtime_variables_are_special() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_defvar_bool_int_runtime_variables_are_special() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (mapcar (lambda (sym)
+           (list sym (boundp sym) (special-variable-p sym)))
+         '(case-fold-search
+           debug-on-error
+           gc-cons-threshold
+           max-lisp-eval-depth
+           max-specpdl-size
+           inhibit-quit
+           noninteractive
+           purify-flag))
+ (let ((case-fold-search nil)
+       (debug-on-error t)
+       (gc-cons-threshold 1234567)
+       (max-lisp-eval-depth 9876)
+       (max-specpdl-size 8765)
+       (inhibit-quit t)
+       (noninteractive nil)
+       (purify-flag t))
+   (list (symbol-value 'case-fold-search)
+         (funcall (lambda () debug-on-error))
+         gc-cons-threshold
+         (funcall (lambda () max-lisp-eval-depth))
+         max-specpdl-size
+         inhibit-quit
+         noninteractive
+         purify-flag)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
