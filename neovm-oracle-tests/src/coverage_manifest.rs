@@ -156,6 +156,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "file-equal-p",
     "file-executable-p",
     "file-exists-p",
+    "file-expand-wildcards",
     "file-has-changed-p",
     "file-in-directory-p",
     "file-local-copy",
