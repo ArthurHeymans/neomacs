@@ -77,6 +77,8 @@ mod base64_semantics;
 mod beginning_of_line;
 #[path = "bidi-string-semantics.rs"]
 mod bidi_string_semantics;
+#[path = "binding-forms-via-binary-semantics.rs"]
+mod binding_forms_via_binary_semantics;
 #[path = "binding-scoping-deep-edge-semantics.rs"]
 mod binding_scoping_deep_edge_semantics;
 mod bitwise;
