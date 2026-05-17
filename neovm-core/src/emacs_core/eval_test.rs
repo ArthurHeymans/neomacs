@@ -1461,6 +1461,33 @@ fn redisplay_skips_callback_when_visible_state_is_unchanged() {
 }
 
 #[test]
+fn overlay_property_change_invalidates_redisplay_signature() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str(r#"(progn (insert "x") (setq neo-test-overlay (make-overlay 1 2)))"#)
+        .expect("overlay should be created");
+
+    let buffer_id = ev
+        .buffers
+        .current_buffer_id()
+        .expect("current buffer should exist");
+    let before = ev
+        .redisplay_buffer_signature(buffer_id)
+        .expect("buffer should have a redisplay signature");
+
+    ev.eval_str(r#"(overlay-put neo-test-overlay 'after-string "candidate")"#)
+        .expect("overlay-put should evaluate");
+    let after = ev
+        .redisplay_buffer_signature(buffer_id)
+        .expect("buffer should still have a redisplay signature");
+
+    assert_ne!(before, after);
+    assert_eq!(before.modified_tick, after.modified_tick);
+    assert_ne!(before.overlay_modified_tick, after.overlay_modified_tick);
+}
+
+#[test]
 fn redisplay_skips_callback_after_unwatched_symbol_value_change() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -2328,6 +2328,9 @@ pub(crate) fn builtin_overlay_put_in_buffers(
     };
     if let Some(buf_id) = resolve_overlay_buffer_id(overlay) {
         if changed {
+            if let Some(buf) = buffers.get_mut(buf_id) {
+                buf.increment_overlay_modified_tick();
+            }
             let evaporate = args[1].is_symbol_named("evaporate") && val.is_truthy();
             let is_empty = buffers
                 .get(buf_id)
@@ -2480,12 +2483,15 @@ pub(crate) fn builtin_move_overlay_in_buffers(
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
         let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
         buf.overlays.move_overlay(overlay, byte_beg, byte_end);
+        buf.increment_overlay_modified_tick();
         Ok(args[0])
     } else {
         if let Some(old_buf_id) = old_buf_id
             && let Some(buf) = buffers.get_mut(old_buf_id)
         {
-            buf.overlays.detach_overlay(overlay);
+            if buf.overlays.detach_overlay(overlay) {
+                buf.increment_overlay_modified_tick();
+            }
         }
 
         let new_buf = buffers
@@ -2498,13 +2504,16 @@ pub(crate) fn builtin_move_overlay_in_buffers(
             object.end = byte_end;
         });
         new_buf.overlays.insert_overlay(overlay);
+        new_buf.increment_overlay_modified_tick();
         if byte_beg == byte_end
             && new_buf
                 .overlays
                 .overlay_get_named(overlay, Value::symbol("evaporate"))
                 .is_some_and(|value| value.is_truthy())
         {
-            let _ = new_buf.overlays.delete_overlay(overlay);
+            if new_buf.overlays.delete_overlay(overlay) {
+                new_buf.increment_overlay_modified_tick();
+            }
         }
         Ok(args[0])
     }

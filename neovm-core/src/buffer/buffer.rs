@@ -1490,6 +1490,9 @@ pub struct Buffer {
     pub local_flags: u64,
     /// Overlays attached to the buffer.
     pub overlays: OverlayList,
+    /// GNU `BUF_OVERLAY_MODIFF`: incremented when live overlay ranges or
+    /// properties change so redisplay observes overlay-only UI updates.
+    pub overlay_modified_tick: i64,
     /// Shared undo owner for this text.
     pub undo_state: SharedUndoState,
 }
@@ -1553,6 +1556,7 @@ impl Buffer {
             // `make-local-variable` flips the bit.
             local_flags: 0,
             overlays: OverlayList::new(),
+            overlay_modified_tick: 1,
             undo_state: SharedUndoState::new(),
         }
     }
@@ -2201,6 +2205,14 @@ impl Buffer {
 
     pub fn save_modified_tick(&self) -> i64 {
         self.text.save_modified_tick()
+    }
+
+    pub fn overlay_modified_tick(&self) -> i64 {
+        self.overlay_modified_tick
+    }
+
+    pub fn increment_overlay_modified_tick(&mut self) {
+        self.overlay_modified_tick = self.overlay_modified_tick.wrapping_add(1);
     }
 
     pub fn is_modified(&self) -> bool {
@@ -3467,15 +3479,18 @@ impl BufferManager {
 
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        buf.overlays.delete_all_overlays();
+        if !buf.overlays.is_empty() {
+            buf.overlays.delete_all_overlays();
+            buf.increment_overlay_modified_tick();
+        }
         Some(())
     }
 
     pub fn delete_buffer_overlay(&mut self, id: BufferId, overlay_id: Value) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .overlays
-            .delete_overlay(overlay_id);
+        let buf = self.buffers.get_mut(&id)?;
+        if buf.overlays.delete_overlay(overlay_id) {
+            buf.increment_overlay_modified_tick();
+        }
         Some(())
     }
 

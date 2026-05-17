@@ -4528,6 +4528,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
                 })
                 .collect(),
         ),
+        overlay_modified_tick: 1,
         undo_state: SharedUndoState::from_parts(undo_list, false, false),
     }
 }
