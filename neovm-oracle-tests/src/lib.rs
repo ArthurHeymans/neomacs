@@ -1772,6 +1772,8 @@ mod substring;
 mod substring_advanced;
 #[path = "substring-strict-edge-semantics.rs"]
 mod substring_strict_edge_semantics;
+#[path = "suppress-keymap-semantics.rs"]
+mod suppress_keymap_semantics;
 mod symbol;
 #[path = "symbol-accessor-strict-edge-semantics.rs"]
 mod symbol_accessor_strict_edge_semantics;
