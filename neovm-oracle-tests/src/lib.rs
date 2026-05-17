@@ -574,6 +574,8 @@ mod completion_basic_semantics;
 mod concat_extended;
 #[path = "concat-extended-advanced.rs"]
 mod concat_extended_advanced;
+#[path = "concat-nconc-final-strict-edge-semantics.rs"]
+mod concat_nconc_final_strict_edge_semantics;
 mod cond;
 #[path = "cond-advanced.rs"]
 mod cond_advanced;
