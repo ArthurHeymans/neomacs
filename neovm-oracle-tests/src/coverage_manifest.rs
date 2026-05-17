@@ -138,6 +138,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "eval-region",
     "event-convert-list",
     "exp",
+    "expand-file-name",
     "expt",
     "fboundp",
     "featurep",
