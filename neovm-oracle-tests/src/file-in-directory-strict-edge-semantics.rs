@@ -124,3 +124,39 @@ fn oracle_file_in_directory_relative_prefix_and_escape_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_in_directory_file_name_handler_dispatch_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-file-in-dir-calls nil)
+  (defun neomacs--oracle-file-in-dir-file-handler (operation &rest args)
+    (push (list 'file operation args) neomacs--oracle-file-in-dir-calls)
+    (list 'file-handler operation args))
+  (defun neomacs--oracle-file-in-dir-dir-handler (operation &rest args)
+    (push (list 'dir operation args) neomacs--oracle-file-in-dir-calls)
+    (list 'dir-handler operation args))
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/oracle-file:" . neomacs--oracle-file-in-dir-file-handler)
+               ("\\`/oracle-dir:" . neomacs--oracle-file-in-dir-dir-handler))))
+        (list
+         (file-in-directory-p "/oracle-file:child" "/plain-dir")
+         neomacs--oracle-file-in-dir-calls
+         (setq neomacs--oracle-file-in-dir-calls nil)
+         (file-in-directory-p "/plain-file" "/oracle-dir:root")
+         neomacs--oracle-file-in-dir-calls
+         (setq neomacs--oracle-file-in-dir-calls nil)
+         ;; GNU probes FILE first, so this must dispatch to the file handler
+         ;; even when DIR has its own handler.
+         (file-in-directory-p "/oracle-file:child" "/oracle-dir:root")
+         neomacs--oracle-file-in-dir-calls))
+    (fmakunbound 'neomacs--oracle-file-in-dir-file-handler)
+    (fmakunbound 'neomacs--oracle-file-in-dir-dir-handler)
+    (makunbound 'neomacs--oracle-file-in-dir-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
