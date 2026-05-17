@@ -874,6 +874,8 @@ mod fillarray_advanced;
 mod fillarray_operations;
 #[path = "final-gaps-strict-edge-semantics.rs"]
 mod final_gaps_strict_edge_semantics;
+#[path = "find-backup-file-name-strict-edge-semantics.rs"]
+mod find_backup_file_name_strict_edge_semantics;
 #[path = "find-buffer-semantics.rs"]
 mod find_buffer_semantics;
 #[path = "flatten-tree-semantics.rs"]
