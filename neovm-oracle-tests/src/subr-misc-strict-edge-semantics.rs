@@ -68,3 +68,39 @@ fn oracle_prop_system_type_dynamic_binding_reaches_functions() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_defvar_lisp_runtime_variables_are_special() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(list
+ (mapcar (lambda (sym)
+           (list sym (boundp sym) (special-variable-p sym)))
+         '(system-type
+           system-configuration
+           system-configuration-options
+           system-configuration-features
+           emacs-version
+           system-name
+           operating-system-release
+           command-line-args
+           user-full-name
+           user-login-name
+           user-real-login-name))
+ (let ((system-configuration "oracle-config")
+       (system-configuration-options "oracle-options")
+       (emacs-version "99.99-oracle")
+       (system-name "oracle-host")
+       (operating-system-release "oracle-kernel")
+       (command-line-args '("oracle-emacs" "--flag")))
+   (list (symbol-value 'system-configuration)
+         (funcall (lambda () system-configuration-options))
+         emacs-version
+         (funcall (lambda () system-name))
+         operating-system-release
+         command-line-args)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
