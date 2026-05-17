@@ -1013,6 +1013,8 @@ mod load_history_semantics;
 mod log10_semantics;
 #[path = "looking-at-advanced.rs"]
 mod looking_at_advanced;
+#[path = "looking-at-pos-strict-edge-semantics.rs"]
+mod looking_at_pos_strict_edge_semantics;
 #[path = "lookup-key-advanced.rs"]
 mod lookup_key_advanced;
 #[path = "lsh-semantics.rs"]
