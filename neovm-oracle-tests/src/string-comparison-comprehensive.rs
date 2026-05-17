@@ -138,6 +138,28 @@ fn oracle_prop_string_comparison_greaterp_ordering() {
     assert_oracle_parity_with_bootstrap(form);
 }
 
+#[test]
+fn oracle_string_greaterp_symbol_and_error_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU subr.el defines string-greaterp by reversing the arguments to
+    // string-lessp.  GNU src/fns.c:string-lessp accepts symbols by their print
+    // names and rejects non-symbol, non-string inputs before comparison.
+    let form = r#"(list
+ (string-greaterp "b" "a")
+ (string-greaterp "a" "b")
+ (string-greaterp "a" "a")
+ (string-greaterp :beta :alpha)
+ (string-greaterp :alpha "beta")
+ (condition-case e
+     (string-greaterp 1 "a")
+   (error (list (car e) (cadr e))))
+ (condition-case e
+     (string-greaterp "a")
+   (error (list (car e) (cadr e)))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}
+
 // ---------------------------------------------------------------------------
 // compare-strings: all parameters (STR1 START1 END1 STR2 START2 END2 IGNORE-CASE)
 // ---------------------------------------------------------------------------

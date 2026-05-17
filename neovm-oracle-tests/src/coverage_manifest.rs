@@ -472,6 +472,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "string-equal",
     "string-equal-ignore-case",
     "string-fill",
+    "string-greaterp",
     "string-lessp",
     "string-limit",
     "string-lines",
