@@ -104,6 +104,8 @@ mod buffer_line_statistics_semantics;
 mod buffer_list_other_buffer_semantics;
 #[path = "buffer-local-default-value-edge-semantics.rs"]
 mod buffer_local_default_value_edge_semantics;
+#[path = "buffer-local-hook-unintern-strict-edge-semantics.rs"]
+mod buffer_local_hook_unintern_strict_edge_semantics;
 #[path = "buffer-local-set-state-semantics.rs"]
 mod buffer_local_set_state_semantics;
 #[path = "buffer-local-symbol-identity-semantics.rs"]
