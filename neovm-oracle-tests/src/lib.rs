@@ -830,6 +830,8 @@ mod file_name_semantics;
 mod file_newer_than_strict_edge_semantics;
 #[path = "file-predicate-strict-edge-semantics.rs"]
 mod file_predicate_strict_edge_semantics;
+#[path = "file-relative-name-strict-edge-semantics.rs"]
+mod file_relative_name_strict_edge_semantics;
 #[path = "file-remote-local-strict-edge-semantics.rs"]
 mod file_remote_local_strict_edge_semantics;
 #[path = "file-repository-version-semantics.rs"]
