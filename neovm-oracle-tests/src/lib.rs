@@ -874,6 +874,8 @@ mod function_equal_semantics;
 mod function_get_semantics;
 #[path = "function-introspect-strict-edge-semantics.rs"]
 mod function_introspect_strict_edge_semantics;
+#[path = "function-introspection-via-binary-semantics.rs"]
+mod function_introspection_via_binary_semantics;
 #[path = "gc-scan-strict-edge-semantics.rs"]
 mod gc_scan_strict_edge_semantics;
 #[path = "generator-semantics.rs"]
