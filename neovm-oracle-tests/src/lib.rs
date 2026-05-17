@@ -826,6 +826,8 @@ mod file_newer_than_strict_edge_semantics;
 mod file_predicate_strict_edge_semantics;
 #[path = "file-repository-version-semantics.rs"]
 mod file_repository_version_semantics;
+#[path = "file-truename-equal-strict-edge-semantics.rs"]
+mod file_truename_equal_strict_edge_semantics;
 #[path = "fillarray-advanced.rs"]
 mod fillarray_advanced;
 #[path = "fillarray-operations.rs"]
