@@ -1671,6 +1671,8 @@ mod subr_x_comprehensive;
 mod subst_char_in_string_comprehensive;
 #[path = "subst-char-in-string-semantics.rs"]
 mod subst_char_in_string_semantics;
+#[path = "substitute-in-file-name-strict-edge-semantics.rs"]
+mod substitute_in_file_name_strict_edge_semantics;
 mod substring;
 #[path = "substring-advanced.rs"]
 mod substring_advanced;
