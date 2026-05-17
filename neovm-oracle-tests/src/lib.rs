@@ -6,6 +6,8 @@ mod abbrev_comprehensive_patterns;
 mod abs;
 #[path = "accessible-keymaps-semantics.rs"]
 mod accessible_keymaps_semantics;
+#[path = "add-minor-mode-semantics.rs"]
+mod add_minor_mode_semantics;
 #[path = "add-to-list-semantics.rs"]
 mod add_to_list_semantics;
 #[path = "add-to-ordered-list-semantics.rs"]

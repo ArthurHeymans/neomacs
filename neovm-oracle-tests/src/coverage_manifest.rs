@@ -567,6 +567,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "accept-change-group",
     "activate-change-group",
     "add-hook",
+    "add-minor-mode",
     "add-to-invisibility-spec",
     "add-to-list",
     "add-to-ordered-list",
