@@ -917,6 +917,8 @@ mod insert_advanced;
 mod insert_buffer_comprehensive;
 #[path = "insert-char-operations.rs"]
 mod insert_char_operations;
+#[path = "interaction-patterns-strict-edge-semantics.rs"]
+mod interaction_patterns_strict_edge_semantics;
 #[path = "interactive-form-comprehensive.rs"]
 mod interactive_form_comprehensive;
 #[path = "interactive-patterns.rs"]
