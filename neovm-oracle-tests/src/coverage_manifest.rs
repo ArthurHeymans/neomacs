@@ -383,6 +383,7 @@ pub(crate) const ORACLE_TESTED_PRIMITIVE_NAMES: &[&str] = &[
     "remove-pos-from-symbol",
     "remove-text-properties",
     "rename-buffer",
+    "rename-file",
     "replace-match",
     "require",
     "reverse",

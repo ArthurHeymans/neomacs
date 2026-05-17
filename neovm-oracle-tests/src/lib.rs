@@ -1493,6 +1493,8 @@ mod remember_mouse_glyph_semantics;
 mod remove_text_properties_patterns;
 #[path = "rename-buffer-patterns.rs"]
 mod rename_buffer_patterns;
+#[path = "rename-file-strict-edge-semantics.rs"]
+mod rename_file_strict_edge_semantics;
 #[path = "replace-in-region-semantics.rs"]
 mod replace_in_region_semantics;
 #[path = "replace-match-advanced.rs"]
