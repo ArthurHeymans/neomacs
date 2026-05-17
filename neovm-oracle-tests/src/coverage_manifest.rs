@@ -695,6 +695,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "while-let",
     "with-current-buffer",
     "with-demoted-errors",
+    "with-environment-variables",
     "with-output-to-string",
     "with-silent-modifications",
     "with-temp-buffer",

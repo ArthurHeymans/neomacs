@@ -127,3 +127,41 @@ fn oracle_prop_substitute_env_in_file_name_uses_lisp_environment() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_with_environment_variables_scoping_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((process-environment (copy-sequence process-environment)))
+  (setenv "NEOMACS_ORACLE_WITH_ENV_A" "outer")
+  (setenv "NEOMACS_ORACLE_WITH_ENV_B" "outer-b")
+  (list
+   (with-environment-variables
+       (("NEOMACS_ORACLE_WITH_ENV_A" "inner")
+        ("NEOMACS_ORACLE_WITH_ENV_B" nil)
+        ("NEOMACS_ORACLE_WITH_ENV_C" "created"))
+     (list
+      (getenv "NEOMACS_ORACLE_WITH_ENV_A")
+      (getenv "NEOMACS_ORACLE_WITH_ENV_B")
+      (getenv-internal "NEOMACS_ORACLE_WITH_ENV_B" process-environment)
+      (getenv "NEOMACS_ORACLE_WITH_ENV_C")
+      (car process-environment)))
+   (list
+    (getenv "NEOMACS_ORACLE_WITH_ENV_A")
+    (getenv "NEOMACS_ORACLE_WITH_ENV_B")
+    (getenv "NEOMACS_ORACLE_WITH_ENV_C"))
+   (with-environment-variables (("NEOMACS_ORACLE_WITH_ENV_A" "level1"))
+     (with-environment-variables (("NEOMACS_ORACLE_WITH_ENV_A" "level2"))
+       (getenv "NEOMACS_ORACLE_WITH_ENV_A")))
+   (getenv "NEOMACS_ORACLE_WITH_ENV_A")
+   (condition-case err
+       (macroexpand '(with-environment-variables nil :body))
+     (error (list (car err) (cdr err))))
+   (condition-case err
+       (with-environment-variables "not-a-list" :body)
+     (error (list (car err) (cdr err)))))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
