@@ -633,6 +633,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "purecopy",
     "prepare-change-group",
     "define-error",
+    "define-prefix-command",
     "define-symbol-prop",
     "defmacro",
     "delay-warning",

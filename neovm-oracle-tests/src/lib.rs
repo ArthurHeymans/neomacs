@@ -687,6 +687,8 @@ mod define_error_semantics;
 mod define_key_advanced;
 #[path = "define-key-after-semantics.rs"]
 mod define_key_after_semantics;
+#[path = "define-prefix-command-semantics.rs"]
+mod define_prefix_command_semantics;
 #[path = "defmacro-advanced.rs"]
 mod defmacro_advanced;
 #[path = "defmacro-comprehensive-patterns.rs"]
