@@ -4,7 +4,10 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_with_bootstrap,
+};
 
 // ---------------------------------------------------------------------------
 // zerop
@@ -80,6 +83,27 @@ fn oracle_prop_fixnump() {
                         (fixnump nil)
                         (fixnump "42"))"#;
     assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_fixnump_bignump_are_lisp_predicates_with_boundary_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lisp/subr.el defines these as Lisp functions, not C subrs.  The
+    // function identity matters to Elisp callers that inspect symbols.
+    let form = r#"(list
+ (subrp (symbol-function 'fixnump))
+ (subrp (symbol-function 'bignump))
+ (byte-code-function-p (symbol-function 'fixnump))
+ (byte-code-function-p (symbol-function 'bignump))
+ (list (fixnump most-positive-fixnum)
+       (bignump most-positive-fixnum)
+       (fixnump (1+ most-positive-fixnum))
+       (bignump (1+ most-positive-fixnum))
+       (fixnump (1- most-negative-fixnum))
+       (bignump (1- most-negative-fixnum))))"#;
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    assert_ok_eq("(nil nil t t (t nil nil t nil t))", &oracle, &neovm);
 }
 
 // ---------------------------------------------------------------------------
