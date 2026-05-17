@@ -777,6 +777,7 @@ pub(crate) const ORACLE_TESTED_NONPRIMITIVE_NAMES: &[&str] = &[
     "unless",
     "unmsys--file-name",
     "values--store-value",
+    "variable-binding-locus",
     "version-list-<",
     "version-list-<=",
     "version-list-=",

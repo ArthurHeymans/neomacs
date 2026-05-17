@@ -199,3 +199,48 @@ fn oracle_default_toplevel_value_errors_and_constant_protection() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_variable_binding_locus_default_let_local_and_alias_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((buf (generate-new-buffer " *neomacs-oracle-locus*")))
+  (unwind-protect
+      (progn
+        (defvar neomacs--oracle-locus-base 'default)
+        (defvaralias 'neomacs--oracle-locus-alias
+          'neomacs--oracle-locus-base)
+        (list
+         ;; Global/default and dynamic let bindings are not buffer-local.
+         (variable-binding-locus 'neomacs--oracle-locus-base)
+         (let ((neomacs--oracle-locus-base 'dynamic))
+           (list neomacs--oracle-locus-base
+                 (variable-binding-locus 'neomacs--oracle-locus-base)
+                 (variable-binding-locus 'neomacs--oracle-locus-alias)))
+         ;; Buffer-local active binding returns the current buffer, and alias
+         ;; lookup follows GNU's SYMBOL_VARALIAS redirect path.
+         (with-current-buffer buf
+           (make-local-variable 'neomacs--oracle-locus-base)
+           (setq neomacs--oracle-locus-base 'local)
+           (list (eq (variable-binding-locus 'neomacs--oracle-locus-base)
+                     (current-buffer))
+                 (eq (variable-binding-locus 'neomacs--oracle-locus-alias)
+                     (current-buffer))
+                 neomacs--oracle-locus-alias))
+         ;; Void symbols still have a default/global locus of nil.
+         (variable-binding-locus 'neomacs--oracle-locus-unbound)
+         (condition-case err
+             (variable-binding-locus 42)
+           (error (list (car err) (cdr err))))))
+    (condition-case nil
+        (internal-delete-indirect-variable 'neomacs--oracle-locus-alias)
+      (error nil))
+    (when (boundp 'neomacs--oracle-locus-base)
+      (makunbound 'neomacs--oracle-locus-base))
+    (when (buffer-live-p buf)
+      (kill-buffer buf))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
