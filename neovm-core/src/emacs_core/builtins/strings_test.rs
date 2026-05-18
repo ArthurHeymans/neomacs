@@ -32,6 +32,25 @@ fn substring_can_return_raw_non_utf8_unibyte_bytes() {
 }
 
 #[test]
+fn substring_copies_text_properties_through_gnu_add_properties_order() {
+    crate::test_utils::init_test_tracing();
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let* ((s (propertize "abcdef" 'face 'bold 'tag 'source))
+                      (sub (substring s 1 5)))
+                 (text-properties-at 0 sub))"#,
+        )
+        .expect("evaluation succeeds");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&result),
+        "(tag source face bold)"
+    );
+}
+
+#[test]
 fn concat_preserves_multibyte_text_properties_as_char_intervals() {
     crate::test_utils::init_test_tracing();
 

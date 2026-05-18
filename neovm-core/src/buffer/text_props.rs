@@ -767,7 +767,7 @@ impl TextPropertyTable {
             return TextPropertyTable::new();
         }
 
-        let intervals: Vec<PropertyInterval> = self
+        let runs: Vec<(usize, usize, Vec<(Value, Value)>)> = self
             .intervals
             .range(..end)
             .rev()
@@ -775,12 +775,14 @@ impl TextPropertyTable {
             .map(|(interval_start, node)| {
                 let new_start = (*interval_start).max(start) - start;
                 let new_end = node.end.min(end) - start;
-                PropertyInterval::from_plist(new_start, new_end, &node.plist)
+                let mut plist = node.plist.clone();
+                plist.reverse();
+                (new_start, new_end, plist)
             })
-            .filter(|pi| pi.start < pi.end)
+            .filter(|(new_start, new_end, _)| new_start < new_end)
             .collect();
 
-        TextPropertyTable::from_dump(intervals)
+        TextPropertyTable::from_plist_runs(runs)
     }
 
     pub fn append_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
