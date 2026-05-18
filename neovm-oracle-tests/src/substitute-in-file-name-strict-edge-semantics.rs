@@ -44,3 +44,33 @@ fn oracle_substitute_in_file_name_env_and_embedded_absolute_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_substitute_in_file_name_handler_validation_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defun neomacs--oracle-subst-bad-handler (operation &rest args)
+    42)
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/subst-bad:" . neomacs--oracle-subst-bad-handler))))
+        (list
+         ;; GNU checks the argument type before looking up handlers.
+         (condition-case err
+             (substitute-in-file-name 42)
+           (error (list (car err) (cdr err))))
+         ;; GNU requires substitute-in-file-name handlers to return strings.
+         (condition-case err
+             (substitute-in-file-name "/subst-bad:path")
+           (error (list (car err) (cdr err))))
+         ;; String handler results are returned directly.
+         (let ((file-name-handler-alist
+                '(("\\`/subst-good:" . (lambda (&rest _) "handled")))))
+           (substitute-in-file-name "/subst-good:path"))))
+    (fmakunbound 'neomacs--oracle-subst-bad-handler)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

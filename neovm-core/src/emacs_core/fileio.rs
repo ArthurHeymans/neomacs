@@ -429,20 +429,24 @@ fn env_name_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+fn embedded_absfilename_start(bytes: &[u8]) -> Option<usize> {
+    let mut i = 1usize;
+    while i < bytes.len() {
+        if bytes[i - 1] == b'/'
+            && (bytes[i] == b'/'
+                || (bytes[i] == b'~' && (i + 1 == bytes.len() || bytes[i + 1] == b'/')))
+        {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
 fn trim_embedded_absfilename(path: String) -> String {
     let mut current = path;
     loop {
-        let bytes = current.as_bytes();
-        let mut cut_at = None;
-        let mut i = 1usize;
-        while i < bytes.len() {
-            if bytes[i - 1] == b'/' && (bytes[i] == b'/' || bytes[i] == b'~') {
-                cut_at = Some(i);
-                break;
-            }
-            i += 1;
-        }
-        if let Some(idx) = cut_at {
+        if let Some(idx) = embedded_absfilename_start(current.as_bytes()) {
             current = current[idx..].to_string();
         } else {
             return current;
@@ -450,20 +454,10 @@ fn trim_embedded_absfilename(path: String) -> String {
     }
 }
 
-#[cfg(unix)]
 fn trim_embedded_absfilename_bytes(path: Vec<u8>) -> Vec<u8> {
     let mut current = path;
     loop {
-        let mut cut_at = None;
-        let mut i = 1usize;
-        while i < current.len() {
-            if current[i - 1] == b'/' && (current[i] == b'/' || current[i] == b'~') {
-                cut_at = Some(i);
-                break;
-            }
-            i += 1;
-        }
-        if let Some(idx) = cut_at {
+        if let Some(idx) = embedded_absfilename_start(&current) {
             current = current[idx..].to_vec();
         } else {
             return current;
@@ -2044,20 +2038,41 @@ pub(crate) fn builtin_directory_name_p(args: Vec<Value>) -> EvalResult {
 
 /// (substitute-in-file-name FILENAME) -> string
 pub(crate) fn builtin_substitute_in_file_name(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "substitute-in-file-name", &args)? {
-        return Ok(result);
-    }
     expect_args("substitute-in-file-name", &args, 1)?;
-    match args[0].kind() {
-        ValueKind::String => Ok(Value::heap_string(substitute_in_file_name_lisp(
-            args[0]
-                .as_lisp_string()
-                .expect("ValueKind::String must carry LispString payload"),
-        ))),
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), args[0]],
-        )),
+    let filename = expect_lisp_string_strict(&args[0])?;
+
+    if let Some(result) = dispatch_file_handler(eval, "substitute-in-file-name", &args)? {
+        return file_name_handler_string_or_error(result);
+    }
+
+    if let Some(idx) = embedded_absfilename_start(filename.as_bytes()) {
+        let suffix =
+            file_name_lisp_from_bytes(filename.as_bytes()[idx..].to_vec(), filename.is_multibyte());
+        return builtin_substitute_in_file_name(eval, vec![Value::heap_string(suffix)]);
+    }
+
+    let mut result = args[0];
+    if eval
+        .obarray()
+        .symbol_function("substitute-env-in-file-name")
+        .is_some()
+    {
+        result =
+            eval.funcall_general(Value::symbol("substitute-env-in-file-name"), vec![args[0]])?;
+        expect_lisp_string_strict(&result)?;
+    }
+
+    let result_string = result
+        .as_lisp_string()
+        .expect("substitute-in-file-name result was checked as a string");
+    if let Some(idx) = embedded_absfilename_start(result_string.as_bytes()) {
+        let trimmed = trim_embedded_absfilename_bytes(result_string.as_bytes()[idx..].to_vec());
+        Ok(Value::heap_string(file_name_lisp_from_bytes(
+            trimmed,
+            result_string.is_multibyte(),
+        )))
+    } else {
+        Ok(result)
     }
 }
 

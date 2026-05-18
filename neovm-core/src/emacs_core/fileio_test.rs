@@ -3023,11 +3023,22 @@ fn test_default_file_modes_argument_errors() {
 #[test]
 fn test_builtin_substitute_in_file_name() {
     crate::test_utils::init_test_tracing();
-    let home = std::env::var("HOME").unwrap_or_default();
     let mut ev = Context::new();
     let result =
         builtin_substitute_in_file_name(&mut ev, vec![Value::string("$HOME/foo")]).unwrap();
-    assert_eq!(result.as_utf8_str(), Some(format!("{home}/foo").as_str()));
+    assert_eq!(result.as_utf8_str(), Some("$HOME/foo"));
+
+    let values = bootstrap_eval(
+        r#"
+(let ((process-environment (copy-sequence process-environment)))
+  (setenv "NEOMACS_SUBSTITUTE_UNIT_HOME" "/tmp/neomacs-home")
+  (substitute-in-file-name "$NEOMACS_SUBSTITUTE_UNIT_HOME/foo"))
+"#,
+    );
+    assert_eq!(
+        values.last().map(String::as_str),
+        Some(r#"OK "/tmp/neomacs-home/foo""#)
+    );
 }
 
 #[test]
