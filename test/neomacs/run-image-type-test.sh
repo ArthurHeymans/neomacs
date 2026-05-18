@@ -51,7 +51,7 @@ echo "Test:  $TEST_EL"
 echo "Log:   $LOG_FILE"
 echo ""
 
-"$EMACS_BIN" -Q -l "$TEST_EL" 2>"$LOG_FILE" &
+"$EMACS_BIN" -Q -l "$TEST_EL" >"$LOG_FILE" 2>&1 &
 EMACS_PID=$!
 echo "Started emacs PID=$EMACS_PID"
 

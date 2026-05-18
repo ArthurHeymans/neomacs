@@ -13,7 +13,7 @@ echo "=== Selective Display / Folding Test ==="
 echo "Starting Neomacs..."
 
 RUST_LOG=neomacs_display=debug DISPLAY=:0 ./target/release/neomacs -Q \
-    -l test/neomacs/selective-display-test.el 2>"$LOG" &
+    -l test/neomacs/selective-display-test.el >"$LOG" 2>&1 &
 EMACS_PID=$!
 
 echo "Neomacs PID: $EMACS_PID"

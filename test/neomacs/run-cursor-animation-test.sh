@@ -17,7 +17,7 @@ echo "=== Cursor Animation Test ==="
 echo "Starting Neomacs..."
 
 RUST_LOG=neomacs_display=debug DISPLAY=:0 ./target/release/neomacs -Q \
-    -l test/neomacs/cursor-animation-test.el 2>"$LOG" &
+    -l test/neomacs/cursor-animation-test.el >"$LOG" 2>&1 &
 EMACS_PID=$!
 
 echo "Neomacs PID: $EMACS_PID"

@@ -23,7 +23,7 @@ echo "=== Child Frame Test Suite ==="
 echo "Starting Neomacs..."
 
 RUST_LOG=neomacs_display=debug DISPLAY=:0 ./target/release/neomacs -Q \
-    -l test/neomacs/child-frame-test.el 2>"$LOG" &
+    -l test/neomacs/child-frame-test.el >"$LOG" 2>&1 &
 EMACS_PID=$!
 
 echo "Neomacs PID: $EMACS_PID"

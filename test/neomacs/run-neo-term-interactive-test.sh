@@ -94,7 +94,7 @@ setup_display
 echo "Starting Neomacs with neo-term interactive test..."
 
 RUST_LOG=neomacs_display=debug ./target/release/neomacs -Q \
-    -l test/neomacs/neo-term-interactive-test.el 2>"$LOG" &
+    -l test/neomacs/neo-term-interactive-test.el >"$LOG" 2>&1 &
 EMACS_PID=$!
 
 echo "Neomacs PID: $EMACS_PID"
