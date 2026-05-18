@@ -2333,6 +2333,20 @@ fn maybe_dispatch_resolved_file_handler(
     Ok(None)
 }
 
+fn dispatch_expanded_file_handler(
+    eval: &mut Context,
+    operation_name: &str,
+    filename: &crate::heap_types::LispString,
+) -> Result<Option<Value>, Flow> {
+    maybe_dispatch_resolved_file_handler(
+        eval,
+        operation_name,
+        Some(filename),
+        None,
+        vec![Value::heap_string(filename.clone())],
+    )
+}
+
 #[cfg(unix)]
 fn path_to_cstring(path: &Path) -> Result<CString, std::ffi::NulError> {
     CString::new(path.as_os_str().as_bytes())
@@ -2681,14 +2695,20 @@ fn delete_file_compat_path(path: &Path, path_value: Value) -> Result<(), Flow> {
 
 /// `(access-file FILENAME STRING)`
 pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "access-file", &args)? {
-        return Ok(result);
-    }
     expect_args("access-file", &args, 2)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let resolved = resolve_filename_lisp_for_eval(eval, &filename);
-    let path = lisp_file_name_to_path_buf(&resolved);
     let operation = expect_string_strict(&args[1])?;
+    if let Some(result) = maybe_dispatch_resolved_file_handler(
+        eval,
+        "access-file",
+        Some(&resolved),
+        None,
+        vec![Value::heap_string(resolved.clone()), args[1]],
+    )? {
+        return Ok(result);
+    }
+    let path = lisp_file_name_to_path_buf(&resolved);
     match access_file_path(&path) {
         Ok(_) => Ok(Value::NIL),
         Err(err) => Err(signal_file_action_error_value(
@@ -2702,12 +2722,12 @@ pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalR
 /// Context-aware variant of `file-exists-p` that resolves relative paths
 /// against dynamic/default `default-directory`.
 pub(crate) fn builtin_file_exists_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-exists-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-exists-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-exists-p", &filename)? {
+        return Ok(result);
+    }
     Ok(Value::bool_val(file_exists_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2716,12 +2736,12 @@ pub(crate) fn builtin_file_exists_p(eval: &mut Context, args: Vec<Value>) -> Eva
 /// `(file-readable-p FILENAME)` — resolves FILENAME against
 /// dynamic/default `default-directory`.
 pub(crate) fn builtin_file_readable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-readable-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-readable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-readable-p", &filename)? {
+        return Ok(result);
+    }
     Ok(Value::bool_val(file_readable_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2729,12 +2749,12 @@ pub(crate) fn builtin_file_readable_p(eval: &mut Context, args: Vec<Value>) -> E
 
 /// `(file-writable-p FILENAME)`
 pub(crate) fn builtin_file_writable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-writable-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-writable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-writable-p", &filename)? {
+        return Ok(result);
+    }
     Ok(Value::bool_val(file_writable_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2745,12 +2765,14 @@ pub(crate) fn builtin_file_accessible_directory_p(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-accessible-directory-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-accessible-directory-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) =
+        dispatch_expanded_file_handler(eval, "file-accessible-directory-p", &filename)?
+    {
+        return Ok(result);
+    }
     Ok(Value::bool_val(file_accessible_directory_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2758,12 +2780,12 @@ pub(crate) fn builtin_file_accessible_directory_p(
 
 /// `(file-executable-p FILENAME)`
 pub(crate) fn builtin_file_executable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-executable-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-executable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-executable-p", &filename)? {
+        return Ok(result);
+    }
     Ok(Value::bool_val(file_executable_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2851,12 +2873,12 @@ pub(crate) fn builtin_file_system_info(eval: &mut Context, args: Vec<Value>) -> 
 
 /// `(file-directory-p FILENAME)`
 pub(crate) fn builtin_file_directory_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-directory-p", &args)? {
+    expect_args("file-directory-p", &args, 1)?;
+    let filename =
+        expand_and_dir_to_file_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-directory-p", &filename)? {
         return Ok(result);
     }
-    expect_args("file-directory-p", &args, 1)?;
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
     Ok(Value::bool_val(file_directory_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2866,12 +2888,12 @@ pub(crate) fn builtin_file_directory_p(eval: &mut Context, args: Vec<Value>) -> 
 /// against dynamic/default `default-directory`.
 /// `(file-regular-p FILENAME)`
 pub(crate) fn builtin_file_regular_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-regular-p", &args)? {
+    expect_args("file-regular-p", &args, 1)?;
+    let filename =
+        expand_and_dir_to_file_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-regular-p", &filename)? {
         return Ok(result);
     }
-    expect_args("file-regular-p", &args, 1)?;
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
     Ok(Value::bool_val(file_regular_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
@@ -2885,12 +2907,12 @@ pub(crate) fn builtin_file_regular_p(eval: &mut Context, args: Vec<Value>) -> Ev
 /// §10.3) which was a data-type bug — code that uses the result as a
 /// path was always broken because it got `t` instead of a string.
 pub(crate) fn builtin_file_symlink_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-symlink-p", &args)? {
-        return Ok(result);
-    }
     expect_args("file-symlink-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    if let Some(result) = dispatch_expanded_file_handler(eval, "file-symlink-p", &filename)? {
+        return Ok(result);
+    }
     Ok(match file_symlink_target_lisp(&filename) {
         Some(target) => Value::heap_string(target),
         None => Value::NIL,

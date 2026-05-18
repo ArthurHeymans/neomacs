@@ -68,3 +68,58 @@ fn oracle_file_predicates_symlink_and_missing_targets() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_predicates_dispatch_after_default_directory_expansion() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-file-predicate-calls nil)
+  (defun neomacs--oracle-file-predicate-handler (operation &rest args)
+    (cond
+     ((memq operation '(file-exists-p file-readable-p file-writable-p
+                        file-executable-p file-accessible-directory-p
+                        file-directory-p file-regular-p))
+      (push (cons operation args) neomacs--oracle-file-predicate-calls)
+      t)
+     ((eq operation 'file-symlink-p)
+      (push (cons operation args) neomacs--oracle-file-predicate-calls)
+      "target")
+     (t
+      (let ((file-name-handler-alist nil))
+        (apply operation args)))))
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/oracle-predicate-root/" . neomacs--oracle-file-predicate-handler)))
+            (default-directory "/oracle-predicate-root/"))
+        (list
+         (file-exists-p "child")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-readable-p "child")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-writable-p "child")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-executable-p "child")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-accessible-directory-p "child/")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-directory-p "child/")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-regular-p "child/")
+         neomacs--oracle-file-predicate-calls
+         (setq neomacs--oracle-file-predicate-calls nil)
+         (file-symlink-p "child")
+         neomacs--oracle-file-predicate-calls))
+    (fmakunbound 'neomacs--oracle-file-predicate-handler)
+    (makunbound 'neomacs--oracle-file-predicate-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
