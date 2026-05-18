@@ -10,7 +10,7 @@ use crate::collector::{
 };
 use crate::heap::AllocError;
 use crate::index_state::ObjectLocator;
-use crate::mark::MarkWorklist;
+use crate::collector::MarkWorklist;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
 use crate::reclaim::PreparedReclaim;

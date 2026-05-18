@@ -1,5 +1,29 @@
 use crate::background::BackgroundCollectionRuntime;
-use crate::barrier::{BarrierEvent, BarrierKind};
+// ── Barrier types (merged from barrier.rs) ──
+
+/// High-level barrier category.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BarrierKind {
+    /// Post-write barrier for old-to-young tracking.
+    PostWrite,
+    /// Pre-write SATB barrier for concurrent marking.
+    SatbPreWrite,
+}
+
+/// Recorded barrier event.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BarrierEvent {
+    /// Barrier kind.
+    pub kind: BarrierKind,
+    /// Object being mutated.
+    pub owner: Gc<()>,
+    /// Slot index when known.
+    pub slot: Option<usize>,
+    /// Previous value for SATB.
+    pub old_value: Option<Gc<()>>,
+    /// New value for remembered-set tracking.
+    pub new_value: Option<Gc<()>>,
+}
 use crate::descriptor::{GcErased, Trace, TypeDesc};
 use crate::edge::EdgeCell;
 use crate::heap::{AllocError, Heap};

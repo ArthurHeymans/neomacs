@@ -1,7 +1,7 @@
 use super::*;
 use crate::descriptor::{Relocator, Trace, Tracer, fixed_type_desc};
 use crate::index_state::{HeapIndexState, ObjectLocator, PreparedIndexReclaim};
-use crate::mark::MarkWorklist;
+use crate::collector::MarkWorklist;
 use crate::object::{ObjectRecord, SpaceKind};
 use crate::object_store::FlatReadView;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};

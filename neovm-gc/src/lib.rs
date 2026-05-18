@@ -113,7 +113,6 @@ pub(crate) mod collector;
 pub(crate) mod util;
 pub(crate) mod background_worker;
 /// Write-barrier event types and remembered-set edge metadata.
-pub mod barrier;
 pub(crate) mod card_table;
 mod collector_policy;
 mod collector_state;
@@ -131,7 +130,6 @@ pub mod edge;
 /// errors.
 pub mod heap;
 mod index_state;
-mod mark;
 /// `Mutator<'heap>` — the only allocating view onto a `Heap`.
 pub mod mutator;
 mod object;
@@ -167,7 +165,7 @@ pub use background::{
     SharedBackgroundStatus, SharedBackgroundWaitResult, SharedHeap, SharedHeapAccessError,
     SharedHeapError, SharedHeapStatus,
 };
-pub use barrier::{BarrierEvent, BarrierKind};
+pub use mutator::{BarrierEvent, BarrierKind};
 pub use concurrent_marker::{
     ConcurrentMarker, ConcurrentMarkerConfig, ConcurrentMarkerError, ConcurrentMarkerStats,
     ConcurrentMarkerStatus,

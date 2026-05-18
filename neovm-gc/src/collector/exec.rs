@@ -8,7 +8,7 @@ use crossbeam_deque::{Steal, Stealer, Worker};
 use crate::descriptor::{EphemeronVisitor, GcErased, ObjectKey, Relocator, Tracer, WeakProcessor};
 use crate::heap::AllocError;
 use crate::index_state::{ForwardingMap, HeapIndexState, ObjectIndex, ObjectLocator};
-use crate::mark::MarkWorklist;
+use crate::collector::MarkWorklist;
 use crate::object::{ObjectHeader, ObjectRecord, SpaceKind};
 use crate::object_store::{FlatReadView, ObjectReadRaw, ObjectReadView};
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};
