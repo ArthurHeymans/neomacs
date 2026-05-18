@@ -1649,9 +1649,11 @@ pub(crate) fn trace_minor_ephemerons(
     let mut mark_steps = 0u64;
     let mut mark_rounds = 0u64;
     loop {
-        let changed = if worker_count.max(1) == 1 || objects.len() <= 1 {
+        let changed = if worker_count.max(1) == 1
+            || ephemeron_candidates.len() <= 1
+        {
             let mut visitor = MinorEphemeronTracer::new(tracer);
-            for locator in objects.all_locators() {
+            for &locator in ephemeron_candidates {
                 let object = objects.get(locator);
                 let survives = object.space() != SpaceKind::Nursery || object.is_marked();
                 if survives {
