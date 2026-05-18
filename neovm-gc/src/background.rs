@@ -1606,7 +1606,7 @@ pub struct BackgroundCollector {
 /// Holds an exclusive write guard on the heap core for its
 /// entire lifetime via [`crate::heap::HeapCollectorRuntime`].
 /// Each `tick()` builds a fresh `CollectorRuntime` against
-/// the held guard plus a scratch `MutatorLocal` and runs
+/// the held guard plus a scratch `MutatorState` and runs
 /// the coordinator round through it.
 #[derive(Debug)]
 pub struct BackgroundService<'heap> {

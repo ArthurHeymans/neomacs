@@ -2633,7 +2633,7 @@ fn collector_runtime_alloc_typed_keeps_rooted_object_alive_during_active_major_m
     // so the test can construct a handle scope without
     // holding a live Mutator. The scratch's root stack is
     // dropped at the end of the block, along with the scope.
-    let mut scratch = crate::mutator::MutatorLocal::default();
+    let mut scratch = crate::mutator::MutatorState::default();
     let kept_gc = {
         let root_stack = scratch.root_stack_ptr();
         let mut runtime = heap.collector_runtime_with_local(&mut scratch);
@@ -2656,7 +2656,7 @@ fn collector_runtime_alloc_typed_keeps_rooted_object_alive_during_active_major_m
 #[test]
 fn collector_runtime_alloc_typed_places_pinned_object_in_pinned_space() {
     let heap = Heap::new(HeapConfig::default());
-    let mut scratch = crate::mutator::MutatorLocal::default();
+    let mut scratch = crate::mutator::MutatorState::default();
     let pinned_gc = {
         let root_stack = scratch.root_stack_ptr();
         let mut runtime = heap.collector_runtime_with_local(&mut scratch);
@@ -11328,7 +11328,7 @@ fn concurrent_marker_satb_barrier_keeps_overwritten_edge_alive() {
 
             // Check the per-mutator diagnostic ring BEFORE the closure
             // returns and the mutator drops. Post-move, the barrier
-            // event ring lives on MutatorLocal; reading it through the
+            // event ring lives on MutatorState; reading it through the
             // heap lock is no longer possible because each mutator owns
             // its own ring.
             let satb_seen = mutator

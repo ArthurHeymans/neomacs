@@ -22,7 +22,7 @@ use std::any::TypeId;
 const MAX_BARRIER_EVENTS: usize = 1024;
 
 /// High-water mark at which
-/// [`MutatorLocal::push_barrier_event`] drains the ring
+/// [`MutatorState::push_barrier_event`] drains the ring
 /// back down to [`MAX_BARRIER_EVENTS`]. Set to `2 * MAX` so
 /// the O(MAX) `Vec::drain` (which shifts the surviving
 /// suffix forward) only fires once per `MAX` pushes,
@@ -76,7 +76,7 @@ enum AllocationSlot {
 /// heap: the per-mutator nursery TLAB slab, the per-mutator
 /// barrier event ring, and the per-mutator root stack.
 #[derive(Debug)]
-pub struct MutatorLocal {
+pub struct MutatorState {
     /// Per-mutator nursery TLAB slab. Carved out of the
     /// shared `NurseryState::from_space` via
     /// `NurseryState::reserve_tlab`. Local bumps within the
@@ -91,7 +91,7 @@ pub struct MutatorLocal {
     pub(crate) tlab: Option<crate::spaces::nursery_arena::NurseryTlab>,
     /// Bounded diagnostic ring of the most recent barrier
     /// events this mutator has recorded. Updated by
-    /// [`MutatorLocal::push_barrier_event`] from the barrier
+    /// [`MutatorState::push_barrier_event`] from the barrier
     /// path in [`crate::runtime::CollectorRuntime::record_post_write_with_local`].
     /// External observers read it via
     /// [`Mutator::recent_barrier_events`].
@@ -107,10 +107,10 @@ pub struct MutatorLocal {
     /// concurrent major mark.
     ///
     /// In the single-mutator world this was heap-owned via
-    /// `HeapCore::roots`. Moving it onto `MutatorLocal` lets
+    /// `HeapCore::roots`. Moving it onto `MutatorState` lets
     /// the collector walk multiple mutators' root stacks
     /// independently in the multi-mutator target. Today's
-    /// collector still operates on a single `&mut MutatorLocal`
+    /// collector still operates on a single `&mut MutatorState`
     /// threaded in from the caller.
     pub(crate) roots: RootStack,
     /// Single-entry allocation profile cache for the most
@@ -144,7 +144,7 @@ pub struct MutatorLocal {
     prepared_full_reclaim_active: bool,
 }
 
-impl Default for MutatorLocal {
+impl Default for MutatorState {
     fn default() -> Self {
         Self {
             tlab: None,
@@ -162,12 +162,12 @@ impl Default for MutatorLocal {
     }
 }
 
-impl MutatorLocal {
+impl MutatorState {
     /// Return a `NonNull` pointer into this local's root
     /// stack. The pointer is safe to use as long as
     /// `self` is not moved; `HandleScope` relies on stable
     /// addressing of the backing vector while the scope is
-    /// alive, which in turn relies on the `MutatorLocal`
+    /// alive, which in turn relies on the `MutatorState`
     /// itself being pinned by a `&mut` borrow for the scope
     /// duration.
     pub(crate) fn root_stack_ptr(&mut self) -> NonNull<RootStack> {
@@ -271,7 +271,7 @@ impl MutatorLocal {
     }
 }
 
-impl MutatorLocal {
+impl MutatorState {
     /// Append one barrier event to this mutator's recent
     /// ring, dropping the oldest entries when the ring
     /// exceeds [`BARRIER_EVENT_HIGH_WATER`]. The drain is
@@ -306,7 +306,7 @@ impl MutatorLocal {
 /// Mutator view onto the heap.
 ///
 /// Holds a shared `&Heap` borrow plus a per-mutator
-/// `MutatorLocal`. Multiple mutators can coexist against
+/// `MutatorState`. Multiple mutators can coexist against
 /// the same heap because they all borrow `&Heap`.
 /// Collector-style operations take the safepoint write lock
 /// through `with_runtime`; the common allocation path holds
@@ -315,13 +315,13 @@ impl MutatorLocal {
 #[derive(Debug)]
 pub struct Mutator<'heap> {
     heap: &'heap Heap,
-    local: MutatorLocal,
+    local: MutatorState,
     handle_scope_state: crate::root::HandleScopeState<'heap>,
 }
 
 impl<'heap> Mutator<'heap> {
     pub(crate) fn new(heap: &'heap Heap) -> Self {
-        let mut local = MutatorLocal::default();
+        let mut local = MutatorState::default();
         local.set_alloc_counter_local(heap.allocation_counter_local());
         local.set_barrier_stats_local(heap.barrier_stats_local());
         local.set_nursery_generation(heap.current_nursery_generation());
@@ -384,7 +384,7 @@ impl<'heap> Mutator<'heap> {
 /// --- Allocation helpers for each space kind ---
 #[inline]
 fn alloc_nursery_slot<T: Trace + 'static>(
-    local: &mut MutatorLocal,
+    local: &mut MutatorState,
     heap: &Heap,
     alloc_profile: &CachedAllocProfile,
     value: &mut Option<T>,
@@ -592,7 +592,7 @@ impl<'heap> Mutator<'heap> {
     }
 
     fn resolve_alloc_profile<T: Trace + 'static>(
-        local: &mut MutatorLocal,
+        local: &mut MutatorState,
         heap: &Heap,
     ) -> Result<CachedAllocProfile, AllocError> {
         Ok(match local.cached_alloc_profile::<T>() {

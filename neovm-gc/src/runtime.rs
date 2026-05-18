@@ -28,7 +28,7 @@ use crate::root::{HandleScope, Root};
 
 /// Collector-side runtime bound to one heap.
 ///
-/// The runtime carries a per-cycle `MutatorLocal` that it
+/// The runtime carries a per-cycle `MutatorState` that it
 /// either borrows from an outer [`crate::mutator::Mutator`]
 /// or owns for the duration of the call. Every collector
 /// entry point that needs to walk roots threads that local
@@ -39,7 +39,7 @@ pub struct CollectorRuntime<'heap> {
     local: CollectorLocal<'heap>,
 }
 
-/// Borrow of the [`crate::mutator::MutatorLocal`] carried by
+/// Borrow of the [`crate::mutator::MutatorState`] carried by
 /// [`CollectorRuntime`]. The runtime always borrows from
 /// either an outer [`crate::mutator::Mutator`] (the
 /// production path) or a scratch local owned by
@@ -47,15 +47,15 @@ pub struct CollectorRuntime<'heap> {
 /// path). The runtime itself never owns the local.
 #[derive(Debug)]
 pub(crate) struct CollectorLocal<'heap> {
-    inner: &'heap mut crate::mutator::MutatorLocal,
+    inner: &'heap mut crate::mutator::MutatorState,
 }
 
 impl CollectorLocal<'_> {
-    pub(crate) fn get(&self) -> &crate::mutator::MutatorLocal {
+    pub(crate) fn get(&self) -> &crate::mutator::MutatorState {
         self.inner
     }
 
-    pub(crate) fn get_mut(&mut self) -> &mut crate::mutator::MutatorLocal {
+    pub(crate) fn get_mut(&mut self) -> &mut crate::mutator::MutatorState {
         self.inner
     }
 }
@@ -71,7 +71,7 @@ impl CollectorLocal<'_> {
 ///
 /// The `tlab_slot` parameter is a `&mut Option<NurseryTlab>`
 /// so the caller can own the slab wherever it likes —
-/// currently on `MutatorLocal`, so each mutator has its own
+/// currently on `MutatorState`, so each mutator has its own
 /// per-mutator slab without serializing on the shared
 /// cursor for the common case.
 ///
@@ -125,7 +125,7 @@ impl<'heap> CollectorRuntime<'heap> {
     /// borrows the mutator's own local).
     pub(crate) fn with_local(
         heap: &'heap mut HeapCore,
-        local: &'heap mut crate::mutator::MutatorLocal,
+        local: &'heap mut crate::mutator::MutatorState,
     ) -> Self {
         Self {
             heap,
@@ -344,7 +344,7 @@ impl<'heap> CollectorRuntime<'heap> {
         layout: core::alloc::Layout,
     ) -> Option<core::ptr::NonNull<u8>> {
         let tlab_bytes = self.heap.config().nursery.tlab_bytes;
-        let local: &mut crate::mutator::MutatorLocal = self.local.get_mut();
+        let local: &mut crate::mutator::MutatorState = self.local.get_mut();
         let tlab = &mut local.tlab;
         let heap: &HeapCore = &*self.heap;
         try_bump_nursery_tlab_or_refill(tlab, heap.nursery(), layout, tlab_bytes)
@@ -352,7 +352,7 @@ impl<'heap> CollectorRuntime<'heap> {
     }
 
     /// Allocate a typed managed object through this
-    /// runtime's carried `MutatorLocal`.
+    /// runtime's carried `MutatorState`.
     ///
     /// Nursery allocations attempt to bump within the
     /// local's TLAB slab via

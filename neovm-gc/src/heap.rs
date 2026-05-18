@@ -498,7 +498,7 @@ impl Heap {
     ///
     /// Takes `&self` so multiple mutators can coexist
     /// against the same heap at the type level. Each mutator
-    /// owns its own [`crate::mutator::MutatorLocal`] and
+    /// owns its own [`crate::mutator::MutatorState`] and
     /// holds a safepoint read guard while it operates,
     /// taking the heap-core write lock only when it needs to
     /// touch shared heap state.
@@ -912,11 +912,11 @@ impl Heap {
     }
 
     /// Test-only build a write-locked collector runtime
-    /// that borrows the supplied external `MutatorLocal`.
+    /// that borrows the supplied external `MutatorState`.
     #[cfg(test)]
     pub(crate) fn collector_runtime_with_local<'a>(
         &'a self,
-        local: &'a mut crate::mutator::MutatorLocal,
+        local: &'a mut crate::mutator::MutatorState,
     ) -> HeapCollectorRuntimeWithLocal<'a> {
         if !local.has_alloc_counter_local() {
             local.set_alloc_counter_local(self.state.alloc_counters.register_local());
@@ -955,7 +955,7 @@ impl Heap {
 
 /// Guard type returned by [`Heap::collector_runtime`] that
 /// holds the safepoint write guard plus the heap-core write
-/// guard and a scratch `MutatorLocal` for the duration of
+/// guard and a scratch `MutatorState` for the duration of
 /// collector operations. Each method builds a fresh
 /// [`CollectorRuntime`] against the held borrows and runs
 /// the operation through it.
@@ -965,7 +965,7 @@ pub struct HeapCollectorRuntime<'a> {
     guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
-    local: crate::mutator::MutatorLocal,
+    local: crate::mutator::MutatorState,
 }
 
 impl<'a> HeapCollectorRuntime<'a> {
@@ -975,7 +975,7 @@ impl<'a> HeapCollectorRuntime<'a> {
         nursery_generation: &'a std::sync::atomic::AtomicU64,
         collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
     ) -> Self {
-        let mut local = crate::mutator::MutatorLocal::default();
+        let mut local = crate::mutator::MutatorState::default();
         local.set_alloc_counter_local(guard.alloc_counters.register_local());
         local.set_barrier_stats_local(guard.barrier_stats.register_local());
         Self {
@@ -1190,7 +1190,7 @@ impl crate::background::BackgroundCollectionRuntime for HeapCollectorRuntime<'_>
 
 /// Test-only guard returned by
 /// [`Heap::collector_runtime_with_local`] that borrows an
-/// external `MutatorLocal` so the caller can hand out a
+/// external `MutatorState` so the caller can hand out a
 /// root stack pointer before constructing the runtime.
 #[cfg(test)]
 #[derive(Debug)]
@@ -1199,7 +1199,7 @@ pub struct HeapCollectorRuntimeWithLocal<'a> {
     guard: std::sync::RwLockWriteGuard<'a, HeapCore>,
     nursery_generation: &'a std::sync::atomic::AtomicU64,
     collector_plans_refresh_epoch: &'a std::sync::atomic::AtomicU64,
-    local: &'a mut crate::mutator::MutatorLocal,
+    local: &'a mut crate::mutator::MutatorState,
 }
 
 #[cfg(test)]
@@ -1341,7 +1341,7 @@ impl HeapCore {
 
     /// Build the list of global trace sources the collector
     /// walks alongside mutator roots. Mutator roots now live
-    /// on per-mutator `MutatorLocal` instances; this helper
+    /// on per-mutator `MutatorState` instances; this helper
     /// takes one root stack and pairs it with the heap's
     /// permanent sources (immortal objects, etc.).
     pub(crate) fn global_sources_with_roots(
@@ -2200,9 +2200,9 @@ impl HeapCore {
     /// path never needs exclusive access to the heap for this
     /// bookkeeping.
     /// The per-mutator diagnostic ring lives on
-    /// [`crate::mutator::MutatorLocal`]; the collector
+    /// [`crate::mutator::MutatorState`]; the collector
     /// pushes events there via
-    /// [`crate::mutator::MutatorLocal::push_barrier_event`]
+    /// [`crate::mutator::MutatorState::push_barrier_event`]
     /// during the same barrier hook that bumps the stats
     /// here.
     pub(crate) fn bump_barrier_stats(
