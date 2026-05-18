@@ -38,7 +38,8 @@ fn trace_major_marks_seeded_source() {
     };
     let view = FlatReadView::new(&objects, &indexes);
 
-    let (steps, rounds) = super::trace_major(view.raw(), 1, 8, [source]);
+    let candidates = indexes.candidate_indices(&indexes.ephemeron_candidates);
+    let (steps, rounds) = super::trace_major(view.raw(), &candidates, 1, 8, [source]);
 
     assert_eq!(steps, 1);
     assert_eq!(rounds, 1);

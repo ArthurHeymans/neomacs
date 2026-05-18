@@ -168,6 +168,7 @@ impl EphemeronVisitor for MajorEphemeronTracer<'_, '_> {
 pub(crate) struct MajorMarkSession<'a> {
     objects: ObjectReadRaw<'a>,
     tracer: MarkTracer<'a>,
+    ephemeron_candidates: Vec<ObjectLocator>,
     worker_count: usize,
     slice_budget: usize,
     mark_steps: u64,
@@ -177,12 +178,14 @@ pub(crate) struct MajorMarkSession<'a> {
 impl<'a> MajorMarkSession<'a> {
     pub(crate) fn new(
         objects: ObjectReadRaw<'a>,
+        ephemeron_candidates: &[ObjectLocator],
         worker_count: usize,
         slice_budget: usize,
     ) -> Self {
         Self {
             objects: objects.clone(),
             tracer: MarkTracer::new(objects),
+            ephemeron_candidates: ephemeron_candidates.to_vec(),
             worker_count,
             slice_budget,
             mark_steps: 0,
@@ -204,9 +207,11 @@ impl<'a> MajorMarkSession<'a> {
 
     pub(crate) fn run_ephemeron_fixpoint_parallel(&mut self) {
         loop {
-            let changed = if self.worker_count.max(1) == 1 || self.objects.len() <= 1 {
+            let changed = if self.worker_count.max(1) == 1
+                || self.ephemeron_candidates.len() <= 1
+            {
                 let mut visitor = MajorEphemeronTracer::new(&mut self.tracer);
-                for locator in self.objects.all_locators() {
+                for &locator in &self.ephemeron_candidates {
                     let object = self.objects.get(locator);
                     if object.is_marked() {
                         object.visit_ephemerons(&mut visitor);
@@ -230,17 +235,20 @@ impl<'a> MajorMarkSession<'a> {
     }
 
     fn scan_ephemerons_parallel(&mut self) -> bool {
-        let locators = Arc::new(self.objects.all_locators());
-        let workers = self.worker_count.max(1).min(locators.len().max(1));
-        let chunk_size = locators.len().max(1).div_ceil(workers);
+        if self.ephemeron_candidates.is_empty() {
+            return false;
+        }
+        let candidates = Arc::new(self.ephemeron_candidates.clone());
+        let workers = self.worker_count.max(1).min(candidates.len().max(1));
+        let chunk_size = candidates.len().max(1).div_ceil(workers);
         let shared = ParallelMarkShared::new(self.objects.clone());
         let worker_outputs = thread::scope(|scope| {
             let mut handles = Vec::with_capacity(workers);
             for worker_index in 0..workers {
                 let shared = shared.clone();
-                let locators = Arc::clone(&locators);
+                let candidates = Arc::clone(&candidates);
                 let start = worker_index.saturating_mul(chunk_size);
-                let end = (start + chunk_size).min(locators.len());
+                let end = (start + chunk_size).min(candidates.len());
                 if start >= end {
                     continue;
                 }
@@ -248,7 +256,7 @@ impl<'a> MajorMarkSession<'a> {
                     let mut worker = shared.tracer(MarkWorklist::default());
                     let changed = {
                         let mut visitor = MajorEphemeronTracer::new(&mut worker);
-                        for &locator in &locators[start..end] {
+                        for &locator in &candidates[start..end] {
                             let object = shared.objects().get(locator);
                             if object.is_marked() {
                                 object.visit_ephemerons(&mut visitor);
@@ -286,11 +294,12 @@ impl<'a> MajorMarkSession<'a> {
 
 pub(crate) fn trace_major(
     objects: ObjectReadRaw<'_>,
+    ephemeron_candidates: &[ObjectLocator],
     worker_count: usize,
     slice_budget: usize,
     sources: impl IntoIterator<Item = GcErased>,
 ) -> (u64, u64) {
-    let mut session = MajorMarkSession::new(objects, worker_count, slice_budget);
+    let mut session = MajorMarkSession::new(objects, ephemeron_candidates, worker_count, slice_budget);
     for source in sources {
         session.seed(source);
     }
@@ -568,6 +577,7 @@ pub(crate) fn trace_collection(
             record_phase(CollectionPhase::Remark);
             trace_major(
                 view.raw(),
+                &indexes.candidate_indices(&indexes.ephemeron_candidates),
                 plan.worker_count.max(1),
                 plan.mark_slice_budget,
                 sources.iter().copied(),
