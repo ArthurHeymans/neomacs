@@ -1821,14 +1821,7 @@ pub(crate) fn builtin_format_message_slice(
 pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
     expect_min_args("make-string", &args, 2)?;
     expect_max_args("make-string", &args, 3)?;
-    let count_raw = expect_int(&args[0])?;
-    if count_raw < 0 {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("wholenump"), args[0]],
-        ));
-    }
-    let count = count_raw as usize;
+    let count = expect_wholenump(&args[0])? as usize;
 
     let ch = match args[1].kind() {
         ValueKind::Fixnum(c) => {
