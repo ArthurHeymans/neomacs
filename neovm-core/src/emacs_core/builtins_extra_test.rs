@@ -213,11 +213,11 @@ fn assoc_string_and_car_less_than_car_semantics() {
             .is_nil()
     );
 
-    let key_err = builtin_assoc_string(vec![Value::fixnum(1), Value::NIL]).unwrap_err();
-    match key_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+    assert!(
+        builtin_assoc_string(vec![Value::fixnum(1), Value::NIL])
+            .unwrap()
+            .is_nil()
+    );
 
     assert!(
         builtin_car_less_than_car(vec![
@@ -252,6 +252,65 @@ fn assoc_string_and_car_less_than_car_semantics() {
     ])
     .unwrap_err();
     match number_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn assoc_string_matches_gnu_atom_entries_and_deferred_key_errors() {
+    crate::test_utils::init_test_tracing();
+
+    let atom_string_hit = builtin_assoc_string(vec![
+        Value::string("solo"),
+        Value::list(vec![
+            Value::string("solo"),
+            Value::cons(Value::string("solo"), Value::symbol("pair-hit")),
+        ]),
+    ])
+    .unwrap();
+    assert_eq!(atom_string_hit, Value::string("solo"));
+
+    let atom_symbol_hit = builtin_assoc_string(vec![
+        Value::string("symbol-key"),
+        Value::list(vec![
+            Value::symbol("symbol-key"),
+            Value::cons(Value::string("symbol-key"), Value::symbol("string-pair")),
+        ]),
+    ])
+    .unwrap();
+    assert_eq!(atom_symbol_hit, Value::symbol("symbol-key"));
+
+    let no_list_no_key_check = builtin_assoc_string(vec![Value::fixnum(42), Value::NIL]).unwrap();
+    assert!(no_list_no_key_check.is_nil());
+
+    let skipped_non_string_entries_then_hit = builtin_assoc_string(vec![
+        Value::string("hit"),
+        Value::list(vec![
+            Value::cons(Value::fixnum(1), Value::symbol("skip-number")),
+            Value::cons(Value::NIL, Value::symbol("skip-nil")),
+            Value::cons(
+                Value::list(vec![Value::symbol("hit")]),
+                Value::symbol("skip-list"),
+            ),
+            Value::cons(Value::string("hit"), Value::symbol("string-hit")),
+        ]),
+    ])
+    .unwrap();
+    assert_eq!(
+        skipped_non_string_entries_then_hit.cons_cdr(),
+        Value::symbol("string-hit")
+    );
+
+    let deferred_key_err = builtin_assoc_string(vec![
+        Value::fixnum(42),
+        Value::list(vec![Value::cons(
+            Value::string("42"),
+            Value::symbol("would-error"),
+        )]),
+    ])
+    .unwrap_err();
+    match deferred_key_err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),
     }

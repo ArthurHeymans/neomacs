@@ -125,6 +125,11 @@ fn assoc_string_key_name(value: &Value) -> Result<String, Flow> {
     }
 }
 
+fn assoc_string_compare(key: &Value, entry_key: &str, fold_case: bool) -> Result<bool, Flow> {
+    let key_name = assoc_string_key_name(key)?;
+    Ok(assoc_string_equal(entry_key, &key_name, fold_case))
+}
+
 fn assoc_string_entry_name(value: &Value) -> Option<String> {
     match value.kind() {
         ValueKind::String => Some(
@@ -389,7 +394,7 @@ pub(crate) fn builtin_byteorder(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_assoc_string(args: Vec<Value>) -> EvalResult {
     expect_min_args("assoc-string", &args, 2)?;
     expect_max_args("assoc-string", &args, 3)?;
-    let needle = assoc_string_key_name(&args[0])?;
+    let key = args[0];
     let fold_case = args.get(2).is_some_and(|v| v.is_truthy());
 
     let mut cursor = args[1];
@@ -402,15 +407,15 @@ pub(crate) fn builtin_assoc_string(args: Vec<Value>) -> EvalResult {
                 let entry = pair_car;
                 cursor = pair_cdr;
 
-                if !entry.is_cons() {
+                let entry_car = if entry.is_cons() {
+                    entry.cons_car()
+                } else {
+                    entry
+                };
+                let Some(entry_key) = assoc_string_entry_name(&entry_car) else {
                     continue;
                 };
-                let entry_pair_car = entry.cons_car();
-                let entry_pair_cdr = entry.cons_cdr();
-                let Some(entry_key) = assoc_string_entry_name(&entry_pair_car) else {
-                    continue;
-                };
-                if assoc_string_equal(&needle, &entry_key, fold_case) {
+                if assoc_string_compare(&key, &entry_key, fold_case)? {
                     return Ok(entry);
                 }
             }
