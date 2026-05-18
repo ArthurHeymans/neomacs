@@ -54,7 +54,8 @@ use neovm_core::emacs_core::load::RuntimeImageRole;
 #[cfg(test)]
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
-    configure_terminal_runtime, reset_terminal_host, reset_terminal_runtime, set_terminal_host,
+    TerminalRuntimeConfig, configure_terminal_runtime, ensure_terminal_runtime_owner,
+    reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
 use neovm_core::emacs_core::{Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest};
 use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth};
@@ -2862,6 +2863,8 @@ fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup
 }
 
 fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: FrameId) -> FrameId {
+    const GUI_STARTUP_TERMINAL_ID: u64 = 1;
+
     if let Some(existing) = eval
         .frame_manager()
         .frame_list()
@@ -2894,9 +2897,18 @@ fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: Frame
             )
         })
         .unwrap_or((80, 25, None));
-    let terminal_frame_id =
-        eval.frame_manager_mut()
-            .create_frame("Fstartup-tty", width, height, seed_buffer_id);
+    ensure_terminal_runtime_owner(
+        GUI_STARTUP_TERMINAL_ID,
+        "startup_terminal",
+        TerminalRuntimeConfig::inactive(),
+    );
+    let terminal_frame_id = eval.frame_manager_mut().create_frame_on_terminal(
+        "Fstartup-tty",
+        GUI_STARTUP_TERMINAL_ID,
+        width,
+        height,
+        seed_buffer_id,
+    );
     if let Some(frame) = eval.frame_manager_mut().get_mut(terminal_frame_id) {
         frame.visible = false;
         frame.set_window_system(None);

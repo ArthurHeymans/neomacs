@@ -5512,15 +5512,21 @@ fn pure_dispatch_reconsider_redirect_placeholders_match_compat_contracts() {
         }
         other => panic!("expected signal, got: {other:?}"),
     }
-    // Valid window handle but no frame in the bare context → "Window not found".
-    let resize_mini_no_frame =
-        dispatch_builtin_pure("resize-mini-window-internal", vec![Value::make_window(1)])
-            .expect("builtin resize-mini-window-internal should resolve")
-            .expect_err("resize-mini-window-internal should signal when window has no frame");
+    // Valid window handle that is not present in the synthesized batch frame.
+    let resize_mini_no_frame = dispatch_builtin_pure(
+        "resize-mini-window-internal",
+        vec![Value::make_window(999_999)],
+    )
+    .expect("builtin resize-mini-window-internal should resolve")
+    .expect_err("resize-mini-window-internal should signal when window has no frame");
     match resize_mini_no_frame {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "error");
-            assert_eq!(sig.data, vec![Value::string("Window not found")]);
+            assert_eq!(sig.data.len(), 1);
+            assert_eq!(
+                sig.data[0].as_runtime_string_owned().as_deref(),
+                Some("Window not found")
+            );
         }
         other => panic!("expected signal, got: {other:?}"),
     }
@@ -5545,6 +5551,32 @@ fn pure_dispatch_reconsider_redirect_placeholders_match_compat_contracts() {
         .expect("builtin set-buffer-auto-saved should resolve")
         .expect("builtin set-buffer-auto-saved should evaluate");
     assert!(set_auto_saved.is_nil());
+}
+
+#[test]
+fn reconsider_frame_fonts_accepts_live_window_system_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = eval
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("selected frame");
+    frame.set_window_system(Some(Value::symbol("neo")));
+    frame.set_parameter(
+        Value::symbol("font-parameter"),
+        Value::string("monospace-12"),
+    );
+
+    let result = dispatch_builtin(
+        &mut eval,
+        "reconsider-frame-fonts",
+        vec![Value::make_frame(frame_id.0)],
+    )
+    .expect("builtin reconsider-frame-fonts should resolve")
+    .expect("window-system frame should be accepted");
+
+    assert!(result.is_nil());
 }
 
 #[test]

@@ -268,7 +268,7 @@ pub fn configure_terminal_runtime(config: TerminalRuntimeConfig) {
     });
 }
 
-pub(crate) fn ensure_terminal_runtime_owner(
+pub fn ensure_terminal_runtime_owner(
     id: u64,
     name: impl Into<String>,
     config: TerminalRuntimeConfig,
@@ -818,8 +818,23 @@ pub(crate) fn builtin_terminal_live_p(
         return Ok(Value::NIL);
     };
     let runtime = terminal_runtime_for_id(terminal_id);
+    let mut terminal_has_frame = false;
+    let window_system = eval
+        .frames
+        .frame_list()
+        .into_iter()
+        .filter_map(|frame_id| eval.frames.get(frame_id))
+        .filter(|frame| frame.terminal_id == terminal_id)
+        .find_map(|frame| {
+            terminal_has_frame = true;
+            frame.effective_window_system()
+        });
     // Return the window system type so framep-on-display works correctly.
-    if runtime.controlling_tty || runtime.tty_type.is_some() {
+    if let Some(window_system) = window_system {
+        Ok(window_system)
+    } else if terminal_has_frame {
+        Ok(Value::T)
+    } else if runtime.controlling_tty || runtime.tty_type.is_some() {
         Ok(Value::T)
     } else if crate::emacs_core::display::x_window_system_active(eval) {
         Ok(Value::symbol(

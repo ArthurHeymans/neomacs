@@ -1302,6 +1302,85 @@ fn configure_gnu_startup_state_reports_neo_window_system_for_gui_boots() {
 }
 
 #[test]
+fn gui_startup_terminal_frame_uses_separate_terminal_owner() {
+    let mut eval = Context::new();
+    let buffer_id = eval.buffer_manager_mut().create_buffer("*scratch*");
+    let gui_frame_id = eval
+        .frame_manager_mut()
+        .create_frame("F1", 960, 640, buffer_id);
+    eval.frame_manager_mut()
+        .get_mut(gui_frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let _ = eval.frame_manager_mut().select_frame(gui_frame_id);
+
+    configure_gnu_startup_state(&mut eval, gui_frame_id, &gui_startup());
+
+    let gui_terminal_id = eval
+        .frame_manager()
+        .get(gui_frame_id)
+        .expect("GUI frame")
+        .terminal_id;
+    let startup_terminal_frame = eval
+        .frame_manager()
+        .frame_list()
+        .into_iter()
+        .filter(|frame_id| *frame_id != gui_frame_id)
+        .find_map(|frame_id| eval.frame_manager().get(frame_id))
+        .expect("hidden startup terminal frame");
+
+    assert!(startup_terminal_frame.effective_window_system().is_none());
+    assert_ne!(startup_terminal_frame.terminal_id, gui_terminal_id);
+    let terminal_types = eval
+        .eval_str(
+            "(list (terminal-live-p (frame-terminal frame-initial-frame))
+                   (terminal-live-p (frame-terminal terminal-frame)))",
+        )
+        .expect("terminal-live-p should evaluate for startup frames");
+    assert_eq!(
+        print_value_with_eval(&mut eval, &terminal_types),
+        "(neo t)",
+        "hidden startup terminal must stay tty-typed even while GUI frame is selected"
+    );
+}
+
+#[test]
+fn gui_startup_hidden_terminal_frame_matches_tty_face_specs() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
+    let _frame_id = bootstrap_runtime_gui_startup(&mut eval);
+
+    let result = eval
+        .eval_str(
+            r#"
+        (condition-case err
+            (list
+             (terminal-live-p (frame-terminal frame-initial-frame))
+             (terminal-live-p (frame-terminal terminal-frame))
+             (framep-on-display terminal-frame)
+             (window-system terminal-frame)
+             (display-color-cells terminal-frame)
+             (face-spec-choose
+              '((((class color grayscale) (min-colors 88)) :foreground "red")
+                (((type tty)) :foreground "blue"))
+              terminal-frame
+              'no-match)
+             (condition-case err
+                 (x-display-color-cells terminal-frame)
+               (error (error-message-string err))))
+          (error (list 'error (error-message-string err))))
+        "#,
+        )
+        .expect("hidden terminal face probe should evaluate");
+
+    assert_eq!(
+        print_value_with_eval(&mut eval, &result),
+        "(neo t t nil 0 (:foreground \"blue\") \"Window system frame should be used\")",
+        "hidden startup terminal frame must use tty display queries without weakening explicit X errors"
+    );
+}
+
+#[test]
 fn cl_generic_context_dispatch_uses_neo_window_system_method() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

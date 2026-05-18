@@ -933,6 +933,8 @@ pub(crate) fn builtin_window_system(
         frame_window_system_symbol_in_state(&mut eval.frames, &mut eval.buffers, args.first())?
     {
         return Ok(window_system);
+    } else {
+        return Ok(Value::NIL);
     }
     Ok(
         dynamic_or_global_symbol_value_in_state(&eval.obarray, &[], "window-system")

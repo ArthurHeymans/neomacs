@@ -2518,18 +2518,30 @@ pub(crate) fn builtin_recent_auto_save_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_reconsider_frame_fonts(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_reconsider_frame_fonts(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("reconsider-frame-fonts", &args, 1)?;
-    if !args[0].is_nil() && !args[0].is_frame() {
+    let frame_id = super::window_cmds::resolve_frame_id_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        Some(&args[0]),
+        "frame-live-p",
+    )?;
+    if eval
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.effective_window_system())
+        .is_none()
+    {
         return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("frame-live-p"), args[0]],
+            "error",
+            vec![Value::string("Window system frame should be used")],
         ));
     }
-    Err(signal(
-        "error",
-        vec![Value::string("Window system frame should be used")],
-    ))
+    crate::emacs_core::font::seed_live_frame_default_face_from_font_parameter(eval, frame_id);
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_redirect_debugging_output(args: Vec<Value>) -> EvalResult {

@@ -2908,6 +2908,15 @@ fn window_system_prefers_selected_frame_then_global_fallback() {
         builtin_window_system(&mut eval, vec![Value::fixnum(frame_id.0 as i64)]).unwrap(),
         Value::symbol("x")
     );
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(None);
+    assert_eq!(
+        builtin_window_system(&mut eval, vec![Value::fixnum(frame_id.0 as i64)]).unwrap(),
+        Value::NIL,
+        "an explicit non-window-system frame must not fall back to global window-system"
+    );
 
     let err = builtin_window_system(&mut eval, vec![Value::string("x")]).unwrap_err();
     match err {

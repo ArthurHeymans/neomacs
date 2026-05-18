@@ -84,6 +84,44 @@ fn terminal_live_p_nil_is_live() {
 }
 
 #[test]
+fn terminal_live_p_reports_frame_terminal_type_not_selected_global_type() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    let mut eval = Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("*scratch*");
+    let gui_frame = eval.frame_manager_mut().create_frame("F1", 80, 25, buffer);
+    eval.frame_manager_mut()
+        .get_mut(gui_frame)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let _ = eval.frame_manager_mut().select_frame(gui_frame);
+    eval.set_variable("window-system", Value::symbol("neo"));
+    eval.set_variable("initial-window-system", Value::symbol("neo"));
+
+    let hidden_terminal =
+        ensure_terminal_runtime_owner(1, "startup_terminal", TerminalRuntimeConfig::inactive());
+    let hidden_frame =
+        eval.frame_manager_mut()
+            .create_frame_on_terminal("Fstartup-tty", 1, 80, 25, buffer);
+    eval.frame_manager_mut()
+        .get_mut(hidden_frame)
+        .expect("hidden terminal frame")
+        .set_window_system(None);
+
+    let gui_terminal =
+        builtin_frame_terminal(&mut eval, vec![Value::make_frame(gui_frame.0)]).unwrap();
+
+    assert_eq!(
+        builtin_terminal_live_p(&mut eval, vec![gui_terminal]).unwrap(),
+        Value::symbol("neo")
+    );
+    assert_eq!(
+        builtin_terminal_live_p(&mut eval, vec![hidden_terminal]).unwrap(),
+        Value::T
+    );
+}
+
+#[test]
 fn terminal_live_p_int_is_not_live() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();

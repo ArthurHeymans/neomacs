@@ -5722,7 +5722,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr_1("recordp", builtin_recordp_1, 1);
     ctx.defsubr(
         "reconsider-frame-fonts",
-        |_ctx, args| builtin_reconsider_frame_fonts(args),
+        builtin_reconsider_frame_fonts,
         1,
         Some(1),
     );
