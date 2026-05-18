@@ -1897,6 +1897,55 @@ impl Interpreter<'_, '_, '_> {
                     Err(_) => Some(LispValue::NIL),
                 }
             }),
+            "undo-boundary" => self.min_max_arity(name, args, 0, 0).map(|_| LispValue::NIL),
+            "get-text-property" => self.subr_2_3(name, args, |s| {
+                let _pos = s.fixnum_arg(name, args[0])? as usize;
+                let _prop = s.runtime.string_contents(args[1]).ok()?.to_string();
+                Some(LispValue::NIL)
+            }),
+            "put-text-property" => self.subr_2_5(name, args, |s| {
+                let _start = s.fixnum_arg(name, args[0])? as usize;
+                let _end = s.fixnum_arg(name, args[1])? as usize;
+                Some(LispValue::NIL)
+            }),
+            "add-text-properties" => self.subr_min_2(name, args, |s| {
+                Some(LispValue::NIL)
+            }),
+            "remove-text-properties" => self.subr_min_2(name, args, |s| {
+                Some(LispValue::TRUE)
+            }),
+            "overlayp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
+            "make-overlay" => self.subr_2_3(name, args, |s| {
+                let _start = s.fixnum_arg(name, args[0])? as usize;
+                let idx = s.runtime.markers.len();
+                s.runtime.markers.push(crate::runtime::Marker {
+                    buffer_index: s.runtime.current_buffer,
+                    position: _start,
+                    insertion_type: false,
+                });
+                Some(LispValue::expect_fixnum(idx as i64))
+            }),
+            "delete-overlay" => self.subr_1(name, args, |s| {
+                Some(LispValue::NIL)
+            }),
+            "overlay-start" => self.subr_1(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() {
+                    Some(LispValue::expect_fixnum((s.runtime.markers[i].position + 1) as i64))
+                } else { Some(LispValue::NIL) }
+            }),
+            "overlay-end" => self.subr_1(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                Some(LispValue::expect_fixnum(n + 1))
+            }),
+            "overlay-get" => self.subr_2(name, args, |s| {
+                let _prop = s.runtime.string_contents(args[1]).ok()?.to_string();
+                Some(LispValue::NIL)
+            }),
+            "overlay-put" => self.subr_3(name, args, |s| {
+                Some(LispValue::NIL)
+            }),
             "sleep-for" => self.subr_0_1(name, args, |s| {
                 let secs = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(0) as f64;
                 if secs > 0.0 {
