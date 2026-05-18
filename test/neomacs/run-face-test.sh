@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Test face rendering (font faces, colors, attributes, variable-height faces)
 # Usage: ./test/neomacs/run-face-test.sh
+#        NEOMACS_BIN=./target/release/neomacs ./test/neomacs/run-face-test.sh
 #
 # What this tests:
 # - Face attribute rendering (foreground, background, bold, italic, underline)
@@ -16,33 +17,47 @@ cd "$(dirname "$0")/../.."
 
 LOG=/tmp/face-test.log
 SCREENSHOT=/tmp/face-screenshot.png
+MATRIX_REPORT=/tmp/face-matrix-report.txt
 TEST_NAME="Face"
+NEOMACS_BIN="${NEOMACS_BIN:-./target/release/neomacs}"
+PANIC_COUNT=0
+ERROR_COUNT=0
 
 echo "=== $TEST_NAME Test ==="
-echo "Starting Emacs..."
+echo "Starting Neomacs..."
 
-RUST_LOG=neomacs_display=debug DISPLAY=:0 ./src/emacs -Q \
-    -l test/neomacs/neomacs-face-test.el 2>"$LOG" &
-EMACS_PID=$!
+if [ ! -x "$NEOMACS_BIN" ]; then
+    echo "ERROR: Neomacs binary not found or not executable: $NEOMACS_BIN"
+    echo "Run: cargo xtask fresh-build --release"
+    exit 1
+fi
 
-echo "Emacs PID: $EMACS_PID"
+rm -f "$LOG" "$SCREENSHOT" "$MATRIX_REPORT"
+
+RUST_LOG=info DISPLAY="${DISPLAY:-:0}" "$NEOMACS_BIN" -Q \
+    -l test/neomacs/neomacs-face-test.el \
+    --eval "(run-at-time 5 nil (lambda () (neomacs-face-test-write-matrix-report \"$MATRIX_REPORT\")))" \
+    >"$LOG" 2>&1 &
+NEOMACS_PID=$!
+
+echo "Neomacs PID: $NEOMACS_PID"
 echo "Waiting for window to appear..."
 sleep 5
 
-# Find emacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "emacs" 2>/dev/null | head -1)
+# Find Neomacs window.
+WIN_ID=$(DISPLAY="${DISPLAY:-:0}" xdotool search --name "Neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
-    echo "ERROR: Could not find Emacs window"
-    kill $EMACS_PID 2>/dev/null || true
+    echo "ERROR: Could not find Neomacs window"
+    kill $NEOMACS_PID 2>/dev/null || true
     exit 1
 fi
 
 echo "Found window: $WIN_ID"
-DISPLAY=:0 xdotool getwindowgeometry "$WIN_ID"
+DISPLAY="${DISPLAY:-:0}" xdotool getwindowgeometry "$WIN_ID"
 
 # Activate window
 echo "Activating window..."
-DISPLAY=:0 xdotool windowactivate --sync "$WIN_ID"
+DISPLAY="${DISPLAY:-:0}" xdotool windowactivate --sync "$WIN_ID"
 sleep 1
 
 # Wait for face rendering to complete
@@ -54,7 +69,7 @@ sleep 5
 echo ""
 echo "=== Taking screenshot ==="
 if command -v import &>/dev/null; then
-    DISPLAY=:0 import -window "$WIN_ID" "$SCREENSHOT" 2>/dev/null || true
+    DISPLAY="${DISPLAY:-:0}" import -window "$WIN_ID" "$SCREENSHOT" 2>/dev/null || true
     if [ -f "$SCREENSHOT" ]; then
         echo "Screenshot saved: $SCREENSHOT"
     else
@@ -64,12 +79,20 @@ else
     echo "Skipping screenshot (ImageMagick 'import' not available)"
 fi
 
+# Wait for matrix report timer.
+sleep 1
+if [ -f "$MATRIX_REPORT" ]; then
+    echo "Face matrix report saved: $MATRIX_REPORT"
+else
+    echo "WARNING: Face matrix report was not written."
+fi
+
 # Check logs for errors
 echo ""
 echo "=== Checking log entries ==="
 if [ -f "$LOG" ]; then
-    PANIC_COUNT=$(grep -ci "panic" "$LOG" 2>/dev/null || echo "0")
-    ERROR_COUNT=$(grep -ci "error" "$LOG" 2>/dev/null || echo "0")
+    PANIC_COUNT=$(grep -ci "panic" "$LOG" 2>/dev/null || true)
+    ERROR_COUNT=$(grep -c " ERROR " "$LOG" 2>/dev/null || true)
 
     if [ "$PANIC_COUNT" -gt 0 ]; then
         echo "WARNING: $PANIC_COUNT PANIC entries found!"
@@ -80,7 +103,7 @@ if [ -f "$LOG" ]; then
 
     if [ "$ERROR_COUNT" -gt 0 ]; then
         echo "WARNING: $ERROR_COUNT ERROR entries found:"
-        grep -i "error" "$LOG" | tail -10
+        grep " ERROR " "$LOG" | tail -10
     else
         echo "No ERROR entries detected."
     fi
@@ -90,9 +113,9 @@ fi
 
 # Cleanup
 echo ""
-echo "Stopping Emacs..."
-kill $EMACS_PID 2>/dev/null || true
-wait $EMACS_PID 2>/dev/null || true
+echo "Stopping Neomacs..."
+kill $NEOMACS_PID 2>/dev/null || true
+wait $NEOMACS_PID 2>/dev/null || true
 
 # Summary
 echo ""
