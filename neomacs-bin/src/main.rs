@@ -1553,27 +1553,45 @@ fn seed_gnu_default_gui_chrome_modes(eval: &mut Context) {
     eval.set_variable("compact-bar-mode", Value::NIL);
 }
 
-fn setup_reused_gui_startup_function_keys(eval: &mut Context, frame_id: FrameId) {
+fn run_reused_gui_startup_frame_lisp(eval: &mut Context, frame_id: FrameId, body: &str) {
     let frame_value = Value::make_frame(frame_id.0);
     let previous = eval
         .obarray()
         .symbol_value("neomacs--reused-gui-startup-frame")
         .copied();
     eval.set_variable("neomacs--reused-gui-startup-frame", frame_value);
-    let result = eval.eval_str(
-        r#"
-        (when (and (fboundp 'x-setup-function-keys)
-                   (frame-live-p neomacs--reused-gui-startup-frame))
-          (x-setup-function-keys neomacs--reused-gui-startup-frame))
-        "#,
-    );
+    let result = eval.eval_str(body);
     match previous {
         Some(value) => eval.set_variable("neomacs--reused-gui-startup-frame", value),
         None => {
             let _ = eval.eval_str("(makunbound 'neomacs--reused-gui-startup-frame)");
         }
     }
-    result.expect("GNU GUI startup frame key setup should succeed");
+    result.expect("GNU GUI startup frame Lisp initialization should succeed");
+}
+
+fn initialize_reused_gui_startup_frame(eval: &mut Context, frame_id: FrameId) {
+    seed_gnu_default_gui_chrome_modes(eval);
+
+    // GNU startup calls `window-system-initialization`, then
+    // `frame-initialize`; the opening GUI frame is created through
+    // `faces.el:x-create-frame-with-faces`.  Neomacs creates the host
+    // GUI frame before Lisp startup and reuses it as `frame-initial-frame`,
+    // so run the frame-local Lisp side effects that GNU's creation path
+    // applies after `x-create-frame` returns.
+    run_reused_gui_startup_frame_lisp(
+        eval,
+        frame_id,
+        r#"
+        (when (frame-live-p neomacs--reused-gui-startup-frame)
+          ;; GNU faces.el:x-create-frame-with-faces calls this before face
+          ;; recalculation.  It installs x-alternatives-map on the frame's
+          ;; terminal, including [M-backspace] -> M-DEL.
+          (when (fboundp 'x-setup-function-keys)
+            (x-setup-function-keys neomacs--reused-gui-startup-frame)))
+        "#,
+    );
+    sync_selected_gui_chrome_state(eval);
 }
 
 fn ensure_gnu_tool_bar_setup(eval: &mut Context) {
@@ -2665,9 +2683,7 @@ fn bootstrap_buffers(
         }
     }
     if display.frontend == FrontendKind::Gui {
-        seed_gnu_default_gui_chrome_modes(eval);
-        setup_reused_gui_startup_function_keys(eval, frame_id);
-        sync_selected_gui_chrome_state(eval);
+        initialize_reused_gui_startup_frame(eval, frame_id);
     } else {
         eval.set_face_attribute(
             "default",

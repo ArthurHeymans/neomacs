@@ -1711,13 +1711,19 @@ fn gnu_startup_reused_gui_frame_installs_common_window_key_translations() {
             r#"
         (list
          (lookup-key local-function-key-map [M-backspace])
+         (lookup-key local-function-key-map [M-delete])
+         (terminal-parameter nil 'x-setup-function-keys)
          (key-binding [M-backspace])
+         (key-binding [M-delete])
          (key-binding [?\M-\d]))
         "#,
         )
         .expect("key translation probe should evaluate");
     let rendered = print_value_with_eval(&mut eval, &result);
-    assert_eq!(rendered, "([134217855] nil backward-kill-word)");
+    assert_eq!(
+        rendered,
+        "([134217855] [134217855] t nil nil backward-kill-word)"
+    );
 }
 
 #[test]
