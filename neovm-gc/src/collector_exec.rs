@@ -9,7 +9,7 @@ use crate::descriptor::{EphemeronVisitor, GcErased, ObjectKey, Relocator, Tracer
 use crate::heap::AllocError;
 use crate::index_state::{ForwardingMap, HeapIndexState, ObjectIndex, ObjectLocator};
 use crate::mark::MarkWorklist;
-use crate::object::{ObjectRecord, SpaceKind};
+use crate::object::{ObjectHeader, ObjectRecord, SpaceKind};
 use crate::object_store::{FlatReadView, ObjectReadRaw, ObjectReadView};
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};
 use crate::reclaim::{
@@ -349,8 +349,9 @@ fn align_up_to(value: usize, align: usize) -> usize {
 pub(crate) fn collect_dirty_card_root_indices(
     objects: &[ObjectRecord],
     old_gen: &OldGenState,
+    object_index: &ObjectIndex,
 ) -> Vec<usize> {
-    collect_dirty_card_root_indices_with_counter(objects, old_gen, &mut 0usize)
+    collect_dirty_card_root_indices_with_counter(objects, old_gen, object_index, &mut 0usize)
 }
 
 /// Variant of `collect_dirty_card_root_indices` that also writes the
@@ -360,25 +361,15 @@ pub(crate) fn collect_dirty_card_root_indices(
 pub(crate) fn collect_dirty_card_root_indices_with_counter(
     objects: &[ObjectRecord],
     old_gen: &OldGenState,
+    object_index: &ObjectIndex,
     counter: &mut usize,
 ) -> Vec<usize> {
-    // Fast path: skip the header-index build when no block has dirty cards.
     if !old_gen.blocks().iter().any(|b| b.card_table().has_dirty()) {
         return Vec::new();
     }
 
     let mut roots = Vec::new();
     let mut seen = vec![false; objects.len()];
-
-    // One-shot header-pointer -> objects-index map. Built once and
-    // shared across every dirty card so the per-card walk only pays a
-    // single hash lookup per object header it visits.
-    let mut header_index: std::collections::HashMap<usize, usize> =
-        std::collections::HashMap::with_capacity(objects.len());
-    for (object_index, record) in objects.iter().enumerate() {
-        let header_addr = record.erased().header().as_ptr() as usize;
-        header_index.insert(header_addr, object_index);
-    }
 
     for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
@@ -401,27 +392,26 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
             let mut offset = start_offset as usize;
             while offset < card_end_offset {
                 let header_addr = block_base + offset;
-                if let Some(&object_index) = header_index.get(&header_addr) {
-                    *counter += 1;
-                    let record = &objects[object_index];
-                    let total_size = record.total_size().max(1);
-                    if !seen[object_index] {
-                        seen[object_index] = true;
-                        roots.push(object_index);
+                let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
+                    .expect("block base + offset is non-null");
+                let key = ObjectKey::from_header(header_ptr);
+                if let Some(&locator) = object_index.get(&key) {
+                    let object_index = locator.slot;
+                    if object_index < objects.len() {
+                        *counter += 1;
+                        let record = &objects[object_index];
+                        let total_size = record.total_size().max(1);
+                        if !seen[object_index] {
+                            seen[object_index] = true;
+                            roots.push(object_index);
+                        }
+                        offset = align_up_to(
+                            offset.saturating_add(total_size),
+                            line_bytes,
+                        );
+                        continue;
                     }
-                    let next_offset = offset.saturating_add(total_size);
-                    // After consuming this object, the next object header
-                    // is line-aligned (try_alloc rounds every allocation
-                    // up to a whole number of lines). Snap forward to the
-                    // next line boundary so we don't waste time scanning
-                    // the trailing pad bytes inside the same line.
-                    offset = align_up_to(next_offset, line_bytes);
-                    continue;
                 }
-                // No live record at this header address — advance to
-                // the next line boundary so we keep making forward
-                // progress without skipping over a real header that may
-                // sit at the next line start.
                 *counter += 1;
                 offset = align_up_to(offset.saturating_add(1), line_bytes);
             }
@@ -717,7 +707,7 @@ pub(crate) fn execute_collection_plan(
     // young-target edges that mutators marked since the last
     // cycle.
     if matches!(plan.kind, CollectionKind::Minor) {
-        let dirty_card_root_indices = collect_dirty_card_root_indices(objects, old_gen);
+        let dirty_card_root_indices = collect_dirty_card_root_indices(objects, old_gen, &indexes.object_index);
         for object_index in dirty_card_root_indices {
             sources.push(objects[object_index].erased());
         }
