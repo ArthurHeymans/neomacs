@@ -500,6 +500,40 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
             };
             let card_end_offset = ((card_index + 1) << card_shift).min(block_len);
             let mut offset = start_offset as usize;
+            // First object: try cached locator.
+            if offset < card_end_offset {
+                let header_addr = block_base + offset;
+                if let Some(loc) = block.cached_locator_for_card(card_index) {
+                    *counter += 1;
+                    let record = objects.get(loc);
+                    let total_size = record.total_size().max(1);
+                    if seen.insert(ObjectKey::from_header(
+                        core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
+                            .expect("block base + offset is non-null"),
+                    )) {
+                        roots.push(loc);
+                    }
+                    offset = align_up_to(offset.saturating_add(total_size), line_bytes);
+                } else {
+                    let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
+                        .expect("block base + offset is non-null");
+                    let key = ObjectKey::from_header(header_ptr);
+                    if let Some(locator) = objects.locator_of_key(key) {
+                        block.cache_locator_for_card(card_index, locator);
+                        *counter += 1;
+                        let record = objects.get(locator);
+                        let total_size = record.total_size().max(1);
+                        if seen.insert(key) {
+                            roots.push(locator);
+                        }
+                        offset = align_up_to(offset.saturating_add(total_size), line_bytes);
+                    } else {
+                        *counter += 1;
+                        offset = align_up_to(offset.saturating_add(1), line_bytes);
+                    }
+                }
+            }
+            // Remaining objects: use locator_of_key.
             while offset < card_end_offset {
                 let header_addr = block_base + offset;
                 let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
