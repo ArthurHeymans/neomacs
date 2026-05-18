@@ -362,6 +362,12 @@ fn test_file_name_absolute_p() {
     assert!(file_name_absolute_p("~/tmp"));
     assert!(file_name_absolute_p("~"));
     assert!(file_name_absolute_p("~root"));
+    assert!(!file_name_absolute_p(
+        "~neomacs-user-that-should-not-exist-2b6ad2e4"
+    ));
+    assert!(!file_name_absolute_p(
+        "~neomacs-user-that-should-not-exist-2b6ad2e4/tmp"
+    ));
     assert!(!file_name_absolute_p("tmp"));
     assert!(!file_name_absolute_p("./tmp"));
 }
@@ -2578,6 +2584,11 @@ fn test_builtin_path_predicates() {
     assert_eq!(result.unwrap(), Value::T);
 
     let result = builtin_file_name_absolute_p(vec![Value::string("tmp")]);
+    assert_eq!(result.unwrap(), Value::NIL);
+
+    let result = builtin_file_name_absolute_p(vec![Value::string(
+        "~neovm-user-that-should-not-exist-94d11b/tmp",
+    )]);
     assert_eq!(result.unwrap(), Value::NIL);
 
     let result = builtin_directory_name_p(vec![Value::string("foo/")]);

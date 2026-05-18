@@ -399,10 +399,54 @@ pub fn file_name_concat(parts: &[&str]) -> String {
     out
 }
 
+fn user_homedir_absolute_p(name: &[u8]) -> bool {
+    let end = name
+        .iter()
+        .position(|&b| b == b'\0' || b == b'/')
+        .unwrap_or(name.len());
+    if end == 0 {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        let Ok(user) = CString::new(&name[..end]) else {
+            return false;
+        };
+        let passwd = unsafe { libc::getpwnam(user.as_ptr()) };
+        if passwd.is_null() {
+            return false;
+        }
+        let pw_dir = unsafe { (*passwd).pw_dir };
+        if pw_dir.is_null() {
+            return false;
+        }
+        unsafe { CStr::from_ptr(pw_dir) }
+            .to_bytes()
+            .starts_with(b"/")
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = name;
+        false
+    }
+}
+
+fn file_name_absolute_bytes_p(filename: &[u8]) -> bool {
+    match filename {
+        [b'/', ..] => true,
+        [b'~'] => true,
+        [b'~', b'/', ..] => true,
+        [b'~', rest @ ..] => user_homedir_absolute_p(rest),
+        _ => false,
+    }
+}
+
 /// Return true if FILENAME is an absolute file name.
-/// On Unix this means it starts with `/` or `~`.
+/// Mirrors GNU Emacs `file_name_absolute_p` for Unix path syntax.
 pub fn file_name_absolute_p(filename: &str) -> bool {
-    filename.starts_with('/') || filename.starts_with('~')
+    file_name_absolute_bytes_p(filename.as_bytes())
 }
 
 /// Return true if NAME is a directory name (ends with a directory separator).
@@ -432,10 +476,7 @@ fn env_name_char(b: u8) -> bool {
 fn embedded_absfilename_start(bytes: &[u8]) -> Option<usize> {
     let mut i = 1usize;
     while i < bytes.len() {
-        if bytes[i - 1] == b'/'
-            && (bytes[i] == b'/'
-                || (bytes[i] == b'~' && (i + 1 == bytes.len() || bytes[i + 1] == b'/')))
-        {
+        if bytes[i - 1] == b'/' && file_name_absolute_bytes_p(&bytes[i..]) {
             return Some(i);
         }
         i += 1;
