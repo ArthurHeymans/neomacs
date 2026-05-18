@@ -1,12 +1,14 @@
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
 use crate::card_table::CardTable;
+use crate::index_state::ObjectLocator;
 use crate::object::{ObjectRecord, OldBlockPlacement};
 use crate::stats::OldRegionStats;
 
 /// Sentinel value for [`OldBlock::object_starts`] meaning "no object
 /// starts in this card."
 const OBJECT_START_NONE: u32 = u32::MAX;
+const CARD_LOCATOR_NONE: u64 = u64::MAX;
 
 /// Old-generation configuration.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,6 +131,11 @@ pub(crate) struct OldBlock {
     /// header in the card.  Atomic so `try_alloc` / `record_object_start`
     /// can update the index under `&self`.
     object_starts: Box<[AtomicU32]>,
+    /// Per-card cached ObjectLocator for the first object in each card.
+    /// u64::MAX means no locator cached. Populated lazily by the
+    /// dirty-card scan and cleared alongside object_starts on sweep.
+    /// Uses packed representation: (shard as u64) << 32 | (slot as u64).
+    card_locators: Box<[AtomicU64]>,
 }
 
 impl OldBlock {
@@ -154,6 +161,10 @@ impl OldBlock {
             .map(|_| AtomicU32::new(OBJECT_START_NONE))
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        let card_locators: Box<[AtomicU64]> = (0..card_table.card_count())
+            .map(|_| AtomicU64::new(CARD_LOCATOR_NONE))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         Self {
             buffer,
             line_marks: marks.into_boxed_slice(),
@@ -168,6 +179,7 @@ impl OldBlock {
             occupied_line_count: AtomicUsize::new(0),
             card_table,
             object_starts,
+            card_locators,
         }
     }
 
@@ -318,12 +330,48 @@ impl OldBlock {
     /// the post-sweep rebuild before walking surviving records to repopulate
     /// the index.
     pub(crate) fn clear_object_starts(&mut self) {
-        // Bulk fill via raw pointer — stop-the-world guarantees no
-        // concurrent access. OBJECT_START_NONE == u32::MAX, so fill
-        // every byte with 0xFF.
         let ptr = self.object_starts.as_ptr() as *mut u8;
         let len = self.object_starts.len() * core::mem::size_of::<u32>();
         unsafe { std::ptr::write_bytes(ptr, 0xFF, len); }
+        // Also invalidate the locator cache — object positions changed.
+        let lptr = self.card_locators.as_ptr() as *mut u8;
+        let llen = self.card_locators.len() * core::mem::size_of::<u64>();
+        unsafe { std::ptr::write_bytes(lptr, 0xFF, llen); }
+    }
+
+    /// Pack an ObjectLocator into a u64 for storage in `card_locators`.
+    #[inline]
+    fn pack_locator(loc: ObjectLocator) -> u64 {
+        ((loc.shard as u64) << 32) | (loc.slot as u64)
+    }
+
+    /// Unpack a u64 from `card_locators` back to ObjectLocator.
+    #[inline]
+    fn unpack_locator(raw: u64) -> Option<ObjectLocator> {
+        if raw == CARD_LOCATOR_NONE { return None; }
+        Some(ObjectLocator {
+            shard: (raw >> 32) as usize,
+            slot: (raw & 0xFFFF_FFFF) as usize,
+        })
+    }
+
+    /// Try to get a cached locator for `card_index`. Returns None if
+    /// no locator has been cached yet.
+    #[inline]
+    pub(crate) fn cached_locator_for_card(&self, card_index: usize) -> Option<ObjectLocator> {
+        let raw = self.card_locators.get(card_index)?
+            .load(Ordering::Relaxed);
+        Self::unpack_locator(raw)
+    }
+
+    /// Cache a locator for `card_index`. Subsequent calls to
+    /// `cached_locator_for_card` will return this locator until the
+    /// cache is cleared by `clear_object_starts`.
+    #[inline]
+    pub(crate) fn cache_locator_for_card(&self, card_index: usize, loc: ObjectLocator) {
+        if let Some(slot) = self.card_locators.get(card_index) {
+            slot.store(Self::pack_locator(loc), Ordering::Relaxed);
+        }
     }
 
     /// Record an object start at the given buffer offset. The per-card

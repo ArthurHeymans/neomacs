@@ -390,6 +390,52 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
             };
             let card_end_offset = ((card_index + 1) << card_shift).min(block_len);
             let mut offset = start_offset as usize;
+            // First object in the card: try the cached locator.
+            if offset < card_end_offset {
+                let header_addr = block_base + offset;
+                if let Some(loc) = block.cached_locator_for_card(card_index) {
+                    let object_index = loc.slot;
+                    if object_index < objects.len() {
+                        *counter += 1;
+                        let record = &objects[object_index];
+                        let total_size = record.total_size().max(1);
+                        if !seen[object_index] {
+                            seen[object_index] = true;
+                            roots.push(object_index);
+                        }
+                        offset = align_up_to(
+                            offset.saturating_add(total_size),
+                            line_bytes,
+                        );
+                    }
+                } else {
+                    // Cache miss: look up via ObjectIndex and populate cache.
+                    let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
+                        .expect("block base + offset is non-null");
+                    let key = ObjectKey::from_header(header_ptr);
+                    if let Some(&locator) = object_index.get(&key) {
+                        block.cache_locator_for_card(card_index, locator);
+                        let object_index = locator.slot;
+                        if object_index < objects.len() {
+                            *counter += 1;
+                            let record = &objects[object_index];
+                            let total_size = record.total_size().max(1);
+                            if !seen[object_index] {
+                                seen[object_index] = true;
+                                roots.push(object_index);
+                            }
+                            offset = align_up_to(
+                                offset.saturating_add(total_size),
+                                line_bytes,
+                            );
+                        }
+                    } else {
+                        *counter += 1;
+                        offset = align_up_to(offset.saturating_add(1), line_bytes);
+                    }
+                }
+            }
+            // Remaining objects in the card: use ObjectIndex lookups.
             while offset < card_end_offset {
                 let header_addr = block_base + offset;
                 let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
@@ -431,16 +477,9 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
         return Vec::new();
     }
 
-    let all_locators = objects.all_locators();
     let mut roots = Vec::new();
-    let mut seen = vec![false; all_locators.len()];
-
-    let mut header_index: std::collections::HashMap<usize, (usize, crate::index_state::ObjectLocator)> =
-        std::collections::HashMap::with_capacity(all_locators.len());
-    for (idx, &locator) in all_locators.iter().enumerate() {
-        let header_addr = objects.get(locator).erased().header().as_ptr() as usize;
-        header_index.insert(header_addr, (idx, locator));
-    }
+    let mut seen: std::collections::HashSet<ObjectKey, crate::index_state::ObjectKeyBuildHasher> =
+        std::collections::HashSet::with_hasher(crate::index_state::ObjectKeyBuildHasher);
 
     for block in old_gen.blocks().iter() {
         let card_table = block.card_table();
@@ -463,12 +502,14 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
             let mut offset = start_offset as usize;
             while offset < card_end_offset {
                 let header_addr = block_base + offset;
-                if let Some(&(idx, locator)) = header_index.get(&header_addr) {
+                let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
+                    .expect("block base + offset is non-null");
+                let key = ObjectKey::from_header(header_ptr);
+                if let Some(locator) = objects.locator_of_key(key) {
                     *counter += 1;
                     let record = objects.get(locator);
                     let total_size = record.total_size().max(1);
-                    if !seen[idx] {
-                        seen[idx] = true;
+                    if seen.insert(key) {
                         roots.push(locator);
                     }
                     offset = align_up_to(offset.saturating_add(total_size), line_bytes);
