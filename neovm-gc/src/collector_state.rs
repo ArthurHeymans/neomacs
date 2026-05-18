@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration, Instant};
 
 use crate::collector::MarkTracer;
-use crate::collector::session;
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
 use crate::collector::{
     self, ActiveReclaimPrepRequest, FinishedActiveCollection, PreparedActiveReclaim,
