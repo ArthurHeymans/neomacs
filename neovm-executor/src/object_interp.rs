@@ -2256,6 +2256,89 @@ impl Interpreter<'_, '_, '_> {
                 self.runtime.current_buffer_mut().mark_active = false;
                 LispValue::NIL
             }),
+            "mark-active" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                bool_value(buf.mark_active && buf.mark.is_some())
+            }),
+            "region-active-p" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                bool_value(buf.mark_active && buf.mark.is_some()
+                    && buf.mark != Some(buf.point))
+            }),
+            "activate-mark" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                buf.mark_active = true;
+                if buf.mark.is_none() { buf.mark = Some(buf.point); }
+                LispValue::NIL
+            }),
+            "zap-to-char" => self.subr_1(name, args, |s| {
+                let ch = args[0].as_char().unwrap_or(' ');
+                let (pt, end) = {
+                    let buf = s.runtime.current_buffer();
+                    let after = &buf.contents[buf.point..];
+                    let idx = after.find(ch).map(|i| i + 1).unwrap_or(after.len());
+                    (buf.point, buf.point + idx)
+                };
+                if end > pt {
+                    s.runtime.current_buffer_mut().contents.drain(pt..end);
+                    s.runtime.current_buffer_mut().modified = true;
+                }
+                Some(LispValue::NIL)
+            }),
+            "indent-to" => self.subr_1(name, args, |s| {
+                let col = s.fixnum_arg(name, args[0])? as usize;
+                let (current_col, pt) = {
+                    let buf = s.runtime.current_buffer();
+                    let bol = buf.contents[..buf.point].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    (buf.point - bol, buf.point)
+                };
+                if col > current_col {
+                    let spaces = col - current_col;
+                    let b = s.runtime.current_buffer_mut();
+                    b.contents.insert_str(pt, &" ".repeat(spaces));
+                    b.point += spaces;
+                    b.modified = true;
+                }
+                Some(LispValue::NIL)
+            }),
+            "newline" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
+                let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
+                let buf = self.runtime.current_buffer_mut();
+                for _ in 0..n {
+                    buf.contents.insert(buf.point, '\n');
+                    buf.point += 1;
+                }
+                buf.modified = true;
+                Some(LispValue::NIL)
+            }),
+            "transient-mark-mode" => self.min_max_arity(name, args, 0, 1).map(|_| LispValue::NIL),
+            "cua-mode" => self.min_max_arity(name, args, 0, 1).map(|_| LispValue::NIL),
+            "delete-trailing-whitespace" => self.min_max_arity(name, args, 0, 2).and_then(|_| {
+                let content = self.runtime.current_buffer().contents.clone();
+                let new_content: String = content.lines().map(|line| {
+                    line.trim_end().to_string() + "\n"
+                }).collect();
+                let buf = self.runtime.current_buffer_mut();
+                buf.contents = new_content;
+                buf.modified = true;
+                Some(LispValue::NIL)
+            }),
+            "count-lines-region" => self.subr_2(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let buf = s.runtime.current_buffer();
+                let region = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                let count = if region.is_empty() { 0 } else { region.lines().count() as i64 };
+                Some(LispValue::expect_fixnum(count))
+            }),
+            "count-words-region" => self.subr_2(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let buf = s.runtime.current_buffer();
+                let region = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                let count = region.split_whitespace().count() as i64;
+                Some(LispValue::expect_fixnum(count))
+            }),
             "narrow-to-region" => self.subr_2(name, args, |s| {
                 let start = s.fixnum_arg(name, args[0])? as usize;
                 let end = s.fixnum_arg(name, args[1])? as usize;
