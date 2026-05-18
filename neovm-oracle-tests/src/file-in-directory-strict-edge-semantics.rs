@@ -166,6 +166,53 @@ fn oracle_file_in_directory_empty_root_and_normalized_file_edges() {
 }
 
 #[test]
+fn oracle_file_in_directory_type_null_and_missing_dir_order_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-file-in-dir-order-" t))
+       (root (expand-file-name "root" dir))
+       (file (expand-file-name "file.txt" root))
+       (missing-dir (expand-file-name "missing-dir" dir))
+       (nul-name (string ?a 0 ?b)))
+  (unwind-protect
+      (progn
+        (make-directory root)
+        (write-region "x" nil file nil 'silent)
+        (list
+         ;; GNU asks `find-file-name-handler' about FILE first, so a non-string
+         ;; FILE signals even when DIR is missing.
+         (condition-case err
+             (file-in-directory-p 42 missing-dir)
+           (error (list (car err) (cdr err))))
+         ;; But a string FILE containing a null byte reaches the DIR existence
+         ;; check.  When DIR is missing, GNU returns nil before `file-truename'
+         ;; validates FILE as a filename.
+         (condition-case err
+             (file-in-directory-p nul-name missing-dir)
+           (error (list (car err) (cdr err))))
+         ;; With an existing DIR, FILE is passed to `file-truename' and the
+         ;; null-byte filename check must signal.
+         (condition-case err
+             (file-in-directory-p nul-name root)
+           (error (list (car err) (cdr err))))
+         ;; DIR validation is performed by `file-directory-p' before the
+         ;; truename/component comparison.
+         (condition-case err
+             (file-in-directory-p file nul-name)
+           (error (list (car err) (cdr err))))
+         (condition-case err
+             (file-in-directory-p file nil)
+           (error (list (car err) (cdr err)))))))
+    (ignore-errors (delete-file file))
+    (ignore-errors (delete-directory root))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_file_in_directory_file_name_handler_dispatch_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
