@@ -8,6 +8,14 @@ use crate::agent_pool::AgentPool;
 use crate::thread::ThreadScheduler;
 use crate::value::LispValue;
 
+/// A marker — a position in a buffer that persists across edits.
+#[derive(Debug, Clone)]
+pub struct Marker {
+    pub buffer_index: usize,
+    pub position: usize,
+    pub insertion_type: bool, // true = advances with insert, false = stays before
+}
+
 /// An Emacs buffer — holds text content, point, and metadata.
 #[derive(Debug, Clone)]
 pub struct Buffer {
@@ -15,6 +23,7 @@ pub struct Buffer {
     pub contents: String,
     pub point: usize,
     pub mark: Option<usize>,
+    pub mark_active: bool,
     pub modified: bool,
     pub read_only: bool,
     pub narrowed_start: Option<usize>,
@@ -28,6 +37,7 @@ impl Buffer {
             contents: String::new(),
             point: 0,
             mark: None,
+            mark_active: false,
             modified: false,
             read_only: false,
             narrowed_start: None,
@@ -41,6 +51,7 @@ impl Buffer {
             contents,
             point: 0,
             mark: None,
+            mark_active: false,
             modified: false,
             read_only: false,
             narrowed_start: None,
@@ -116,6 +127,7 @@ pub struct Runtime {
     /// Buffer list and current buffer index.
     pub(crate) buffers: Vec<Buffer>,
     pub(crate) current_buffer: usize,
+    pub(crate) markers: Vec<Marker>,
     buf_index: HashMap<usize, usize>,
 }
 
@@ -170,6 +182,7 @@ impl Default for Runtime {
             load_path: Vec::new(),
             buffers: vec![Buffer::new("*scratch*".into())],
             current_buffer: 0,
+            markers: Vec::new(),
             buf_index: HashMap::new(),
         }
     }
@@ -242,6 +255,7 @@ impl Runtime {
             load_path: self.load_path.clone(),
             buffers: self.buffers.clone(),
             current_buffer: self.current_buffer,
+            markers: self.markers.clone(),
             buf_index: self.buf_index.clone(),
         }
     }

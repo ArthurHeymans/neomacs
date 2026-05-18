@@ -2140,7 +2140,132 @@ impl Interpreter<'_, '_, '_> {
             "downcase" => self
                 .exact_arity(name, args, 1)
                 .map(|_| self.downcase(args[0])),
-            "use-region-p" => Some(LispValue::NIL),
+            "use-region-p" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                bool_value(buf.mark_active && buf.mark.is_some() && buf.mark != Some(buf.point))
+            }),
+            "region-beginning" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                match buf.mark {
+                    Some(m) => LispValue::expect_fixnum(buf.point.min(m) as i64),
+                    None => LispValue::NIL,
+                }
+            }),
+            "region-end" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer();
+                match buf.mark {
+                    Some(m) => LispValue::expect_fixnum(buf.point.max(m) as i64),
+                    None => LispValue::NIL,
+                }
+            }),
+            "mark" => self.min_max_arity(name, args, 0, 1).map(|_| {
+                match self.runtime.current_buffer().mark {
+                    Some(p) => LispValue::expect_fixnum(p as i64),
+                    None => LispValue::NIL,
+                }
+            }),
+            "set-mark" => self.subr_1(name, args, |s| {
+                let pos = s.fixnum_arg(name, args[0])? as usize;
+                let buf = s.runtime.current_buffer_mut();
+                buf.mark = Some(pos.min(buf.point_max()).max(buf.point_min()));
+                buf.mark_active = true;
+                Some(LispValue::NIL)
+            }),
+            "push-mark" => self.min_max_arity(name, args, 0, 2).map(|_| {
+                let pos = args.get(0).and_then(|v| v.as_fixnum()).map(|n| n as usize);
+                let buf = self.runtime.current_buffer_mut();
+                let p = pos.unwrap_or(buf.point);
+                buf.mark = Some(p.min(buf.point_max()).max(buf.point_min()));
+                buf.mark_active = true;
+                LispValue::NIL
+            }),
+            "exchange-point-and-mark" => self.min_max_arity(name, args, 0, 0).and_then(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                if let Some(m) = buf.mark {
+                    buf.mark = Some(buf.point);
+                    buf.point = m;
+                    buf.mark_active = true;
+                    return Some(LispValue::NIL);
+                }
+                None
+            }),
+            "deactivate-mark" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                self.runtime.current_buffer_mut().mark_active = false;
+                LispValue::NIL
+            }),
+            "narrow-to-region" => self.subr_2(name, args, |s| {
+                let start = s.fixnum_arg(name, args[0])? as usize;
+                let end = s.fixnum_arg(name, args[1])? as usize;
+                let buf = s.runtime.current_buffer_mut();
+                buf.narrowed_start = Some(start.min(buf.contents.len()));
+                buf.narrowed_end = Some(end.min(buf.contents.len()));
+                buf.clamp_point();
+                Some(LispValue::NIL)
+            }),
+            "widen" => self.min_max_arity(name, args, 0, 0).map(|_| {
+                let buf = self.runtime.current_buffer_mut();
+                buf.narrowed_start = None;
+                buf.narrowed_end = None;
+                LispValue::NIL
+            }),
+            "make-marker" => self.min_max_arity(name, args, 0, 1).map(|_| {
+                let pos = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1) as usize;
+                let idx = self.runtime.markers.len();
+                self.runtime.markers.push(crate::runtime::Marker {
+                    buffer_index: self.runtime.current_buffer,
+                    position: pos.saturating_sub(1),
+                    insertion_type: false,
+                });
+                LispValue::expect_fixnum(idx as i64)
+            }),
+            "marker-position" => self.subr_1(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() {
+                    Some(LispValue::expect_fixnum((s.runtime.markers[i].position + 1) as i64))
+                } else { Some(LispValue::NIL) }
+            }),
+            "set-marker" => self.subr_2_3(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() {
+                    let pos = s.fixnum_arg(name, args[1])? as usize;
+                    s.runtime.markers[i].position = pos.saturating_sub(1);
+                }
+                Some(args[0])
+            }),
+            "copy-marker" => self.min_max_arity(name, args, 1, 2).and_then(|_| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < self.runtime.markers.len() {
+                    let new_idx = self.runtime.markers.len();
+                    self.runtime.markers.push(self.runtime.markers[i].clone());
+                    return Some(LispValue::expect_fixnum(new_idx as i64));
+                }
+                Some(LispValue::NIL)
+            }),
+            "marker-buffer" => self.subr_1(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() && s.runtime.markers[i].buffer_index < s.runtime.buffers.len() {
+                    Some(s.runtime.string(s.runtime.buffers[s.runtime.markers[i].buffer_index].name.clone()))
+                } else { Some(LispValue::NIL) }
+            }),
+            "marker-insertion-type" => self.subr_1(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() {
+                    Some(bool_value(s.runtime.markers[i].insertion_type))
+                } else { Some(LispValue::NIL) }
+            }),
+            "set-marker-insertion-type" => self.subr_2(name, args, |s| {
+                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let i = n as usize;
+                if i < s.runtime.markers.len() {
+                    s.runtime.markers[i].insertion_type = !args[1].is_nil();
+                }
+                Some(LispValue::NIL)
+            }),
             "upcase-initials" => self.subr_1(name, args, |s| {
                 Some(s.upcase_initials(args[0]))
             }),
