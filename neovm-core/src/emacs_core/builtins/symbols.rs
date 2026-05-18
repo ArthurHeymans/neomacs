@@ -5440,6 +5440,25 @@ pub(crate) fn make_interpreted_closure_from_parts(
         ));
     }
 
+    Ok(make_interpreted_closure_from_parts_unchecked(
+        params_value,
+        body_value,
+        env_value,
+        docstring,
+        interactive,
+    ))
+}
+
+pub(crate) fn make_interpreted_closure_from_parts_unchecked(
+    params_value: &Value,
+    body_value: &Value,
+    env_value: &Value,
+    docstring: Option<&Value>,
+    interactive: Option<&Value>,
+) -> Value {
+    let docstring_value = docstring.copied().unwrap_or(Value::NIL);
+    let iform = interactive.copied().unwrap_or(Value::NIL);
+
     // GNU Emacs (eval.c:535-555): Fmake_interpreted_closure stores the
     // interactive spec in slot 5 of the closure vector.  The vector length is
     // observable: nil IFORM means slot 5 is absent; `(interactive)' and
@@ -5472,7 +5491,7 @@ pub(crate) fn make_interpreted_closure_from_parts(
         }
     }
 
-    Ok(Value::make_lambda_with_slots(slots))
+    Value::make_lambda_with_slots(slots)
 }
 
 /// Reify nested compiled literals embedded in `.elc` constant vectors.

@@ -7314,9 +7314,10 @@ impl Context {
             }
         } else if original_fun.is_cons() {
             // GNU eval_sub runs non-symbol function position through
-            // Ffunction: literal (lambda ...) becomes an interpreted
-            // closure, but every other cons is only quoted and then
-            // validated by the normal function dispatcher below.
+            // Ffunction.  Literal `(lambda ...)` becomes an interpreted
+            // closure, preserving lexical environments for nested closures;
+            // malformed arglists remain in the closure and are rejected by
+            // funcall_lambda during call binding.
             if cons_head_symbol_id(&original_fun) == Some(lambda_symbol()) {
                 self.instantiate_callable_cons_form(original_fun)?
             } else {
@@ -10508,10 +10509,7 @@ impl Context {
                         vec![Value::symbol("symbolp"), function],
                     ))
                 } else if cons_head_symbol_id(&function) == Some(lambda_symbol()) {
-                    match self.instantiate_callable_cons_form(function) {
-                        Ok(callable) => self.apply(callable, args),
-                        Err(_) => Err(signal("invalid-function", vec![function])),
-                    }
+                    self.apply_lambda(function, args)
                 } else {
                     Err(signal("invalid-function", vec![function]))
                 }
@@ -10638,14 +10636,26 @@ impl Context {
         self.push_specpdl_root(iform_value);
 
         let result = if is_lambda {
-            self.make_interpreted_closure_with_value_runtime_hook(
-                function,
-                params_value,
-                body_value,
-                env_value,
-                closure_doc_value,
-                iform_value,
-            )
+            if env_value.is_nil() || list_length(&params_value).is_none() {
+                Ok(
+                    builtins::symbols::make_interpreted_closure_from_parts_unchecked(
+                        &params_value,
+                        &body_value,
+                        &env_value,
+                        Some(&closure_doc_value),
+                        Some(&iform_value),
+                    ),
+                )
+            } else {
+                self.make_interpreted_closure_with_value_runtime_hook(
+                    function,
+                    params_value,
+                    body_value,
+                    env_value,
+                    closure_doc_value,
+                    iform_value,
+                )
+            }
         } else {
             builtins::symbols::make_interpreted_closure_from_parts(
                 &params_value,
@@ -11304,21 +11314,34 @@ impl Context {
     }
 
     fn apply_lambda(&mut self, func_value: Value, args: LispArgVec) -> EvalResult {
-        if func_value.closure_params().is_none() {
-            return Err(signal("invalid-function", vec![func_value]));
-        }
-        let Some(arglist) = func_value.closure_slot(CLOSURE_ARGLIST) else {
-            return Err(signal("invalid-function", vec![func_value]));
+        let raw_cons_lambda = func_value.is_cons();
+        let (arglist, body, env) = if raw_cons_lambda {
+            let tail = func_value.cons_cdr();
+            if !tail.is_cons() {
+                return Err(signal("invalid-function", vec![func_value]));
+            }
+            (tail.cons_car(), tail.cons_cdr(), None)
+        } else {
+            if func_value.closure_params().is_none() {
+                return Err(signal("invalid-function", vec![func_value]));
+            }
+            let Some(arglist) = func_value.closure_slot(CLOSURE_ARGLIST) else {
+                return Err(signal("invalid-function", vec![func_value]));
+            };
+            let Some(body) = func_value.closure_body_value() else {
+                return Err(signal("invalid-function", vec![func_value]));
+            };
+            (arglist, body, func_value.closure_env().unwrap_or(None))
         };
-        let Some(body) = func_value.closure_body_value() else {
-            return Err(signal("invalid-function", vec![func_value]));
-        };
-        let env = func_value.closure_env().unwrap_or(None);
 
         // Root the function value on the specpdl so GC can trace it
         // (keeping body, env, and params alive through the call).
         let root_count = self.specpdl.len();
         self.specpdl.push(SpecBinding::GcRoot { value: func_value });
+        if raw_cons_lambda {
+            let old_lexenv = std::mem::replace(&mut self.lexenv, Value::NIL);
+            self.specpdl.push(SpecBinding::LexicalEnv { old_lexenv });
+        }
 
         let call_state = match self.begin_lambda_call(func_value, arglist, env, &args) {
             Ok(state) => state,

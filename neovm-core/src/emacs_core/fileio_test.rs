@@ -4587,7 +4587,7 @@ fn file_local_name_bootstrap_matches_gnu_files_el() {
     );
     assert_eq!(results[0], "OK nil");
     assert_eq!(results[1], r#"OK "/tmp/local""#);
-    assert_eq!(results[2], r#"OK "/ssh:user@host#22:/tmp/file""#);
+    assert_eq!(results[2], r#"OK "/tmp/file""#);
 }
 
 #[test]

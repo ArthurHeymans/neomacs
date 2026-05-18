@@ -21,6 +21,13 @@ fn eval_one(src: &str) -> String {
     format_eval_result(&result)
 }
 
+fn eval_one_lexical(src: &str) -> String {
+    let mut ev = Context::new();
+    ev.set_lexical_binding(true);
+    let result = ev.eval_str(src);
+    format_eval_result(&result)
+}
+
 #[test]
 fn mapc_mapconcat_and_mapcan_signal_circular_list_like_gnu() {
     crate::test_utils::init_test_tracing();
@@ -4321,11 +4328,11 @@ fn bignum_round_trips_through_print_and_parse() {
 
 /// Regression for audit Phase B: file primitives must dispatch
 /// through `file-name-handler-alist`. Mirrors GNU's `Ffind_file_name_handler`
-/// pattern (`src/fileio.c:371`) — every file builtin checks the alist
-/// before doing native I/O. We install a fake handler that records the
-/// `(operation . args)` it was invoked with and returns a sentinel,
-/// then call several primitives over a synthetic filename and verify
-/// the handler ran.
+/// pattern (`src/fileio.c:371`) — file predicates first expand the
+/// file name, then check the alist before doing native I/O. We install
+/// a fake handler that records the `(operation . args)` it was invoked
+/// with, returns the expanded file name for `expand-file-name`, and
+/// returns a sentinel for the predicates.
 #[test]
 fn file_name_handler_dispatch_invokes_handler_for_matching_filenames() {
     crate::test_utils::init_test_tracing();
@@ -4343,7 +4350,9 @@ fn file_name_handler_dispatch_invokes_handler_for_matching_filenames() {
                           (lambda (op &rest args)
                             (setq my-handler-log
                                   (cons (cons op args) my-handler-log))
-                            'sentinel))
+                            (if (eq op 'expand-file-name)
+                                (car args)
+                              'sentinel)))
                     nil))
         (file-exists-p "/fake:foo")
         (file-directory-p "/fake:bar")
@@ -4351,13 +4360,10 @@ fn file_name_handler_dispatch_invokes_handler_for_matching_filenames() {
         (file-symlink-p "/fake:link")
         (expand-file-name "/fake:abs")
         (length my-handler-log)
-        ;; The log is built via `cons`, so the most recent call is
-        ;; at the head and the first call (file-exists-p) is at
-        ;; the tail. nth 4 reaches the 5th element which is the
-        ;; first call.
-        (eq (car (nth 4 my-handler-log)) 'file-exists-p)
-        ;; And nth 0 should be the last call (expand-file-name).
-        (eq (car (nth 0 my-handler-log)) 'expand-file-name)
+        ;; GNU calls expand-file-name before each predicate-specific
+        ;; handler. The log is built via `cons`, so reverse it before
+        ;; comparing chronological operation names.
+        (mapcar 'car (reverse my-handler-log))
         "#,
     );
     // Skip the two setq forms; assertions start at index 2.
@@ -4366,10 +4372,12 @@ fn file_name_handler_dispatch_invokes_handler_for_matching_filenames() {
     assert_eq!(answers[1], "OK sentinel"); // file-directory-p
     assert_eq!(answers[2], "OK sentinel"); // file-readable-p
     assert_eq!(answers[3], "OK sentinel"); // file-symlink-p
-    assert_eq!(answers[4], "OK sentinel"); // expand-file-name (lambda returns sentinel uniformly)
-    assert_eq!(answers[5], "OK 5"); // 5 calls logged
-    assert_eq!(answers[6], "OK t"); // first call was file-exists-p
-    assert_eq!(answers[7], "OK t"); // last call was expand-file-name
+    assert_eq!(answers[4], "OK \"/fake:abs\""); // expand-file-name returns a string
+    assert_eq!(answers[5], "OK 9"); // four expand+predicate pairs, plus explicit expand
+    assert_eq!(
+        answers[6],
+        "OK (expand-file-name file-exists-p expand-file-name file-directory-p expand-file-name file-readable-p expand-file-name file-symlink-p expand-file-name)"
+    );
 
     // A non-matching filename must not invoke the handler — verifies
     // we don't dispatch indiscriminately. /tmp doesn't start with /fake:.
@@ -5359,11 +5367,22 @@ fn byte_code_literal_value_path_produces_interpreted_closure() {
 }
 
 #[test]
-fn quoted_lambda_funcall_strips_dynamic_documentation_form() {
+fn quoted_lambda_funcall_keeps_dynamic_documentation_form_like_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         eval_one(
             "(let ((f '(lambda nil (:documentation (if t \"dyn-doc\" \"bad\")) 7))) (funcall f))"
+        ),
+        "ERR (void-function (:documentation))"
+    );
+}
+
+#[test]
+fn function_lambda_funcall_strips_dynamic_documentation_form_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(let ((f (function (lambda nil (:documentation (if t \"dyn-doc\" \"bad\")) 7)))) (funcall f))"
         ),
         "OK 7"
     );
@@ -6008,6 +6027,27 @@ fn apply_improper_tail_signals_wrong_type_argument() {
                (error (list (car err) (nth 2 err))))"
         ),
         "OK (wrong-type-argument 2)"
+    );
+}
+
+#[test]
+fn apply_lambda_with_dotted_formals_signals_invalid_function() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(condition-case err
+                 (apply (lambda (a b . rest) (list a b rest)) '(1 2 3 4))
+               (error (car err)))"
+        ),
+        "OK invalid-function"
+    );
+    assert_eq!(
+        eval_one_lexical(
+            "(condition-case err
+                 (apply (lambda (a b . rest) (list a b rest)) '(1 2 3 4))
+               (error (car err)))"
+        ),
+        "OK invalid-function"
     );
 }
 
@@ -11391,38 +11431,17 @@ fn interpreted_closure_trim_cache_survives_exact_gc() {
 }
 
 #[test]
-fn value_lambda_instantiation_uses_interpreted_closure_trim_cache() {
+fn raw_quoted_lambda_uses_nil_lexenv_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_lexical_binding(true);
 
-    ev.eval_str(
-        r#"
-        (setq vm-interpreted-closure-count 0)
-        (fset 'cconv-make-interpreted-closure
-              (lambda (args body env docstring iform)
-                (setq vm-interpreted-closure-count
-                      (1+ vm-interpreted-closure-count))
-                (make-interpreted-closure args body env docstring iform)))
-        (setq internal-make-interpreted-closure-function
-              'cconv-make-interpreted-closure)
-        "#,
-    )
-    .expect("eval forms");
-
-    let filter_fn = ev
-        .obarray()
-        .symbol_function("cconv-make-interpreted-closure")
-        .expect("cconv interpreted closure filter");
-    ev.set_interpreted_closure_filter_fn(Some(filter_fn));
-
     let rendered = format_eval_result(&ev.eval_str(
         r#"(let ((x 1))
              (list (funcall '(lambda () x))
-                   (funcall '(lambda () x))
-                   vm-interpreted-closure-count))"#,
+                   (funcall '(lambda () x))))"#,
     ));
-    assert_eq!(rendered, "OK (1 1 1)");
+    assert_eq!(rendered, "ERR (void-variable (x))");
 }
 
 #[test]

@@ -1532,6 +1532,27 @@ fn expand_and_dir_to_file_lisp_for_eval(
     }
 }
 
+fn expand_file_name_lisp_for_file_predicate(
+    eval: &mut Context,
+    filename: &crate::heap_types::LispString,
+) -> Result<crate::heap_types::LispString, Flow> {
+    let expanded =
+        builtin_expand_file_name(eval, vec![Value::heap_string(filename.clone()), Value::NIL])?;
+    expect_lisp_filename_string_strict(&expanded)
+}
+
+fn expand_and_dir_to_file_lisp_for_file_predicate(
+    eval: &mut Context,
+    filename: &crate::heap_types::LispString,
+) -> Result<crate::heap_types::LispString, Flow> {
+    let absname = expand_file_name_lisp_for_file_predicate(eval, filename)?;
+    if absname.sbytes() > 1 && lisp_directory_name_p(&absname) {
+        Ok(lisp_directory_file_name(&absname))
+    } else {
+        Ok(absname)
+    }
+}
+
 fn lisp_files_splice_dirname_file(
     dirname: &crate::heap_types::LispString,
     file: &crate::heap_types::LispString,
@@ -2814,7 +2835,7 @@ pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalR
 pub(crate) fn builtin_file_exists_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-exists-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-exists-p", &filename)? {
         return Ok(result);
     }
@@ -2828,7 +2849,7 @@ pub(crate) fn builtin_file_exists_p(eval: &mut Context, args: Vec<Value>) -> Eva
 pub(crate) fn builtin_file_readable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-readable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-readable-p", &filename)? {
         return Ok(result);
     }
@@ -2841,7 +2862,7 @@ pub(crate) fn builtin_file_readable_p(eval: &mut Context, args: Vec<Value>) -> E
 pub(crate) fn builtin_file_writable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-writable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-writable-p", &filename)? {
         return Ok(result);
     }
@@ -2857,7 +2878,7 @@ pub(crate) fn builtin_file_accessible_directory_p(
 ) -> EvalResult {
     expect_args("file-accessible-directory-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) =
         dispatch_expanded_file_handler(eval, "file-accessible-directory-p", &filename)?
     {
@@ -2872,7 +2893,7 @@ pub(crate) fn builtin_file_accessible_directory_p(
 pub(crate) fn builtin_file_executable_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-executable-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-executable-p", &filename)? {
         return Ok(result);
     }
@@ -2964,8 +2985,10 @@ pub(crate) fn builtin_file_system_info(eval: &mut Context, args: Vec<Value>) -> 
 /// `(file-directory-p FILENAME)`
 pub(crate) fn builtin_file_directory_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-directory-p", &args, 1)?;
-    let filename =
-        expand_and_dir_to_file_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    let filename = expand_and_dir_to_file_lisp_for_file_predicate(
+        eval,
+        &expect_lisp_string_strict(&args[0])?,
+    )?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-directory-p", &filename)? {
         return Ok(result);
     }
@@ -2979,8 +3002,10 @@ pub(crate) fn builtin_file_directory_p(eval: &mut Context, args: Vec<Value>) -> 
 /// `(file-regular-p FILENAME)`
 pub(crate) fn builtin_file_regular_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-regular-p", &args, 1)?;
-    let filename =
-        expand_and_dir_to_file_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    let filename = expand_and_dir_to_file_lisp_for_file_predicate(
+        eval,
+        &expect_lisp_string_strict(&args[0])?,
+    )?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-regular-p", &filename)? {
         return Ok(result);
     }
@@ -2999,7 +3024,7 @@ pub(crate) fn builtin_file_regular_p(eval: &mut Context, args: Vec<Value>) -> Ev
 pub(crate) fn builtin_file_symlink_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("file-symlink-p", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    let filename = expand_file_name_lisp_for_file_predicate(eval, &filename)?;
     if let Some(result) = dispatch_expanded_file_handler(eval, "file-symlink-p", &filename)? {
         return Ok(result);
     }
