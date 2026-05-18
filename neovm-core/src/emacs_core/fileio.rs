@@ -1268,6 +1268,31 @@ fn fallback_root_default_directory() -> crate::heap_types::LispString {
     crate::heap_types::LispString::from_utf8("/")
 }
 
+fn invalid_file_name_handler_result() -> Flow {
+    signal(
+        "error",
+        vec![Value::string(
+            "Invalid handler in ‘file-name-handler-alist’",
+        )],
+    )
+}
+
+fn file_name_handler_string_or_nil(result: Value) -> Value {
+    if result.is_string() {
+        result
+    } else {
+        Value::NIL
+    }
+}
+
+fn file_name_handler_string_or_error(result: Value) -> EvalResult {
+    if result.is_string() {
+        Ok(result)
+    } else {
+        Err(invalid_file_name_handler_result())
+    }
+}
+
 fn expand_file_name_result_multibyte(
     name: &crate::heap_types::LispString,
     default_directory: &crate::heap_types::LispString,
@@ -1827,7 +1852,7 @@ pub(crate) fn builtin_unhandled_file_name_directory_eval(
 ) -> EvalResult {
     expect_args("unhandled-file-name-directory", &args, 1)?;
     if let Some(result) = dispatch_file_handler(eval, "unhandled-file-name-directory", &args)? {
-        return Ok(result);
+        return Ok(file_name_handler_string_or_nil(result));
     }
     builtin_unhandled_file_name_directory(args)
 }
@@ -1936,7 +1961,7 @@ pub(crate) fn builtin_file_truename(eval: &mut Context, args: Vec<Value>) -> Eva
 /// (file-name-directory FILENAME) -> string or nil
 pub(crate) fn builtin_file_name_directory(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "file-name-directory", &args)? {
-        return Ok(result);
+        return Ok(file_name_handler_string_or_nil(result));
     }
     expect_args("file-name-directory", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
@@ -1949,7 +1974,7 @@ pub(crate) fn builtin_file_name_directory(eval: &mut Context, args: Vec<Value>) 
 /// (file-name-nondirectory FILENAME) -> string
 pub(crate) fn builtin_file_name_nondirectory(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "file-name-nondirectory", &args)? {
-        return Ok(result);
+        return file_name_handler_string_or_error(result);
     }
     expect_args("file-name-nondirectory", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
@@ -1959,7 +1984,7 @@ pub(crate) fn builtin_file_name_nondirectory(eval: &mut Context, args: Vec<Value
 /// (file-name-as-directory FILENAME) -> string
 pub(crate) fn builtin_file_name_as_directory(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "file-name-as-directory", &args)? {
-        return Ok(result);
+        return file_name_handler_string_or_error(result);
     }
     expect_args("file-name-as-directory", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;
@@ -1969,7 +1994,7 @@ pub(crate) fn builtin_file_name_as_directory(eval: &mut Context, args: Vec<Value
 /// (directory-file-name FILENAME) -> string
 pub(crate) fn builtin_directory_file_name(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "directory-file-name", &args)? {
-        return Ok(result);
+        return file_name_handler_string_or_error(result);
     }
     expect_args("directory-file-name", &args, 1)?;
     let filename = expect_lisp_string_strict(&args[0])?;

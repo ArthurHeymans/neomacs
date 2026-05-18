@@ -45,6 +45,42 @@ fn oracle_file_name_directory_and_nondirectory_edges() {
 }
 
 #[test]
+fn oracle_file_name_directory_handler_result_contract_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defun neomacs--oracle-file-name-component-handler (operation &rest args)
+    (list 'handler operation args))
+  (defun neomacs--oracle-file-name-component-bad-handler (operation &rest args)
+    42)
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/component:" . neomacs--oracle-file-name-component-handler)
+               ("\\`/bad-component:" . neomacs--oracle-file-name-component-bad-handler))))
+        (list
+         ;; GNU returns a string handler result directly.
+         (let ((file-name-handler-alist
+                '(("\\`/component:" . (lambda (&rest _) "handled-dir/")))))
+           (file-name-directory "/component:path"))
+         (let ((file-name-handler-alist
+                '(("\\`/component:" . (lambda (&rest _) "handled-base")))))
+           (file-name-nondirectory "/component:path"))
+         ;; But non-string handler results differ by operation:
+         ;; `file-name-directory' coerces to nil, while
+         ;; `file-name-nondirectory' signals an invalid handler.
+         (file-name-directory "/bad-component:path")
+         (condition-case err
+             (file-name-nondirectory "/bad-component:path")
+           (error (list (car err) (cdr err))))))
+    (fmakunbound 'neomacs--oracle-file-name-component-handler)
+    (fmakunbound 'neomacs--oracle-file-name-component-bad-handler)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_file_name_extension_and_version_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

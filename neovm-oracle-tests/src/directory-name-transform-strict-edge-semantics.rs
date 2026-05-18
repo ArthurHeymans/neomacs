@@ -49,6 +49,34 @@ fn oracle_directory_name_transform_root_and_empty_edges() {
 }
 
 #[test]
+fn oracle_directory_name_transform_handler_result_contract_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (defun neomacs--oracle-directory-name-bad-handler (operation &rest args)
+    42)
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/bad-dir-transform:" . neomacs--oracle-directory-name-bad-handler))))
+        (list
+         ;; GNU validates handler results per operation in src/fileio.c.
+         (condition-case err
+             (file-name-as-directory "/bad-dir-transform:path")
+           (error (list (car err) (cdr err))))
+         (condition-case err
+             (directory-file-name "/bad-dir-transform:path/")
+           (error (list (car err) (cdr err))))
+         ;; `unhandled-file-name-directory' is permissive and maps a
+         ;; non-string handler result to nil.
+         (unhandled-file-name-directory "/bad-dir-transform:path")))
+    (fmakunbound 'neomacs--oracle-directory-name-bad-handler)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_unhandled_file_name_directory_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
