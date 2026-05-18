@@ -104,6 +104,20 @@ fn oracle_expand_file_name_handler_dispatch_edges() {
          (expand-file-name "leaf" "/oracle-expand:default/")
          neomacs--oracle-expand-file-name-calls
          (setq neomacs--oracle-expand-file-name-calls nil)
+         ;; If DEFAULT-DIRECTORY is relative, GNU recursively expands it and
+         ;; gives the current buffer default's handler a chance to handle that
+         ;; recursive expansion before appending NAME.
+         (let ((default-directory "/oracle-expand:base/"))
+           (expand-file-name "leaf" "relative/default/"))
+         neomacs--oracle-expand-file-name-calls
+         (setq neomacs--oracle-expand-file-name-calls nil)
+         ;; GNU's recursive relative-default guard uses object identity
+         ;; (`EQ'), not string equality.
+         (let* ((same (copy-sequence "relative/default/"))
+                (left (copy-sequence "relative/default/"))
+                (right (copy-sequence "relative/default/")))
+           (list (expand-file-name same same)
+                 (expand-file-name left right)))
          ;; GNU requires an `expand-file-name' handler to return a string.
          (let ((file-name-handler-alist
                 '(("\\`/oracle-expand:" . (lambda (&rest _args) 42)))))
