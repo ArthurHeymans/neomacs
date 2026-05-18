@@ -367,6 +367,52 @@ fn builtin_time_subtract_basic() {
 }
 
 #[test]
+fn time_add_preserves_gnu_list_timestamp_form_for_seconds_to_time_inputs() {
+    crate::test_utils::init_test_tracing();
+    let a = Value::list(vec![
+        Value::fixnum(0),
+        Value::fixnum(1),
+        Value::fixnum(0),
+        Value::fixnum(0),
+    ]);
+    let b = Value::list(vec![
+        Value::fixnum(0),
+        Value::fixnum(2),
+        Value::fixnum(0),
+        Value::fixnum(0),
+    ]);
+    let result = builtin_time_add(vec![a, b]).unwrap();
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(3),
+            Value::fixnum(0),
+            Value::fixnum(0)
+        ]
+    );
+}
+
+#[test]
+fn time_arithmetic_preserves_gnu_numeric_and_ticks_hz_forms() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        builtin_time_add(vec![Value::fixnum(1), Value::fixnum(2)])
+            .unwrap()
+            .as_int(),
+        Some(3)
+    );
+
+    let cons_result = builtin_time_add(vec![
+        Value::cons(Value::fixnum(3), Value::fixnum(2)),
+        Value::cons(Value::fixnum(1), Value::fixnum(2)),
+    ])
+    .unwrap();
+    assert_eq!(cons_result.cons_car().as_int(), Some(4));
+    assert_eq!(cons_result.cons_cdr().as_int(), Some(2));
+}
+
+#[test]
 fn builtin_time_less_p_true() {
     crate::test_utils::init_test_tracing();
     let result = builtin_time_less_p(vec![Value::fixnum(1), Value::fixnum(2)]).unwrap();
@@ -868,8 +914,15 @@ fn time_add_with_usec_overflow() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_add(vec![a, b]).unwrap();
-    assert_eq!(result.cons_car().as_int(), Some(16_499_000));
-    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(16),
+            Value::fixnum(499_000),
+            Value::fixnum(0)
+        ]
+    );
 }
 
 #[test]
@@ -888,8 +941,15 @@ fn time_subtract_with_usec_borrow() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_subtract(vec![a, b]).unwrap();
-    assert_eq!(result.cons_car().as_int(), Some(4_600_000));
-    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(4),
+            Value::fixnum(600_000),
+            Value::fixnum(0)
+        ]
+    );
 }
 
 #[test]
@@ -917,8 +977,15 @@ fn time_operations_with_mixed_formats() {
         Value::fixnum(0),
     ]);
     let result = builtin_time_add(vec![a, b]).unwrap();
-    assert_eq!(result.cons_car().as_int(), Some(150_250_000));
-    assert_eq!(result.cons_cdr().as_int(), Some(1_000_000));
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(150),
+            Value::fixnum(250_000),
+            Value::fixnum(0)
+        ]
+    );
 }
 
 #[test]

@@ -157,16 +157,6 @@ impl TimeMicros {
         Value::cons(Value::make_int(ticks as i64), Value::fixnum(hz))
     }
 
-    fn to_arithmetic_result(&self) -> Value {
-        if self.psecs != 0 {
-            self.to_ticks_hz(1_000_000_000_000)
-        } else if self.usecs != 0 {
-            self.to_ticks_hz(1_000_000)
-        } else {
-            Value::make_int(self.secs)
-        }
-    }
-
     fn less_than(self, other: TimeMicros) -> bool {
         if self.secs != other.secs {
             self.secs < other.secs
@@ -182,6 +172,20 @@ impl TimeMicros {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TimeInputForm {
+    Scalar,
+    List,
+    TicksHz,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ParsedTime {
+    time: TimeMicros,
+    hz: i64,
+    form: TimeInputForm,
+}
+
 /// Parse a time value from a Lisp argument.
 ///
 /// Accepts:
@@ -193,6 +197,10 @@ impl TimeMicros {
 ///   - (HIGH LOW USEC)       -> with microseconds
 ///   - (HIGH LOW USEC PSEC)  -> with picoseconds
 fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
+    Ok(parse_time_detailed(val)?.time)
+}
+
+fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
     use crate::emacs_core::value::VecLikeType;
     // Bignum seconds-since-epoch values get truncated to i64;
     // Emacs's GNU encoding of large times uses (HIGH LOW) cons
@@ -200,27 +208,43 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
     // tests that compute (1+ most-positive-fixnum) etc.
     if let ValueKind::Veclike(VecLikeType::Bignum) = val.kind() {
         let f = val.as_bignum().unwrap().to_f64();
-        return Ok(TimeMicros {
-            secs: f as i64,
-            usecs: 0,
-            psecs: 0,
+        return Ok(ParsedTime {
+            time: TimeMicros {
+                secs: f as i64,
+                usecs: 0,
+                psecs: 0,
+            },
+            hz: 1,
+            form: TimeInputForm::Scalar,
         });
     }
     match val.kind() {
-        ValueKind::Nil => Ok(TimeMicros::now()),
-        ValueKind::Fixnum(n) => Ok(TimeMicros {
-            secs: n,
-            usecs: 0,
-            psecs: 0,
+        ValueKind::Nil => Ok(ParsedTime {
+            time: TimeMicros::now(),
+            hz: 1_000_000_000_000,
+            form: TimeInputForm::List,
+        }),
+        ValueKind::Fixnum(n) => Ok(ParsedTime {
+            time: TimeMicros {
+                secs: n,
+                usecs: 0,
+                psecs: 0,
+            },
+            hz: 1,
+            form: TimeInputForm::Scalar,
         }),
         ValueKind::Float => {
             let f = val.xfloat();
             let secs = f.floor() as i64;
             let usecs = ((f - f.floor()) * 1_000_000.0).round() as i64;
-            Ok(TimeMicros {
-                secs,
-                usecs,
-                psecs: 0,
+            Ok(ParsedTime {
+                time: TimeMicros {
+                    secs,
+                    usecs,
+                    psecs: 0,
+                },
+                hz: time_convert_default_hz(val),
+                form: TimeInputForm::List,
             })
         }
         ValueKind::Cons => {
@@ -236,7 +260,11 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
                         vec![Value::symbol("integerp"), low_or_tail],
                     )
                 })?;
-                return TimeMicros::from_ticks_hz(ticks, hz);
+                return Ok(ParsedTime {
+                    time: TimeMicros::from_ticks_hz(ticks, hz)?,
+                    hz,
+                    form: TimeInputForm::TicksHz,
+                });
             }
 
             let items = list_to_vec(val)
@@ -270,10 +298,14 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
                 0
             };
             let secs = high * 65536 + low;
-            Ok(TimeMicros {
-                secs,
-                usecs: usec,
-                psecs: psec,
+            Ok(ParsedTime {
+                time: TimeMicros {
+                    secs,
+                    usecs: usec,
+                    psecs: psec,
+                },
+                hz: time_convert_default_hz(val),
+                form: TimeInputForm::List,
             })
         }
         other => Err(signal(
@@ -281,6 +313,40 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
             vec![Value::symbol("numberp"), *val],
         )),
     }
+}
+
+fn time_hz_gcd(mut a: i64, mut b: i64) -> i64 {
+    while b != 0 {
+        let r = a % b;
+        a = b;
+        b = r;
+    }
+    a.abs()
+}
+
+fn time_hz_lcm(a: i64, b: i64) -> i64 {
+    if a <= 0 || b <= 0 {
+        return 1;
+    }
+    let gcd = time_hz_gcd(a, b);
+    a.saturating_div(gcd).saturating_mul(b)
+}
+
+fn time_arithmetic_hz(a: ParsedTime, b: ParsedTime) -> i64 {
+    time_hz_lcm(a.hz, b.hz)
+}
+
+fn time_arithmetic_result(result: TimeMicros, a: ParsedTime, b: ParsedTime) -> Value {
+    let hz = time_arithmetic_hz(a, b);
+    if hz == 1 {
+        return Value::make_int(result.secs);
+    }
+
+    if a.form == TimeInputForm::TicksHz || b.form == TimeInputForm::TicksHz {
+        return result.to_ticks_hz(hz);
+    }
+
+    result.to_list()
 }
 
 // ---------------------------------------------------------------------------
@@ -799,17 +865,17 @@ pub(crate) fn builtin_float_time(args: Vec<Value>) -> EvalResult {
 /// `(time-add A B)` -> integer seconds or `(TICKS . HZ)`
 pub(crate) fn builtin_time_add(args: Vec<Value>) -> EvalResult {
     expect_args("time-add", &args, 2)?;
-    let a = parse_time(&args[0])?;
-    let b = parse_time(&args[1])?;
-    Ok(a.add(b).to_arithmetic_result())
+    let a = parse_time_detailed(&args[0])?;
+    let b = parse_time_detailed(&args[1])?;
+    Ok(time_arithmetic_result(a.time.add(b.time), a, b))
 }
 
 /// `(time-subtract A B)` -> integer seconds or `(TICKS . HZ)`
 pub(crate) fn builtin_time_subtract(args: Vec<Value>) -> EvalResult {
     expect_args("time-subtract", &args, 2)?;
-    let a = parse_time(&args[0])?;
-    let b = parse_time(&args[1])?;
-    Ok(a.sub(b).to_arithmetic_result())
+    let a = parse_time_detailed(&args[0])?;
+    let b = parse_time_detailed(&args[1])?;
+    Ok(time_arithmetic_result(a.time.sub(b.time), a, b))
 }
 
 /// `(time-less-p A B)` -> t or nil
