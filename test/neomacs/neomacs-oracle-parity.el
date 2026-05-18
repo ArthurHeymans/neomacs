@@ -2,7 +2,7 @@
 
 ;; Usage:
 ;;   NEOMACS_ORACLE_SCENARIO=hello NEOMACS_ORACLE_LABEL=neomacs \
-;;     ./src/emacs -Q -l test/neomacs/neomacs-oracle-parity.el
+;;     ./target/release/neomacs -Q -l test/neomacs/neomacs-oracle-parity.el
 
 ;;; Code:
 

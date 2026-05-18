@@ -3,7 +3,7 @@
 ;; Test text-scale-adjust, variable-height face rendering, cursor sizing,
 ;; line-number scaling, word-wrap with mixed heights, face inheritance,
 ;; and mode-line custom face heights in the neomacs GPU renderer.
-;; Usage: ./src/emacs -Q -l test/neomacs/text-scale-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/text-scale-test.el
 
 ;;; Code:
 

@@ -8,7 +8,7 @@
 #
 # Optional env:
 #   OFFICIAL_EMACS=/path/to/emacs
-#   NEOMACS_BIN=./src/emacs
+#   NEOMACS_BIN=./target/release/neomacs
 #   ORACLE_OUT_DIR=/tmp/neomacs-oracle-parity
 #   ORACLE_MAX_AE=<int>   # fail if AE diff exceeds threshold
 
@@ -19,7 +19,7 @@ cd "$(dirname "$0")/../.."
 DISPLAY_ENV="${DISPLAY:-:0}"
 ORACLE_ELISP="test/neomacs/neomacs-oracle-parity.el"
 OFFICIAL_EMACS="${OFFICIAL_EMACS:-/nix/store/hql3zwz5b4ywd2qwx8jssp4dyb7nx4cb-emacs-30.2/bin/emacs}"
-NEOMACS_BIN="${NEOMACS_BIN:-./src/emacs}"
+NEOMACS_BIN="${NEOMACS_BIN:-./target/release/neomacs}"
 OUT_DIR="${ORACLE_OUT_DIR:-/tmp/neomacs-oracle-parity}"
 
 if ! command -v xdotool >/dev/null 2>&1; then

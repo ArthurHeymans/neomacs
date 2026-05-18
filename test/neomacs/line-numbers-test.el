@@ -3,7 +3,7 @@
 ;; Test line number display modes in the neomacs GPU renderer.
 ;; Exercises absolute, relative, visual modes, width settings,
 ;; custom faces, text-scale-adjust, invisible text, and alignment.
-;; Usage: ./src/emacs -Q -l test/neomacs/line-numbers-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/line-numbers-test.el
 
 ;;; Code:
 

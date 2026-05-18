@@ -12,7 +12,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NEOMACS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-EMACS_BIN="$NEOMACS_ROOT/src/emacs"
+EMACS_BIN="$NEOMACS_ROOT/target/release/neomacs"
 TEST_EL="$SCRIPT_DIR/image-type-test.el"
 LOG_FILE="/tmp/neomacs-image-type-test-$$.log"
 SCREENSHOT_FILE="/tmp/neomacs-image-type-test-$$.png"
@@ -26,8 +26,8 @@ echo "=== Neomacs Image Type Test ==="
 echo ""
 
 if [[ ! -x "$EMACS_BIN" ]]; then
-    echo -e "${RED}ERROR: Emacs binary not found at $EMACS_BIN${NC}"
-    echo "Build first: make -j\$(nproc)"
+    echo -e "${RED}ERROR: Neomacs binary not found at $EMACS_BIN${NC}"
+    echo "Run: cargo xtask fresh-build --release"
     exit 1
 fi
 

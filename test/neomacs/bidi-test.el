@@ -5,7 +5,7 @@
 ;; DejaVu Sans, or any font covering Unicode blocks U+0590-U+05FF and
 ;; U+0600-U+06FF).  If RTL text appears as boxes or tofu, install an
 ;; appropriate font and restart.
-;; Usage: ./src/emacs -Q -l test/neomacs/bidi-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/bidi-test.el
 
 ;;; Code:
 

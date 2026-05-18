@@ -3,7 +3,7 @@
 ;; Test window splitting, dividers, multi-window rendering, mode-lines,
 ;; header-lines, tab-lines, and window configuration cycling in the
 ;; neomacs GPU renderer.
-;; Usage: ./src/emacs -Q -l test/neomacs/window-layout-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/window-layout-test.el
 
 ;;; Code:
 

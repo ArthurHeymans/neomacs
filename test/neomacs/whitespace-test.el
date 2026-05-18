@@ -3,7 +3,7 @@
 ;; Test whitespace-mode rendering, tab display, trailing whitespace,
 ;; special whitespace characters, and related display features in the
 ;; neomacs GPU renderer.
-;; Usage: ./src/emacs -Q -l test/neomacs/whitespace-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/whitespace-test.el
 
 ;;; Code:
 

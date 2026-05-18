@@ -13,8 +13,8 @@ EMACS_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$EMACS_DIR"
 
-if [ ! -x "./src/emacs" ]; then
-    echo "Error: ./src/emacs not found. Build Emacs first."
+if [ ! -x "./target/release/neomacs" ]; then
+    echo "Error: ./target/release/neomacs not found. Run: cargo xtask fresh-build --release."
     exit 1
 fi
 
@@ -24,7 +24,7 @@ if [ -z "$DISPLAY" ]; then
 fi
 
 echo "=== Neomacs Inline WebKit Test ==="
-echo "Emacs: $EMACS_DIR/src/emacs"
+echo "Emacs: $EMACS_DIR/target/release/neomacs"
 echo "Display: $DISPLAY"
 echo ""
 
@@ -41,4 +41,4 @@ if ! command -v xdg-dbus-proxy &> /dev/null; then
 fi
 
 # Run the test
-exec ./src/emacs -Q -l test/neomacs/neomacs-webkit-test.el "$@"
+exec ./target/release/neomacs -Q -l test/neomacs/neomacs-webkit-test.el "$@"

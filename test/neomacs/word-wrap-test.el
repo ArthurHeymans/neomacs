@@ -3,7 +3,7 @@
 ;; Test word wrap, line truncation, and horizontal scrolling in the
 ;; neomacs GPU renderer.  Creates multiple windows showing different
 ;; wrapping modes simultaneously.
-;; Usage: ./src/emacs -Q -l test/neomacs/word-wrap-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/word-wrap-test.el
 
 ;;; Code:
 

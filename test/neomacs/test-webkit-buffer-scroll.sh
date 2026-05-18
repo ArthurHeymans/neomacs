@@ -4,17 +4,17 @@ cd "$(dirname "$0")/../.."
 
 echo "=== WebKit Buffer Scroll Test ==="
 
-RUST_LOG=warn DISPLAY=:0 ./src/emacs -Q -l test/neomacs/webkit-scroll-buffer-test.el 2>/tmp/webkit-buffer-scroll.log &
+RUST_LOG=warn DISPLAY=:0 ./target/release/neomacs -Q -l test/neomacs/webkit-scroll-buffer-test.el 2>/tmp/webkit-buffer-scroll.log &
 EMACS_PID=$!
-echo "Emacs PID: $EMACS_PID"
+echo "Neomacs PID: $EMACS_PID"
 
 sleep 8
 
-WIN_ID=$(DISPLAY=:0 xdotool search --name "emacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
 echo "Window ID: $WIN_ID"
 
 if [ -z "$WIN_ID" ]; then
-    echo "ERROR: Could not find Emacs window"
+    echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true
     exit 1
 fi

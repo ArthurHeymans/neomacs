@@ -91,13 +91,13 @@ echo "=== $TEST_NAME Test ==="
 setup_lib_path
 setup_display
 
-echo "Starting Emacs with neo-term interactive test..."
+echo "Starting Neomacs with neo-term interactive test..."
 
-RUST_LOG=neomacs_display=debug ./src/emacs -Q \
+RUST_LOG=neomacs_display=debug ./target/release/neomacs -Q \
     -l test/neomacs/neo-term-interactive-test.el 2>"$LOG" &
 EMACS_PID=$!
 
-echo "Emacs PID: $EMACS_PID"
+echo "Neomacs PID: $EMACS_PID"
 
 # Helper: wait for Emacs window
 wait_for_window() {
@@ -110,7 +110,7 @@ wait_for_window() {
             tail -20 "$LOG" 2>/dev/null || true
             return 1
         fi
-        WIN_ID=$(xdotool search --name "emacs" 2>/dev/null | head -1)
+        WIN_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1)
         if [ -n "$WIN_ID" ]; then
             echo "Found Emacs window: $WIN_ID"
             return 0

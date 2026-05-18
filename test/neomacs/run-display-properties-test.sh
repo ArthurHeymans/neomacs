@@ -20,20 +20,20 @@ SCREENSHOT=/tmp/display-properties-screenshot.png
 TEST_NAME="Display Properties"
 
 echo "=== $TEST_NAME Test ==="
-echo "Starting Emacs..."
+echo "Starting Neomacs..."
 
-RUST_LOG=neomacs_display=debug DISPLAY=:0 ./src/emacs -Q \
+RUST_LOG=neomacs_display=debug DISPLAY=:0 ./target/release/neomacs -Q \
     -l test/neomacs/display-properties-test.el 2>"$LOG" &
 EMACS_PID=$!
 
-echo "Emacs PID: $EMACS_PID"
+echo "Neomacs PID: $EMACS_PID"
 echo "Waiting for window to appear..."
 sleep 5
 
-# Find emacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "emacs" 2>/dev/null | head -1)
+# Find Neomacs window
+WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
-    echo "ERROR: Could not find Emacs window"
+    echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true
     exit 1
 fi
@@ -95,7 +95,7 @@ echo "Waiting 10 seconds before cleanup (observe display visually)..."
 sleep 10
 
 # Cleanup
-echo "Stopping Emacs..."
+echo "Stopping Neomacs..."
 kill $EMACS_PID 2>/dev/null || true
 wait $EMACS_PID 2>/dev/null || true
 

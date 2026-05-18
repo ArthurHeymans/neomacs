@@ -7,20 +7,20 @@ set -e
 cd "$(dirname "$0")/../.."
 
 echo "=== WebKit XDotool Click Test ==="
-echo "Starting Emacs with WebKit view..."
+echo "Starting Neomacs with WebKit view..."
 
 # Start Emacs and capture stderr to a log file
-RUST_LOG=debug DISPLAY=:0 ./src/emacs -Q -l test/neomacs/webkit-xdotool-test.el 2>/tmp/webkit-click-test.log &
+RUST_LOG=debug DISPLAY=:0 ./target/release/neomacs -Q -l test/neomacs/webkit-xdotool-test.el 2>/tmp/webkit-click-test.log &
 EMACS_PID=$!
 
-echo "Emacs PID: $EMACS_PID"
+echo "Neomacs PID: $EMACS_PID"
 echo "Waiting for window to appear..."
 sleep 6
 
-# Find emacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "emacs" 2>/dev/null | head -1)
+# Find Neomacs window
+WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
-    echo "ERROR: Could not find Emacs window"
+    echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true
     exit 1
 fi
@@ -65,7 +65,7 @@ grep -E "load_changed|about\.google" /tmp/webkit-click-test.log | tail -10 || ec
 sleep 30
 # Cleanup
 echo ""
-echo "Stopping Emacs..."
+echo "Stopping Neomacs..."
 kill $EMACS_PID 2>/dev/null || true
 wait $EMACS_PID 2>/dev/null || true
 

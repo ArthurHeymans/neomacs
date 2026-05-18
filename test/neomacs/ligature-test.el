@@ -2,7 +2,7 @@
 
 ;; Test whether programming font ligatures render correctly in neomacs.
 ;; Uses JetBrains Mono which has extensive ligature support.
-;; Usage: ./src/emacs -Q -l test/neomacs/ligature-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/ligature-test.el
 ;;
 ;; Common ligature sequences in programming fonts:
 ;;   ->  =>  !=  ==  ===  >=  <=  <>  |>  <|  >>  <<

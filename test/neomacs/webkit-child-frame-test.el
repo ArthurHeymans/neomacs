@@ -1,7 +1,7 @@
 ;;; webkit-child-frame-test.el --- Test WebKit view inside a child frame -*- lexical-binding: t -*-
 
 ;; Open a WPE WebKit view showing YouTube inside a child frame.
-;; Usage: ./src/emacs -Q -l test/neomacs/webkit-child-frame-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/webkit-child-frame-test.el
 
 ;;; Code:
 

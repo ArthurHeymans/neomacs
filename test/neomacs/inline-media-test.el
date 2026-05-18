@@ -7,7 +7,7 @@
 
 ;;; Commentary:
 ;; Run with: ./test/neomacs/run-inline-media-test.sh
-;; Or manually: DISPLAY=:0 ./src/emacs -Q -l test/neomacs/inline-media-test.el
+;; Or manually: DISPLAY=:0 ./target/release/neomacs -Q -l test/neomacs/inline-media-test.el
 
 ;;; Code:
 

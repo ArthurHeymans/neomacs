@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NEOMACS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-EMACS_BIN="$NEOMACS_ROOT/src/emacs"
+EMACS_BIN="$NEOMACS_ROOT/target/release/neomacs"
 TEST_EL="$SCRIPT_DIR/inline-media-test.el"
 LOG_FILE="/tmp/inline-media-test-$$.log"
 SCREENSHOT_FILE="/tmp/inline-media-screenshot-$$.png"
@@ -23,8 +23,8 @@ echo ""
 
 # Check emacs binary
 if [[ ! -x "$EMACS_BIN" ]]; then
-    echo -e "${RED}ERROR: Emacs binary not found at $EMACS_BIN${NC}"
-    echo "Please build neomacs first"
+    echo -e "${RED}ERROR: Neomacs binary not found at $EMACS_BIN${NC}"
+    echo "Run: cargo xtask fresh-build --release"
     exit 1
 fi
 
@@ -52,7 +52,7 @@ echo "Log file: $LOG_FILE"
 echo ""
 
 # Run emacs with timeout
-echo "Starting Emacs..."
+echo "Starting Neomacs..."
 export RUST_LOG=info
 timeout 35 "$EMACS_BIN" -Q -l "$TEST_EL" 2>&1 | tee "$LOG_FILE" &
 EMACS_PID=$!
@@ -63,14 +63,14 @@ sleep 8
 # Take screenshot
 if command -v import &> /dev/null && [[ -n "$DISPLAY" ]]; then
     echo "Taking screenshot..."
-    WINDOW_ID=$(xdotool search --name "emacs" 2>/dev/null | head -1 || true)
+    WINDOW_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1 || true)
     if [[ -n "$WINDOW_ID" ]]; then
         import -window "$WINDOW_ID" "$SCREENSHOT_FILE" 2>/dev/null || true
         if [[ -f "$SCREENSHOT_FILE" ]]; then
             echo -e "${GREEN}Screenshot saved: $SCREENSHOT_FILE${NC}"
         fi
     else
-        echo -e "${YELLOW}Could not find Emacs window for screenshot${NC}"
+        echo -e "${YELLOW}Could not find Neomacs window for screenshot${NC}"
     fi
 fi
 

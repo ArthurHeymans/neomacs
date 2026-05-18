@@ -5,7 +5,7 @@
 ;; italic, underline, overline, strike-through, box decorations, and
 ;; inline images — all visible simultaneously.
 ;;
-;; Usage: RUST_LOG=debug ./src/emacs -Q -l test/neomacs/tab-bar-face-test.el
+;; Usage: RUST_LOG=debug ./target/release/neomacs -Q -l test/neomacs/tab-bar-face-test.el
 ;;
 ;; What to check:
 ;; - Each tab shows a different face style (all visible at once)

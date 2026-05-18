@@ -3,7 +3,7 @@
 ;; Test regex search and match highlighting, useful for verifying the Rust
 ;; regex engine integration in neomacs.  Each section inserts sample text,
 ;; searches with a regex pattern, and highlights matches with colored overlays.
-;; Usage: ./src/emacs -Q -l test/neomacs/regex-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/regex-test.el
 
 ;;; Code:
 

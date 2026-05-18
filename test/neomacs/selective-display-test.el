@@ -4,7 +4,7 @@
 ;; properties, and code folding interactions with the neomacs GPU renderer.
 ;; Verifies that hidden text, ellipsis indicators, line numbers, and cursor
 ;; navigation all render correctly through folded regions.
-;; Usage: ./src/emacs -Q -l test/neomacs/selective-display-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/selective-display-test.el
 
 ;;; Code:
 

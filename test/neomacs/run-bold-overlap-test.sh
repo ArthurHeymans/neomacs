@@ -3,4 +3,4 @@
 # Usage: ./test/neomacs/run-bold-overlap-test.sh
 set -e
 cd "$(git rev-parse --show-toplevel)"
-RUST_LOG=debug exec ./src/emacs -Q -l test/neomacs/bold-overlap-test.el
+RUST_LOG=debug exec ./target/release/neomacs -Q -l test/neomacs/bold-overlap-test.el

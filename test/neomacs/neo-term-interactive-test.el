@@ -1,6 +1,6 @@
 ;;; neo-term-interactive-test.el --- Interactive xdotool test for neo-term -*- lexical-binding: t -*-
 
-;; Usage: ./src/emacs -Q -l test/neomacs/neo-term-interactive-test.el
+;; Usage: ./target/release/neomacs -Q -l test/neomacs/neo-term-interactive-test.el
 ;;
 ;; This test is driven by xdotool from run-neo-term-interactive-test.sh.
 ;; It creates a terminal, then waits for xdotool to send keystrokes.

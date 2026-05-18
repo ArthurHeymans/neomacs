@@ -2,13 +2,13 @@
 # Take a screenshot of the webkit view
 cd "$(dirname "$0")/../.."
 
-echo "Starting Emacs with WebKit..."
-RUST_LOG=warn DISPLAY=:0 ./src/emacs -Q -l test/neomacs/webkit-xdotool-test.el &
+echo "Starting Neomacs with WebKit..."
+RUST_LOG=warn DISPLAY=:0 ./target/release/neomacs -Q -l test/neomacs/webkit-xdotool-test.el &
 EMACS_PID=$!
 
 sleep 8
 
-WIN_ID=$(DISPLAY=:0 xdotool search --name "emacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
 echo "Window ID: $WIN_ID"
 
 if [ -n "$WIN_ID" ]; then

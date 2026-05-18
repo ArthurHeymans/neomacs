@@ -8,7 +8,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NEOMACS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-EMACS_BIN="$NEOMACS_ROOT/src/emacs"
+EMACS_BIN="$NEOMACS_ROOT/target/release/neomacs"
 TEST_EL="$SCRIPT_DIR/org-image-test.el"
 LOG_FILE="/tmp/neomacs-org-image-test.log"
 SCREENSHOT_FILE="/tmp/neomacs-org-image-test.png"
@@ -22,12 +22,12 @@ echo "=== Neomacs Org Image Preview Test ==="
 echo ""
 
 if [[ ! -x "$EMACS_BIN" ]]; then
-    echo -e "${RED}ERROR: Emacs binary not found at $EMACS_BIN${NC}"
-    echo "Please build neomacs first: make -j8"
+    echo -e "${RED}ERROR: Neomacs binary not found at $EMACS_BIN${NC}"
+    echo "Run: cargo xtask fresh-build --release"
     exit 1
 fi
 
-echo "Emacs binary: $EMACS_BIN"
+echo "Neomacs binary: $EMACS_BIN"
 echo "Test file: $TEST_EL"
 echo ""
 
@@ -49,7 +49,7 @@ sleep 6
 
 # Take screenshot
 if command -v import &> /dev/null && [[ -n "$DISPLAY" ]]; then
-    WINDOW_ID=$(xdotool search --name "emacs" 2>/dev/null | head -1 || true)
+    WINDOW_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1 || true)
     if [[ -n "$WINDOW_ID" ]]; then
         import -window "$WINDOW_ID" "$SCREENSHOT_FILE" 2>/dev/null || true
     fi

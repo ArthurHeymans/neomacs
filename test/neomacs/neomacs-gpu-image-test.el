@@ -5,7 +5,7 @@
 
 ;;; Commentary:
 ;; Run with: ./test/neomacs/run-gpu-image-test.sh
-;; Or manually: DISPLAY=:0 ./src/emacs -Q -l test/neomacs/neomacs-gpu-image-test.el
+;; Or manually: DISPLAY=:0 ./target/release/neomacs -Q -l test/neomacs/neomacs-gpu-image-test.el
 ;;
 ;; Neomacs automatically uses GPU rendering for images when native
 ;; image libraries (libpng, libjpeg, etc.) aren't available.
