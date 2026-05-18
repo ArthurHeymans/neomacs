@@ -425,9 +425,6 @@ impl TextPropertyTable {
             changed = true;
         }
 
-        if changed {
-            self.prune_empty_intervals_after_mutation();
-        }
         changed
     }
 
@@ -480,9 +477,6 @@ impl TextPropertyTable {
             }
         }
 
-        if changed {
-            self.prune_empty_intervals_after_mutation();
-        }
         changed
     }
 
@@ -501,8 +495,6 @@ impl TextPropertyTable {
                 node.refresh_cache();
             }
         }
-
-        self.prune_empty_intervals_after_mutation();
     }
 
     pub fn next_property_change(&self, pos: usize) -> Option<usize> {

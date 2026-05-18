@@ -1473,13 +1473,18 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let had_intervals = get_string_text_properties_table_for_value(str_val).is_some();
+        let full_string = beg == 0 && end == s.schars() as i64;
+        let had_intervals = string_has_text_property_interval_tree(str_val);
         let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
         else {
             return Ok(Value::NIL);
         };
         if pairs.is_empty() && !had_intervals {
             return Ok(Value::NIL);
+        }
+        if pairs.is_empty() && full_string {
+            clear_string_text_properties_for_value(str_val);
+            return Ok(Value::T);
         }
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         table.remove_all_properties(char_beg, char_end);
@@ -1986,11 +1991,21 @@ pub(crate) fn builtin_text_property_any_in_state(
         else {
             return Ok(Value::NIL);
         };
-        let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
+        let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
+            return Ok(if val.is_nil() {
+                if char_beg < char_end {
+                    Value::fixnum(string_char_to_elisp_pos(s, char_beg))
+                } else {
+                    Value::NIL
+                }
+            } else {
+                Value::NIL
+            });
+        };
         let mut cursor = char_beg;
         while cursor < char_end {
             let found = lookup_string_text_property(obarray, buffers, &table, cursor, prop);
-            if equal_value(&found, val, 0) {
+            if eq_value(&found, val) {
                 return Ok(Value::fixnum(string_char_to_elisp_pos(s, cursor)));
             }
             match table.next_property_change(cursor) {
@@ -2012,10 +2027,22 @@ pub(crate) fn builtin_text_property_any_in_state(
         return Ok(Value::NIL);
     };
 
+    if buf.text.text_props_is_empty() {
+        return Ok(if val.is_nil() {
+            if byte_beg < byte_end {
+                Value::fixnum(byte_to_elisp_pos(buf, byte_beg))
+            } else {
+                Value::NIL
+            }
+        } else {
+            Value::NIL
+        });
+    }
+
     let mut cursor = byte_beg;
     while cursor < byte_end {
         let found = lookup_buffer_text_property(obarray, buffers, buf, cursor, prop);
-        if equal_value(&found, val, 0) {
+        if eq_value(&found, val) {
             return Ok(Value::fixnum(byte_to_elisp_pos(buf, cursor)));
         }
         match buf.text.text_props_next_change(cursor) {
@@ -2056,11 +2083,19 @@ pub(crate) fn builtin_text_property_not_all_in_state(
         else {
             return Ok(Value::NIL);
         };
-        let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
+        let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
+            return Ok(if val.is_nil() {
+                Value::NIL
+            } else if char_beg < char_end {
+                Value::fixnum(string_char_to_elisp_pos(s, char_beg))
+            } else {
+                Value::NIL
+            });
+        };
         let mut cursor = char_beg;
         while cursor < char_end {
             let found = lookup_string_text_property(obarray, buffers, &table, cursor, prop);
-            let matches = equal_value(&found, val, 0);
+            let matches = eq_value(&found, val);
             if !matches {
                 return Ok(Value::fixnum(string_char_to_elisp_pos(s, cursor)));
             }
@@ -2082,11 +2117,22 @@ pub(crate) fn builtin_text_property_not_all_in_state(
     else {
         return Ok(Value::NIL);
     };
+
+    if buf.text.text_props_is_empty() {
+        return Ok(if val.is_nil() {
+            Value::NIL
+        } else if byte_beg < byte_end {
+            Value::fixnum(byte_to_elisp_pos(buf, byte_beg))
+        } else {
+            Value::NIL
+        });
+    }
+
     let mut cursor = byte_beg;
 
     while cursor < byte_end {
         let found = lookup_buffer_text_property(obarray, buffers, buf, cursor, prop);
-        let matches = equal_value(&found, val, 0);
+        let matches = eq_value(&found, val);
         if !matches {
             return Ok(Value::fixnum(byte_to_elisp_pos(buf, cursor)));
         }

@@ -76,6 +76,88 @@ fn compat_text_property_semantics_matches_gnu_emacs() {
    (object-intervals s)))"#,
         },
         TextPropertyCase {
+            name: "string_remove_text_properties_preserves_nil_intervals",
+            form: r#"(list
+ (let ((s (copy-sequence "ab")))
+   (put-text-property 0 1 'p t s)
+   (remove-text-properties 0 1 '(p nil) s)
+   (list
+    (object-intervals s)
+    (next-property-change 0 s t)
+    (next-property-change 0 s)
+    (text-properties-at 0 s)
+    (text-properties-at 1 s)))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 3 'p t s)
+   (remove-text-properties 0 3 '(p nil) s)
+   (list
+    (object-intervals s)
+    (next-property-change 0 s t)))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 3 'p t s)
+   (set-text-properties 0 3 nil s)
+   (list
+    (object-intervals s)
+    (next-property-change 0 s t))))"#,
+        },
+        TextPropertyCase {
+            name: "text_property_search_default_properties_without_interval_tree",
+            form: r#"(list
+ (let ((default-text-properties '(fallback 7))
+       (s "ab"))
+   (list
+    (get-text-property 0 'fallback s)
+    (text-property-any 0 2 'fallback 7 s)
+    (text-property-not-all 0 2 'fallback 7 s)
+    (text-property-any 0 2 'fallback nil s)
+    (text-property-not-all 0 2 'fallback nil s)))
+ (let ((default-text-properties '(fallback 7)))
+   (with-temp-buffer
+     (insert "ab")
+     (list
+      (get-text-property 1 'fallback)
+      (text-property-any 1 3 'fallback 7)
+      (text-property-not-all 1 3 'fallback 7)
+      (text-property-any 1 3 'fallback nil)
+      (text-property-not-all 1 3 'fallback nil)))))"#,
+        },
+        TextPropertyCase {
+            name: "text_property_search_empty_range_without_interval_tree",
+            form: r#"(list
+ (let ((s "ab"))
+   (list
+    (text-property-any 1 1 'fallback nil s)
+    (text-property-not-all 1 1 'fallback 7 s)))
+ (with-temp-buffer
+   (insert "ab")
+   (list
+    (text-property-any 2 2 'fallback nil)
+    (text-property-not-all 2 2 'fallback 7))))"#,
+        },
+        TextPropertyCase {
+            name: "text_property_search_uses_eq_not_equal",
+            form: r#"(list
+ (let ((s (copy-sequence "ab"))
+       (stored (list 1))
+       (same-shape (list 1)))
+   (put-text-property 0 1 'p stored s)
+   (list
+    (text-property-any 0 2 'p stored s)
+    (text-property-any 0 2 'p same-shape s)
+    (text-property-not-all 0 1 'p stored s)
+    (text-property-not-all 0 1 'p same-shape s)))
+ (with-temp-buffer
+   (let ((stored (list 1))
+         (same-shape (list 1)))
+     (insert "ab")
+     (put-text-property 1 2 'p stored)
+     (list
+      (text-property-any 1 3 'p stored)
+      (text-property-any 1 3 'p same-shape)
+      (text-property-not-all 1 2 'p stored)
+      (text-property-not-all 1 2 'p same-shape)))))"#,
+        },
+        TextPropertyCase {
             name: "buffer_text_property_boundaries_use_buffer_positions",
             form: r#"(let ((buf (get-buffer-create " *compat-textprop-buffer*")))
   (unwind-protect

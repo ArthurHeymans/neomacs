@@ -292,6 +292,17 @@ pub fn set_string_text_properties_table_for_value(value: Value, table: TextPrope
     });
 }
 
+pub fn clear_string_text_properties_for_value(value: Value) {
+    let _ = mutate::with_lisp_string_mut(value, |s| s.clear_intervals());
+}
+
+pub fn string_has_text_property_interval_tree(value: Value) -> bool {
+    let Some(ptr) = value.as_string_ptr() else {
+        return false;
+    };
+    unsafe { (*ptr).data.has_intervals() }
+}
+
 pub fn set_string_text_properties_for_value(value: Value, runs: Vec<StringTextPropertyRun>) {
     if let Some(table) = bulk_string_text_property_table(&runs) {
         set_string_text_properties_table_for_value(value, table);
@@ -406,6 +417,15 @@ pub fn get_string_text_properties_table_for_value(value: Value) -> Option<TextPr
     } else {
         Some(table.clone())
     }
+}
+
+pub fn get_string_text_properties_interval_table_for_value(
+    value: Value,
+) -> Option<TextPropertyTable> {
+    if !string_has_text_property_interval_tree(value) {
+        return None;
+    }
+    Some(string_text_props(value)?.clone())
 }
 
 /// A string text property run used by printed propertized-string literals.

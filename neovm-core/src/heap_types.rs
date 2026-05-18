@@ -534,6 +534,14 @@ impl LispString {
         }
     }
 
+    pub fn has_intervals(&self) -> bool {
+        self.intervals.is_some()
+    }
+
+    pub fn clear_intervals(&mut self) {
+        self.intervals = None;
+    }
+
     /// Mutable text-property interval tree attached to this string.
     pub fn intervals_mut(&mut self) -> &mut TextPropertyTable {
         self.ensure_intervals()

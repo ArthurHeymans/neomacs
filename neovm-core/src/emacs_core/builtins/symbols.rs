@@ -2343,7 +2343,7 @@ pub(crate) fn builtin_object_intervals(args: Vec<Value>) -> EvalResult {
             .expect("string value must carry LispString payload")
             .schars();
         let Some(table) =
-            crate::emacs_core::value::get_string_text_properties_table_for_value(args[0])
+            crate::emacs_core::value::get_string_text_properties_interval_table_for_value(args[0])
         else {
             return Ok(Value::NIL);
         };
