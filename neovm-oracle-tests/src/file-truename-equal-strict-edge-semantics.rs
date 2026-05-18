@@ -69,3 +69,54 @@ fn oracle_file_truename_parent_symlink_missing_tail_and_file_equal() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_truename_empty_dot_and_symlink_cycle_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-truename-cycle-" t))
+       (default-directory (file-name-as-directory dir))
+       (sub (expand-file-name "sub" dir))
+       (self (expand-file-name "self" dir))
+       (cycle-a (expand-file-name "cycle-a" dir))
+       (cycle-b (expand-file-name "cycle-b" dir)))
+  (unwind-protect
+      (progn
+        (make-directory sub)
+        (make-symbolic-link "self" self)
+        (make-symbolic-link "cycle-b" cycle-a)
+        (make-symbolic-link "cycle-a" cycle-b)
+        (list
+         ;; GNU's `file-truename` first expands empty and dot names against
+         ;; `default-directory`; the directory spelling is still observable
+         ;; via `file-relative-name`.
+         (mapcar (lambda (name)
+                   (file-relative-name (file-truename name) dir))
+                 '("" "." "./" "sub/.." "sub/."))
+         ;; Both self-links and multi-link cycles signal `error`.  The final
+         ;; pathname in the message depends on where the cycle is detected, so
+         ;; assert the GNU message shape instead of hard-coding /tmp names.
+         (condition-case err
+             (file-truename self)
+           (error (list (car err)
+                        (and (stringp (cadr err))
+                             (string-match-p
+                              "\\`Apparent cycle of symbolic links for "
+                              (cadr err))))))
+         (condition-case err
+             (file-truename cycle-a)
+           (error (list (car err)
+                        (and (stringp (cadr err))
+                             (string-match-p
+                              "\\`Apparent cycle of symbolic links for "
+                              (cadr err)))))))))
+    (ignore-errors (delete-file self))
+    (ignore-errors (delete-file cycle-a))
+    (ignore-errors (delete-file cycle-b))
+    (ignore-errors (delete-directory sub))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
