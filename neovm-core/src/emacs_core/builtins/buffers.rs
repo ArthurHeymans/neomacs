@@ -4032,14 +4032,15 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
 
         let string = args[1].as_lisp_string().expect("string");
         let char_len = string.schars();
-        if pos >= char_len && !string.is_empty() {
+        if pos >= char_len && !args[0].is_nil() {
             return Err(signal(
                 "args-out-of-range",
                 vec![string_value, Value::fixnum(pos as i64)],
             ));
         }
 
-        // Emacs returns 0 for the terminating NUL when indexing an empty string.
+        // GNU returns the terminating NUL for (get-byte nil "") after the
+        // explicit-position path has already been range-checked.
         if char_len == 0 {
             return Ok(Value::fixnum(0));
         }

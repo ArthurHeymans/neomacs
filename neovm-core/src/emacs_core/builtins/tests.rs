@@ -14455,6 +14455,10 @@ fn get_byte_string_semantics_match_oracle_edges() {
         builtin_get_byte(&mut eval, vec![Value::NIL, Value::string("abc")]).unwrap(),
         Value::fixnum(97)
     );
+    assert_eq!(
+        builtin_get_byte(&mut eval, vec![Value::NIL, Value::string("")]).unwrap(),
+        Value::fixnum(0)
+    );
 
     let out_of_range =
         builtin_get_byte(&mut eval, vec![Value::fixnum(3), Value::string("abc")]).unwrap_err();
@@ -14462,6 +14466,16 @@ fn get_byte_string_semantics_match_oracle_edges() {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "args-out-of-range");
             assert_eq!(sig.data, vec![Value::string("abc"), Value::fixnum(3)]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let empty_explicit_position =
+        builtin_get_byte(&mut eval, vec![Value::fixnum(0), Value::string("")]).unwrap_err();
+    match empty_explicit_position {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::string(""), Value::fixnum(0)]);
         }
         other => panic!("unexpected flow: {other:?}"),
     }
