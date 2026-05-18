@@ -38,3 +38,31 @@ fn oracle_file_name_concat_filters_and_separator_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_name_concat_unibyte_multibyte_conversion_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((raw (unibyte-string #xe9))
+       (wide "\u00e9")
+       (cases
+        (list
+         (file-name-concat raw "tail")
+         (file-name-concat raw nil "tail")
+         (file-name-concat raw "" "tail")
+         (file-name-concat raw wide)
+         (file-name-concat "head" raw)
+         (file-name-concat "" raw)
+         (file-name-concat nil raw))))
+  (mapcar (lambda (s)
+            (list (multibyte-string-p s)
+                  (unibyte-string-p s)
+                  (length s)
+                  (string-bytes s)
+                  (string-to-list s)))
+          cases))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
