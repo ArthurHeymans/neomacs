@@ -187,3 +187,26 @@ fn char_overlap_classifies_font_overhang_separately() {
     assert_eq!(overlap.width, 2.0);
     assert!(overlap.expected_by_overhang);
 }
+
+#[test]
+fn char_overlap_classifies_adjacent_dual_bearing_overhang_separately() {
+    let mut w = char_bounds("w", 888.0, 384.0, 16.0, 33.0);
+    w.glyph_x = 889.0;
+    w.glyph_y = 395.0;
+    w.glyph_w = 17.0;
+    w.glyph_h = 15.0;
+    w.right_overhang = 2.0;
+
+    let mut x = char_bounds("x", 904.0, 384.0, 16.0, 33.0);
+    x.glyph_x = 903.0;
+    x.glyph_y = 395.0;
+    x.glyph_w = 18.0;
+    x.glyph_h = 15.0;
+    x.left_overhang = 1.0;
+    x.right_overhang = 1.0;
+
+    let overlap = char_overlap(&w, &x).expect("dual-bearing overhang overlap");
+    assert_eq!(overlap.x, 903.0);
+    assert_eq!(overlap.width, 3.0);
+    assert!(overlap.expected_by_overhang);
+}

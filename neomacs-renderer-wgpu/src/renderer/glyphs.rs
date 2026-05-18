@@ -173,7 +173,27 @@ fn overlap_is_expected_by_overhang(
         && overlap_right <= a.cell_x + CHAR_OVERLAP_MIN_AXIS
         && overlap_left >= a.glyph_x - CHAR_OVERLAP_MIN_AXIS;
 
-    a_explains || b_explains || b_right_explains || a_left_explains
+    let a_right_b_left_explain = a.right_overhang > CHAR_OVERLAP_MIN_AXIS
+        && b.left_overhang > CHAR_OVERLAP_MIN_AXIS
+        && (a_cell_right - b.cell_x).abs() <= CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= b.glyph_x - CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= a.right() + CHAR_OVERLAP_MIN_AXIS
+        && overlap_left <= a_cell_right + CHAR_OVERLAP_MIN_AXIS
+        && overlap_right >= a_cell_right - CHAR_OVERLAP_MIN_AXIS;
+    let b_right_a_left_explain = b.right_overhang > CHAR_OVERLAP_MIN_AXIS
+        && a.left_overhang > CHAR_OVERLAP_MIN_AXIS
+        && (b_cell_right - a.cell_x).abs() <= CHAR_OVERLAP_MIN_AXIS
+        && overlap_left >= a.glyph_x - CHAR_OVERLAP_MIN_AXIS
+        && overlap_right <= b.right() + CHAR_OVERLAP_MIN_AXIS
+        && overlap_left <= b_cell_right + CHAR_OVERLAP_MIN_AXIS
+        && overlap_right >= b_cell_right - CHAR_OVERLAP_MIN_AXIS;
+
+    a_explains
+        || b_explains
+        || b_right_explains
+        || a_left_explains
+        || a_right_b_left_explain
+        || b_right_a_left_explain
 }
 
 fn log_rendered_char_overlaps(
