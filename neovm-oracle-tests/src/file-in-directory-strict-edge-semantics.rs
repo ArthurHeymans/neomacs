@@ -126,6 +126,46 @@ fn oracle_file_in_directory_relative_prefix_and_escape_edges() {
 }
 
 #[test]
+fn oracle_file_in_directory_empty_root_and_normalized_file_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-file-in-dir-root-" t))
+       (default-directory (file-name-as-directory dir))
+       (root (expand-file-name "root" dir))
+       (child (expand-file-name "child" root))
+       (file (expand-file-name "file.txt" child)))
+  (unwind-protect
+      (progn
+        (make-directory child t)
+        (write-region "x" nil file nil 'silent)
+        (list
+         ;; Empty names are expanded by `file-truename` relative to
+         ;; `default-directory`, so these are true when DIR is that default.
+         (file-in-directory-p "" dir)
+         (file-in-directory-p dir "")
+         (file-in-directory-p "." dir)
+         (file-in-directory-p dir ".")
+         ;; Root is a parent of itself and every absolute path below it, but
+         ;; string-prefix lookalikes are still rejected component-wise.
+         (file-in-directory-p "/" "/")
+         (file-in-directory-p "/tmp" "/")
+         (file-in-directory-p "/tmp2" "/tmp")
+         ;; FILE is resolved by `file-truename`, so trailing slash and parent
+         ;; components are normalized before comparing against DIR.
+         (file-in-directory-p (concat file "/") root)
+         (file-in-directory-p (concat child "/../child/file.txt") root)
+         (file-in-directory-p (concat child "/../../root/child/file.txt") root))))
+    (ignore-errors (delete-file file))
+    (ignore-errors (delete-directory child))
+    (ignore-errors (delete-directory root))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_file_in_directory_file_name_handler_dispatch_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
