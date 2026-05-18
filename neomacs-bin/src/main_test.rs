@@ -1381,6 +1381,35 @@ fn gui_startup_hidden_terminal_frame_matches_tty_face_specs() {
 }
 
 #[test]
+fn gui_startup_ediff_window_parameters_use_live_display_pixels() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
+    let _frame_id = bootstrap_runtime_gui_startup(&mut eval);
+
+    let result = eval
+        .eval_str(
+            r#"
+        (condition-case err
+            (progn
+              (require 'ediff-wind)
+              (list
+               (display-pixel-height)
+               (display-pixel-width)
+               (cdr (assq 'top ediff-control-frame-parameters))
+               (cdr (assq 'left ediff-control-frame-parameters))))
+          (error (list 'error (error-message-string err))))
+        "#,
+        )
+        .expect("ediff window probe should evaluate");
+
+    assert_eq!(
+        print_value_with_eval(&mut eval, &result),
+        "(25 80 26 81)",
+        "ediff-wind should load with GUI display pixel queries active"
+    );
+}
+
+#[test]
 fn cl_generic_context_dispatch_uses_neo_window_system_method() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

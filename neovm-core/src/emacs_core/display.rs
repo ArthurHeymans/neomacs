@@ -1769,43 +1769,10 @@ pub(crate) fn builtin_x_display_pixel_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_max_args("x-display-pixel-width", &args, 1)?;
-    if let Some(display) = args.first() {
-        if live_frame_designator_p(eval, display) {
-            return Err(signal(
-                "error",
-                vec![Value::string("Window system frame should be used")],
-            ));
-        }
+    if gui_x_query_target_eval(eval, "x-display-pixel-width", &args)? {
+        return Ok(Value::fixnum(80));
     }
-    match args.first() {
-        None => Err(signal(
-            "error",
-            vec![Value::string("X windows are not in use or not initialized")],
-        )),
-        Some(v) if v.is_nil() => Err(signal(
-            "error",
-            vec![Value::string("X windows are not in use or not initialized")],
-        )),
-        Some(display) if is_terminal_handle(display) => {
-            if let Some(err) = terminal_not_x_display_error(display) {
-                Err(err)
-            } else {
-                Err(invalid_get_device_terminal_error(display))
-            }
-        }
-        Some(v) if v.is_string() => {
-            let display = display_string_text(v).expect("checked string");
-            Err(signal(
-                "error",
-                vec![Value::string(format!("Display {display} can’t be opened"))],
-            ))
-        }
-        Some(other) => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("frame-live-p"), *other],
-        )),
-    }
+    x_optional_display_query_error_eval(eval, "x-display-pixel-width", args)
 }
 
 /// Context-aware variant of `x-display-pixel-height`.
@@ -1816,43 +1783,10 @@ pub(crate) fn builtin_x_display_pixel_height(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_max_args("x-display-pixel-height", &args, 1)?;
-    if let Some(display) = args.first() {
-        if live_frame_designator_p(eval, display) {
-            return Err(signal(
-                "error",
-                vec![Value::string("Window system frame should be used")],
-            ));
-        }
+    if gui_x_query_target_eval(eval, "x-display-pixel-height", &args)? {
+        return Ok(Value::fixnum(25));
     }
-    match args.first() {
-        None => Err(signal(
-            "error",
-            vec![Value::string("X windows are not in use or not initialized")],
-        )),
-        Some(v) if v.is_nil() => Err(signal(
-            "error",
-            vec![Value::string("X windows are not in use or not initialized")],
-        )),
-        Some(display) if is_terminal_handle(display) => {
-            if let Some(err) = terminal_not_x_display_error(display) {
-                Err(err)
-            } else {
-                Err(invalid_get_device_terminal_error(display))
-            }
-        }
-        Some(v) if v.is_string() => {
-            let display = display_string_text(v).expect("checked string");
-            Err(signal(
-                "error",
-                vec![Value::string(format!("Display {display} can’t be opened"))],
-            ))
-        }
-        Some(other) => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("frame-live-p"), *other],
-        )),
-    }
+    x_optional_display_query_error_eval(eval, "x-display-pixel-height", args)
 }
 
 // ---------------------------------------------------------------------------

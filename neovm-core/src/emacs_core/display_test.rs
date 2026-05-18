@@ -2712,6 +2712,34 @@ fn eval_x_display_queries_accept_live_frame_designator() {
 }
 
 #[test]
+fn eval_x_display_pixel_queries_use_selected_gui_display() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol(gui_window_system_symbol())));
+
+    assert_eq!(
+        builtin_x_display_pixel_width(&mut eval, vec![]).unwrap(),
+        Value::fixnum(80)
+    );
+    assert_eq!(
+        builtin_x_display_pixel_height(&mut eval, vec![]).unwrap(),
+        Value::fixnum(25)
+    );
+    assert_eq!(
+        builtin_x_display_pixel_width(&mut eval, vec![Value::make_frame(frame_id.0)]).unwrap(),
+        Value::fixnum(80)
+    );
+    assert_eq!(
+        builtin_x_display_pixel_height(&mut eval, vec![Value::make_frame(frame_id.0)]).unwrap(),
+        Value::fixnum(25)
+    );
+}
+
+#[test]
 fn eval_monitor_attributes_include_bootstrapped_frame() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
