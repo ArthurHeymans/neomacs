@@ -1553,6 +1553,29 @@ fn seed_gnu_default_gui_chrome_modes(eval: &mut Context) {
     eval.set_variable("compact-bar-mode", Value::NIL);
 }
 
+fn setup_reused_gui_startup_function_keys(eval: &mut Context, frame_id: FrameId) {
+    let frame_value = Value::make_frame(frame_id.0);
+    let previous = eval
+        .obarray()
+        .symbol_value("neomacs--reused-gui-startup-frame")
+        .copied();
+    eval.set_variable("neomacs--reused-gui-startup-frame", frame_value);
+    let result = eval.eval_str(
+        r#"
+        (when (and (fboundp 'x-setup-function-keys)
+                   (frame-live-p neomacs--reused-gui-startup-frame))
+          (x-setup-function-keys neomacs--reused-gui-startup-frame))
+        "#,
+    );
+    match previous {
+        Some(value) => eval.set_variable("neomacs--reused-gui-startup-frame", value),
+        None => {
+            let _ = eval.eval_str("(makunbound 'neomacs--reused-gui-startup-frame)");
+        }
+    }
+    result.expect("GNU GUI startup frame key setup should succeed");
+}
+
 fn ensure_gnu_tool_bar_setup(eval: &mut Context) {
     let needs_setup = match eval.eval_str(
         "(and (fboundp 'tool-bar-setup) tool-bar-mode (= 1 (length (default-value 'tool-bar-map))))",
@@ -2643,6 +2666,7 @@ fn bootstrap_buffers(
     }
     if display.frontend == FrontendKind::Gui {
         seed_gnu_default_gui_chrome_modes(eval);
+        setup_reused_gui_startup_function_keys(eval, frame_id);
         sync_selected_gui_chrome_state(eval);
     } else {
         eval.set_face_attribute(

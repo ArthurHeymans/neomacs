@@ -1701,6 +1701,26 @@ fn gnu_startup_keeps_scratch_selected_under_q_startup() {
 }
 
 #[test]
+fn gnu_startup_reused_gui_frame_installs_common_window_key_translations() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _frame_id = bootstrap_runtime_gui_startup(&mut eval);
+
+    let result = eval
+        .eval_str(
+            r#"
+        (list
+         (lookup-key local-function-key-map [M-backspace])
+         (key-binding [M-backspace])
+         (key-binding [?\M-\d]))
+        "#,
+        )
+        .expect("key translation probe should evaluate");
+    let rendered = print_value_with_eval(&mut eval, &result);
+    assert_eq!(rendered, "([134217855] nil backward-kill-word)");
+}
+
+#[test]
 fn gnu_startup_keeps_bootstrap_gui_frame_instead_of_creating_replacement_frame() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
