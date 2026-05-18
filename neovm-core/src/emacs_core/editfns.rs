@@ -708,16 +708,7 @@ fn expect_integer_or_marker_in_buffers(
     buffers: &BufferManager,
     value: &Value,
 ) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if value.is_marker() => {
-            super::marker::marker_position_as_int_with_buffers(buffers, value)
-        }
-        _other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
+    super::position::fix_position_with_buffers(buffers, value)
 }
 
 pub(crate) fn current_buffer_accessible_char_region_in_buffers(
@@ -1233,21 +1224,30 @@ pub(crate) fn builtin_load_average(args: Vec<Value>) -> EvalResult {
 /// or the number of 0 bits in two's-complement form for negative integers.
 pub(crate) fn builtin_logcount(args: Vec<Value>) -> EvalResult {
     expect_args("logcount", &args, 1)?;
-    let n = match args[0].kind() {
-        ValueKind::Fixnum(v) => v,
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("integerp"), args[0]],
-            ));
+    match args[0].kind() {
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            let n = args[0].as_bignum().expect("bignum kind");
+            let bits = if n.cmp0().is_lt() {
+                n.count_zeros().expect("negative bignum has zero count")
+            } else {
+                n.count_ones()
+                    .expect("nonnegative bignum has finite one count")
+            };
+            Ok(Value::fixnum(i64::from(bits)))
         }
-    };
-    let bits = if n >= 0 {
-        (n as u64).count_ones() as i64
-    } else {
-        ((!n) as u64).count_ones() as i64
-    };
-    Ok(Value::fixnum(bits))
+        ValueKind::Fixnum(n) => {
+            let bits = if n >= 0 {
+                (n as u64).count_ones() as i64
+            } else {
+                ((!n) as u64).count_ones() as i64
+            };
+            Ok(Value::fixnum(bits))
+        }
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integerp"), args[0]],
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------

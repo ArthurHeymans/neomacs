@@ -3989,7 +3989,7 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
             _other => {
                 return Err(signal(
                     "wrong-type-argument",
-                    vec![Value::symbol("natnump"), *val],
+                    vec![Value::symbol("wholenump"), *val],
                 ));
             }
         }

@@ -1000,6 +1000,12 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                     }
                 }
                 ValueKind::Veclike(VecLikeType::Vector) => {
+                    if super::chartable::is_char_table(arg) {
+                        return Err(signal(
+                            "wrong-type-argument",
+                            vec![Value::symbol("sequencep"), *arg],
+                        ));
+                    }
                     if let Some(items) = arg.as_vector_data() {
                         for item in items.as_slice().iter().copied() {
                             append_element(&mut result, &mut last, item);

@@ -952,7 +952,10 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
     };
 
     // Custom obarray path
-    if let Some(custom_obarray) = args.get(1).filter(|v| !v.is_nil()) {
+    if let Some(custom_obarray) = args
+        .get(1)
+        .filter(|v| !v.is_nil() && !is_global_obarray_proxy_in_state(eval.obarray(), v))
+    {
         let custom_obarray =
             crate::emacs_core::builtins::symbols::check_obarray_value(*custom_obarray)?;
         let vec_data = custom_obarray.as_vector_data().unwrap();

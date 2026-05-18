@@ -13,6 +13,7 @@ use super::value::*;
 use crate::buffer::BufferManager;
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
+use std::borrow::Cow;
 
 // Sentinel constants removed — no longer needed with Vec<u8> LispString
 
@@ -130,11 +131,19 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 const B64_STD: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const B64_URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-/// Build a decode table (256 entries, 0xFF = invalid) from an alphabet.
-fn build_decode_table(alphabet: &[u8; 64]) -> [u8; 256] {
-    let mut table = [0xFFu8; 256];
+/// Build a GNU-style decode table.
+///
+/// GNU `base64_char_to_value` uses:
+/// - `-1` for always-ignored whitespace,
+/// - `0` for invalid input and `=`,
+/// - `1..=64` for represented values plus one.
+fn build_decode_table(alphabet: &[u8; 64]) -> [i8; 256] {
+    let mut table = [0i8; 256];
+    for b in [b'\t', b'\n', 0x0c, b'\r', b' '] {
+        table[b as usize] = -1;
+    }
     for (i, &ch) in alphabet.iter().enumerate() {
-        table[ch as usize] = i as u8;
+        table[ch as usize] = i as i8 + 1;
     }
     table
 }
@@ -180,44 +189,141 @@ fn base64_encode(input: &[u8], alphabet: &[u8; 64], pad: bool, line_break: bool)
     unsafe { String::from_utf8_unchecked(out) }
 }
 
+fn base64_encode_string_bytes(
+    string: &crate::heap_types::LispString,
+) -> Result<Cow<'_, [u8]>, Flow> {
+    if !string.is_multibyte() {
+        return Ok(Cow::Borrowed(string.as_bytes()));
+    }
+
+    let mut bytes = Vec::with_capacity(string.schars());
+    let mut pos = 0;
+    let source = string.as_bytes();
+    while pos < source.len() {
+        let (ch, len) = super::emacs_char::string_char(&source[pos..]);
+        if ch <= 0x7f {
+            bytes.push(ch as u8);
+        } else if super::emacs_char::char_byte8_p(ch) {
+            bytes.push(super::emacs_char::char_to_byte8(ch));
+        } else {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Multibyte character in data for base64 encoding",
+                )],
+            ));
+        }
+        pos += len;
+    }
+    Ok(Cow::Owned(bytes))
+}
+
 // ---------------------------------------------------------------------------
 // Base64 decode (manual implementation)
 // ---------------------------------------------------------------------------
 
-fn base64_decode(input: &str, table: &[u8; 256]) -> Result<Vec<u8>, ()> {
-    base64_decode_bytes(input.as_bytes(), table)
+fn base64_decode(
+    input: &[u8],
+    table: &[i8; 256],
+    base64url: bool,
+    ignore_invalid: bool,
+) -> Result<Vec<u8>, ()> {
+    base64_decode_bytes(input, table, base64url, ignore_invalid)
 }
 
-fn base64_decode_bytes(input: &[u8], table: &[u8; 256]) -> Result<Vec<u8>, ()> {
-    let bytes: Vec<u8> = input
-        .iter()
-        .copied()
-        .filter(|&b| b != b'\n' && b != b'\r' && b != b' ' && b != b'\t')
-        .collect();
-
-    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
-    let mut buf: u32 = 0;
-    let mut bits: u32 = 0;
-
-    for &b in &bytes {
-        if b == b'=' {
-            // Padding — stop collecting
-            break;
+fn base64_next_value(
+    input: &[u8],
+    pos: &mut usize,
+    table: &[i8; 256],
+    ignore_invalid: bool,
+) -> Option<(u8, i8)> {
+    while *pos < input.len() {
+        let byte = input[*pos];
+        *pos += 1;
+        let value = table[byte as usize];
+        if value < 0 || (value == 0 && ignore_invalid) {
+            continue;
         }
-        let val = table[b as usize];
-        if val == 0xFF {
+        return Some((byte, value));
+    }
+    None
+}
+
+fn base64_next_non_ignorable(input: &[u8], pos: &mut usize, table: &[i8; 256]) -> Option<u8> {
+    while *pos < input.len() {
+        let byte = input[*pos];
+        *pos += 1;
+        if table[byte as usize] < 0 {
+            continue;
+        }
+        return Some(byte);
+    }
+    None
+}
+
+fn base64_decode_bytes(
+    input: &[u8],
+    table: &[i8; 256],
+    base64url: bool,
+    ignore_invalid: bool,
+) -> Result<Vec<u8>, ()> {
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut pos = 0usize;
+
+    loop {
+        let Some((_c1, v1)) = base64_next_value(input, &mut pos, table, ignore_invalid) else {
+            return Ok(out);
+        };
+        if v1 == 0 {
             return Err(());
         }
-        buf = (buf << 6) | val as u32;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-            buf &= (1 << bits) - 1;
-        }
-    }
+        let mut value = ((v1 - 1) as u32) << 18;
 
-    Ok(out)
+        let Some((_c2, v2)) = base64_next_value(input, &mut pos, table, ignore_invalid) else {
+            return Err(());
+        };
+        if v2 == 0 {
+            return Err(());
+        }
+        value |= ((v2 - 1) as u32) << 12;
+        out.push(((value >> 16) & 0xff) as u8);
+
+        let Some((c3, v3)) = base64_next_value(input, &mut pos, table, ignore_invalid) else {
+            if !base64url && !ignore_invalid {
+                return Err(());
+            }
+            return Ok(out);
+        };
+        if c3 == b'=' {
+            let Some(c4) = base64_next_non_ignorable(input, &mut pos, table) else {
+                return Err(());
+            };
+            if c4 != b'=' {
+                return Err(());
+            }
+            continue;
+        }
+        if v3 == 0 {
+            return Err(());
+        }
+        value |= ((v3 - 1) as u32) << 6;
+        out.push(((value >> 8) & 0xff) as u8);
+
+        let Some((c4, v4)) = base64_next_value(input, &mut pos, table, ignore_invalid) else {
+            if !base64url && !ignore_invalid {
+                return Err(());
+            }
+            return Ok(out);
+        };
+        if c4 == b'=' {
+            continue;
+        }
+        if v4 == 0 {
+            return Err(());
+        }
+        value |= (v4 - 1) as u32;
+        out.push((value & 0xff) as u8);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -233,18 +339,15 @@ pub(crate) fn builtin_base64_encode_string(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
-    // GNU Fbase64_encode_string (fns.c) rejects non-ASCII multibyte strings.
-    // Encode directly from Emacs-internal bytes so unibyte strings containing
-    // raw bytes 0x80..0xFF base64-encode as the original byte values rather
-    // than via the storage-sentinel intermediate.
     let no_line_break = args.get(1).is_some_and(|v| v.is_truthy());
-    let encoded = base64_encode(ls.as_bytes(), B64_STD, true, !no_line_break);
+    let source = base64_encode_string_bytes(ls)?;
+    let encoded = base64_encode(&source, B64_STD, true, !no_line_break);
     Ok(Value::string(encoded))
 }
 
-/// (base64-decode-string STRING &optional BASE64URL)
+/// (base64-decode-string STRING &optional BASE64URL IGNORE-INVALID)
 pub(crate) fn builtin_base64_decode_string(args: Vec<Value>) -> EvalResult {
-    expect_range_args("base64-decode-string", &args, 1, 2)?;
+    expect_range_args("base64-decode-string", &args, 1, 3)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -257,11 +360,12 @@ pub(crate) fn builtin_base64_decode_string(args: Vec<Value>) -> EvalResult {
     } else {
         build_decode_table(B64_STD)
     };
+    let ignore_invalid = args.get(2).is_some_and(|v| v.is_truthy());
     // base64 data is ASCII, so LispString.as_bytes() equals the storage
     // form for valid input. Decoded bytes are arbitrary; return as a
     // unibyte LispString to match GNU Fbase64_decode_string (fns.c) which
     // returns a unibyte string.
-    match base64_decode_bytes(ls.as_bytes(), &table) {
+    match base64_decode_bytes(ls.as_bytes(), &table, use_url, ignore_invalid) {
         Ok(bytes) => Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(bytes),
         )),
@@ -279,7 +383,8 @@ pub(crate) fn builtin_base64url_encode_string(args: Vec<Value>) -> EvalResult {
         )
     })?;
     let no_pad = args.get(1).is_some_and(|v| v.is_truthy());
-    let encoded = base64_encode(ls.as_bytes(), B64_URL, !no_pad, false);
+    let source = base64_encode_string_bytes(ls)?;
+    let encoded = base64_encode(&source, B64_URL, !no_pad, false);
     Ok(Value::string(encoded))
 }
 
@@ -294,7 +399,8 @@ pub(crate) fn builtin_base64url_decode_string(args: Vec<Value>) -> EvalResult {
         )
     })?;
     let table = build_decode_table(B64_URL);
-    match base64_decode_bytes(ls.as_bytes(), &table) {
+    let ignore_invalid = args.get(1).is_some_and(|v| v.is_truthy());
+    match base64_decode_bytes(ls.as_bytes(), &table, true, ignore_invalid) {
         Ok(bytes) => Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(bytes),
         )),
@@ -475,14 +581,13 @@ pub(crate) fn builtin_base64_decode_region(
     } else {
         build_decode_table(B64_STD)
     };
-    let source = String::from_utf8_lossy(&source).into_owned();
     let target_multibyte = eval
         .buffers
         .get(buffer_id)
         .map(|buf| buf.get_multibyte())
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    match base64_decode(&source, &table) {
+    match base64_decode(&source, &table, use_url, noerror) {
         Ok(bytes) => {
             let replacement =
                 super::builtins::lisp_string_from_buffer_bytes(bytes.clone(), target_multibyte);

@@ -123,32 +123,14 @@ fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
 }
 
 fn expect_integer_or_marker_eval(eval: &super::eval::Context, value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if super::marker::is_marker(value) => {
-            super::marker::marker_position_as_int_eval(eval, value)
-        }
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
+    super::position::fix_position_eval(eval, value)
 }
 
 fn expect_integer_or_marker_in_buffers(
     buffers: &BufferManager,
     value: &Value,
 ) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if super::marker::is_marker(value) => {
-            super::marker::marker_position_as_int_with_buffers(buffers, value)
-        }
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
+    super::position::fix_position_with_buffers(buffers, value)
 }
 
 /// Text property keys are Lisp objects and are compared by identity, matching
@@ -395,9 +377,17 @@ pub(crate) fn validate_string_point(
     s: &crate::heap_types::LispString,
     pos: i64,
 ) -> Result<usize, Flow> {
+    validate_string_point_raw(s, pos, Value::fixnum(pos))
+}
+
+pub(crate) fn validate_string_point_raw(
+    s: &crate::heap_types::LispString,
+    pos: i64,
+    pos0: Value,
+) -> Result<usize, Flow> {
     let len = s.schars() as i64;
     if !(0 <= pos && pos <= len) {
-        return Err(args_out_of_range_point(pos));
+        return Err(args_out_of_range_range(pos0, pos0));
     }
     Ok(pos as usize)
 }
@@ -424,10 +414,18 @@ pub(crate) fn validate_buffer_point(
     buf: &crate::buffer::buffer::Buffer,
     pos: i64,
 ) -> Result<usize, Flow> {
+    validate_buffer_point_raw(buf, pos, Value::fixnum(pos))
+}
+
+pub(crate) fn validate_buffer_point_raw(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+    pos0: Value,
+) -> Result<usize, Flow> {
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
     if !(point_min <= pos && pos <= point_max) {
-        return Err(args_out_of_range_point(pos));
+        return Err(args_out_of_range_range(pos0, pos0));
     }
     Ok(elisp_pos_to_byte(buf, pos))
 }
@@ -1045,7 +1043,7 @@ pub(crate) fn builtin_get_text_property_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let char_pos = validate_string_point(s, pos)?;
+        let char_pos = validate_string_point_raw(s, pos, args[0])?;
         if char_pos == s.schars() {
             return Ok(Value::NIL);
         }
@@ -1068,7 +1066,7 @@ pub(crate) fn builtin_get_text_property_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
@@ -1155,7 +1153,7 @@ fn builtin_get_char_property_with_frames(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
@@ -1613,7 +1611,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let char_pos = validate_string_point(s, pos)?;
+        let char_pos = validate_string_point_raw(s, pos, args[0])?;
         if char_pos == s.schars() {
             return Ok(Value::NIL);
         }
@@ -1629,7 +1627,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
@@ -1660,7 +1658,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point(s, pos)?;
+        let char_pos = validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_int(v)?;
@@ -1707,7 +1705,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_int(v)?;
@@ -1774,7 +1772,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point(s, pos)?;
+        let char_pos = validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_int(v)?;
@@ -1823,7 +1821,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_int(v)?;
@@ -1889,7 +1887,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point(s, pos)?;
+        let char_pos = validate_string_point_raw(s, pos, args[0])?;
         let limit_arg = args.get(2);
         if limit_arg.is_some_and(|v| v.is_t()) {
             let next = table
@@ -1929,7 +1927,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point(buf, pos)?;
+    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     if limit_arg.is_some_and(|v| v.is_t()) {
         let next = buf
             .text
@@ -2187,7 +2185,7 @@ fn builtin_get_char_property_and_overlay_with_frames(
     let (buf_id, window_id) = resolve_char_property_target_in_state(frames, buffers, args.get(2))?;
 
     if let Some(buf) = buffers.get(buf_id) {
-        let byte_pos = validate_buffer_point(buf, pos)?;
+        let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
         if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
             return Ok(Value::cons(Value::NIL, Value::NIL));
         }

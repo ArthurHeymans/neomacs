@@ -16,7 +16,7 @@ use super::intern::{intern, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
 use crate::emacs_core::SymId;
-use crate::emacs_core::builtins::symbols::symbol_id;
+use crate::emacs_core::builtins::symbols::{expect_symbol_id, symbol_id};
 use crate::emacs_core::value::ValueKind;
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
@@ -402,23 +402,23 @@ pub(crate) fn plan_autoload_do_load_in_state(
         return Ok(AutoloadDoLoadPlan::Return(*fundef));
     };
 
-    let funname = if args.len() > 1 && !args[1].is_nil() {
-        symbol_id(&args[1])
-    } else {
-        None
-    };
-
-    // MACRO-ONLY check: if the third arg is non-nil, only autoload if the
+    // MACRO-ONLY check: if the third arg is `macro`, only autoload if the
     // autoload's TYPE field (5th element) is `t` or `macro`.
     // This matches GNU Emacs eval.c:Fautoload_do_load.
     let macro_only = args.get(2).copied().unwrap_or(Value::NIL);
-    if !macro_only.is_nil() {
+    if macro_only.as_symbol_name().map_or(false, |s| s == "macro") {
         let kind = items.get(4).copied().unwrap_or(Value::NIL);
         let is_macro_type = kind.is_t() || kind.as_symbol_name().map_or(false, |s| s == "macro");
         if !is_macro_type {
             return Ok(AutoloadDoLoadPlan::Return(*fundef));
         }
     }
+
+    let funname = if args.len() > 1 && !args[1].is_nil() {
+        Some(expect_symbol_id(&args[1])?)
+    } else {
+        None
+    };
 
     // Before loading, check if the function cell has already been resolved
     // (i.e., a previous load of the same file already defined this function).

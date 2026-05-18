@@ -7,6 +7,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use super::value::*;
+use crate::buffer::BufferId;
 use crate::gc_trace::GcTrace;
 
 /// Rust-side registry for customization state.
@@ -343,6 +344,146 @@ pub(crate) fn builtin_buffer_local_variables(
         })
         .collect();
     Ok(Value::list(entries))
+}
+
+fn buffer_arg_or_current(
+    ctx: &mut super::eval::Context,
+    _fn_name: &str,
+    arg: Option<Value>,
+) -> Result<BufferId, Flow> {
+    match arg {
+        None => ctx
+            .buffers
+            .current_buffer_id()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+        Some(value) => match value.kind() {
+            ValueKind::Nil => ctx
+                .buffers
+                .current_buffer_id()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
+            ValueKind::Veclike(VecLikeType::Buffer) => {
+                let id = value.as_buffer_id().expect("buffer value has id");
+                if ctx.buffers.get(id).is_some() {
+                    Ok(id)
+                } else {
+                    Err(signal(
+                        "error",
+                        vec![Value::string("Selecting deleted buffer")],
+                    ))
+                }
+            }
+            _ => Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("bufferp"), value],
+            )),
+        },
+    }
+}
+
+fn local_toplevel_binding_value(
+    specpdl: &[super::eval::SpecBinding],
+    sym_id: SymId,
+    buffer_id: BufferId,
+) -> Option<Value> {
+    specpdl.iter().find_map(|binding| match binding {
+        super::eval::SpecBinding::LetLocal {
+            sym_id: binding_sym,
+            old_value,
+            buffer_id: binding_buffer,
+        } if *binding_sym == sym_id && *binding_buffer == buffer_id => Some(*old_value),
+        _ => None,
+    })
+}
+
+fn set_local_toplevel_binding_value(
+    specpdl: &mut [super::eval::SpecBinding],
+    sym_id: SymId,
+    buffer_id: BufferId,
+    value: Value,
+) -> bool {
+    for binding in specpdl.iter_mut() {
+        if let super::eval::SpecBinding::LetLocal {
+            sym_id: binding_sym,
+            old_value,
+            buffer_id: binding_buffer,
+        } = binding
+            && *binding_sym == sym_id
+            && *binding_buffer == buffer_id
+        {
+            *old_value = value;
+            return true;
+        }
+    }
+    false
+}
+
+/// `(buffer-local-toplevel-value SYMBOL &optional BUFFER)`.
+///
+/// Mirrors GNU `Fbuffer_local_toplevel_value` (`eval.c`): first require an
+/// actual buffer-local binding in the target buffer, then return the saved
+/// `SPECPDL_LET_LOCAL` old value if an active `let` is shadowing it.
+pub(crate) fn builtin_buffer_local_toplevel_value(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("buffer-local-toplevel-value", &args, 1)?;
+    expect_max_args("buffer-local-toplevel-value", &args, 2)?;
+
+    let symbol = super::builtins::symbols::expect_symbol_id(&args[0])?;
+    let resolved = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
+    let buffer_id =
+        buffer_arg_or_current(ctx, "buffer-local-toplevel-value", args.get(1).copied())?;
+    let buffer_value = Value::make_buffer(buffer_id);
+
+    let is_local = builtin_local_variable_p(ctx, vec![args[0], buffer_value])?;
+    if is_local.is_nil() {
+        return Err(signal("void-variable", vec![args[0]]));
+    }
+
+    if let Some(value) = local_toplevel_binding_value(ctx.specpdl.as_slice(), resolved, buffer_id) {
+        return Ok(value);
+    }
+
+    super::builtins::builtin_buffer_local_value(ctx, vec![args[0], buffer_value])
+}
+
+/// `(set-buffer-local-toplevel-value SYMBOL VALUE &optional BUFFER)`.
+///
+/// Mirrors GNU `Fset_buffer_local_toplevel_value`: update the saved
+/// `SPECPDL_LET_LOCAL` old value when one is active; otherwise temporarily
+/// select the target buffer, make the variable local, and set it there.
+pub(crate) fn builtin_set_buffer_local_toplevel_value(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("set-buffer-local-toplevel-value", &args, 2)?;
+    expect_max_args("set-buffer-local-toplevel-value", &args, 3)?;
+
+    let symbol = super::builtins::symbols::expect_symbol_id(&args[0])?;
+    let resolved = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
+    let buffer_id =
+        buffer_arg_or_current(ctx, "set-buffer-local-toplevel-value", args.get(2).copied())?;
+    if set_local_toplevel_binding_value(ctx.specpdl.as_mut_slice(), resolved, buffer_id, args[1]) {
+        return Ok(Value::NIL);
+    }
+
+    let saved_current = ctx.buffers.current_buffer_id();
+    let switched = saved_current != Some(buffer_id);
+    if switched {
+        ctx.set_current_buffer_unrecorded(buffer_id)?;
+    }
+
+    let result = (|| {
+        builtin_make_local_variable(ctx, vec![args[0]])?;
+        super::eval::set_runtime_binding_in_state(ctx, resolved, args[1]);
+        Ok(Value::NIL)
+    })();
+
+    if switched && let Some(saved) = saved_current {
+        ctx.restore_current_buffer_if_live(saved);
+    }
+
+    result
 }
 
 /// `(kill-local-variable VARIABLE)` -- remove local binding in current buffer.

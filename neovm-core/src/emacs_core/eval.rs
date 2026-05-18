@@ -2391,6 +2391,17 @@ impl Context {
         ctx
     }
 
+    pub(crate) fn ensure_startup_messages_buffer(&mut self) {
+        // GNU's initialized batch/runtime state has a live `*Messages*`
+        // buffer before user Lisp runs: `emacs.c` clears pre-dump messages via
+        // `message_dolog`, whose xdisp.c path creates `messages-buffer-name`.
+        // Keep it after the initial minibuffer in buffer-list order and do not
+        // select it.
+        if self.buffers.find_buffer_by_name("*Messages*").is_none() {
+            self.buffers.create_buffer("*Messages*");
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn new_vm_runtime_harness() -> Self {
         // GNU bytecode executes inside the same callable runtime surface as the

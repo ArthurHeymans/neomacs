@@ -541,6 +541,23 @@ fn autoload_do_load_passes_nomessage_to_load_source_file_function() {
 }
 
 #[test]
+fn autoload_do_load_checks_funname_before_loading_macro_autoload() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((macro-autoload '(autoload "missing-macro-file" nil nil macro))
+                 (function-autoload '(autoload "missing-function-file" nil nil nil)))
+             (list
+              (eq (autoload-do-load function-autoload 42 'macro)
+                  function-autoload)
+              (condition-case err
+                  (autoload-do-load macro-autoload 42 'macro)
+                (error (list (car err) (cdr err))))))"#,
+    );
+
+    assert_eq!(results[0], "OK (t (wrong-type-argument (symbolp 42)))");
+}
+
+#[test]
 fn autoload_is_callable_subr_surface() {
     crate::test_utils::init_test_tracing();
     let results = minimal_autoload_eval_all(

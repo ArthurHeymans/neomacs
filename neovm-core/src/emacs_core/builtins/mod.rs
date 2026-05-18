@@ -6902,13 +6902,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "buffer-local-toplevel-value",
-        |_ctx, args| builtin_buffer_local_toplevel_value(args),
+        |ctx, args| super::custom::builtin_buffer_local_toplevel_value(ctx, args),
         0,
         None,
     );
     ctx.defsubr(
         "set-buffer-local-toplevel-value",
-        |_ctx, args| builtin_set_buffer_local_toplevel_value(args),
+        |ctx, args| super::custom::builtin_set_buffer_local_toplevel_value(ctx, args),
         0,
         None,
     );

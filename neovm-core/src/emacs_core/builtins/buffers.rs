@@ -159,16 +159,7 @@ pub(crate) fn expect_integer_or_marker_in_buffers(
     buffers: &BufferManager,
     value: &Value,
 ) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other if value.is_marker() => {
-            crate::emacs_core::marker::marker_position_as_int_with_buffers(buffers, value)
-        }
-        _other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
+    crate::emacs_core::position::fix_position_with_buffers(buffers, value)
 }
 
 fn canonicalize_or_self(path: &str) -> String {
@@ -1042,9 +1033,9 @@ pub(crate) fn builtin_buffer_line_statistics(
     let text = buffer_id
         .and_then(|id| {
             buffers.get(id).map(|buf| {
-                super::runtime_string_from_lisp_string(
-                    &buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()),
-                )
+                let mut bytes = Vec::new();
+                buf.copy_emacs_bytes_to(buf.point_min(), buf.point_max(), &mut bytes);
+                bytes
             })
         })
         .unwrap_or_default();
@@ -1059,12 +1050,22 @@ pub(crate) fn builtin_buffer_line_statistics(
 
     let mut line_count = 0usize;
     let mut max_len = 0usize;
-    let mut total_len = 0usize;
-    for line in text.lines() {
-        line_count += 1;
-        let width = line.len();
-        max_len = max_len.max(width);
-        total_len += width;
+    let mut mean = 0.0f64;
+    let mut start = 0usize;
+    while start < text.len() {
+        if let Some(rel_nl) = text[start..].iter().position(|&b| b == b'\n') {
+            let width = rel_nl;
+            line_count += 1;
+            max_len = max_len.max(width);
+            mean += (width as f64 - mean) / line_count as f64;
+            start += rel_nl + 1;
+        } else {
+            let width = text.len() - start;
+            line_count += 1;
+            max_len = max_len.max(width);
+            mean += (width as f64 - mean) / line_count as f64;
+            break;
+        }
     }
 
     if line_count == 0 {
@@ -1078,7 +1079,7 @@ pub(crate) fn builtin_buffer_line_statistics(
     Ok(Value::list(vec![
         Value::fixnum(line_count as i64),
         Value::fixnum(max_len as i64),
-        Value::make_float(total_len as f64 / line_count as f64),
+        Value::make_float(mean),
     ]))
 }
 

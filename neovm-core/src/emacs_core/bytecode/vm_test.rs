@@ -6273,7 +6273,9 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (null (inotify-watch-list))
                  (null (inotify-allocated-p))
                  (null (dbus-make-inhibitor-lock "session" "app"))
-                 (null (dbus-close-inhibitor-lock nil))
+                 (condition-case err
+                     (dbus-close-inhibitor-lock nil)
+                   (wrong-type-argument (car err)))
                  (null (dbus-registered-inhibitor-locks))
                  (null (lcms2-available-p))
                  (null (lcms-cie-de2000 nil nil))
@@ -6319,7 +6321,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (null (gnutls-symmetric-decrypt nil nil nil nil))
                  (null (gnutls-symmetric-encrypt nil nil nil nil)))"##
         ),
-        r#"OK (t (t t t) t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
+        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
     );
 }
 

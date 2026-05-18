@@ -95,6 +95,51 @@ fn base64_decode_invalid() {
     assert!(r.is_err());
 }
 
+#[test]
+fn base64_decode_string_ignore_invalid() {
+    crate::test_utils::init_test_tracing();
+    let decoded =
+        builtin_base64_decode_string(vec![Value::string("!!!!"), Value::NIL, Value::T]).unwrap();
+    let decoded = decoded.as_lisp_string().unwrap();
+    assert_eq!(decoded.as_bytes(), b"");
+    assert!(!decoded.is_multibyte());
+}
+
+#[test]
+fn base64_decode_string_rejects_malformed_padding_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    for input in ["Zg=", "Zm9vYmE", "Zm9vYmFy=", "Zg=Zg="] {
+        let decoded = builtin_base64_decode_string(vec![Value::string(input)]);
+        assert!(decoded.is_err(), "{input} should signal invalid base64");
+    }
+}
+
+#[test]
+fn base64_encode_string_rejects_multibyte_non_ascii_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let encoded = builtin_base64_encode_string(vec![Value::string("é"), Value::T]);
+    match encoded {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string(
+                    "Multibyte character in data for base64 encoding"
+                )]
+            );
+        }
+        other => panic!("expected multibyte base64 error, got {other:?}"),
+    }
+}
+
+#[test]
+fn base64_encode_string_preserves_unibyte_raw_bytes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xE9]));
+    let encoded = builtin_base64_encode_string(vec![input, Value::T]).unwrap();
+    assert_eq!(encoded.as_utf8_str(), Some("6Q=="));
+}
+
 // ---- Base64 URL ----
 
 #[test]
@@ -136,34 +181,41 @@ fn base64url_decode_invalid() {
 }
 
 #[test]
+fn base64url_decode_ignore_invalid() {
+    crate::test_utils::init_test_tracing();
+    let decoded = builtin_base64url_decode_string(vec![Value::string("!!!!"), Value::T]).unwrap();
+    let decoded = decoded.as_lisp_string().unwrap();
+    assert_eq!(decoded.as_bytes(), b"");
+    assert!(!decoded.is_multibyte());
+}
+
+#[test]
 fn base64url_uses_dash_underscore() {
     crate::test_utils::init_test_tracing();
-    // Standard base64 of "?>" is "Pz4=" which contains no + or /.
-    // Use a string that we know produces different chars in std vs url.
-    // "abc?+/" in standard base64 is "YWJjPysvg" — contains + and /.
-    // Actually, just test that the url alphabet is used:
-    // base64url of ">?" is "Pj8" (std would be "Pj8" too — same for ASCII).
-    // Instead, directly encode bytes [0xFF] which in std is "/w==" and url is "_w==".
-    // Since our strings are UTF-8, we use a string with codepoint U+00FF (latin small y with diaeresis).
-    let input = "\u{00FF}"; // UTF-8: [0xC3, 0xBF]
-    let std_enc = builtin_base64_encode_string(vec![Value::string(input), Value::T]).unwrap();
-    let url_enc = builtin_base64url_encode_string(vec![Value::string(input), Value::T]).unwrap();
-    // Standard and URL should differ if the encoding contains + or /
-    // For [0xC3, 0xBF]: std = "w78=" which has no + or /... let's just
-    // verify neither + nor / appear in url encoding.
-    let s = url_enc.as_utf8_str().unwrap();
-    assert!(!s.contains('+'), "URL-safe encoding should not contain '+'");
-    assert!(!s.contains('/'), "URL-safe encoding should not contain '/'");
-    // Also verify the standard encoding does not contain - or _
-    let s_std = std_enc.as_utf8_str().unwrap();
-    assert!(
-        !s_std.contains('-'),
-        "Standard encoding should not contain '-'"
-    );
-    assert!(
-        !s_std.contains('_'),
-        "Standard encoding should not contain '_'"
-    );
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let std_enc = builtin_base64_encode_string(vec![input, Value::T]).unwrap();
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let url_enc = builtin_base64url_encode_string(vec![input, Value::NIL]).unwrap();
+    assert_eq!(std_enc.as_utf8_str(), Some("/w=="));
+    assert_eq!(url_enc.as_utf8_str(), Some("_w=="));
+}
+
+#[test]
+fn base64url_encode_string_rejects_multibyte_non_ascii_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let encoded = builtin_base64url_encode_string(vec![Value::string("é"), Value::T]);
+    match encoded {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string(
+                    "Multibyte character in data for base64 encoding"
+                )]
+            );
+        }
+        other => panic!("expected multibyte base64 error, got {other:?}"),
+    }
 }
 
 #[test]

@@ -161,7 +161,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(*str_val).unwrap_or_default();
-        let char_pos = textprop::validate_string_point(s, pos)?;
+        let char_pos = textprop::validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(2) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_integer_or_marker(v)?;
@@ -226,7 +226,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = textprop::validate_buffer_point(buf, pos)?;
+    let byte_pos = textprop::validate_buffer_point_raw(buf, pos, args[0])?;
 
     let (limit_pos, limit_val) = match args.get(2) {
         Some(v) if !v.is_nil() => {

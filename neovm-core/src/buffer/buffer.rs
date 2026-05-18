@@ -2987,6 +2987,22 @@ impl BufferManager {
         true
     }
 
+    /// Move a live buffer immediately after another live buffer in global
+    /// buffer-list order without recording display or selection.
+    pub(crate) fn note_buffer_order_after(&mut self, id: BufferId, after: BufferId) -> bool {
+        if id == after || !self.buffers.contains_key(&id) || !self.buffers.contains_key(&after) {
+            return false;
+        }
+        self.buffer_order.retain(|existing| *existing != id);
+        let insert_at = self
+            .buffer_order
+            .iter()
+            .position(|existing| *existing == after)
+            .map_or(self.buffer_order.len(), |index| index + 1);
+        self.buffer_order.insert(insert_at, id);
+        true
+    }
+
     pub fn note_buffer_display(&mut self, id: BufferId) {
         if self.buffers.contains_key(&id) {
             self.note_buffer_order_head(id);

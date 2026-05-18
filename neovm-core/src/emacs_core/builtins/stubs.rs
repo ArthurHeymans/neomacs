@@ -46,11 +46,17 @@ pub(crate) fn builtin_inotify_allocated_p(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_dbus_make_inhibitor_lock(args: Vec<Value>) -> EvalResult {
     expect_range_args("dbus-make-inhibitor-lock", &args, 2, 3)?;
+    // GNU dbusbind.c:Fdbus_make_inhibitor_lock performs CHECK_STRING on
+    // WHAT and WHY before any D-Bus side effect.
+    let _what = expect_string(&args[0])?;
+    let _why = expect_string(&args[1])?;
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_dbus_close_inhibitor_lock(args: Vec<Value>) -> EvalResult {
     expect_args("dbus-close-inhibitor-lock", &args, 1)?;
+    // GNU dbusbind.c:Fdbus_close_inhibitor_lock starts with CHECK_FIXNUM.
+    let _lock = expect_fixnum(&args[0])?;
     Ok(Value::NIL)
 }
 

@@ -575,6 +575,25 @@ fn pure_dispatch_typed_append_flattens_bool_vector_logical_bits() {
 }
 
 #[test]
+fn pure_dispatch_typed_append_rejects_char_table_like_gnu_concat_to_list() {
+    crate::test_utils::init_test_tracing();
+    let char_table =
+        super::chartable::make_char_table_value(Value::symbol("test-only"), Value::fixnum(65));
+
+    let err = dispatch_builtin_pure("append", vec![char_table, Value::NIL])
+        .expect("builtin append should resolve")
+        .expect_err("GNU append rejects char-tables");
+
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("sequencep"), char_table]);
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn pure_dispatch_typed_append_flattens_bytecode_slots() {
     crate::test_utils::init_test_tracing();
     let bc = Value::make_bytecode(crate::emacs_core::bytecode::ByteCodeFunction::new(

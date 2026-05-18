@@ -6,7 +6,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
-use super::value::{Value, ValueKind, lexenv_lookup};
+use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::BufferManager;
 
 // ---------------------------------------------------------------------------
@@ -590,10 +590,42 @@ pub(crate) fn builtin_line_number_at_pos(
     args: Vec<Value>,
 ) -> EvalResult {
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
+    let current_buffer_id = buf.id;
     let byte_pos = if args.is_empty() || args[0].is_nil() {
         buf.pt_byte
     } else {
-        char_pos_to_byte(buf, expect_int(&args[0])?)
+        match args[0].kind() {
+            ValueKind::Veclike(VecLikeType::Marker) => {
+                let marker = args[0].as_marker_data().unwrap();
+                if marker.buffer == Some(current_buffer_id) {
+                    marker
+                        .marker_id
+                        .and_then(|marker_id| {
+                            eval.buffers.marker_position(current_buffer_id, marker_id)
+                        })
+                        .unwrap_or_else(|| char_pos_to_byte(buf, marker.charpos as i64 + 1))
+                } else {
+                    char_pos_to_byte(buf, marker.charpos as i64 + 1)
+                }
+            }
+            ValueKind::Fixnum(pos) => {
+                let beg = buf.point_min_char() as i64 + 1;
+                let z = buf.point_max_char() as i64 + 1;
+                if pos < beg || pos > z {
+                    return Err(signal(
+                        "args-out-of-range",
+                        vec![args[0], Value::fixnum(beg), Value::fixnum(z)],
+                    ));
+                }
+                char_pos_to_byte(buf, pos)
+            }
+            _ => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("fixnump"), args[0]],
+                ));
+            }
+        }
     };
     let _absolute = args.get(1).is_some_and(|v| v.is_truthy());
     // Count newlines from start of buffer to byte_pos.

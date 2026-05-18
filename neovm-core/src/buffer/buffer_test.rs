@@ -1052,6 +1052,20 @@ fn manager_recorded_switch_records_even_when_buffer_is_already_current() {
 }
 
 #[test]
+fn manager_order_after_relinks_without_selecting_or_recording_head() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let scratch = mgr.find_buffer_by_name("*scratch*").expect("scratch");
+    let messages = mgr.create_buffer("*Messages*");
+    let minibuf = mgr.create_buffer(" *Minibuf-0*");
+
+    assert_eq!(mgr.current_buffer_id(), Some(scratch));
+    assert!(mgr.note_buffer_order_after(messages, minibuf));
+    assert_eq!(mgr.current_buffer_id(), Some(scratch));
+    assert_eq!(mgr.buffer_list(), vec![scratch, minibuf, messages]);
+}
+
+#[test]
 fn manager_generate_new_buffer_name_unique() {
     crate::test_utils::init_test_tracing();
     let mgr = BufferManager::new();

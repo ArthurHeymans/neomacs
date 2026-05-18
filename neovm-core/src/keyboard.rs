@@ -3741,7 +3741,11 @@ impl crate::emacs_core::eval::Context {
 
             match wait_result {
                 Ok(event) => {
+                    let timers_fired = self.service_pending_timers_with_wait_policy(false);
                     self.timer_stop_idle();
+                    if timers_fired {
+                        self.redisplay();
+                    }
                     if let Some(value) = self.handle_read_char_input_event(event)? {
                         return Ok(Some(ReadCharEvent::input_method_candidate(value)));
                     }

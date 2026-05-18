@@ -3558,6 +3558,15 @@ fn sync_runtime_interpreted_closure_filter(eval: &mut super::eval::Context) {
 
 pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<(), EvalError> {
     let project_root = runtime_project_root();
+    let minibuf_id = eval
+        .buffers
+        .find_buffer_by_name(" *Minibuf-0*")
+        .unwrap_or_else(|| eval.buffers.create_buffer(" *Minibuf-0*"));
+    eval.ensure_startup_messages_buffer();
+    if let Some(messages_id) = eval.buffers.find_buffer_by_name("*Messages*") {
+        eval.buffers
+            .note_buffer_order_after(messages_id, minibuf_id);
+    }
     eval_startup_forms(
         eval,
         // Note: the closing paren count must balance the opens.

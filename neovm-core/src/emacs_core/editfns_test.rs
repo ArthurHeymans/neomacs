@@ -168,6 +168,24 @@ fn logcount_negative() {
 }
 
 #[test]
+fn logcount_bignum_matches_gnu_integer_path() {
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    let big = Value::make_integer(rug::Integer::from(1) << 100);
+    assert_eq!(builtin_logcount(vec![big]).unwrap(), Value::fixnum(1));
+
+    let mut negative_big = rug::Integer::from(1);
+    negative_big <<= 100;
+    negative_big = -negative_big;
+    let negative = Value::make_integer(negative_big);
+    assert_eq!(
+        builtin_logcount(vec![negative]).unwrap(),
+        Value::fixnum(100)
+    );
+}
+
+#[test]
 fn logcount_wrong_type() {
     crate::test_utils::init_test_tracing();
     install_test_runtime();
