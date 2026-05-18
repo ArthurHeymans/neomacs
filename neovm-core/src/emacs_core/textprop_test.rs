@@ -58,6 +58,22 @@ fn get_text_property_returns_nil_when_absent() {
 }
 
 #[test]
+fn get_text_property_uses_category_symbol_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((cat (make-symbol "text-category")))
+                 (put cat 'oracle-prop 'from-category)
+                 (insert "abc")
+                 (put-text-property 2 3 'category cat)
+                 (get-text-property 2 'oracle-prop))"#,
+        )
+        .expect("evaluation succeeds");
+    assert_eq!(result.as_symbol_name(), Some("from-category"));
+}
+
+#[test]
 fn put_text_property_outside_range() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("hello");
@@ -1211,6 +1227,23 @@ fn overlay_get_absent_property() {
 
     let result = builtin_overlay_get(&mut eval, vec![ov, Value::symbol("missing")]).unwrap();
     assert!(result.is_nil());
+}
+
+#[test]
+fn overlay_get_uses_category_symbol_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((cat (make-symbol "overlay-category")))
+                 (put cat 'oracle-prop 'from-category)
+                 (insert "abc")
+                 (let ((overlay (make-overlay 1 2)))
+                   (overlay-put overlay 'category cat)
+                   (overlay-get overlay 'oracle-prop)))"#,
+        )
+        .expect("evaluation succeeds");
+    assert_eq!(result.as_symbol_name(), Some("from-category"));
 }
 
 // -----------------------------------------------------------------------

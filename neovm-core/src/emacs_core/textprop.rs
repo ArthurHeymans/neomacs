@@ -5,13 +5,14 @@
 
 use super::builtins::builtin_copy_sequence;
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
+use super::intern::{NIL_SYM_ID, T_SYM_ID, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
 use crate::buffer::{BufferId, BufferManager};
+use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
 
 pub(crate) fn init_textprop_vars(
@@ -206,6 +207,15 @@ fn assq_rest(list: Value, prop: Value) -> Option<Value> {
     None
 }
 
+fn symbol_id_for_property_lookup(value: Value) -> Option<SymId> {
+    match value.kind() {
+        ValueKind::Nil => Some(NIL_SYM_ID),
+        ValueKind::T => Some(T_SYM_ID),
+        ValueKind::Symbol(id) => Some(id),
+        _ => None,
+    }
+}
+
 fn lookup_char_property_from_direct<F>(
     obarray: &Obarray,
     buffers: &BufferManager,
@@ -223,9 +233,9 @@ where
     let mut fallback = Value::NIL;
 
     if let Some(category) = direct_get(Value::symbol("category"))
-        && let Some(category_name) = category.as_symbol_name()
-        && let Some(prop_name) = prop.as_symbol_name()
-        && let Some(value) = obarray.get_property(category_name, prop_name)
+        && let Some(category_id) = symbol_id_for_property_lookup(category)
+        && let Some(prop_id) = symbol_id_for_property_lookup(prop)
+        && let Some(value) = obarray.get_property_id(category_id, prop_id)
     {
         fallback = value;
     }
@@ -2398,7 +2408,14 @@ pub(crate) fn builtin_overlay_put_in_buffers(
 
 /// (overlay-get OVERLAY PROP)
 pub(crate) fn builtin_overlay_get(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_overlay_get_in_buffers(&eval.buffers, args)
+    expect_args("overlay-get", &args, 2)?;
+    let overlay = expect_overlay(&args[0])?;
+    Ok(lookup_overlay_property(
+        &eval.obarray,
+        &eval.buffers,
+        overlay,
+        args[1],
+    ))
 }
 
 pub(crate) fn builtin_overlay_get_in_buffers(
