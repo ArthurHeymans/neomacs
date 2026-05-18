@@ -98,7 +98,7 @@ else
 fi
 
 # Check for image loading activity
-IMG_COUNT=$(grep -c "Loading image" "$LOG_FILE" 2>/dev/null || echo 0)
+IMG_COUNT=$(grep -c "Loading image" "$LOG_FILE" 2>/dev/null || true)
 echo -e "${GREEN}[INFO] $IMG_COUNT images loaded${NC}"
 
 # Check for errors

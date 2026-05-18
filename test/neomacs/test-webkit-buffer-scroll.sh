@@ -10,7 +10,7 @@ echo "Neomacs PID: $EMACS_PID"
 
 sleep 8
 
-WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --class "neomacs" 2>/dev/null | head -1)
 echo "Window ID: $WIN_ID"
 
 if [ -z "$WIN_ID" ]; then

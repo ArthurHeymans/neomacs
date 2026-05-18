@@ -31,7 +31,7 @@ echo "Waiting for window to appear..."
 sleep 5
 
 # Find Neomacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --class "neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
     echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true
@@ -78,8 +78,8 @@ sleep 20
 echo ""
 echo "=== Checking log entries ==="
 if [ -f "$LOG" ]; then
-    PANIC_COUNT=$(grep -ci "panic" "$LOG" 2>/dev/null || echo "0")
-    ERROR_COUNT=$(grep -ci "error" "$LOG" 2>/dev/null || echo "0")
+    PANIC_COUNT=$(grep -ci "panic" "$LOG" 2>/dev/null || true)
+    ERROR_COUNT=$(grep -ci "error" "$LOG" 2>/dev/null || true)
 
     if [ "$PANIC_COUNT" -gt 0 ]; then
         echo "WARNING: $PANIC_COUNT PANIC entries found!"
@@ -109,8 +109,10 @@ echo ""
 echo "=== $TEST_NAME Test Summary ==="
 if [ "$PANIC_COUNT" -gt 0 ]; then
     echo "RESULT: PANICS DETECTED - check log"
+    exit 1
 elif [ "$ERROR_COUNT" -gt 0 ]; then
     echo "RESULT: ERRORS DETECTED - check log for details"
+    exit 1
 else
     echo "RESULT: No panics or errors detected"
 fi

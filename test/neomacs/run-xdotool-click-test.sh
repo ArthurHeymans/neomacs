@@ -18,7 +18,7 @@ echo "Waiting for window to appear..."
 sleep 6
 
 # Find Neomacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --class "neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
     echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true

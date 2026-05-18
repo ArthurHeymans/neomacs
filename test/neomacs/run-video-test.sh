@@ -69,7 +69,7 @@ sleep 3
 # Take screenshot
 if command -v import &> /dev/null && [[ -n "$DISPLAY" ]]; then
     echo "Taking screenshot..."
-    WINDOW_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1 || true)
+    WINDOW_ID=$(xdotool search --class "neomacs" 2>/dev/null | head -1 || true)
     if [[ -n "$WINDOW_ID" ]]; then
         import -window "$WINDOW_ID" "$SCREENSHOT_FILE" 2>/dev/null || true
         if [[ -f "$SCREENSHOT_FILE" ]]; then

@@ -23,7 +23,7 @@ echo "Waiting for window + package install..."
 sleep 10
 
 # Find Neomacs window
-WIN_ID=$(DISPLAY=:0 xdotool search --name "Neomacs" 2>/dev/null | head -1)
+WIN_ID=$(DISPLAY=:0 xdotool search --class "neomacs" 2>/dev/null | head -1)
 if [ -z "$WIN_ID" ]; then
     echo "ERROR: Could not find Neomacs window"
     kill $EMACS_PID 2>/dev/null || true
@@ -128,8 +128,8 @@ sleep 1
 echo ""
 echo "=== Checking logs ==="
 if [ -f "$LOG" ]; then
-    CHILD_COUNT=$(grep -ci "child" "$LOG" 2>/dev/null || echo "0")
-    ERROR_COUNT=$(grep -ci "error\|panic\|crash" "$LOG" 2>/dev/null || echo "0")
+    CHILD_COUNT=$(grep -ci "child" "$LOG" 2>/dev/null || true)
+    ERROR_COUNT=$(grep -ci "error\|panic\|crash" "$LOG" 2>/dev/null || true)
     echo "Child frame log entries: $CHILD_COUNT"
     echo "Error entries: $ERROR_COUNT"
     if [ "$ERROR_COUNT" -gt 0 ]; then

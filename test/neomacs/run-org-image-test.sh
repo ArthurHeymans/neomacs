@@ -49,7 +49,7 @@ sleep 6
 
 # Take screenshot
 if command -v import &> /dev/null && [[ -n "$DISPLAY" ]]; then
-    WINDOW_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1 || true)
+    WINDOW_ID=$(xdotool search --class "neomacs" 2>/dev/null | head -1 || true)
     if [[ -n "$WINDOW_ID" ]]; then
         import -window "$WINDOW_ID" "$SCREENSHOT_FILE" 2>/dev/null || true
     fi
@@ -67,8 +67,8 @@ if [[ ! -f "$LOG_FILE" ]]; then
     exit 1
 fi
 
-PASS_COUNT=$(grep -c "^PASS:" "$LOG_FILE" 2>/dev/null || echo 0)
-FAIL_COUNT=$(grep -c "^FAIL:" "$LOG_FILE" 2>/dev/null || echo 0)
+PASS_COUNT=$(grep -c "^PASS:" "$LOG_FILE" 2>/dev/null || true)
+FAIL_COUNT=$(grep -c "^FAIL:" "$LOG_FILE" 2>/dev/null || true)
 
 # Show all results
 while IFS= read -r line; do

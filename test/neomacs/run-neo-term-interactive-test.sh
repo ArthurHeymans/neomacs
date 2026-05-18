@@ -110,7 +110,7 @@ wait_for_window() {
             tail -20 "$LOG" 2>/dev/null || true
             return 1
         fi
-        WIN_ID=$(xdotool search --name "Neomacs" 2>/dev/null | head -1)
+        WIN_ID=$(xdotool search --class "neomacs" 2>/dev/null | head -1)
         if [ -n "$WIN_ID" ]; then
             echo "Found Emacs window: $WIN_ID"
             return 0
@@ -274,8 +274,8 @@ fi
 echo ""
 echo "=== Summary ==="
 if [ -f "$RESULTS" ]; then
-    PASS_COUNT=$(grep -c "^PASS:" "$RESULTS" 2>/dev/null || echo "0")
-    FAIL_COUNT=$(grep -c "^FAIL:" "$RESULTS" 2>/dev/null || echo "0")
+    PASS_COUNT=$(grep -c "^PASS:" "$RESULTS" 2>/dev/null || true)
+    FAIL_COUNT=$(grep -c "^FAIL:" "$RESULTS" 2>/dev/null || true)
     echo "Tests passed: $PASS_COUNT"
     echo "Tests failed: $FAIL_COUNT"
     echo "Panics: $PANIC_COUNT"
