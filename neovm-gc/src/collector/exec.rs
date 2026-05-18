@@ -322,18 +322,6 @@ pub(crate) fn collect_global_sources(
     roots.iter().chain(immortal_sources).collect()
 }
 
-/// Round `value` up to the next multiple of `align` (assumed non-zero).
-/// Returns `value` unchanged if it is already aligned.
-#[inline]
-fn align_up_to(value: usize, align: usize) -> usize {
-    if align <= 1 {
-        return value;
-    }
-    // All callers pass line_bytes (always power-of-two).
-    debug_assert!(align.is_power_of_two(), "align_up_to alignment must be power of two");
-    let mask = align - 1;
-    (value + mask) & !mask
-}
 
 /// Walk every old-gen block, enumerate dirty cards, and gather the
 /// `ObjectRecord` indices whose payload base falls inside any dirty
@@ -403,7 +391,7 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                             seen[object_index] = true;
                             roots.push(object_index);
                         }
-                        offset = align_up_to(
+                        offset = crate::util::align_up(
                             offset.saturating_add(total_size),
                             line_bytes,
                         );
@@ -424,14 +412,14 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                                 seen[object_index] = true;
                                 roots.push(object_index);
                             }
-                            offset = align_up_to(
+                            offset = crate::util::align_up(
                                 offset.saturating_add(total_size),
                                 line_bytes,
                             );
                         }
                     } else {
                         *counter += 1;
-                        offset = align_up_to(offset.saturating_add(1), line_bytes);
+                        offset = crate::util::align_up(offset.saturating_add(1), line_bytes);
                     }
                 }
             }
@@ -451,7 +439,7 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                             seen[object_index] = true;
                             roots.push(object_index);
                         }
-                        offset = align_up_to(
+                        offset = crate::util::align_up(
                             offset.saturating_add(total_size),
                             line_bytes,
                         );
@@ -459,7 +447,7 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                     }
                 }
                 *counter += 1;
-                offset = align_up_to(offset.saturating_add(1), line_bytes);
+                offset = crate::util::align_up(offset.saturating_add(1), line_bytes);
             }
         }
     }
@@ -513,7 +501,7 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
                     )) {
                         roots.push(loc);
                     }
-                    offset = align_up_to(offset.saturating_add(total_size), line_bytes);
+                    offset = crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                 } else {
                     let header_ptr = core::ptr::NonNull::new(header_addr as *mut ObjectHeader)
                         .expect("block base + offset is non-null");
@@ -526,10 +514,10 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
                         if seen.insert(key) {
                             roots.push(locator);
                         }
-                        offset = align_up_to(offset.saturating_add(total_size), line_bytes);
+                        offset = crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                     } else {
                         *counter += 1;
-                        offset = align_up_to(offset.saturating_add(1), line_bytes);
+                        offset = crate::util::align_up(offset.saturating_add(1), line_bytes);
                     }
                 }
             }
@@ -546,11 +534,11 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
                     if seen.insert(key) {
                         roots.push(locator);
                     }
-                    offset = align_up_to(offset.saturating_add(total_size), line_bytes);
+                    offset = crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                     continue;
                 }
                 *counter += 1;
-                offset = align_up_to(offset.saturating_add(1), line_bytes);
+                offset = crate::util::align_up(offset.saturating_add(1), line_bytes);
             }
         }
     }

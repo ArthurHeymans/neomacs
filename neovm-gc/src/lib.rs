@@ -110,6 +110,7 @@
 /// background worker, lock-free status snapshots).
 pub mod background;
 pub(crate) mod collector;
+pub(crate) mod util;
 pub(crate) mod background_worker;
 /// Write-barrier event types and remembered-set edge metadata.
 pub mod barrier;
