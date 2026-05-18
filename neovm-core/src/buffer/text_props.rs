@@ -667,6 +667,35 @@ impl TextPropertyTable {
             .collect()
     }
 
+    /// Return GNU `object-intervals' shaped runs for a string of `len' chars.
+    ///
+    /// Unlike `intervals_snapshot', this keeps nil-property gaps once an
+    /// interval tree exists.  GNU reports those gaps so callers can observe the
+    /// complete interval partition of the string.
+    pub fn object_interval_runs(&self, len: usize) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        if self.intervals.is_empty() {
+            return Vec::new();
+        }
+
+        let mut runs = Vec::new();
+        let mut cursor = 0;
+        for (&start, node) in &self.intervals {
+            let start = start.min(len);
+            let end = node.end.min(len);
+            if cursor < start {
+                runs.push((cursor, start, Vec::new()));
+            }
+            if start < end {
+                runs.push((start, end, node.plist.clone()));
+                cursor = end;
+            }
+        }
+        if cursor < len {
+            runs.push((cursor, len, Vec::new()));
+        }
+        runs
+    }
+
     pub(crate) fn try_for_each_interval_in_range<E>(
         &self,
         start: usize,

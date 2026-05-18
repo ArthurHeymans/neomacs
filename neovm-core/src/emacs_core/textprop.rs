@@ -1473,10 +1473,14 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
+        let had_intervals = get_string_text_properties_table_for_value(str_val).is_some();
         let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
         else {
             return Ok(Value::NIL);
         };
+        if pairs.is_empty() && !had_intervals {
+            return Ok(Value::NIL);
+        }
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         table.remove_all_properties(char_beg, char_end);
         for (name, val) in pairs.into_iter().rev() {

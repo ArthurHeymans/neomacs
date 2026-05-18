@@ -2337,7 +2337,36 @@ pub(crate) fn builtin_open_dribble_file(
 
 pub(crate) fn builtin_object_intervals(args: Vec<Value>) -> EvalResult {
     expect_args("object-intervals", &args, 1)?;
-    if !(args[0].is_string() || args[0].is_buffer()) {
+    if args[0].is_string() {
+        let len = args[0]
+            .as_lisp_string()
+            .expect("string value must carry LispString payload")
+            .schars();
+        let Some(table) =
+            crate::emacs_core::value::get_string_text_properties_table_for_value(args[0])
+        else {
+            return Ok(Value::NIL);
+        };
+        let intervals = table
+            .object_interval_runs(len)
+            .into_iter()
+            .map(|(start, end, plist)| {
+                let mut plist_values = Vec::with_capacity(plist.len() * 2);
+                for (key, value) in plist {
+                    plist_values.push(key);
+                    plist_values.push(value);
+                }
+                Value::list(vec![
+                    Value::fixnum(start as i64),
+                    Value::fixnum(end as i64),
+                    Value::list(plist_values),
+                ])
+            })
+            .collect();
+        return Ok(Value::list(intervals));
+    }
+
+    if !args[0].is_buffer() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("buffer-or-string-p"), args[0]],

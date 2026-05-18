@@ -43,6 +43,39 @@ fn compat_text_property_semantics_matches_gnu_emacs() {
    (text-properties-at 4 s)))"#,
         },
         TextPropertyCase {
+            name: "string_set_text_properties_nil_return_values",
+            form: r#"(list
+ (let ((s "abc"))
+   (set-text-properties 0 3 nil s))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 1 'p t s)
+   (set-text-properties 0 3 nil s))
+ (let ((s "abc"))
+   (set-text-properties 1 2 nil s))
+ (let ((s "abc"))
+   (set-text-properties 1 2 '(p t) s))
+ (let ((s "abc"))
+   (set-text-properties 1 1 '(p t) s))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 1 'p t s)
+   (set-text-properties 0 3 nil s)
+   (object-intervals s)))"#,
+        },
+        TextPropertyCase {
+            name: "string_object_intervals_include_nil_gaps",
+            form: r#"(list
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 1 'p t s)
+   (object-intervals s))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 1 2 'p t s)
+   (object-intervals s))
+ (let ((s (copy-sequence "abc")))
+   (put-text-property 0 3 'p t s)
+   (set-text-properties 1 2 nil s)
+   (object-intervals s)))"#,
+        },
+        TextPropertyCase {
             name: "buffer_text_property_boundaries_use_buffer_positions",
             form: r#"(let ((buf (get-buffer-create " *compat-textprop-buffer*")))
   (unwind-protect
