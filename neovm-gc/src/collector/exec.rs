@@ -1817,5 +1817,5 @@ fn survives_collection_kind(kind: CollectionKind, object: &ObjectRecord) -> bool
 }
 
 #[cfg(test)]
-#[path = "collector_exec_test.rs"]
+#[path = "exec_test.rs"]
 mod tests;

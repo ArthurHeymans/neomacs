@@ -109,13 +109,12 @@
 /// Shared/background collector surfaces (`SharedHeap`,
 /// background worker, lock-free status snapshots).
 pub mod background;
+pub(crate) mod collector;
 pub(crate) mod background_worker;
 /// Write-barrier event types and remembered-set edge metadata.
 pub mod barrier;
 pub(crate) mod card_table;
-mod collector_exec;
 mod collector_policy;
-mod collector_session;
 mod collector_state;
 /// Dedicated concurrent-marker scaffold built on top of
 /// `BackgroundWorker`.

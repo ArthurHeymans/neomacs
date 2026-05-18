@@ -356,16 +356,16 @@ impl SharedCollectorHandle {
 
     pub(crate) fn active_reclaim_prep_request(
         &self,
-    ) -> Option<crate::collector_session::ActiveReclaimPrepRequest> {
+    ) -> Option<crate::collector::ActiveReclaimPrepRequest> {
         self.state.active_reclaim_prep_request()
     }
 
     pub(crate) fn prepare_active_collection_reclaim_with_request_and_refresh(
         &self,
-        request: crate::collector_session::ActiveReclaimPrepRequest,
+        request: crate::collector::ActiveReclaimPrepRequest,
         objects: crate::object_store::ObjectReadRaw<'_>,
         trace_ephemerons: impl FnOnce(
-            &mut crate::collector_exec::MarkTracer<'_>,
+            &mut crate::collector::MarkTracer<'_>,
             &crate::plan::CollectionPlan,
         ) -> (u64, u64),
         prepare_reclaim: impl FnOnce(

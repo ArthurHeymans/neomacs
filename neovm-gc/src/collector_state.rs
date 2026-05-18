@@ -2,9 +2,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration, Instant};
 
-use crate::collector_exec::MarkTracer;
+use crate::collector::MarkTracer;
+use crate::collector::session;
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{
+use crate::collector::{
     self, ActiveReclaimPrepRequest, FinishedActiveCollection, PreparedActiveReclaim,
 };
 use crate::heap::AllocError;
@@ -204,7 +205,7 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<(), AllocError> {
         self.with_state(|state| {
-            collector_session::begin_major_mark(state, objects, plan, sources)?;
+            crate::collector::session::begin_major_mark(state, objects, plan, sources)?;
             refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             Ok(())
         })
@@ -217,7 +218,7 @@ impl CollectorStateHandle {
         plan: CollectionPlan,
         sources: impl IntoIterator<Item = crate::descriptor::GcErased>,
     ) -> Result<(), AllocError> {
-        self.with_state(|state| collector_session::begin_major_mark(state, objects, plan, sources))
+        self.with_state(|state| crate::collector::session::begin_major_mark(state, objects, plan, sources))
     }
 
     pub(crate) fn assist_active_major_mark_slices_and_refresh(
@@ -231,7 +232,7 @@ impl CollectorStateHandle {
     ) -> Result<Option<MajorMarkProgress>, AllocError> {
         self.with_state(|state| {
             let progress =
-                collector_session::assist_active_major_mark_slices(state, objects, max_slices)?;
+                crate::collector::session::assist_active_major_mark_slices(state, objects, max_slices)?;
             refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             Ok(progress)
         })
@@ -244,7 +245,7 @@ impl CollectorStateHandle {
         assist_slices: usize,
     ) -> Result<bool, AllocError> {
         self.with_state(|state| {
-            collector_session::record_active_major_reachable_object(
+            crate::collector::session::record_active_major_reachable_object(
                 state,
                 objects,
                 object,
@@ -271,7 +272,7 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<bool, AllocError> {
         self.with_state(|state| {
-            let recorded = collector_session::record_active_major_reachable_object(
+            let recorded = crate::collector::session::record_active_major_reachable_object(
                 state,
                 objects,
                 object,
@@ -303,7 +304,7 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<bool, AllocError> {
         self.with_state(|state| {
-            let updated = collector_session::record_active_major_post_write(
+            let updated = crate::collector::session::record_active_major_post_write(
                 state,
                 objects,
                 owner,
@@ -330,7 +331,7 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<Option<MajorMarkProgress>, AllocError> {
         self.with_state(|state| {
-            let progress = collector_session::poll_active_major_mark_with_completion(
+            let progress = crate::collector::session::poll_active_major_mark_with_completion(
                 state,
                 objects,
                 trace_ephemerons,
@@ -352,7 +353,7 @@ impl CollectorStateHandle {
         old_config: &OldGenConfig,
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<bool, AllocError> {
-        let prepared = collector_session::prepare_active_reclaim_request(
+        let prepared = crate::collector::session::prepare_active_reclaim_request(
             request,
             trace_ephemerons,
             objects,
@@ -365,7 +366,7 @@ impl CollectorStateHandle {
 
     pub(crate) fn active_reclaim_prep_request(&self) -> Option<ActiveReclaimPrepRequest> {
         let state = self.lock();
-        collector_session::active_reclaim_prep_request(&state)
+        crate::collector::session::active_reclaim_prep_request(&state)
     }
 
     pub(crate) fn active_major_mark_has_prepared_reclaim(&self) -> bool {
@@ -382,7 +383,7 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> bool {
         self.with_state(|state| {
-            let completed = collector_session::complete_active_reclaim_prep(state, prepared);
+            let completed = crate::collector::session::complete_active_reclaim_prep(state, prepared);
             if completed {
                 refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             }
@@ -397,7 +398,7 @@ impl CollectorStateHandle {
         prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
     ) -> Result<Option<FinishedActiveCollection>, AllocError> {
         self.with_state(|state| {
-            collector_session::finish_active_collection_if_ready(
+            crate::collector::session::finish_active_collection_if_ready(
                 state,
                 objects,
                 trace_ephemerons,
@@ -413,7 +414,7 @@ impl CollectorStateHandle {
         prepare_reclaim: impl FnOnce(&CollectionPlan) -> Result<PreparedReclaim, AllocError>,
     ) -> Result<FinishedActiveCollection, AllocError> {
         self.with_state(|state| {
-            collector_session::finish_active_collection_now(
+            crate::collector::session::finish_active_collection_now(
                 state,
                 objects,
                 trace_ephemerons,

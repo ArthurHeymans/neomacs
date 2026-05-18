@@ -4,12 +4,12 @@ use crate::background::{
     SharedBackgroundService, SharedBackgroundStatus, SharedBackgroundWaitResult,
     SharedCollectorHandle, SharedHeap, SharedHeapError, SharedHeapStatus, SharedRuntimeHandle,
 };
-use crate::collector_exec::{
+use crate::collector::{
     collect_global_sources, execute_collection_plan, prepare_major_reclaim_for_plan,
     trace_major_ephemerons_for_candidates,
 };
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector_session::{self, build_prepared_active_reclaim, prepare_active_reclaim};
+use crate::collector::{self, build_prepared_active_reclaim, prepare_active_reclaim};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
 use crate::descriptor::{GcErased, TypeDesc};
 use crate::heap::{AllocError, HeapCore};
@@ -512,7 +512,7 @@ impl<'heap> CollectorRuntime<'heap> {
         let progress = {
             let objects = self.heap.objects();
             self.heap.collector_handle().with_state(|state| {
-                collector_session::poll_active_major_mark_round(state, objects.raw())
+                crate::collector::session::poll_active_major_mark_round(state, objects.raw())
             })
         }?;
         let auto_prepare_major_reclaim =
@@ -578,11 +578,11 @@ impl<'heap> CollectorRuntime<'heap> {
         let mut state = state;
         {
             let objects = self.heap.objects();
-            collector_session::finish_major_mark(&mut state, objects.raw(), |tracer, plan| {
+            crate::collector::session::finish_major_mark(&mut state, objects.raw(), |tracer, plan| {
                 trace_heap_major_ephemerons(self.heap, tracer, plan)
             });
         }
-        let finished = collector_session::finish_active_collection(state, |plan| {
+        let finished = crate::collector::session::finish_active_collection(state, |plan| {
             self.prepare_reclaim_for_plan(plan)
         })?;
         self.heap
@@ -788,7 +788,7 @@ impl<'heap> CollectorRuntime<'heap> {
                 let roots = self.local.get_mut().roots_mut();
                 let prepared = self.heap.with_flat_store_for_collection(
                     |flat, old_gen, old_config, nursery_config, stats, nursery| {
-                        crate::collector_exec::prepare_full_reclaim_for_plan(
+                        crate::collector::prepare_full_reclaim_for_plan(
                             plan,
                             roots,
                             &mut flat.objects,
@@ -813,7 +813,7 @@ impl<'heap> CollectorRuntime<'heap> {
 
     fn commit_finished_active_collection(
         &mut self,
-        finished: crate::collector_session::FinishedActiveCollection,
+        finished: crate::collector::FinishedActiveCollection,
         before_bytes: usize,
         pause_start: Instant,
     ) -> CollectionStats {
@@ -890,7 +890,7 @@ fn prepare_heap_major_reclaim(heap: &mut HeapCore, plan: &CollectionPlan) -> Pre
 
 fn trace_heap_major_ephemerons(
     heap: &HeapCore,
-    tracer: &mut crate::collector_exec::MarkTracer<'_>,
+    tracer: &mut crate::collector::MarkTracer<'_>,
     plan: &CollectionPlan,
 ) -> (u64, u64) {
     let objects = heap.objects();
@@ -1272,7 +1272,7 @@ impl SharedCollectorRuntime {
         self.with_heap_read_collector_update(|core, collector| {
             let objects = core.objects();
             let sources = collect_global_sources(&crate::root::RootStack::default(), &objects);
-            collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
+            crate::collector::session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,
                 &core.storage_stats(),
@@ -1291,7 +1291,7 @@ impl SharedCollectorRuntime {
         self.try_with_heap_read_collector_update(|core, collector| {
             let objects = core.objects();
             let sources = collect_global_sources(&crate::root::RootStack::default(), &objects);
-            collector_session::begin_major_mark(collector, objects.raw(), plan, sources)?;
+            crate::collector::session::begin_major_mark(collector, objects.raw(), plan, sources)?;
             refresh_cached_collector_plans(
                 collector,
                 &core.storage_stats(),
@@ -1314,10 +1314,10 @@ impl SharedCollectorRuntime {
             .with_heap_read_collector_update(|core, collector| {
                 let objects = core.objects();
                 let progress =
-                    collector_session::poll_active_major_mark_round(collector, objects.raw())?;
+                    crate::collector::session::poll_active_major_mark_round(collector, objects.raw())?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
                     progress.completed
-                        && collector_session::active_reclaim_prep_request(collector)
+                        && crate::collector::session::active_reclaim_prep_request(collector)
                             .is_some_and(|request| request.plan.kind == CollectionKind::Major)
                 });
                 if !auto_prepare_major_reclaim {
@@ -1351,10 +1351,10 @@ impl SharedCollectorRuntime {
             .try_with_heap_read_collector_update(|core, collector| {
                 let objects = core.objects();
                 let progress =
-                    collector_session::poll_active_major_mark_round(collector, objects.raw())?;
+                    crate::collector::session::poll_active_major_mark_round(collector, objects.raw())?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
                     progress.completed
-                        && collector_session::active_reclaim_prep_request(collector)
+                        && crate::collector::session::active_reclaim_prep_request(collector)
                             .is_some_and(|request| request.plan.kind == CollectionKind::Major)
                 });
                 if !auto_prepare_major_reclaim {
@@ -1400,7 +1400,7 @@ impl SharedCollectorRuntime {
                 .with_heap_read_collector_update(|core, collector| {
                     let objects = core.objects();
                     let (mark_steps_delta, mark_rounds_delta) =
-                        collector_session::prepare_active_reclaim(
+                        crate::collector::session::prepare_active_reclaim(
                             &request,
                             |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
                             objects.raw(),
@@ -1447,7 +1447,7 @@ impl SharedCollectorRuntime {
                 .try_with_heap_read_collector_update(|core, collector| {
                     let objects = core.objects();
                     let (mark_steps_delta, mark_rounds_delta) =
-                        collector_session::prepare_active_reclaim(
+                        crate::collector::session::prepare_active_reclaim(
                             &request,
                             |tracer, plan| trace_heap_major_ephemerons(core, tracer, plan),
                             objects.raw(),

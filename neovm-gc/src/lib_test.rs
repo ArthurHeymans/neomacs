@@ -10981,7 +10981,7 @@ fn dirty_card_scan_index_avoids_linear_objects_walk() {
     let mut counter = 0usize;
     let core = mutator.heap().read_core();
     let objects = core.objects();
-    let roots = crate::collector_exec::collect_dirty_card_root_locators_with_counter(
+    let roots = crate::collector::collect_dirty_card_root_locators_with_counter(
         objects.raw(),
         core.old_gen(),
         &mut counter,

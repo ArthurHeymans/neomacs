@@ -1,7 +1,7 @@
 use crate::descriptor::{GcErased, Tracer};
 use std::time::{Duration, Instant};
 
-use crate::collector_exec::MarkTracer;
+use crate::collector::MarkTracer;
 use crate::collector_state::{CollectorState, MajorMarkState, MajorMarkUpdate};
 use crate::heap::AllocError;
 use crate::object_store::ObjectReadRaw;
@@ -471,5 +471,5 @@ fn saturating_duration_nanos(duration: Duration) -> u64 {
 }
 
 #[cfg(test)]
-#[path = "collector_session_test.rs"]
+#[path = "session_test.rs"]
 mod tests;

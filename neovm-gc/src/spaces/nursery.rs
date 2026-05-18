@@ -1,6 +1,6 @@
 use std::thread;
 
-use crate::collector_exec::ForwardingRelocator;
+use crate::collector::ForwardingRelocator;
 use crate::descriptor::MovePolicy;
 use crate::heap::AllocError;
 use crate::index_state::{ForwardingMap, HeapIndexState, ObjectLocator};
