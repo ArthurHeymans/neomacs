@@ -1977,6 +1977,20 @@ impl Interpreter<'_, '_, '_> {
                 // Compare as list times (HIGH LOW MICRO) or just return nil for now
                 Some(LispValue::TRUE)
             }),
+            "buffer-live-p" => self.subr_1(name, args, |s| {
+                let name = s.runtime.string_contents(args[0]).ok()?.to_string();
+                Some(bool_value(s.runtime.get_buffer(&name).is_some()))
+            }),
+            "generate-new-buffer-name" => self.subr_1(name, args, |s| {
+                let base = s.runtime.string_contents(args[0]).ok()?.to_string();
+                let mut name = base.clone();
+                let mut n = 1;
+                while s.runtime.get_buffer(&name).is_some() {
+                    n += 1;
+                    name = format!("{}<{}>", base, n);
+                }
+                Some(s.runtime.string(name))
+            }),
             "window-buffer" => Some(LispValue::NIL),
             "boundp" => self.subr_1(name, args, |s| {
                 let result = s.runtime.is_bound_symbol(args[0]);

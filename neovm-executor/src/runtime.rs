@@ -1335,6 +1335,22 @@ impl Runtime {
         }
     }
 
+    pub fn save_excursion_state(&self) -> (usize, usize, Option<usize>, Option<usize>, Option<usize>) {
+        let buf = self.current_buffer();
+        (self.current_buffer, buf.point, buf.mark, buf.narrowed_start, buf.narrowed_end)
+    }
+
+    pub fn restore_excursion_state(&mut self, state: (usize, usize, Option<usize>, Option<usize>, Option<usize>)) {
+        if state.0 < self.buffers.len() {
+            self.current_buffer = state.0;
+            let buf = self.current_buffer_mut();
+            buf.point = state.1.min(buf.point_max()).max(buf.point_min());
+            buf.mark = state.2;
+            buf.narrowed_start = state.3;
+            buf.narrowed_end = state.4;
+        }
+    }
+
     pub fn kill_buffer(&mut self, name: &str) -> bool {
         let Some(idx) = self.get_buffer(name) else { return false };
         if self.current_buffer == idx {
