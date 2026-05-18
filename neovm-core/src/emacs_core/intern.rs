@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::sync::OnceLock;
 
 use crate::heap_types::LispString;
+use crate::tagged::value::TaggedValue;
 
 /// A compact handle to a Lisp symbol object. Copy, 4 bytes.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
@@ -135,6 +136,11 @@ impl StringInterner {
 struct SymbolSlot {
     name: NameId,
     canonical: bool,
+    /// Exact heap string object used as the symbol name when Lisp supplies
+    /// one directly.  GNU stores the Lisp string object in the symbol, so
+    /// `(symbol-name (make-symbol NAME))` is `eq` to NAME and sees later
+    /// string mutation.
+    name_value: Option<TaggedValue>,
 }
 
 pub(crate) struct DumpedSymbolTable {
@@ -170,23 +176,32 @@ impl SymbolRegistry {
             canonical_by_name: FxHashMap::default(),
         };
         let nil_name = registry.names.intern("nil");
-        let nil_id = registry.alloc_symbol(nil_name, true);
+        let nil_id = registry.alloc_symbol(nil_name, true, None);
         debug_assert_eq!(nil_id, NIL_SYM_ID);
 
         let t_name = registry.names.intern("t");
-        let t_id = registry.alloc_symbol(t_name, true);
+        let t_id = registry.alloc_symbol(t_name, true, None);
         debug_assert_eq!(t_id, T_SYM_ID);
 
         let unbound_name = registry.names.intern("unbound");
-        let unbound_id = registry.alloc_symbol(unbound_name, false);
+        let unbound_id = registry.alloc_symbol(unbound_name, false, None);
         debug_assert_eq!(unbound_id, UNBOUND_SYM_ID);
 
         registry
     }
 
-    fn alloc_symbol(&mut self, name: NameId, canonical: bool) -> SymId {
+    fn alloc_symbol(
+        &mut self,
+        name: NameId,
+        canonical: bool,
+        name_value: Option<TaggedValue>,
+    ) -> SymId {
         let id = SymId(self.symbols.len() as u32);
-        self.symbols.push(SymbolSlot { name, canonical });
+        self.symbols.push(SymbolSlot {
+            name,
+            canonical,
+            name_value,
+        });
         if canonical {
             self.canonical_by_name.insert(name, id);
         }
@@ -202,7 +217,7 @@ impl SymbolRegistry {
         if let Some(existing) = self.canonical_by_name.get(&name) {
             return *existing;
         }
-        self.alloc_symbol(name, true)
+        self.alloc_symbol(name, true, None)
     }
 
     fn intern_lisp_string(&mut self, s: &LispString) -> SymId {
@@ -210,17 +225,24 @@ impl SymbolRegistry {
         if let Some(existing) = self.canonical_by_name.get(&name) {
             return *existing;
         }
-        self.alloc_symbol(name, true)
+        self.alloc_symbol(name, true, None)
     }
 
     fn intern_uninterned(&mut self, s: &str) -> SymId {
         let name = self.names.intern(s);
-        self.alloc_symbol(name, false)
+        self.alloc_symbol(name, false, None)
     }
 
     fn intern_uninterned_lisp_string(&mut self, s: &LispString) -> SymId {
         let name = self.names.intern_lisp_string(s);
-        self.alloc_symbol(name, false)
+        self.alloc_symbol(name, false, None)
+    }
+
+    fn make_uninterned_symbol_with_name_value(&mut self, name_value: TaggedValue) -> SymId {
+        let name = self
+            .names
+            .intern_lisp_string(name_value.as_lisp_string().expect("string name"));
+        self.alloc_symbol(name, false, Some(name_value))
     }
 
     fn lookup(&self, s: &str) -> Option<SymId> {
@@ -240,10 +262,9 @@ impl SymbolRegistry {
 
     #[inline]
     fn resolve(&self, id: SymId) -> &'static str {
-        let slot = self
-            .slot(id)
-            .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        self.names.resolve(slot.name)
+        self.resolve_lisp_string(id)
+            .as_utf8_str()
+            .unwrap_or_else(|| panic!("symbol name {:?} is not valid UTF-8", id))
     }
 
     #[inline]
@@ -251,7 +272,19 @@ impl SymbolRegistry {
         let slot = self
             .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
+        if let Some(value) = slot.name_value {
+            return value
+                .as_lisp_string()
+                .expect("symbol name value must remain a string");
+        }
         self.names.resolve_lisp_string(slot.name)
+    }
+
+    #[inline]
+    fn resolve_name_value(&self, id: SymId) -> Option<TaggedValue> {
+        self.slot(id)
+            .unwrap_or_else(|| panic!("invalid symbol id {:?}", id))
+            .name_value
     }
 
     #[inline]
@@ -366,10 +399,10 @@ impl SymbolRegistry {
                         self.canonical_by_name
                             .get(&runtime_name)
                             .copied()
-                            .unwrap_or_else(|| self.alloc_symbol(runtime_name, true)),
+                            .unwrap_or_else(|| self.alloc_symbol(runtime_name, true, None)),
                     )
                 } else {
-                    Ok::<SymId, String>(self.alloc_symbol(runtime_name, false))
+                    Ok::<SymId, String>(self.alloc_symbol(runtime_name, false, None))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -383,6 +416,10 @@ impl SymbolRegistry {
     #[inline]
     fn canonical_symbol_for_name(&self, name: NameId) -> Option<SymId> {
         self.canonical_by_name.get(&name).copied()
+    }
+
+    fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>) {
+        roots.extend(self.symbols.iter().filter_map(|slot| slot.name_value));
     }
 }
 
@@ -461,6 +498,14 @@ pub fn intern_uninterned_lisp_string(s: &LispString) -> SymId {
     registry.intern_uninterned_lisp_string(s)
 }
 
+/// Create an uninterned symbol that stores NAME_VALUE as its exact name
+/// object, matching GNU `make-symbol`.
+#[inline]
+pub fn make_uninterned_symbol_with_name_value(name_value: TaggedValue) -> SymId {
+    let mut registry = global_symbol_registry().write();
+    registry.make_uninterned_symbol_with_name_value(name_value)
+}
+
 /// Look up the canonical interned symbol id for a string without interning it.
 #[inline]
 pub fn lookup_interned(s: &str) -> Option<SymId> {
@@ -511,17 +556,21 @@ pub(crate) fn is_keyword_id(id: SymId) -> bool {
 
 #[inline]
 pub fn resolve_sym_metadata(id: SymId) -> (&'static str, bool) {
-    if let (Some(name), Some(is_canonical)) =
-        (thread_local_resolve(id), thread_local_is_canonical(id))
-    {
-        return (name, is_canonical);
+    if let Some(is_canonical) = thread_local_is_canonical(id) {
+        if is_canonical {
+            if let Some(name) = thread_local_resolve(id) {
+                return (name, true);
+            }
+        }
     }
     let registry = global_symbol_registry().read();
     let name = registry.resolve(id);
     let is_canonical = registry.is_canonical_id(id);
     drop(registry);
-    thread_local_record(id, name);
     thread_local_record_canonical(id, is_canonical);
+    if is_canonical {
+        thread_local_record(id, name);
+    }
     (name, is_canonical)
 }
 
@@ -564,13 +613,21 @@ pub(crate) fn canonical_symbol_for_name(id: NameId) -> Option<SymId> {
 /// Resolve a SymId to its string using the global runtime symbol registry.
 #[inline]
 pub fn resolve_sym(id: SymId) -> &'static str {
-    if let Some(s) = thread_local_resolve(id) {
-        return s;
+    if let Some(is_canonical) = thread_local_is_canonical(id) {
+        if is_canonical {
+            if let Some(s) = thread_local_resolve(id) {
+                return s;
+            }
+        }
     }
     let registry = global_symbol_registry().read();
     let s = registry.resolve(id);
+    let is_canonical = registry.is_canonical_id(id);
     drop(registry);
-    thread_local_record(id, s);
+    thread_local_record_canonical(id, is_canonical);
+    if is_canonical {
+        thread_local_record(id, s);
+    }
     s
 }
 
@@ -580,6 +637,17 @@ pub fn resolve_sym(id: SymId) -> &'static str {
 pub fn resolve_sym_lisp_string(id: SymId) -> &'static LispString {
     let registry = global_symbol_registry().read();
     registry.resolve_lisp_string(id)
+}
+
+#[inline]
+pub fn resolve_sym_name_value(id: SymId) -> Option<TaggedValue> {
+    let registry = global_symbol_registry().read();
+    registry.resolve_name_value(id)
+}
+
+pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>) {
+    let registry = global_symbol_registry().read();
+    registry.collect_name_value_roots(roots);
 }
 
 // ---------------------------------------------------------------------------

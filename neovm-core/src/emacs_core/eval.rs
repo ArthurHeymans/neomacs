@@ -1198,12 +1198,12 @@ thread_local! {
     static SCRATCH_GC_ROOTS: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Collect GC roots from all thread-local statics that hold Values.
+/// Collect GC roots from runtime-global side tables that hold Values.
 ///
-/// Thread-local statics are invisible to the normal GC root scan (which
-/// only walks the Evaluator struct and its sub-managers).  This function
-/// calls each module's `collect_*_gc_roots` helper to ensure those Values
-/// are marked as live during garbage collection.
+/// These side tables are invisible to the normal GC root scan (which only
+/// walks the Evaluator struct and its sub-managers).  This function calls each
+/// module's `collect_*_gc_roots` helper to ensure those Values are marked as
+/// live during garbage collection.
 fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
     super::syntax::collect_syntax_gc_roots(roots);
     super::casetab::collect_casetab_gc_roots(roots);
@@ -1213,6 +1213,7 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
     super::charset::collect_charset_gc_roots(roots);
     super::ccl::collect_ccl_gc_roots(roots);
     super::dynamic_module::collect_dynamic_module_gc_roots(roots);
+    super::intern::collect_symbol_name_gc_roots(roots);
     SCRATCH_GC_ROOTS.with(|scratch| roots.extend(scratch.borrow().iter().copied()));
 }
 

@@ -346,9 +346,11 @@ pub(crate) fn builtin_symbol_name_1(eval: &mut super::eval::Context, symbol: Val
 
 fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> EvalResult {
     match super::symbols::symbol_id_checked(&symbol, symbols_with_pos_enabled) {
-        Some(id) => Ok(Value::heap_string(
-            crate::emacs_core::intern::resolve_sym_lisp_string(id).clone(),
-        )),
+        Some(id) => Ok(
+            crate::emacs_core::intern::resolve_sym_name_value(id).unwrap_or_else(|| {
+                Value::heap_string(crate::emacs_core::intern::resolve_sym_lisp_string(id).clone())
+            }),
+        ),
         None => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), symbol],
@@ -366,8 +368,8 @@ pub(crate) fn builtin_make_symbol_1(_eval: &mut super::eval::Context, arg: Value
 }
 
 fn make_symbol_value(arg: Value) -> EvalResult {
-    let name = expect_lisp_string(&arg)?;
+    expect_lisp_string(&arg)?;
     Ok(Value::from_sym_id(
-        crate::emacs_core::intern::intern_uninterned_lisp_string(name),
+        crate::emacs_core::intern::make_uninterned_symbol_with_name_value(arg),
     ))
 }

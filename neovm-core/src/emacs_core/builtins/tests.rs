@@ -4695,6 +4695,32 @@ fn make_symbol_and_symbol_name_preserve_raw_unibyte_bytes() {
 }
 
 #[test]
+fn make_symbol_keeps_exact_name_string_object() {
+    crate::test_utils::init_test_tracing();
+    let name = Value::string("abc");
+
+    let sym = dispatch_builtin_pure("make-symbol", vec![name])
+        .expect("builtin make-symbol should resolve")
+        .expect("builtin make-symbol should evaluate");
+    let first_name = dispatch_builtin_pure("symbol-name", vec![sym])
+        .expect("builtin symbol-name should resolve")
+        .expect("builtin symbol-name should evaluate");
+    assert_eq!(first_name, name);
+
+    super::collections::builtin_aset(vec![name, Value::fixnum(1), Value::fixnum('Z' as i64)])
+        .expect("aset should mutate symbol name string");
+
+    let second_name = dispatch_builtin_pure("symbol-name", vec![sym])
+        .expect("builtin symbol-name should resolve")
+        .expect("builtin symbol-name should evaluate");
+    assert_eq!(second_name, name);
+    assert_eq!(
+        second_name.as_lisp_string().and_then(|s| s.as_utf8_str()),
+        Some("aZc")
+    );
+}
+
+#[test]
 fn intern_and_intern_soft_preserve_raw_unibyte_symbol_names() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
