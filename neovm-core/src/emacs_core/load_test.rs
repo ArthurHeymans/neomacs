@@ -7364,32 +7364,32 @@ fn find_file_with_suffix_flags() {
     let plain = dir.join("choice");
     let el = dir.join("choice.el");
     let elc = dir.join("choice.elc");
+    let module = dir.join(format!("choice{}", std::env::consts::DLL_SUFFIX));
     fs::write(&plain, "plain").expect("write plain fixture");
     fs::write(&el, "el").expect("write el fixture");
     fs::write(&elc, "elc").expect("write elc fixture");
+    fs::write(&module, "module").expect("write module fixture");
 
     let load_path = vec![runtime_path_entry(dir.to_string_lossy().as_ref())];
 
-    // GNU `load-suffixes` is `(".so" ".elc" ".el")` and `find_file_*`
-    // tries them in that order, so .elc is preferred over .el. NeoVM
-    // matches that since .elc loading was enabled (see commit history
-    // for the .elc bootstrap support).
+    // GNU `load-suffixes` starts with the module suffix when modules are
+    // supported, then `.elc`, then `.el`.
     assert_eq!(
         find_file_in_load_path_with_flags("choice", &load_path, false, false, false),
-        Some(elc.clone())
+        Some(module.clone())
     );
     // no-suffix mode only tries exact name.
     assert_eq!(
         find_file_in_load_path_with_flags("choice", &load_path, true, false, false),
         Some(plain.clone())
     );
-    // must-suffix mode rejects plain file and requires suffixed one.
-    // .elc is preferred over .el (matches GNU load-suffixes order).
+    // must-suffix mode rejects plain file and requires a suffixed one.
     assert_eq!(
         find_file_in_load_path_with_flags("choice", &load_path, false, true, false),
-        Some(elc)
+        Some(module)
     );
     let _el_unused = el;
+    let _elc_unused = elc;
     // no-suffix takes precedence if both flags are set.
     assert_eq!(
         find_file_in_load_path_with_flags("choice", &load_path, true, true, false),
@@ -8487,6 +8487,28 @@ fn load_elc_gz_is_rejected() {
     let err = load_file(&mut eval, &compiled).expect_err("load should reject .elc.gz");
     match err {
         EvalError::Signal { symbol, .. } => assert_eq!(resolve_sym(symbol), "error"),
+        other => panic!("unexpected error: {other:?}"),
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_module_suffix_dispatches_to_dynamic_module_loader() {
+    crate::test_utils::init_test_tracing();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-load-module-dispatch-{unique}"));
+    fs::create_dir_all(&dir).expect("create temp fixture dir");
+    let module = dir.join(format!("probe{}", std::env::consts::DLL_SUFFIX));
+    fs::write(&module, "not-a-dynamic-library").expect("write module fixture");
+
+    let mut eval = super::super::eval::Context::new();
+    let err = load_file(&mut eval, &module).expect_err("load should call module loader");
+    match err {
+        EvalError::Signal { symbol, .. } => assert_eq!(resolve_sym(symbol), "module-open-failed"),
         other => panic!("unexpected error: {other:?}"),
     }
 

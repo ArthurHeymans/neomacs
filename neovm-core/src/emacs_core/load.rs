@@ -545,7 +545,9 @@ fn eval_generated_loaddefs_form(
 
 fn has_load_suffix(name: &LispString) -> bool {
     let bytes = name.as_bytes();
-    bytes.ends_with(b".el") || bytes.ends_with(b".elc")
+    bytes.ends_with(b".el")
+        || bytes.ends_with(b".elc")
+        || bytes.ends_with(std::env::consts::DLL_SUFFIX.as_bytes())
 }
 
 fn append_load_suffix(base: &Path, suffix: &[u8]) -> PathBuf {
@@ -571,12 +573,22 @@ fn compiled_suffixed_path(base: &Path) -> PathBuf {
     append_load_suffix(base, b".elc")
 }
 
+fn module_suffixed_path(base: &Path) -> PathBuf {
+    append_load_suffix(base, std::env::consts::DLL_SUFFIX.as_bytes())
+}
+
 fn unsupported_compiled_suffixed_paths(base: &Path) -> [PathBuf; 1] {
     [append_load_suffix(base, b".elc.gz")]
 }
 
-/// GNU Emacs always prefers .elc over .el (load-suffixes defaults to
-/// (".elc" ".el")).  NeoVM matches this by default.
+fn is_module_path(path: &Path) -> bool {
+    path.as_os_str()
+        .as_encoded_bytes()
+        .ends_with(std::env::consts::DLL_SUFFIX.as_bytes())
+}
+
+/// GNU Emacs tries dynamic modules before .elc and .el when modules are
+/// supported.  NeoVM matches this by default.
 /// Set NEOVM_PREFER_EL=1 to prefer .el source (for debugging).
 fn prefer_el_only() -> bool {
     std::env::var("NEOVM_PREFER_EL").is_ok()
@@ -587,12 +599,16 @@ fn candidate_mtime(path: &Path) -> Option<std::time::SystemTime> {
 }
 
 fn pick_suffixed(base: &Path, prefer_newer: bool) -> Option<PathBuf> {
+    let module = module_suffixed_path(base);
     let el = source_suffixed_path(base);
     let elc = compiled_suffixed_path(base);
     let skip_elc = prefer_el_only();
 
     if prefer_newer && !skip_elc {
         let mut candidates = Vec::new();
+        if module.exists() {
+            candidates.push(module.clone());
+        }
         if elc.exists() {
             candidates.push(elc.clone());
         }
@@ -606,7 +622,11 @@ fn pick_suffixed(base: &Path, prefer_newer: bool) -> Option<PathBuf> {
             .map(|(_, path)| path);
     }
 
-    // GNU default: try .elc first, then .el
+    // GNU default with module support: try the module suffix first, then
+    // .elc, then .el.
+    if module.exists() {
+        return Some(module);
+    }
     if !skip_elc && elc.exists() {
         return Some(elc);
     }
@@ -1763,6 +1783,11 @@ fn load_file_body(
 ) -> Result<Value, EvalError> {
     let is_elc = path.extension().and_then(|e| e.to_str()) == Some("elc");
     let hist_file_name = load_hist_file_name(eval, requested, found);
+
+    if is_module_path(path) {
+        return crate::emacs_core::dynamic_module::load_module(eval, path.to_string_lossy().into())
+            .map_err(crate::emacs_core::error::map_flow);
+    }
 
     if !is_elc
         && let load_source_file_function =

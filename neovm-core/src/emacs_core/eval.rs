@@ -3045,13 +3045,6 @@ impl Context {
             "fontset-alias-alist",
             super::builtins::symbols::fontset_alias_alist_startup_value(),
         );
-        // GNU Emacs: load-suffixes defaults to (".elc" ".el").
-        // NeoVM matches this — prefer compiled bytecode, fall back to source.
-        obarray.set_symbol_value(
-            "load-suffixes",
-            Value::list(vec![Value::string(".elc"), Value::string(".el")]),
-        );
-        obarray.make_special("load-suffixes");
         let module_suffix = if cfg!(target_os = "macos") {
             ".dylib"
         } else if cfg!(target_os = "windows") {
@@ -3059,6 +3052,17 @@ impl Context {
         } else {
             ".so"
         };
+        // GNU Emacs with module support includes the module suffix before
+        // compiled and source Lisp suffixes.
+        obarray.set_symbol_value(
+            "load-suffixes",
+            Value::list(vec![
+                Value::string(module_suffix),
+                Value::string(".elc"),
+                Value::string(".el"),
+            ]),
+        );
+        obarray.make_special("load-suffixes");
         obarray.set_symbol_value("module-file-suffix", Value::make_string(module_suffix));
         obarray.make_special("module-file-suffix");
         obarray.set_symbol_value(
