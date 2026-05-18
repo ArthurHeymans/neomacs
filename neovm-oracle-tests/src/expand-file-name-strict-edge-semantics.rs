@@ -75,3 +75,44 @@ fn oracle_expand_file_name_root_and_relative_default_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_expand_file_name_handler_dispatch_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-expand-file-name-calls nil)
+  (defun neomacs--oracle-expand-file-name-handler (operation &rest args)
+    (push (cons operation args) neomacs--oracle-expand-file-name-calls)
+    (cond
+     ((eq operation 'expand-file-name)
+      (concat "/handled/"
+              (number-to-string (length neomacs--oracle-expand-file-name-calls))))
+     (t
+      (let ((file-name-handler-alist nil))
+        (apply operation args)))))
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/oracle-expand:" . neomacs--oracle-expand-file-name-handler))))
+        (list
+         ;; GNU first checks NAME for an `expand-file-name' handler.
+         (expand-file-name "/oracle-expand:name" "/plain/default/")
+         neomacs--oracle-expand-file-name-calls
+         (setq neomacs--oracle-expand-file-name-calls nil)
+         ;; If NAME is ordinary, GNU checks DEFAULT-DIRECTORY next.
+         (expand-file-name "leaf" "/oracle-expand:default/")
+         neomacs--oracle-expand-file-name-calls
+         (setq neomacs--oracle-expand-file-name-calls nil)
+         ;; GNU requires an `expand-file-name' handler to return a string.
+         (let ((file-name-handler-alist
+                '(("\\`/oracle-expand:" . (lambda (&rest _args) 42)))))
+           (condition-case err
+               (expand-file-name "/oracle-expand:bad" "/plain/default/")
+             (error (list (car err) (cdr err)))))))
+    (fmakunbound 'neomacs--oracle-expand-file-name-handler)
+    (makunbound 'neomacs--oracle-expand-file-name-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

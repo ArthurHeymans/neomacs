@@ -1823,9 +1823,6 @@ fn make_temp_name_suffix() -> String {
 /// to dynamic `default-directory` when DEFAULT-DIRECTORY is omitted
 /// or nil.
 pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "expand-file-name", &args)? {
-        return Ok(result);
-    }
     expect_min_args("expand-file-name", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
@@ -1837,6 +1834,17 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
         ));
     }
     let name_lisp = expect_lisp_filename_string_strict(&args[0])?;
+    let default_arg = args.get(1).copied().unwrap_or(Value::NIL);
+    let operation = Value::symbol("expand-file-name");
+    let name_handler = find_file_name_handler_lisp_for_eval(eval, &name_lisp, operation);
+    if !name_handler.is_nil() {
+        let result = eval.funcall_general(
+            name_handler,
+            vec![operation, Value::heap_string(name_lisp), default_arg],
+        )?;
+        return file_name_handler_string_or_error(result);
+    }
+
     let name = crate::emacs_core::builtins::runtime_string_from_lisp_string(&name_lisp);
     let default_dir_lisp = if let Some(arg) = args.get(1) {
         match arg.kind() {
@@ -1847,6 +1855,19 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
     } else {
         implicit_default_directory_lisp_for_eval(eval)?
     };
+    let default_handler = find_file_name_handler_lisp_for_eval(eval, &default_dir_lisp, operation);
+    if !default_handler.is_nil() {
+        let result = eval.funcall_general(
+            default_handler,
+            vec![
+                operation,
+                Value::heap_string(name_lisp),
+                Value::heap_string(default_dir_lisp),
+            ],
+        )?;
+        return file_name_handler_string_or_error(result);
+    }
+
     let default_dir =
         crate::emacs_core::builtins::runtime_string_from_lisp_string(&default_dir_lisp);
 
