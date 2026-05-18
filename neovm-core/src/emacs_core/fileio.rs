@@ -31,16 +31,27 @@ use super::value::{OrderedRuntimeBindingMap, Value, ValueKind, VecLikeType, list
 /// Expand FILE relative to DEFAULT_DIR (or the current working directory).
 /// Handles `~` expansion and absolute path detection.
 pub fn expand_file_name(name: &str, default_dir: Option<&str>) -> String {
+    expand_file_name_with_home(name, default_dir, None)
+}
+
+fn expand_file_name_with_home(
+    name: &str,
+    default_dir: Option<&str>,
+    home_override: Option<&str>,
+) -> String {
     // Handle ~ expansion
     let expanded = if name.starts_with("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            let home_str = home.to_string_lossy();
-            format!("{}{}", home_str, &name[1..])
+        if let Some(home) = home_override {
+            format!("{}{}", home, &name[1..])
+        } else if let Some(home) = std::env::var_os("HOME") {
+            format!("{}{}", home.to_string_lossy(), &name[1..])
         } else {
             name.to_string()
         }
     } else if name == "~" {
-        if let Some(home) = std::env::var_os("HOME") {
+        if let Some(home) = home_override {
+            home.to_string()
+        } else if let Some(home) = std::env::var_os("HOME") {
             home.to_string_lossy().into_owned()
         } else {
             name.to_string()
@@ -63,7 +74,7 @@ pub fn expand_file_name(name: &str, default_dir: Option<&str>) -> String {
     // Resolve relative to default_dir or cwd
     let base = if let Some(dir) = default_dir {
         // Recursively expand the default dir too (handles ~ in dir)
-        let expanded_dir = expand_file_name(dir, None);
+        let expanded_dir = expand_file_name_with_home(dir, None, home_override);
         PathBuf::from(expanded_dir)
     } else {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"))
@@ -1226,6 +1237,19 @@ fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispStr
     }
 }
 
+fn expect_lisp_filename_string_strict(
+    value: &Value,
+) -> Result<crate::heap_types::LispString, Flow> {
+    let string = expect_lisp_string_strict(value)?;
+    if string.as_bytes().contains(&0) {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("filenamep"), *value],
+        ));
+    }
+    Ok(string)
+}
+
 fn file_name_runtime_result_value(text: &str, multibyte: bool) -> Value {
     Value::heap_string(crate::emacs_core::builtins::runtime_string_to_lisp_string(
         text, multibyte,
@@ -1356,6 +1380,15 @@ fn expand_file_name_lisp(
         &result,
         expand_file_name_result_multibyte(name, &default_directory),
     )
+}
+
+fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<String> {
+    match super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")]) {
+        Ok(value) => value
+            .as_lisp_string()
+            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
+        Err(_) => None,
+    }
 }
 
 fn lisp_file_name_absolute_system_p(filename: &crate::heap_types::LispString) -> bool {
@@ -1743,22 +1776,22 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
             ],
         ));
     }
-    let name_lisp = expect_lisp_string_strict(&args[0])?;
+    let name_lisp = expect_lisp_filename_string_strict(&args[0])?;
     let name = crate::emacs_core::builtins::runtime_string_from_lisp_string(&name_lisp);
     let default_dir_lisp = if let Some(arg) = args.get(1) {
         match arg.kind() {
-            ValueKind::Nil => default_directory_lisp_for_eval(eval)
-                .unwrap_or_else(fallback_root_default_directory),
-            ValueKind::String => expect_lisp_string_strict(arg)?,
+            ValueKind::Nil => implicit_default_directory_lisp_for_eval(eval)?,
+            ValueKind::String => expect_lisp_filename_string_strict(arg)?,
             _ => fallback_root_default_directory(),
         }
     } else {
-        default_directory_lisp_for_eval(eval).unwrap_or_else(fallback_root_default_directory)
+        implicit_default_directory_lisp_for_eval(eval)?
     };
     let default_dir =
         crate::emacs_core::builtins::runtime_string_from_lisp_string(&default_dir_lisp);
 
-    let result = expand_file_name(&name, Some(&default_dir));
+    let home_dir = home_directory_for_expand_file_name(eval);
+    let result = expand_file_name_with_home(&name, Some(&default_dir), home_dir.as_deref());
     let result_multibyte = expand_file_name_result_multibyte(&name_lisp, &default_dir_lisp);
     Ok(file_name_runtime_result_value(&result, result_multibyte))
 }
@@ -2044,6 +2077,33 @@ fn default_directory_for_eval(eval: &Context) -> Option<String> {
 
 fn default_directory_lisp_for_eval(eval: &Context) -> Option<crate::heap_types::LispString> {
     default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
+}
+
+fn implicit_default_directory_lisp_for_eval(
+    eval: &Context,
+) -> Result<crate::heap_types::LispString, Flow> {
+    if let Some(buf) = eval.buffers.current_buffer() {
+        if let Some(value) = buf.get_buffer_local("default-directory") {
+            if value.is_nil() {
+                return Ok(fallback_root_default_directory());
+            }
+            return value.as_lisp_string().cloned().ok_or_else(|| {
+                signal("wrong-type-argument", vec![Value::symbol("stringp"), value])
+            });
+        }
+    }
+    if let Some(value) = eval.obarray.symbol_value("default-directory") {
+        if value.is_nil() {
+            return Ok(fallback_root_default_directory());
+        }
+        return value.as_lisp_string().cloned().ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        });
+    }
+    Ok(fallback_root_default_directory())
 }
 
 fn resolve_filename_lisp_in_state(

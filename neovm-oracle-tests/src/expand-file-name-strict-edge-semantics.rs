@@ -61,10 +61,13 @@ fn oracle_expand_file_name_root_and_relative_default_edges() {
  (let ((expanded (expand-file-name "leaf" "relative/default")))
    (list (file-name-absolute-p expanded)
          (string-suffix-p "/relative/default/leaf" expanded)))
- ;; A non-string buffer-local `default-directory' falls back to root.
- (let ((default-directory 42))
-   (expand-file-name "leaf"))
- ;; An explicit bad DEFAULT-DIRECTORY is checked before that fallback.
+ ;; GNU rejects a non-string buffer-local `default-directory` before it can be
+ ;; used as the implicit DEFAULT-DIRECTORY.
+ (condition-case err
+     (let ((default-directory 42))
+       (expand-file-name "leaf"))
+   (error (list (car err) (cdr err))))
+ ;; GNU treats an explicit bad DEFAULT-DIRECTORY as root instead of signaling.
  (condition-case err
      (expand-file-name "leaf" 42)
    (error (list (car err) (cdr err)))))

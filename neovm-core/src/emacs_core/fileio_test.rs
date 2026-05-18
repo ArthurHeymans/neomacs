@@ -1341,7 +1341,7 @@ fn test_builtin_expand_file_name() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap().as_utf8_str(), Some("/usr/local/bin/emacs"));
 
-    // Emacs treats non-string DEFAULT-DIRECTORY as root.
+    // GNU treats an explicit non-string DEFAULT-DIRECTORY as root.
     let result = call_fileio_builtin!(
         builtin_expand_file_name,
         vec![Value::string("a"), Value::symbol("x")]
