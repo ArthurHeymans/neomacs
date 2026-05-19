@@ -172,6 +172,10 @@ fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
     buf.text.emacs_byte_to_char(byte_pos) as i64 + 1
 }
 
+fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
+    byte_pos.clamp(buf.point_min_byte(), buf.point_max_byte())
+}
+
 /// Return the full buffer text as raw Emacs bytes.
 fn buffer_bytes(buf: &crate::buffer::Buffer) -> Vec<u8> {
     let mut out = Vec::new();
@@ -1083,7 +1087,8 @@ pub(crate) fn builtin_region_beginning(
             )],
         )
     })?;
-    let pt = buf.pt_byte;
+    let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
+    let mark = clamp_byte_to_accessible(buf, mark);
     let start = pt.min(mark);
     Ok(Value::fixnum(byte_to_char_pos(buf, start)))
 }
@@ -1100,7 +1105,8 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
             )],
         )
     })?;
-    let pt = buf.pt_byte;
+    let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
+    let mark = clamp_byte_to_accessible(buf, mark);
     let end = pt.max(mark);
     Ok(Value::fixnum(byte_to_char_pos(buf, end)))
 }

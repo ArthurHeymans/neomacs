@@ -58,7 +58,7 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 // Marker value helpers
 // ---------------------------------------------------------------------------
 
-const MARK_MARKER_ID: u64 = i64::MAX as u64;
+pub(crate) const MARK_MARKER_ID: u64 = i64::MAX as u64;
 
 pub(crate) fn is_marker(v: &Value) -> bool {
     v.is_marker()

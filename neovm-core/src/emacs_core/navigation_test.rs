@@ -718,6 +718,43 @@ fn test_region_beginning_and_end() {
 }
 
 #[test]
+fn test_region_beginning_and_end_clip_mark_to_narrowing() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = bootstrap_eval_with_text("0123456789");
+    let bounds = eval_str(
+        &mut ev,
+        r#"(let ((transient-mark-mode nil))
+             (goto-char 6)
+             (set-marker (mark-marker) 2 (current-buffer))
+             (narrow-to-region 4 8)
+             (list (region-beginning) (region-end)))"#,
+    );
+    assert_eq!(bounds, eval_str(&mut ev, "'(4 6)"));
+}
+
+#[test]
+fn test_set_mark_nil_clears_region() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = bootstrap_eval_with_text("abc");
+    let result = eval_str(
+        &mut ev,
+        r#"(progn
+             (set-mark 2)
+             (set-mark nil)
+             (condition-case err
+                 (region-beginning)
+               (error (list (car err) (cdr err)))))"#,
+    );
+    assert_eq!(
+        result,
+        eval_str(
+            &mut ev,
+            r#"'(error ("The mark is not set now, so there is no region"))"#,
+        )
+    );
+}
+
+#[test]
 fn test_use_region_p_is_available_after_bootstrap() {
     crate::test_utils::init_test_tracing();
     // use-region-p is a defun in simple.el, not autoloaded in GNU Emacs.

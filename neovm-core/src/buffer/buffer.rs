@@ -2115,14 +2115,8 @@ impl Buffer {
 
     /// Set the mark to byte position `pos`, creating the marker if needed.
     pub fn set_mark_byte(&mut self, pos: usize) {
-        let clamped = pos.clamp(self.begv_byte, self.zv_byte);
-        let char_pos = if clamped == self.begv_byte {
-            self.begv
-        } else if clamped == self.zv_byte {
-            self.zv
-        } else {
-            self.text.emacs_byte_to_char(clamped)
-        };
+        let clamped = pos.min(self.total_bytes());
+        let char_pos = self.text.emacs_byte_to_char(clamped);
         if self.mark_marker_ptr.is_null() {
             // Create the marker eagerly and register in the chain so it
             // auto-adjusts on edits.
@@ -2130,7 +2124,7 @@ impl Buffer {
                 crate::emacs_core::value::Value::make_marker(crate::heap_types::LispMarker {
                     buffer: Some(self.id),
                     insertion_type: false,
-                    marker_id: None,
+                    marker_id: Some(crate::emacs_core::marker::MARK_MARKER_ID),
                     bytepos: clamped,
                     charpos: char_pos,
                     last_position_valid: true,
@@ -2143,7 +2137,7 @@ impl Buffer {
             self.text.register_marker(
                 ptr,
                 self.id,
-                0,
+                crate::emacs_core::marker::MARK_MARKER_ID,
                 clamped,
                 char_pos,
                 super::InsertionType::Before,
