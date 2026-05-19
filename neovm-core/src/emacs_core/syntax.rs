@@ -357,12 +357,9 @@ impl SyntaxEntry {
 /// `". 12"`) into a `SyntaxEntry`.
 pub fn string_to_syntax(s: &str) -> Result<SyntaxEntry, String> {
     let chars: Vec<char> = s.chars().collect();
-    if chars.is_empty() {
-        return Err("Empty syntax descriptor".to_string());
-    }
-
-    let class = SyntaxClass::from_char(chars[0])
-        .ok_or_else(|| format!("Invalid syntax class character: '{}'", chars[0]))?;
+    let descriptor = chars.first().copied().unwrap_or('\0');
+    let class = SyntaxClass::from_char(descriptor)
+        .ok_or_else(|| format!("Invalid syntax description letter: {descriptor}"))?;
 
     let matching_char = if chars.len() > 1 && chars[1] != ' ' {
         Some(chars[1])

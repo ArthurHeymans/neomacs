@@ -148,13 +148,19 @@ fn string_to_syntax_prefix_flag() {
 #[test]
 fn string_to_syntax_empty_errors() {
     crate::test_utils::init_test_tracing();
-    assert!(string_to_syntax("").is_err());
+    assert_eq!(
+        string_to_syntax("").unwrap_err(),
+        "Invalid syntax description letter: \0"
+    );
 }
 
 #[test]
 fn string_to_syntax_invalid_class() {
     crate::test_utils::init_test_tracing();
-    assert!(string_to_syntax("Z").is_err());
+    assert_eq!(
+        string_to_syntax("Z").unwrap_err(),
+        "Invalid syntax description letter: Z"
+    );
 }
 
 // -----------------------------------------------------------------------
