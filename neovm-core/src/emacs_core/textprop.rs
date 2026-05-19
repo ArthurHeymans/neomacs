@@ -656,6 +656,31 @@ fn plist_pairs(plist: &Value) -> Result<Vec<(Value, Value)>, Flow> {
     Ok(pairs)
 }
 
+fn plist_names_for_remove(plist: Value) -> Vec<Value> {
+    let mut names = Vec::new();
+    let mut tail = plist;
+    while tail.is_cons() {
+        names.push(tail.cons_car());
+        tail = tail.cons_cdr();
+        if tail.is_cons() {
+            tail = tail.cons_cdr();
+        } else {
+            break;
+        }
+    }
+    names
+}
+
+fn list_names_for_remove(list: Value) -> Vec<Value> {
+    let mut names = Vec::new();
+    let mut tail = list;
+    while tail.is_cons() {
+        names.push(tail.cons_car());
+        tail = tail.cons_cdr();
+    }
+    names
+}
+
 /// Convert ordered property pairs to an Elisp plist.
 /// Preserves the order from the property interval (matching GNU Emacs behavior).
 fn ordered_pairs_to_plist(pairs: &[(Value, Value)]) -> Value {
@@ -1405,7 +1430,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
     expect_max_args("remove-text-properties", &args, 4)?;
     let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
-    let pairs = plist_pairs(&args[2])?;
+    let names = plist_names_for_remove(args[2]);
 
     if let Some(str_val) = is_string_object(args.get(3)) {
         let s = str_val
@@ -1417,7 +1442,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_removed = false;
-        for (name, _val) in pairs {
+        for name in names {
             if table.remove_property(char_beg, char_end, name) {
                 any_removed = true;
             }
@@ -1437,7 +1462,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         return Ok(Value::NIL);
     };
     let mut any_removed = false;
-    for (name, _val) in pairs {
+    for name in names {
         if buffers
             .remove_buffer_text_property(buf_id, byte_beg, byte_end, name)
             .unwrap_or(false)
@@ -1541,8 +1566,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
     expect_max_args("remove-list-of-text-properties", &args, 4)?;
     let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
-    let names = list_to_vec(&args[2])
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[2]]))?;
+    let names = list_names_for_remove(args[2]);
 
     if let Some(str_val) = is_string_object(args.get(3)) {
         let s = str_val
@@ -1554,12 +1578,10 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut changed = false;
-        for name_val in names {
-            let name = expect_property_key(&name_val)?;
-            if table.get_property(char_beg, name).is_some() {
+        for name in names {
+            if table.remove_property(char_beg, char_end, name) {
                 changed = true;
             }
-            table.remove_property(char_beg, char_end, name);
         }
         save_string_props_for_value(str_val, table);
         return Ok(if changed { Value::T } else { Value::NIL });
@@ -1577,8 +1599,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
     };
 
     let mut changed = false;
-    for name_val in names {
-        let name = expect_property_key(&name_val)?;
+    for name in names {
         let mut cursor = byte_beg;
         while cursor < byte_end {
             let Some(buf) = buffers.get(buf_id) else {
