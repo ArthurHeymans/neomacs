@@ -6,7 +6,9 @@ use std::ffi::{CStr, CString};
 use std::fmt::Write as _;
 
 use super::chartable::{bool_vector_length, char_table_external_slots};
-use super::intern::{SymId, lookup_interned_lisp_string, resolve_sym, resolve_sym_lisp_string};
+use super::intern::{
+    SymId, intern, lookup_interned_lisp_string, resolve_sym, resolve_sym_lisp_string,
+};
 use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
 use super::value::{
     HashKey, HashTableTest, LispHashTable, StringTextPropertyRun, Value,
@@ -1024,6 +1026,41 @@ fn append_bytecode_literal_bytes(value: &Value, out: &mut Vec<u8>, options: Prin
     }
 }
 
+#[inline]
+fn symbol_id_is(id: SymId, name: &str) -> bool {
+    id == intern(name)
+}
+
+#[inline]
+fn value_is_symbol_named(value: &Value, name: &str) -> bool {
+    matches!(value.kind(), ValueKind::Symbol(id) if symbol_id_is(id, name))
+}
+
+#[derive(Clone, Copy)]
+enum SymbolShorthand {
+    Quote,
+    Function,
+    Backquote,
+    Comma,
+    CommaAt,
+}
+
+fn symbol_shorthand(id: SymId) -> Option<SymbolShorthand> {
+    if symbol_id_is(id, "quote") {
+        Some(SymbolShorthand::Quote)
+    } else if symbol_id_is(id, "function") {
+        Some(SymbolShorthand::Function)
+    } else if symbol_id_is(id, "`") {
+        Some(SymbolShorthand::Backquote)
+    } else if symbol_id_is(id, ",") {
+        Some(SymbolShorthand::Comma)
+    } else if symbol_id_is(id, ",@") {
+        Some(SymbolShorthand::CommaAt)
+    } else {
+        None
+    }
+}
+
 /// Try to produce a shorthand form (quote, function, backquote, etc.) using
 /// stateful printing. Returns `Some(string)` on success.
 fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Option<String> {
@@ -1033,11 +1070,11 @@ fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Optio
     }
 
     let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
+        ValueKind::Symbol(id) => id,
         _ => return None,
     };
 
-    if head == "make-hash-table-from-literal" {
+    if symbol_id_is(head, "make-hash-table-from-literal") {
         if let Some(payload) = quote_payload_stateful(&items[1]) {
             let mut out = String::from("#s");
             write_value_stateful(&payload, &mut out, state);
@@ -1046,23 +1083,22 @@ fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Optio
         return None;
     }
 
-    let (prefix, nested_options) = match head {
-        "quote" => ("'", state.options),
-        "function" => ("#'", state.options),
-        "`" => ("`", state.options.enter_backquote()),
-        "," => {
+    let (prefix, nested_options) = match symbol_shorthand(head)? {
+        SymbolShorthand::Quote => ("'", state.options),
+        SymbolShorthand::Function => ("#'", state.options),
+        SymbolShorthand::Backquote => ("`", state.options.enter_backquote()),
+        SymbolShorthand::Comma => {
             if !state.options.allow_unquote_shorthand() {
                 return None;
             }
             (",", state.options.exit_backquote())
         }
-        ",@" => {
+        SymbolShorthand::CommaAt => {
             if !state.options.allow_unquote_shorthand() {
                 return None;
             }
             (",@", state.options.exit_backquote())
         }
-        _ => return None,
     };
 
     let saved_options = state.options;
@@ -1078,10 +1114,7 @@ fn quote_payload_stateful(value: &Value) -> Option<Value> {
     if items.len() != 2 {
         return None;
     }
-    match items[0].kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "quote" => Some(items[1]),
-        _ => None,
-    }
+    value_is_symbol_named(&items[0], "quote").then_some(items[1])
 }
 
 /// Print a cons cell (list elements) with stateful print support.
@@ -1440,10 +1473,10 @@ fn print_list_shorthand_with_buffers(
         return None;
     }
     let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
+        ValueKind::Symbol(id) => id,
         _ => return None,
     };
-    if head == "make-hash-table-from-literal" {
+    if symbol_id_is(head, "make-hash-table-from-literal") {
         if let Some(payload) = quote_payload(&items[1]) {
             return Some(format!(
                 "#s{}",
@@ -1452,23 +1485,22 @@ fn print_list_shorthand_with_buffers(
         }
         return None;
     }
-    let (prefix, nested_options) = match head {
-        "quote" => ("'", options),
-        "function" => ("#'", options),
-        "`" => ("`", options.enter_backquote()),
-        "," => {
+    let (prefix, nested_options) = match symbol_shorthand(head)? {
+        SymbolShorthand::Quote => ("'", options),
+        SymbolShorthand::Function => ("#'", options),
+        SymbolShorthand::Backquote => ("`", options.enter_backquote()),
+        SymbolShorthand::Comma => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (",", options.exit_backquote())
         }
-        ",@" => {
+        SymbolShorthand::CommaAt => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (",@", options.exit_backquote())
         }
-        _ => return None,
     };
     Some(format!(
         "{prefix}{}",
@@ -2245,34 +2277,33 @@ fn print_list_shorthand(value: &Value, options: PrintOptions) -> Option<String> 
     }
 
     let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
+        ValueKind::Symbol(id) => id,
         _ => return None,
     };
 
-    if head == "make-hash-table-from-literal" {
+    if symbol_id_is(head, "make-hash-table-from-literal") {
         if let Some(payload) = quote_payload(&items[1]) {
             return Some(format!("#s{}", print_value_with_options(&payload, options)));
         }
         return None;
     }
 
-    let (prefix, nested_options) = match head {
-        "quote" => ("'", options),
-        "function" => ("#'", options),
-        "`" => ("`", options.enter_backquote()),
-        "," => {
+    let (prefix, nested_options) = match symbol_shorthand(head)? {
+        SymbolShorthand::Quote => ("'", options),
+        SymbolShorthand::Function => ("#'", options),
+        SymbolShorthand::Backquote => ("`", options.enter_backquote()),
+        SymbolShorthand::Comma => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (",", options.exit_backquote())
         }
-        ",@" => {
+        SymbolShorthand::CommaAt => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (",@", options.exit_backquote())
         }
-        _ => return None,
     };
 
     Some(format!(
@@ -2288,11 +2319,11 @@ fn print_list_shorthand_bytes(value: &Value, options: PrintOptions) -> Option<Ve
     }
 
     let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
+        ValueKind::Symbol(id) => id,
         _ => return None,
     };
 
-    if head == "make-hash-table-from-literal" {
+    if symbol_id_is(head, "make-hash-table-from-literal") {
         let payload = quote_payload(&items[1])?;
         let mut out = Vec::new();
         out.extend_from_slice(b"#s");
@@ -2300,23 +2331,22 @@ fn print_list_shorthand_bytes(value: &Value, options: PrintOptions) -> Option<Ve
         return Some(out);
     }
 
-    let (prefix, nested_options): (&[u8], PrintOptions) = match head {
-        "quote" => (b"'", options),
-        "function" => (b"#'", options),
-        "`" => (b"`", options.enter_backquote()),
-        "," => {
+    let (prefix, nested_options): (&[u8], PrintOptions) = match symbol_shorthand(head)? {
+        SymbolShorthand::Quote => (b"'", options),
+        SymbolShorthand::Function => (b"#'", options),
+        SymbolShorthand::Backquote => (b"`", options.enter_backquote()),
+        SymbolShorthand::Comma => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (b",", options.exit_backquote())
         }
-        ",@" => {
+        SymbolShorthand::CommaAt => {
             if !options.allow_unquote_shorthand() {
                 return None;
             }
             (b",@", options.exit_backquote())
         }
-        _ => return None,
     };
 
     let mut out = Vec::new();
@@ -2330,10 +2360,7 @@ fn quote_payload(value: &Value) -> Option<Value> {
     if items.len() != 2 {
         return None;
     }
-    match items[0].kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "quote" => Some(items[1]),
-        _ => None,
-    }
+    value_is_symbol_named(&items[0], "quote").then_some(items[1])
 }
 
 fn print_cons(value: &Value, out: &mut String, options: PrintOptions) {

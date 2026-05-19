@@ -20,8 +20,8 @@ use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_ST
 use super::error::*;
 use super::interactive::InteractiveRegistry;
 use super::intern::{
-    NameId, SymId, intern, intern_uninterned, is_canonical_id, is_keyword_id, resolve_name,
-    resolve_sym, resolve_sym_metadata, symbol_name_id,
+    NIL_SYM_ID, NameId, SymId, T_SYM_ID, intern, intern_uninterned, is_canonical_id, is_keyword_id,
+    resolve_name, resolve_sym, resolve_sym_metadata, symbol_name_id,
 };
 use super::keymap::{
     list_keymap_define, list_keymap_set_parent, make_list_keymap, make_sparse_list_keymap,
@@ -976,11 +976,9 @@ fn is_runtime_dynamically_special(obarray: &Obarray, sym_id: SymId) -> bool {
 }
 
 fn symbol_sets_constant_error(sym_id: SymId) -> Option<&'static str> {
-    match resolve_sym(sym_id) {
-        "nil" => Some("nil"),
-        "t" => Some("t"),
-        _ => None,
-    }
+    (sym_id == NIL_SYM_ID)
+        .then_some("nil")
+        .or_else(|| (sym_id == T_SYM_ID).then_some("t"))
 }
 
 pub(crate) fn sync_features_variable_in_state(obarray: &mut Obarray, features: &[SymId]) {

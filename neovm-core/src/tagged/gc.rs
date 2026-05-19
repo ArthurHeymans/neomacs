@@ -27,6 +27,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::alloc::{self, Layout};
 use std::cell::Cell;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteTrackingMode {
@@ -127,6 +128,12 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+static NEXT_TAGGED_HEAP_ID: AtomicUsize = AtomicUsize::new(1);
+
+fn next_tagged_heap_identity() -> usize {
+    NEXT_TAGGED_HEAP_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Set the thread-local tagged heap pointer.
 pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP.with(|h| h.set(heap as *mut TaggedHeap));
@@ -142,7 +149,7 @@ pub fn set_tagged_heap(heap: &mut TaggedHeap) {
 pub(crate) fn current_tagged_heap_identity() -> Option<usize> {
     TAGGED_HEAP.with(|h| {
         let ptr = h.get();
-        (!ptr.is_null()).then_some(ptr as usize)
+        (!ptr.is_null()).then(|| unsafe { (*ptr).identity() })
     })
 }
 
@@ -561,6 +568,12 @@ impl MappedStringObject {
 
 /// The tagged pointer heap. Owns all heap-allocated Lisp objects.
 pub struct TaggedHeap {
+    /// Process-unique heap identity used by side tables that carry GC-managed
+    /// Lisp values.  It deliberately does not use this heap's address: boxed
+    /// heaps are routinely dropped and recreated by snapshot-based tests, and
+    /// the allocator may reuse an address for a different heap lifetime.
+    identity: usize,
+
     /// Cons cell block allocator.
     cons_blocks: Vec<ConsBlock>,
     /// Base-address lookup for O(1) cons block ownership and marking.
@@ -660,6 +673,7 @@ pub struct TaggedHeap {
 impl TaggedHeap {
     pub fn new() -> Self {
         Self {
+            identity: next_tagged_heap_identity(),
             cons_blocks: Vec::new(),
             cons_block_index_by_base: FxHashMap::default(),
             mark_cons_block_cache: None,
@@ -692,6 +706,10 @@ impl TaggedHeap {
             gc_collections: 0,
             gc_total_elapsed_us: 0,
         }
+    }
+
+    pub(crate) fn identity(&self) -> usize {
+        self.identity
     }
 
     pub fn set_stack_bottom(&mut self, bottom: *const u8) {
@@ -2177,6 +2195,16 @@ impl Drop for TaggedHeap {
 #[cfg(test)]
 mod ownership_tests {
     use super::*;
+
+    #[test]
+    fn heap_identity_is_unique_across_heap_lifetimes() {
+        crate::test_utils::init_test_tracing();
+
+        let first_id = TaggedHeap::new().identity();
+        let second_id = TaggedHeap::new().identity();
+
+        assert_ne!(first_id, second_id);
+    }
 
     #[test]
     fn ordinary_non_cons_ownership_index_tracks_sweep() {
