@@ -7008,6 +7008,25 @@ fn provide_stores_subfeatures_list() {
 }
 
 #[test]
+fn provide_nil_subfeatures_preserves_existing_subfeatures() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(provide 'test-sf-nil '(sub-a sub-b))
+           (provide 'test-sf-nil nil)
+           (featurep 'test-sf-nil 'sub-a)
+           (get 'test-sf-nil 'subfeatures)
+           (condition-case err
+               (provide 'test-sf-nil 1)
+             (error (car err)))"#,
+    );
+    assert_eq!(results[0], "OK test-sf-nil");
+    assert_eq!(results[1], "OK test-sf-nil");
+    assert_eq!(results[2], "OK t");
+    assert_eq!(results[3], "OK (sub-a sub-b)");
+    assert_eq!(results[4], "OK wrong-type-argument");
+}
+
+#[test]
 fn provide_runs_after_load_alist_callbacks() {
     crate::test_utils::init_test_tracing();
     // GNU Fprovide runs (mapc #'funcall (cdr (assq feature after-load-alist)))

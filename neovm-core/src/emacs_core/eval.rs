@@ -1052,6 +1052,16 @@ pub(crate) fn provide_value_in_state(
     })?;
     let name = resolve_sym(sym_id).to_owned();
     if let Some(value) = subfeatures {
+        if crate::emacs_core::value::list_to_vec(&value).is_none() {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("listp"), value],
+            ));
+        }
+        if value.is_nil() {
+            add_feature_in_state(obarray, features, &name);
+            return Ok(feature);
+        }
         obarray.put_property(&name, "subfeatures", value)?;
     }
     add_feature_in_state(obarray, features, &name);
