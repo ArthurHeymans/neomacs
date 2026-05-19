@@ -6072,12 +6072,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
-        "inotify-allocated-p",
-        |_ctx, args| builtin_inotify_allocated_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "inotify-rm-watch",
         |_ctx, args| builtin_inotify_rm_watch(args),
         1,
@@ -6089,12 +6083,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "inotify-watch-list",
-        |_ctx, args| builtin_inotify_watch_list(args),
-        0,
-        Some(0),
-    );
+    if INOTIFY_FEATURE_AVAILABLE {
+        let _ = ctx.provide_value(Value::symbol("inotify"), None);
+    }
     ctx.defsubr("lock-buffer", super::filelock::builtin_lock_buffer, 0, None);
     ctx.defsubr("lock-file", super::filelock::builtin_lock_file, 1, Some(1));
     ctx.defsubr(
@@ -6975,30 +6966,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "remember-mouse-glyph",
         |_ctx, args| builtin_remember_mouse_glyph(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "lookup-image",
-        |_ctx, args| builtin_lookup_image(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "imagemagick-types",
-        |_ctx, args| builtin_imagemagick_types(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "font-drive-otf",
-        |_ctx, args| builtin_font_drive_otf(args),
-        6,
-        Some(6),
-    );
-    ctx.defsubr(
-        "font-otf-alternates",
-        |_ctx, args| builtin_font_otf_alternates(args),
         0,
         None,
     );

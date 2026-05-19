@@ -1685,6 +1685,13 @@ pub struct Context {
     last_redisplay_signature: Option<RedisplaySignature>,
     /// Recursion depth counter.
     pub(crate) depth: usize,
+    /// Bytecode call depth counted for GNU `lisp_eval_depth` parity.
+    ///
+    /// Keep this separate from `depth`, which also drives the native Rust
+    /// stack-growth probe cadence.  GNU's `lisp_eval_depth` includes Bcall
+    /// frames, but Neomacs' stack-growth scheduling predates that accounting
+    /// and must not be perturbed by bytecode call frames.
+    pub(crate) bytecode_call_depth: usize,
     eval_counter: u64,
     /// Maximum recursion depth.
     pub(crate) max_depth: usize,
@@ -4360,6 +4367,7 @@ impl Context {
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
+            bytecode_call_depth: 0,
             eval_counter: 0,
             max_depth: 1600,
             gc_pending: false,
@@ -4525,6 +4533,7 @@ impl Context {
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
+            bytecode_call_depth: 0,
             eval_counter: 0,
             max_depth: 1600,
             gc_pending: false,
@@ -6698,6 +6707,7 @@ impl Context {
         };
         self.condition_stack.clear();
         self.depth = 0;
+        self.bytecode_call_depth = 0;
         // Named-call resolution is a runtime memoization layer, not part of
         // GNU's persisted Lisp surface. If it survives bootstrap/pdump
         // boundaries it can disagree with restored function cells while still
@@ -6714,6 +6724,7 @@ impl Context {
             && self.vm_root_frames.is_empty()
             && self.condition_stack.is_empty()
             && self.depth == 0
+            && self.bytecode_call_depth == 0
     }
 
     #[cfg(test)]

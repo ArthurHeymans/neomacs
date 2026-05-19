@@ -2688,7 +2688,11 @@ pub fn list_keymap_define_seq(keymap: Value, events: &[Value], def: Value) -> Re
             current_map = prefix_map;
         } else {
             // Non-prefix binding found — error (matching GNU Emacs)
-            return Err(format!("Key sequence starts with non-prefix key"));
+            let full = describe_event_sequence(events);
+            let prefix = describe_event_sequence(&events[..=i]);
+            return Err(format!(
+                "Key sequence {full} starts with non-prefix key {prefix}"
+            ));
         }
     }
     Ok(())
@@ -2754,12 +2758,15 @@ pub fn list_keymap_define_seq_in_obarray_ex(
             list_keymap_define(current_map, *event, prefix_map);
             current_map = prefix_map;
         } else {
-            // Non-prefix binding found. GNU Emacs `define_as_prefix` creates
-            // a new prefix keymap even when a non-keymap binding exists at
-            // this intermediate position. Match that behavior (gap #10).
-            let prefix_map = make_sparse_list_keymap();
-            list_keymap_define(current_map, *event, prefix_map);
-            current_map = prefix_map;
+            // GNU `Fdefine_key` only calls `define_as_prefix` after
+            // `access_keymap` returns nil.  Existing non-prefix bindings are
+            // errors, even though a fresh undefined key is promoted to a new
+            // prefix keymap.
+            let full = describe_event_sequence(events);
+            let prefix = describe_event_sequence(&events[..=i]);
+            return Err(format!(
+                "Key sequence {full} starts with non-prefix key {prefix}"
+            ));
         }
     }
     Ok(())

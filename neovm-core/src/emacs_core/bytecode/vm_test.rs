@@ -1605,6 +1605,41 @@ fn vm_bytecoded_call_executes_heap_bytecode_without_cloning_function() {
     );
 }
 
+#[test]
+fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    eval.set_max_depth(100);
+    eval.set_variable("max-lisp-eval-depth", Value::fixnum(100));
+
+    let recurse_sym = intern("vm-bcall-depth-recurse");
+    let mut recurse = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let recurse_idx = recurse.add_constant(Value::from_sym_id(recurse_sym));
+    recurse.ops = vec![Op::Constant(recurse_idx), Op::Call(0), Op::Return];
+    recurse.max_stack = 1;
+    eval.obarray
+        .set_symbol_function_id(recurse_sym, Value::make_bytecode(recurse.clone()));
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&recurse, vec![])
+    };
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(resolve_sym(sig.symbol), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")]
+            );
+        }
+        other => panic!("expected bytecode max-depth error, got {other:?}"),
+    }
+}
+
 fn vm_unbind_restores_saved_excursion_point() {
     let (result, buffers, (buffer_id, saved_point)) = execute_manual_vm_built(|buffers| {
         let buffer_id = buffers.create_buffer("excursion");
@@ -6270,8 +6305,8 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                    (list (consp w)
                          (inotify-valid-p w)
                          (inotify-rm-watch w)))
-                 (null (inotify-watch-list))
-                 (null (inotify-allocated-p))
+                 (not (fboundp 'inotify-watch-list))
+                 (not (fboundp 'inotify-allocated-p))
                  (null (dbus-make-inhibitor-lock "session" "app"))
                  (condition-case err
                      (dbus-close-inhibitor-lock nil)

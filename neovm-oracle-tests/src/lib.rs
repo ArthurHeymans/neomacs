@@ -1026,6 +1026,8 @@ mod indent_to;
 mod indirect_function;
 #[path = "inotify-debug-availability-semantics.rs"]
 mod inotify_debug_availability_semantics;
+#[path = "inotify-public-semantics.rs"]
+mod inotify_public_semantics;
 mod insert;
 #[path = "insert-advanced.rs"]
 mod insert_advanced;

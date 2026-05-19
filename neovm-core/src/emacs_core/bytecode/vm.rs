@@ -192,6 +192,31 @@ impl<'a> Vm<'a> {
         stacker::maybe_grow(VM_STACK_RED_ZONE, VM_STACK_SEGMENT, || f(self))
     }
 
+    fn with_bytecode_call_depth<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, Flow>,
+    ) -> Result<T, Flow> {
+        self.ctx.bytecode_call_depth += 1;
+        let lisp_eval_depth = self.ctx.depth.saturating_add(self.ctx.bytecode_call_depth);
+        if lisp_eval_depth > self.ctx.max_depth {
+            if self.ctx.max_depth < 100 {
+                self.ctx.max_depth = 100;
+            }
+            let lisp_eval_depth = self.ctx.depth.saturating_add(self.ctx.bytecode_call_depth);
+            if lisp_eval_depth > self.ctx.max_depth {
+                self.ctx.bytecode_call_depth -= 1;
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
+                ));
+            }
+        }
+
+        let result = f(self);
+        self.ctx.bytecode_call_depth -= 1;
+        result
+    }
+
     #[inline(always)]
     fn with_vm_root_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         let scope = self.ctx.save_vm_roots();
@@ -917,12 +942,17 @@ impl<'a> Vm<'a> {
                     let writeback_args = writeback_names
                         .as_ref()
                         .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
-                    let result = if writeback_names.is_none() {
-                        vm_try!(self.call_function_from_stack_args(func_val, args_start, n, true,))
-                    } else {
-                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                        vm_try!(self.call_function(func_val, args))
-                    };
+                    let result =
+                        if writeback_names.is_none() {
+                            vm_try!(self.with_bytecode_call_depth(|vm| {
+                                vm.call_function_from_stack_args(func_val, args_start, n, true)
+                            }))
+                        } else {
+                            let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                            vm_try!(self.with_bytecode_call_depth(|vm| {
+                                vm.call_function(func_val, args)
+                            }))
+                        };
                     if let (Some((called_name, alias_target)), Some(writeback_args)) =
                         (writeback_names.as_ref(), writeback_args.as_ref())
                     {
