@@ -3091,9 +3091,7 @@ pub(crate) fn builtin_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalRe
     }
     let filename = expect_lisp_string_strict(&args[0])?;
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
-    let nofollow = args
-        .get(1)
-        .is_some_and(|flag| flag.as_symbol_name() == Some("nofollow"));
+    let nofollow = args.get(1).is_some_and(|flag| !flag.is_nil());
     match file_modes_path(&lisp_file_name_to_path_buf(&filename), nofollow) {
         Some(mode) => Ok(Value::fixnum(mode as i64)),
         None => Ok(Value::NIL),
@@ -3118,9 +3116,7 @@ pub(crate) fn builtin_set_file_modes(eval: &mut Context, args: Vec<Value>) -> Ev
     let filename = expect_lisp_string_strict(&args[0])?;
     let resolved = resolve_filename_lisp_for_eval(eval, &filename);
     let mode = expect_fixnum(&args[1])?;
-    let nofollow = args
-        .get(2)
-        .is_some_and(|flag| flag.as_symbol_name() == Some("nofollow"));
+    let nofollow = args.get(2).is_some_and(|flag| !flag.is_nil());
     set_file_modes_path(&lisp_file_name_to_path_buf(&resolved), mode, nofollow).map_err(|err| {
         signal_file_action_error_value(err, "Doing chmod", Value::heap_string(resolved))
     })?;

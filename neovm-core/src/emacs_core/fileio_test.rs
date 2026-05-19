@@ -1862,6 +1862,45 @@ fn test_builtin_file_modes_semantics() {
 
 #[cfg(unix)]
 #[test]
+fn builtin_file_modes_treats_any_non_nil_flag_as_nofollow() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir =
+        std::env::temp_dir().join(format!("neovm-file-modes-nofollow-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir(&dir).unwrap();
+    let target = dir.join("target");
+    let link = dir.join("link");
+    fs::write(&target, b"x").unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let link_name = Value::string(link.to_string_lossy());
+    let nofollow = call_fileio_builtin!(
+        builtin_file_modes,
+        vec![link_name, Value::symbol("nofollow")]
+    )
+    .unwrap();
+    let arbitrary = call_fileio_builtin!(
+        builtin_file_modes,
+        vec![link_name, Value::symbol("anything-non-nil")]
+    )
+    .unwrap();
+    let t_flag = call_fileio_builtin!(builtin_file_modes, vec![link_name, Value::T]).unwrap();
+    let follow = call_fileio_builtin!(builtin_file_modes, vec![link_name, Value::NIL]).unwrap();
+
+    assert_eq!(arbitrary, nofollow);
+    assert_eq!(t_flag, nofollow);
+    assert_eq!(follow.as_fixnum().unwrap() & 0o7777, 0o600);
+
+    let _ = fs::remove_file(&link);
+    let _ = fs::remove_file(&target);
+    let _ = fs::remove_dir(&dir);
+}
+
+#[cfg(unix)]
+#[test]
 fn builtin_file_modes_handles_raw_unibyte_paths() {
     crate::test_utils::init_test_tracing();
     let path = raw_temp_path(b"neovm-file-modes-\xFF");
