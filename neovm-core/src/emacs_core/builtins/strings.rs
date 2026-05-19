@@ -1271,13 +1271,43 @@ fn normalize_exp_notation(s: &str) -> String {
     }
 }
 
+fn ensure_float_alternate_decimal(mut s: String) -> String {
+    let mantissa_end = s.find(['e', 'E']).unwrap_or(s.len());
+    if !s[..mantissa_end].contains('.') {
+        s.insert(mantissa_end, '.');
+    }
+    s
+}
+
 /// Format a float with the given spec.
 fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
     let prec = spec.precision.unwrap_or(6);
+    let alternate = spec.sharp && f.is_finite();
     let s = match spec.conversion {
-        'f' => format!("{:.prec$}", f, prec = prec),
-        'e' => normalize_exp_notation(&format!("{:.prec$e}", f, prec = prec)),
-        'E' => normalize_exp_notation(&format!("{:.prec$E}", f, prec = prec)),
+        'f' => {
+            let s = format!("{:.prec$}", f, prec = prec);
+            if alternate {
+                ensure_float_alternate_decimal(s)
+            } else {
+                s
+            }
+        }
+        'e' => {
+            let s = normalize_exp_notation(&format!("{:.prec$e}", f, prec = prec));
+            if alternate {
+                ensure_float_alternate_decimal(s)
+            } else {
+                s
+            }
+        }
+        'E' => {
+            let s = normalize_exp_notation(&format!("{:.prec$E}", f, prec = prec));
+            if alternate {
+                ensure_float_alternate_decimal(s)
+            } else {
+                s
+            }
+        }
         'g' | 'G' => {
             let p = if prec == 0 { 1 } else { prec };
             // %g uses %e if exponent < -4 or >= precision, else %f
@@ -1291,7 +1321,7 @@ fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
                 // Use %e style, strip trailing zeros
                 let mut s = format!("{:.prec$e}", f, prec = p.saturating_sub(1));
                 // Strip trailing zeros before 'e'
-                if let Some(e_pos) = s.rfind('e') {
+                if !alternate && let Some(e_pos) = s.rfind('e') {
                     let mantissa = &s[..e_pos];
                     let exp_part = &s[e_pos..];
                     let trimmed = mantissa.trim_end_matches('0');
@@ -1302,15 +1332,21 @@ fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
                 if spec.conversion == 'G' {
                     s = s.replace('e', "E");
                 }
+                if alternate {
+                    s = ensure_float_alternate_decimal(s);
+                }
                 s
             } else {
                 // Use %f style with appropriate decimals
                 let decimal_places = (p as i32 - exp_val - 1).max(0) as usize;
                 let mut s = format!("{:.prec$}", f, prec = decimal_places);
                 // Strip trailing zeros after decimal point
-                if s.contains('.') {
+                if !alternate && s.contains('.') {
                     s = s.trim_end_matches('0').to_string();
                     s = s.trim_end_matches('.').to_string();
+                }
+                if alternate {
+                    s = ensure_float_alternate_decimal(s);
                 }
                 s
             }

@@ -12384,6 +12384,25 @@ fn format_matches_gnu_numbered_fields_and_integer_aliases() {
         binary.as_runtime_string_owned().as_deref(),
         Some("0b101 0B101")
     );
+
+    let alternate_floats = dispatch_builtin(
+        &mut eval,
+        "format",
+        vec![
+            Value::string("%#.0f %#.0g %#.3g %#g %#.0e"),
+            Value::make_float(3.4),
+            Value::make_float(3.4),
+            Value::make_float(3.0),
+            Value::make_float(3.0),
+            Value::make_float(3.4),
+        ],
+    )
+    .expect("format should resolve")
+    .expect("alternate float formats should evaluate");
+    assert_eq!(
+        alternate_floats.as_runtime_string_owned().as_deref(),
+        Some("3. 3. 3.00 3.00000 3.e+00")
+    );
 }
 
 /// `user-error` is an Elisp function in GNU (subr.el:535), not a C builtin.
