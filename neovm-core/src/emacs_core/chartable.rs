@@ -1520,6 +1520,7 @@ pub(crate) fn for_each_char_table_mapping(
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(shared_range);
     let result = (|| {
+        let mut last_emitted_end = None;
         for run in ct_map_char_table_runs(table) {
             shared_range.set_car(Value::fixnum(run.start));
             shared_range.set_cdr(Value::fixnum(run.end));
@@ -1533,6 +1534,17 @@ pub(crate) fn for_each_char_table_mapping(
             };
             let value = decode_unicode_property_map_value(*table, run.value);
             f(key, value)?;
+            last_emitted_end = Some(run.end);
+        }
+
+        // GNU map_char_table keeps mutating the same range cons while it
+        // walks the final nil span after the last non-nil value.  Lisp code
+        // that retained a range key observes that final mutation.
+        if let Some(end) = last_emitted_end
+            && end < MAX_CHAR
+        {
+            shared_range.set_car(Value::fixnum(end + 1));
+            shared_range.set_cdr(Value::fixnum(MAX_CHAR));
         }
         Ok(())
     })();

@@ -6925,18 +6925,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "internal-decode-string-utf-8",
-        |_ctx, args| builtin_internal_decode_string_utf_8(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-encode-string-utf-8",
-        |_ctx, args| builtin_internal_encode_string_utf_8(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
         "overlay-tree",
         |_ctx, args| builtin_overlay_tree(args),
         0,

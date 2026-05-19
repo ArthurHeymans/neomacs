@@ -870,19 +870,16 @@ pub(crate) fn builtin_hash_table_count(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_char_to_string(args: Vec<Value>) -> EvalResult {
     expect_args("char-to-string", &args, 1)?;
     let code = expect_character_code(&args[0])? as u32;
-    if crate::emacs_core::emacs_char::char_byte8_p(code) {
-        // Raw byte → unibyte string with the actual byte value
-        let byte = crate::emacs_core::emacs_char::char_to_byte8(code);
-        Ok(Value::heap_string(
-            crate::heap_types::LispString::from_unibyte(vec![byte]),
-        ))
-    } else if code <= 0x7f {
+    if code <= 0x7f {
         // ASCII → unibyte
         Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(vec![code as u8]),
         ))
     } else {
-        // Non-ASCII Unicode → multibyte
+        // GNU Fchar_to_string uses CHAR_STRING followed by
+        // make_string_from_bytes.  Non-ASCII Unicode, extended Emacs
+        // characters, and raw-byte characters therefore all produce
+        // multibyte strings containing Emacs-internal bytes.
         let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
         let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         Ok(Value::heap_string(
