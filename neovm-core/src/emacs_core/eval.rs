@@ -2844,14 +2844,17 @@ impl Context {
         obarray.set_symbol_value("float-pi", Value::make_float(std::f64::consts::PI));
         obarray.set_symbol_value("pi", Value::make_float(std::f64::consts::PI));
         obarray.set_symbol_value("emacs-version", Value::string("31.0.50"));
+        obarray.make_special("emacs-version");
         obarray.set_symbol_value(
             "emacs-copyright",
             Value::string("Copyright (C) 2026 Free Software Foundation, Inc."),
         );
+        obarray.make_special("emacs-copyright");
         obarray.set_symbol_value("emacs-major-version", Value::fixnum(31));
         obarray.set_symbol_value("emacs-minor-version", Value::fixnum(0));
         obarray.set_symbol_value("emacs-build-number", Value::fixnum(1));
         obarray.set_symbol_value("system-type", Value::symbol("gnu/linux"));
+        obarray.make_special("system-type");
         obarray.set_symbol_value("system-uses-terminfo", Value::T);
         // GNU Emacs uses unibyte for default-directory during dump because
         // the locale isn't set up yet (see init_buffer in buffer.c).
@@ -2876,6 +2879,7 @@ impl Context {
                 Value::string("--batch"),
             ]),
         );
+        obarray.make_special("command-line-args");
         obarray.set_symbol_value("command-line-args-left", Value::NIL);
         obarray.set_symbol_value("command-line-functions", Value::NIL);
         obarray.set_symbol_value("command-line-processed", Value::T);
@@ -2900,8 +2904,11 @@ impl Context {
             .map(|d| format!("{}/", d.to_string_lossy()))
             .unwrap_or_else(|| "./".to_string());
         obarray.set_symbol_value("invocation-name", Value::string(invocation_name));
+        obarray.make_special("invocation-name");
         obarray.set_symbol_value("invocation-directory", Value::string(invocation_directory));
+        obarray.make_special("invocation-directory");
         obarray.set_symbol_value("installation-directory", Value::NIL);
+        obarray.make_special("installation-directory");
         obarray.set_symbol_value("configure-info-directory", Value::NIL);
         // GNU keyboard.c: internal--top-level-message for command loop entry
         obarray.set_symbol_value(
@@ -2932,31 +2939,44 @@ impl Context {
             obarray.make_special(name);
         }
         obarray.set_symbol_value("path-separator", Value::string(":"));
+        obarray.make_special("path-separator");
         obarray.set_symbol_value("shared-game-score-directory", Value::NIL);
         obarray.set_symbol_value("system-messages-locale", Value::NIL);
+        obarray.make_special("system-messages-locale");
         obarray.set_symbol_value("system-time-locale", Value::NIL);
+        obarray.make_special("system-time-locale");
         obarray.set_symbol_value("before-init-time", Value::NIL);
+        obarray.make_special("before-init-time");
         obarray.set_symbol_value("after-init-time", Value::NIL);
+        obarray.make_special("after-init-time");
         obarray.set_symbol_value(
             "system-configuration",
             super::builtins_extra::system_configuration_value(),
         );
+        obarray.make_special("system-configuration");
         obarray.set_symbol_value(
             "system-configuration-options",
             super::builtins_extra::system_configuration_options_value(),
         );
+        obarray.make_special("system-configuration-options");
         obarray.set_symbol_value(
             "system-configuration-features",
             super::builtins_extra::system_configuration_features_value(),
         );
+        obarray.make_special("system-configuration-features");
         obarray.set_symbol_value("system-name", Value::string("localhost"));
+        obarray.make_special("system-name");
         obarray.set_symbol_value("user-full-name", Value::string("unknown"));
+        obarray.make_special("user-full-name");
         obarray.set_symbol_value("user-login-name", Value::string("unknown"));
+        obarray.make_special("user-login-name");
         obarray.set_symbol_value("user-real-login-name", Value::string("unknown"));
+        obarray.make_special("user-real-login-name");
         obarray.set_symbol_value(
             "operating-system-release",
             super::builtins_extra::operating_system_release_value(),
         );
+        obarray.make_special("operating-system-release");
         // GNU `keyboard.c` defines this with DEFVAR_LISP, so lexical-binding
         // Lisp must treat it as dynamically scoped.
         obarray.set_symbol_value("delayed-warnings-list", Value::NIL);
@@ -3236,6 +3256,7 @@ impl Context {
             "report-emacs-bug-address",
             Value::string("bug-gnu-emacs@gnu.org"),
         );
+        obarray.make_special("report-emacs-bug-address");
         obarray.set_symbol_value("yes-or-no-prompt", Value::string("(yes or no) "));
         // Float-valued C variables
         obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
@@ -3892,6 +3913,7 @@ impl Context {
         obarray.set_symbol_value("overriding-local-map-menu-flag", Value::NIL);
         obarray.make_special("overriding-local-map-menu-flag");
         obarray.set_symbol_value("overriding-plist-environment", Value::NIL);
+        obarray.make_special("overriding-plist-environment");
         obarray.set_symbol_value("overriding-terminal-local-map", Value::NIL);
         // GNU uses DEFVAR_KBOARD here. NeoVM does not yet split keyboard state
         // per terminal, so model it as a dynamically scoped runtime variable.
@@ -3923,6 +3945,7 @@ impl Context {
 
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);
+        obarray.make_special("purify-flag");
         obarray.set_symbol_value("max-lisp-eval-depth", Value::fixnum(1600));
         obarray.make_special("max-lisp-eval-depth");
         obarray.set_symbol_value("lisp-eval-depth-reserve", Value::fixnum(200));

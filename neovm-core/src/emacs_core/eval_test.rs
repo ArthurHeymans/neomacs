@@ -9726,6 +9726,42 @@ fn delayed_warning_defvars_are_special_and_dynamically_bound_like_gnu() {
 }
 
 #[test]
+fn c_defvar_runtime_globals_are_special_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(mapcar (lambda (sym)
+                   (list sym (boundp sym) (special-variable-p sym)))
+                 '(system-type
+                   system-configuration
+                   system-configuration-options
+                   system-configuration-features
+                   emacs-version
+                   system-name
+                   operating-system-release
+                   command-line-args
+                   user-full-name
+                   user-login-name
+                   user-real-login-name
+                   overriding-plist-environment
+                   gc-cons-threshold
+                   purify-flag))
+         (let ((system-type 'windows-nt)
+               (system-configuration \"oracle-config\")
+               (gc-cons-threshold 1234567)
+               (purify-flag t))
+           (list (funcall (lambda () system-type))
+                 (symbol-value 'system-configuration)
+                 gc-cons-threshold
+                 purify-flag))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((system-type t t) (system-configuration t t) (system-configuration-options t t) (system-configuration-features t t) (emacs-version t t) (system-name t t) (operating-system-release t t) (command-line-args t t) (user-full-name t t) (user-login-name t t) (user-real-login-name t t) (overriding-plist-environment t t) (gc-cons-threshold t t) (purify-flag t t))"
+    );
+    assert_eq!(results[1], "OK (windows-nt \"oracle-config\" 1234567 t)");
+}
+
+#[test]
 fn while_no_input_ignore_events_bootstraps_monitors_changed_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
