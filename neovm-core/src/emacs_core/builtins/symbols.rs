@@ -467,6 +467,30 @@ pub(crate) fn builtin_indirect_variable(
     Ok(value_from_symbol_id(resolved))
 }
 
+pub(crate) fn builtin_internal_delete_indirect_variable(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("internal-delete-indirect-variable", &args, 1)?;
+    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    if !eval.obarray().is_alias_id(symbol) {
+        return Err(signal(
+            "error",
+            vec![
+                Value::string("Cannot undeclare a variable that is not an alias"),
+                args[0],
+            ],
+        ));
+    }
+
+    eval.note_macro_expansion_mutation();
+    eval.obarray_mut().delete_variable_alias_id(symbol);
+    eval.obarray_mut()
+        .put_property_id(symbol, intern("variable-documentation"), Value::NIL)?;
+    eval.makunbound_runtime_binding_by_id(symbol);
+    Ok(args[0])
+}
+
 pub(crate) fn builtin_fboundp(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("fboundp", &args, 1)?;
     builtin_fboundp_1(eval, args[0])

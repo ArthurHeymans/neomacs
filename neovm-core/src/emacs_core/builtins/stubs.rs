@@ -2171,12 +2171,6 @@ pub(crate) fn builtin_debugger_trap(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_internal_delete_indirect_variable(args: Vec<Value>) -> EvalResult {
-    expect_args("internal-delete-indirect-variable", &args, 1)?;
-    // Stub: return the symbol unchanged
-    Ok(args[0])
-}
-
 // =========================================================================
 // coding.c gap-fill stubs
 // =========================================================================

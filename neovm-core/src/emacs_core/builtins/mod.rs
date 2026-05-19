@@ -6920,7 +6920,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-delete-indirect-variable",
-        |_ctx, args| builtin_internal_delete_indirect_variable(args),
+        |ctx, args| builtin_internal_delete_indirect_variable(ctx, args),
         0,
         None,
     );

@@ -1768,6 +1768,19 @@ impl Obarray {
             .is_some_and(|s| s.flags.redirect() == SymbolRedirect::Varalias)
     }
 
+    /// Remove a variable alias without following it and leave SYMBOL void.
+    /// Mirrors GNU `internal-delete-indirect-variable`: the alias symbol is
+    /// restored to `SYMBOL_PLAINVAL` with `Qunbound` in its value cell.
+    pub fn delete_variable_alias_id(&mut self, id: SymId) {
+        self.ensure_global_member_if_canonical(id);
+        let sym = self.ensure_symbol_id(id);
+        sym.flags.set_redirect(SymbolRedirect::Plainval);
+        sym.val = SymbolVal {
+            plain: Value::UNBOUND,
+        };
+        self.value_epoch = self.value_epoch.wrapping_add(1);
+    }
+
     /// Walk an alias chain to its terminus and return the resolved
     /// SymId. Mirrors GNU `indirect_variable` (`src/data.c:1284-1301`).
     /// Returns `None` if (and only if) a true cycle is detected via
