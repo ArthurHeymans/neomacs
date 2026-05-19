@@ -61,6 +61,20 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Ok(Value::NIL);
     };
 
+    let start = expect_integer_or_marker(&ctx.buffers, &args[0])?;
+    let end = expect_integer_or_marker(&ctx.buffers, &args[1])?;
+
+    // GNU `Fzlib_decompress_region` calls `validate_region` before the
+    // unibyte-buffer check.
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if start < point_min || start > point_max || end < point_min || end > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        ));
+    }
+
     // Check unibyte — GNU signals error in multibyte buffers.
     if buf.get_multibyte() {
         return Err(signal(
@@ -74,19 +88,6 @@ pub(crate) fn builtin_zlib_decompress_region(
     // Check read-only.
     if buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
         return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
-    }
-
-    let start = expect_integer_or_marker(&ctx.buffers, &args[0])?;
-    let end = expect_integer_or_marker(&ctx.buffers, &args[1])?;
-
-    // Clamp to accessible region, matching GNU's validate_region behavior.
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
-    if start < point_min || start > point_max || end < point_min || end > point_max {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::make_buffer(buf.id), args[0], args[1]],
-        ));
     }
 
     let (from, to) = if start <= end {

@@ -55,11 +55,11 @@ fn validate_base_url(args: &[Value]) -> Result<(), Flow> {
     Ok(())
 }
 
-/// Read buffer region bytes, handling nil start/end as point-min/point-max.
-fn read_region_bytes(
+/// Validate region arguments, handling nil start/end as point-min/point-max.
+fn validate_region_byte_bounds(
     ctx: &mut super::eval::Context,
     args: &[Value],
-) -> Result<Option<Vec<u8>>, Flow> {
+) -> Result<Option<(crate::buffer::BufferId, usize, usize)>, Flow> {
     let Some(buf) = ctx.buffers.current_buffer() else {
         return Ok(None);
     };
@@ -75,10 +75,6 @@ fn read_region_bytes(
     } else {
         expect_integer_or_marker(&ctx.buffers, &args[1])?
     };
-
-    if start == end {
-        return Ok(Some(Vec::new()));
-    }
 
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
@@ -97,14 +93,22 @@ fn read_region_bytes(
     let from_byte = buf.lisp_pos_to_accessible_byte(from);
     let to_byte = buf.lisp_pos_to_accessible_byte(to);
 
-    let buffer_id = buf.id;
+    Ok(Some((buf.id, from_byte, to_byte)))
+}
+
+fn read_region_bytes(
+    ctx: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    from_byte: usize,
+    to_byte: usize,
+) -> Result<Vec<u8>, Flow> {
     let bytes = super::fns::read_buffer_region_bytes_in_manager(
         &ctx.buffers,
         buffer_id,
         from_byte,
         to_byte,
     )?;
-    Ok(Some(bytes))
+    Ok(bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -358,12 +362,14 @@ pub(crate) fn builtin_libxml_parse_html_region(
     args: Vec<Value>,
 ) -> EvalResult {
     super::builtins::expect_max_args("libxml-parse-html-region", &args, 4)?;
+    let Some((buffer_id, from_byte, to_byte)) = validate_region_byte_bounds(ctx, &args)? else {
+        return Ok(Value::NIL);
+    };
+    // GNU `parse_region` calls `validate_region` before checking BASE-URL.
     validate_base_url(&args)?;
     let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
 
-    let Some(bytes) = read_region_bytes(ctx, &args)? else {
-        return Ok(Value::NIL);
-    };
+    let bytes = read_region_bytes(ctx, buffer_id, from_byte, to_byte)?;
     if bytes.is_empty() {
         return Ok(Value::NIL);
     }
@@ -380,12 +386,14 @@ pub(crate) fn builtin_libxml_parse_xml_region(
     args: Vec<Value>,
 ) -> EvalResult {
     super::builtins::expect_max_args("libxml-parse-xml-region", &args, 4)?;
+    let Some((buffer_id, from_byte, to_byte)) = validate_region_byte_bounds(ctx, &args)? else {
+        return Ok(Value::NIL);
+    };
+    // GNU `parse_region` calls `validate_region` before checking BASE-URL.
     validate_base_url(&args)?;
     let discard_comments = args.get(3).is_some_and(|v| v.is_truthy());
 
-    let Some(bytes) = read_region_bytes(ctx, &args)? else {
-        return Ok(Value::NIL);
-    };
+    let bytes = read_region_bytes(ctx, buffer_id, from_byte, to_byte)?;
     if bytes.is_empty() {
         return Ok(Value::NIL);
     }
