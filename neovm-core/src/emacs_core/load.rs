@@ -2613,6 +2613,19 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
     ] {
         eval.obarray.make_special(name);
     }
+    {
+        let obarray = eval.obarray_mut();
+        // GNU data.c installs these with DEFVAR_LISP, then assigns the
+        // fixnum limit and calls make_symbol_constant.  Reassert this here so
+        // cached bootstrap dumps from older builds regain the C bootstrap
+        // symbol flags after load.
+        obarray.set_symbol_value("most-positive-fixnum", Value::fixnum(i64::MAX >> 2));
+        obarray.make_special("most-positive-fixnum");
+        obarray.set_constant("most-positive-fixnum");
+        obarray.set_symbol_value("most-negative-fixnum", Value::fixnum(-(i64::MAX >> 2) - 1));
+        obarray.make_special("most-negative-fixnum");
+        obarray.set_constant("most-negative-fixnum");
+    }
     crate::emacs_core::xfaces::ensure_startup_compat_variables(eval);
 }
 

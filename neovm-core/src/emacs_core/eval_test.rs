@@ -9657,6 +9657,28 @@ fn throw_on_input_is_special_and_dynamically_bound() {
 }
 
 #[test]
+fn fixnum_limit_constants_are_special_like_gnu_defvar_lisp() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(list (special-variable-p 'most-positive-fixnum)
+               (special-variable-p 'most-negative-fixnum))
+         (condition-case err
+             (let ((most-positive-fixnum 1)) most-positive-fixnum)
+           (setting-constant (car err)))
+         (condition-case err
+             (let* ((most-negative-fixnum -1)) most-negative-fixnum)
+           (setting-constant (car err)))
+         (condition-case err
+             (let ((:neomacs-keyword-constant 1)) :neomacs-keyword-constant)
+           (setting-constant (car err)))",
+    );
+    assert_eq!(results[0], "OK (t t)");
+    assert_eq!(results[1], "OK setting-constant");
+    assert_eq!(results[2], "OK setting-constant");
+    assert_eq!(results[3], "OK setting-constant");
+}
+
+#[test]
 fn post_self_insert_hook_is_special_and_dynamically_bound_like_gnu_cmds() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

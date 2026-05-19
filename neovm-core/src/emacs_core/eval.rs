@@ -20,8 +20,8 @@ use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_ST
 use super::error::*;
 use super::interactive::InteractiveRegistry;
 use super::intern::{
-    NIL_SYM_ID, NameId, SymId, T_SYM_ID, intern, intern_uninterned, is_canonical_id, is_keyword_id,
-    resolve_name, resolve_sym, resolve_sym_metadata, symbol_name_id,
+    NameId, SymId, intern, intern_uninterned, is_canonical_id, is_keyword_id, resolve_name,
+    resolve_sym, resolve_sym_metadata, symbol_name_id,
 };
 use super::keymap::{
     list_keymap_define, list_keymap_set_parent, make_list_keymap, make_sparse_list_keymap,
@@ -975,10 +975,10 @@ fn is_runtime_dynamically_special(obarray: &Obarray, sym_id: SymId) -> bool {
     obarray.is_special_id(sym_id) && !obarray.is_constant_id(sym_id)
 }
 
-fn symbol_sets_constant_error(sym_id: SymId) -> Option<&'static str> {
-    (sym_id == NIL_SYM_ID)
-        .then_some("nil")
-        .or_else(|| (sym_id == T_SYM_ID).then_some("t"))
+fn let_constant_error_name(obarray: &Obarray, sym_id: SymId) -> Option<String> {
+    obarray
+        .is_constant_id(sym_id)
+        .then(|| resolve_sym(sym_id).to_owned())
 }
 
 pub(crate) fn sync_features_variable_in_state(obarray: &mut Obarray, features: &[SymId]) {
@@ -2331,8 +2331,12 @@ impl Context {
         super::errors::init_standard_errors(&mut ev.obarray);
         ev.obarray
             .set_symbol_value("most-positive-fixnum", Value::fixnum(i64::MAX >> 2));
+        ev.obarray.make_special("most-positive-fixnum");
+        ev.obarray.set_constant("most-positive-fixnum");
         ev.obarray
             .set_symbol_value("most-negative-fixnum", Value::fixnum(-(i64::MAX >> 2) - 1));
+        ev.obarray.make_special("most-negative-fixnum");
+        ev.obarray.set_constant("most-negative-fixnum");
         ev.specpdl.clear();
         ev.backtrace_args_stack.clear();
         ev.lexenv = Value::NIL;
@@ -2813,11 +2817,13 @@ impl Context {
             .expect("startup seeding requires standard category table");
 
         // Set up standard global variables
-        // Match GNU Emacs: MOST_POSITIVE_FIXNUM = EMACS_INT_MAX >> INTTYPEBITS (>> 2)
-        // These are SYMBOL_NOWRITE constants in GNU Emacs (cannot be setq'd).
+        // Match GNU data.c: DEFVAR_LISP marks these symbols declared-special,
+        // then make_symbol_constant installs the SYMBOL_NOWRITE trap.
         obarray.set_symbol_value("most-positive-fixnum", Value::fixnum(i64::MAX >> 2));
+        obarray.make_special("most-positive-fixnum");
         obarray.set_constant("most-positive-fixnum");
         obarray.set_symbol_value("most-negative-fixnum", Value::fixnum(-(i64::MAX >> 2) - 1));
+        obarray.make_special("most-negative-fixnum");
         obarray.set_constant("most-negative-fixnum");
         // Mathematical constants (defconst in float-sup.el)
         obarray.set_symbol_value("float-e", Value::make_float(std::f64::consts::E));
@@ -8207,9 +8213,9 @@ impl Context {
             let binding = self.unwrap_symbol(bindings.cons_car());
             bindings = bindings.cons_cdr();
             if let Some(id) = binding.as_symbol_id() {
-                if let Some(name) = symbol_sets_constant_error(id) {
+                if let Some(name) = let_constant_error_name(&self.obarray, id) {
                     if constant_binding_error.is_none() {
-                        constant_binding_error = Some(name.to_owned());
+                        constant_binding_error = Some(name);
                     }
                     continue;
                 }
@@ -8263,9 +8269,9 @@ impl Context {
                 return Err(self.listp_error(binding));
             };
             self.push_specpdl_root(value);
-            if let Some(name) = symbol_sets_constant_error(id) {
+            if let Some(name) = let_constant_error_name(&self.obarray, id) {
                 if constant_binding_error.is_none() {
-                    constant_binding_error = Some(name.to_owned());
+                    constant_binding_error = Some(name);
                 }
                 continue;
             }
@@ -8407,8 +8413,8 @@ impl Context {
                     return Err(signal("wrong-type-argument", vec![]));
                 };
 
-                if let Some(name) = symbol_sets_constant_error(id) {
-                    return Err(signal("setting-constant", vec![Value::symbol(name)]));
+                if let Some(name) = let_constant_error_name(&self.obarray, id) {
+                    return Err(signal("setting-constant", vec![Value::symbol(&name)]));
                 }
                 if use_lexical
                     && !self.obarray.is_special_id(id)
