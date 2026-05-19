@@ -803,66 +803,75 @@ fn verify_property_change_read_only(
     verify_text_read_only_in_state(&eval.obarray, &eval.buffers, buf_id, byte_beg, byte_end)
 }
 
-/// GNU `verify_interval_modification` modification-hooks branch
-/// (textprop.c:2289-2363, 2342-2353): walk intervals overlapping
-/// `[byte_start, byte_end)` and call each interval's `modification-hooks`
-/// list (deduplicating consecutive identical hook lists).  Used by the
-/// property-change DEFUNs, which in GNU funnel through
-/// `modify_text_properties` -> `prepare_to_modify_buffer_1` ->
-/// `verify_interval_modification`.
-fn run_interval_modification_hooks(
-    eval: &mut super::eval::Context,
+fn buffer_property_range_for_args(
+    eval: &super::eval::Context,
     args: &[Value],
     object_arg_idx: usize,
-) -> Result<(), Flow> {
+) -> Result<Option<(BufferId, usize, usize)>, Flow> {
     if is_string_object(args.get(object_arg_idx)).is_some() {
-        return Ok(());
+        return Ok(None);
     }
     if args.len() < 2 {
-        return Ok(());
-    }
-    if super::editfns::inhibit_modification_hooks(eval) {
-        return Ok(());
+        return Ok(None);
     }
     let beg = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
     let buf_id =
         resolve_text_property_buffer_id_in_buffers(&eval.buffers, args.get(object_arg_idx))?;
-    let (byte_start, byte_end, lisp_start, lisp_end, hook_lists) = {
-        let Some(buf) = eval.buffers.get(buf_id) else {
-            return Ok(());
-        };
-        let Some((a, b)) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
-            return Ok(());
-        };
-        let lisp_a = buf.text.emacs_byte_to_char(a) as i64 + 1;
-        let lisp_b = buf.text.emacs_byte_to_char(b) as i64 + 1;
-        let mod_sym = Value::symbol("modification-hooks");
-        let mut prev: Option<Value> = None;
-        let mut hooks: Vec<Value> = Vec::new();
-        let _ = buf
-            .text
-            .text_props_try_for_each_interval_in_range(a, b, |_, _, plist| {
-                let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
-                if mh.is_nil() {
-                    return Ok::<(), ()>(());
-                }
-                if let Some(p) = prev
-                    && eq_value(&p, &mh)
-                {
-                    return Ok(());
-                }
-                prev = Some(mh);
-                hooks.push(mh);
-                Ok(())
-            });
-        (a, b, lisp_a, lisp_b, hooks)
+    let Some(buf) = eval.buffers.get(buf_id) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Buffer does not exist")],
+        ));
     };
-    let _ = (byte_start, byte_end);
-    if hook_lists.is_empty() {
-        return Ok(());
+    validate_buffer_property_range(buf, beg, end, args[0], args[1])
+        .map(|range| range.map(|(byte_beg, byte_end)| (buf_id, byte_beg, byte_end)))
+}
+
+fn begin_buffer_text_property_change(
+    eval: &mut super::eval::Context,
+    buf_id: BufferId,
+    byte_beg: usize,
+    byte_end: usize,
+) -> Result<(Option<BufferId>, usize), Flow> {
+    let saved_current = eval.buffers.current_buffer_id();
+    if saved_current != Some(buf_id) {
+        eval.set_current_buffer_unrecorded(buf_id)?;
     }
-    call_text_property_hook_lists(eval, hook_lists, lisp_start, lisp_end)
+    let old_len = eval
+        .buffers
+        .get(buf_id)
+        .map(|buf| super::editfns::byte_span_char_len(buf, byte_beg, byte_end))
+        .unwrap_or_else(|| byte_end.abs_diff(byte_beg));
+    super::editfns::signal_before_change(eval, byte_beg, byte_end)?;
+    Ok((saved_current, old_len))
+}
+
+fn finish_buffer_text_property_change(
+    eval: &mut super::eval::Context,
+    saved_current: Option<BufferId>,
+    byte_beg: usize,
+    byte_end: usize,
+    old_len: usize,
+) -> Result<(), Flow> {
+    let result = super::editfns::signal_after_change(eval, byte_beg, byte_end, old_len);
+    if let Some(saved) = saved_current {
+        eval.restore_current_buffer_if_live(saved);
+    }
+    result
+}
+
+fn current_buffer_text_property_snapshot(
+    eval: &super::eval::Context,
+    buf_id: BufferId,
+) -> Result<TextPropertyTable, Flow> {
+    let Some(buf) = eval.buffers.get(buf_id) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Buffer does not exist")],
+        ));
+    };
+    Ok(buf.text.text_props_snapshot())
 }
 
 fn call_text_property_hook_lists(
@@ -1006,9 +1015,29 @@ pub(crate) fn builtin_put_text_property(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("put-text-property", &args, 4)?;
+    expect_max_args("put-text-property", &args, 5)?;
     verify_property_change_read_only(eval, &args, 4)?;
-    run_interval_modification_hooks(eval, &args, 4)?;
+    let change =
+        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
+            table
+                .put_property(byte_beg, byte_end, args[2], args[3])
+                .then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result = builtin_put_text_property_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
@@ -1209,9 +1238,32 @@ pub(crate) fn builtin_add_text_properties(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("add-text-properties", &args, 3)?;
+    expect_max_args("add-text-properties", &args, 4)?;
     verify_property_change_read_only(eval, &args, 3)?;
-    run_interval_modification_hooks(eval, &args, 3)?;
+    let pairs_for_probe = plist_pairs(&args[2])?;
+    let change =
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
+            let mut changed = false;
+            for (name, val) in &pairs_for_probe {
+                changed |= table.put_property(byte_beg, byte_end, *name, *val);
+            }
+            changed.then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result = builtin_add_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
@@ -1332,9 +1384,46 @@ pub(crate) fn builtin_add_face_text_property(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("add-face-text-property", &args, 3)?;
+    expect_max_args("add-face-text-property", &args, 5)?;
     verify_property_change_read_only(eval, &args, 4)?;
-    run_interval_modification_hooks(eval, &args, 4)?;
+    let change =
+        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let Some(buf) = eval.buffers.get(buf_id) else {
+                return None;
+            };
+            let new_face = args[2];
+            let append = args.get(3).is_some_and(|v| v.is_truthy());
+            let mut table = buf.text.text_props_snapshot();
+            let mut changed = false;
+            let mut seg_start = byte_beg;
+            while seg_start < byte_end {
+                let seg_end = match table.next_property_change(seg_start) {
+                    Some(p) if p < byte_end => p,
+                    _ => byte_end,
+                };
+                let existing = table.get_property(seg_start, Value::symbol("face"));
+                let Ok(merged) = merge_face_property(existing, new_face, append) else {
+                    return None;
+                };
+                changed |= table.put_property(seg_start, seg_end, Value::symbol("face"), merged);
+                seg_start = seg_end;
+            }
+            changed.then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result = builtin_add_face_text_property_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
@@ -1440,9 +1529,32 @@ pub(crate) fn builtin_remove_text_properties(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("remove-text-properties", &args, 3)?;
+    expect_max_args("remove-text-properties", &args, 4)?;
     verify_property_change_read_only(eval, &args, 3)?;
-    run_interval_modification_hooks(eval, &args, 3)?;
+    let names_for_probe = plist_names_for_remove(args[2]);
+    let change =
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
+            let mut changed = false;
+            for name in &names_for_probe {
+                changed |= table.remove_property(byte_beg, byte_end, *name);
+            }
+            changed.then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result = builtin_remove_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
@@ -1505,9 +1617,33 @@ pub(crate) fn builtin_set_text_properties(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("set-text-properties", &args, 3)?;
+    expect_max_args("set-text-properties", &args, 4)?;
     verify_property_change_read_only(eval, &args, 3)?;
-    run_interval_modification_hooks(eval, &args, 3)?;
+    let pairs_for_probe = if args[2].is_nil() {
+        Vec::new()
+    } else {
+        plist_pairs(&args[2])?
+    };
+    let change =
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
+            (!pairs_for_probe.is_empty() || !table.intervals_snapshot().is_empty())
+                .then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result = builtin_set_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
@@ -1575,10 +1711,33 @@ pub(crate) fn builtin_remove_list_of_text_properties(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_min_args("remove-list-of-text-properties", &args, 3)?;
+    expect_max_args("remove-list-of-text-properties", &args, 4)?;
     verify_property_change_read_only(eval, &args, 3)?;
-    run_interval_modification_hooks(eval, &args, 3)?;
+    let names_for_probe = list_names_for_remove(args[2]);
+    let change =
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
+            let mut changed = false;
+            for name in &names_for_probe {
+                changed |= table.remove_property(byte_beg, byte_end, *name);
+            }
+            changed.then_some((buf_id, byte_beg, byte_end))
+        });
+    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
+        Some((
+            byte_beg,
+            byte_end,
+            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
+        ))
+    } else {
+        None
+    };
     let result =
         builtin_remove_list_of_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
+    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
+        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    }
     Ok(result)
 }
 
