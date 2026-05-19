@@ -10,6 +10,14 @@ use crate::heap_types::LispString;
 fn serialize_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_serialize(vec![Value::NIL]);
+    assert_eq!(result.unwrap().as_utf8_str(), Some("{}"));
+}
+
+#[test]
+fn serialize_nil_as_custom_null_object() {
+    crate::test_utils::init_test_tracing();
+    let result =
+        builtin_json_serialize(vec![Value::NIL, Value::keyword(":null-object"), Value::NIL]);
     assert_eq!(result.unwrap().as_utf8_str(), Some("null"));
 }
 
@@ -31,7 +39,16 @@ fn serialize_false_keyword() {
 fn serialize_json_false_keyword() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_serialize(vec![Value::keyword(":json-false")]);
-    assert_eq!(result.unwrap().as_utf8_str(), Some("false"));
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("json-value-p"), Value::keyword(":json-false")]
+            );
+        }
+        other => panic!("expected wrong-type-argument json-value-p, got {:?}", other),
+    }
 }
 
 #[test]
@@ -145,7 +162,7 @@ fn serialize_vector() {
         Value::T,
         Value::NIL,
     ])]);
-    assert_eq!(result.unwrap().as_utf8_str(), Some("[1,\"two\",true,null]"));
+    assert_eq!(result.unwrap().as_utf8_str(), Some("[1,\"two\",true,{}]"));
 }
 
 #[test]
@@ -203,9 +220,7 @@ fn serialize_custom_false_object() {
         Value::keyword(":false-object"),
         Value::NIL,
     ]);
-    // nil matches both null_object (default) and false_object (nil).
-    // null_object is checked first, so it becomes "null".
-    assert_eq!(result.unwrap().as_utf8_str(), Some("null"));
+    assert_eq!(result.unwrap().as_utf8_str(), Some("false"));
 }
 
 #[test]

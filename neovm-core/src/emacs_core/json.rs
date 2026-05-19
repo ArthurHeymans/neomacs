@@ -5,9 +5,10 @@
 //! - `json-parse-string` — parse JSON string to Lisp value
 //!
 //! Key mapping (Emacs convention):
-//! - Lisp nil / :null → JSON null
+//! - Lisp nil → JSON object {}
+//! - Lisp :null → JSON null
 //! - Lisp t → JSON true
-//! - Lisp :false / :json-false → JSON false
+//! - Lisp :false → JSON false
 //! - Lisp integer/float → JSON number
 //! - Lisp string → JSON string
 //! - Lisp hash-table → JSON object
@@ -44,8 +45,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 /// Options that control how Lisp values are serialized to JSON.
 #[derive(Clone, Debug)]
 struct SerializeOpts {
-    /// How nil is serialized.  In Emacs, `json-serialize` always maps nil to
-    /// JSON `null`, but the keyword arg can override (:null-object).
+    /// The Lisp value that maps to JSON null.
     null_object: Value,
     /// The Lisp value that maps to JSON false.
     false_object: Value,
@@ -54,7 +54,7 @@ struct SerializeOpts {
 impl Default for SerializeOpts {
     fn default() -> Self {
         Self {
-            null_object: Value::NIL,
+            null_object: Value::keyword(":null"),
             false_object: Value::keyword(":false"),
         }
     }
@@ -109,8 +109,7 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
         ));
     }
 
-    let mut i = 0;
-    while i + 1 < rest.len() {
+    for i in (0..rest.len()).step_by(2).rev() {
         let key = &rest[i];
         let value = &rest[i + 1];
         match key.kind() {
@@ -169,7 +168,6 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
                 ));
             }
         }
-        i += 2;
     }
     Ok(opts)
 }
@@ -185,8 +183,7 @@ fn parse_serialize_kwargs(args: &[Value], start_index: usize) -> Result<Serializ
         ));
     }
 
-    let mut i = 0;
-    while i + 1 < rest.len() {
+    for i in (0..rest.len()).step_by(2).rev() {
         let key = &rest[i];
         let value = &rest[i + 1];
         match key.kind() {
@@ -206,7 +203,6 @@ fn parse_serialize_kwargs(args: &[Value], start_index: usize) -> Result<Serializ
                 ));
             }
         }
-        i += 2;
     }
     Ok(opts)
 }
@@ -218,7 +214,7 @@ fn parse_serialize_kwargs(args: &[Value], start_index: usize) -> Result<Serializ
 /// Check if two Values are equivalent for the purpose of matching the
 /// null/false sentinel objects.
 fn value_matches(a: &Value, b: &Value) -> bool {
-    super::value::equal_value(a, b, 0)
+    super::value::eq_value(a, b)
 }
 
 /// Serialize a Lisp value to a JSON string.
@@ -336,30 +332,11 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
             Ok(format!("{{{}}}", parts.join(",")))
         }
 
-        // Nil was already checked as null_object above. If we reach here,
-        // it means nil is NOT the null sentinel (user provided a custom
-        // :null-object).  Emacs treats nil as JSON null regardless, but we
-        // follow the sentinel logic.  Since nil is also an empty list, treat
-        // it as an empty JSON object when it wasn't matched as null.
-        ValueKind::Nil => Ok("null".to_string()),
-
-        // Keywords that were not matched as false/null sentinels.
-        ValueKind::Symbol(k) if resolve_sym(k) == ":json-false" => Ok("false".to_string()),
-        ValueKind::Symbol(k)
-            if {
-                let n = resolve_sym(k);
-                n == ":null" || n == ":json-null"
-            } =>
-        {
-            Ok("null".to_string())
-        }
+        ValueKind::Nil => Ok("{}".to_string()),
 
         _ => Err(signal(
-            "json-serialize-error",
-            vec![Value::string(format!(
-                "Value cannot be serialized to JSON: {}",
-                super::print::print_value(value)
-            ))],
+            "wrong-type-argument",
+            vec![Value::symbol("json-value-p"), *value],
         )),
     }
 }
@@ -1075,7 +1052,7 @@ impl<'a> JsonParser<'a> {
 /// `(json-serialize VALUE &rest ARGS)` — serialize a Lisp value to a JSON string.
 ///
 /// ARGS are keyword arguments:
-/// - `:null-object VALUE` — Lisp value to serialize as JSON null (default: nil)
+/// - `:null-object VALUE` — Lisp value to serialize as JSON null (default: :null)
 /// - `:false-object VALUE` — Lisp value to serialize as JSON false (default: :false)
 pub(crate) fn builtin_json_serialize(args: Vec<Value>) -> EvalResult {
     expect_min_args("json-serialize", &args, 1)?;
