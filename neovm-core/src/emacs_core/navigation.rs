@@ -49,11 +49,86 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
+}
+
+#[derive(Clone, Copy)]
+struct LineCountArg {
+    original: Value,
+    count: i64,
+    excessive: bool,
+}
+
+fn bignum_line_count(value: &Value) -> i64 {
+    let n = value.as_bignum().expect("bignum kind");
+    if n >= &rug::Integer::from(0) {
+        Value::MOST_POSITIVE_FIXNUM
+    } else {
+        Value::MOST_NEGATIVE_FIXNUM
+    }
+}
+
+fn line_count_arg(value: &Value) -> Result<LineCountArg, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(LineCountArg {
+            original: *value,
+            count: n,
+            excessive: false,
+        }),
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(LineCountArg {
+            original: *value,
+            count: bignum_line_count(value),
+            excessive: true,
+        }),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integer-or-marker-p"), *value],
+        )),
+    }
+}
+
+fn optional_line_count_arg(args: &[Value], default: i64) -> Result<LineCountArg, Flow> {
+    if args.is_empty() || args[0].is_nil() {
+        Ok(LineCountArg {
+            original: Value::fixnum(default),
+            count: default,
+            excessive: false,
+        })
+    } else {
+        line_count_arg(&args[0])
+    }
+}
+
+pub(crate) fn line_beginning_scan_count_arg(args: &[Value]) -> Result<i64, Flow> {
+    if args.is_empty() || args[0].is_nil() {
+        Ok(0)
+    } else {
+        Ok(line_count_arg(&args[0])?.count.saturating_sub(1))
+    }
+}
+
+pub(crate) fn line_end_scan_count_arg(args: &[Value]) -> Result<i64, Flow> {
+    if args.is_empty() || args[0].is_nil() {
+        Ok(1)
+    } else {
+        Ok(line_count_arg(&args[0])?.count)
+    }
+}
+
+fn line_count_result(arg: LineCountArg, shortage: i64) -> Value {
+    if !arg.excessive {
+        return Value::make_int(shortage);
+    }
+
+    let adjustment = shortage - arg.count;
+    if let Some(big) = arg.original.as_bignum() {
+        return Value::make_integer(big.clone() + adjustment);
+    }
+    Value::make_int(shortage)
 }
 
 /// Get a no-current-buffer signal flow.
@@ -475,16 +550,18 @@ pub(crate) fn builtin_eolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 /// buffer's point after moving `n - 1` lines. Returns `(bol_charpos,
 /// orig_charpos, lines_moved)` mirroring GNU's static `bol` helper
 /// (editfns.c) plus the original PT used as anchor for field constraint.
-pub(crate) fn pos_bol_compute(ctx: &super::eval::Context, n: i64) -> Result<(i64, i64, i64), Flow> {
+pub(crate) fn pos_bol_compute(
+    ctx: &super::eval::Context,
+    scan_count: i64,
+) -> Result<(i64, i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
     let begv = buf.begv_byte;
     let zv = buf.zv_byte;
     let mut pos = buf.pt_byte;
     let mut moved: i64 = 0;
-    if n != 1 {
-        let delta = n - 1;
-        let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, delta, begv, zv);
+    if scan_count != 0 {
+        let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, scan_count, begv, zv);
         pos = new_pos;
         moved = actual_moved;
     }
@@ -493,7 +570,7 @@ pub(crate) fn pos_bol_compute(ctx: &super::eval::Context, n: i64) -> Result<(i64
     // returned position is ZV itself, not the beginning of the final
     // unterminated line containing ZV.  `delete-line` relies on this via
     // `(pos-bol 2)` to delete the last line of a buffer.
-    let bol = if n != 1 && n > 1 && moved != n - 1 && pos == zv {
+    let bol = if scan_count > 0 && moved != scan_count && pos == zv {
         zv
     } else {
         line_beginning_byte_narrowed(&text, pos, begv)
@@ -508,20 +585,23 @@ pub(crate) fn pos_bol_compute(ctx: &super::eval::Context, n: i64) -> Result<(i64
 /// Compute the unconstrained end-of-line position for the current buffer's
 /// point after moving `n - 1` lines. Returns `(eol_charpos, orig_charpos)`,
 /// mirroring GNU's static `eol` helper (editfns.c).
-pub(crate) fn pos_eol_compute(ctx: &super::eval::Context, n: i64) -> Result<(i64, i64), Flow> {
+pub(crate) fn pos_eol_compute(
+    ctx: &super::eval::Context,
+    scan_count: i64,
+) -> Result<(i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
     let begv = buf.begv_byte;
     let zv = buf.zv_byte;
     let mut pos = buf.pt_byte;
     let mut moved = 0;
-    if n != 1 {
-        let delta = n - 1;
+    let delta = scan_count - if scan_count <= 0 { 1 } else { 0 };
+    if delta != 0 {
         let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, delta, begv, zv);
         pos = new_pos;
         moved = actual_moved;
     }
-    let eol = if n != 1 && moved != n - 1 && pos == begv {
+    let eol = if delta != 0 && moved != delta && pos == begv {
         begv
     } else {
         line_end_byte_narrowed(&text, pos, zv)
@@ -537,12 +617,8 @@ pub(crate) fn builtin_line_beginning_position(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("line-beginning-position", &args, 1)?;
-    let n = if args.is_empty() || args[0].is_nil() {
-        1
-    } else {
-        expect_int(&args[0])?
-    };
-    let (bol_charpos, orig_charpos, count) = pos_bol_compute(ctx, n)?;
+    let scan_count = line_beginning_scan_count_arg(&args)?;
+    let (bol_charpos, orig_charpos, count) = pos_bol_compute(ctx, scan_count)?;
     // GNU `Fline_beginning_position` (editfns.c:700) constrains the result to
     // the current input field. ESCAPE-FROM-EDGE is t when any lines were
     // scanned (count != 0), nil otherwise; ONLY-IN-LINE is always t.
@@ -564,12 +640,8 @@ pub(crate) fn builtin_line_end_position(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("line-end-position", &args, 1)?;
-    let n = if args.is_empty() || args[0].is_nil() {
-        1
-    } else {
-        expect_int(&args[0])?
-    };
-    let (eol_charpos, orig_charpos) = pos_eol_compute(ctx, n)?;
+    let scan_count = line_end_scan_count_arg(&args)?;
+    let (eol_charpos, orig_charpos) = pos_eol_compute(ctx, scan_count)?;
     // GNU `Fline_end_position` (editfns.c:755): constrain to current input
     // field with ESCAPE-FROM-EDGE = nil and ONLY-IN-LINE = t.
     crate::emacs_core::builtins::builtin_constrain_to_field(
@@ -665,11 +737,8 @@ pub(crate) fn builtin_forward_line(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let n = if args.is_empty() || args[0].is_nil() {
-        1
-    } else {
-        expect_int(&args[0])?
-    };
+    let line_arg = optional_line_count_arg(&args, 1)?;
+    let n = line_arg.count;
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (text, begv, zv, pt) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
@@ -692,7 +761,7 @@ pub(crate) fn builtin_forward_line(
         }
     }
     check_point_motion_hooks(eval, old_byte, adjusted)?;
-    Ok(Value::fixnum(shortage))
+    Ok(line_count_result(line_arg, shortage))
 }
 
 /// (beginning-of-line &optional N)
