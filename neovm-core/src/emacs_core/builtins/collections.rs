@@ -289,6 +289,12 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                     result.push(bit);
                 }
             }
+            ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(arg) => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("sequencep"), *arg],
+                ));
+            }
             ValueKind::Veclike(VecLikeType::Vector) => {
                 result.extend(arg.as_vector_data().unwrap().clone().into_iter())
             }

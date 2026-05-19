@@ -277,9 +277,14 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                 ValueKind::String => value
                     .as_lisp_string()
                     .is_some_and(|string| string.is_multibyte()),
-                ValueKind::Veclike(VecLikeType::Vector) => value
-                    .as_vector_data()
-                    .is_some_and(|items| items.iter().copied().any(concat_arg_makes_multibyte)),
+                ValueKind::Veclike(VecLikeType::Vector)
+                    if !super::chartable::is_bool_vector(&value)
+                        && !super::chartable::is_char_table(&value) =>
+                {
+                    value
+                        .as_vector_data()
+                        .is_some_and(|items| items.iter().copied().any(concat_arg_makes_multibyte))
+                }
                 ValueKind::Cons => {
                     let mut cursor = value;
                     while cursor.is_cons() {
@@ -428,7 +433,10 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                         }
                     }
                 }
-                ValueKind::Veclike(VecLikeType::Vector) => {
+                ValueKind::Veclike(VecLikeType::Vector)
+                    if !super::chartable::is_bool_vector(arg)
+                        && !super::chartable::is_char_table(arg) =>
+                {
                     let items = arg.as_vector_data().unwrap().clone();
                     for item in items.iter() {
                         result_chars += push_concat_element(&mut result, item, dest_multibyte)?;
