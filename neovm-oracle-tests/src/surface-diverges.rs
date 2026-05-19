@@ -1,40 +1,120 @@
 //! Oracle divergence surface tests for text properties.
 //!
-//! Each test targets a *known divergence* between NeoMacs and GNU Emacs.
+//! Each test targets a *suspected divergence* between NeoMacs and GNU Emacs.
 //! Tests that FAIL expose an active divergence; tests that PASS serve as
-//! regression guards (the divergence was either already fixed or does not
-//! surface at this test level).
+//! regression guards verifying parity.
 //!
-//! ## Confirmed divergences (FAILING as of 2026-05-19)
+//! ## Confirmed divergence (FAILING as of 2026-05-19)
 //!
-//! - **D4** `signal_after_change` / `prepare_to_modify_buffer_1` not called
-//!   for property mutations → after-change-functions and before-change-functions
-//!   are not fired when text properties are modified via put-text-property,
+//! - **D4** `signal_after_change` not called for property mutations.
+//!   `after-change-functions` and `before-change-functions` are not fired
+//!   when text properties are modified via put-text-property,
 //!   add-text-properties, remove-text-properties, or set-text-properties.
 //!   GNU Emacs fires these hooks (used by font-lock, jit-lock, etc.).
 //!
-//! Divergence IDs reference the audit report sections.
+//! ## Audit corrections (tests PASS — audit was wrong)
+//!
+//! - **D1** Audit said NeoMacs lacks sticky inheritance. Wrong: plain `insert`
+//!   doesn't inherit in GNU either. NeoMacs implements `insert-and-inherit`
+//!   correctly via `apply_inherited_text_properties` (buffers.rs:2941).
+//! - **D3** Audit said undo isn't recorded. Wrong: `put_buffer_text_property`
+//!   (buffer.rs:3615) calls `undo_list_record_property_change` before each
+//!   mutation. The audit only saw the tick-bumper function.
+//! - **D5** Audit said overlays use raw positions that become stale. Wrong:
+//!   `adjust_for_insert` (overlay.rs:370) explicitly shifts all overlay
+//!   positions on every edit. Equivalent behavior to GNU markers.
+//! - **D6** Audit said adjacent equal intervals aren't merged. True internally,
+//!   but `next_property_change` (text_props.rs:574) skips equal neighbors.
+//!   Observable behavior is identical.
+//! - **D7** Audit said evaporate isn't handled on delete. Wrong:
+//!   `adjust_for_delete` (overlay.rs:405) checks evaporate and removes
+//!   zero-width overlays.
 
 use super::common::assert_oracle_parity_with_bootstrap;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D1 · Sticky property inheritance on insertion  (HIGH)
+//  D1 · Sticky property inheritance via insert-and-inherit
 //
-//  GNU: adjust_intervals_for_insertion (intervals.c:802) calls
-//       merge_properties_sticky per property on newly inserted intervals.
-//       Default: front-sticky=t, rear-nonsticky=nil → rear-sticky.
-//  NeoMacs: adjust_for_insert (text_props.rs:641) splits and shifts
-//           without any property inheritance.
+//  Plain `insert` does NOT inherit in either GNU or NeoMacs.  Only
+//  `insert-and-inherit` triggers merge_properties_sticky.  NeoMacs
+//  implements this via apply_inherited_text_properties (buffers.rs:2941).
+//  These tests verify that sticky inheritance works correctly.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn surface_d1_sticky_insert_middle_inherits() {
+fn surface_d1_insert_and_inherit_middle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Inserting into a uniformly-propertied region: the new text should
-    // inherit `face 'bold` via default rear-stickiness.
-    // GNU → bold, NeoMacs → nil
+    // insert-and-inherit into a uniformly-propertied region: the new text
+    // should inherit face='bold via default rear-stickiness.
+    assert_oracle_parity_with_bootstrap(r#"
+(with-temp-buffer
+  (insert "abcdefghij")
+  (put-text-property 1 11 'face 'bold)
+  (goto-char 5)
+  (insert-and-inherit "XXX")
+  (get-text-property 6 'face))
+"#);
+}
+
+#[test]
+fn surface_d1_insert_and_inherit_front_sticky_explicit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Explicit front-sticky: text inserted at the right boundary inherits.
+    assert_oracle_parity_with_bootstrap(r#"
+(with-temp-buffer
+  (insert "aaaa")
+  (put-text-property 1 5 'face 'bold)
+  (put-text-property 1 5 'front-sticky t)
+  (goto-char 5)
+  (insert-and-inherit "bbbb")
+  (get-text-property 5 'face))
+"#);
+}
+
+#[test]
+fn surface_d1_insert_and_inherit_rear_nonsticky_blocks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // rear-nonsticky=t: text inserted at the right boundary should NOT
+    // inherit the property.
+    assert_oracle_parity_with_bootstrap(r#"
+(with-temp-buffer
+  (insert "aaaa")
+  (put-text-property 1 5 'face 'bold)
+  (put-text-property 1 5 'rear-nonsticky t)
+  (goto-char 5)
+  (insert-and-inherit "bbbb")
+  (get-text-property 5 'face))
+"#);
+}
+
+#[test]
+fn surface_d1_insert_and_inherit_before_front_sticky() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Insert at position 1 of a front-sticky interval: the inserted text
+    // should inherit because front-sticky means "text at my front gets
+    // my properties."
+    assert_oracle_parity_with_bootstrap(r#"
+(with-temp-buffer
+  (insert "aaaa")
+  (put-text-property 1 5 'face 'bold)
+  (put-text-property 1 5 'front-sticky t)
+  (goto-char 1)
+  (insert-and-inherit "bbbb")
+  (get-text-property 1 'face))
+"#);
+}
+
+#[test]
+fn surface_d1_plain_insert_does_not_inherit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Verify plain insert does NOT inherit — both GNU and NeoMacs agree.
+    // The audit incorrectly expected GNU's plain `insert` to inherit.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -45,78 +125,19 @@ fn surface_d1_sticky_insert_middle_inherits() {
 "#);
 }
 
-#[test]
-fn surface_d1_sticky_front_sticky_explicit() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-
-    // Explicit front-sticky: text inserted at the right boundary inherits.
-    // GNU → bold, NeoMacs → nil
-    assert_oracle_parity_with_bootstrap(r#"
-(with-temp-buffer
-  (insert "aaaa")
-  (put-text-property 1 5 'face 'bold)
-  (put-text-property 1 5 'front-sticky t)
-  (goto-char 5)
-  (insert "bbbb")
-  (get-text-property 5 'face))
-"#);
-}
-
-#[test]
-fn surface_d1_sticky_rear_nonsticky_blocks_inherit() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-
-    // rear-nonsticky=t: text inserted at the right boundary should NOT
-    // inherit.  GNU → nil (blocked by rear-nonsticky).
-    // NeoMacs → also nil (never inherits), so this test PASSES for the
-    // *wrong reason*.  Kept as a guard: if NeoMacs later implements
-    // blanket inheritance without respecting rear-nonsticky, this will fail.
-    assert_oracle_parity_with_bootstrap(r#"
-(with-temp-buffer
-  (insert "aaaa")
-  (put-text-property 1 5 'face 'bold)
-  (put-text-property 1 5 'rear-nonsticky t)
-  (goto-char 5)
-  (insert "bbbb")
-  (get-text-property 5 'face))
-"#);
-}
-
-#[test]
-fn surface_d1_sticky_insert_before_front_sticky_boundary() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-
-    // Insert at position 1 of a front-sticky interval: the inserted text
-    // should inherit the property because front-sticky means "text inserted
-    // at my front gets my properties."
-    // GNU → bold, NeoMacs → nil
-    assert_oracle_parity_with_bootstrap(r#"
-(with-temp-buffer
-  (insert "aaaa")
-  (put-text-property 1 5 'face 'bold)
-  (put-text-property 1 5 'front-sticky t)
-  (goto-char 1)
-  (insert "bbbb")
-  (get-text-property 1 'face))
-"#);
-}
-
 // ═══════════════════════════════════════════════════════════════════════
-//  D2 · Byte vs character position confusion  (HIGH)
+//  D2 · Multibyte position correctness (parity guard)
 //
-//  TextPropertyTable stores character positions, but text_props_put_property
-//  (buffer_text.rs) can receive byte positions directly without conversion.
-//  With multibyte text, intervals land at wrong offsets.
+//  TextPropertyTable stores character positions.  The builtin layer
+//  converts between byte/char at the API boundary.  These tests verify
+//  no byte/char confusion leaks through with multibyte text.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d2_multibyte_put_get_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Each Greek letter is 2 bytes in UTF-8.  Positions 1-4 should cover
-    // "αβγδ" and 5-8 covers "εζηθ".  If byte positions leak through,
-    // property on char range 1-4 actually lands on byte range 1-4
-    // (only "α" + half of "β").
+    // Greek letters (2 bytes each).  Property boundaries on char positions.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "αβγδεζηθ")
@@ -133,8 +154,7 @@ fn surface_d2_multibyte_put_get_roundtrip() {
 fn surface_d2_multibyte_boundary_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Property on chars 1-3 of multibyte text: only "αβ" and the start
-    // of "γ" should carry the property.
+    // Property on chars 1-3 of multibyte text.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "αβγδε")
@@ -151,7 +171,6 @@ fn surface_d2_multibyte_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Boundary between two property regions in multibyte text.
-    // If byte positions leak, the boundary appears at the wrong place.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "αβγδεζηθ")
@@ -162,19 +181,19 @@ fn surface_d2_multibyte_next_property_change() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D3 · No undo recording for property changes  (HIGH)
+//  D3 · Undo recording for property changes (parity guard)
 //
-//  GNU: record_property_change per interval per property before mutation.
-//  NeoMacs: only increments modified tick (buffer.rs:3714).
+//  AUDIT SAID: only tick incremented, no undo entries.
+//  REALITY: put_buffer_text_property (buffer.rs:3615) calls
+//  undo_list_record_property_change before each mutation.  The audit
+//  only saw the tick-bumper and missed the lower-level undo recording.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d3_undo_list_populated_after_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // After put-text-property, buffer-undo-list should have a property
-    // change entry.  NeoMacs records nothing.
-    // GNU → t, NeoMacs → nil
+    // buffer-undo-list should be non-nil after put-text-property.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -188,8 +207,7 @@ fn surface_d3_undo_list_populated_after_put() {
 fn surface_d3_undo_restores_previous_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Set face=bold, record undo, change to italic, undo → should get bold.
-    // GNU → bold, NeoMacs → italic (undo has no effect on properties)
+    // Set face=bold, change to italic, undo → should get bold back.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -202,12 +220,13 @@ fn surface_d3_undo_restores_previous_property() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D4 · No signal_after_change for property mutations  (HIGH)
+//  D4 · No signal_after_change for property mutations  ★ CONFIRMED ★
 //
 //  GNU: all property mutation functions call signal_after_change after
-//       modifying intervals.  This fires after-change-functions used by
-//       font-lock, jit-lock, etc.
-//  NeoMacs: signal_after_change is never called in the property path.
+//       modifying intervals (textprop.c).  This fires after-change-functions
+//       used by font-lock, jit-lock, etc.
+//  NeoMacs: signal_after_change is never called in the property mutation
+//           path (textprop.rs).  Only the modified tick is bumped.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
@@ -215,7 +234,7 @@ fn surface_d4_after_change_fired_on_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // after-change-functions should fire when put-text-property mutates.
-    // GNU → ((1 12 0)), NeoMacs → nil
+    // GNU → ((1 12 11)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -234,7 +253,7 @@ fn surface_d4_after_change_fired_on_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for add-text-properties.
-    // GNU → ((1 6 0)), NeoMacs → nil
+    // GNU → ((1 6 5)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -253,6 +272,7 @@ fn surface_d4_after_change_fired_on_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for remove-text-properties.
+    // GNU → ((1 12 11)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -288,20 +308,19 @@ fn surface_d4_before_change_fired_on_set() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D5 · Overlay start/end are raw positions, not markers  (HIGH)
+//  D5 · Overlay position tracking (parity guard)
 //
-//  GNU: overlays use Lisp markers for start/end, which auto-advance when
-//       text is inserted before them.
-//  NeoMacs: OverlayData (heap_types.rs) stores raw usize byte positions.
-//           Overlays become stale after text insertion before them.
+//  AUDIT SAID: OverlayData uses raw usize, overlays become stale.
+//  REALITY: adjust_for_insert (overlay.rs:370) and adjust_for_delete
+//  (overlay.rs:405) explicitly shift all overlay positions on every edit.
+//  Raw usize internally, but adjusted to match GNU marker behavior.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d5_overlay_start_end_track_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Insert text before an overlay: its start/end markers should advance.
-    // GNU → (8 12), NeoMacs → (5 9) (stale)
+    // Insert text before an overlay: positions should advance.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -317,9 +336,8 @@ fn surface_d5_overlay_start_end_track_insertion() {
 fn surface_d5_overlay_property_after_insertion_before() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // After inserting 3 chars at position 1, the overlay originally at
-    // 5-9 should now be at 8-12.  get-char-property at 8 should find it.
-    // GNU → marked, NeoMacs → nil (overlay still at 5-9, nothing at 8)
+    // After inserting 3 chars at position 1, overlay at 5-9 should be at
+    // 8-12.  get-char-property at 8 should find it.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -335,8 +353,7 @@ fn surface_d5_overlay_property_after_insertion_before() {
 fn surface_d5_overlay_start_end_track_deletion_before() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Delete text before an overlay: markers should retreat.
-    // GNU → (3 7), NeoMacs → (5 9) (stale)
+    // Delete text before an overlay: positions should retreat.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "ABCDEFGHIJ")
@@ -348,22 +365,20 @@ fn surface_d5_overlay_start_end_track_deletion_before() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D6 · Adjacent equal-property intervals never merged  (MEDIUM)
+//  D6 · Adjacent equal-property intervals (parity guard)
 //
-//  GNU: merge_interval_left/right merges adjacent intervals with
-//       identical plists after property changes.
-//  NeoMacs: merge_adjacent_equal_properties_around (text_props.rs:933)
-//           exists but is never called from the mutation path.
+//  AUDIT SAID: intervals never merged, next-property-change wrong.
+//  REALITY: intervals ARE kept separate internally, but next_property_change
+//  (text_props.rs:574) skips equal neighbors.  Observable behavior matches
+//  GNU which does merge internally.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d6_next_property_change_adjacent_equal_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Two adjacent regions with identical face=bold.  GNU merges them
-    // into one interval → next-property-change returns nil.
-    // NeoMacs keeps two intervals → returns 6.
-    // GNU → nil, NeoMacs → 6
+    // Two adjacent regions with identical face=bold.  Both return nil
+    // (no property change) — GNU via merge, NeoMacs via skip.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -374,12 +389,10 @@ fn surface_d6_next_property_change_adjacent_equal_props() {
 }
 
 #[test]
-fn surface_d6_next_property_change_three_way_merge() {
+fn surface_d6_next_property_change_three_way() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Three regions, same property.  GNU merges all three.
-    // next-property-change 1 → nil (all merged).
-    // NeoMacs → 5 (boundary between first and second region).
+    // Three regions, same property.  Both return nil.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghijklmno")
@@ -394,36 +407,30 @@ fn surface_d6_next_property_change_three_way_merge() {
 fn surface_d6_merge_after_overlapping_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Set props on 1-6 and 6-11 with different values, then make them
-    // equal by setting the same property on both.  GNU merges the now-
-    // equal adjacent intervals.
+    // Make adjacent intervals equal by setting same property over full range.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghij")
   (put-text-property 1 6 'face 'bold)
   (put-text-property 6 11 'face 'italic)
-  ;; Now make them equal
   (put-text-property 1 11 'face 'bold)
-  ;; Should be fully merged — next-property-change returns nil
   (next-property-change 1))
 "#);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D7 · Overlay evaporate not triggered by text deletion  (MEDIUM)
+//  D7 · Overlay evaporate on text deletion (parity guard)
 //
-//  GNU: Fdelete_all_overlays and text deletion check evaporate property,
-//       removing overlays whose content is fully deleted.
-//  NeoMacs: evaporate only checked in overlay-put and move-overlay.
+//  AUDIT SAID: evaporate only checked in overlay-put and move-overlay.
+//  REALITY: adjust_for_delete (overlay.rs:405-447) checks evaporate
+//  and removes zero-width overlays during deletion.  Fully implemented.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d7_overlay_evaporate_on_delete_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Delete the entire content of an evaporate-enabled overlay.
-    // GNU: overlay is removed → overlay-start returns nil.
-    // NeoMacs: overlay survives → overlay-start returns a position.
+    // Delete entire content of evaporate overlay → overlay removed.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -435,10 +442,10 @@ fn surface_d7_overlay_evaporate_on_delete_content() {
 }
 
 #[test]
-fn surface_d7_overlay_evaporate_on_kill_region() {
+fn surface_d7_overlay_evaporate_on_partial_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Kill-region to empty an overlay with evaporate=t.
+    // Delete part of overlay content → overlay survives.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "prefix MIDDLE suffix")
@@ -450,20 +457,14 @@ fn surface_d7_overlay_evaporate_on_kill_region() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D8 · Read-only stickiness check missing for insertions  (MEDIUM)
-//
-//  GNU: verify_interval_modification checks read-only with front-sticky/
-//       rear-nonsticky even for insertions (start==end).
-//  NeoMacs: verify_text_read_only_in_state returns early for empty ranges.
+//  D8 · Read-only stickiness check for insertions (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d8_read_only_blocks_sticky_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Inserting at the front of a read-only, front-sticky interval should
-    // signal buffer-read-only.
-    // GNU → blocked, NeoMacs → inserted (no read-only check for insertions)
+    // Inserting at the front of a read-only, front-sticky interval.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello")
@@ -479,20 +480,14 @@ fn surface_d8_read_only_blocks_sticky_insertion() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D9 · No stickiness-aware merge during graft/yank  (MEDIUM)
-//
-//  GNU: graft_intervals_into_buffer (intervals.c:1570) does per-interval
-//       copy-or-merge with stickiness-based inheritance.
-//  NeoMacs: append_shifted/merge_missing_shifted has no stickiness logic.
+//  D9 · Propertied string insertion merge (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d9_insert_propertied_string_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Insert a propertied substring into a buffer that already has
-    // properties at the insertion point.  GNU merges according to
-    // stickiness; NeoMacs may overwrite or leave gaps.
+    // Insert a propertied substring into a buffer with existing properties.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "aaaa")
@@ -500,28 +495,18 @@ fn surface_d9_insert_propertied_string_merge() {
   (let ((str (propertize "bbbb" 'face 'italic)))
     (goto-char 3)
     (insert str)
-    ;; At position 3 we inserted italic "bbbb" into bold "aaaa"
-    ;; GNU: inserted text keeps its own property (italic)
-    ;; NeoMacs: behavior may differ
     (get-text-property 3 'face)))
 "#);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D10 · display property — fringe/margin specs missing  (MED-HIGH)
-//
-//  GNU: (left-fringe BITMAP FACE), (right-fringe BITMAP FACE),
-//       (margin OBJECT) display specs are handled by xdisp.c.
-//  NeoMacs: string replacement and space specs work; fringe/margin
-//           display specs are not implemented.
+//  D10 · display property storage (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d10_display_property_string_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Baseline: display property with a simple string should be stored
-    // and retrievable.  This is the passing case.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -534,7 +519,6 @@ fn surface_d10_display_property_string_value() {
 fn surface_d10_display_property_space_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // (space :width 10) display spec should be stored as a property.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello")
@@ -544,18 +528,13 @@ fn surface_d10_display_property_space_spec() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D11 · composition property — stubs only  (MEDIUM)
-//
-//  GNU: find-composition returns composition info at position.
-//  NeoMacs: composite.rs find-composition-internal always returns nil.
+//  D11 · composition property (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d11_find_composition_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // find-composition at a position with no composition data.
-    // Both should return nil — this is a baseline check.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello")
@@ -564,19 +543,13 @@ fn surface_d11_find_composition_returns_nil() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D12 · line-prefix / wrap-prefix — not rendered  (MEDIUM)
-//
-//  GNU: line-prefix and wrap-prefix text properties affect visual lines.
-//  NeoMacs: data structures exist (types.rs) but are always empty during
-//           rendering.
+//  D12 · line-prefix / wrap-prefix storage (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d12_line_wrap_prefix_storage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // line-prefix and wrap-prefix should at least be storable and
-    // retrievable as text properties even if rendering doesn't use them.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "hello world")
@@ -589,19 +562,13 @@ fn surface_d12_line_wrap_prefix_storage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D13 · Overlay char-property-change combined boundary  (MEDIUM)
-//
-//  next-char-property-change must combine overlay boundaries with text
-//  property boundaries.  If overlay positions are stale, the combined
-//  boundary detection diverges.
+//  D13 · Combined overlay + text property boundary (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d13_next_char_property_change_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Insert text that shifts both a text property boundary and an overlay.
-    // The combined next-char-property-change result depends on both.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghij")
@@ -610,8 +577,6 @@ fn surface_d13_next_char_property_change_after_insert() {
     (overlay-put ov 'face 'italic)
     (goto-char 1)
     (insert "XX")
-    ;; After inserting 2 chars at pos 1:
-    ;; text-prop boundary moved from 6→8, overlay from 3-8→5-10
     (list (next-char-property-change 1)
           (next-char-property-change 5)
           (next-char-property-change 10))))
@@ -619,19 +584,13 @@ fn surface_d13_next_char_property_change_after_insert() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D14 · invisible property with buffer-invisibility-spec ellipsis
-//
-//  GNU: buffer-invisibility-spec with ((t . t)) causes invisible text
-//       to show an ellipsis.  The property-level behavior should match.
-//  NeoMacs: invisible status is tracked but ellipsis rendering may be
-//           incomplete in the display engine.
+//  D14 · invisible property with buffer-invisibility-spec (parity guard)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
 fn surface_d14_invisible_property_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // Basic invisible property storage and retrieval with spec.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "visible hidden visible")
@@ -646,8 +605,6 @@ fn surface_d14_invisible_property_basic() {
 fn surface_d14_invisible_p_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    // invisible-p should return non-nil for positions with invisible
-    // property that matches buffer-invisibility-spec.
     assert_oracle_parity_with_bootstrap(r#"
 (with-temp-buffer
   (insert "abcdefghij")
