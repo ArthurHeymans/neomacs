@@ -779,13 +779,35 @@ pub(crate) fn builtin_get_load_suffixes(
         obarray.symbol_value("load-file-rep-suffixes"),
         "load-file-rep-suffixes",
     )?;
+    let jka_compr_suffixes = load_suffix_list(
+        obarray.symbol_value("jka-compr-load-suffixes"),
+        "jka-compr-load-suffixes",
+    )?;
     let mut suffixes = Vec::new();
     for suffix in &load_suffixes {
         for rep in &rep_suffixes {
+            // GNU `Fget_load_suffixes' does not try compressed dynamic
+            // modules when the representation suffix comes from jka-compr.
+            if !rep.is_empty()
+                && suffix.ends_with(module_file_suffix())
+                && jka_compr_suffixes.iter().any(|jka| jka == rep)
+            {
+                continue;
+            }
             suffixes.push(Value::string(format!("{suffix}{rep}")));
         }
     }
     Ok(Value::list(suffixes))
+}
+
+pub(crate) fn module_file_suffix() -> &'static str {
+    if cfg!(target_os = "macos") {
+        ".dylib"
+    } else if cfg!(target_os = "windows") {
+        ".dll"
+    } else {
+        ".so"
+    }
 }
 
 fn load_suffix_list(value: Option<&Value>, name: &str) -> Result<Vec<String>, Flow> {

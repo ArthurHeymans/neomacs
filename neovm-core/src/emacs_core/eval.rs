@@ -3057,13 +3057,7 @@ impl Context {
             "fontset-alias-alist",
             super::builtins::symbols::fontset_alias_alist_startup_value(),
         );
-        let module_suffix = if cfg!(target_os = "macos") {
-            ".dylib"
-        } else if cfg!(target_os = "windows") {
-            ".dll"
-        } else {
-            ".so"
-        };
+        let module_suffix = super::lread::module_file_suffix();
         // GNU Emacs with module support includes the module suffix before
         // compiled and source Lisp suffixes.
         obarray.set_symbol_value(

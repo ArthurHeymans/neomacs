@@ -886,9 +886,10 @@ fn get_load_suffixes_returns_list() {
     // load suffix; it is not returned as its own suffix.
     let result = builtin_get_load_suffixes(&ev.obarray, vec![]).unwrap();
     let items = list_to_vec(&result).unwrap();
-    assert_eq!(items.len(), 2);
-    assert_eq!(items[0].as_utf8_str(), Some(".elc"));
-    assert_eq!(items[1].as_utf8_str(), Some(".el"));
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0].as_utf8_str(), Some(module_file_suffix()));
+    assert_eq!(items[1].as_utf8_str(), Some(".elc"));
+    assert_eq!(items[2].as_utf8_str(), Some(".el"));
 }
 
 #[test]
@@ -899,6 +900,10 @@ fn get_load_suffixes_cross_products_rep_suffixes() {
         "load-file-rep-suffixes",
         Value::list(vec![Value::string(""), Value::string(".gz")]),
     );
+    ev.obarray.set_symbol_value(
+        "jka-compr-load-suffixes",
+        Value::list(vec![Value::string(".gz")]),
+    );
 
     let result = builtin_get_load_suffixes(&ev.obarray, vec![]).unwrap();
     let rendered = list_to_vec(&result)
@@ -906,7 +911,10 @@ fn get_load_suffixes_cross_products_rep_suffixes() {
         .into_iter()
         .map(|v| v.as_utf8_str().unwrap().to_string())
         .collect::<Vec<_>>();
-    assert_eq!(rendered, vec![".elc", ".elc.gz", ".el", ".el.gz"]);
+    assert_eq!(
+        rendered,
+        vec![module_file_suffix(), ".elc", ".elc.gz", ".el", ".el.gz"]
+    );
 }
 
 #[test]

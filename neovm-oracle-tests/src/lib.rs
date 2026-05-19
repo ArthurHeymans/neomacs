@@ -1141,6 +1141,8 @@ mod list_tail_helper_semantics;
 mod listify_key_sequence_semantics;
 #[path = "load-history-semantics.rs"]
 mod load_history_semantics;
+#[path = "load-suffixes-semantics.rs"]
+mod load_suffixes_semantics;
 #[path = "locate-dominating-file-strict-edge-semantics.rs"]
 mod locate_dominating_file_strict_edge_semantics;
 #[path = "locate-file-strict-edge-semantics.rs"]
