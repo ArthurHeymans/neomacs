@@ -935,16 +935,14 @@ fn expect_list(value: &Value) -> Result<Vec<Value>, Flow> {
 
 fn parse_path_argument(value: &Value) -> Result<Vec<LispString>, Flow> {
     let mut path = Vec::new();
-    for entry in expect_list(value)? {
+    let Some(entries) = list_to_vec(value) else {
+        return Ok(path);
+    };
+    for entry in entries {
         match entry.kind() {
             ValueKind::Nil => path.push(LispString::from_unibyte(b".".to_vec())),
             ValueKind::String => path.push(entry.as_lisp_string().expect("checked string").clone()),
-            other => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("stringp"), entry],
-                ));
-            }
+            _ => {}
         }
     }
     Ok(path)
@@ -1049,6 +1047,10 @@ fn predicate_matches_candidate(
         return Ok(true);
     }
 
+    if let Some(mask) = predicate.as_fixnum() {
+        return Ok(integer_access_predicate_matches(candidate, mask));
+    }
+
     let Some(symbol) = predicate.as_symbol_name() else {
         // We currently only support symbol predicates via dispatch_subr;
         // unknown predicate object shapes default to accepting candidate.
@@ -1061,6 +1063,40 @@ fn predicate_matches_candidate(
         return Ok(true);
     };
     Ok(result?.is_truthy())
+}
+
+fn integer_access_predicate_matches(candidate: &LispString, mask: i64) -> bool {
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(candidate);
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        let mut mode = 0;
+        if (mask & 1) != 0 {
+            mode |= libc::X_OK;
+        }
+        if (mask & 2) != 0 {
+            mode |= libc::W_OK;
+        }
+        if (mask & 4) != 0 {
+            mode |= libc::R_OK;
+        }
+        unsafe { libc::access(c_path.as_ptr(), mode) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        let meta = match std::fs::metadata(path) {
+            Ok(meta) => meta,
+            Err(_) => return false,
+        };
+        if (mask & 2) != 0 && meta.permissions().readonly() {
+            return false;
+        }
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------

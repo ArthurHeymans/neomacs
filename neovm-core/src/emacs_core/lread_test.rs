@@ -1009,6 +1009,118 @@ fn locate_file_respects_symbol_predicates() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[cfg(unix)]
+#[test]
+fn locate_file_respects_integer_access_predicates() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = test_eval_ctx();
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-locate-file-access-{unique}"));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    let script = dir.join("script");
+    let data = dir.join("data");
+    fs::write(&script, "#!/bin/sh\nexit 0\n").expect("write script");
+    fs::write(&data, "not executable\n").expect("write data");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::set_permissions(&data, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let executable = builtin_locate_file(
+        &mut ctx,
+        vec![
+            Value::string("script"),
+            Value::list(vec![Value::string(dir.to_string_lossy())]),
+            Value::NIL,
+            Value::fixnum(1),
+        ],
+    )
+    .expect("locate-file with access predicate should evaluate");
+    assert!(
+        executable.as_utf8_str().is_some(),
+        "X_OK predicate should accept executable files"
+    );
+
+    let non_executable = builtin_locate_file(
+        &mut ctx,
+        vec![
+            Value::string("data"),
+            Value::list(vec![Value::string(dir.to_string_lossy())]),
+            Value::NIL,
+            Value::fixnum(1),
+        ],
+    )
+    .expect("locate-file with access predicate should evaluate");
+    assert!(
+        non_executable.is_nil(),
+        "X_OK predicate should reject non-executable files"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn locate_file_treats_invalid_path_entries_as_no_match() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = test_eval_ctx();
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-locate-file-path-edge-{unique}"));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    fs::write(dir.join("probe"), "x\n").expect("write probe");
+
+    let non_list_path = builtin_locate_file(
+        &mut ctx,
+        vec![
+            Value::string("probe"),
+            Value::fixnum(42),
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect("locate-file should evaluate");
+    assert!(non_list_path.is_nil());
+
+    let invalid_entry_path = builtin_locate_file(
+        &mut ctx,
+        vec![
+            Value::string("probe"),
+            Value::list(vec![Value::fixnum(42)]),
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect("locate-file should evaluate");
+    assert!(invalid_entry_path.is_nil());
+
+    let mixed_path = builtin_locate_file(
+        &mut ctx,
+        vec![
+            Value::string("probe"),
+            Value::list(vec![
+                Value::fixnum(42),
+                Value::string(dir.to_string_lossy()),
+            ]),
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect("locate-file should evaluate");
+    assert!(mixed_path.as_utf8_str().is_some());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn locate_file_unknown_predicate_defaults_to_truthy_match() {
     crate::test_utils::init_test_tracing();
