@@ -77,16 +77,16 @@ fn overlapping_put_fills_uncovered_gaps() {
 
     assert_eq!(
         table.get_property(0, Value::symbol("custom-prop")),
-        Some(&Value::symbol("value1"))
+        Some(Value::symbol("value1"))
     );
     assert_eq!(
         table.get_property(3, Value::symbol("custom-prop")),
-        Some(&Value::symbol("value1"))
+        Some(Value::symbol("value1"))
     );
     assert!(table.get_property(0, Value::symbol("face")).is_none());
     assert_eq!(
         table.get_property(3, Value::symbol("face")),
-        Some(&Value::symbol("bold"))
+        Some(Value::symbol("bold"))
     );
 }
 

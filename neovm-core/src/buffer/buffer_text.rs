@@ -521,11 +521,7 @@ impl BufferText {
 
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
         let pos = self.buf_bytepos_to_charpos(pos);
-        self.storage
-            .borrow()
-            .text_props
-            .get_property(pos, name)
-            .copied()
+        self.storage.borrow().text_props.get_property(pos, name)
     }
 
     pub fn text_props_get_properties(&self, pos: usize) -> HashMap<Value, Value> {

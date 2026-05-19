@@ -1451,7 +1451,7 @@ fn resolved_face_at_string_byte(
         let face_prop = table.get_property(bytepos, Value::symbol("face"));
         let font_lock_face_prop = table.get_property(bytepos, Value::symbol("font-lock-face"));
         if let Some(value) = face_prop.or(font_lock_face_prop) {
-            layers.extend(resolve_face_layers_from_value(value));
+            layers.extend(resolve_face_layers_from_value(&value));
         }
     }
     // Use face-remapping-alist from the current buffer (strings inherit

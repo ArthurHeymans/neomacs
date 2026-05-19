@@ -133,6 +133,12 @@ impl StringInterner {
 }
 
 #[derive(Clone, Copy, Debug)]
+struct SymbolNameValue {
+    value: TaggedValue,
+    heap_id: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
 struct SymbolSlot {
     name: NameId,
     canonical: bool,
@@ -140,7 +146,7 @@ struct SymbolSlot {
     /// one directly.  GNU stores the Lisp string object in the symbol, so
     /// `(symbol-name (make-symbol NAME))` is `eq` to NAME and sees later
     /// string mutation.
-    name_value: Option<TaggedValue>,
+    name_value: Option<SymbolNameValue>,
 }
 
 pub(crate) struct DumpedSymbolTable {
@@ -194,7 +200,7 @@ impl SymbolRegistry {
         &mut self,
         name: NameId,
         canonical: bool,
-        name_value: Option<TaggedValue>,
+        name_value: Option<SymbolNameValue>,
     ) -> SymId {
         let id = SymId(self.symbols.len() as u32);
         self.symbols.push(SymbolSlot {
@@ -242,7 +248,16 @@ impl SymbolRegistry {
         let name = self
             .names
             .intern_lisp_string(name_value.as_lisp_string().expect("string name"));
-        self.alloc_symbol(name, false, Some(name_value))
+        let heap_id = crate::tagged::gc::current_tagged_heap_identity()
+            .expect("make-symbol name value requires an installed tagged heap");
+        self.alloc_symbol(
+            name,
+            false,
+            Some(SymbolNameValue {
+                value: name_value,
+                heap_id,
+            }),
+        )
     }
 
     fn lookup(&self, s: &str) -> Option<SymId> {
@@ -272,8 +287,11 @@ impl SymbolRegistry {
         let slot = self
             .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        if let Some(value) = slot.name_value {
-            return value
+        if let Some(name_value) = slot.name_value
+            && crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id)
+        {
+            return name_value
+                .value
                 .as_lisp_string()
                 .expect("symbol name value must remain a string");
         }
@@ -282,9 +300,12 @@ impl SymbolRegistry {
 
     #[inline]
     fn resolve_name_value(&self, id: SymId) -> Option<TaggedValue> {
-        self.slot(id)
+        let name_value = self
+            .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id))
-            .name_value
+            .name_value?;
+        (crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id))
+            .then_some(name_value.value)
     }
 
     #[inline]
@@ -418,8 +439,14 @@ impl SymbolRegistry {
         self.canonical_by_name.get(&name).copied()
     }
 
-    fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>) {
-        roots.extend(self.symbols.iter().filter_map(|slot| slot.name_value));
+    fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>, heap_id: usize) {
+        roots.extend(
+            self.symbols
+                .iter()
+                .filter_map(|slot| slot.name_value)
+                .filter(|name_value| name_value.heap_id == heap_id)
+                .map(|name_value| name_value.value),
+        );
     }
 }
 
@@ -645,9 +672,9 @@ pub fn resolve_sym_name_value(id: SymId) -> Option<TaggedValue> {
     registry.resolve_name_value(id)
 }
 
-pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>) {
+pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>, heap_id: usize) {
     let registry = global_symbol_registry().read();
-    registry.collect_name_value_roots(roots);
+    registry.collect_name_value_roots(roots, heap_id);
 }
 
 // ---------------------------------------------------------------------------

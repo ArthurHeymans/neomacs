@@ -9,6 +9,9 @@
 
 use std::collections::BTreeMap;
 
+use crate::emacs_core::eval::{
+    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+};
 use crate::emacs_core::value::{Value, eq_value, equal_value};
 use crate::gc_trace::GcTrace;
 
@@ -100,7 +103,7 @@ impl PropertyInterval {
 
 use std::collections::HashMap;
 
-type IntervalPlist = Vec<(Value, Value)>;
+type IntervalPlist = Value;
 
 fn plist_value_from_pairs(plist: &[(Value, Value)]) -> Value {
     let mut items = Vec::with_capacity(plist.len() * 2);
@@ -111,58 +114,77 @@ fn plist_value_from_pairs(plist: &[(Value, Value)]) -> Value {
     Value::list(items)
 }
 
-fn plist_value_replace_existing(plist: Value, key: Value, value: Value) -> bool {
+fn plist_pairs(plist: Value) -> Vec<(Value, Value)> {
+    let mut pairs = Vec::new();
+    let mut tail = plist;
+    while tail.is_cons() {
+        let key = tail.cons_car();
+        let rest = tail.cons_cdr();
+        if !rest.is_cons() {
+            break;
+        }
+        pairs.push((key, rest.cons_car()));
+        tail = rest.cons_cdr();
+    }
+    pairs
+}
+
+fn plist_value_prepend_pair(plist: Value, key: Value, value: Value) -> Value {
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(plist);
+    push_scratch_gc_root(key);
+    push_scratch_gc_root(value);
+
+    let value_cell = Value::cons(value, plist);
+    push_scratch_gc_root(value_cell);
+    let result = Value::cons(key, value_cell);
+
+    restore_scratch_gc_roots(saved);
+    result
+}
+
+fn plist_value_get(plist: Value, key: Value) -> Option<Value> {
     let mut tail = plist;
     while tail.is_cons() {
         let name = tail.cons_car();
-        let value_cell = tail.cons_cdr();
-        if !value_cell.is_cons() {
-            return false;
+        let rest = tail.cons_cdr();
+        if !rest.is_cons() {
+            return None;
         }
         if eq_value(&name, &key) {
-            if eq_value(&value_cell.cons_car(), &value) {
-                return false;
-            }
-            value_cell.set_car(value);
-            return true;
+            return Some(rest.cons_car());
         }
-        tail = value_cell.cons_cdr();
+        tail = rest.cons_cdr();
     }
-    false
+    None
 }
 
-fn plist_value_remove(plist: Value, key: Value) -> (Value, bool) {
-    let mut old_tail = plist;
-    let mut reversed = Value::NIL;
-    let mut removed = false;
-    while old_tail.is_cons() {
-        let name = old_tail.cons_car();
-        let value_cell = old_tail.cons_cdr();
-        if !value_cell.is_cons() {
-            break;
+fn plist_value_put_replace(plist: &mut Value, key: Value, value: Value) -> bool {
+    let mut pairs = plist_pairs(*plist);
+    for (name, existing) in &mut pairs {
+        if eq_value(name, &key) {
+            if eq_value(existing, &value) {
+                return false;
+            }
+            *existing = value;
+            *plist = plist_value_from_pairs(&pairs);
+            return true;
         }
-        let value = value_cell.cons_car();
-        if eq_value(&name, &key) {
-            removed = true;
-        } else {
-            reversed = Value::cons(value, reversed);
-            reversed = Value::cons(name, reversed);
-        }
-        old_tail = value_cell.cons_cdr();
     }
+    pairs.insert(0, (key, value));
+    *plist = plist_value_from_pairs(&pairs);
+    true
+}
 
-    let mut rebuilt = old_tail;
-    while reversed.is_cons() {
-        let name = reversed.cons_car();
-        reversed = reversed.cons_cdr();
-        if !reversed.is_cons() {
-            break;
-        }
-        let value = reversed.cons_car();
-        reversed = reversed.cons_cdr();
-        rebuilt = Value::cons(name, Value::cons(value, rebuilt));
+fn plist_value_remove(plist: &mut Value, key: Value) -> bool {
+    let mut pairs = plist_pairs(*plist);
+    let before = pairs.len();
+    pairs.retain(|(name, _)| !eq_value(name, &key));
+    if pairs.len() == before {
+        return false;
     }
-    (rebuilt, removed)
+    *plist = plist_value_from_pairs(&pairs);
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -182,13 +204,11 @@ struct IntervalNode {
     write_protect: bool,
     visible: bool,
     plist: IntervalPlist,
-    plist_value: Value,
 }
 
 impl IntervalNode {
     fn new(end: usize, plist: IntervalPlist) -> Self {
-        let (front_sticky, rear_sticky, write_protect, visible) = Self::extract_cached(&plist);
-        let plist_value = plist_value_from_pairs(&plist);
+        let (front_sticky, rear_sticky, write_protect, visible) = Self::extract_cached(plist);
         Self {
             end,
             front_sticky,
@@ -196,12 +216,11 @@ impl IntervalNode {
             write_protect,
             visible,
             plist,
-            plist_value,
         }
     }
 
     fn default(start: usize, end: usize) -> Self {
-        Self::new(end, Vec::new())
+        Self::new(end, Value::NIL)
     }
 
     fn with_cached(
@@ -218,22 +237,21 @@ impl IntervalNode {
             rear_sticky,
             write_protect,
             visible,
-            plist_value: plist_value_from_pairs(&plist),
             plist,
         }
     }
 
     fn is_empty_plist(&self) -> bool {
-        self.plist.is_empty()
+        self.plist.is_nil()
     }
 
     /// Extract cached booleans from a plist (mirrors GNU's cache bits).
-    fn extract_cached(plist: &[(Value, Value)]) -> (bool, bool, bool, bool) {
+    fn extract_cached(plist: Value) -> (bool, bool, bool, bool) {
         let mut front_sticky = false;
         let mut rear_sticky = false;
         let mut write_protect = false;
         let mut visible = true;
-        for (key, value) in plist {
+        for (key, value) in plist_pairs(plist) {
             if key.is_symbol() {
                 let name = key.as_symbol_name().unwrap_or("");
                 match name {
@@ -250,7 +268,7 @@ impl IntervalNode {
 
     /// Re-extract and update cached booleans from current plist.
     fn refresh_cache(&mut self) {
-        let (fs, rs, wp, vis) = Self::extract_cached(&self.plist);
+        let (fs, rs, wp, vis) = Self::extract_cached(self.plist);
         self.front_sticky = fs;
         self.rear_sticky = rs;
         self.write_protect = wp;
@@ -261,32 +279,6 @@ impl IntervalNode {
 // ---------------------------------------------------------------------------
 // Plist helpers
 // ---------------------------------------------------------------------------
-
-fn plist_get(plist: &[(Value, Value)], key: Value) -> Option<&Value> {
-    plist
-        .iter()
-        .find_map(|(name, value)| eq_value(name, &key).then_some(value))
-}
-
-fn plist_put_replace(plist: &mut IntervalPlist, key: Value, value: Value) -> bool {
-    for (name, existing) in plist.iter_mut() {
-        if eq_value(name, &key) {
-            if eq_value(existing, &value) {
-                return false;
-            }
-            *existing = value;
-            return true;
-        }
-    }
-    plist.insert(0, (key, value));
-    true
-}
-
-fn plist_remove(plist: &mut IntervalPlist, key: Value) -> bool {
-    let before = plist.len();
-    plist.retain(|(name, _)| !eq_value(name, &key));
-    before != plist.len()
-}
 
 fn plists_equal_eq(left: &[(Value, Value)], right: &[(Value, Value)]) -> bool {
     if left.len() != right.len() {
@@ -373,7 +365,7 @@ impl TextPropertyTable {
             return;
         }
         if start < pos && pos < end {
-            let plist = node.plist.clone();
+            let plist = node.plist;
             let (fs, rs, wp, vis) = (
                 node.front_sticky,
                 node.rear_sticky,
@@ -470,20 +462,13 @@ impl TextPropertyTable {
         for key in affected {
             if cursor < key {
                 let mut node = IntervalNode::default(cursor, key);
-                plist_put_replace(&mut node.plist, name, value);
-                node.plist_value = plist_value_from_pairs(&node.plist);
+                plist_value_put_replace(&mut node.plist, name, value);
                 node.refresh_cache();
                 self.intervals.insert(cursor, node);
                 changed = true;
             }
             if let Some(node) = self.intervals.get_mut(&key) {
-                let existed = plist_get(&node.plist, name).is_some();
-                if plist_put_replace(&mut node.plist, name, value) {
-                    if existed {
-                        plist_value_replace_existing(node.plist_value, name, value);
-                    } else {
-                        node.plist_value = Value::cons(name, Value::cons(value, node.plist_value));
-                    }
+                if plist_value_put_replace(&mut node.plist, name, value) {
                     node.refresh_cache();
                     changed = true;
                 }
@@ -493,8 +478,7 @@ impl TextPropertyTable {
 
         if cursor < end {
             let mut node = IntervalNode::default(cursor, end);
-            plist_put_replace(&mut node.plist, name, value);
-            node.plist_value = plist_value_from_pairs(&node.plist);
+            plist_value_put_replace(&mut node.plist, name, value);
             node.refresh_cache();
             self.intervals.insert(cursor, node);
             changed = true;
@@ -507,37 +491,40 @@ impl TextPropertyTable {
         let mut table = Self::new();
         for (start, end, plist) in runs {
             if start < end && !plist.is_empty() {
-                table.intervals.insert(start, IntervalNode::new(end, plist));
+                table.intervals.insert(
+                    start,
+                    IntervalNode::new(end, plist_value_from_pairs(&plist)),
+                );
             }
         }
         table.prune_empty_intervals_after_mutation();
         table
     }
 
-    pub fn get_property(&self, pos: usize, name: Value) -> Option<&Value> {
+    pub fn get_property(&self, pos: usize, name: Value) -> Option<Value> {
         let (_, node) = self.find_interval(pos)?;
-        plist_get(&node.plist, name)
+        plist_value_get(node.plist, name)
     }
 
     pub fn get_properties(&self, pos: usize) -> HashMap<Value, Value> {
         let Some((start, node)) = self.find_interval(pos) else {
             return HashMap::new();
         };
-        PropertyInterval::from_plist(start, node.end, &node.plist).properties
+        PropertyInterval::from_plist(start, node.end, &plist_pairs(node.plist)).properties
     }
 
     pub fn get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
         let Some((_, node)) = self.find_interval(pos) else {
             return Vec::new();
         };
-        node.plist.clone()
+        plist_pairs(node.plist)
     }
 
     pub fn get_properties_plist_value(&self, pos: usize) -> Value {
         let Some((_, node)) = self.find_interval(pos) else {
             return Value::NIL;
         };
-        node.plist_value
+        node.plist
     }
 
     pub fn remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
@@ -552,8 +539,7 @@ impl TextPropertyTable {
         let mut changed = false;
         for key in &affected {
             if let Some(node) = self.intervals.get_mut(key) {
-                if plist_remove(&mut node.plist, name) {
-                    node.plist_value = plist_value_remove(node.plist_value, name).0;
+                if plist_value_remove(&mut node.plist, name) {
                     node.refresh_cache();
                     changed = true;
                 }
@@ -574,19 +560,18 @@ impl TextPropertyTable {
 
         for key in &affected {
             if let Some(node) = self.intervals.get_mut(key) {
-                node.plist.clear();
-                node.plist_value = Value::NIL;
+                node.plist = Value::NIL;
                 node.refresh_cache();
             }
         }
     }
 
     pub fn next_property_change(&self, pos: usize) -> Option<usize> {
-        let current = self.plist_at(pos).unwrap_or(&[]);
+        let current = self.plist_at(pos).unwrap_or_default();
         let mut cursor = pos;
         while let Some(next) = self.next_interval_boundary(cursor) {
-            let next_plist = self.plist_at(next).unwrap_or(&[]);
-            if !plists_equal_eq(current, next_plist) {
+            let next_plist = self.plist_at(next).unwrap_or_default();
+            if !plists_equal_eq(&current, &next_plist) {
                 return Some(next);
             }
             if next <= cursor {
@@ -602,14 +587,14 @@ impl TextPropertyTable {
             return None;
         }
 
-        let current = self.plist_at(pos - 1).unwrap_or(&[]);
+        let current = self.plist_at(pos - 1).unwrap_or_default();
         let mut cursor = pos;
         while let Some(prev) = self.previous_interval_boundary(cursor) {
             if prev == 0 {
                 return None;
             }
-            let previous_plist = self.plist_at(prev - 1).unwrap_or(&[]);
-            if !plists_equal_eq(current, previous_plist) {
+            let previous_plist = self.plist_at(prev - 1).unwrap_or_default();
+            if !plists_equal_eq(&current, &previous_plist) {
                 return Some(prev);
             }
             if prev >= cursor {
@@ -739,7 +724,9 @@ impl TextPropertyTable {
         self.intervals
             .iter()
             .filter(|(_, node)| !node.is_empty_plist())
-            .map(|(start, node)| PropertyInterval::from_plist(*start, node.end, &node.plist))
+            .map(|(start, node)| {
+                PropertyInterval::from_plist(*start, node.end, &plist_pairs(node.plist))
+            })
             .collect()
     }
 
@@ -762,7 +749,7 @@ impl TextPropertyTable {
                 runs.push((cursor, start, Vec::new()));
             }
             if start < end {
-                runs.push((start, end, node.plist.clone()));
+                runs.push((start, end, plist_pairs(node.plist)));
                 cursor = end;
             }
         }
@@ -788,7 +775,8 @@ impl TextPropertyTable {
             if *interval_start >= end {
                 break;
             }
-            f(*interval_start, node.end, &node.plist)?;
+            let pairs = plist_pairs(node.plist);
+            f(*interval_start, node.end, &pairs)?;
         }
         Ok(())
     }
@@ -797,9 +785,9 @@ impl TextPropertyTable {
         self.intervals.is_empty()
     }
 
-    fn plist_at(&self, pos: usize) -> Option<&[(Value, Value)]> {
+    fn plist_at(&self, pos: usize) -> Option<Vec<(Value, Value)>> {
         let (_, node) = self.find_interval(pos)?;
-        Some(&node.plist)
+        Some(plist_pairs(node.plist))
     }
 
     fn next_interval_boundary_after(&self, pos: usize, end: usize) -> usize {
@@ -828,9 +816,13 @@ impl TextPropertyTable {
     ) -> bool {
         let mut pos = 0;
         while pos < len {
-            let left_plist = left.and_then(|table| table.plist_at(pos)).unwrap_or(&[]);
-            let right_plist = right.and_then(|table| table.plist_at(pos)).unwrap_or(&[]);
-            if !plists_equal_values_equal(left_plist, right_plist) {
+            let left_plist = left
+                .and_then(|table| table.plist_at(pos))
+                .unwrap_or_default();
+            let right_plist = right
+                .and_then(|table| table.plist_at(pos))
+                .unwrap_or_default();
+            if !plists_equal_values_equal(&left_plist, &right_plist) {
                 return false;
             }
 
@@ -859,7 +851,7 @@ impl TextPropertyTable {
             .map(|(interval_start, node)| {
                 let new_start = (*interval_start).max(start) - start;
                 let new_end = node.end.min(end) - start;
-                (new_start, new_end, node.plist.clone())
+                (new_start, new_end, plist_pairs(node.plist))
             })
             .filter(|(new_start, new_end, _)| new_start < new_end)
             .collect();
@@ -883,8 +875,8 @@ impl TextPropertyTable {
             if new_start >= new_end {
                 continue;
             }
-            for (name, value) in &node.plist {
-                table.put_property(new_start, new_end, *name, *value);
+            for (name, value) in plist_pairs(node.plist) {
+                table.put_property(new_start, new_end, name, value);
             }
         }
         table
@@ -894,7 +886,7 @@ impl TextPropertyTable {
         for (&start, node) in &other.intervals {
             self.intervals.insert(
                 start + offset,
-                IntervalNode::new(node.end + offset, node.plist.clone()),
+                IntervalNode::new(node.end + offset, node.plist),
             );
         }
         self.prune_empty_intervals_after_mutation();
@@ -920,9 +912,9 @@ impl TextPropertyTable {
 
             for key in &affected {
                 if let Some(target) = self.intervals.get_mut(key) {
-                    for (name, value) in &node.plist {
-                        if plist_get(&target.plist, *name).is_none() {
-                            target.plist.insert(0, (*name, *value));
+                    for (name, value) in plist_pairs(node.plist) {
+                        if plist_value_get(target.plist, name).is_none() {
+                            target.plist = plist_value_prepend_pair(target.plist, name, value);
                         }
                     }
                     target.refresh_cache();
@@ -931,10 +923,8 @@ impl TextPropertyTable {
 
             // If no intervals in range, insert the source directly
             if affected.is_empty() {
-                self.intervals.insert(
-                    shifted_start,
-                    IntervalNode::new(shifted_end, node.plist.clone()),
-                );
+                self.intervals
+                    .insert(shifted_start, IntervalNode::new(shifted_end, node.plist));
             }
         }
         self.prune_empty_intervals_after_mutation();
@@ -960,8 +950,8 @@ impl TextPropertyTable {
                     continue;
                 };
                 if left.end != right_start
-                    || left.plist.is_empty()
-                    || !plists_equal_eq(&left.plist, &right.plist)
+                    || left.plist.is_nil()
+                    || !plists_equal_eq(&plist_pairs(left.plist), &plist_pairs(right.plist))
                     || left.end < start
                     || right_start > end
                 {
@@ -994,7 +984,7 @@ impl TextPropertyTable {
             if interval.start < interval.end {
                 table.intervals.insert(
                     interval.start,
-                    IntervalNode::new(interval.end, interval.into_plist()),
+                    IntervalNode::new(interval.end, plist_value_from_pairs(&interval.into_plist())),
                 );
             }
         }
@@ -1004,11 +994,7 @@ impl TextPropertyTable {
 
     pub(crate) fn for_each_root(&self, mut f: impl FnMut(Value)) {
         for (_, node) in &self.intervals {
-            f(node.plist_value);
-            for (key, value) in &node.plist {
-                f(*key);
-                f(*value);
-            }
+            f(node.plist);
         }
     }
 }

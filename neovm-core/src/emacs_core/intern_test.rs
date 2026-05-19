@@ -347,3 +347,32 @@ fn symbol_registry_exposes_name_ids_separately() {
     assert_eq!(registry.resolve_name(canonical_name), "shared-name");
     assert_ne!(canonical, uninterned);
 }
+
+#[test]
+fn uninterned_symbol_name_value_roots_are_heap_owned() {
+    crate::test_utils::init_test_tracing();
+
+    let mut heap1 = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut heap1);
+    let heap1_id = crate::tagged::gc::current_tagged_heap_identity().unwrap();
+    let name = crate::emacs_core::value::Value::string("owned-symbol-name");
+    let sym = make_uninterned_symbol_with_name_value(name);
+
+    assert_eq!(resolve_sym_name_value(sym), Some(name));
+    let mut roots = Vec::new();
+    collect_symbol_name_gc_roots(&mut roots, heap1_id);
+    assert!(roots.contains(&name));
+
+    let mut heap2 = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut heap2);
+    let heap2_id = crate::tagged::gc::current_tagged_heap_identity().unwrap();
+    let mut roots = Vec::new();
+    collect_symbol_name_gc_roots(&mut roots, heap2_id);
+
+    assert!(!roots.contains(&name));
+    assert_eq!(resolve_sym_name_value(sym), None);
+    assert_eq!(
+        resolve_sym_lisp_string(sym).as_utf8_str(),
+        Some("owned-symbol-name")
+    );
+}

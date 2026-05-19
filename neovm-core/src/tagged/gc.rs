@@ -133,6 +133,19 @@ pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(heap.write_tracking_mode()));
 }
 
+/// Return the current thread's tagged heap identity, if one is installed.
+///
+/// This is used only for runtime side tables that must avoid retaining Lisp
+/// objects from a different evaluator heap. GNU keeps those object references
+/// inside ordinary GC-managed structures; the heap identity preserves that
+/// ownership boundary for Neomacs side tables.
+pub(crate) fn current_tagged_heap_identity() -> Option<usize> {
+    TAGGED_HEAP.with(|h| {
+        let ptr = h.get();
+        (!ptr.is_null()).then_some(ptr as usize)
+    })
+}
+
 /// Access the thread-local tagged heap.
 ///
 /// In test mode, auto-creates a fallback heap if none is set.
@@ -1520,32 +1533,42 @@ impl TaggedHeap {
     }
 
     pub(crate) fn seed_root(&mut self, root: TaggedValue) {
+        self.seed_root_with_origin(root, "explicit-root");
+    }
+
+    pub(crate) fn seed_root_with_origin(&mut self, root: TaggedValue, origin: &str) {
         if root.is_heap_object() {
-            self.gray_queue.push(root);
+            self.push_gray(root, origin);
         }
     }
 
     fn seed_internal_runtime_roots(&mut self) {
         // Static subr objects are leaked process/thread runtime objects, matching
         // GNU's static `Lisp_Subr` storage. They are not swept by this heap.
-        for value in self.buffer_registry.values() {
+        let roots: Vec<(TaggedValue, &'static str)> = self
+            .buffer_registry
+            .values()
+            .map(|value| (*value, "buffer-registry"))
+            .chain(
+                self.window_registry
+                    .values()
+                    .map(|value| (*value, "window-registry")),
+            )
+            .chain(
+                self.frame_registry
+                    .values()
+                    .map(|value| (*value, "frame-registry")),
+            )
+            .chain(
+                self.timer_registry
+                    .values()
+                    .map(|value| (*value, "timer-registry")),
+            )
+            .collect();
+
+        for (value, origin) in roots {
             if value.is_heap_object() {
-                self.gray_queue.push(*value);
-            }
-        }
-        for value in self.window_registry.values() {
-            if value.is_heap_object() {
-                self.gray_queue.push(*value);
-            }
-        }
-        for value in self.frame_registry.values() {
-            if value.is_heap_object() {
-                self.gray_queue.push(*value);
-            }
-        }
-        for value in self.timer_registry.values() {
-            if value.is_heap_object() {
-                self.gray_queue.push(*value);
+                self.push_gray(value, origin);
             }
         }
     }
@@ -1604,6 +1627,58 @@ impl TaggedHeap {
         }
     }
 
+    fn push_gray(&mut self, val: TaggedValue, origin: &str) {
+        debug_assert!(val.is_heap_object());
+        self.debug_assert_heap_tag_matches_header(val, origin);
+        self.gray_queue.push(val);
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_assert_heap_tag_matches_header(&self, val: TaggedValue, origin: &str) {
+        if val.is_cons() {
+            return;
+        }
+
+        let (ptr, expected) = if val.is_string() {
+            (
+                val.as_string_ptr().unwrap() as *const u8,
+                HeapObjectKind::String,
+            )
+        } else if val.is_float() {
+            (
+                val.as_float_ptr().unwrap() as *const u8,
+                HeapObjectKind::Float,
+            )
+        } else if val.is_veclike() {
+            (
+                val.as_veclike_ptr().unwrap() as *const u8,
+                HeapObjectKind::VecLike,
+            )
+        } else {
+            return;
+        };
+
+        if !self.owns_non_cons_object(ptr) {
+            return;
+        }
+
+        let header = unsafe { &*(ptr as *const GcHeader) };
+        assert_eq!(
+            header.kind,
+            expected,
+            "GC gray queue received malformed tagged heap value from {origin}: \
+             value={:#x}, ptr={:?}, tag={}, header.kind={:?}, expected={:?}",
+            val.0,
+            ptr,
+            val.tag(),
+            header.kind,
+            expected
+        );
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn debug_assert_heap_tag_matches_header(&self, _val: TaggedValue, _origin: &str) {}
+
     /// Mark a single tagged value and push its children onto the gray queue.
     fn mark_value(&mut self, val: TaggedValue) {
         if val.is_cons() {
@@ -1612,10 +1687,10 @@ impl TaggedHeap {
                 let car = unsafe { (*ptr).car };
                 let cdr = unsafe { (*ptr).cdr() };
                 if car.is_heap_object() {
-                    self.gray_queue.push(car);
+                    self.push_gray(car, "cons-car");
                 }
                 if cdr.is_heap_object() {
-                    self.gray_queue.push(cdr);
+                    self.push_gray(cdr, "cons-cdr");
                 }
             }
         } else if val.is_string() {
@@ -1627,7 +1702,7 @@ impl TaggedHeap {
                         if !intervals.is_empty() {
                             intervals.for_each_root(|root| {
                                 if root.is_heap_object() {
-                                    self.gray_queue.push(root);
+                                    self.push_gray(root, "mapped-string-interval");
                                 }
                             });
                         }
@@ -1644,7 +1719,7 @@ impl TaggedHeap {
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
                         if root.is_heap_object() {
-                            self.gray_queue.push(root);
+                            self.push_gray(root, "string-interval");
                         }
                     });
                 }
@@ -1766,7 +1841,7 @@ impl TaggedHeap {
                 let obj = ptr as *const VectorObj;
                 for val in unsafe { &(*obj).data } {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "vector-slot");
                     }
                 }
             }
@@ -1774,7 +1849,7 @@ impl TaggedHeap {
                 let obj = ptr as *const RecordObj;
                 for val in unsafe { &(*obj).data } {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "record-slot");
                     }
                 }
             }
@@ -1784,13 +1859,13 @@ impl TaggedHeap {
                 // Trace all values in the hash table
                 for val in ht.data.values() {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "hash-table-value");
                     }
                 }
                 // Trace key snapshots (original key objects)
                 for val in ht.key_snapshots.values() {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "hash-table-key-snapshot");
                     }
                 }
             }
@@ -1800,7 +1875,7 @@ impl TaggedHeap {
                 let obj = ptr as *const LambdaObj;
                 for val in unsafe { &(*obj).data } {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "closure-slot");
                     }
                 }
             }
@@ -1808,35 +1883,35 @@ impl TaggedHeap {
                 let obj = ptr as *const ByteCodeObj;
                 let data = unsafe { &(*obj).data };
                 if data.arglist.is_heap_object() {
-                    self.gray_queue.push(data.arglist);
+                    self.push_gray(data.arglist, "bytecode-arglist");
                 }
                 // Trace constants vector
                 for val in &data.constants {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "bytecode-constant");
                     }
                 }
                 // Trace captured lexical environment
                 if let Some(env) = data.env {
                     if env.is_heap_object() {
-                        self.gray_queue.push(env);
+                        self.push_gray(env, "bytecode-env");
                     }
                 }
                 // Trace doc_form (can be a Value)
                 if let Some(doc_form) = data.doc_form {
                     if doc_form.is_heap_object() {
-                        self.gray_queue.push(doc_form);
+                        self.push_gray(doc_form, "bytecode-doc-form");
                     }
                 }
                 // Trace interactive spec
                 if let Some(interactive) = data.interactive {
                     if interactive.is_heap_object() {
-                        self.gray_queue.push(interactive);
+                        self.push_gray(interactive, "bytecode-interactive");
                     }
                 }
                 for val in &data.extra_slots {
                     if val.is_heap_object() {
-                        self.gray_queue.push(*val);
+                        self.push_gray(*val, "bytecode-extra-slot");
                     }
                 }
             }
@@ -1845,7 +1920,7 @@ impl TaggedHeap {
                 let data = unsafe { &(*obj).data };
                 // Trace the property list
                 if data.plist.is_heap_object() {
-                    self.gray_queue.push(data.plist);
+                    self.push_gray(data.plist, "overlay-plist");
                 }
             }
             VecLikeType::SymbolWithPos => {
@@ -1854,10 +1929,10 @@ impl TaggedHeap {
                 let sym = unsafe { (*obj).sym };
                 let pos = unsafe { (*obj).pos };
                 if sym.is_heap_object() {
-                    self.gray_queue.push(sym);
+                    self.push_gray(sym, "symbol-with-pos-symbol");
                 }
                 if pos.is_heap_object() {
-                    self.gray_queue.push(pos);
+                    self.push_gray(pos, "symbol-with-pos-position");
                 }
             }
             VecLikeType::ModuleFunction => {
@@ -1865,10 +1940,10 @@ impl TaggedHeap {
                 let doc = unsafe { (*obj).documentation };
                 let interactive = unsafe { (*obj).interactive_form };
                 if doc.is_heap_object() {
-                    self.gray_queue.push(doc);
+                    self.push_gray(doc, "module-function-documentation");
                 }
                 if interactive.is_heap_object() {
-                    self.gray_queue.push(interactive);
+                    self.push_gray(interactive, "module-function-interactive");
                 }
             }
             VecLikeType::Buffer

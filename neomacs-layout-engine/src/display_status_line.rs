@@ -811,7 +811,7 @@ impl LayoutEngine {
         let face_prop = props.get_property(charpos, Value::symbol("face"));
         let font_lock_face_prop = props.get_property(charpos, Value::symbol("font-lock-face"));
         if let Some(value) = face_prop.or(font_lock_face_prop)
-            && let Some(next) = face_resolver.resolve_face_value_over(&face, value)
+            && let Some(next) = face_resolver.resolve_face_value_over(&face, &value)
         {
             face = next;
         }

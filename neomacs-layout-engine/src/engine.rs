@@ -1453,9 +1453,7 @@ fn render_overlay_string(
             break;
         }
         if let Some(table) = text_props.as_ref()
-            && let Some(display_prop) = table
-                .get_property(char_idx, Value::symbol("display"))
-                .copied()
+            && let Some(display_prop) = table.get_property(char_idx, Value::symbol("display"))
         {
             let next_char = table
                 .next_interval_boundary(char_idx)
@@ -1682,17 +1680,17 @@ fn overlay_string_face_id_at(
     let Some(value) = face_prop.or(font_lock_face_prop) else {
         return base_face_id;
     };
-    if let Some(face_id) = string_face_cache.get(value) {
+    if let Some(face_id) = string_face_cache.get(&value) {
         return *face_id;
     }
-    let Some(resolved) = face_resolver.resolve_face_value_over(base_face, value) else {
+    let Some(resolved) = face_resolver.resolve_face_value_over(base_face, &value) else {
         return base_face_id;
     };
 
     let face_id = *current_face_id;
     apply_resolved_face(builder, face_id, &resolved, None);
     *current_face_id += 1;
-    string_face_cache.insert(*value, face_id);
+    string_face_cache.insert(value, face_id);
     face_id
 }
 

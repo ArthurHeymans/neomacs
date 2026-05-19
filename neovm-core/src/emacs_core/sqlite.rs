@@ -232,12 +232,8 @@ fn bind_elisp_value(
         }
         ValueKind::String => {
             let s = val.as_lisp_string().unwrap();
-            let coding_system =
-                get_string_text_properties_table_for_value(*val).and_then(|table| {
-                    table
-                        .get_property(0, Value::symbol("coding-system"))
-                        .copied()
-                });
+            let coding_system = get_string_text_properties_table_for_value(*val)
+                .and_then(|table| table.get_property(0, Value::symbol("coding-system")));
             let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
             if blob {
                 if s.is_multibyte() {
@@ -308,12 +304,8 @@ unsafe fn bind_raw_value(
         ValueKind::Float => unsafe { ffi::sqlite3_bind_double(stmt, idx, val.xfloat()) },
         ValueKind::String => {
             let s = val.as_lisp_string().unwrap();
-            let coding_system =
-                get_string_text_properties_table_for_value(*val).and_then(|table| {
-                    table
-                        .get_property(0, Value::symbol("coding-system"))
-                        .copied()
-                });
+            let coding_system = get_string_text_properties_table_for_value(*val)
+                .and_then(|table| table.get_property(0, Value::symbol("coding-system")));
             let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
             if blob {
                 if s.is_multibyte() {

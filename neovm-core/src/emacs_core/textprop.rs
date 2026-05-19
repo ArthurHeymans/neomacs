@@ -283,7 +283,7 @@ fn lookup_string_text_property(
     lookup_char_property_from_direct(
         obarray,
         buffers,
-        |name| table.get_property(char_pos, name).copied(),
+        |name| table.get_property(char_pos, name),
         prop,
         true,
     )
@@ -1368,9 +1368,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
                 Some(p) if p < char_end => p,
                 _ => char_end,
             };
-            let existing = table
-                .get_property(seg_start, Value::symbol("face"))
-                .cloned();
+            let existing = table.get_property(seg_start, Value::symbol("face"));
             let merged = merge_face_property(existing, new_face, append)?;
             table.put_property(seg_start, seg_end, Value::symbol("face"), merged);
             seg_start = seg_end;

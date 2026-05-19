@@ -180,14 +180,11 @@ fn read_from_string_preserves_propertized_string_literal_intervals() {
         .expect("reader should apply #(\"...\" START END PLIST) intervals");
 
     assert_eq!(
-        props
-            .get_property(0, Value::symbol("marginalia--align"))
-            .copied(),
+        props.get_property(0, Value::symbol("marginalia--align")),
         Some(Value::symbol("t"))
     );
     let display = props
         .get_property(0, Value::symbol("display"))
-        .copied()
         .expect("display property should survive reader literal");
     assert!(display.is_cons());
     assert!(display.cons_car().is_symbol_named("space"));

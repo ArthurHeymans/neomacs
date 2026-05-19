@@ -1204,17 +1204,65 @@ thread_local! {
 /// walks the Evaluator struct and its sub-managers).  This function calls each
 /// module's `collect_*_gc_roots` helper to ensure those Values are marked as
 /// live during garbage collection.
-fn collect_thread_local_gc_roots(roots: &mut Vec<Value>) {
-    super::syntax::collect_syntax_gc_roots(roots);
-    super::casetab::collect_casetab_gc_roots(roots);
-    super::category::collect_category_gc_roots(roots);
-    super::terminal::pure::collect_terminal_gc_roots(roots);
-    super::font::collect_font_gc_roots(roots);
-    super::charset::collect_charset_gc_roots(roots);
-    super::ccl::collect_ccl_gc_roots(roots);
-    super::dynamic_module::collect_dynamic_module_gc_roots(roots);
-    super::intern::collect_symbol_name_gc_roots(roots);
-    SCRATCH_GC_ROOTS.with(|scratch| roots.extend(scratch.borrow().iter().copied()));
+fn collect_thread_local_gc_roots(roots: &mut Vec<(Value, &'static str)>, heap_id: usize) {
+    fn collect_group(
+        roots: &mut Vec<(Value, &'static str)>,
+        origin: &'static str,
+        collect: impl FnOnce(&mut Vec<Value>),
+    ) {
+        let mut group = Vec::new();
+        collect(&mut group);
+        roots.extend(group.into_iter().map(|root| (root, origin)));
+    }
+
+    collect_group(
+        roots,
+        "syntax-thread-local",
+        super::syntax::collect_syntax_gc_roots,
+    );
+    collect_group(
+        roots,
+        "casetab-thread-local",
+        super::casetab::collect_casetab_gc_roots,
+    );
+    collect_group(
+        roots,
+        "category-thread-local",
+        super::category::collect_category_gc_roots,
+    );
+    collect_group(
+        roots,
+        "terminal-thread-local",
+        super::terminal::pure::collect_terminal_gc_roots,
+    );
+    collect_group(
+        roots,
+        "font-thread-local",
+        super::font::collect_font_gc_roots,
+    );
+    collect_group(
+        roots,
+        "charset-thread-local",
+        super::charset::collect_charset_gc_roots,
+    );
+    collect_group(roots, "ccl-thread-local", super::ccl::collect_ccl_gc_roots);
+    collect_group(
+        roots,
+        "dynamic-module-thread-local",
+        super::dynamic_module::collect_dynamic_module_gc_roots,
+    );
+    collect_group(roots, "symbol-name-thread-local", |group| {
+        super::intern::collect_symbol_name_gc_roots(group, heap_id)
+    });
+    SCRATCH_GC_ROOTS.with(|scratch| {
+        roots.extend(
+            scratch
+                .borrow()
+                .iter()
+                .copied()
+                .map(|root| (root, "scratch-thread-local")),
+        )
+    });
 }
 
 pub fn save_scratch_gc_roots() -> usize {
@@ -4811,11 +4859,6 @@ impl Context {
         if !self.interval_insert_in_front_hooks.is_nil() {
             visit(self.interval_insert_in_front_hooks);
         }
-        let mut thread_local_roots = Vec::new();
-        collect_thread_local_gc_roots(&mut thread_local_roots);
-        for root in thread_local_roots {
-            visit(root);
-        }
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);
         }
@@ -6229,9 +6272,25 @@ impl Context {
         // the raw heap pointer.
         unsafe {
             (*heap_ptr).begin_collection();
+            #[cfg(debug_assertions)]
+            let mut root_index = 0usize;
             self.trace_roots(&mut |root| {
-                (*heap_ptr).seed_root(root);
+                #[cfg(debug_assertions)]
+                {
+                    let origin = format!("context-root#{root_index}");
+                    root_index += 1;
+                    (*heap_ptr).seed_root_with_origin(root, &origin);
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    (*heap_ptr).seed_root(root);
+                }
             });
+            let mut thread_local_roots = Vec::new();
+            collect_thread_local_gc_roots(&mut thread_local_roots, heap_ptr as usize);
+            for (root, origin) in thread_local_roots {
+                (*heap_ptr).seed_root_with_origin(root, origin);
+            }
             // Install per-buffer marker-chain head slots so
             // `unchain_dead_markers` can splice unmarked markers out of
             // every live chain before sweep. Mirrors GNU
