@@ -155,6 +155,24 @@ fn oracle_add_face_text_property_preserves_dotted_face_list_like_gnu() {
 }
 
 #[test]
+fn oracle_add_face_text_property_append_rejects_dotted_face_list_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // The append branch in GNU Emacs src/textprop.c:add_properties calls
+    // append on the existing face list.  Improper face lists therefore signal
+    // a listp error instead of being wrapped as a single face value.
+    let form = r#"
+(let ((s (copy-sequence "abc")))
+  (set-text-properties 0 3 '(face (bold . italic)) s)
+  (condition-case err
+      (add-face-text-property 0 3 'underline t s)
+    (error (list (car err) (cadr err) (caddr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

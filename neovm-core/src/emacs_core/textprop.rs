@@ -1275,30 +1275,56 @@ fn is_anonymous_face_plist(v: &Value) -> bool {
     v.is_cons() && v.cons_car().is_keyword()
 }
 
-fn merge_face_property(existing: Option<Value>, new_face: Value, append: bool) -> Value {
+fn improper_list_tail(list: Value) -> Value {
+    let mut tail = list;
+    let mut tortoise = list;
+    let mut step = 0u64;
+    while tail.is_cons() {
+        tail = tail.cons_cdr();
+        step += 1;
+        if step % 2 == 0 {
+            if tortoise.is_cons() {
+                tortoise = tortoise.cons_cdr();
+            }
+            if tortoise.bits() == tail.bits() {
+                return list;
+            }
+        }
+    }
+    tail
+}
+
+fn merge_face_property(
+    existing: Option<Value>,
+    new_face: Value,
+    append: bool,
+) -> Result<Value, Flow> {
     let Some(existing_value) = existing else {
-        return new_face;
+        return Ok(new_face);
     };
     if existing_value.is_nil() {
-        return new_face;
+        return Ok(new_face);
     }
 
     if existing_value.is_cons() && !is_anonymous_face_plist(&existing_value) {
-        if let Some(mut items) = list_to_vec(&existing_value) {
-            if append {
+        if append {
+            if let Some(mut items) = list_to_vec(&existing_value) {
                 items.push(new_face);
-            } else {
-                items.insert(0, new_face);
+                return Ok(Value::list(items));
             }
-            return Value::list(items);
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("listp"), improper_list_tail(existing_value)],
+            ));
         }
+        return Ok(Value::cons(new_face, existing_value));
     }
 
-    if append {
+    Ok(if append {
         Value::list(vec![existing_value, new_face])
     } else {
         Value::list(vec![new_face, existing_value])
-    }
+    })
 }
 
 /// `(add-face-text-property START END FACE &optional APPENDP OBJECT)`
@@ -1345,7 +1371,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
             let existing = table
                 .get_property(seg_start, Value::symbol("face"))
                 .cloned();
-            let merged = merge_face_property(existing, new_face, append);
+            let merged = merge_face_property(existing, new_face, append)?;
             table.put_property(seg_start, seg_end, Value::symbol("face"), merged);
             seg_start = seg_end;
         }
@@ -1392,7 +1418,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         let existing = buf
             .text
             .text_props_get_property(seg_start, Value::symbol("face"));
-        let merged = merge_face_property(existing, new_face, append);
+        let merged = merge_face_property(existing, new_face, append)?;
         segments.push((seg_start, seg_end, merged));
         seg_start = seg_end;
     }
