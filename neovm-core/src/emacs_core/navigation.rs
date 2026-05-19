@@ -595,7 +595,7 @@ pub(crate) fn pos_eol_compute(
     let zv = buf.zv_byte;
     let mut pos = buf.pt_byte;
     let mut moved = 0;
-    let delta = scan_count - if scan_count <= 0 { 1 } else { 0 };
+    let delta = scan_count.saturating_sub(1);
     if delta != 0 {
         let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, delta, begv, zv);
         pos = new_pos;
