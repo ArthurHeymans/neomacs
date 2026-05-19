@@ -7105,25 +7105,7 @@ impl Context {
             return Ok(form_unwrapped);
         }
 
-        self.depth += 1;
-        if self.depth > self.max_depth {
-            if let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth") {
-                if let Some(n) = v.as_fixnum() {
-                    let new_max = n.max(100) as usize;
-                    if new_max != self.max_depth {
-                        self.max_depth = new_max;
-                    }
-                }
-            }
-        }
-        if self.depth > self.max_depth {
-            let overflow_depth = self.depth as i64;
-            self.depth -= 1;
-            return Err(signal(
-                "excessive-lisp-nesting",
-                vec![Value::fixnum(overflow_depth)],
-            ));
-        }
+        self.enter_interpreted_eval_depth()?;
 
         let result = self.maybe_grow_eval_stack(|ctx| {
             ctx.maybe_quit_before_gc()?;
@@ -7137,6 +7119,28 @@ impl Context {
         });
         self.depth -= 1;
         result
+    }
+
+    fn enter_interpreted_eval_depth(&mut self) -> Result<(), Flow> {
+        self.depth += 1;
+        if self.depth > self.max_depth
+            && let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth")
+            && let Some(n) = v.as_fixnum()
+        {
+            let new_max = n.max(100) as usize;
+            if new_max != self.max_depth {
+                self.max_depth = new_max;
+            }
+        }
+        if self.depth > self.max_depth {
+            let overflow_depth = self.depth as i64;
+            self.depth -= 1;
+            return Err(signal(
+                "excessive-lisp-nesting",
+                vec![Value::fixnum(overflow_depth)],
+            ));
+        }
+        Ok(())
     }
 
     fn eval_sub_cons(&mut self, form: Value) -> EvalResult {
@@ -10054,17 +10058,23 @@ impl Context {
         args: LispArgVec,
         record_backtrace: bool,
     ) -> EvalResult {
+        self.maybe_quit_before_gc()?;
+        self.enter_interpreted_eval_depth()?;
         let bt_count = self.specpdl.len();
         if record_backtrace {
             self.push_backtrace_frame(function, &args);
         }
-        let result = self.maybe_gc_and_quit().and_then(|_| {
+        let result = (|| {
+            if self.gc_safe_point_exact_should_collect() {
+                self.gc_collect_from_current_roots();
+            }
             // GNU does not probe stack space for every funcall. Keep growth
             // checks at the function-application boundary, but only on coarse
             // depth intervals so normal startup is not dominated by TLS lookups
             // in stacker::maybe_grow.
             self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args))
-        });
+        })();
+        self.depth -= 1;
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
     }
