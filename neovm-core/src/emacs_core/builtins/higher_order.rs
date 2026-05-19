@@ -4,6 +4,149 @@ use smallvec::SmallVec;
 
 type MapResultVec = SmallVec<[Value; 8]>;
 
+pub(crate) fn gnu_mapconcat_unfilled_slot_value() -> Value {
+    // GNU `Fmapconcat` allocates the concat argument vector before calling
+    // `mapcar1`.  In non-checking builds, a callback that shortens a list
+    // leaves the later slot observable when `concat` type-checks it.
+    Value::fixnum(35_184_318_513_152)
+}
+
+pub(crate) fn map_sequence_length(sequence: Value) -> Result<usize, Flow> {
+    if super::chartable::is_char_table(&sequence) {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), sequence],
+        ));
+    }
+
+    match sequence.kind() {
+        ValueKind::Nil => Ok(0),
+        ValueKind::Cons => super::cons_list::proper_list_length_or_signal(sequence),
+        ValueKind::String => Ok(sequence.as_lisp_string().expect("string").schars()),
+        ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::ByteCode) => {
+            super::cons_list::closure_vector_length(&sequence)
+                .and_then(|len| usize::try_from(len).ok())
+                .ok_or_else(|| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("sequencep"), sequence],
+                    )
+                })
+        }
+        ValueKind::Veclike(VecLikeType::Vector) => {
+            if let Some(len) = super::chartable::bool_vector_length(&sequence) {
+                usize::try_from(len).map_err(|_| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("sequencep"), sequence],
+                    )
+                })
+            } else {
+                Ok(sequence.as_vector_data().expect("vector").len())
+            }
+        }
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("sequencep"), sequence],
+        )),
+    }
+}
+
+pub(crate) fn map_sequence_element(sequence: Value, index: usize) -> Result<Value, Flow> {
+    match sequence.kind() {
+        ValueKind::Veclike(VecLikeType::Vector) => {
+            if let Some(value) = super::chartable::bool_vector_ref_value(&sequence, index) {
+                Ok(value)
+            } else {
+                Ok(sequence.as_vector_data().expect("vector")[index])
+            }
+        }
+        ValueKind::Veclike(VecLikeType::Lambda) => {
+            super::cons_list::lambda_to_closure_vector(&sequence)
+                .get(index)
+                .copied()
+                .ok_or_else(|| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("sequencep"), sequence],
+                    )
+                })
+        }
+        ValueKind::Veclike(VecLikeType::ByteCode) => {
+            super::cons_list::bytecode_to_closure_vector(&sequence)
+                .get(index)
+                .copied()
+                .ok_or_else(|| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("sequencep"), sequence],
+                    )
+                })
+        }
+        ValueKind::String => {
+            let string = sequence.as_lisp_string().expect("string");
+            super::lisp_string_char_at(string, index)
+                .map(|code| Value::fixnum(code as i64))
+                .ok_or_else(|| {
+                    signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("sequencep"), sequence],
+                    )
+                })
+        }
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("sequencep"), sequence],
+        )),
+    }
+}
+
+fn mapcar1_eval<F>(
+    eval: &mut super::eval::Context,
+    len: usize,
+    values: Option<&mut MapResultVec>,
+    sequence: Value,
+    mut call: F,
+) -> Result<usize, Flow>
+where
+    F: FnMut(&mut super::eval::Context, Value) -> Result<Value, Flow>,
+{
+    let mut values = values;
+    match sequence.kind() {
+        ValueKind::Nil => Ok(0),
+        ValueKind::Cons => {
+            let mut cursor = sequence;
+            let mut mapped = 0usize;
+            for _ in 0..len {
+                if !cursor.is_cons() {
+                    return Ok(mapped);
+                }
+                eval.push_vm_frame_root(cursor);
+                let item = cursor.cons_car();
+                let value = call(eval, item)?;
+                if let Some(results) = values.as_deref_mut() {
+                    eval.push_vm_frame_root(value);
+                    results.push(value);
+                }
+                mapped += 1;
+                cursor = cursor.cons_cdr();
+            }
+            Ok(mapped)
+        }
+        _ => {
+            for index in 0..len {
+                let item = map_sequence_element(sequence, index)?;
+                let value = call(eval, item)?;
+                if let Some(results) = values.as_deref_mut() {
+                    eval.push_vm_frame_root(value);
+                    results.push(value);
+                }
+            }
+            Ok(len)
+        }
+    }
+}
+
 fn list_from_map_results(eval: &mut super::eval::Context, results: &[Value]) -> Value {
     let mut acc = Value::NIL;
     let acc_root = eval.push_vm_frame_root_slot(acc);
@@ -217,57 +360,17 @@ pub(crate) fn builtin_mapcar_2(
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(seq);
-    let mut results = MapResultVec::new();
-    // GNU fns.c Fmapcar rejects char-tables with `listp` before mapping.
-    if super::chartable::is_char_table(&seq) {
-        eval.restore_vm_roots(roots);
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("listp"), seq],
-        ));
-    }
-    // GNU fns.c Fmapcar computes SEQUENCE length before calling FUNCTION, then
-    // reads each cons cdr after the callback.  If FUNCTION shortens the list,
-    // mapcar returns the mapped prefix instead of following stale cdrs.
-    let map_result: Result<(), Flow> = if seq.is_nil() {
-        Ok(())
-    } else if seq.is_cons() {
-        let len = match super::cons_list::proper_list_length_or_signal(seq) {
-            Ok(len) => len,
-            Err(err) => {
-                eval.restore_vm_roots(roots);
-                return Err(err);
-            }
-        };
-        results = MapResultVec::with_capacity(len);
-        let mut cursor = seq;
-        let mut result = Ok(());
-        for _ in 0..len {
-            if !cursor.is_cons() {
-                break;
-            }
-            eval.push_vm_frame_root(cursor);
-            let item = cursor.cons_car();
-            let val = match apply1(eval, func, item) {
-                Ok(v) => v,
-                Err(e) => {
-                    result = Err(e);
-                    break;
-                }
-            };
-            eval.push_vm_frame_root(val);
-            results.push(val);
-            cursor = cursor.cons_cdr();
+    let len = match map_sequence_length(seq) {
+        Ok(len) => len,
+        Err(flow) => {
+            eval.restore_vm_roots(roots);
+            return Err(flow);
         }
-        result
-    } else {
-        for_each_sequence_element(&seq, |item| {
-            let val = apply1(eval, func, item)?;
-            eval.push_vm_frame_root(val);
-            results.push(val);
-            Ok(())
-        })
     };
+    let mut results = MapResultVec::with_capacity(len);
+    let map_result = mapcar1_eval(eval, len, Some(&mut results), seq, |eval, item| {
+        apply1(eval, func, item)
+    });
     if let Err(flow) = map_result {
         eval.restore_vm_roots(roots);
         return Err(flow);
@@ -295,52 +398,16 @@ pub(crate) fn builtin_mapc_2(
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(seq);
-    if super::chartable::is_char_table(&seq) {
-        eval.restore_vm_roots(roots);
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("listp"), seq],
-        ));
-    }
-    // For cons lists, root cursor at each step so our precise GC
-    // (which doesn't scan the Rust stack) can find the remaining
-    // chain even if a hook callback modifies the list.
-    let result: Result<(), Flow> = if seq.is_cons() || seq.is_nil() {
-        if let Err(err) = super::cons_list::proper_list_length_or_signal(seq) {
+    let len = match map_sequence_length(seq) {
+        Ok(len) => len,
+        Err(flow) => {
             eval.restore_vm_roots(roots);
-            return Err(err);
+            return Err(flow);
         }
-        let mut cursor = seq;
-        loop {
-            match cursor.kind() {
-                ValueKind::Nil => break Ok(()),
-                ValueKind::Cons => {
-                    let pair_car = cursor.cons_car();
-                    let pair_cdr = cursor.cons_cdr();
-                    let item = pair_car;
-                    cursor = pair_cdr;
-                    // Root the remaining tail before calling the function.
-                    eval.push_vm_frame_root(cursor);
-                    if let Err(e) = apply1(eval, func, item) {
-                        break Err(e);
-                    }
-                }
-                tail => {
-                    break Err(signal(
-                        "wrong-type-argument",
-                        vec![Value::symbol("listp"), cursor],
-                    ));
-                }
-            }
-        }
-    } else {
-        for_each_sequence_element(&seq, |item| {
-            apply1(eval, func, item)?;
-            Ok(())
-        })
     };
+    let result = mapcar1_eval(eval, len, None, seq, |eval, item| apply1(eval, func, item));
     eval.restore_vm_roots(roots);
-    result?;
+    result.map(|_| ())?;
     Ok(seq)
 }
 
@@ -351,45 +418,48 @@ pub(crate) fn builtin_mapconcat(eval: &mut super::eval::Context, args: Vec<Value
     // Emacs 30: separator is optional, defaults to ""
     let separator = args.get(2).copied().unwrap_or_else(|| Value::string(""));
 
-    let mut parts = Vec::new();
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(sequence);
     eval.push_vm_frame_root(separator);
-    if super::chartable::is_char_table(&sequence) {
+    let len = match map_sequence_length(sequence) {
+        Ok(len) => len,
+        Err(flow) => {
+            eval.restore_vm_roots(roots);
+            return Err(flow);
+        }
+    };
+    if len == 0 {
         eval.restore_vm_roots(roots);
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("listp"), sequence],
-        ));
-    }
-    if sequence.is_cons()
-        && let Err(err) = super::cons_list::proper_list_length_or_signal(sequence)
-    {
-        eval.restore_vm_roots(roots);
-        return Err(err);
-    }
-    let mapconcat_result = for_each_sequence_element(&sequence, |item| {
-        let val = apply1(eval, func, item)?;
-        eval.push_vm_frame_root(val);
-        parts.push(val);
-        Ok(())
-    });
-    eval.restore_vm_roots(roots);
-    mapconcat_result?;
-
-    if parts.is_empty() {
         return Ok(Value::string(""));
     }
+    let mut parts = MapResultVec::with_capacity(len);
+    let mapconcat_result = mapcar1_eval(eval, len, Some(&mut parts), sequence, |eval, item| {
+        apply1(eval, func, item)
+    });
+    let mapped = match mapconcat_result {
+        Ok(mapped) => mapped,
+        Err(flow) => {
+            eval.restore_vm_roots(roots);
+            return Err(flow);
+        }
+    };
 
-    let mut concat_args = Vec::with_capacity(parts.len() * 2 - 1);
-    for (index, part) in parts.into_iter().enumerate() {
+    let mut concat_args = Vec::with_capacity(len * 2 - 1);
+    for index in 0..len {
         if index > 0 {
             concat_args.push(separator);
         }
-        concat_args.push(part);
+        concat_args.push(if index < mapped {
+            parts[index]
+        } else {
+            gnu_mapconcat_unfilled_slot_value()
+        });
     }
-    builtin_concat(concat_args)
+
+    let result = builtin_concat(concat_args);
+    eval.restore_vm_roots(roots);
+    result
 }
 
 pub(crate) fn builtin_mapcan(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -401,31 +471,26 @@ pub(crate) fn builtin_mapcan(eval: &mut super::eval::Context, args: Vec<Value>) 
     }
     let func = args[0];
     let sequence = args[1];
-    let mut mapped = Vec::new();
     let roots = eval.save_vm_roots();
     eval.push_vm_frame_root(func);
     eval.push_vm_frame_root(sequence);
-    if super::chartable::is_char_table(&sequence) {
-        eval.restore_vm_roots(roots);
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("listp"), sequence],
-        ));
-    }
-    if sequence.is_cons()
-        && let Err(err) = super::cons_list::proper_list_length_or_signal(sequence)
-    {
-        eval.restore_vm_roots(roots);
-        return Err(err);
-    }
-    let mapcan_result = for_each_sequence_element(&sequence, |item| {
-        let val = apply1(eval, func, item)?;
-        eval.push_vm_frame_root(val);
-        mapped.push(val);
-        Ok(())
+    let len = match map_sequence_length(sequence) {
+        Ok(len) => len,
+        Err(flow) => {
+            eval.restore_vm_roots(roots);
+            return Err(flow);
+        }
+    };
+    let mut mapped = MapResultVec::with_capacity(len);
+    let mapcan_result = mapcar1_eval(eval, len, Some(&mut mapped), sequence, |eval, item| {
+        apply1(eval, func, item)
     });
+    if let Err(flow) = mapcan_result {
+        eval.restore_vm_roots(roots);
+        return Err(flow);
+    }
+    let mapped: Vec<Value> = mapped.into_iter().collect();
     eval.restore_vm_roots(roots);
-    mapcan_result?;
     builtin_nconc(mapped)
 }
 

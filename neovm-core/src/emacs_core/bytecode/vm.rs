@@ -3048,25 +3048,73 @@ impl<'a> Vm<'a> {
         self.with_vm_root_scope(|vm| {
             vm.push_dynamic_vm_root(func);
             vm.push_dynamic_vm_root(sequence);
+            let len = crate::emacs_core::builtins::higher_order::map_sequence_length(sequence)?;
             let mut results = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function1(func, item)
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    results.push(value);
-                    Ok(())
-                },
-            );
+            let map_result = vm.mapcar1_fast(len, Some(&mut results), sequence, |vm, item| {
+                vm.with_vm_root_scope(|vm| {
+                    vm.push_dynamic_vm_root(item);
+                    vm.call_function1(func, item)
+                })
+            });
 
             match map_result {
-                Ok(()) => Ok(Value::list(results)),
+                Ok(_) => Ok(Value::list(results)),
                 Err(flow) => Err(flow),
             }
         })
+    }
+
+    fn mapcar1_fast<F>(
+        &mut self,
+        len: usize,
+        values: Option<&mut Vec<Value>>,
+        sequence: Value,
+        mut call: F,
+    ) -> Result<usize, Flow>
+    where
+        F: FnMut(&mut Self, Value) -> EvalResult,
+    {
+        let mut values = values;
+        match sequence.kind() {
+            ValueKind::Nil => Ok(0),
+            ValueKind::Cons => {
+                let mut cursor = sequence;
+                let mut mapped = 0usize;
+                for _ in 0..len {
+                    if !cursor.is_cons() {
+                        return Ok(mapped);
+                    }
+                    self.push_dynamic_vm_root(cursor);
+                    let item = cursor.cons_car();
+                    self.push_dynamic_vm_root(item);
+                    let value = call(self, item)?;
+                    if let Some(results) = values.as_deref_mut() {
+                        self.push_dynamic_vm_root(value);
+                        results.push(value);
+                    }
+                    mapped += 1;
+                    cursor = cursor.cons_cdr();
+                }
+                Ok(mapped)
+            }
+            _ => {
+                for index in 0..len {
+                    let item = crate::emacs_core::builtins::higher_order::map_sequence_element(
+                        sequence, index,
+                    )?;
+                    self.push_dynamic_vm_root(item);
+                    let value = self.with_vm_root_scope(|vm| {
+                        vm.push_dynamic_vm_root(item);
+                        call(vm, item)
+                    })?;
+                    if let Some(results) = values.as_deref_mut() {
+                        self.push_dynamic_vm_root(value);
+                        results.push(value);
+                    }
+                }
+                Ok(len)
+            }
+        }
     }
 
     fn builtin_mapc_fast(&mut self, args: &[Value]) -> EvalResult {
@@ -3076,17 +3124,13 @@ impl<'a> Vm<'a> {
         self.with_vm_root_scope(|vm| {
             vm.push_dynamic_vm_root(func);
             vm.push_dynamic_vm_root(sequence);
-            crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let result = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function1(func, item)
-                    });
-                    result?;
-                    Ok(())
-                },
-            )?;
+            let len = crate::emacs_core::builtins::higher_order::map_sequence_length(sequence)?;
+            vm.mapcar1_fast(len, None, sequence, |vm, item| {
+                vm.with_vm_root_scope(|vm| {
+                    vm.push_dynamic_vm_root(item);
+                    vm.call_function1(func, item)
+                })
+            })?;
             Ok(sequence)
         })
     }
@@ -3098,22 +3142,17 @@ impl<'a> Vm<'a> {
         self.with_vm_root_scope(|vm| {
             vm.push_dynamic_vm_root(func);
             vm.push_dynamic_vm_root(sequence);
+            let len = crate::emacs_core::builtins::higher_order::map_sequence_length(sequence)?;
             let mut mapped = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function1(func, item)
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    mapped.push(value);
-                    Ok(())
-                },
-            );
+            let map_result = vm.mapcar1_fast(len, Some(&mut mapped), sequence, |vm, item| {
+                vm.with_vm_root_scope(|vm| {
+                    vm.push_dynamic_vm_root(item);
+                    vm.call_function1(func, item)
+                })
+            });
 
             match map_result {
-                Ok(()) => crate::emacs_core::builtins::builtin_nconc(mapped),
+                Ok(_) => crate::emacs_core::builtins::builtin_nconc(mapped),
                 Err(flow) => Err(flow),
             }
         })
@@ -3128,29 +3167,30 @@ impl<'a> Vm<'a> {
             vm.push_dynamic_vm_root(func);
             vm.push_dynamic_vm_root(sequence);
             vm.push_dynamic_vm_root(separator);
+            let len = crate::emacs_core::builtins::higher_order::map_sequence_length(sequence)?;
+            if len == 0 {
+                return Ok(Value::string(""));
+            }
             let mut parts = Vec::new();
-            let map_result = crate::emacs_core::builtins::higher_order::for_each_sequence_element(
-                &sequence,
-                |item| {
-                    let value = vm.with_vm_root_scope(|vm| {
-                        vm.push_dynamic_vm_root(item);
-                        vm.call_function1(func, item)
-                    })?;
-                    vm.push_dynamic_vm_root(value);
-                    parts.push(value);
-                    Ok(())
-                },
-            );
+            let map_result = vm.mapcar1_fast(len, Some(&mut parts), sequence, |vm, item| {
+                vm.with_vm_root_scope(|vm| {
+                    vm.push_dynamic_vm_root(item);
+                    vm.call_function1(func, item)
+                })
+            });
 
             match map_result {
-                Ok(()) if parts.is_empty() => Ok(Value::string("")),
-                Ok(()) => {
-                    let mut concat_args = Vec::with_capacity(parts.len() * 2 - 1);
-                    for (index, part) in parts.iter().copied().enumerate() {
+                Ok(mapped) => {
+                    let mut concat_args = Vec::with_capacity(len * 2 - 1);
+                    for index in 0..len {
                         if index > 0 {
                             concat_args.push(separator);
                         }
-                        concat_args.push(part);
+                        concat_args.push(if index < mapped {
+                            parts[index]
+                        } else {
+                            crate::emacs_core::builtins::higher_order::gnu_mapconcat_unfilled_slot_value()
+                        });
                     }
                     crate::emacs_core::builtins::builtin_concat(concat_args)
                 }
