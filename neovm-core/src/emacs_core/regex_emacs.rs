@@ -602,38 +602,8 @@ pub(crate) fn regex_compile_lisp(
                 // Do not split when the postfix applies to a just-closed shy
                 // group. GNU clears `pending_exact` on \), so `\(?:ab\)?`
                 // repeats the whole "ab" group, not only "b".
-                if !last_is_group && buf.buffer[last] == RegexOp::Exactn as u8 {
-                    let count_pos = last + 1;
-                    let count = buf.buffer[count_pos] as usize;
-                    let exact_start = count_pos + 1;
-                    let exact_end = exact_start + count;
-                    let exact_bytes = &buf.buffer[exact_start..exact_end];
-                    let last_char_start = if buf.multibyte {
-                        let mut rel = 0;
-                        let mut previous = 0;
-                        let mut chars = 0;
-                        while rel < exact_bytes.len() {
-                            previous = rel;
-                            let (_, len) = emacs_char::string_char(&exact_bytes[rel..]);
-                            rel += len;
-                            chars += 1;
-                        }
-                        if chars > 1 { Some(previous) } else { None }
-                    } else if count > 1 {
-                        Some(count - 1)
-                    } else {
-                        None
-                    };
-
-                    if let Some(split_start) = last_char_start {
-                        let split_bytes = exact_bytes[split_start..].to_vec();
-                        buf.buffer.truncate(exact_start + split_start);
-                        buf.buffer[count_pos] = split_start as u8;
-                        last = buf.buffer.len();
-                        buf.buffer.push(RegexOp::Exactn as u8);
-                        buf.buffer.push(split_bytes.len() as u8);
-                        buf.buffer.extend_from_slice(&split_bytes);
-                    }
+                if !last_is_group {
+                    last = split_trailing_exactn_atom_if_needed(&mut buf, last);
                 }
 
                 let greedy = if p < plen && pattern_bytes[p] == b'?' {
@@ -1021,11 +991,14 @@ pub(crate) fn regex_compile_lisp(
                             p += 1;
                         }
 
-                        let Some(last) = laststart else {
+                        let Some(mut last) = laststart else {
                             return Err(RegexCompileError {
                                 message: "\\{ without preceding expression".to_string(),
                             });
                         };
+                        if !laststart_is_group {
+                            last = split_trailing_exactn_atom_if_needed(&mut buf, last);
+                        }
 
                         compile_interval(min_count, max_count, lazy, last, &mut buf)?;
                         laststart = None;
@@ -1268,6 +1241,61 @@ fn goto_normal_char(
     *pending_exact = Some(buf.buffer.len());
     buf.buffer.push(encoded_len as u8);
     buf.buffer.extend_from_slice(&encoded[..encoded_len]);
+}
+
+/// Split the final character out of a multi-character `exactn` atom.
+///
+/// GNU `regex-emacs.c` avoids building one `exactn` across a character
+/// followed by a postfix or interval operator (see the `normal_char`
+/// check for `*`, `+`, `?`, and `\{`). Since this Rust compiler may
+/// already have coalesced adjacent literal characters, split lazily
+/// before compiling the repeat so `ab\{0,1\}` repeats only `b`, not
+/// the whole `ab`.
+fn split_trailing_exactn_atom_if_needed(buf: &mut CompiledPattern, laststart: usize) -> usize {
+    if buf.buffer.get(laststart).copied() != Some(RegexOp::Exactn as u8) {
+        return laststart;
+    }
+
+    let count_pos = laststart + 1;
+    let Some(&count_byte) = buf.buffer.get(count_pos) else {
+        return laststart;
+    };
+    let count = count_byte as usize;
+    let exact_start = count_pos + 1;
+    let exact_end = exact_start + count;
+    if exact_end > buf.buffer.len() {
+        return laststart;
+    }
+    let exact_bytes = &buf.buffer[exact_start..exact_end];
+    let last_char_start = if buf.multibyte {
+        let mut rel = 0;
+        let mut previous = 0;
+        let mut chars = 0;
+        while rel < exact_bytes.len() {
+            previous = rel;
+            let (_, len) = emacs_char::string_char(&exact_bytes[rel..]);
+            rel += len;
+            chars += 1;
+        }
+        if chars > 1 { Some(previous) } else { None }
+    } else if count > 1 {
+        Some(count - 1)
+    } else {
+        None
+    };
+
+    let Some(split_start) = last_char_start else {
+        return laststart;
+    };
+
+    let split_bytes = exact_bytes[split_start..].to_vec();
+    buf.buffer.truncate(exact_start + split_start);
+    buf.buffer[count_pos] = split_start as u8;
+    let split_atom = buf.buffer.len();
+    buf.buffer.push(RegexOp::Exactn as u8);
+    buf.buffer.push(split_bytes.len() as u8);
+    buf.buffer.extend_from_slice(&split_bytes);
+    split_atom
 }
 
 /// Compile a repetition operator (*, +, ?).

@@ -671,6 +671,21 @@ fn string_match_open_interval_quantifier_matches_gnu_semantics() {
 }
 
 #[test]
+fn string_match_interval_repeats_only_trailing_literal_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let mut md = None;
+    let result = string_match_full_with_case_fold("ab\\{0,1\\}", "a", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    assert_eq!(md.expect("match data").groups[0], Some((0, 1)));
+
+    let mut md = None;
+    let result = string_match_full_with_case_fold("ab\\{0\\}", "ab", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    assert_eq!(md.expect("match data").groups[0], Some((0, 1)));
+}
+
+#[test]
 fn string_match_explicit_numbered_group_preserves_group_slot() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
