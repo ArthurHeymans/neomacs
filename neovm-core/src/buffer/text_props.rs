@@ -160,17 +160,25 @@ fn plist_value_get(plist: Value, key: Value) -> Option<Value> {
 }
 
 fn plist_value_put_replace(plist: &mut Value, key: Value, value: Value) -> bool {
-    let mut pairs = plist_pairs(*plist);
-    for (name, existing) in &mut pairs {
-        if eq_value(name, &key) {
-            if eq_value(existing, &value) {
+    let mut tail = *plist;
+    while tail.is_cons() {
+        let name = tail.cons_car();
+        let rest = tail.cons_cdr();
+        if !rest.is_cons() {
+            break;
+        }
+        if eq_value(&name, &key) {
+            let existing = rest.cons_car();
+            if eq_value(&existing, &value) {
                 return false;
             }
-            *existing = value;
-            *plist = plist_value_from_pairs(&pairs);
+            rest.set_car(value);
             return true;
         }
+        tail = rest.cons_cdr();
     }
+
+    let mut pairs = plist_pairs(*plist);
     pairs.insert(0, (key, value));
     *plist = plist_value_from_pairs(&pairs);
     true
@@ -326,6 +334,17 @@ impl TextPropertyTable {
         Self {
             intervals: BTreeMap::new(),
         }
+    }
+
+    /// Copy interval nodes and plist cons spines, while preserving plist
+    /// values by reference.  GNU `copy_intervals` copies intervals and
+    /// `copy_properties` copies `interval->plist` with `copy-sequence`.
+    pub fn copy_interval_plist_spines(&self) -> Self {
+        let mut copy = self.clone();
+        for node in copy.intervals.values_mut() {
+            node.plist = plist_value_from_pairs(&plist_pairs(node.plist));
+        }
+        copy
     }
 
     // -- Query helpers -------------------------------------------------------
@@ -736,6 +755,18 @@ impl TextPropertyTable {
     /// interval tree exists.  GNU reports those gaps so callers can observe the
     /// complete interval partition of the string.
     pub fn object_interval_runs(&self, len: usize) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        self.object_interval_plist_runs(len)
+            .into_iter()
+            .map(|(start, end, plist)| (start, end, plist_pairs(plist)))
+            .collect()
+    }
+
+    /// Return GNU `object-intervals' shaped runs with the live interval plist.
+    ///
+    /// GNU `collect_interval' stores `interval->plist' directly in the
+    /// returned structure, so later property replacement can be visible through
+    /// that plist object.
+    pub fn object_interval_plist_runs(&self, len: usize) -> Vec<(usize, usize, Value)> {
         if self.intervals.is_empty() {
             return Vec::new();
         }
@@ -746,15 +777,15 @@ impl TextPropertyTable {
             let start = start.min(len);
             let end = node.end.min(len);
             if cursor < start {
-                runs.push((cursor, start, Vec::new()));
+                runs.push((cursor, start, Value::NIL));
             }
             if start < end {
-                runs.push((start, end, plist_pairs(node.plist)));
+                runs.push((start, end, node.plist));
                 cursor = end;
             }
         }
         if cursor < len {
-            runs.push((cursor, len, Vec::new()));
+            runs.push((cursor, len, Value::NIL));
         }
         runs
     }

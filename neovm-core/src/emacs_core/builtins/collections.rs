@@ -366,12 +366,7 @@ fn hash_test_from_user_test_pair(test: &Value, hash: &Value) -> Option<HashTable
     match (test_name, hash_name) {
         ("eq", "sxhash-eq") => Some(HashTableTest::Eq),
         ("eql", "sxhash-eql") => Some(HashTableTest::Eql),
-        ("equal", "sxhash-equal")
-        | ("equal", "sxhash-equal-including-properties")
-        | ("equal-including-properties", "sxhash-equal")
-        | ("equal-including-properties", "sxhash-equal-including-properties") => {
-            Some(HashTableTest::Equal)
-        }
+        ("equal", "sxhash-equal") => Some(HashTableTest::Equal),
         _ => None,
     }
 }

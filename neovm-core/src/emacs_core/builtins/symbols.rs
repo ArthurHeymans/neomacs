@@ -2375,18 +2375,13 @@ pub(crate) fn builtin_object_intervals(
             return Ok(Value::NIL);
         };
         let intervals = table
-            .object_interval_runs(len)
+            .object_interval_plist_runs(len)
             .into_iter()
             .map(|(start, end, plist)| {
-                let mut plist_values = Vec::with_capacity(plist.len() * 2);
-                for (key, value) in plist {
-                    plist_values.push(key);
-                    plist_values.push(value);
-                }
                 Value::list(vec![
                     Value::fixnum(start as i64),
                     Value::fixnum(end as i64),
-                    Value::list(plist_values),
+                    plist,
                 ])
             })
             .collect();

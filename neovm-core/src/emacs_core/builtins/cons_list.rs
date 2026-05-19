@@ -1523,7 +1523,10 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
             // Copy text properties
             if new_val.is_string() {
                 if let Some(table) = get_string_text_properties_table_for_value(args[0]) {
-                    set_string_text_properties_table_for_value(new_val, table);
+                    set_string_text_properties_table_for_value(
+                        new_val,
+                        table.copy_interval_plist_spines(),
+                    );
                 }
             }
             Ok(new_val)
