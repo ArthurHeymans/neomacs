@@ -6,6 +6,7 @@ use proptest::prelude::*;
 
 use super::common::{
     ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_via_binary,
 };
 
 #[test]
@@ -87,7 +88,7 @@ fn oracle_prop_concat_in_loop() {
                     (dotimes (i 5)
                       (setq result (concat result (number-to-string i))))
                     result)"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_via_binary(form);
     assert_ok_eq(r#""01234""#, &o, &n);
 }
 

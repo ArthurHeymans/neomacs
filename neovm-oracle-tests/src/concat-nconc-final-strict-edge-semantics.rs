@@ -5,10 +5,11 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
-fn oracle_concat_integers_forms_string() {
+fn oracle_concat_integers_signal_sequence_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(concat 72 73)"#);
-    assert_ok_eq("\"HI\"", &o, &n);
+    assert_eq!(o, "ERR (wrong-type-argument sequencep 72)");
+    assert_eq!(n, o);
 }
 
 #[test]
