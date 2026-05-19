@@ -341,19 +341,34 @@ fn column_for_lisp_string(prefix: &LispString, tab_width: usize) -> usize {
     column
 }
 
-fn padding_to_column(mut column: usize, target: usize, tab_width: usize) -> String {
+fn spaces_to_column(column: usize, target: usize) -> String {
+    " ".repeat(target.saturating_sub(column))
+}
+
+fn indent_to_column_string(
+    mut column: usize,
+    target: usize,
+    tab_width: usize,
+    indent_tabs_mode: bool,
+) -> String {
     let mut out = String::new();
     let tab = tab_width.max(1);
-    while column < target {
-        let next_tab = column + (tab - (column % tab));
-        if next_tab <= target && next_tab > column + 1 {
+
+    if indent_tabs_mode {
+        let ntabs = target / tab - column / tab;
+        for _ in 0..ntabs {
             out.push('\t');
-            column = next_tab;
-        } else {
-            out.push(' ');
-            column += 1;
+        }
+        if ntabs > 0 {
+            column = (target / tab) * tab;
         }
     }
+
+    while column < target {
+        out.push(' ');
+        column += 1;
+    }
+
     out
 }
 
@@ -520,7 +535,7 @@ pub(crate) fn builtin_move_to_column(
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
         let _ = ctx.buffers.goto_buffer_byte(current_id, tab_byte);
-        let pad = padding_to_column(col_before_tab, target, tabw);
+        let pad = spaces_to_column(col_before_tab, target);
         let insert_pos = tab_byte;
         let pad_len = pad.len();
         super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
@@ -545,7 +560,8 @@ pub(crate) fn builtin_move_to_column(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
-        let pad = padding_to_column(reached, target, tabw);
+        let use_tabs = indent_tabs_mode_in_state(&ctx.obarray, &[], ctx.buffers.get(current_id));
+        let pad = indent_to_column_string(reached, target, tabw, use_tabs);
         let insert_pos = ctx.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
         let pad_len = pad.len();
         super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
