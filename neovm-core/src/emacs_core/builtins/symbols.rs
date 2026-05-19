@@ -2588,11 +2588,27 @@ pub(crate) fn builtin_reconsider_frame_fonts(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_redirect_debugging_output(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_redirect_debugging_output(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("redirect-debugging-output", &args, 1, 2)?;
-    if !args[0].is_nil() {
-        let _ = expect_strict_string(&args[0])?;
+    if args[0].is_nil() {
+        eval.debugging_output_file = None;
+        return Ok(Value::NIL);
     }
+    let expanded =
+        crate::emacs_core::fileio::builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let path = expect_strict_string(&expanded)?;
+    let append = args.get(1).is_some_and(|value| value.is_truthy());
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(append)
+        .truncate(!append)
+        .open(&path)
+        .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+    eval.debugging_output_file = Some(file);
     Ok(Value::NIL)
 }
 

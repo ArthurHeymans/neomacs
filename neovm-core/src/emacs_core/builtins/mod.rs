@@ -4828,7 +4828,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "external-debugging-output",
-        |_ctx, args| builtin_external_debugging_output(args),
+        builtin_external_debugging_output,
         1,
         Some(1),
     );
@@ -5728,7 +5728,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "redirect-debugging-output",
-        |_ctx, args| builtin_redirect_debugging_output(args),
+        builtin_redirect_debugging_output,
         1,
         Some(2),
     );

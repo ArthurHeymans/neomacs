@@ -1007,7 +1007,10 @@ pub(crate) fn builtin_display_update_for_mouse_movement(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_external_debugging_output(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_external_debugging_output(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("external-debugging-output", &args, 1)?;
     let ch = expect_fixnum(&args[0])?;
     if ch < 0 {
@@ -1016,7 +1019,27 @@ pub(crate) fn builtin_external_debugging_output(args: Vec<Value>) -> EvalResult 
             vec![Value::string("Invalid character: f03fffff")],
         ));
     }
-    Ok(Value::fixnum(ch))
+    let character = char::from_u32(ch as u32).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string(format!("Invalid character: {ch:x}"))],
+        )
+    })?;
+    let mut encoded = [0; 4];
+    let bytes = character.encode_utf8(&mut encoded).as_bytes();
+    if let Some(file) = eval.debugging_output_file.as_mut() {
+        use std::io::Write;
+        file.write_all(bytes)
+            .and_then(|_| file.flush())
+            .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+    } else {
+        use std::io::Write;
+        std::io::stderr()
+            .write_all(bytes)
+            .and_then(|_| std::io::stderr().flush())
+            .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+    }
+    Ok(args[0])
 }
 
 pub(crate) fn builtin_internal_labeled_narrow_to_region(

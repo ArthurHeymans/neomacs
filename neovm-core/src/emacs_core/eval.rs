@@ -1613,6 +1613,10 @@ pub struct Context {
     pub(crate) interactive_minibuffer_read_count: u64,
     /// Current echo-area message text, mirroring GNU `current-message`.
     pub(crate) current_message: Option<crate::heap_types::LispString>,
+    /// Redirected debugging output stream. Mirrors GNU print.c's
+    /// `redirect-debugging-output` redirection target for writes through
+    /// `external-debugging-output`.
+    pub(crate) debugging_output_file: Option<std::fs::File>,
     /// True after print output has selected the current echo area buffer.
     ///
     /// Mirrors GNU xdisp.c `message_buf_print`: `message`/clear reset it, and
@@ -4359,6 +4363,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            debugging_output_file: None,
             message_buf_print: false,
             minibuffer_selected_window: None,
             active_minibuffer_window: None,
@@ -4525,6 +4530,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            debugging_output_file: None,
             message_buf_print: false,
             minibuffer_selected_window: None,
             active_minibuffer_window: None,

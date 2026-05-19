@@ -318,13 +318,47 @@ fn rassoc_improper_tail_reports_original_alist_like_gnu() {
 #[test]
 fn external_debugging_rejects_negative_fixnum() {
     crate::test_utils::init_test_tracing();
-    let err =
-        crate::emacs_core::builtins::builtin_external_debugging_output(vec![Value::fixnum(-1)])
-            .unwrap_err();
+    let mut eval = crate::emacs_core::Context::new();
+    let err = crate::emacs_core::builtins::builtin_external_debugging_output(
+        &mut eval,
+        vec![Value::fixnum(-1)],
+    )
+    .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected signal, got {other:?}"),
     }
+}
+
+#[test]
+fn redirect_debugging_output_captures_external_debugging_output() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let path = std::env::temp_dir().join(format!(
+        "neomacs-redirect-debugging-output-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let path_value = Value::string(path.to_string_lossy().as_ref());
+
+    crate::emacs_core::builtins::builtin_redirect_debugging_output(&mut eval, vec![path_value])
+        .expect("redirect debug output to temp file");
+    crate::emacs_core::builtins::builtin_external_debugging_output(
+        &mut eval,
+        vec![Value::fixnum('A' as i64)],
+    )
+    .expect("write A");
+    crate::emacs_core::builtins::builtin_external_debugging_output(
+        &mut eval,
+        vec![Value::fixnum('B' as i64)],
+    )
+    .expect("write B");
+    crate::emacs_core::builtins::builtin_redirect_debugging_output(&mut eval, vec![Value::NIL])
+        .expect("reset debug output");
+
+    let contents = std::fs::read_to_string(&path).expect("debug output file contents");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(contents, "AB");
 }
 
 #[test]
