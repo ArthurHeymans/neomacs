@@ -3661,6 +3661,19 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn merge_adjacent_equal_buffer_text_properties(
+        &mut self,
+        id: BufferId,
+        byte_start: usize,
+        byte_end: usize,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .text
+            .text_props_merge_adjacent_equal_around(byte_start, byte_end);
+        Some(())
+    }
+
     pub fn remove_buffer_text_property(
         &mut self,
         id: BufferId,

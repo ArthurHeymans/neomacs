@@ -775,9 +775,7 @@ impl TextPropertyTable {
             .map(|(interval_start, node)| {
                 let new_start = (*interval_start).max(start) - start;
                 let new_end = node.end.min(end) - start;
-                let mut plist = node.plist.clone();
-                plist.reverse();
-                (new_start, new_end, plist)
+                (new_start, new_end, node.plist.clone())
             })
             .filter(|(new_start, new_end, _)| new_start < new_end)
             .collect();
@@ -833,6 +831,50 @@ impl TextPropertyTable {
             }
         }
         self.prune_empty_intervals_after_mutation();
+    }
+
+    pub fn merge_adjacent_equal_properties_around(&mut self, start: usize, end: usize) {
+        if start > end || self.intervals.len() < 2 {
+            return;
+        }
+
+        loop {
+            let keys: Vec<usize> = self.intervals.keys().copied().collect();
+            let mut merged = false;
+
+            for pair in keys.windows(2) {
+                let left_start = pair[0];
+                let right_start = pair[1];
+
+                let Some(left) = self.intervals.get(&left_start) else {
+                    continue;
+                };
+                let Some(right) = self.intervals.get(&right_start) else {
+                    continue;
+                };
+                if left.end != right_start
+                    || left.plist.is_empty()
+                    || !plists_equal_eq(&left.plist, &right.plist)
+                    || left.end < start
+                    || right_start > end
+                {
+                    continue;
+                }
+
+                let right_end = right.end;
+                if let Some(left) = self.intervals.get_mut(&left_start) {
+                    left.end = right_end;
+                    left.refresh_cache();
+                }
+                self.intervals.remove(&right_start);
+                merged = true;
+                break;
+            }
+
+            if !merged {
+                break;
+            }
+        }
     }
 
     pub(crate) fn dump_intervals(&self) -> Vec<PropertyInterval> {

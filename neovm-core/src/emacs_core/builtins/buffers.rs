@@ -3074,6 +3074,13 @@ fn insert_pieces_in_state(
                 insert_pos,
                 piece.text.sbytes(),
             );
+            if piece.text_props.is_none() {
+                let _ = buffers.merge_adjacent_equal_buffer_text_properties(
+                    current_id,
+                    insert_pos,
+                    insert_pos + piece.text.sbytes(),
+                );
+            }
         }
         if let Some(str_table) = piece.text_props {
             if inherit {
@@ -3156,6 +3163,11 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
             insert_pos,
             text_len,
         );
+        let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
+            current_id,
+            insert_pos,
+            insert_pos + text_len,
+        );
     }
     super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
     Ok(Value::NIL)
@@ -3225,6 +3237,11 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
             current_id,
             insert_pos,
             text_len,
+        );
+        let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
+            current_id,
+            insert_pos,
+            insert_pos + text_len,
         );
     }
     super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;

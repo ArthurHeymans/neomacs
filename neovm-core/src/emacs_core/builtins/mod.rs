@@ -5576,7 +5576,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "object-intervals",
-        |_ctx, args| builtin_object_intervals(args),
+        |ctx, args| builtin_object_intervals(ctx, args),
         1,
         Some(1),
     );

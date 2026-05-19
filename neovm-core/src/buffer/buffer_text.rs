@@ -619,6 +619,20 @@ impl BufferText {
             .merge_missing_shifted(other, char_offset);
     }
 
+    pub fn text_props_merge_adjacent_equal_around(&self, byte_start: usize, byte_end: usize) {
+        let (char_start, char_end) = {
+            let storage = self.storage.borrow();
+            (
+                storage.gap.byte_to_char(byte_start),
+                storage.gap.byte_to_char(byte_end),
+            )
+        };
+        self.storage
+            .borrow_mut()
+            .text_props
+            .merge_adjacent_equal_properties_around(char_start, char_end);
+    }
+
     pub fn text_props_slice(&self, start: usize, end: usize) -> TextPropertyTable {
         let start = self.buf_bytepos_to_charpos(start);
         let end = self.buf_bytepos_to_charpos(end);
@@ -627,6 +641,13 @@ impl BufferText {
 
     pub fn text_props_intervals_snapshot(&self) -> Vec<PropertyInterval> {
         self.storage.borrow().text_props.intervals_snapshot()
+    }
+
+    pub fn text_props_object_interval_runs(
+        &self,
+        len: usize,
+    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        self.storage.borrow().text_props.object_interval_runs(len)
     }
 
     pub(crate) fn text_props_try_for_each_interval_in_range<E>(

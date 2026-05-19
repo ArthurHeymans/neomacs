@@ -2335,7 +2335,10 @@ pub(crate) fn builtin_open_dribble_file(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_object_intervals(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_object_intervals(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("object-intervals", &args, 1)?;
     if args[0].is_string() {
         let len = args[0]
@@ -2366,13 +2369,35 @@ pub(crate) fn builtin_object_intervals(args: Vec<Value>) -> EvalResult {
         return Ok(Value::list(intervals));
     }
 
-    if !args[0].is_buffer() {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("buffer-or-string-p"), args[0]],
-        ));
+    if args[0].is_buffer() {
+        let id = args[0].as_buffer_id().expect("buffer value has id");
+        let Some(buf) = eval.buffers.get_any(id) else {
+            return Ok(Value::NIL);
+        };
+        let intervals = buf
+            .text
+            .text_props_object_interval_runs(buf.total_chars())
+            .into_iter()
+            .map(|(start, end, plist)| {
+                let mut plist_values = Vec::with_capacity(plist.len() * 2);
+                for (key, value) in plist {
+                    plist_values.push(key);
+                    plist_values.push(value);
+                }
+                Value::list(vec![
+                    Value::fixnum(start as i64),
+                    Value::fixnum(end as i64),
+                    Value::list(plist_values),
+                ])
+            })
+            .collect();
+        return Ok(Value::list(intervals));
     }
-    Ok(Value::NIL)
+
+    Err(signal(
+        "wrong-type-argument",
+        vec![Value::symbol("buffer-or-string-p"), args[0]],
+    ))
 }
 
 pub(crate) fn builtin_optimize_char_table(args: Vec<Value>) -> EvalResult {
