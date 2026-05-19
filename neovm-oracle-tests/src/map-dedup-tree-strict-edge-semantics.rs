@@ -2,7 +2,7 @@
 //! GNU src/fns.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap};
 
 #[test]
 fn oracle_mapconcat_basic() {
@@ -28,14 +28,14 @@ fn oracle_mapconcat_single() {
 #[test]
 fn oracle_delete_dups_removes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete-dups '(a b a c b d))"#);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(r#"(delete-dups '(a b a c b d))"#);
     assert_ok_eq("(a b c d)", &o, &n);
 }
 
 #[test]
 fn oracle_delete_dups_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(delete-dups nil)"#);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(r#"(delete-dups nil)"#);
     assert_ok_eq("nil", &o, &n);
 }
 
