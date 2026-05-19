@@ -85,6 +85,62 @@ fn string_search() {
 }
 
 #[test]
+fn string_search_gnu_start_pos_errors() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_string_search(vec![
+        Value::string("a"),
+        Value::string("abc"),
+        Value::fixnum(-1),
+    ])
+    .unwrap_err();
+    match err {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol, intern("args-out-of-range"));
+            assert_eq!(sig.data, vec![Value::fixnum(-1)]);
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+
+    let err = builtin_string_search(vec![
+        Value::string("a"),
+        Value::string("abc"),
+        Value::bignum(rug::Integer::from(1) << 100),
+    ])
+    .unwrap_err();
+    match err {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol, intern("wrong-type-argument"));
+            assert_eq!(sig.data[0], Value::symbol("fixnump"));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn string_search_raw_byte_multibyte_conversion() {
+    crate::test_utils::init_test_tracing();
+    let unibyte_e9 = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xE9]));
+    let raw_byte_e9 = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(
+        crate::emacs_core::emacs_char::str_to_multibyte(&[0xE9]),
+    ));
+    let eacute = Value::string("é");
+
+    assert_eq!(
+        builtin_string_search(vec![raw_byte_e9.clone(), unibyte_e9.clone()]).unwrap(),
+        Value::fixnum(0)
+    );
+    assert_eq!(
+        builtin_string_search(vec![unibyte_e9.clone(), raw_byte_e9]).unwrap(),
+        Value::fixnum(0)
+    );
+    assert!(
+        builtin_string_search(vec![eacute, unibyte_e9])
+            .unwrap()
+            .is_nil()
+    );
+}
+
+#[test]
 fn proper_list_p() {
     crate::test_utils::init_test_tracing();
     let list = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);

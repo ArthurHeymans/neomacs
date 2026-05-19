@@ -76,6 +76,16 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     }
 }
 
+fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
+    match val.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        other => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("fixnump"), *val],
+        )),
+    }
+}
+
 fn symbol_like_name(value: &Value) -> Option<&str> {
     match value.kind() {
         ValueKind::Nil => Some("nil"),
@@ -266,6 +276,7 @@ pub(crate) fn builtin_take(args: Vec<Value>) -> EvalResult {
 /// is also a character position, matching GNU Emacs semantics.
 pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
     expect_min_args("string-search", &args, 2)?;
+    expect_max_args("string-search", &args, 3)?;
     let needle_ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             "wrong-type-argument",
@@ -280,30 +291,48 @@ pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
     })?;
     let char_len = haystack_ls.schars();
     let start_char = if args.len() > 2 {
-        let n = expect_int(&args[2])?;
+        let n = expect_fixnum(&args[2])?;
         if n < 0 || n as usize > char_len {
-            return Err(signal(
-                "args-out-of-range",
-                vec![args[2], Value::fixnum(0), Value::fixnum(char_len as i64)],
-            ));
+            return Err(signal("args-out-of-range", vec![args[2]]));
         }
         n as usize
     } else {
         0
     };
 
-    let haystack_bytes = haystack_ls.as_bytes();
-    let needle_bytes = needle_ls.as_bytes();
+    if needle_ls.schars() > haystack_ls.schars() - start_char {
+        return Ok(Value::NIL);
+    }
 
-    // Convert the start character position to a byte offset for slicing.
+    let haystack_bytes = haystack_ls.as_bytes();
     let start_byte = if haystack_ls.is_multibyte() {
         crate::emacs_core::emacs_char::char_to_byte_pos(haystack_bytes, start_char)
     } else {
         start_char
     };
     let search_in = &haystack_bytes[start_byte..];
+    let needle_bytes_storage;
+    let needle_bytes = if string_search_direct_bytes(haystack_ls, needle_ls) {
+        if haystack_ls.is_multibyte()
+            && needle_ls.is_multibyte()
+            && haystack_ls.schars() == haystack_ls.sbytes()
+            && needle_ls.schars() != needle_ls.sbytes()
+        {
+            return Ok(Value::NIL);
+        }
+        needle_ls.as_bytes()
+    } else if haystack_ls.is_multibyte() {
+        needle_bytes_storage =
+            crate::emacs_core::emacs_char::str_to_multibyte(needle_ls.as_bytes());
+        &needle_bytes_storage
+    } else {
+        if multibyte_string_has_non_ascii_non_raw_byte(needle_ls) {
+            return Ok(Value::NIL);
+        }
+        needle_bytes_storage = crate::emacs_core::emacs_char::str_as_unibyte(needle_ls.as_bytes());
+        &needle_bytes_storage
+    };
 
-    // Search for needle bytes in haystack bytes
     if let Some(byte_pos) = find_subsequence(search_in, needle_bytes) {
         let abs_byte = start_byte + byte_pos;
         let char_pos = if haystack_ls.is_multibyte() {
@@ -315,6 +344,32 @@ pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
     } else {
         Ok(Value::NIL)
     }
+}
+
+fn string_search_direct_bytes(
+    haystack: &crate::heap_types::LispString,
+    needle: &crate::heap_types::LispString,
+) -> bool {
+    if haystack.is_multibyte() {
+        needle.is_multibyte()
+            || haystack.schars() == haystack.sbytes()
+            || needle.as_bytes().is_ascii()
+    } else {
+        !needle.is_multibyte() || needle.schars() == needle.sbytes()
+    }
+}
+
+fn multibyte_string_has_non_ascii_non_raw_byte(s: &crate::heap_types::LispString) -> bool {
+    let mut pos = 0;
+    let bytes = s.as_bytes();
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        if code > 0x7F && !crate::emacs_core::emacs_char::char_byte8_p(code) {
+            return true;
+        }
+        pos += len;
+    }
+    false
 }
 
 /// Find the first occurrence of `needle` in `haystack` (byte slice search).
