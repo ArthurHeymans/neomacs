@@ -9449,12 +9449,20 @@ impl Context {
         docstring_value: Value,
         iform_value: Value,
     ) -> EvalResult {
+        let root_scope = self.save_specpdl_roots();
+        self.push_specpdl_root(params_value);
+        self.push_specpdl_root(body_value);
+        self.push_specpdl_root(env_value);
+        self.push_specpdl_root(docstring_value);
+        self.push_specpdl_root(iform_value);
+
         if !env_value.is_nil() {
             let closure_hook = self.visible_variable_value_or_nil_by_id(
                 internal_make_interpreted_closure_function_symbol(),
             );
             if !closure_hook.is_nil() {
-                return self.apply(
+                self.push_specpdl_root(closure_hook);
+                let result = self.apply(
                     closure_hook,
                     vec![
                         params_value,
@@ -9464,16 +9472,20 @@ impl Context {
                         iform_value,
                     ],
                 );
+                self.restore_specpdl_roots(root_scope);
+                return result;
             }
         }
 
-        builtins::symbols::make_interpreted_closure_from_parts(
+        let result = builtins::symbols::make_interpreted_closure_from_parts(
             &params_value,
             &body_value,
             &env_value,
             Some(&docstring_value),
             Some(&iform_value),
-        )
+        );
+        self.restore_specpdl_roots(root_scope);
+        result
     }
 
     fn make_interpreted_closure_with_value_runtime_hook(
@@ -9485,13 +9497,21 @@ impl Context {
         docstring_value: Value,
         iform_value: Value,
     ) -> EvalResult {
+        let root_scope = self.save_specpdl_roots();
+        self.push_specpdl_root(source_function);
+        self.push_specpdl_root(params_value);
+        self.push_specpdl_root(body_value);
+        self.push_specpdl_root(env_value);
+        self.push_specpdl_root(docstring_value);
+        self.push_specpdl_root(iform_value);
+
         if !env_value.is_nil() {
             let closure_hook = self.visible_variable_value_or_nil_by_id(
                 internal_make_interpreted_closure_function_symbol(),
             );
             if !closure_hook.is_nil() {
-                let _ = source_function;
-                return self.apply(
+                self.push_specpdl_root(closure_hook);
+                let result = self.apply(
                     closure_hook,
                     vec![
                         params_value,
@@ -9501,16 +9521,20 @@ impl Context {
                         iform_value,
                     ],
                 );
+                self.restore_specpdl_roots(root_scope);
+                return result;
             }
         }
 
-        builtins::symbols::make_interpreted_closure_from_parts(
+        let result = builtins::symbols::make_interpreted_closure_from_parts(
             &params_value,
             &body_value,
             &env_value,
             Some(&docstring_value),
             Some(&iform_value),
-        )
+        );
+        self.restore_specpdl_roots(root_scope);
+        result
     }
 
     fn eval_dynamic_documentation_value(&mut self, value: Value) -> Result<Option<Value>, Flow> {
