@@ -27,6 +27,27 @@ fn eval_one_with_frame(src: &str) -> String {
     eval_with_frame(src).into_iter().next().unwrap()
 }
 
+#[test]
+fn window_tree_primitives_validate_arguments_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let out = eval_one_with_frame(
+        r#"(list
+             (condition-case err
+                 (combine-windows "not-a-window" nil)
+               (error err))
+             (condition-case err
+                 (uncombine-window "not-a-window")
+               (error err))
+             (condition-case err
+                 (window-discard-buffer-from-window (current-buffer) "not-a-window")
+               (error err)))"#,
+    );
+    assert_eq!(
+        out,
+        r#"OK ((wrong-type-argument window-valid-p "not-a-window") (wrong-type-argument window-valid-p "not-a-window") (error "Not a live window"))"#
+    );
+}
+
 fn eval_with_gui_frame(src: &str) -> Vec<String> {
     let mut ev = Context::new();
     let buf = ev.buffers.create_buffer("*scratch*");

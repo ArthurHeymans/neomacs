@@ -23,17 +23,17 @@ pub(crate) use super::builtins::symbols::{
     builtin_set_window_new_pixel, builtin_set_window_new_total,
 };
 pub(crate) use super::builtins::{
-    builtin_combine_windows, builtin_uncombine_window, builtin_window_lines_pixel_dimensions,
-    builtin_window_new_normal, builtin_window_new_pixel, builtin_window_new_total,
-    builtin_window_old_body_pixel_height, builtin_window_old_body_pixel_width,
-    builtin_window_old_pixel_height, builtin_window_old_pixel_width,
-};
-pub(crate) use super::builtins::{
     builtin_coordinates_in_window_p, builtin_current_window_configuration,
     builtin_run_window_configuration_change_hook, builtin_run_window_scroll_functions,
     builtin_set_window_configuration, builtin_split_window_internal,
     builtin_window_configuration_equal_p, builtin_window_configuration_frame,
     builtin_window_configuration_p,
+};
+pub(crate) use super::builtins::{
+    builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel,
+    builtin_window_new_total, builtin_window_old_body_pixel_height,
+    builtin_window_old_body_pixel_width, builtin_window_old_pixel_height,
+    builtin_window_old_pixel_width,
 };
 
 // ---------------------------------------------------------------------------
@@ -2347,9 +2347,64 @@ pub(crate) fn builtin_window_discard_buffer_from_window(
             return Err(signal("error", vec![Value::string("Not a live buffer")]));
         }
     };
-    let (_fid, wid) =
-        resolve_window_id_with_pred_in_state(frames, buffers, args.get(1), "window-live-p")?;
+    let wid = match args.get(1).and_then(window_id_from_designator) {
+        Some(wid) if frames.is_live_window_id(wid) => wid,
+        _ => return Err(signal("error", vec![Value::string("Not a live window")])),
+    };
     discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buffer_id)])?;
+    Ok(Value::NIL)
+}
+
+/// `(combine-windows FIRST LAST)` -> nil or a new internal parent window.
+///
+/// GNU `Fcombine_windows` starts by decoding both arguments with
+/// `decode_valid_window`, so nil defaults to the selected window and
+/// non-window values signal `window-valid-p`.
+pub(crate) fn builtin_combine_windows(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+    expect_args("combine-windows", &args, 2)?;
+    let (_first_fid, first_wid) =
+        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
+    let (_last_fid, last_wid) =
+        resolve_window_id_with_pred_in_state(frames, buffers, args.get(1), "window-valid-p")?;
+
+    if first_wid == last_wid {
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot combine a window with itself")],
+        ));
+    }
+
+    Ok(Value::NIL)
+}
+
+/// `(uncombine-window WINDOW)` -> t if WINDOW was flattened, else nil.
+///
+/// GNU `Funcombine_window` validates with `decode_valid_window` before testing
+/// whether WINDOW is an internal combination of the same direction as its
+/// parent.
+pub(crate) fn builtin_uncombine_window(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+    expect_args("uncombine-window", &args, 1)?;
+    let (fid, wid) =
+        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
+
+    if frames
+        .get(fid)
+        .is_some_and(|frame| frame.minibuffer_window == Some(wid))
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot uncombine a mini window")],
+        ));
+    }
+
     Ok(Value::NIL)
 }
 

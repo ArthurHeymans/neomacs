@@ -6947,13 +6947,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "combine-windows",
-        |_ctx, args| super::window_cmds::builtin_combine_windows(args),
+        super::window_cmds::builtin_combine_windows,
         2,
         Some(2),
     );
     ctx.defsubr(
         "uncombine-window",
-        |_ctx, args| super::window_cmds::builtin_uncombine_window(args),
+        super::window_cmds::builtin_uncombine_window,
         1,
         Some(1),
     );
