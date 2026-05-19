@@ -1426,6 +1426,9 @@ pub(super) fn print_value_princ(value: &Value) -> String {
             out
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
+            if super::chartable::bool_vector_length(value).is_some() {
+                return super::print::print_value(value);
+            }
             let items = value.as_vector_data().unwrap().clone();
             let parts: Vec<String> = items.iter().map(print_value_princ).collect();
             format!("[{}]", parts.join(" "))
@@ -1501,6 +1504,9 @@ pub(crate) fn print_value_princ_in_state(
             out
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
+            if super::chartable::bool_vector_length(value).is_some() {
+                return super::error::print_value_in_state(ctx, value);
+            }
             let items = value.as_vector_data().unwrap().clone();
             let parts: Vec<String> = items
                 .iter()
