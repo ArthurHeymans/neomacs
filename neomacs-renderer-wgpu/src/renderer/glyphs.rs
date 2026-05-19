@@ -159,29 +159,29 @@ fn overlap_is_expected_by_overhang(
     let a_cell_right = a.cell_x + a.cell_w;
     let b_cell_right = b.cell_x + b.cell_w;
 
-    let a_explains = a.right_overhang > CHAR_OVERLAP_MIN_AXIS
+    let a_explains = a.right_overhang > 0.0
         && overlap_left >= a_cell_right - CHAR_OVERLAP_MIN_AXIS
         && overlap_right <= a.right() + CHAR_OVERLAP_MIN_AXIS;
-    let b_explains = b.left_overhang > CHAR_OVERLAP_MIN_AXIS
+    let b_explains = b.left_overhang > 0.0
         && overlap_right <= b.cell_x + CHAR_OVERLAP_MIN_AXIS
         && overlap_left >= b.glyph_x - CHAR_OVERLAP_MIN_AXIS;
 
-    let b_right_explains = b.right_overhang > CHAR_OVERLAP_MIN_AXIS
+    let b_right_explains = b.right_overhang > 0.0
         && overlap_left >= b_cell_right - CHAR_OVERLAP_MIN_AXIS
         && overlap_right <= b.right() + CHAR_OVERLAP_MIN_AXIS;
-    let a_left_explains = a.left_overhang > CHAR_OVERLAP_MIN_AXIS
+    let a_left_explains = a.left_overhang > 0.0
         && overlap_right <= a.cell_x + CHAR_OVERLAP_MIN_AXIS
         && overlap_left >= a.glyph_x - CHAR_OVERLAP_MIN_AXIS;
 
-    let a_right_b_left_explain = a.right_overhang > CHAR_OVERLAP_MIN_AXIS
-        && b.left_overhang > CHAR_OVERLAP_MIN_AXIS
+    let a_right_b_left_explain = a.right_overhang > 0.0
+        && b.left_overhang > 0.0
         && (a_cell_right - b.cell_x).abs() <= CHAR_OVERLAP_MIN_AXIS
         && overlap_left >= b.glyph_x - CHAR_OVERLAP_MIN_AXIS
         && overlap_right <= a.right() + CHAR_OVERLAP_MIN_AXIS
         && overlap_left <= a_cell_right + CHAR_OVERLAP_MIN_AXIS
         && overlap_right >= a_cell_right - CHAR_OVERLAP_MIN_AXIS;
-    let b_right_a_left_explain = b.right_overhang > CHAR_OVERLAP_MIN_AXIS
-        && a.left_overhang > CHAR_OVERLAP_MIN_AXIS
+    let b_right_a_left_explain = b.right_overhang > 0.0
+        && a.left_overhang > 0.0
         && (b_cell_right - a.cell_x).abs() <= CHAR_OVERLAP_MIN_AXIS
         && overlap_left >= a.glyph_x - CHAR_OVERLAP_MIN_AXIS
         && overlap_right <= b.right() + CHAR_OVERLAP_MIN_AXIS

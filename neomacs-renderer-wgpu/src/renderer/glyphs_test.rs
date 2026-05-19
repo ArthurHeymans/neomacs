@@ -189,6 +189,26 @@ fn char_overlap_classifies_font_overhang_separately() {
 }
 
 #[test]
+fn char_overlap_classifies_subpixel_boundary_overhang_separately() {
+    let mut slash = char_bounds("/", 775.8, 698.0, 14.0, 31.0);
+    slash.glyph_x = 776.0;
+    slash.glyph_y = 701.7;
+    slash.glyph_w = 14.3;
+    slash.glyph_h = 22.3;
+    slash.right_overhang = (slash.glyph_x + slash.glyph_w - (slash.cell_x + slash.cell_w)).max(0.0);
+
+    let mut m = char_bounds("m", 789.8, 698.0, 14.0, 31.0);
+    m.glyph_x = 789.7;
+    m.glyph_y = 708.0;
+    m.glyph_w = 13.7;
+    m.glyph_h = 13.7;
+    m.left_overhang = (m.cell_x - m.glyph_x).max(0.0);
+
+    let overlap = char_overlap(&slash, &m).expect("subpixel boundary overhang");
+    assert!(overlap.expected_by_overhang);
+}
+
+#[test]
 fn char_overlap_classifies_adjacent_dual_bearing_overhang_separately() {
     let mut w = char_bounds("w", 888.0, 384.0, 16.0, 33.0);
     w.glyph_x = 889.0;
