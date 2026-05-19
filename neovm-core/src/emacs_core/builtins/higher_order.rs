@@ -212,7 +212,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
                 vec![Value::symbol("listp"), cursor],
             ));
         }
-        eval.apply(func, call_args)
+        eval.apply_from_lisp_apply(func, call_args)
     } else {
         call_args.extend_from_slice(&args[1..args.len() - 1]);
         let mut cursor = last;
@@ -231,7 +231,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
                 }
             }
         }
-        eval.apply(args[0], call_args)
+        eval.apply_from_lisp_apply(args[0], call_args)
     }
 }
 

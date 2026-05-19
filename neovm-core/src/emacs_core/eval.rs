@@ -7122,8 +7122,13 @@ impl Context {
     }
 
     fn enter_interpreted_eval_depth(&mut self) -> Result<(), Flow> {
+        self.enter_interpreted_eval_depth_with_extra(0)
+    }
+
+    fn enter_interpreted_eval_depth_with_extra(&mut self, extra_depth: usize) -> Result<(), Flow> {
         self.depth += 1;
-        if self.depth > self.max_depth
+        let lisp_eval_depth = self.depth.saturating_add(extra_depth);
+        if lisp_eval_depth > self.max_depth
             && let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth")
             && let Some(n) = v.as_fixnum()
         {
@@ -7132,8 +7137,9 @@ impl Context {
                 self.max_depth = new_max;
             }
         }
-        if self.depth > self.max_depth {
-            let overflow_depth = self.depth as i64;
+        let lisp_eval_depth = self.depth.saturating_add(extra_depth);
+        if lisp_eval_depth > self.max_depth {
+            let overflow_depth = lisp_eval_depth as i64;
             self.depth -= 1;
             return Err(signal(
                 "excessive-lisp-nesting",
@@ -10057,9 +10063,15 @@ impl Context {
         function: Value,
         args: LispArgVec,
         record_backtrace: bool,
+        include_bytecode_depth: bool,
     ) -> EvalResult {
         self.maybe_quit_before_gc()?;
-        self.enter_interpreted_eval_depth()?;
+        let extra_depth = if include_bytecode_depth {
+            self.bytecode_call_depth
+        } else {
+            0
+        };
+        self.enter_interpreted_eval_depth_with_extra(extra_depth)?;
         let bt_count = self.specpdl.len();
         if record_backtrace {
             self.push_backtrace_frame(function, &args);
@@ -10084,7 +10096,20 @@ impl Context {
     where
         A: Into<LispArgVec>,
     {
-        self.apply_internal(function, args.into(), true)
+        self.apply_internal(function, args.into(), true, false)
+    }
+
+    /// Apply from GNU's Lisp-visible `apply` subr.
+    ///
+    /// GNU `Fapply` delegates to `Ffuncall`; when called from bytecode, the
+    /// current `Bcall` has already incremented `lisp_eval_depth`, so the
+    /// `Ffuncall` guard observes that active bytecode call. Neomacs tracks
+    /// bytecode calls separately, so include that depth here.
+    pub(crate) fn apply_from_lisp_apply<A>(&mut self, function: Value, args: A) -> EvalResult
+    where
+        A: Into<LispArgVec>,
+    {
+        self.apply_internal(function, args.into(), true, true)
     }
 
     #[inline]
@@ -10111,7 +10136,7 @@ impl Context {
     where
         A: Into<LispArgVec>,
     {
-        self.apply_internal(function, args.into(), false)
+        self.apply_internal(function, args.into(), false, false)
     }
 
     /// Apply FUNC to ARGS, but record FRAME_FUNCTION (not FUNC) in the
