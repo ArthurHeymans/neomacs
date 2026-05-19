@@ -2,7 +2,7 @@
 //! GNU src/editfns.c, src/indent.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_via_binary};
 
 #[test]
 fn oracle_line_number_at_pos_first_line() {
@@ -34,7 +34,9 @@ fn oracle_line_number_at_pos_no_arg() {
 #[test]
 fn oracle_count_lines_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    // GNU defines `count-lines` in lisp/simple.el, so exercise the dumped
+    // runtime rather than the bare-core evaluator.
+    let (o, n) = eval_oracle_and_neovm_via_binary(
         r#"(progn (switch-to-buffer (get-buffer-create "*cl*")) (erase-buffer) (insert "a\nb\nc\nd") (= (count-lines (point-min) (point-max)) 4))"#,
     );
     assert_ok_eq("t", &o, &n);
@@ -73,5 +75,5 @@ fn oracle_line_end_position() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*lep*")) (erase-buffer) (insert "abc\ndef") (goto-char 5) (line-end-position))"#,
     );
-    assert_ok_eq("4", &o, &n);
+    assert_ok_eq("8", &o, &n);
 }
