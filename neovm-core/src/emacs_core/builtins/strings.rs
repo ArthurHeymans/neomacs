@@ -1517,6 +1517,8 @@ fn do_format(
     let mut chars = fmt_str.chars().peekable();
     let mut format_char_pos = 0usize;
     let mut result_char_pos = 0usize;
+    let fmt_has_props =
+        crate::emacs_core::value::get_string_text_properties_table_for_value(args[0]).is_some();
 
     while let Some(ch) = chars.next() {
         let source_start = format_char_pos;
@@ -1574,15 +1576,20 @@ fn do_format(
                     let formatted_chars = formatted.chars().count();
                     let content_char_start_in_formatted =
                         formatted[..content_byte_start_in_formatted].chars().count();
-                    let span_char_len = formatted_chars - content_char_start_in_formatted;
+                    let field_char_start_in_formatted = if fmt_has_props {
+                        0
+                    } else {
+                        content_char_start_in_formatted
+                    };
+                    let span_char_len = formatted_chars - field_char_start_in_formatted;
                     let arg_char_len = args[this_arg_idx]
                         .as_lisp_string()
                         .map(|string| string.schars())
                         .unwrap_or(0);
                     spans.push(FormatPropSpan {
-                        result_char_start: result_char_pos + content_char_start_in_formatted,
+                        result_char_start: result_char_pos + field_char_start_in_formatted,
                         result_char_end: result_char_pos
-                            + content_char_start_in_formatted
+                            + field_char_start_in_formatted
                             + span_char_len,
                         arg_idx: this_arg_idx,
                         arg_char_len,

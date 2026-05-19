@@ -593,6 +593,23 @@ impl BufferText {
         next.map(|next| self.buf_charpos_to_bytepos(next))
     }
 
+    pub fn text_props_first_interval_pos_with_property_eq(
+        &self,
+        start: usize,
+        end: usize,
+        name: Value,
+        value: Value,
+    ) -> Option<usize> {
+        let char_start = self.buf_bytepos_to_charpos(start);
+        let char_end = self.buf_bytepos_to_charpos(end);
+        let pos = self
+            .storage
+            .borrow()
+            .text_props
+            .first_interval_pos_with_property_eq(char_start, char_end, name, value)?;
+        Some(self.buf_charpos_to_bytepos(pos))
+    }
+
     pub fn text_props_previous_interval_boundary(&self, pos: usize) -> Option<usize> {
         let char_pos = self.buf_bytepos_to_charpos(pos);
         let prev = {

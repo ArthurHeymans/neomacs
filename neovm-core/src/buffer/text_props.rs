@@ -385,6 +385,7 @@ impl TextPropertyTable {
         }
         if start < pos && pos < end {
             let plist = node.plist;
+            let right_plist = plist_value_from_pairs(&plist_pairs(plist));
             let (fs, rs, wp, vis) = (
                 node.front_sticky,
                 node.rear_sticky,
@@ -395,8 +396,10 @@ impl TextPropertyTable {
             self.intervals.get_mut(&start).unwrap().end = pos;
             self.intervals.get_mut(&start).unwrap().refresh_cache();
             // Right part: [pos, end)
-            self.intervals
-                .insert(pos, IntervalNode::with_cached(end, fs, rs, wp, vis, plist));
+            self.intervals.insert(
+                pos,
+                IntervalNode::with_cached(end, fs, rs, wp, vis, right_plist),
+            );
         }
     }
 
@@ -788,6 +791,31 @@ impl TextPropertyTable {
             runs.push((cursor, len, Value::NIL));
         }
         runs
+    }
+
+    pub fn first_interval_pos_with_property_eq(
+        &self,
+        start: usize,
+        end: usize,
+        name: Value,
+        value: Value,
+    ) -> Option<usize> {
+        if start >= end {
+            return None;
+        }
+        for (&interval_start, node) in self.intervals.range(..end) {
+            if node.end <= start {
+                continue;
+            }
+            if interval_start >= end {
+                break;
+            }
+            if plist_value_get(node.plist, name).is_some_and(|found| eq_value(&found, &value)) {
+                return Some(interval_start.max(start));
+            }
+        }
+
+        None
     }
 
     pub(crate) fn try_for_each_interval_in_range<E>(
