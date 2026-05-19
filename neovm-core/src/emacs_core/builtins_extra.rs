@@ -463,6 +463,9 @@ pub(crate) fn builtin_natnump(args: Vec<Value>) -> EvalResult {
     expect_args("natnump", &args, 1)?;
     let is_nat = match args[0].kind() {
         ValueKind::Fixnum(n) => n >= 0,
+        _ if args[0].is_bignum() => args[0]
+            .as_bignum()
+            .is_some_and(|value| value.significant_bits() == 0 || value > &rug::Integer::from(0)),
         _ => false,
     };
     Ok(Value::bool_val(is_nat))

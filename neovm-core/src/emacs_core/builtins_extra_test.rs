@@ -323,6 +323,16 @@ fn number_predicates() {
     assert!(builtin_zerop(vec![Value::fixnum(1)]).unwrap().is_nil());
     assert!(builtin_natnump(vec![Value::fixnum(5)]).unwrap().is_t());
     assert!(builtin_natnump(vec![Value::fixnum(-1)]).unwrap().is_nil());
+    assert!(
+        builtin_natnump(vec![Value::make_integer((i128::from(i64::MAX) + 1).into())])
+            .unwrap()
+            .is_t()
+    );
+    assert!(
+        builtin_natnump(vec![Value::make_integer((i128::from(i64::MIN) - 1).into())])
+            .unwrap()
+            .is_nil()
+    );
 }
 
 #[test]
