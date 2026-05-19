@@ -328,21 +328,6 @@ impl<'a> Vm<'a> {
         func_value: Value,
     ) -> EvalResult {
         let args = args.into();
-        self.ctx.depth += 1;
-        if self.ctx.depth > self.ctx.max_depth {
-            if let Some(v) = self.ctx.obarray.symbol_value("max-lisp-eval-depth")
-                && let Some(n) = v.as_fixnum()
-            {
-                self.ctx.max_depth = n.max(100) as usize;
-            }
-            if self.ctx.depth > self.ctx.max_depth {
-                self.ctx.depth -= 1;
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
-                ));
-            }
-        }
 
         // Root the bytecode function's constants so they survive GC during
         // nested calls. Heap bytecode calls also root func_value below, which
@@ -359,7 +344,6 @@ impl<'a> Vm<'a> {
                 vm.run_frame(func, args, func_value)
             })
         });
-        self.ctx.depth -= 1;
         result
     }
 
