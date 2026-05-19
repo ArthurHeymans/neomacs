@@ -1780,6 +1780,8 @@ mod substring_advanced;
 mod substring_strict_edge_semantics;
 #[path = "suppress-keymap-semantics.rs"]
 mod suppress_keymap_semantics;
+#[path = "surface-diverges.rs"]
+mod surface_diverges;
 mod symbol;
 #[path = "symbol-accessor-strict-edge-semantics.rs"]
 mod symbol_accessor_strict_edge_semantics;
