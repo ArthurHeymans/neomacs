@@ -746,6 +746,62 @@ fn make_interpreted_closure_preserves_nil_interactive_slot_presence() {
 }
 
 #[test]
+fn make_interpreted_closure_matches_gnu_arglist_construction_checks() {
+    crate::test_utils::init_test_tracing();
+    let body = Value::list(vec![Value::NIL]);
+    let env = Value::NIL;
+
+    for params in [
+        Value::list(vec![Value::fixnum(1)]),
+        Value::list(vec![Value::symbol("&rest")]),
+        Value::cons(Value::symbol("a"), Value::symbol("b")),
+    ] {
+        let closure =
+            super::symbols::make_interpreted_closure_from_parts(&params, &body, &env, None, None)
+                .expect("GNU accepts listp arglists without parsing formals");
+        assert!(closure.is_lambda());
+        assert_eq!(closure.closure_slot(0), Some(params));
+    }
+
+    let err = super::symbols::make_interpreted_closure_from_parts(
+        &Value::fixnum(1),
+        &body,
+        &env,
+        None,
+        None,
+    )
+    .expect_err("GNU rejects non-listp arglist object");
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn malformed_interpreted_closure_arglists_signal_invalid_function_at_call_time() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let rendered = format_eval_result(&eval.eval_str(
+        r#"(list
+             (condition-case err
+                 (funcall (make-interpreted-closure '(1) '(nil) nil))
+               (error err))
+             (condition-case err
+                 (funcall (make-interpreted-closure '(&rest) '(nil) nil))
+               (error err))
+             (condition-case err
+                 (funcall (make-interpreted-closure '(a . b) '(nil) nil) 1)
+               (error err)))"#,
+    ));
+
+    assert_eq!(
+        rendered,
+        "OK ((invalid-function #[(1) (nil) nil]) (invalid-function #[(&rest) (nil) nil]) (invalid-function #[(a . b) (nil) nil]))"
+    );
+}
+
+#[test]
 fn compiled_literal_reifier_preserves_ordinary_vectors() {
     crate::test_utils::init_test_tracing();
     let closure_vec = Value::vector(vec![

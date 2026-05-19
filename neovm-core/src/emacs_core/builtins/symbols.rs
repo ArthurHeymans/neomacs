@@ -5269,13 +5269,12 @@ fn valid_bytecode_stack_depth(value: Value) -> bool {
 }
 
 fn check_interpreted_closure_args(params_value: &Value) -> EvalResult {
-    if list_length(params_value).is_none() {
+    if !params_value.is_nil() && !params_value.is_cons() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), *params_value],
         ));
     }
-    parse_lambda_params_from_value(params_value)?;
     Ok(Value::NIL)
 }
 

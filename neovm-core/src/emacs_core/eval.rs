@@ -10997,9 +10997,6 @@ impl Context {
             }
             (tail.cons_car(), tail.cons_cdr(), None)
         } else {
-            if func_value.closure_params().is_none() {
-                return Err(signal("invalid-function", vec![func_value]));
-            }
             let Some(arglist) = func_value.closure_slot(CLOSURE_ARGLIST) else {
                 return Err(signal("invalid-function", vec![func_value]));
             };
