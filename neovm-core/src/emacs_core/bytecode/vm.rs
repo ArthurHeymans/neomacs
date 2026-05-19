@@ -636,7 +636,6 @@ impl<'a> Vm<'a> {
             };
         }
 
-        // Debug: validate string values before pushing to bc_buf
         macro_rules! stk_push {
             ($val:expr) => {{
                 let v = $val;
@@ -4445,10 +4444,14 @@ impl<'a> Vm<'a> {
                     &mut self.ctx.condition_stack,
                     selected_resume.as_ref(),
                 ) {
+                    let root_scope = self.ctx.save_vm_roots();
+                    self.ctx.push_vm_frame_root(tag);
+                    self.ctx.push_vm_frame_root(value);
                     self.ctx.unbind_to(spec_depth);
                     bind_stack.truncate(bind_stack_len);
                     self.ctx.bc_buf.truncate(stack_len);
                     self.ctx.bc_buf.push(value);
+                    self.ctx.restore_vm_roots(root_scope);
                     *pc = target as usize;
                     return Ok(());
                 }
@@ -4495,10 +4498,19 @@ impl<'a> Vm<'a> {
                     &mut self.ctx.condition_stack,
                     sig.selected_resume.as_ref(),
                 ) {
+                    let root_scope = self.ctx.save_vm_roots();
+                    self.ctx.push_vm_frame_root(Value::from_sym_id(sig.symbol));
+                    for value in sig.data.iter().copied() {
+                        self.ctx.push_vm_frame_root(value);
+                    }
+                    if let Some(raw_data) = sig.raw_data {
+                        self.ctx.push_vm_frame_root(raw_data);
+                    }
                     self.ctx.unbind_to(spec_depth);
                     bind_stack.truncate(bind_stack_len);
                     self.ctx.bc_buf.truncate(stack_len);
                     self.ctx.bc_buf.push(make_signal_binding_value(&sig));
+                    self.ctx.restore_vm_roots(root_scope);
                     *pc = target as usize;
                     return Ok(());
                 }

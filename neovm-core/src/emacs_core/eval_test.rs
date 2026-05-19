@@ -10656,6 +10656,29 @@ fn vm_root_frames_are_traced_across_exact_gc() {
 }
 
 #[test]
+fn make_symbol_name_value_survives_exact_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.gc_stress = true;
+
+    let result = ev.eval_str(
+        r#"(let* ((name (copy-sequence "vm-exact-symbol-name"))
+                  (sym (make-symbol name))
+                  (i 0))
+             (while (< i 300)
+               (setq i (1+ i))
+               (vector (copy-sequence "replacement")))
+             (list (eq (symbol-name sym) name)
+                   (symbol-name sym)))"#,
+    );
+
+    assert_eq!(
+        format_eval_result(&result),
+        r#"OK (t "vm-exact-symbol-name")"#
+    );
+}
+
+#[test]
 fn extra_gc_roots_use_specpdl_when_no_runtime_frame_owns_them() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

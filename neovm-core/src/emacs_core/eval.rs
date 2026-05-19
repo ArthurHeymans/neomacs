@@ -6153,8 +6153,9 @@ impl Context {
                     (*heap_ptr).seed_root(root);
                 }
             });
+            let heap_identity = (*heap_ptr).identity();
             let mut thread_local_roots = Vec::new();
-            collect_thread_local_gc_roots(&mut thread_local_roots, heap_ptr as usize);
+            collect_thread_local_gc_roots(&mut thread_local_roots, heap_identity);
             for (root, origin) in thread_local_roots {
                 (*heap_ptr).seed_root_with_origin(root, origin);
             }
