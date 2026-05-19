@@ -28,7 +28,7 @@ fn oracle_text_property_any_none() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*tpa2*")) (erase-buffer) (insert "abcdef") (text-property-any 1 4 'x nil))"#,
     );
-    assert_ok_eq("nil", &o, &n);
+    assert_ok_eq("1", &o, &n);
 }
 
 #[test]
@@ -37,7 +37,25 @@ fn oracle_text_property_any_found() {
     let (o, n) = eval_oracle_and_neovm(
         r#"(progn (switch-to-buffer (get-buffer-create "*tpaf*")) (erase-buffer) (insert "abcdef") (put-text-property 2 4 'x 'y) (text-property-any 1 5 'x nil))"#,
     );
+    assert_ok_eq("1", &o, &n);
+}
+
+#[test]
+fn oracle_text_property_any_finds_explicit_value_after_nil_gap() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (switch-to-buffer (get-buffer-create "*tpafy*")) (erase-buffer) (insert "abcdef") (put-text-property 2 4 'x 'y) (text-property-any 1 5 'x 'y))"#,
+    );
     assert_ok_eq("2", &o, &n);
+}
+
+#[test]
+fn oracle_text_property_not_all_respects_nil_gap() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(progn (switch-to-buffer (get-buffer-create "*tpna*")) (erase-buffer) (insert "abcdef") (put-text-property 2 4 'x 'y) (list (text-property-not-all 1 5 'x nil) (text-property-not-all 1 5 'x 'y)))"#,
+    );
+    assert_ok_eq("(2 1)", &o, &n);
 }
 
 #[test]
