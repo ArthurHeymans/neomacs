@@ -114,6 +114,21 @@ fn validate_md5_coding_system_arg(args: &[Value]) -> Result<(), Flow> {
     }
 }
 
+fn md5_coding_system_name(args: &[Value]) -> Option<String> {
+    let coding_system = args.get(3)?;
+    if coding_system.is_nil() {
+        return None;
+    }
+    let noerror = args.get(4).is_some_and(|v| v.is_truthy());
+    match coding_system.kind() {
+        ValueKind::Symbol(id) if md5_known_coding_system(resolve_sym(id)) => {
+            Some(resolve_sym(id).to_owned())
+        }
+        _ if noerror => Some("raw-text".to_string()),
+        _ => None,
+    }
+}
+
 fn bytes_to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
@@ -620,6 +635,7 @@ pub(crate) fn builtin_md5(eval: &mut super::eval::Context, args: Vec<Value>) -> 
             object,
             args.get(1),
             args.get(2),
+            md5_coding_system_name(&args).as_deref(),
         )?)),
         ValueKind::Veclike(VecLikeType::Buffer) => {
             Ok(Value::string(md5_hex_for_buffer_in_manager(
@@ -627,6 +643,7 @@ pub(crate) fn builtin_md5(eval: &mut super::eval::Context, args: Vec<Value>) -> 
                 object.as_buffer_id().unwrap(),
                 args.get(1),
                 args.get(2),
+                md5_coding_system_name(&args).as_deref(),
             )?))
         }
         _ => Err(signal(
@@ -744,11 +761,22 @@ fn md5_hex_for_string(
     object: &Value,
     start_raw: Option<&Value>,
     end_raw: Option<&Value>,
+    coding_system: Option<&str>,
 ) -> Result<String, Flow> {
     let string = object
         .as_lisp_string()
         .expect("md5_hex_for_string only accepts string object");
-    let len = string.schars() as i64;
+    let encoded;
+    let (bytes, len, multibyte) = if string.is_multibyte() {
+        encoded = crate::encoding::encode_lisp_string(string, coding_system.unwrap_or("utf-8"));
+        (&encoded[..], encoded.len() as i64, false)
+    } else {
+        (
+            string.as_bytes(),
+            string.schars() as i64,
+            string.is_multibyte(),
+        )
+    };
     let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
     let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
     let start =
@@ -763,8 +791,7 @@ fn md5_hex_for_string(
         ));
     }
 
-    let bytes = string.as_bytes();
-    let (byte_from, byte_to) = if string.is_multibyte() {
+    let (byte_from, byte_to) = if multibyte {
         (
             crate::emacs_core::emacs_char::char_to_byte_pos(bytes, start),
             crate::emacs_core::emacs_char::char_to_byte_pos(bytes, end),
@@ -837,7 +864,39 @@ fn md5_hex_for_buffer_in_manager(
     buffer_id: crate::buffer::BufferId,
     start_raw: Option<&Value>,
     end_raw: Option<&Value>,
+    coding_system: Option<&str>,
 ) -> Result<String, Flow> {
+    if let Some(coding_system) = coding_system {
+        let buf = buffers
+            .get(buffer_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+        let point_min = buf.point_min_char() as i64 + 1;
+        let point_max = buf.point_max_char() as i64 + 1;
+        let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
+        let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
+        let start = normalize_md5_buffer_position(
+            start_raw, point_min, point_min, point_max, &start_arg, &end_arg,
+        )?;
+        let end = normalize_md5_buffer_position(
+            end_raw, point_max, point_min, point_max, &start_arg, &end_arg,
+        )?;
+        let (lo, hi) = if start <= end {
+            (start, end)
+        } else {
+            (end, start)
+        };
+        let byte_lo = buf.lisp_pos_to_accessible_byte(lo);
+        let byte_hi = buf.lisp_pos_to_accessible_byte(hi);
+        let text = buf.buffer_substring_lisp_string(byte_lo, byte_hi);
+        if text.is_multibyte() {
+            return Ok(md5_hash(&crate::encoding::encode_lisp_string(
+                &text,
+                coding_system,
+            )));
+        }
+        return Ok(md5_hash(text.as_bytes()));
+    }
+
     let slice = hash_slice_for_buffer_in_manager(buffers, buffer_id, start_raw, end_raw)?;
     Ok(md5_hash(&slice))
 }

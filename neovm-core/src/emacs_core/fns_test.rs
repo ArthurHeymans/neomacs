@@ -511,6 +511,22 @@ fn md5_unknown_coding_system_ignored_with_noerror() {
 }
 
 #[test]
+fn md5_string_honors_utf16le_coding_system() {
+    crate::test_utils::init_test_tracing();
+    let r = call_fns_builtin!(
+        builtin_md5,
+        vec![
+            Value::string("é"),
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("utf-16le"),
+        ]
+    )
+    .unwrap();
+    assert_eq!(r.as_utf8_str(), Some("ed71e8ffd3d8c47c1a2e22c53cd384aa"));
+}
+
+#[test]
 fn md5_accepts_iso_8859_15_alias() {
     crate::test_utils::init_test_tracing();
     let r = call_fns_builtin!(
