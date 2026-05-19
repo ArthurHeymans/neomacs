@@ -767,18 +767,13 @@ impl<'a> Reader<'a> {
                                 bytes.push(0x0B);
                             }
                         }
-                        // Modifier escapes in strings
-                        x if x == b's' as u32 && self.current_code() == Some(b'-' as u32) => {
-                            self.bump(); // consume '-'
-                            let val = self.parse_string_char_value(1 << 23)?;
-                            self.push_string_escape_value(&mut buf, &mut unibyte_buf, val)?;
-                        }
                         x if x == b's' as u32 => {
                             buf.push(b' ');
                             if let Some(bytes) = unibyte_buf.as_mut() {
                                 bytes.push(b' ');
                             }
                         }
+                        // Modifier escapes in strings
                         x if x == b'C' as u32 && self.current_code() == Some(b'-' as u32) => {
                             self.bump(); // consume '-'
                             let base = self.parse_string_char_value(0)?;

@@ -224,6 +224,15 @@ fn string_escapes() {
 }
 
 #[test]
+fn string_space_escape_wins_over_super_modifier_prefix() {
+    crate::test_utils::init_test_tracing();
+    let v = read1(r#""^[\s-]*$""#);
+    let ls = v.as_lisp_string().expect("string literal");
+    assert_eq!(ls.as_bytes(), b"^[ -]*$");
+    assert!(!ls.is_multibyte());
+}
+
+#[test]
 fn string_old_control_escape_matches_gnu_reader() {
     crate::test_utils::init_test_tracing();
 
