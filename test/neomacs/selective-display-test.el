@@ -389,18 +389,18 @@ Lines indented more than the threshold should be hidden with `...' ellipsis."
 ;; ============================================================================
 
 (defun sdt--test-invisible-property ()
-  "Test the `invisible' text property with various `buffer-invisibility-alist' settings."
+  "Test the `invisible' text property with various `buffer-invisibility-spec' settings."
   (let ((buf (sdt--make-buffer "invisible-property")))
     (switch-to-buffer buf)
     (erase-buffer)
     (sdt--insert-heading "INVISIBLE TEXT PROPERTY TEST")
     (insert "Testing the `invisible' text property with different ellipsis settings.\n\n")
 
-    ;; Configure buffer-invisibility-alist:
+    ;; Configure GNU's buffer-invisibility-spec:
     ;; - `hidden-no-ellipsis' : invisible, no ellipsis
     ;; - `hidden-with-ellipsis' : invisible, shows "..." ellipsis
     ;; - `hidden-custom' : invisible, shows "..." ellipsis (t)
-    (setq-local buffer-invisibility-alist
+    (setq-local buffer-invisibility-spec
                 '((hidden-no-ellipsis . nil)
                   (hidden-with-ellipsis . t)
                   (hidden-custom . t)))
@@ -508,11 +508,11 @@ Lines indented more than the threshold should be hidden with `...' ellipsis."
                                 (if with-ellipsis-visible "VISIBLE" "HIDDEN"))))
       (local-set-key (kbd "C-c a")
                      (lambda () (interactive)
-                       (setq-local buffer-invisibility-alist nil)
+                       (setq-local buffer-invisibility-spec nil)
                        (message "All text visible")))
       (local-set-key (kbd "C-c h")
                      (lambda () (interactive)
-                       (setq-local buffer-invisibility-alist
+                       (setq-local buffer-invisibility-spec
                                    '((hidden-no-ellipsis . nil)
                                      (hidden-with-ellipsis . t)
                                      (hidden-custom . t)))

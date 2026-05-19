@@ -339,9 +339,9 @@
       (put-text-property start (point) 'invisible t))
     (insert "]Visible <-- nothing between brackets\n")
 
-    ;; Invisible with ellipsis using buffer-invisibility-alist
-    (make-local-variable 'buffer-invisibility-alist)
-    (add-to-list 'buffer-invisibility-alist '(display-test-ellipsis . t))
+    ;; Invisible with ellipsis using GNU's per-buffer invisibility spec.
+    (setq-local buffer-invisibility-spec
+                '(t (display-test-ellipsis . t) display-test-no-ellipsis))
 
     (insert "  Visible[")
     (let ((start (point)))
@@ -350,7 +350,6 @@
     (insert "]Visible <-- should show [...] between brackets\n")
 
     ;; Invisible without ellipsis
-    (add-to-list 'buffer-invisibility-alist '(display-test-no-ellipsis))
 
     (insert "  Start ")
     (let ((start (point)))
