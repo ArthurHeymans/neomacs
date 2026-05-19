@@ -1714,7 +1714,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         let char_pos = validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
-                let lim_int = expect_int(v)?;
+                let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
@@ -1761,7 +1761,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
-            let lim_int = expect_int(v)?;
+            let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
             (Some(lim_int), Some(lim_int))
         }
         _ => (None, None),
@@ -1828,7 +1828,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         let char_pos = validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
-                let lim_int = expect_int(v)?;
+                let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
@@ -1877,7 +1877,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
     let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
-            let lim_int = expect_int(v)?;
+            let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
             (Some(lim_int), Some(lim_int))
         }
         _ => (None, None),
@@ -1950,7 +1950,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         }
         let (limit_pos, limit_val) = match limit_arg {
             Some(v) if !v.is_nil() => {
-                let lim_int = expect_int(v)?;
+                let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(Value::fixnum(lim_int)))
             }
             _ => (None, None),
@@ -1990,7 +1990,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
     }
     let (limit_pos, limit_val) = match limit_arg {
         Some(v) if !v.is_nil() => {
-            let lim_int = expect_int(v)?;
+            let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
             (Some(lim_int), Some(Value::fixnum(lim_int)))
         }
         _ => (None, None),
