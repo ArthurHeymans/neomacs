@@ -42,7 +42,7 @@ fn oracle_eval_region_returns_nil() {
   (insert "99")
   (eval-region (point-min) (point-max)))"#,
     );
-    assert_ok_eq("99", &oracle, &neovm);
+    assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
