@@ -1155,6 +1155,26 @@ fn runtime_startup_state_clears_top_level_eval_state() {
     );
 }
 
+#[test]
+fn runtime_startup_state_seeds_scratch_window_before_temp_buffer_eval() {
+    crate::test_utils::init_test_tracing();
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
+    apply_runtime_startup_state(&mut eval).unwrap_or_else(|err| {
+        panic!("runtime startup state: {}", format_eval_error(&eval, &err));
+    });
+
+    let observed = eval_rendered(
+        &mut eval,
+        r#"(with-temp-buffer
+             (list (buffer-name (current-buffer))
+                   (buffer-name (window-buffer (selected-window)))
+                   (eq (current-buffer)
+                       (window-buffer (selected-window)))))"#,
+    );
+    assert_eq!(observed, "OK (\" *temp*\" \"*scratch*\" nil)");
+}
+
 /// Legacy bootstrap load sequence, retained for partial-bootstrap test utilities.
 /// The production code now loads loadup.el directly instead.
 const BOOTSTRAP_LOAD_SEQUENCE: &[&str] = &[

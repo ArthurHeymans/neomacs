@@ -3580,6 +3580,13 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
         eval.buffers
             .note_buffer_order_after(messages_id, minibuf_id);
     }
+    let scratch_id = eval
+        .buffers
+        .find_buffer_by_name("*scratch*")
+        .unwrap_or_else(|| eval.buffers.create_buffer("*scratch*"));
+    eval.set_current_buffer_unrecorded(scratch_id)
+        .map_err(map_flow)?;
+    super::window_cmds::seed_batch_startup_frame_in_state(&mut eval.frames, &mut eval.buffers);
     eval_startup_forms(
         eval,
         // Note: the closing paren count must balance the opens.
