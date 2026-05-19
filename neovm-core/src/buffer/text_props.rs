@@ -951,6 +951,18 @@ impl TextPropertyTable {
         self.prune_empty_intervals_after_mutation();
     }
 
+    pub fn append_shifted_via_add_text_properties(
+        &mut self,
+        other: &TextPropertyTable,
+        offset: usize,
+    ) {
+        for (&start, node) in &other.intervals {
+            for (name, value) in plist_pairs(node.plist) {
+                self.put_property(start + offset, node.end + offset, name, value);
+            }
+        }
+    }
+
     pub fn merge_missing_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
         for (&start, node) in &other.intervals {
             if node.is_empty_plist() {

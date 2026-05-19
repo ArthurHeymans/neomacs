@@ -381,7 +381,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             for (src_val, offset) in &string_sources {
                 if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
                     if !src_table.is_empty() {
-                        combined_table.append_shifted(&src_table, *offset);
+                        combined_table.append_shifted_via_add_text_properties(&src_table, *offset);
                         has_props = true;
                     }
                 }
@@ -464,7 +464,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             for (src_val, offset) in &string_sources {
                 if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
                     if !src_table.is_empty() {
-                        combined_table.append_shifted(&src_table, *offset);
+                        combined_table.append_shifted_via_add_text_properties(&src_table, *offset);
                         has_props = true;
                     }
                 }
