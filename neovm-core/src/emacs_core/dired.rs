@@ -1208,13 +1208,7 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
     // instead of signaling an error.
     let filename = match args[0].as_lisp_string() {
         Some(string) => dired_runtime_string(string),
-        None if args[0].is_nil() => return Ok(Value::NIL),
-        None => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), args[0]],
-            ));
-        }
+        None => return Ok(Value::NIL),
     };
     let filename =
         super::fileio::resolve_filename_in_state(&eval.obarray, &[], &eval.buffers, &filename);
@@ -1237,14 +1231,17 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
 pub(crate) fn builtin_file_attributes_lessp(args: Vec<Value>) -> EvalResult {
     expect_range_args("file-attributes-lessp", &args, 2, 2)?;
 
-    let name1 = extract_car_string("file-attributes-lessp", &args[0])?;
-    let name2 = extract_car_string("file-attributes-lessp", &args[1])?;
+    let name2 = file_attributes_lessp_car_string(&args[1])?;
+    let name1 = file_attributes_lessp_car_string(&args[0])?;
 
     Ok(Value::bool_val(name1 < name2))
 }
 
 /// Extract the car of a cons cell as a string.
-fn extract_car_string(_name: &str, val: &Value) -> Result<String, Flow> {
+///
+/// GNU implements `file-attributes-lessp` as `Fstring_lessp (Fcar (f1),
+/// Fcar (f2))`; with the current C build this observes the second `car` first.
+fn file_attributes_lessp_car_string(val: &Value) -> Result<String, Flow> {
     match val.kind() {
         ValueKind::Cons => {
             let pair_car = val.cons_car();
@@ -1262,7 +1259,7 @@ fn extract_car_string(_name: &str, val: &Value) -> Result<String, Flow> {
         }
         other => Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("consp"), *val],
+            vec![Value::symbol("listp"), *val],
         )),
     }
 }

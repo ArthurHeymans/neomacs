@@ -717,6 +717,17 @@ fn test_file_attributes_nonexistent() {
 }
 
 #[test]
+fn test_file_attributes_non_string_returns_nil_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert!(
+        call_file_attributes(vec![Value::fixnum(42)])
+            .unwrap()
+            .is_nil()
+    );
+    assert!(call_file_attributes(vec![Value::NIL]).unwrap().is_nil());
+}
+
+#[test]
 fn test_file_attributes_accepts_raw_unibyte_filename_value() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -815,6 +826,21 @@ fn test_file_attributes_lessp_equal() {
 
     let result = builtin_file_attributes_lessp(vec![f1, f2]).unwrap();
     assert!(result.is_nil()); // not less than
+}
+
+#[test]
+fn test_file_attributes_lessp_bad_args_match_gnu_order() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_file_attributes_lessp(vec![Value::string("alpha"), Value::string("beta")])
+        .unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data[0].as_symbol_name(), Some("listp"));
+            assert_eq!(sig.data[1].as_str_owned().as_deref(), Some("beta"));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 // -----------------------------------------------------------------------
