@@ -867,6 +867,29 @@ impl TextPropertyTable {
         TextPropertyTable::from_plist_runs(runs)
     }
 
+    pub fn slice_copy_text_properties(&self, start: usize, end: usize) -> TextPropertyTable {
+        if start >= end {
+            return TextPropertyTable::new();
+        }
+
+        let mut table = TextPropertyTable::new();
+        for (interval_start, node) in self
+            .intervals
+            .range(..end)
+            .filter(|(_, node)| node.end > start)
+        {
+            let new_start = (*interval_start).max(start) - start;
+            let new_end = node.end.min(end) - start;
+            if new_start >= new_end {
+                continue;
+            }
+            for (name, value) in &node.plist {
+                table.put_property(new_start, new_end, *name, *value);
+            }
+        }
+        table
+    }
+
     pub fn append_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
         for (&start, node) in &other.intervals {
             self.intervals.insert(
