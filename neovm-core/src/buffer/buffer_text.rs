@@ -538,6 +538,14 @@ impl BufferText {
         self.storage.borrow().text_props.get_properties_ordered(pos)
     }
 
+    pub fn text_props_get_properties_plist_value(&self, pos: usize) -> Value {
+        let pos = self.buf_bytepos_to_charpos(pos);
+        self.storage
+            .borrow()
+            .text_props
+            .get_properties_plist_value(pos)
+    }
+
     pub fn text_props_remove_property(&self, start: usize, end: usize, name: Value) -> bool {
         let start = self.buf_bytepos_to_charpos(start);
         let end = self.buf_bytepos_to_charpos(end);

@@ -1673,8 +1673,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
             return Ok(Value::NIL);
         }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
-            let props = table.get_properties_ordered(char_pos);
-            return Ok(ordered_pairs_to_plist(&props));
+            return Ok(table.get_properties_plist_value(char_pos));
         }
         return Ok(Value::NIL);
     }
@@ -1688,8 +1687,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
-    let props = buf.text.text_props_get_properties_ordered(byte_pos);
-    Ok(ordered_pairs_to_plist(&props))
+    Ok(buf.text.text_props_get_properties_plist_value(byte_pos))
 }
 
 /// (next-single-property-change POS PROP &optional OBJECT LIMIT)

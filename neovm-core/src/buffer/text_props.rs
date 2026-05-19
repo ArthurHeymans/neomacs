@@ -102,6 +102,69 @@ use std::collections::HashMap;
 
 type IntervalPlist = Vec<(Value, Value)>;
 
+fn plist_value_from_pairs(plist: &[(Value, Value)]) -> Value {
+    let mut items = Vec::with_capacity(plist.len() * 2);
+    for (key, value) in plist {
+        items.push(*key);
+        items.push(*value);
+    }
+    Value::list(items)
+}
+
+fn plist_value_replace_existing(plist: Value, key: Value, value: Value) -> bool {
+    let mut tail = plist;
+    while tail.is_cons() {
+        let name = tail.cons_car();
+        let value_cell = tail.cons_cdr();
+        if !value_cell.is_cons() {
+            return false;
+        }
+        if eq_value(&name, &key) {
+            if eq_value(&value_cell.cons_car(), &value) {
+                return false;
+            }
+            value_cell.set_car(value);
+            return true;
+        }
+        tail = value_cell.cons_cdr();
+    }
+    false
+}
+
+fn plist_value_remove(plist: Value, key: Value) -> (Value, bool) {
+    let mut old_tail = plist;
+    let mut reversed = Value::NIL;
+    let mut removed = false;
+    while old_tail.is_cons() {
+        let name = old_tail.cons_car();
+        let value_cell = old_tail.cons_cdr();
+        if !value_cell.is_cons() {
+            break;
+        }
+        let value = value_cell.cons_car();
+        if eq_value(&name, &key) {
+            removed = true;
+        } else {
+            reversed = Value::cons(value, reversed);
+            reversed = Value::cons(name, reversed);
+        }
+        old_tail = value_cell.cons_cdr();
+    }
+
+    let mut rebuilt = old_tail;
+    while reversed.is_cons() {
+        let name = reversed.cons_car();
+        reversed = reversed.cons_cdr();
+        if !reversed.is_cons() {
+            break;
+        }
+        let value = reversed.cons_car();
+        reversed = reversed.cons_cdr();
+        rebuilt = Value::cons(name, Value::cons(value, rebuilt));
+    }
+    (rebuilt, removed)
+}
+
 // ---------------------------------------------------------------------------
 // IntervalNode — internal tree node matching GNU struct interval
 // ---------------------------------------------------------------------------
@@ -119,11 +182,13 @@ struct IntervalNode {
     write_protect: bool,
     visible: bool,
     plist: IntervalPlist,
+    plist_value: Value,
 }
 
 impl IntervalNode {
     fn new(end: usize, plist: IntervalPlist) -> Self {
         let (front_sticky, rear_sticky, write_protect, visible) = Self::extract_cached(&plist);
+        let plist_value = plist_value_from_pairs(&plist);
         Self {
             end,
             front_sticky,
@@ -131,6 +196,7 @@ impl IntervalNode {
             write_protect,
             visible,
             plist,
+            plist_value,
         }
     }
 
@@ -152,6 +218,7 @@ impl IntervalNode {
             rear_sticky,
             write_protect,
             visible,
+            plist_value: plist_value_from_pairs(&plist),
             plist,
         }
     }
@@ -404,12 +471,19 @@ impl TextPropertyTable {
             if cursor < key {
                 let mut node = IntervalNode::default(cursor, key);
                 plist_put_replace(&mut node.plist, name, value);
+                node.plist_value = plist_value_from_pairs(&node.plist);
                 node.refresh_cache();
                 self.intervals.insert(cursor, node);
                 changed = true;
             }
             if let Some(node) = self.intervals.get_mut(&key) {
+                let existed = plist_get(&node.plist, name).is_some();
                 if plist_put_replace(&mut node.plist, name, value) {
+                    if existed {
+                        plist_value_replace_existing(node.plist_value, name, value);
+                    } else {
+                        node.plist_value = Value::cons(name, Value::cons(value, node.plist_value));
+                    }
                     node.refresh_cache();
                     changed = true;
                 }
@@ -420,6 +494,7 @@ impl TextPropertyTable {
         if cursor < end {
             let mut node = IntervalNode::default(cursor, end);
             plist_put_replace(&mut node.plist, name, value);
+            node.plist_value = plist_value_from_pairs(&node.plist);
             node.refresh_cache();
             self.intervals.insert(cursor, node);
             changed = true;
@@ -458,6 +533,13 @@ impl TextPropertyTable {
         node.plist.clone()
     }
 
+    pub fn get_properties_plist_value(&self, pos: usize) -> Value {
+        let Some((_, node)) = self.find_interval(pos) else {
+            return Value::NIL;
+        };
+        node.plist_value
+    }
+
     pub fn remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
         if start >= end {
             return false;
@@ -471,6 +553,7 @@ impl TextPropertyTable {
         for key in &affected {
             if let Some(node) = self.intervals.get_mut(key) {
                 if plist_remove(&mut node.plist, name) {
+                    node.plist_value = plist_value_remove(node.plist_value, name).0;
                     node.refresh_cache();
                     changed = true;
                 }
@@ -492,6 +575,7 @@ impl TextPropertyTable {
         for key in &affected {
             if let Some(node) = self.intervals.get_mut(key) {
                 node.plist.clear();
+                node.plist_value = Value::NIL;
                 node.refresh_cache();
             }
         }
@@ -897,6 +981,7 @@ impl TextPropertyTable {
 
     pub(crate) fn for_each_root(&self, mut f: impl FnMut(Value)) {
         for (_, node) in &self.intervals {
+            f(node.plist_value);
             for (key, value) in &node.plist {
                 f(*key);
                 f(*value);
