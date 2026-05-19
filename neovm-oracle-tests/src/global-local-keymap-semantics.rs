@@ -19,29 +19,30 @@ fn oracle_current_global_map_returns_keymap() {
 #[test]
 fn oracle_current_local_map_nil_by_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(current-local-map)");
+    let (oracle, neovm) =
+        eval_oracle_and_neovm_with_bootstrap("(with-temp-buffer (current-local-map))");
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_use_global_map_returns_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm("(keymapp (use-global-map (current-global-map)))");
-    assert_ok_eq("t", &oracle, &neovm);
+    let (oracle, neovm) = eval_oracle_and_neovm("(use-global-map (current-global-map))");
+    assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_use_local_map_returns_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (oracle, neovm) =
-        eval_oracle_and_neovm("(let ((m (make-sparse-keymap))) (keymapp (use-local-map m)))");
-    assert_ok_eq("t", &oracle, &neovm);
+        eval_oracle_and_neovm("(let ((m (make-sparse-keymap))) (use-local-map m))");
+    assert_ok_eq("nil", &oracle, &neovm);
 }
 
 #[test]
 fn oracle_global_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(
         r#"(progn
   (global-set-key (kbd "C-c C-x") 'ignore)
   t)"#,
@@ -52,7 +53,7 @@ fn oracle_global_set_key_no_error() {
 #[test]
 fn oracle_local_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm(
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(
         r#"(progn
   (local-set-key (kbd "C-c C-y") 'ignore)
   t)"#,

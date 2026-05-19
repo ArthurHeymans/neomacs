@@ -57,6 +57,13 @@ fn oracle_interactive_form_for_interactive_lambda() {
 #[test]
 fn oracle_accessible_keymaps_returns_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(r#"(listp (accessible-keymaps))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(listp (accessible-keymaps (make-sparse-keymap)))"#);
     assert_ok_eq("t", &o, &n);
+}
+
+#[test]
+fn oracle_accessible_keymaps_requires_keymap() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(r#"(accessible-keymaps)"#);
+    assert_err_kind(&o, &n, "wrong-number-of-arguments");
 }
