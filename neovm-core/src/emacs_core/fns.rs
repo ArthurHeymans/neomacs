@@ -14,8 +14,75 @@ use crate::buffer::BufferManager;
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use std::borrow::Cow;
+use std::ffi::{CStr, CString};
 
 // Sentinel constants removed — no longer needed with Vec<u8> LispString
+
+#[cfg(unix)]
+unsafe extern "C" {
+    #[link_name = "towlower"]
+    fn c_towlower(wc: libc::c_uint) -> libc::c_uint;
+    #[link_name = "towlower_l"]
+    fn c_towlower_l(wc: libc::c_uint, locale: libc::locale_t) -> libc::c_uint;
+    #[link_name = "wcscoll"]
+    fn c_wcscoll(ws1: *const libc::wchar_t, ws2: *const libc::wchar_t) -> libc::c_int;
+    #[link_name = "wcscoll_l"]
+    fn c_wcscoll_l(
+        ws1: *const libc::wchar_t,
+        ws2: *const libc::wchar_t,
+        locale: libc::locale_t,
+    ) -> libc::c_int;
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "emscripten",
+    target_os = "dragonfly",
+    target_os = "hurd"
+))]
+unsafe fn collation_errno_location() -> *mut libc::c_int {
+    unsafe { libc::__errno_location() }
+}
+
+#[cfg(any(target_os = "android", target_os = "netbsd", target_os = "openbsd"))]
+unsafe fn collation_errno_location() -> *mut libc::c_int {
+    unsafe { libc::__errno() }
+}
+
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "freebsd"
+))]
+unsafe fn collation_errno_location() -> *mut libc::c_int {
+    unsafe { libc::__error() }
+}
+
+#[cfg(unix)]
+unsafe fn set_collation_errno(value: libc::c_int) {
+    unsafe {
+        *collation_errno_location() = value;
+    }
+}
+
+#[cfg(unix)]
+unsafe fn collation_errno() -> libc::c_int {
+    unsafe { *collation_errno_location() }
+}
+
+#[cfg(unix)]
+fn collation_errno_message(errno: libc::c_int) -> String {
+    let ptr = unsafe { libc::strerror(errno) };
+    if ptr.is_null() {
+        format!("Unknown error {errno}")
+    } else {
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -1579,36 +1646,154 @@ fn filenvercmp(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
+fn require_optional_locale(locale: Option<&Value>) -> Result<Option<String>, Flow> {
+    match locale {
+        None => Ok(None),
+        Some(value) if value.is_nil() => Ok(None),
+        Some(value) => value.as_runtime_string_owned().map(Some).ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        }),
+    }
+}
+
+#[cfg(unix)]
+fn string_collate_compare(
+    s1: &str,
+    s2: &str,
+    locale: Option<&str>,
+    ignore_case: bool,
+) -> Result<i32, Flow> {
+    let mut left: Vec<libc::wchar_t> = s1.chars().map(|ch| ch as libc::wchar_t).collect();
+    let mut right: Vec<libc::wchar_t> = s2.chars().map(|ch| ch as libc::wchar_t).collect();
+    left.push(0);
+    right.push(0);
+
+    if let Some(locale) = locale {
+        let locale_c = CString::new(locale).map_err(|_| {
+            signal(
+                "error",
+                vec![Value::string(format!(
+                    "Invalid locale {locale}: embedded NUL"
+                ))],
+            )
+        })?;
+        // GNU `str_collate' opens explicit locale strings with newlocale
+        // and signals `error' when the requested locale does not exist.
+        let loc = unsafe {
+            libc::newlocale(
+                libc::LC_COLLATE_MASK | libc::LC_CTYPE_MASK,
+                locale_c.as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        if loc.is_null() {
+            let errno = unsafe { collation_errno() };
+            return Err(signal(
+                "error",
+                vec![Value::string(format!(
+                    "Invalid locale {locale}: {}",
+                    collation_errno_message(errno)
+                ))],
+            ));
+        }
+
+        if ignore_case {
+            for ch in left.iter_mut().chain(right.iter_mut()) {
+                if *ch != 0 {
+                    *ch = unsafe { c_towlower_l(*ch as libc::c_uint, loc) as libc::wchar_t };
+                }
+            }
+        }
+
+        unsafe { set_collation_errno(0) };
+        let result = unsafe { c_wcscoll_l(left.as_ptr(), right.as_ptr(), loc) };
+        let err = unsafe { collation_errno() };
+        unsafe { libc::freelocale(loc) };
+        if err != 0 {
+            return Err(signal(
+                "error",
+                vec![Value::string(format!(
+                    "Invalid string for collation: {}",
+                    collation_errno_message(err)
+                ))],
+            ));
+        }
+        Ok(result)
+    } else {
+        if ignore_case {
+            for ch in left.iter_mut().chain(right.iter_mut()) {
+                if *ch != 0 {
+                    *ch = unsafe { c_towlower(*ch as libc::c_uint) as libc::wchar_t };
+                }
+            }
+        }
+        unsafe { set_collation_errno(0) };
+        let result = unsafe { c_wcscoll(left.as_ptr(), right.as_ptr()) };
+        let err = unsafe { collation_errno() };
+        if err != 0 {
+            return Err(signal(
+                "error",
+                vec![Value::string(format!(
+                    "Invalid string for collation: {}",
+                    collation_errno_message(err)
+                ))],
+            ));
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(not(unix))]
+fn string_collate_compare(
+    s1: &str,
+    s2: &str,
+    _locale: Option<&str>,
+    ignore_case: bool,
+) -> Result<i32, Flow> {
+    let left = if ignore_case {
+        s1.to_lowercase()
+    } else {
+        s1.to_owned()
+    };
+    let right = if ignore_case {
+        s2.to_lowercase()
+    } else {
+        s2.to_owned()
+    };
+    Ok(match left.cmp(&right) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    })
+}
+
 /// (string-collate-lessp S1 S2 &optional LOCALE IGNORE-CASE)
-/// Simple lexicographic comparison (locale is ignored).
 pub(crate) fn builtin_string_collate_lessp(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-lessp", &args, 2, 4)?;
     let s1 = require_string_or_symbol_name(&args[0])?;
     let s2 = require_string_or_symbol_name(&args[1])?;
+    let locale = require_optional_locale(args.get(2))?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
-    let result = if ignore_case {
-        s1.to_lowercase() < s2.to_lowercase()
-    } else {
-        s1 < s2
-    };
-    Ok(Value::bool_val(result))
+    Ok(Value::bool_val(
+        string_collate_compare(&s1, &s2, locale.as_deref(), ignore_case)? < 0,
+    ))
 }
 
 /// (string-collate-equalp S1 S2 &optional LOCALE IGNORE-CASE)
-/// Simple lexicographic equality (locale is ignored).
 pub(crate) fn builtin_string_collate_equalp(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-equalp", &args, 2, 4)?;
     let s1 = require_string_or_symbol_name(&args[0])?;
     let s2 = require_string_or_symbol_name(&args[1])?;
+    let locale = require_optional_locale(args.get(2))?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
-    let result = if ignore_case {
-        s1.to_lowercase() == s2.to_lowercase()
-    } else {
-        s1 == s2
-    };
-    Ok(Value::bool_val(result))
+    Ok(Value::bool_val(
+        string_collate_compare(&s1, &s2, locale.as_deref(), ignore_case)? == 0,
+    ))
 }
 
 // ---------------------------------------------------------------------------

@@ -1372,6 +1372,44 @@ fn collate_lessp_ignore_case() {
     assert!(r.is_truthy());
 }
 
+#[test]
+fn collate_lessp_rejects_non_string_locale() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_string_collate_lessp(vec![
+        Value::string("a"),
+        Value::string("b"),
+        Value::fixnum(42),
+    ])
+    .expect_err("non-nil locale must be a string");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(
+                sig.symbol,
+                Value::symbol("wrong-type-argument").as_symbol_id().unwrap()
+            );
+            assert_eq!(sig.data[0], Value::symbol("stringp"));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn collate_lessp_invalid_locale_signals_error() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_string_collate_lessp(vec![
+        Value::string("a"),
+        Value::string("b"),
+        Value::string("neomacs-invalid-locale"),
+    ])
+    .expect_err("invalid explicit locale should signal error");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol, Value::symbol("error").as_symbol_id().unwrap());
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
 // ---- string-collate-equalp ----
 
 #[test]
@@ -1401,6 +1439,27 @@ fn collate_equalp_different() {
     let r =
         builtin_string_collate_equalp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
     assert!(r.is_nil());
+}
+
+#[test]
+fn collate_equalp_rejects_non_string_locale() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_string_collate_equalp(vec![
+        Value::string("a"),
+        Value::string("a"),
+        Value::symbol("not-a-locale"),
+    ])
+    .expect_err("non-nil locale must be a string");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(
+                sig.symbol,
+                Value::symbol("wrong-type-argument").as_symbol_id().unwrap()
+            );
+            assert_eq!(sig.data[0], Value::symbol("stringp"));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 // ---- widget-get / widget-put ----
