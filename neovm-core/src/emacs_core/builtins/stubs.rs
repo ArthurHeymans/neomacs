@@ -98,14 +98,51 @@ pub(crate) fn builtin_tty_frame_restack(args: Vec<Value>) -> EvalResult {
     ))
 }
 
-pub(crate) fn builtin_tty_display_pixel_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-display-pixel-width", &args, 0, 1)?;
-    Ok(Value::fixnum(0))
+fn tty_display_dimension(
+    ctx: &mut crate::emacs_core::eval::Context,
+    name: &str,
+    args: &[Value],
+) -> Result<(i64, i64), Flow> {
+    expect_range_args(name, args, 0, 1)?;
+
+    let frame_id = match args.first().map(|value| value.kind()) {
+        Some(ValueKind::Veclike(VecLikeType::Frame)) => {
+            crate::window::FrameId(args[0].as_frame_id().unwrap())
+        }
+        _ => crate::emacs_core::window_cmds::ensure_selected_frame_id(ctx),
+    };
+
+    let Some(frame) = ctx.frames.get(frame_id) else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![
+                Value::symbol("framep"),
+                args.first().copied().unwrap_or(Value::NIL),
+            ],
+        ));
+    };
+
+    if frame.initial {
+        return Ok((80, 25));
+    }
+
+    Ok((i64::from(frame.columns()), i64::from(frame.lines())))
 }
 
-pub(crate) fn builtin_tty_display_pixel_height(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-display-pixel-height", &args, 0, 1)?;
-    Ok(Value::fixnum(0))
+pub(crate) fn builtin_tty_display_pixel_width(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let (width, _) = tty_display_dimension(ctx, "tty-display-pixel-width", &args)?;
+    Ok(Value::fixnum(width))
+}
+
+pub(crate) fn builtin_tty_display_pixel_height(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let (_, height) = tty_display_dimension(ctx, "tty-display-pixel-height", &args)?;
+    Ok(Value::fixnum(height))
 }
 
 // =========================================================================

@@ -5928,15 +5928,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "tty-display-pixel-height",
-        |_ctx, args| builtin_tty_display_pixel_height(args),
+        builtin_tty_display_pixel_height,
         0,
-        None,
+        Some(1),
     );
     ctx.defsubr(
         "tty-display-pixel-width",
-        |_ctx, args| builtin_tty_display_pixel_width(args),
+        builtin_tty_display_pixel_width,
         0,
-        None,
+        Some(1),
     );
     ctx.defsubr(
         "tty-frame-at",
