@@ -1384,23 +1384,12 @@ pub(crate) fn builtin_add_face_text_property(
                 return None;
             };
             let new_face = args[2];
-            let append = args.get(3).is_some_and(|v| v.is_truthy());
-            let mut table = buf.text.text_props_snapshot().copy_interval_plist_spines();
-            let mut changed = false;
-            let mut seg_start = byte_beg;
-            while seg_start < byte_end {
-                let seg_end = match table.next_property_change(seg_start) {
-                    Some(p) if p < byte_end => p,
-                    _ => byte_end,
-                };
-                let existing = table.get_property(seg_start, Value::symbol("face"));
-                let Ok(merged) = merge_face_property(existing, new_face, append) else {
-                    return None;
-                };
-                changed |= table.put_property(seg_start, seg_end, Value::symbol("face"), merged);
-                seg_start = seg_end;
-            }
-            changed.then_some((buf_id, byte_beg, byte_end))
+            (!buf.text.text_props_range_has_all_properties(
+                byte_beg,
+                byte_end,
+                &[(Value::symbol("face"), new_face)],
+            ))
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
