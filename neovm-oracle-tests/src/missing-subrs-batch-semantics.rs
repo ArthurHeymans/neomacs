@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_ngettext_returns_singular_for_1() {
@@ -33,14 +33,17 @@ fn oracle_gap_size_returns_integer() {
 }
 
 #[test]
-fn oracle_process_id_returns_integer_or_nil() {
+fn oracle_process_id_rejects_integer_pid_like_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    // process-id returns an integer for the current (or nil for no process).
-    // DIVERGENCE: GNU returns t (integerp), Neovm signals wrong-type-argument
-    // because process-id expects a process, not a PID integer.
-    // This is a legitimate behavioral difference.
-    let (o, n) = eval_oracle_and_neovm(r#"(or (integerp (process-id (emacs-pid))) t)"#);
-    assert_ok_eq("t", &o, &n);
+    // GNU src/process.c:Fprocess_id CHECK_PROCESS validates that the argument
+    // is a process object; an OS PID integer is not accepted.
+    assert_oracle_parity_with_bootstrap(
+        r#"(condition-case err
+               (process-id (emacs-pid))
+             (error (list (car err)
+                          (caadr err)
+                          (integerp (cadadr err)))))"#,
+    );
 }
 
 #[test]
