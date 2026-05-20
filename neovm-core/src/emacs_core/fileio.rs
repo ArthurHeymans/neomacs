@@ -3153,10 +3153,21 @@ pub(crate) fn builtin_set_file_times(eval: &mut Context, args: Vec<Value>) -> Ev
             ],
         ));
     }
-    let filename = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
-    let mut handler_args = Vec::with_capacity(args.len());
-    handler_args.push(Value::heap_string(filename.clone()));
-    handler_args.extend_from_slice(&args[1..]);
+    let nofollow = args.get(2).is_some_and(|flag| !flag.is_nil());
+    let timestamp_arg = args.get(1).copied().unwrap_or(Value::NIL);
+    let flag_arg = args.get(2).copied().unwrap_or(Value::NIL);
+    let timestamp = if !timestamp_arg.is_nil() {
+        Some(parse_timestamp_arg(&timestamp_arg)?)
+    } else {
+        None
+    };
+    let filename = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let filename = expect_lisp_filename_string_strict(&filename)?;
+    let handler_args = vec![
+        Value::heap_string(filename.clone()),
+        timestamp_arg,
+        flag_arg,
+    ];
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
         "set-file-times",
@@ -3166,12 +3177,6 @@ pub(crate) fn builtin_set_file_times(eval: &mut Context, args: Vec<Value>) -> Ev
     )? {
         return Ok(result);
     }
-    let timestamp = if args.len() > 1 && !args[1].is_nil() {
-        Some(parse_timestamp_arg(&args[1])?)
-    } else {
-        None
-    };
-    let nofollow = args.get(2).is_some_and(|flag| !flag.is_nil());
     set_file_times_path(&lisp_file_name_to_path_buf(&filename), timestamp, nofollow).map_err(
         |err| {
             signal_file_action_error_value(err, "Setting file times", Value::heap_string(filename))

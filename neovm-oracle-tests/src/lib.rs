@@ -882,6 +882,8 @@ mod file_repository_version_semantics;
 mod file_selinux_strict_edge_semantics;
 #[path = "file-size-human-readable-strict-edge-semantics.rs"]
 mod file_size_human_readable_strict_edge_semantics;
+#[path = "file-times-strict-edge-semantics.rs"]
+mod file_times_strict_edge_semantics;
 #[path = "file-truename-equal-strict-edge-semantics.rs"]
 mod file_truename_equal_strict_edge_semantics;
 #[path = "fillarray-advanced.rs"]
