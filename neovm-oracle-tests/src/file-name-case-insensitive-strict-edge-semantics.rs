@@ -48,3 +48,65 @@ fn oracle_file_name_case_insensitive_existing_and_missing_paths() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_name_case_insensitive_handler_and_argument_order_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-case-fold-calls nil)
+  (defun neomacs--oracle-case-fold-handler (operation &rest args)
+    (push (cons operation args) neomacs--oracle-case-fold-calls)
+    (cond
+     ((eq operation 'file-name-case-insensitive-p)
+      'handled-case-fold)
+     ((eq operation 'expand-file-name)
+      17)
+     (t
+      (let ((file-name-handler-alist nil))
+        (apply operation args)))))
+  (unwind-protect
+      (list
+       ;; GNU validates arity and type before consulting file-name handlers.
+       (condition-case err
+           (let ((file-name-handler-alist
+                  '((".*" . neomacs--oracle-case-fold-handler))))
+             (file-name-case-insensitive-p))
+         (error (list (car err) (cdr err))))
+       neomacs--oracle-case-fold-calls
+       (setq neomacs--oracle-case-fold-calls nil)
+       (condition-case err
+           (let ((file-name-handler-alist
+                  '((".*" . neomacs--oracle-case-fold-handler))))
+             (file-name-case-insensitive-p 42))
+         (error (list (car err) (cdr err))))
+       neomacs--oracle-case-fold-calls
+       (setq neomacs--oracle-case-fold-calls nil)
+       ;; Unrestricted handlers can be reached by expand-file-name first.
+       (let ((file-name-handler-alist
+              '(("\\`/oracle-case-fold-root/" . neomacs--oracle-case-fold-handler)))
+             (default-directory "/oracle-case-fold-root/"))
+         (condition-case err
+             (file-name-case-insensitive-p "child")
+           (error (list (car err) (cdr err)))))
+       neomacs--oracle-case-fold-calls
+       (setq neomacs--oracle-case-fold-calls nil)
+       ;; Restricting operations skips expand-file-name and dispatches the
+       ;; predicate with the expanded absolute name.
+       (progn
+         (put 'neomacs--oracle-case-fold-handler
+              'operations
+              '(file-name-case-insensitive-p))
+         (let ((file-name-handler-alist
+                '(("\\`/oracle-case-fold-root/" . neomacs--oracle-case-fold-handler)))
+               (default-directory "/oracle-case-fold-root/"))
+           (file-name-case-insensitive-p "child")))
+       neomacs--oracle-case-fold-calls)
+    (put 'neomacs--oracle-case-fold-handler 'operations nil)
+    (fmakunbound 'neomacs--oracle-case-fold-handler)
+    (makunbound 'neomacs--oracle-case-fold-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

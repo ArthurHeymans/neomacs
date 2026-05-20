@@ -3055,12 +3055,15 @@ pub(crate) fn builtin_file_name_case_insensitive_p(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-name-case-insensitive-p", &args)? {
+    expect_args("file-name-case-insensitive-p", &args, 1)?;
+    expect_lisp_string_strict(&args[0])?;
+    let expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let filename = expect_lisp_filename_string_strict(&expanded)?;
+    if let Some(result) =
+        dispatch_expanded_file_handler(eval, "file-name-case-insensitive-p", &filename)?
+    {
         return Ok(result);
     }
-    expect_args("file-name-case-insensitive-p", &args, 1)?;
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
     Ok(Value::bool_val(file_name_case_insensitive_path(
         &lisp_file_name_to_path_buf(&filename),
     )))
