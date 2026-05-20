@@ -542,6 +542,43 @@ impl BufferText {
             .get_properties_plist_value(pos)
     }
 
+    pub fn text_props_range_has_all_properties(
+        &self,
+        start: usize,
+        end: usize,
+        properties: &[(Value, Value)],
+    ) -> bool {
+        let start = self.buf_bytepos_to_charpos(start);
+        let end = self.buf_bytepos_to_charpos(end);
+        self.storage
+            .borrow()
+            .text_props
+            .range_has_all_properties(start, end, properties)
+    }
+
+    pub fn text_props_range_has_any_property_named(
+        &self,
+        start: usize,
+        end: usize,
+        names: &[Value],
+    ) -> bool {
+        let start = self.buf_bytepos_to_charpos(start);
+        let end = self.buf_bytepos_to_charpos(end);
+        self.storage
+            .borrow()
+            .text_props
+            .range_has_any_property_named(start, end, names)
+    }
+
+    pub fn text_props_range_has_any_interval(&self, start: usize, end: usize) -> bool {
+        let start = self.buf_bytepos_to_charpos(start);
+        let end = self.buf_bytepos_to_charpos(end);
+        self.storage
+            .borrow()
+            .text_props
+            .range_has_any_interval(start, end)
+    }
+
     pub fn text_props_remove_property(&self, start: usize, end: usize, name: Value) -> bool {
         let start = self.buf_bytepos_to_charpos(start);
         let end = self.buf_bytepos_to_charpos(end);

@@ -549,6 +549,68 @@ impl TextPropertyTable {
         node.plist
     }
 
+    pub fn range_has_all_properties(
+        &self,
+        start: usize,
+        end: usize,
+        properties: &[(Value, Value)],
+    ) -> bool {
+        if start >= end || properties.is_empty() {
+            return true;
+        }
+
+        let mut cursor = start;
+        while cursor < end {
+            let Some((_, node)) = self.find_interval(cursor) else {
+                return false;
+            };
+            for (name, value) in properties {
+                let Some(existing) = plist_value_get(node.plist, *name) else {
+                    return false;
+                };
+                if !eq_value(&existing, value) {
+                    return false;
+                }
+            }
+            if node.end <= cursor {
+                return false;
+            }
+            cursor = node.end.min(end);
+        }
+
+        true
+    }
+
+    pub fn range_has_any_property_named(&self, start: usize, end: usize, names: &[Value]) -> bool {
+        if start >= end || names.is_empty() {
+            return false;
+        }
+
+        for (_, node) in self.intervals.range(..end) {
+            if node.end <= start {
+                continue;
+            }
+            if names
+                .iter()
+                .any(|name| plist_value_get(node.plist, *name).is_some())
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn range_has_any_interval(&self, start: usize, end: usize) -> bool {
+        if start >= end {
+            return false;
+        }
+
+        self.intervals
+            .range(..end)
+            .any(|(_, node)| node.end > start && !node.is_empty_plist())
+    }
+
     pub fn remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
         if start >= end {
             return false;

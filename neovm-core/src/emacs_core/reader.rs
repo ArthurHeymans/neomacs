@@ -1909,6 +1909,32 @@ pub(crate) fn read_key_sequence_options_from_args(
     )
 }
 
+fn read_key_sequence_string_result(keys: &[Value]) -> Value {
+    let mut chars_only = true;
+    let mut s = String::new();
+    for key in keys {
+        if let Some(c) = event_to_char(key) {
+            s.push(c);
+        } else {
+            chars_only = false;
+            break;
+        }
+    }
+    if chars_only && !keys.is_empty() {
+        Value::string(s)
+    } else {
+        read_key_sequence_vector_result(keys)
+    }
+}
+
+fn read_key_sequence_vector_result(keys: &[Value]) -> Value {
+    Value::vector(
+        keys.iter()
+            .map(|key| event_to_int(key).map(Value::fixnum).unwrap_or(*key))
+            .collect(),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // 10. input-pending-p
 // ---------------------------------------------------------------------------
@@ -2137,13 +2163,10 @@ pub(crate) fn builtin_read_key_sequence_in_runtime(
     expect_max_args("read-key-sequence", args, 6)?;
     expect_optional_prompt_string(args)?;
 
-    if let Some(event) = runtime.pop_unread_command_event() {
-        runtime.record_nonmenu_input_event(event);
-        runtime.set_read_command_keys(vec![event]);
-        if let Some(c) = event_to_char(&event) {
-            return Ok(Some(Value::string(c.to_string())));
-        }
-        return Ok(Some(Value::vector(vec![event])));
+    if runtime.peek_unread_command_event().is_some() {
+        let (keys, _binding) =
+            runtime.read_key_sequence_blocking(read_key_sequence_options_from_args(args))?;
+        return Ok(Some(read_key_sequence_string_result(&keys)));
     }
 
     if runtime.has_input_receiver() {
@@ -2162,13 +2185,10 @@ pub(crate) fn builtin_read_key_sequence_vector_in_runtime(
     expect_max_args("read-key-sequence-vector", args, 6)?;
     expect_optional_prompt_string(args)?;
 
-    if let Some(event) = runtime.pop_unread_command_event() {
-        runtime.record_nonmenu_input_event(event);
-        runtime.set_read_command_keys(vec![event]);
-        if let Some(n) = event_to_int(&event) {
-            return Ok(Some(Value::vector(vec![Value::fixnum(n)])));
-        }
-        return Ok(Some(Value::vector(vec![event])));
+    if runtime.peek_unread_command_event().is_some() {
+        let (keys, _binding) =
+            runtime.read_key_sequence_blocking(read_key_sequence_options_from_args(args))?;
+        return Ok(Some(read_key_sequence_vector_result(&keys)));
     }
 
     if runtime.has_input_receiver() {

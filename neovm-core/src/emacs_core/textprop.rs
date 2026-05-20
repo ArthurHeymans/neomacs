@@ -861,19 +861,6 @@ fn finish_buffer_text_property_change(
     result
 }
 
-fn current_buffer_text_property_snapshot(
-    eval: &super::eval::Context,
-    buf_id: BufferId,
-) -> Result<TextPropertyTable, Flow> {
-    let Some(buf) = eval.buffers.get(buf_id) else {
-        return Err(signal(
-            "error",
-            vec![Value::string("Buffer does not exist")],
-        ));
-    };
-    Ok(buf.text.text_props_snapshot().copy_interval_plist_spines())
-}
-
 fn call_text_property_hook_lists(
     eval: &mut super::eval::Context,
     hook_lists: Vec<Value>,
@@ -1020,10 +1007,12 @@ pub(crate) fn builtin_put_text_property(
     verify_property_change_read_only(eval, &args, 4)?;
     let change =
         buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
-            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
-            table
-                .put_property(byte_beg, byte_end, args[2], args[3])
-                .then_some((buf_id, byte_beg, byte_end))
+            let buf = eval.buffers.get(buf_id)?;
+            let properties = [(args[2], args[3])];
+            (!buf
+                .text
+                .text_props_range_has_all_properties(byte_beg, byte_end, &properties))
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1244,12 +1233,11 @@ pub(crate) fn builtin_add_text_properties(
     let pairs_for_probe = plist_pairs(&args[2])?;
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
-            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
-            let mut changed = false;
-            for (name, val) in &pairs_for_probe {
-                changed |= table.put_property(byte_beg, byte_end, *name, *val);
-            }
-            changed.then_some((buf_id, byte_beg, byte_end))
+            let buf = eval.buffers.get(buf_id)?;
+            (!buf
+                .text
+                .text_props_range_has_all_properties(byte_beg, byte_end, &pairs_for_probe))
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1535,12 +1523,10 @@ pub(crate) fn builtin_remove_text_properties(
     let names_for_probe = plist_names_for_remove(args[2]);
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
-            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
-            let mut changed = false;
-            for name in &names_for_probe {
-                changed |= table.remove_property(byte_beg, byte_end, *name);
-            }
-            changed.then_some((buf_id, byte_beg, byte_end))
+            let buf = eval.buffers.get(buf_id)?;
+            buf.text
+                .text_props_range_has_any_property_named(byte_beg, byte_end, &names_for_probe)
+                .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1627,9 +1613,12 @@ pub(crate) fn builtin_set_text_properties(
     };
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
-            let table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
-            (!pairs_for_probe.is_empty() || !table.intervals_snapshot().is_empty())
-                .then_some((buf_id, byte_beg, byte_end))
+            let buf = eval.buffers.get(buf_id)?;
+            (!pairs_for_probe.is_empty()
+                || buf
+                    .text
+                    .text_props_range_has_any_interval(byte_beg, byte_end))
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1711,12 +1700,10 @@ pub(crate) fn builtin_remove_list_of_text_properties(
     let names_for_probe = list_names_for_remove(args[2]);
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
-            let mut table = current_buffer_text_property_snapshot(eval, buf_id).ok()?;
-            let mut changed = false;
-            for name in &names_for_probe {
-                changed |= table.remove_property(byte_beg, byte_end, *name);
-            }
-            changed.then_some((buf_id, byte_beg, byte_end))
+            let buf = eval.buffers.get(buf_id)?;
+            buf.text
+                .text_props_range_has_any_property_named(byte_beg, byte_end, &names_for_probe)
+                .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((

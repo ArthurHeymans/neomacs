@@ -3744,6 +3744,28 @@ fn bootstrap_runtime_read_key_sequence_follows_help_describe_function_binding() 
 }
 
 #[test]
+fn bootstrap_builtin_read_key_sequence_follows_unread_help_map_prefix() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    eval.set_variable(
+        "unread-command-events",
+        Value::list(vec![Value::fixnum(8), Value::fixnum('i' as i64)]),
+    );
+
+    let result = crate::emacs_core::reader::builtin_read_key_sequence(&mut eval, vec![Value::NIL])
+        .expect("read C-h i key sequence");
+
+    assert_eq!(result, Value::string("\u{8}i"));
+    assert_eq!(
+        eval.read_command_keys(),
+        &[Value::fixnum(8), Value::fixnum('i' as i64)]
+    );
+    assert_eq!(eval.peek_unread_command_event(), None);
+}
+
+#[test]
 fn bootstrap_runtime_read_char_from_input_rx_preserves_ctrl_h_help_char() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
