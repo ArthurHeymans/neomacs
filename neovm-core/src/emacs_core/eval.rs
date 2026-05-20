@@ -2727,13 +2727,16 @@ impl Context {
                     rendered
                 };
 
-                let syntax_table = self
-                    .buffers
-                    .current_buffer()
-                    .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+                let current_buffer = self.buffers.current_buffer();
+                let syntax_table =
+                    current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+                let category_table = Some(
+                    crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?,
+                );
                 if builtins::search::builtin_string_match_p_with_case_fold(
                     false,
                     syntax_table.as_ref(),
+                    category_table,
                     &[entry, message],
                 )?
                 .as_fixnum()

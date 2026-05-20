@@ -57,6 +57,16 @@ const SEARCH_PATTERN_CACHE_SIZE: usize = 20;
 // matcher instead of treating the START argument as point.
 const STRING_MATCH_AT_DOT_UNREACHABLE: usize = usize::MAX;
 
+fn buffer_syntax_lookup(buf: &Buffer) -> BufferSyntaxLookup {
+    let category_table = crate::emacs_core::category::active_category_table_for_buffer(Some(buf))
+        .ok()
+        .filter(|table| !table.is_nil());
+    BufferSyntaxLookup {
+        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
+        category_table,
+    }
+}
+
 /// Convert `MatchRegisters` (from the GNU-translated engine) into `MatchData`
 /// (the public representation used by Elisp builtins).
 fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData {
@@ -1515,9 +1525,7 @@ pub fn re_search_forward_with_posix(
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     let md_opt = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -1609,9 +1617,7 @@ pub fn re_search_backward_with_posix(
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     let md_opt = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -1686,9 +1692,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let limit_rel = limit - region_start;
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| {
         regex_emacs::re_search(
@@ -1739,9 +1743,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     let limit_rel = limit - region_start;
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| {
         regex_emacs::re_search(
@@ -1798,9 +1800,7 @@ pub fn looking_at_with_posix(
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     match with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -1864,9 +1864,7 @@ pub(crate) fn looking_at_lisp_with_posix(
     let start_rel = start - region_start;
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
-    let syn = BufferSyntaxLookup {
-        syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
-    };
+    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_end, regs)) = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| {
         regex_emacs::re_match(

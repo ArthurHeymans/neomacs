@@ -780,6 +780,7 @@ pub(crate) fn builtin_posix_looking_at_with_state(
 pub(crate) fn builtin_string_match_with_state(
     case_fold: bool,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
+    category_table: Option<Value>,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -807,6 +808,7 @@ pub(crate) fn builtin_string_match_with_state(
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
                             syntax_table: syntax_table.clone(),
+                            category_table,
                         }
                     });
                     let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
@@ -864,10 +866,10 @@ pub(crate) fn builtin_string_match_slice(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_table = eval
-        .buffers
-        .current_buffer()
-        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    let current_buffer = eval.buffers.current_buffer();
+    let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    let category_table =
+        Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let mut throwaway: Option<super::regex::MatchData> = None;
     let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
@@ -875,7 +877,13 @@ pub(crate) fn builtin_string_match_slice(
     } else {
         &mut eval.match_data
     };
-    let result = builtin_string_match_with_state(case_fold, syntax_table.as_ref(), md_slot, args);
+    let result = builtin_string_match_with_state(
+        case_fold,
+        syntax_table.as_ref(),
+        category_table,
+        md_slot,
+        args,
+    );
     // Promote a TLS-detected quit (see `builtin_re_search_forward`).
     eval.maybe_quit()?;
     result
@@ -884,6 +892,7 @@ pub(crate) fn builtin_string_match_slice(
 pub(crate) fn builtin_posix_string_match_with_state(
     case_fold: bool,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
+    category_table: Option<Value>,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -917,6 +926,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
                             syntax_table: syntax_table.clone(),
+                            category_table,
                         }
                     });
                     let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
@@ -962,6 +972,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
 pub(crate) fn builtin_string_match_p_with_case_fold(
     case_fold: bool,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
+    category_table: Option<Value>,
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("string-match-p", args, 2, 3)?;
@@ -976,6 +987,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             let buffer_syntax = syntax_table.map(|syntax_table| {
                 crate::emacs_core::regex_emacs::BufferSyntaxLookup {
                     syntax_table: syntax_table.clone(),
+                    category_table,
                 }
             });
             let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
@@ -1023,11 +1035,11 @@ pub(crate) fn builtin_string_match_p(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_table = eval
-        .buffers
-        .current_buffer()
-        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
-    builtin_string_match_p_with_case_fold(case_fold, syntax_table.as_ref(), &args)
+    let current_buffer = eval.buffers.current_buffer();
+    let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    let category_table =
+        Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
+    builtin_string_match_p_with_case_fold(case_fold, syntax_table.as_ref(), category_table, &args)
 }
 
 pub(crate) fn builtin_posix_string_match(
@@ -1037,10 +1049,10 @@ pub(crate) fn builtin_posix_string_match(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_table = eval
-        .buffers
-        .current_buffer()
-        .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    let current_buffer = eval.buffers.current_buffer();
+    let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+    let category_table =
+        Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let mut throwaway: Option<super::regex::MatchData> = None;
     let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
@@ -1048,7 +1060,13 @@ pub(crate) fn builtin_posix_string_match(
     } else {
         &mut eval.match_data
     };
-    builtin_posix_string_match_with_state(case_fold, syntax_table.as_ref(), md_slot, &args)
+    builtin_posix_string_match_with_state(
+        case_fold,
+        syntax_table.as_ref(),
+        category_table,
+        md_slot,
+        &args,
+    )
 }
 
 pub(crate) fn builtin_match_string(

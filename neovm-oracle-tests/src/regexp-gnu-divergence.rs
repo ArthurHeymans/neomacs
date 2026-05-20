@@ -149,7 +149,6 @@ fn oracle_prop_regexp_gnu_unknown_group_extension_errors() {
 }
 
 #[test]
-#[ignore = "known divergence: Neomacs uses approximate built-in category predicates"]
 fn oracle_prop_regexp_gnu_category_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

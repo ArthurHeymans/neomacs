@@ -3856,14 +3856,14 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_posix_string_match_shared(&mut self, args: &[Value]) -> EvalResult {
-        let syntax_table = self
-            .ctx
-            .buffers
-            .current_buffer()
-            .map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+        let current_buffer = self.ctx.buffers.current_buffer();
+        let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
+        let category_table =
+            Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
         crate::emacs_core::builtins::search::builtin_posix_string_match_with_state(
             self.case_fold_search_enabled(),
             syntax_table.as_ref(),
+            category_table,
             &mut self.ctx.match_data,
             args,
         )

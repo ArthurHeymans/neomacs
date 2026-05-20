@@ -459,6 +459,27 @@ fn category_set_contains(category_set: &Value, category: char) -> Result<bool, F
         .map_or(false, |n| n != 0))
 }
 
+pub(crate) fn char_has_category_in_table(
+    table: Value,
+    ch: char,
+    category: u8,
+) -> Result<bool, Flow> {
+    let category_set = super::chartable::ct_lookup(&table, ch as i64)?;
+    category_set_contains(&category_set, category as char)
+}
+
+pub(crate) fn active_category_table_for_buffer(
+    buffer: Option<&crate::buffer::Buffer>,
+) -> Result<Value, Flow> {
+    if let Some(buffer) = buffer {
+        let table = buffer.slots[crate::buffer::buffer::BUFFER_SLOT_CATEGORY_TABLE];
+        if !table.is_nil() {
+            return Ok(table);
+        }
+    }
+    ensure_standard_category_table_object()
+}
+
 fn set_category_set_member(
     category_set: &Value,
     category: char,

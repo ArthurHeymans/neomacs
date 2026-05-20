@@ -2148,6 +2148,7 @@ pub(crate) struct DefaultSyntaxLookup;
 /// Used when regex searching within a buffer context.
 pub(crate) struct BufferSyntaxLookup {
     pub syntax_table: crate::emacs_core::syntax::SyntaxTable,
+    pub category_table: Option<crate::emacs_core::value::Value>,
 }
 
 impl SyntaxLookup for DefaultSyntaxLookup {
@@ -2166,11 +2167,11 @@ impl SyntaxLookup for BufferSyntaxLookup {
     }
 
     fn char_has_category(&self, c: char, cat: u8) -> bool {
-        // Neomacs has no per-buffer category table yet, so we
-        // share the same Unicode-block defaults as the default
-        // syntax lookup. Audit finding #6 in
-        // `drafts/regex-search-audit.md`.
-        default_char_has_category(c, cat)
+        self.category_table
+            .and_then(|table| {
+                crate::emacs_core::category::char_has_category_in_table(table, c, cat).ok()
+            })
+            .unwrap_or_else(|| default_char_has_category(c, cat))
     }
 }
 
@@ -2197,9 +2198,9 @@ fn default_char_has_category(c: char, cat: u8) -> bool {
         // historically returned.
         b'|' => !c.is_ascii(),
 
-        // a  -- ASCII (chars 32..126 in GNU; we accept the full
-        // ASCII range to avoid false negatives on control chars).
-        b'a' => c.is_ascii(),
+        // a  -- ASCII. GNU `lisp/international/characters.el` assigns
+        // category `a` to codepoints 32..127, not ASCII controls.
+        b'a' => (0x20..=0x7f).contains(&cp),
 
         // A  -- 2-byte alnum. GNU populates this from CJK Latin /
         // fullwidth ASCII ranges. The practical shortcut is the
