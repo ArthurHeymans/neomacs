@@ -828,6 +828,58 @@ fn set_text_properties_replaces_existing_values() {
 }
 
 #[test]
+fn set_text_properties_preserves_replacement_plist_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abc");
+
+    let props = Value::list(vec![
+        Value::symbol("x"),
+        Value::fixnum(1),
+        Value::symbol("y"),
+        Value::fixnum(2),
+        Value::symbol("z"),
+        Value::fixnum(3),
+    ]);
+    builtin_set_text_properties(&mut eval, vec![Value::fixnum(1), Value::fixnum(4), props])
+        .unwrap();
+
+    let observed =
+        builtin_text_properties_at(&mut eval, vec![Value::fixnum(1)]).expect("plist lookup");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&observed),
+        "(x 1 y 2 z 3)"
+    );
+}
+
+#[test]
+fn set_text_properties_preserves_string_replacement_plist_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let string = Value::string("abc");
+
+    let props = Value::list(vec![
+        Value::symbol("x"),
+        Value::fixnum(1),
+        Value::symbol("y"),
+        Value::fixnum(2),
+        Value::symbol("z"),
+        Value::fixnum(3),
+    ]);
+    builtin_set_text_properties(
+        &mut eval,
+        vec![Value::fixnum(0), Value::fixnum(3), props, string],
+    )
+    .unwrap();
+
+    let observed = builtin_text_properties_at(&mut eval, vec![Value::fixnum(0), string])
+        .expect("string plist lookup");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&observed),
+        "(x 1 y 2 z 3)"
+    );
+}
+
+#[test]
 fn set_text_properties_replaces_covered_string_intervals_with_one_run() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
