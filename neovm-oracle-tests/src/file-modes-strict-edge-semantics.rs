@@ -45,3 +45,53 @@ fn oracle_file_modes_non_nil_flag_means_nofollow() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_modes_handler_expansion_and_argument_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-file-modes-calls nil)
+  (defun neomacs--oracle-file-modes-handler (operation &rest args)
+    (push (cons operation args) neomacs--oracle-file-modes-calls)
+    (cond
+     ((eq operation 'file-modes) #o641)
+     ((eq operation 'set-file-modes) 'set-mode-handler-result)
+     (t (let ((file-name-handler-alist nil))
+          (apply operation args)))))
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/oracle-mode-root/" . neomacs--oracle-file-modes-handler)))
+            (default-directory "/oracle-mode-root/subdir/"))
+        (list
+         ;; GNU expands relative file names before handler dispatch and
+         ;; passes the optional flag as nil when omitted.
+         (file-modes "../child")
+         neomacs--oracle-file-modes-calls
+         (setq neomacs--oracle-file-modes-calls nil)
+         (file-modes "../child/" 'nofollow)
+         neomacs--oracle-file-modes-calls
+         (setq neomacs--oracle-file-modes-calls nil)
+         ;; `set-file-modes' checks MODE before filename expansion/handler
+         ;; lookup, then calls handlers with expanded filename, mode, flag.
+         (set-file-modes "../child" #o600)
+         neomacs--oracle-file-modes-calls
+         (setq neomacs--oracle-file-modes-calls nil)
+         (set-file-modes "../child" #o644 'nofollow)
+         neomacs--oracle-file-modes-calls
+         (condition-case err
+             (set-file-modes "../child" 'bad-mode)
+           (error (list (car err) (cdr err))))
+         neomacs--oracle-file-modes-calls
+         (setq neomacs--oracle-file-modes-calls nil)
+         (condition-case err
+             (set-file-modes 99 'bad-mode)
+           (error (list (car err) (cdr err))))
+         neomacs--oracle-file-modes-calls))
+    (fmakunbound 'neomacs--oracle-file-modes-handler)
+    (makunbound 'neomacs--oracle-file-modes-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

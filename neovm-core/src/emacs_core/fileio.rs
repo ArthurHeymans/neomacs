@@ -1547,7 +1547,8 @@ fn expand_and_dir_to_file_lisp_for_file_predicate(
 ) -> Result<crate::heap_types::LispString, Flow> {
     let absname = expand_file_name_lisp_for_file_predicate(eval, filename)?;
     if absname.sbytes() > 1 && lisp_directory_name_p(&absname) {
-        Ok(lisp_directory_file_name(&absname))
+        let value = builtin_directory_file_name(eval, vec![Value::heap_string(absname)])?;
+        expect_lisp_filename_string_strict(&value)
     } else {
         Ok(absname)
     }
@@ -3094,9 +3095,6 @@ pub(crate) fn builtin_file_newer_than_file_p(eval: &mut Context, args: Vec<Value
 /// `(file-modes FILENAME &optional FLAG)` — returns the file's
 /// mode bits as an integer, or nil if FILENAME is missing.
 pub(crate) fn builtin_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-modes", &args)? {
-        return Ok(result);
-    }
     expect_min_args("file-modes", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
@@ -3108,9 +3106,15 @@ pub(crate) fn builtin_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalRe
         ));
     }
     let filename = expect_lisp_string_strict(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
-    let nofollow = args.get(1).is_some_and(|flag| !flag.is_nil());
-    match file_modes_path(&lisp_file_name_to_path_buf(&filename), nofollow) {
+    let flag = args.get(1).copied().unwrap_or(Value::NIL);
+    let nofollow = !flag.is_nil();
+    let absname = expand_and_dir_to_file_lisp_for_file_predicate(eval, &filename)?;
+    let operation = Value::symbol("file-modes");
+    let handler = find_file_name_handler_lisp_for_eval(eval, &absname, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(handler, vec![operation, Value::heap_string(absname), flag]);
+    }
+    match file_modes_path(&lisp_file_name_to_path_buf(&absname), nofollow) {
         Some(mode) => Ok(Value::fixnum(mode as i64)),
         None => Ok(Value::NIL),
     }
@@ -3118,9 +3122,6 @@ pub(crate) fn builtin_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalRe
 
 /// `(set-file-modes FILENAME MODE &optional FLAG)`
 pub(crate) fn builtin_set_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "set-file-modes", &args)? {
-        return Ok(result);
-    }
     expect_min_args("set-file-modes", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
@@ -3131,12 +3132,21 @@ pub(crate) fn builtin_set_file_modes(eval: &mut Context, args: Vec<Value>) -> Ev
             ],
         ));
     }
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let resolved = resolve_filename_lisp_for_eval(eval, &filename);
     let mode = expect_fixnum(&args[1])?;
-    let nofollow = args.get(2).is_some_and(|flag| !flag.is_nil());
-    set_file_modes_path(&lisp_file_name_to_path_buf(&resolved), mode, nofollow).map_err(|err| {
-        signal_file_action_error_value(err, "Doing chmod", Value::heap_string(resolved))
+    let flag = args.get(2).copied().unwrap_or(Value::NIL);
+    let nofollow = !flag.is_nil();
+    let expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let absname = expect_lisp_filename_string_strict(&expanded)?;
+    let operation = Value::symbol("set-file-modes");
+    let handler = find_file_name_handler_lisp_for_eval(eval, &absname, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(
+            handler,
+            vec![operation, Value::heap_string(absname), args[1], flag],
+        );
+    }
+    set_file_modes_path(&lisp_file_name_to_path_buf(&absname), mode, nofollow).map_err(|err| {
+        signal_file_action_error_value(err, "Doing chmod", Value::heap_string(absname))
     })?;
     Ok(Value::NIL)
 }
