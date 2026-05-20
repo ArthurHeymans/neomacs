@@ -560,6 +560,15 @@ impl BufferText {
             .remove_all_properties(start, end);
     }
 
+    pub fn text_props_set_properties(&self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
+        let start = self.buf_bytepos_to_charpos(start);
+        let end = self.buf_bytepos_to_charpos(end);
+        self.storage
+            .borrow_mut()
+            .text_props
+            .set_properties(start, end, plist);
+    }
+
     pub fn text_props_next_change(&self, pos: usize) -> Option<usize> {
         let char_pos = self.buf_bytepos_to_charpos(pos);
         let next = {

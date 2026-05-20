@@ -3705,6 +3705,20 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn set_buffer_text_properties(
+        &mut self,
+        id: BufferId,
+        start: usize,
+        end: usize,
+        plist: Vec<(Value, Value)>,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .text
+            .text_props_set_properties(start, end, plist);
+        Some(())
+    }
+
     pub fn record_buffer_text_property_modification(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.text.increment_modified_tick(1);

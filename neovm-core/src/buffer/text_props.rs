@@ -588,6 +588,25 @@ impl TextPropertyTable {
         }
     }
 
+    pub fn set_properties(&mut self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
+        if start >= end {
+            return;
+        }
+        self.split_at(start);
+        self.split_at(end);
+
+        let affected: Vec<usize> = self.intervals.range(start..end).map(|(k, _)| *k).collect();
+        for key in affected {
+            self.intervals.remove(&key);
+        }
+
+        self.intervals.insert(
+            start,
+            IntervalNode::new(end, plist_value_from_pairs(&plist)),
+        );
+        self.prune_empty_intervals_after_mutation();
+    }
+
     pub fn next_property_change(&self, pos: usize) -> Option<usize> {
         let current = self.plist_at(pos).unwrap_or_default();
         let mut cursor = pos;

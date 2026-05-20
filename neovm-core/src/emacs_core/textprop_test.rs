@@ -828,6 +828,95 @@ fn set_text_properties_replaces_existing_values() {
 }
 
 #[test]
+fn set_text_properties_replaces_covered_string_intervals_with_one_run() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let string = Value::string("abcd");
+
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(1),
+            Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+            string,
+        ],
+    )
+    .unwrap();
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(3),
+            Value::list(vec![Value::symbol("help-echo"), Value::string("mid")]),
+            string,
+        ],
+    )
+    .unwrap();
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::list(vec![Value::symbol("help-echo"), Value::string("mid")]),
+            string,
+        ],
+    )
+    .unwrap();
+
+    let intervals = crate::emacs_core::value::get_string_text_properties_table_for_value(string)
+        .unwrap()
+        .intervals_snapshot();
+    assert_eq!(intervals.len(), 2);
+    assert_eq!((intervals[0].start, intervals[0].end), (0, 1));
+    assert_eq!((intervals[1].start, intervals[1].end), (1, 3));
+}
+
+#[test]
+fn set_text_properties_replaces_covered_buffer_intervals_with_one_run() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcd");
+
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(2),
+            Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        ],
+    )
+    .unwrap();
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::list(vec![Value::symbol("help-echo"), Value::string("mid")]),
+        ],
+    )
+    .unwrap();
+    builtin_set_text_properties(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(4),
+            Value::list(vec![Value::symbol("help-echo"), Value::string("mid")]),
+        ],
+    )
+    .unwrap();
+
+    let intervals = eval
+        .buffers
+        .current_buffer()
+        .unwrap()
+        .text
+        .text_props_intervals_snapshot();
+    assert_eq!(intervals.len(), 2);
+    assert_eq!((intervals[0].start, intervals[0].end), (0, 1));
+    assert_eq!((intervals[1].start, intervals[1].end), (1, 3));
+}
+
+#[test]
 fn remove_list_of_text_properties_returns_t_only_when_changed() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("abcd");
