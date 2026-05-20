@@ -830,6 +830,8 @@ mod expt_sqrt_log_patterns;
 mod field_at_pos_semantics;
 #[path = "file-access-ownership-strict-edge-semantics.rs"]
 mod file_access_ownership_strict_edge_semantics;
+#[path = "file-acl-strict-edge-semantics.rs"]
+mod file_acl_strict_edge_semantics;
 #[path = "file-attributes-strict-edge-semantics.rs"]
 mod file_attributes_strict_edge_semantics;
 #[path = "file-chase-links-strict-edge-semantics.rs"]

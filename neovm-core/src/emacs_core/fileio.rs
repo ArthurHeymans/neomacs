@@ -2902,16 +2902,18 @@ pub(crate) fn builtin_file_executable_p(eval: &mut Context, args: Vec<Value>) ->
     )))
 }
 
-/// `(file-acl FILENAME)` — stub returning nil. Native ACL support
-/// is not yet implemented in NeoMacs; the dispatch path lets a
-/// handler intercept first.
+/// `(file-acl FILENAME)` — return native ACL text, or nil when ACL support is
+/// not compiled in.
+///
+/// GNU `src/fileio.c:Ffile_acl` puts filename expansion and file-name-handler
+/// dispatch inside `#if USE_ACL`.  In a no-ACL build, the function only has the
+/// DEFUN arity contract and then returns nil; it does not type-check FILENAME
+/// and does not dispatch file-name handlers.  Neomacs currently has no native
+/// ACL backend, so mirror that no-ACL build path exactly.
 pub(crate) fn builtin_file_acl(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "file-acl", &args)? {
-        return Ok(result);
-    }
     expect_args("file-acl", &args, 1)?;
-    let filename = expect_string_strict(&args[0])?;
-    let _filename = resolve_filename_for_eval(eval, &filename);
+    let _ = eval;
+    let _ = &args[0];
     Ok(Value::NIL)
 }
 
