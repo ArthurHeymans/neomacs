@@ -1345,6 +1345,9 @@ fn merge_face_property(
     if existing_value.is_nil() {
         return Ok(new_face);
     }
+    if eq_value(&existing_value, &new_face) {
+        return Ok(existing_value);
+    }
 
     if existing_value.is_cons() && !is_anonymous_face_plist(&existing_value) {
         if append {

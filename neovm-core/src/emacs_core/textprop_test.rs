@@ -706,6 +706,27 @@ fn add_face_text_property_basic_and_merge_order() {
         prepended,
         Value::list(vec![Value::symbol("bold"), Value::symbol("italic")])
     );
+
+    let mut eval = eval_with_text("abc");
+    builtin_add_face_text_property(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(3), Value::symbol("bold")],
+    )
+    .unwrap();
+    builtin_add_face_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::symbol("bold"),
+            Value::T,
+        ],
+    )
+    .unwrap();
+    let duplicate =
+        builtin_get_text_property(&mut eval, vec![Value::fixnum(1), Value::symbol("face")])
+            .unwrap();
+    assert_eq!(duplicate, Value::symbol("bold"));
 }
 
 #[test]

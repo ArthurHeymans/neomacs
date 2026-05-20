@@ -173,6 +173,28 @@ fn oracle_add_face_text_property_append_rejects_dotted_face_list_like_gnu() {
 }
 
 #[test]
+fn oracle_add_face_text_property_same_face_is_noop_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c:add_properties checks EQ before merge-list
+    // handling.  Adding the same face value again must not manufacture a
+    // duplicate face list.
+    let form = r#"
+(let ((s (copy-sequence "abc")))
+  (add-face-text-property 0 3 'bold nil s)
+  (add-face-text-property 0 3 'bold t s)
+  (with-temp-buffer
+    (insert "abc")
+    (add-face-text-property 1 4 'bold)
+    (add-face-text-property 1 4 'bold t)
+    (list (get-text-property 0 'face s)
+          (get-text-property 1 'face))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_next_previous_property_change_limit_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
