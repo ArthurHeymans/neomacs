@@ -5468,6 +5468,8 @@ fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
         .expect("builtin profiler-memory-log should evaluate");
     assert!(mem_log.is_nil());
 
+    let _ = dispatch_builtin_pure("profiler-memory-stop", vec![]);
+
     let mem_running = dispatch_builtin_pure("profiler-memory-running-p", vec![])
         .expect("builtin profiler-memory-running-p should resolve")
         .expect("builtin profiler-memory-running-p should evaluate");
@@ -5476,7 +5478,21 @@ fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
     let mem_start = dispatch_builtin_pure("profiler-memory-start", vec![])
         .expect("builtin profiler-memory-start should resolve")
         .expect("builtin profiler-memory-start should evaluate");
-    assert!(mem_start.is_nil());
+    assert!(mem_start.is_truthy());
+
+    let mem_running = dispatch_builtin_pure("profiler-memory-running-p", vec![])
+        .expect("builtin profiler-memory-running-p should resolve")
+        .expect("builtin profiler-memory-running-p should evaluate");
+    assert!(mem_running.is_truthy());
+
+    let mem_second_start = dispatch_builtin_pure("profiler-memory-start", vec![])
+        .expect("builtin profiler-memory-start should resolve");
+    assert!(mem_second_start.is_err());
+
+    let mem_stop = dispatch_builtin_pure("profiler-memory-stop", vec![])
+        .expect("builtin profiler-memory-stop should resolve")
+        .expect("builtin profiler-memory-stop should evaluate");
+    assert!(mem_stop.is_truthy());
 
     let mem_stop = dispatch_builtin_pure("profiler-memory-stop", vec![])
         .expect("builtin profiler-memory-stop should resolve")

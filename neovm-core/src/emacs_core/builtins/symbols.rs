@@ -7,6 +7,9 @@ use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::{indent, xdisp};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static PROFILER_MEMORY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // ===========================================================================
 // Symbol operations (need evaluator for obarray access)
@@ -2531,22 +2534,35 @@ pub(crate) fn builtin_profiler_cpu_stop(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_profiler_memory_log(args: Vec<Value>) -> EvalResult {
     expect_args("profiler-memory-log", &args, 0)?;
+    let was_running = PROFILER_MEMORY_RUNNING.swap(false, Ordering::SeqCst);
+    if was_running {
+        PROFILER_MEMORY_RUNNING.store(true, Ordering::SeqCst);
+    }
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_profiler_memory_running_p(args: Vec<Value>) -> EvalResult {
     expect_args("profiler-memory-running-p", &args, 0)?;
-    Ok(Value::NIL)
+    Ok(Value::bool(PROFILER_MEMORY_RUNNING.load(Ordering::SeqCst)))
 }
 
 pub(crate) fn builtin_profiler_memory_start(args: Vec<Value>) -> EvalResult {
     expect_args("profiler-memory-start", &args, 0)?;
-    Ok(Value::NIL)
+    match PROFILER_MEMORY_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+    {
+        Ok(_) => Ok(Value::T),
+        Err(_) => Err(signal(
+            "error",
+            vec![Value::string("Memory profiler is already running")],
+        )),
+    }
 }
 
 pub(crate) fn builtin_profiler_memory_stop(args: Vec<Value>) -> EvalResult {
     expect_args("profiler-memory-stop", &args, 0)?;
-    Ok(Value::NIL)
+    Ok(Value::bool(
+        PROFILER_MEMORY_RUNNING.swap(false, Ordering::SeqCst),
+    ))
 }
 
 pub(crate) fn builtin_pdumper_stats(args: Vec<Value>) -> EvalResult {
