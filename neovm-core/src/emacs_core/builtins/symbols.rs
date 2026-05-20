@@ -1376,6 +1376,47 @@ pub(crate) fn obarray_bucket_find(
     }
 }
 
+fn obarray_bucket_symbols(mut bucket: Value) -> Vec<Value> {
+    let mut symbols = Vec::new();
+    while bucket.is_cons() {
+        let sym = bucket.cons_car();
+        if sym.as_symbol_lisp_string().is_some() {
+            symbols.push(sym);
+        }
+        bucket = bucket.cons_cdr();
+    }
+    symbols
+}
+
+fn obarray_symbol_count(buckets: &[Value]) -> usize {
+    buckets
+        .iter()
+        .map(|bucket| obarray_bucket_symbols(*bucket).len())
+        .sum()
+}
+
+fn grow_obarray_vector_if_needed(obarray_val: Value) {
+    let Some(buckets) = obarray_val.as_vector_data() else {
+        return;
+    };
+    let old_len = buckets.len();
+    if old_len == 0 || obarray_symbol_count(buckets.as_slice()) <= old_len {
+        return;
+    }
+
+    let mut new_buckets = vec![Value::NIL; old_len.saturating_mul(2).max(1)];
+    for bucket in buckets.iter().copied() {
+        for sym in obarray_bucket_symbols(bucket) {
+            let Some(name) = sym.as_symbol_lisp_string() else {
+                continue;
+            };
+            let idx = obarray_hash_lisp_string(name, new_buckets.len());
+            new_buckets[idx] = Value::cons(sym, new_buckets[idx]);
+        }
+    }
+    let _ = obarray_val.replace_vector_data(new_buckets);
+}
+
 pub(crate) fn is_global_obarray_proxy(eval: &super::eval::Context, value: &Value) -> bool {
     eval.obarray()
         .symbol_value("obarray")
@@ -1443,6 +1484,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
         ));
         let new_bucket = Value::cons(sym, bucket);
         let _ = obarray_val.set_vector_slot(bucket_idx, new_bucket);
+        grow_obarray_vector_if_needed(obarray_val);
         return Ok(sym);
     }
 
