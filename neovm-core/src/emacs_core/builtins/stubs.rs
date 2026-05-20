@@ -2556,8 +2556,3 @@ pub(crate) fn builtin_emacs_repository_get_branch(args: Vec<Value>) -> EvalResul
     expect_args("emacs-repository-get-branch", &args, 0)?;
     Ok(Value::NIL)
 }
-
-pub(crate) fn builtin_emacs_repository_get_dirty(args: Vec<Value>) -> EvalResult {
-    expect_args("emacs-repository-get-dirty", &args, 0)?;
-    Ok(Value::NIL)
-}

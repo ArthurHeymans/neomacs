@@ -5382,12 +5382,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "emacs-repository-get-dirty",
-        |_ctx, args| builtin_emacs_repository_get_dirty(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "encode-coding-region",
         crate::encoding::builtin_encode_coding_region,
         3,
