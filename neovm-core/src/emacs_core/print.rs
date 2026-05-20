@@ -30,6 +30,7 @@ pub struct PrintOptions {
     pub print_continuous_numbering: bool,
     pub print_number_table: Option<Value>,
     pub float_output_format: Option<Value>,
+    pub print_noescape: bool,
     backquote_output_level: usize,
 }
 
@@ -76,6 +77,7 @@ impl PrintOptions {
             print_continuous_numbering: false,
             print_number_table: None,
             float_output_format: None,
+            print_noescape: false,
             backquote_output_level: 0,
         }
     }
@@ -100,6 +102,7 @@ impl PrintOptions {
             print_continuous_numbering: false,
             print_number_table: None,
             float_output_format: None,
+            print_noescape: false,
             backquote_output_level: 0,
         }
     }
@@ -665,13 +668,17 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Symbol(id) => out.push_str(&format_symbol(id, state.options)),
         ValueKind::String => {
             let ls = value.as_lisp_string().unwrap();
-            match get_string_text_properties_for_value(*value) {
-                Some(runs) => out.push_str(&format_lisp_propertized_string_emacs(
-                    ls,
-                    &runs,
-                    state.options,
-                )),
-                None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
+            if state.options.print_noescape {
+                out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
+            } else {
+                match get_string_text_properties_for_value(*value) {
+                    Some(runs) => out.push_str(&format_lisp_propertized_string_emacs(
+                        ls,
+                        &runs,
+                        state.options,
+                    )),
+                    None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
+                }
             }
         }
         ValueKind::Cons => {
@@ -1586,21 +1593,25 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         ValueKind::Symbol(id) => append_symbol_bytes(id, out, options),
         ValueKind::String => {
             let ls = value.as_lisp_string().unwrap();
-            let str_bytes = format_lisp_string_bytes_emacs(ls, &options);
-            if let Some(runs) = get_string_text_properties_for_value(*value) {
-                out.extend_from_slice(b"#(");
-                out.extend_from_slice(&str_bytes);
-                for run in runs {
-                    out.push(b' ');
-                    out.extend_from_slice(run.start.to_string().as_bytes());
-                    out.push(b' ');
-                    out.extend_from_slice(run.end.to_string().as_bytes());
-                    out.push(b' ');
-                    append_print_value_bytes(&run.plist, out, options);
-                }
-                out.push(b')');
+            if options.print_noescape {
+                out.extend_from_slice(ls.as_bytes());
             } else {
-                out.extend_from_slice(&str_bytes);
+                let str_bytes = format_lisp_string_bytes_emacs(ls, &options);
+                if let Some(runs) = get_string_text_properties_for_value(*value) {
+                    out.extend_from_slice(b"#(");
+                    out.extend_from_slice(&str_bytes);
+                    for run in runs {
+                        out.push(b' ');
+                        out.extend_from_slice(run.start.to_string().as_bytes());
+                        out.push(b' ');
+                        out.extend_from_slice(run.end.to_string().as_bytes());
+                        out.push(b' ');
+                        append_print_value_bytes(&run.plist, out, options);
+                    }
+                    out.push(b')');
+                } else {
+                    out.extend_from_slice(&str_bytes);
+                }
             }
         }
         ValueKind::Cons => {
@@ -1875,19 +1886,27 @@ fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {
     let canonical = lookup_interned_lisp_string(name);
     let mut out = Vec::new();
     if canonical == Some(id) {
-        append_symbol_name_bytes(name, &mut out);
+        append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
     } else if options.print_gensym {
         out.extend_from_slice(b"#:");
         if !name.is_empty() {
-            append_symbol_name_bytes(name, &mut out);
+            append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
         }
     } else {
-        append_symbol_name_bytes(name, &mut out);
+        append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
     }
     out
 }
 
 fn append_symbol_name_bytes(name: &crate::heap_types::LispString, out: &mut Vec<u8>) {
+    append_symbol_name_bytes_with_escape(name, out, true);
+}
+
+fn append_symbol_name_bytes_with_escape(
+    name: &crate::heap_types::LispString,
+    out: &mut Vec<u8>,
+    escape: bool,
+) {
     let bytes = name.as_bytes();
     if bytes.is_empty() {
         out.extend_from_slice(b"##");
@@ -1901,7 +1920,7 @@ fn append_symbol_name_bytes(name: &crate::heap_types::LispString, out: &mut Vec<
             b'(' | b')' | b'[' | b']' | b'"' | b'\\' | b';' | b'#' | b'\'' | b'`' | b','
         ) || byte <= b' '
             || confusing;
-        if needs_escape {
+        if escape && needs_escape {
             out.push(b'\\');
             confusing = false;
         }

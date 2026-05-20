@@ -1697,33 +1697,18 @@ fn prin1_to_lisp_string_value_in_state_with_overrides(
     noescape: bool,
     overrides: Option<&Value>,
 ) -> Result<crate::heap_types::LispString, Flow> {
-    let options = print_options_from_overrides(ctx, overrides)?;
-    if noescape {
-        match value.kind() {
-            ValueKind::String => Ok(value.as_lisp_string().unwrap().clone()),
-            _other => Ok(crate::heap_types::LispString::from_emacs_bytes(
-                super::error::format_value_bytes_in_state_with_options(
-                    &ctx.obarray,
-                    &ctx.buffers,
-                    &ctx.frames,
-                    &ctx.threads,
-                    value,
-                    options,
-                ),
-            )),
-        }
-    } else {
-        Ok(crate::heap_types::LispString::from_emacs_bytes(
-            super::error::format_value_bytes_in_state_with_options(
-                &ctx.obarray,
-                &ctx.buffers,
-                &ctx.frames,
-                &ctx.threads,
-                value,
-                options,
-            ),
-        ))
-    }
+    let mut options = print_options_from_overrides(ctx, overrides)?;
+    options.print_noescape = noescape;
+    Ok(crate::heap_types::LispString::from_emacs_bytes(
+        super::error::format_value_bytes_in_state_with_options(
+            &ctx.obarray,
+            &ctx.buffers,
+            &ctx.frames,
+            &ctx.threads,
+            value,
+            options,
+        ),
+    ))
 }
 
 pub(crate) fn builtin_princ(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
