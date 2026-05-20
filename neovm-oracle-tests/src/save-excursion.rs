@@ -3,7 +3,10 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_with_bootstrap,
+};
 
 // ---------------------------------------------------------------------------
 // save-excursion
@@ -51,7 +54,7 @@ fn oracle_prop_save_excursion_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -82,7 +85,7 @@ fn oracle_prop_save_excursion_nested() {
                       (save-excursion
                         (goto-char 8)))
                     (point))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("2", &o, &n);
 }
 
@@ -153,7 +156,7 @@ fn oracle_prop_save_restriction_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point-max))"#;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("6", &o, &n);
 }
 
