@@ -2953,11 +2953,27 @@ pub(crate) fn builtin_file_selinux_context(eval: &mut Context, args: Vec<Value>)
     ]))
 }
 
-/// (set-file-selinux-context FILENAME CONTEXT) -> nil
-pub(crate) fn builtin_set_file_selinux_context(args: Vec<Value>) -> EvalResult {
+/// `(set-file-selinux-context FILENAME CONTEXT)` — set a file SELinux context,
+/// or return nil when SELinux support is unavailable.
+///
+/// GNU `src/fileio.c:Fset_file_selinux_context` expands FILENAME and dispatches
+/// file-name handlers before the `HAVE_LIBSELINUX` implementation block.  In a
+/// no-SELinux build, native local files fall through to nil, but handlers still
+/// observe the expanded filename and original context argument.
+pub(crate) fn builtin_set_file_selinux_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("set-file-selinux-context", &args, 2)?;
-    let _filename = expect_string_strict(&args[0])?;
-    let _context = &args[1];
+    let filename = expect_lisp_string_strict(&args[0])?;
+    let absname = builtin_expand_file_name(eval, vec![Value::heap_string(filename), Value::NIL])?;
+    let absname = expect_lisp_filename_string_strict(&absname)?;
+    if let Some(result) = maybe_dispatch_resolved_file_handler(
+        eval,
+        "set-file-selinux-context",
+        Some(&absname),
+        None,
+        vec![Value::heap_string(absname.clone()), args[1]],
+    )? {
+        return Ok(result);
+    }
     Ok(Value::NIL)
 }
 

@@ -4678,7 +4678,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-file-selinux-context",
-        |_ctx, args| super::fileio::builtin_set_file_selinux_context(args),
+        |ctx, args| super::fileio::builtin_set_file_selinux_context(ctx, args),
         2,
         Some(2),
     );
