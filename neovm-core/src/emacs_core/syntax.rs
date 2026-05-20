@@ -3308,6 +3308,7 @@ struct PartialParseState {
     in_comment: Option<ParseCommentState>,
     comment_or_string_start: Option<i64>,
     quoted: bool,
+    in_string_from_oldstate: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -3326,6 +3327,7 @@ impl PartialParseState {
             in_comment: None,
             comment_or_string_start: None,
             quoted: false,
+            in_string_from_oldstate: false,
         }
     }
 
@@ -3339,6 +3341,9 @@ impl PartialParseState {
         };
 
         state.depth = items.first().and_then(|v| v.as_fixnum()).unwrap_or(0);
+        // GNU `internalize_parse_state` ignores element 6 of OLDSTATE.
+        // `scan_sexps_forward` initializes `mindepth` from the incoming depth.
+        state.mindepth = state.depth;
 
         if let Some(start) = items.get(8).and_then(|v| v.as_fixnum()) {
             state.comment_or_string_start = Some(start);
@@ -3360,6 +3365,7 @@ impl PartialParseState {
                     .map(ParseStringState::Delim),
                 _ => None,
             };
+            state.in_string_from_oldstate = state.in_string.is_some();
         }
 
         if let Some(item) = items.get(4) {
@@ -3405,6 +3411,17 @@ impl PartialParseState {
         let level = self.current_level_mut();
         level.last = Some(start);
         level.prev = Some(start);
+    }
+
+    fn finish_string(&mut self) {
+        if !self.in_string_from_oldstate
+            && let Some(start) = self.comment_or_string_start
+        {
+            self.finish_current_level_sexp(start);
+        }
+        self.in_string = None;
+        self.in_string_from_oldstate = false;
+        self.comment_or_string_start = None;
     }
 
     fn open_level(&mut self, start: i64) {
@@ -3583,11 +3600,7 @@ fn parse_state_from_range_with_options(
                     continue;
                 }
                 SyntaxClass::StringFence if string_state == ParseStringState::Fence => {
-                    if let Some(start) = state.comment_or_string_start {
-                        state.finish_current_level_sexp(start);
-                    }
-                    state.in_string = None;
-                    state.comment_or_string_start = None;
+                    state.finish_string();
                     idx += 1;
                     if commentstop == CommentStopMode::SyntaxTable {
                         break;
@@ -3596,11 +3609,7 @@ fn parse_state_from_range_with_options(
                 }
                 SyntaxClass::StringDelim if matches!(string_state, ParseStringState::Delim(term) if ch == term) =>
                 {
-                    if let Some(start) = state.comment_or_string_start {
-                        state.finish_current_level_sexp(start);
-                    }
-                    state.in_string = None;
-                    state.comment_or_string_start = None;
+                    state.finish_string();
                     idx += 1;
                     if commentstop == CommentStopMode::SyntaxTable {
                         break;
@@ -3812,6 +3821,7 @@ fn parse_state_from_range_with_options(
             }
             SyntaxClass::StringDelim => {
                 state.in_string = Some(ParseStringState::Delim(ch));
+                state.in_string_from_oldstate = false;
                 state.comment_or_string_start = Some(pos1);
                 idx += 1;
                 if commentstop == CommentStopMode::SyntaxTable {
@@ -3821,6 +3831,7 @@ fn parse_state_from_range_with_options(
             }
             SyntaxClass::StringFence => {
                 state.in_string = Some(ParseStringState::Fence);
+                state.in_string_from_oldstate = false;
                 state.comment_or_string_start = Some(pos1);
                 idx += 1;
                 if commentstop == CommentStopMode::SyntaxTable {
@@ -3982,9 +3993,13 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
         ));
     }
 
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let buf = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
 
@@ -4003,18 +4018,39 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
     };
 
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    Ok(parse_state_from_range_with_options(
+    let modified_tick = buf.modified_tick();
+    let old = eval.syntax_ppss_last.and_then(|last| {
+        (last.buffer_id == current_id
+            && last.modified_tick == modified_tick
+            && last.pos <= pos
+            && last.pos >= buf.point_min_char() as i64 + 1)
+            .then_some((last.pos, last.state))
+    });
+    let (from, oldstate) = old
+        .map(|(old_pos, state)| (old_pos, Some(state)))
+        .unwrap_or((1, None));
+
+    let state = parse_state_from_range_with_options(
         buf,
         &table,
-        1,
+        from,
         pos,
         None,
         false,
-        None,
+        oldstate.as_ref(),
         CommentStopMode::None,
         honor_properties,
     )
-    .0)
+    .0;
+
+    eval.syntax_ppss_last = Some(super::eval::SyntaxPpssLast {
+        buffer_id: current_id,
+        pos,
+        modified_tick,
+        state,
+    });
+
+    Ok(state)
 }
 
 /// `(syntax-ppss-flush-cache POS &rest _IGNORED)` — flush parser-state cache.
@@ -4022,7 +4058,7 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
 /// NeoVM currently computes parser state directly, so this is a no-op that
 /// enforces Emacs-compatible arity/type behavior.
 pub(crate) fn builtin_syntax_ppss_flush_cache(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() {
@@ -4033,7 +4069,10 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
     }
 
     match args[0].kind() {
-        ValueKind::Fixnum(_) => Ok(Value::NIL),
+        ValueKind::Fixnum(_) => {
+            eval.syntax_ppss_last = None;
+            Ok(Value::NIL)
+        }
         other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("number-or-marker-p"), args[0]],

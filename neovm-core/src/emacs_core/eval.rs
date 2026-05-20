@@ -37,7 +37,7 @@ use super::symbol::Obarray;
 use super::threads::ThreadManager;
 use super::timer::TimerManager;
 use super::value::*;
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferId, BufferManager};
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
@@ -78,6 +78,14 @@ struct RedisplaySignature {
     obarray_function_epoch: u64,
     redisplay_generation: u64,
     frame: Option<RedisplayFrameSignature>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SyntaxPpssLast {
+    pub(crate) buffer_id: BufferId,
+    pub(crate) pos: i64,
+    pub(crate) modified_tick: i64,
+    pub(crate) state: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1582,6 +1590,13 @@ pub struct Context {
     /// authoritative identity here and mirrors it into thread-local state for
     /// no-evaluator syntax builtins.
     pub(crate) standard_syntax_table: Value,
+    /// Last `syntax-ppss` parser state for the current evaluator.
+    ///
+    /// GNU implements `syntax-ppss` in Lisp as an incremental cache over
+    /// `parse-partial-sexp`.  Fields 2 and 6 of the returned state are
+    /// intentionally cache-dependent, so keeping the last state is part of
+    /// matching the observable behavior of repeated `syntax-ppss` calls.
+    pub(crate) syntax_ppss_last: Option<SyntaxPpssLast>,
     /// Canonical Lisp object returned by `standard-category-table`.
     ///
     /// Like `standard_syntax_table`, this is mirrored into thread-local state
@@ -4373,6 +4388,7 @@ impl Context {
             watchers: VariableWatcherList::new(),
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
+            syntax_ppss_last: None,
             standard_category_table,
             current_local_map: Value::NIL,
             registers: RegisterManager::new(),
@@ -4540,6 +4556,7 @@ impl Context {
             watchers,
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
+            syntax_ppss_last: None,
             standard_category_table,
             current_local_map,
             registers,
@@ -4754,6 +4771,11 @@ impl Context {
         }
         if self.standard_syntax_table.is_heap_object() {
             visit(self.standard_syntax_table);
+        }
+        if let Some(last) = self.syntax_ppss_last
+            && last.state.is_heap_object()
+        {
+            visit(last.state);
         }
         if self.standard_category_table.is_heap_object() {
             visit(self.standard_category_table);
