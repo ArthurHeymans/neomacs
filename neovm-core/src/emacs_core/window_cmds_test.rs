@@ -299,6 +299,8 @@ fn frame_root_window_window_valid_and_minibuffer_activity_semantics() {
          (eq (frame-root-window (selected-frame)) (selected-window))
          (eq (frame-root-window (selected-window)) (selected-window))
          (eq (frame-root-window (minibuffer-window)) (selected-window))
+         (eq (window-next-sibling (frame-root-window)) (minibuffer-window))
+         (eq (window-prev-sibling (minibuffer-window)) (frame-root-window))
          (minibuffer-selected-window)
          (active-minibuffer-window)
          (minibuffer-window-active-p (minibuffer-window))
@@ -325,33 +327,35 @@ fn frame_root_window_window_valid_and_minibuffer_activity_semantics() {
     assert_eq!(out[6], "OK t");
     assert_eq!(out[7], "OK t");
     assert_eq!(out[8], "OK t");
-    assert_eq!(out[9], "OK nil");
-    assert_eq!(out[10], "OK nil");
+    assert_eq!(out[9], "OK t");
+    assert_eq!(out[10], "OK t");
     assert_eq!(out[11], "OK nil");
     assert_eq!(out[12], "OK nil");
     assert_eq!(out[13], "OK nil");
     assert_eq!(out[14], "OK nil");
     assert_eq!(out[15], "OK nil");
-    assert_eq!(out[16], "OK (wrong-number-of-arguments window-valid-p 0)");
-    assert_eq!(out[17], "OK (wrong-number-of-arguments window-valid-p 2)");
-    assert_eq!(out[18], "OK (wrong-type-argument frame-live-p 999999)");
-    assert_eq!(out[19], "OK (wrong-type-argument frame-live-p foo)");
+    assert_eq!(out[16], "OK nil");
+    assert_eq!(out[17], "OK nil");
+    assert_eq!(out[18], "OK (wrong-number-of-arguments window-valid-p 0)");
+    assert_eq!(out[19], "OK (wrong-number-of-arguments window-valid-p 2)");
+    assert_eq!(out[20], "OK (wrong-type-argument frame-live-p 999999)");
+    assert_eq!(out[21], "OK (wrong-type-argument frame-live-p foo)");
     assert_eq!(
-        out[20],
+        out[22],
         "OK (wrong-number-of-arguments frame-root-window 2)"
     );
     assert_eq!(
-        out[21],
+        out[23],
         "OK (wrong-number-of-arguments minibuffer-selected-window 1)"
     );
     assert_eq!(
-        out[22],
+        out[24],
         "OK (wrong-number-of-arguments active-minibuffer-window 1)"
     );
     // GNU `minibuffer-window-active-p` is a Lisp defun (window.el),
     // so its arity errors carry the (MIN . MAX) tuple, not the symbol.
-    assert_eq!(out[23], "OK (wrong-number-of-arguments (1 . 1) 0)");
-    assert_eq!(out[24], "OK (wrong-number-of-arguments (1 . 1) 2)");
+    assert_eq!(out[25], "OK (wrong-number-of-arguments (1 . 1) 0)");
+    assert_eq!(out[26], "OK (wrong-number-of-arguments (1 . 1) 2)");
 }
 
 #[test]

@@ -3114,13 +3114,19 @@ pub fn window_next_sibling_id(frame: &Frame, window_id: WindowId) -> Option<Wind
     if frame.minibuffer_window == Some(window_id) {
         return None;
     }
+    if frame.root_window.id() == window_id && frame.minibuffer_leaf.is_some() {
+        return frame.minibuffer_window;
+    }
     find_sibling_in_tree(&frame.root_window, window_id, true)
 }
 
 /// Return the previous sibling of WINDOW-ID, if any.
 pub fn window_prev_sibling_id(frame: &Frame, window_id: WindowId) -> Option<WindowId> {
     if frame.minibuffer_window == Some(window_id) {
-        return None;
+        return frame
+            .minibuffer_leaf
+            .as_ref()
+            .map(|_| frame.root_window.id());
     }
     find_sibling_in_tree(&frame.root_window, window_id, false)
 }
