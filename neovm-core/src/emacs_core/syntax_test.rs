@@ -1308,6 +1308,24 @@ fn scan_sexps_basic_and_backward_nil() {
 }
 
 #[test]
+fn scan_sexps_returns_nil_when_count_not_exhausted_at_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("abc");
+    }
+
+    let past_end = builtin_scan_sexps(&mut eval, vec![Value::fixnum(4), Value::fixnum(1)]).unwrap();
+    assert_eq!(past_end, Value::NIL);
+
+    let not_enough =
+        builtin_scan_sexps(&mut eval, vec![Value::fixnum(1), Value::fixnum(2)]).unwrap();
+    assert_eq!(not_enough, Value::NIL);
+}
+
+#[test]
 fn parse_partial_sexp_baseline_shapes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

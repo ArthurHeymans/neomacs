@@ -888,7 +888,11 @@ pub fn scan_sexps(
     from: usize,
     count: i64,
 ) -> Result<usize, String> {
-    scan_sexps_with_options(buf, table, from, count, false)
+    match scan_sexps_with_options(buf, table, from, count, false)? {
+        Some(pos) => Ok(pos),
+        None if count < 0 => Ok(buf.point_min()),
+        None => Ok(buf.point_max()),
+    }
 }
 
 fn scan_sexps_with_options(
@@ -897,9 +901,9 @@ fn scan_sexps_with_options(
     from: usize,
     count: i64,
     honor_properties: bool,
-) -> Result<usize, String> {
+) -> Result<Option<usize>, String> {
     if count == 0 {
-        return Ok(from);
+        return Ok(Some(from));
     }
 
     let chars = buffer_chars_in_range(buf, 0, buf.total_bytes());
@@ -910,15 +914,76 @@ fn scan_sexps_with_options(
 
     if count > 0 {
         for _ in 0..count {
+            idx = skip_sexp_ignored_forward(buf, &chars, idx, table, honor_properties);
+            if idx >= total_chars {
+                return Ok(None);
+            }
             idx = scan_sexp_forward(buf, &chars, total_chars, idx, table, honor_properties)?;
         }
     } else {
         for _ in 0..(-count) {
+            idx = skip_sexp_ignored_backward(buf, &chars, idx, table, honor_properties);
+            if idx == 0 {
+                return Ok(None);
+            }
             idx = scan_sexp_backward(buf, &chars, idx, table, honor_properties)?;
         }
     }
 
-    Ok(buf.text.char_to_emacs_byte(idx))
+    Ok(Some(buf.text.char_to_emacs_byte(idx)))
+}
+
+fn is_sexp_ignored_syntax(class: SyntaxClass) -> bool {
+    matches!(
+        class,
+        SyntaxClass::Whitespace
+            | SyntaxClass::Comment
+            | SyntaxClass::EndComment
+            | SyntaxClass::Punctuation
+            | SyntaxClass::Quote
+    )
+}
+
+fn skip_sexp_ignored_forward(
+    buf: &Buffer,
+    chars: &[char],
+    mut idx: usize,
+    table: &SyntaxTable,
+    honor_properties: bool,
+) -> usize {
+    while idx < chars.len()
+        && is_sexp_ignored_syntax(
+            effective_syntax_entry_for_abs_char(buf, table, chars[idx], idx, honor_properties)
+                .class,
+        )
+    {
+        idx += 1;
+    }
+    idx
+}
+
+fn skip_sexp_ignored_backward(
+    buf: &Buffer,
+    chars: &[char],
+    mut idx: usize,
+    table: &SyntaxTable,
+    honor_properties: bool,
+) -> usize {
+    while idx > 0
+        && is_sexp_ignored_syntax(
+            effective_syntax_entry_for_abs_char(
+                buf,
+                table,
+                chars[idx - 1],
+                idx - 1,
+                honor_properties,
+            )
+            .class,
+        )
+    {
+        idx -= 1;
+    }
+    idx
 }
 
 fn skip_string_forward(
@@ -3111,8 +3176,13 @@ pub(crate) fn builtin_forward_sexp(
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point();
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    let new_pos = scan_sexps_with_options(buf, &table, from, count, honor_properties)
-        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?;
+    let new_pos = match scan_sexps_with_options(buf, &table, from, count, honor_properties)
+        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?
+    {
+        Some(pos) => pos,
+        None if count < 0 => buf.point_min(),
+        None => buf.point_max(),
+    };
 
     let current_id = eval
         .buffers
@@ -3150,8 +3220,13 @@ pub(crate) fn builtin_backward_sexp(
     let from = buf.point();
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
     // backward-sexp with positive count => scan_sexps with negative count
-    let new_pos = scan_sexps_with_options(buf, &table, from, -count, honor_properties)
-        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?;
+    let new_pos = match scan_sexps_with_options(buf, &table, from, -count, honor_properties)
+        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?
+    {
+        Some(pos) => pos,
+        None if count < 0 => buf.point_max(),
+        None => buf.point_min(),
+    };
 
     let current_id = eval
         .buffers
@@ -3266,10 +3341,10 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
 
     let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
-        Ok(new_byte) => Ok(Value::fixnum(
+        Ok(Some(new_byte)) => Ok(Value::fixnum(
             buf.text.emacs_byte_to_char(new_byte) as i64 + 1,
         )),
-        Err(_) if count < 0 => Ok(Value::NIL),
+        Ok(None) => Ok(Value::NIL),
         Err(msg) => Err(signal("scan-error", vec![Value::string(&msg)])),
     }
 }
