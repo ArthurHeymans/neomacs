@@ -6911,7 +6911,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "remember-mouse-glyph",
-        |_ctx, args| builtin_remember_mouse_glyph(args),
+        builtin_remember_mouse_glyph,
         0,
         None,
     );

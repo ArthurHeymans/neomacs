@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::BufferManager;
+use crate::emacs_core::display;
 use crate::emacs_core::fontset;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::window::{FrameManager, WindowId};
@@ -2510,8 +2511,27 @@ pub(crate) fn builtin_frame_windows_min_size(args: Vec<Value>) -> EvalResult {
 // xdisp.c gap-fill stubs
 // =========================================================================
 
-pub(crate) fn builtin_remember_mouse_glyph(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_remember_mouse_glyph(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("remember-mouse-glyph", &args, 3)?;
+    if !args[0].is_nil() && !display::live_frame_designator_p(eval, &args[0]) {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("frame-live-p"), args[0]],
+        ));
+    }
+    if !display::display_window_system_symbol_eval(eval, Some(&args[0]))?
+        .is_some_and(display::gui_window_system_active_value)
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    }
+    let _x = expect_fixnum(&args[1])?;
+    let _y = expect_fixnum(&args[2])?;
     Ok(Value::NIL)
 }
 
