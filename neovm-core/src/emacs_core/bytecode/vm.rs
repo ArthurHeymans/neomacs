@@ -4829,7 +4829,7 @@ impl<'a> Vm<'a> {
 
     fn builtin_mapatoms_shared(&mut self, args: &[Value]) -> EvalResult {
         let (func, symbols) =
-            crate::emacs_core::hashtab::collect_mapatoms_symbols(&self.ctx.obarray, args.to_vec())?;
+            crate::emacs_core::hashtab::collect_mapatoms_symbols(&self.ctx, args.to_vec())?;
         self.with_dynamic_vm_roots(|vm| {
             vm.push_dynamic_vm_root(func);
             for sym in symbols.iter().copied() {

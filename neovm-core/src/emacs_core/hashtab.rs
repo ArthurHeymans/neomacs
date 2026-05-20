@@ -838,7 +838,7 @@ pub(crate) fn builtin_mapatoms(eval: &mut super::eval::Context, args: Vec<Value>
     for arg in &args {
         eval.push_specpdl_root(*arg);
     }
-    let (func, symbols) = collect_mapatoms_symbols(eval.obarray(), args)?;
+    let (func, symbols) = collect_mapatoms_symbols(eval, args)?;
     eval.push_specpdl_root(func);
     for sym in &symbols {
         eval.push_specpdl_root(*sym);
@@ -878,21 +878,37 @@ pub(crate) fn maphash_entry_at_slot(table: Value, slot: usize) -> Option<(Value,
     Some((hash_key_to_visible_value(table, key), value))
 }
 
+fn current_lisp_obarray_value(eval: &super::eval::Context) -> Value {
+    eval.obarray()
+        .symbol_value("obarray")
+        .copied()
+        .unwrap_or_else(|| {
+            eval.obarray()
+                .symbol_value("neovm--obarray-object")
+                .copied()
+                .unwrap_or(Value::NIL)
+        })
+}
+
+fn effective_mapatoms_obarray_arg(eval: &super::eval::Context, args: &[Value]) -> Value {
+    args.get(1)
+        .copied()
+        .filter(|value| !value.is_nil())
+        .unwrap_or_else(|| current_lisp_obarray_value(eval))
+}
+
 pub(crate) fn collect_mapatoms_symbols(
-    obarray: &crate::emacs_core::symbol::Obarray,
+    eval: &super::eval::Context,
     args: Vec<Value>,
 ) -> Result<(Value, Vec<Value>), Flow> {
     expect_min_args("mapatoms", &args, 1)?;
     expect_max_args("mapatoms", &args, 2)?;
-    validate_optional_obarray_arg(&args)?;
     let func = args[0];
+    let effective_obarray = effective_mapatoms_obarray_arg(eval, &args);
 
-    if let Some(custom_obarray) = args
-        .get(1)
-        .filter(|v| !v.is_nil() && !is_global_obarray_proxy_in_state(obarray, v))
-    {
+    if !crate::emacs_core::builtins::symbols::is_global_obarray_proxy(eval, &effective_obarray) {
         let custom_obarray =
-            crate::emacs_core::builtins::symbols::check_obarray_value(*custom_obarray)?;
+            crate::emacs_core::builtins::symbols::check_obarray_value(effective_obarray)?;
         let all_slots = custom_obarray.as_vector_data().unwrap().clone();
         let mut symbols = Vec::new();
         for slot in &all_slots {
@@ -913,7 +929,8 @@ pub(crate) fn collect_mapatoms_symbols(
         return Ok((func, symbols));
     }
 
-    let symbols = obarray
+    let symbols = eval
+        .obarray()
         .global_member_ids()
         .map(Value::from_sym_id)
         .collect();

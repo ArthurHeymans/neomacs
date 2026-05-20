@@ -7465,6 +7465,23 @@ fn mapatoms_roots_anonymous_callback_across_exact_gc() {
 }
 
 #[test]
+fn mapatoms_default_obarray_uses_dynamic_lisp_binding() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((obarray (make-vector 17 0))
+                 (names nil))
+             (set (intern "mapatoms-dynamic-alpha") 1)
+             (intern "mapatoms-dynamic-beta")
+             (intern "other")
+             (mapatoms (lambda (sym)
+                         (if (string-match "\\`mapatoms-dynamic-" (symbol-name sym))
+                             (setq names (cons sym names)))))
+             (sort names #'string-lessp))"#,
+    );
+    assert_eq!(result, "OK (mapatoms-dynamic-alpha mapatoms-dynamic-beta)");
+}
+
+#[test]
 fn maphash_roots_reconstructed_keys_across_exact_gc() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
