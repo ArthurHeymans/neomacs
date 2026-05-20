@@ -350,23 +350,21 @@ fn string_match_category_escape_pattern_uses_backref_engine_semantics() {
 }
 
 #[test]
-fn string_match_match_at_point_escape_uses_backref_engine_semantics() {
+fn string_match_match_at_point_escape_does_not_match_plain_string() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let result = string_match_full_with_case_fold("\\=foo", "foo", 0, false, &mut md);
-    assert_eq!(result, Ok(Some(0)));
-    let md = md.expect("match data");
-    assert_eq!(md.groups[0], Some((0, 3)));
+    assert_eq!(result, Ok(None));
+    assert!(md.is_none());
 }
 
 #[test]
-fn string_match_match_at_point_escape_respects_nonzero_start() {
+fn string_match_match_at_point_escape_does_not_treat_start_as_point() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let result = string_match_full_with_case_fold("\\=foo", "xxfoo", 2, false, &mut md);
-    assert_eq!(result, Ok(Some(2)));
-    let md = md.expect("match data");
-    assert_eq!(md.groups[0], Some((2, 5)));
+    assert_eq!(result, Ok(None));
+    assert!(md.is_none());
 }
 
 #[test]

@@ -50,6 +50,11 @@ use crate::heap_types::LispString;
 
 pub(crate) const REPLACE_MATCH_SUBEXP_MISSING: &str = "replace-match subexpression does not exist";
 const SEARCH_PATTERN_CACHE_SIZE: usize = 20;
+// GNU's `\=` assertion compares against the current buffer's PT_BYTE even
+// during `string-match` (`regex-emacs.c:5201`). A standalone string has no
+// matching buffer byte address, so pass an unreachable point to the translated
+// matcher instead of treating the START argument as point.
+const STRING_MATCH_AT_DOT_UNREACHABLE: usize = usize::MAX;
 
 /// Convert `MatchRegisters` (from the GNU-translated engine) into `MatchData`
 /// (the public representation used by Elisp builtins).
@@ -2025,9 +2030,14 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
         compile_lisp_pattern_with_posix(pattern, case_fold, posix, string.is_multibyte())?;
     let text_bytes = string.as_bytes();
     let range = (text_bytes.len() - start) as isize;
-    if let Some((_pos, regs)) =
-        regex_emacs::re_search(compiled.as_ref(), text_bytes, start, range, syntax, start)
-    {
+    if let Some((_pos, regs)) = regex_emacs::re_search(
+        compiled.as_ref(),
+        text_bytes,
+        start,
+        range,
+        syntax,
+        STRING_MATCH_AT_DOT_UNREACHABLE,
+    ) {
         let byte_md = match_data_from_registers(&regs, 0);
         let char_md = string_char_match_data(searched_string, byte_md);
         let result_pos = char_md.groups[0].unwrap().0;
@@ -2109,9 +2119,14 @@ fn string_match_full_with_case_fold_source_compiled_syntax(
         CompiledSearchPattern::Emacs(cp) => {
             let text_bytes = string.as_bytes();
             let range = (text_bytes.len() - start) as isize;
-            if let Some((_pos, regs)) =
-                regex_emacs::re_search(cp.as_ref(), text_bytes, start, range, syntax, start)
-            {
+            if let Some((_pos, regs)) = regex_emacs::re_search(
+                cp.as_ref(),
+                text_bytes,
+                start,
+                range,
+                syntax,
+                STRING_MATCH_AT_DOT_UNREACHABLE,
+            ) {
                 let byte_md = match_data_from_registers(&regs, 0);
                 let char_md = string_char_match_data(searched_string, byte_md);
                 let result_pos = char_md.groups[0].unwrap().0;
