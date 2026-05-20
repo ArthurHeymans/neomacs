@@ -553,9 +553,18 @@ pub(crate) fn regex_compile_lisp(
             // ^ — beginning of line
             // ----------------------------------------------------------
             b'^' => {
-                // GNU: only special at beginning of pattern or after \( or \|
-                // For simplicity, always treat as begline (GNU does context check)
+                if !(p == 1 || at_begline_loc_p(pattern_bytes, p)) {
+                    goto_normal_char(
+                        c as u32,
+                        &mut buf,
+                        &mut pending_exact,
+                        &mut laststart,
+                        &mut laststart_is_group,
+                    );
+                    continue;
+                }
                 laststart = None;
+                laststart_is_group = false;
                 pending_exact = None;
                 emit_op!(RegexOp::BegLine);
             }
@@ -564,7 +573,18 @@ pub(crate) fn regex_compile_lisp(
             // $ — end of line
             // ----------------------------------------------------------
             b'$' => {
+                if !(p == plen || at_endline_loc_p(pattern_bytes, p)) {
+                    goto_normal_char(
+                        c as u32,
+                        &mut buf,
+                        &mut pending_exact,
+                        &mut laststart,
+                        &mut laststart_is_group,
+                    );
+                    continue;
+                }
                 laststart = Some(bpos!());
+                laststart_is_group = false;
                 pending_exact = None;
                 emit_op!(RegexOp::EndLine);
             }
@@ -651,39 +671,41 @@ pub(crate) fn regex_compile_lisp(
                 match c2 {
                     // \( — start group
                     b'(' => {
-                        // Check for shy group \(?:...\) or numbered \(?N:...\)
-                        let shy = p + 1 < plen
-                            && pattern_bytes[p] == b'?'
-                            && pattern_bytes[p + 1] == b':';
-                        if shy {
-                            p += 2; // skip ?:
-                        }
-
-                        // Check for explicit numbered group \(?N:...\)
+                        let mut is_shy = false;
                         let mut explicit_group: Option<usize> = None;
-                        if !shy && p < plen && pattern_bytes[p] == b'?' {
-                            // Look for \(?N:...\) where N is a digit
-                            let saved_p = p;
+                        if p < plen && pattern_bytes[p] == b'?' {
                             p += 1; // skip ?
-                            // Parse digits
-                            let num_start = p;
-                            while p < plen && pattern_bytes[p].is_ascii_digit() {
-                                p += 1;
-                            }
-                            if p > num_start && p < plen && pattern_bytes[p] == b':' {
-                                let num_str = std::str::from_utf8(&pattern_bytes[num_start..p])
-                                    .unwrap_or("0");
-                                if let Ok(n) = num_str.parse::<usize>() {
-                                    explicit_group = Some(n);
-                                    p += 1; // skip :
+                            if p < plen && pattern_bytes[p] == b':' {
+                                is_shy = true;
+                                p += 1; // skip :
+                            } else {
+                                let num_start = p;
+                                let mut n = 0usize;
+                                while p < plen && pattern_bytes[p].is_ascii_digit() {
+                                    if p == num_start && pattern_bytes[p] == b'0' {
+                                        return Err(RegexCompileError {
+                                            message: "Invalid regular expression".to_string(),
+                                        });
+                                    }
+                                    n = n
+                                        .checked_mul(10)
+                                        .and_then(|value| {
+                                            value.checked_add((pattern_bytes[p] - b'0') as usize)
+                                        })
+                                        .ok_or_else(|| RegexCompileError {
+                                            message: "Regular expression too big".to_string(),
+                                        })?;
+                                    p += 1;
                                 }
-                            }
-                            if explicit_group.is_none() {
-                                p = saved_p; // not a valid numbered group
+                                if p == num_start || p >= plen || pattern_bytes[p] != b':' {
+                                    return Err(RegexCompileError {
+                                        message: "Invalid regular expression".to_string(),
+                                    });
+                                }
+                                explicit_group = Some(n);
+                                p += 1; // skip :
                             }
                         }
-
-                        let is_shy = shy;
 
                         let group_start = bpos!();
                         let assigned = if let Some(n) = explicit_group {
@@ -842,32 +864,30 @@ pub(crate) fn regex_compile_lisp(
 
                     // \_ — symbol boundary
                     b'_' => {
-                        if p < plen {
-                            let c3 = pattern_bytes[p];
-                            p += 1;
-                            match c3 {
-                                b'<' => {
-                                    laststart = Some(bpos!());
-                                    pending_exact = None;
-                                    buf.uses_syntax = true;
-                                    emit_op!(RegexOp::SymBeg);
-                                }
-                                b'>' => {
-                                    laststart = Some(bpos!());
-                                    pending_exact = None;
-                                    buf.uses_syntax = true;
-                                    emit_op!(RegexOp::SymEnd);
-                                }
-                                _ => {
-                                    // Not a valid symbol boundary — treat \_ as literal
-                                    goto_normal_char(
-                                        b'_' as u32,
-                                        &mut buf,
-                                        &mut pending_exact,
-                                        &mut laststart,
-                                        &mut laststart_is_group,
-                                    );
-                                }
+                        if p >= plen {
+                            return Err(RegexCompileError {
+                                message: "Premature end of regular expression".to_string(),
+                            });
+                        }
+                        let c3 = pattern_bytes[p];
+                        p += 1;
+                        match c3 {
+                            b'<' => {
+                                laststart = Some(bpos!());
+                                pending_exact = None;
+                                buf.uses_syntax = true;
+                                emit_op!(RegexOp::SymBeg);
+                            }
+                            b'>' => {
+                                laststart = Some(bpos!());
+                                pending_exact = None;
+                                buf.uses_syntax = true;
+                                emit_op!(RegexOp::SymEnd);
+                            }
+                            _ => {
+                                return Err(RegexCompileError {
+                                    message: "Invalid regular expression".to_string(),
+                                });
                             }
                         }
                     }
@@ -894,42 +914,32 @@ pub(crate) fn regex_compile_lisp(
                     b's' => {
                         if p >= plen {
                             return Err(RegexCompileError {
-                                message: "\\s requires syntax class character".to_string(),
+                                message: "Premature end of regular expression".to_string(),
                             });
                         }
-                        let sc = pattern_bytes[p] as char;
+                        let sc = syntax_spec_code(pattern_bytes[p]);
                         p += 1;
-                        let Some(class) = SyntaxClass::from_char(sc) else {
-                            return Err(RegexCompileError {
-                                message: format!("invalid syntax class: \\s{sc}"),
-                            });
-                        };
                         laststart = Some(bpos!());
                         pending_exact = None;
                         buf.uses_syntax = true;
                         emit_op!(RegexOp::SyntaxSpec);
-                        emit!(class as u8);
+                        emit!(sc);
                     }
 
                     // \SC — not syntax class C
                     b'S' => {
                         if p >= plen {
                             return Err(RegexCompileError {
-                                message: "\\S requires syntax class character".to_string(),
+                                message: "Premature end of regular expression".to_string(),
                             });
                         }
-                        let sc = pattern_bytes[p] as char;
+                        let sc = syntax_spec_code(pattern_bytes[p]);
                         p += 1;
-                        let Some(class) = SyntaxClass::from_char(sc) else {
-                            return Err(RegexCompileError {
-                                message: format!("invalid syntax class: \\S{sc}"),
-                            });
-                        };
                         laststart = Some(bpos!());
                         pending_exact = None;
                         buf.uses_syntax = true;
                         emit_op!(RegexOp::NotSyntaxSpec);
-                        emit!(class as u8);
+                        emit!(sc);
                     }
 
                     // \cC — category C
@@ -982,7 +992,7 @@ pub(crate) fn regex_compile_lisp(
                     // \{ — interval \{n,m\}
                     b'{' => {
                         // Parse interval
-                        let _interval_start = p;
+                        let interval_start = p;
                         let (min_count, max_count) = parse_interval(pattern_bytes, &mut p)?;
 
                         // Check for non-greedy suffix ?
@@ -992,9 +1002,18 @@ pub(crate) fn regex_compile_lisp(
                         }
 
                         let Some(mut last) = laststart else {
-                            return Err(RegexCompileError {
-                                message: "\\{ without preceding expression".to_string(),
-                            });
+                            // GNU regex-emacs.c:2427 `unfetch_interval`: a
+                            // syntactically valid interval without a preceding
+                            // atom is literal text beginning with `{`.
+                            p = interval_start;
+                            goto_normal_char(
+                                b'{' as u32,
+                                &mut buf,
+                                &mut pending_exact,
+                                &mut laststart,
+                                &mut laststart_is_group,
+                            );
+                            continue;
                         };
                         if !laststart_is_group {
                             last = split_trailing_exactn_atom_if_needed(&mut buf, last);
@@ -1004,89 +1023,6 @@ pub(crate) fn regex_compile_lisp(
                         laststart = None;
                         laststart_is_group = false;
                         pending_exact = None;
-                    }
-
-                    // Control/escape character shortcuts
-                    // GNU Emacs receives these already converted by the
-                    // Lisp reader, but callers from Rust may pass the
-                    // backslash-letter form. Handle both.
-                    b't' => {
-                        goto_normal_char(
-                            b'\t' as u32,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    b'n' => {
-                        goto_normal_char(
-                            b'\n' as u32,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    b'r' => {
-                        goto_normal_char(
-                            b'\r' as u32,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    b'f' => {
-                        goto_normal_char(
-                            0x0c,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    b'a' => {
-                        goto_normal_char(
-                            0x07,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    b'e' => {
-                        goto_normal_char(
-                            0x1b,
-                            &mut buf,
-                            &mut pending_exact,
-                            &mut laststart,
-                            &mut laststart_is_group,
-                        );
-                    }
-                    // \d — digit [0-9]  (not in GNU Emacs, but used in tests)
-                    b'd' => {
-                        laststart = Some(bpos!());
-                        pending_exact = None;
-                        emit_op!(RegexOp::Charset);
-                        emit!(32);
-                        let bitmap_start = buf.buffer.len();
-                        buf.buffer.extend_from_slice(&[0u8; 32]);
-                        for ch in b'0'..=b'9' {
-                            set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, None);
-                        }
-                    }
-                    // \D — non-digit [^0-9]
-                    b'D' => {
-                        laststart = Some(bpos!());
-                        pending_exact = None;
-                        emit_op!(RegexOp::CharsetNot);
-                        emit!(32);
-                        let bitmap_start = buf.buffer.len();
-                        buf.buffer.extend_from_slice(&[0u8; 32]);
-                        for ch in b'0'..=b'9' {
-                            set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, None);
-                        }
                     }
 
                     // Other escaped characters — treat as literal
@@ -1186,6 +1122,70 @@ pub(crate) fn regex_compile_lisp(
 // ---------------------------------------------------------------------------
 // Compiler Helpers
 // ---------------------------------------------------------------------------
+
+/// GNU `regex-emacs.c:2765` context check for `^`.
+///
+/// `p` points just after the `^` byte in `pattern`.  GNU treats `^` as a
+/// beginning-of-line assertion only at pattern start, after an alternative
+/// (`\|`), or after an opening group (`\(` / `\(?:` / `\(?N:`).  Everywhere
+/// else it is a literal character.
+fn at_begline_loc_p(pattern: &[u8], p: usize) -> bool {
+    if p < 2 {
+        return false;
+    }
+
+    let mut prev = p - 2;
+    match pattern[prev] {
+        b'(' | b'|' => {}
+        b':' => {
+            while prev > 0 && pattern[prev - 1].is_ascii_digit() {
+                prev -= 1;
+            }
+            if !(prev > 1 && pattern[prev - 1] == b'?' && pattern[prev - 2] == b'(') {
+                return false;
+            }
+            prev -= 2;
+        }
+        _ => return false,
+    }
+
+    let slash_end = prev;
+    while prev > 0 && pattern[prev - 1] == b'\\' {
+        prev -= 1;
+    }
+    ((slash_end - prev) & 1) != 0
+}
+
+/// GNU `regex-emacs.c:2801` context check for `$`.
+///
+/// `p` points just after the `$` byte in `pattern`.  `$` is an end-of-line
+/// assertion only at pattern end, before a closing group (`\)`) or before an
+/// alternative (`\|`).
+fn at_endline_loc_p(pattern: &[u8], p: usize) -> bool {
+    p + 1 < pattern.len() && pattern[p] == b'\\' && matches!(pattern[p + 1], b')' | b'|')
+}
+
+fn syntax_spec_code(c: u8) -> u8 {
+    match c {
+        b' ' | b'-' => SyntaxClass::Whitespace as u8,
+        b'.' => SyntaxClass::Punctuation as u8,
+        b'w' => SyntaxClass::Word as u8,
+        b'_' => SyntaxClass::Symbol as u8,
+        b'(' => SyntaxClass::Open as u8,
+        b')' => SyntaxClass::Close as u8,
+        b'\'' => SyntaxClass::Quote as u8,
+        b'"' => SyntaxClass::StringDelim as u8,
+        b'$' => SyntaxClass::Math as u8,
+        b'\\' => SyntaxClass::Escape as u8,
+        b'/' => SyntaxClass::CharQuote as u8,
+        b'<' => SyntaxClass::Comment as u8,
+        b'>' => SyntaxClass::EndComment as u8,
+        b'@' => SyntaxClass::InheritStd as u8,
+        b'!' => SyntaxClass::CommentFence as u8,
+        b'|' => SyntaxClass::StringFence as u8,
+        _ => 0o377,
+    }
+}
 
 /// Emit a literal character as part of an `exactn` sequence.
 ///

@@ -1,15 +1,13 @@
-//! Ignored GNU regexp parity probes for known Neomacs divergences.
+//! GNU regexp parity probes for edge cases that previously diverged.
 //!
 //! These tests document behavior confirmed against local GNU Emacs source and
-//! oracle runs. They are ignored so default oracle runs stay green while the
-//! cases remain easy to execute during regex compatibility work.
+//! oracle runs.
 
 use super::common::{
     assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
 };
 
 #[test]
-#[ignore = "known divergence: mid-pattern ^ and $ are literals in GNU Emacs"]
 fn oracle_prop_regexp_gnu_mid_pattern_anchors_are_literals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -27,7 +25,6 @@ fn oracle_prop_regexp_gnu_mid_pattern_anchors_are_literals() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs treats \\d and \\D as escaped literals"]
 fn oracle_prop_regexp_gnu_backslash_d_is_literal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -46,7 +43,6 @@ fn oracle_prop_regexp_gnu_backslash_d_is_literal() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs treats escaped control-letter names as literals in regexps"]
 fn oracle_prop_regexp_gnu_escaped_control_letters_are_literals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -71,7 +67,6 @@ fn oracle_prop_regexp_gnu_escaped_control_letters_are_literals() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs string-match does not use \\= as a string-start assertion"]
 fn oracle_prop_regexp_gnu_at_point_anchor_is_not_for_string_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -88,7 +83,6 @@ fn oracle_prop_regexp_gnu_at_point_anchor_is_not_for_string_match() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs treats interval syntax without a preceding atom as literal text"]
 fn oracle_prop_regexp_gnu_bare_intervals_are_literals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -104,7 +98,6 @@ fn oracle_prop_regexp_gnu_bare_intervals_are_literals() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs rejects malformed \\_ symbol-boundary escapes"]
 fn oracle_prop_regexp_gnu_malformed_symbol_boundary_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -119,7 +112,6 @@ fn oracle_prop_regexp_gnu_malformed_symbol_boundary_errors() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs does not signal for invalid \\s/\\S syntax-class designators"]
 fn oracle_prop_regexp_gnu_invalid_syntax_class_designators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -140,7 +132,6 @@ fn oracle_prop_regexp_gnu_invalid_syntax_class_designators() {
 }
 
 #[test]
-#[ignore = "known divergence: GNU Emacs rejects unknown (?...) group extensions"]
 fn oracle_prop_regexp_gnu_unknown_group_extension_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
