@@ -79,7 +79,7 @@ fn oracle_prop_progn_with_defun_body_and_multiple_steps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(progn (defun neovm--pg-step (x) (progn (setq x (+ x 1)) (setq x (+ x 2)) x)) (unwind-protect (neovm--pg-step 5) (fmakunbound 'neovm--pg-step)))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("8", &oracle, &neovm);
 }
 
@@ -296,7 +296,7 @@ proptest! {
             start, d1, d2, d3
         );
         let expected = (start + d1 + d2 + d3).to_string();
-        let (oracle, neovm) = eval_oracle_and_neovm(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
         assert_ok_eq(expected.as_str(), &oracle, &neovm);
     }
 
