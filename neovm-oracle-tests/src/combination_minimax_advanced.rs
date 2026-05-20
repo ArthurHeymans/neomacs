@@ -4,7 +4,10 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_via_binary,
+};
 
 // ---------------------------------------------------------------------------
 // Game tree representation and traversal
@@ -789,5 +792,6 @@ fn oracle_prop_minimax_advanced_connect_game() {
     (fmakunbound 'neovm--mma-c3-moves)
     (fmakunbound 'neovm--mma-c3-minimax)
     (fmakunbound 'neovm--mma-c3-best-col)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_via_binary(form);
+    assert_ok_eq("(0 1 2 (0 1 2 3) (1 42) 2)", &oracle, &neovm);
 }

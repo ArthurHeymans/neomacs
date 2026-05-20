@@ -24,6 +24,19 @@ fn oracle_mem_limit_bytes() -> u64 {
     mb * 1024 * 1024
 }
 
+/// Optional virtual address space cap for spawned release Neomacs binary
+/// checks. Unlike the GNU oracle process, release Neomacs can legitimately
+/// map several gigabytes while running exhaustive recursive parity cases, and
+/// some nextest child processes cannot raise a lower inherited hard limit.
+///
+/// Set `NEOVM_NEOMACS_BINARY_MEM_LIMIT_MB` to enable an extra cap.
+fn neomacs_binary_mem_limit_bytes() -> Option<u64> {
+    let mb: u64 = std::env::var("NEOVM_NEOMACS_BINARY_MEM_LIMIT_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())?;
+    Some(mb * 1024 * 1024)
+}
+
 /// Optional virtual address space cap (in bytes) for the NeoVM side of an
 /// oracle test process. This is unset by default because NeoVM runs in-process
 /// inside the test binary; when enabled, nextest's per-test process isolation
@@ -628,23 +641,24 @@ fn run_neovm_eval_via_binary(form: &str) -> Result<String, String> {
             .into_owned()
     });
 
-    let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&neovm_bin);
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
         .args(["--batch", "-Q", "--eval", &program]);
 
-    unsafe {
-        cmd.pre_exec(move || {
-            let rlim = libc::rlimit {
-                rlim_cur: mem_limit as libc::rlim_t,
-                rlim_max: mem_limit as libc::rlim_t,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
+    if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
+        unsafe {
+            cmd.pre_exec(move || {
+                let rlim = libc::rlimit {
+                    rlim_cur: mem_limit as libc::rlim_t,
+                    rlim_max: mem_limit as libc::rlim_t,
+                };
+                if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
     }
 
     let output = cmd

@@ -4,7 +4,10 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_via_binary,
+};
 
 // ---------------------------------------------------------------------------
 // Basic minimax on a static game tree
@@ -365,7 +368,8 @@ fn oracle_prop_minimax_tictactoe_with_moves() {
     (fmakunbound 'neovm--ttt2-moves)
     (fmakunbound 'neovm--ttt2-minimax)
     (fmakunbound 'neovm--ttt2-best-move)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm_via_binary(form);
+    assert_ok_eq("((2 10) (2 7) 0 9)", &oracle, &neovm);
 }
 
 // ---------------------------------------------------------------------------
