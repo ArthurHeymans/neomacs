@@ -338,6 +338,11 @@ pub(crate) fn builtin_set_default_toplevel_value(
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     let value = args[1];
+    if let Some(result) = constant_set_outcome_in_obarray(eval.obarray(), resolved, args[0], value)
+    {
+        result?;
+        return Ok(Value::NIL);
+    }
     eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
     if resolved != symbol {
         eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
@@ -353,8 +358,10 @@ pub(crate) fn set_default_toplevel_value_impl(
     expect_args("set-default-toplevel-value", &args, 2)?;
     let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
-    if ctx.obarray.is_constant_id(resolved) {
-        return Err(signal("setting-constant", vec![args[0]]));
+    if let Some(result) = constant_set_outcome_in_obarray(&ctx.obarray, resolved, args[0], args[1])
+    {
+        result?;
+        return Ok(Value::NIL);
     }
     let value = args[1];
     ctx.note_macro_expansion_mutation();

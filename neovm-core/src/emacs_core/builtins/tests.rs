@@ -14539,6 +14539,39 @@ fn set_allows_keyword_self_assignment_like_gnu_emacs() {
     )
     .expect("set should allow alias-to-keyword self-assignment");
     assert_eq!(aliased, keyword);
+
+    let default_direct =
+        crate::emacs_core::custom::builtin_set_default(&mut eval, vec![keyword, keyword])
+            .expect("set-default should allow keyword self-assignment");
+    assert_eq!(default_direct, keyword);
+
+    let toplevel_direct = builtin_set_default_toplevel_value(&mut eval, vec![keyword, keyword])
+        .expect("set-default-toplevel-value should allow keyword self-assignment");
+    assert!(toplevel_direct.is_nil());
+
+    let changed_default = crate::emacs_core::custom::builtin_set_default(
+        &mut eval,
+        vec![keyword, Value::symbol("changed")],
+    )
+    .expect_err("set-default should reject non-self keyword assignment");
+    match changed_default {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "setting-constant");
+            assert_eq!(sig.data, vec![keyword]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let changed_toplevel =
+        builtin_set_default_toplevel_value(&mut eval, vec![keyword, Value::symbol("changed")])
+            .expect_err("set-default-toplevel-value should reject non-self keyword assignment");
+    match changed_toplevel {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "setting-constant");
+            assert_eq!(sig.data, vec![keyword]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
 }
 
 #[test]

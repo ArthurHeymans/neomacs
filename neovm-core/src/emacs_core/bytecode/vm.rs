@@ -2830,8 +2830,13 @@ impl<'a> Vm<'a> {
             }
         };
         let resolved = resolve_variable_alias_id_in_obarray(&self.ctx.obarray, symbol)?;
-        if self.ctx.obarray.is_constant_id(resolved) {
-            return Err(signal("setting-constant", vec![args[0]]));
+        if let Some(result) = crate::emacs_core::builtins::symbols::constant_set_outcome_in_obarray(
+            &self.ctx.obarray,
+            resolved,
+            args[0],
+            args[1],
+        ) {
+            return result;
         }
         let value = args[1];
 
@@ -2858,6 +2863,15 @@ impl<'a> Vm<'a> {
             symbol,
         )?;
         let value = args[1];
+        if let Some(result) = crate::emacs_core::builtins::symbols::constant_set_outcome_in_obarray(
+            &self.ctx.obarray,
+            resolved,
+            args[0],
+            value,
+        ) {
+            result?;
+            return Ok(Value::NIL);
+        }
         self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
         if resolved != symbol {
             self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;

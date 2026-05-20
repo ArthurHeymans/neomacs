@@ -743,8 +743,10 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
         }
     };
     let resolved = super::builtins::resolve_variable_alias_id(eval, symbol)?;
-    if eval.obarray().is_constant_id(resolved) {
-        return Err(signal("setting-constant", vec![args[0]]));
+    if let Some(result) =
+        super::builtins::constant_set_outcome_in_obarray(eval.obarray(), resolved, args[0], args[1])
+    {
+        return result;
     }
     let value = args[1];
 
