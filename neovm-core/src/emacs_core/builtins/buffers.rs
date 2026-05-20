@@ -123,6 +123,8 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     current_id: BufferId,
     start: i64,
     end: i64,
+    start_arg: Value,
+    end_arg: Value,
 ) -> Result<(usize, usize), Flow> {
     let buf = buffers
         .get(current_id)
@@ -135,10 +137,7 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     let full_min = 1_i64;
     let full_max = buf.total_chars() as i64 + 1;
     if s < full_min || s > full_max || e < full_min || e > full_max {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::fixnum(start), Value::fixnum(end)],
-        ));
+        return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
     if let Some((begv_char, zv_char)) = buffers.current_labeled_restriction_char_bounds(current_id)
     {
@@ -3490,8 +3489,14 @@ pub(crate) fn builtin_narrow_to_region(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (byte_start, byte_end) =
-        normalize_narrow_region_in_buffers(&eval.buffers, current_id, start, end)?;
+    let (byte_start, byte_end) = normalize_narrow_region_in_buffers(
+        &eval.buffers,
+        current_id,
+        start,
+        end,
+        args[0],
+        args[1],
+    )?;
     let _ = eval
         .buffers
         .narrow_buffer_to_region(current_id, byte_start, byte_end);
