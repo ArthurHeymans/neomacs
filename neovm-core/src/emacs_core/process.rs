@@ -6838,7 +6838,11 @@ pub(crate) fn builtin_getenv_internal(
     // If ENV arg is a list, search it directly (GNU behavior).
     if let Some(env_list) = args.get(1) {
         if env_list.is_cons() {
-            return getenv_from_list(varname, *env_list);
+            return Ok(match getenv_from_list(varname, *env_list) {
+                EnvLookup::Value(value) => value,
+                EnvLookup::Negative => Value::T,
+                EnvLookup::Missing => Value::NIL,
+            });
         }
     }
 
@@ -6846,9 +6850,10 @@ pub(crate) fn builtin_getenv_internal(
     let proc_env = eval.obarray.symbol_value("process-environment").cloned();
     if let Some(pe) = proc_env {
         if pe.is_cons() {
-            let result = getenv_from_list(varname, pe)?;
-            if !result.is_nil() {
-                return Ok(result);
+            match getenv_from_list(varname, pe) {
+                EnvLookup::Value(value) => return Ok(value),
+                EnvLookup::Negative => return Ok(Value::NIL),
+                EnvLookup::Missing => {}
             }
         }
     }
@@ -6860,35 +6865,39 @@ pub(crate) fn builtin_getenv_internal(
     }
 }
 
-/// Search a process-environment-style list for VARIABLE.
-/// Each entry is "VARIABLE=VALUE" or just "VARIABLE" (no value).
-fn getenv_from_list(varname: &LispString, env_list: Value) -> EvalResult {
-    use crate::emacs_core::value::list_to_vec;
+enum EnvLookup {
+    Value(Value),
+    Negative,
+    Missing,
+}
+
+/// Search a process-environment-style list for VARIABLE, matching GNU
+/// `getenv_internal_1`: scan cons cells, ignore non-string entries, and treat
+/// a bare "VARIABLE" string as an explicit negative entry.
+fn getenv_from_list(varname: &LispString, env_list: Value) -> EnvLookup {
     let var_bytes = varname.as_bytes();
-    if let Some(entries) = list_to_vec(&env_list) {
-        for entry in &entries {
-            if let Some(s) = entry.as_lisp_string() {
-                let bytes = s.as_bytes();
-                if bytes.len() >= var_bytes.len()
-                    && env_var_name_bytes_eq(&bytes[..var_bytes.len()], var_bytes)
-                {
-                    if bytes.len() > var_bytes.len() && bytes[var_bytes.len()] == b'=' {
-                        return Ok(Value::heap_string(lisp_string_from_bytes(
-                            &bytes[var_bytes.len() + 1..],
-                            s.is_multibyte(),
-                        )));
-                    }
-                    if bytes.len() == var_bytes.len() {
-                        return Ok(Value::NIL);
-                    }
+    let mut env = env_list;
+    while env.is_cons() {
+        let entry = env.cons_car();
+        if let Some(s) = entry.as_lisp_string() {
+            let bytes = s.as_bytes();
+            if bytes.len() >= var_bytes.len()
+                && env_var_name_bytes_eq(&bytes[..var_bytes.len()], var_bytes)
+            {
+                if bytes.len() > var_bytes.len() && bytes[var_bytes.len()] == b'=' {
+                    return EnvLookup::Value(Value::heap_string(lisp_string_from_bytes(
+                        &bytes[var_bytes.len() + 1..],
+                        s.is_multibyte(),
+                    )));
                 }
-                if env_var_name_bytes_eq(bytes, var_bytes) {
-                    return Ok(Value::NIL);
+                if bytes.len() == var_bytes.len() {
+                    return EnvLookup::Negative;
                 }
             }
         }
+        env = env.cons_cdr();
     }
-    Ok(Value::NIL)
+    EnvLookup::Missing
 }
 
 /// (set-binary-mode STREAM MODE) -> t
