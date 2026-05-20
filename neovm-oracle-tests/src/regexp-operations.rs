@@ -212,7 +212,7 @@ fn oracle_prop_replace_match_basic() {
                     (re-search-forward "world")
                     (replace-match "emacs")
                     (buffer-string))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq(r#""hello emacs""#, &o, &n);
 }
 
