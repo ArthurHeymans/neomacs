@@ -270,7 +270,7 @@ fn string_match_noncapturing_group_pattern_uses_backref_engine_semantics() {
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
     assert_eq!(md.groups[0], Some((0, 6)));
-    assert_eq!(md.groups.len(), 1);
+    assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
 }
 
 #[test]
@@ -1193,7 +1193,7 @@ fn string_match_with_groups() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0));
     let md = md.unwrap();
-    assert_eq!(md.groups.len(), 3); // full + 2 groups
+    assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
     assert_eq!(md.groups[0], Some((0, 9)));
     assert_eq!(md.groups[1], Some((0, 4))); // "user"
     assert_eq!(md.groups[2], Some((5, 9))); // "host"
@@ -1593,7 +1593,7 @@ fn re_search_forward_with_groups() {
     );
     assert!(result.is_ok());
     let md = md.unwrap();
-    assert_eq!(md.groups.len(), 3);
+    assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
     assert_eq!(md.groups[1], Some((0, 4))); // "name"
     assert_eq!(md.groups[2], Some((6, 10))); // "John"
 }

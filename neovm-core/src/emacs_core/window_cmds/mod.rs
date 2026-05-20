@@ -4690,6 +4690,7 @@ pub(crate) fn builtin_pop_to_buffer(
 ) -> EvalResult {
     expect_min_args("pop-to-buffer", &args, 1)?;
     expect_max_args("pop-to-buffer", &args, 3)?;
+    let record_selection = args.get(2).is_none_or(|v| v.is_nil());
     let buf_id = match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let bid = args[0].as_buffer_id().unwrap();
@@ -4721,6 +4722,16 @@ pub(crate) fn builtin_pop_to_buffer(
         w.set_buffer(buf_id);
     }
     eval.switch_current_buffer(buf_id)?;
+    if let Some(buffer) = eval.buffers.get_mut(buf_id) {
+        buffer.last_selected_window = Some(sel_wid);
+    }
+    update_buffer_display_metadata_in_state(&mut eval.buffers, buf_id)?;
+    if record_selection {
+        record_buffer_in_state(&mut eval.frames, &mut eval.buffers, buf_id, fid)?;
+        if !eval.buffers.buffer_hooks_inhibited(buf_id) {
+            super::builtins::run_buffer_list_update_hook(eval)?;
+        }
+    }
     Ok(Value::make_buffer(buf_id))
 }
 

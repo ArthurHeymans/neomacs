@@ -2804,7 +2804,11 @@ fn bootstrap_completing_read_multiple_accepts_exact_must_match_input() {
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");
     let scratch = eval.buffers.create_buffer("*crm-exact-target*");
     eval.buffers.set_current(scratch);
-    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    let frame_id = eval
+        .frames
+        .selected_frame()
+        .map(|frame| frame.id)
+        .unwrap_or_else(|| eval.frames.create_frame("F1", 960, 640, scratch));
     assert!(eval.frames.select_frame(frame_id));
     eval.eval_str("(require 'crm)").expect("load crm");
 
@@ -6505,6 +6509,13 @@ fn bootstrap_runtime_command_loop_cx_b_uses_recent_file_buffer_as_second_default
         eval.frames.select_frame(frame_id),
         "runtime command-loop switch-buffer test should have a selected frame"
     );
+    for fid in eval.frames.frame_list() {
+        if fid != frame_id
+            && let Some(frame) = eval.frames.get_mut(fid)
+        {
+            frame.visible = false;
+        }
+    }
 
     let _ = eval.eval_str_each(
         r#"(progn
