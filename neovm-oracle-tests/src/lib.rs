@@ -1878,6 +1878,8 @@ mod trigonometry_advanced;
 mod truncate_string_to_width_semantics;
 #[path = "tty-display-dimensions-semantics.rs"]
 mod tty_display_dimensions_semantics;
+#[path = "tty-frame-at-semantics.rs"]
+mod tty_frame_at_semantics;
 #[path = "type-of.rs"]
 mod type_of;
 #[path = "type-of-advanced.rs"]

@@ -1278,8 +1278,9 @@ pub(crate) fn builtin_tty_frame_at(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("tty-frame-at", &args, 2)?;
-    let x = expect_int(&args[0])?;
-    let y = expect_int(&args[1])?;
+    let (Some(x), Some(y)) = (args[0].as_fixnum(), args[1].as_fixnum()) else {
+        return Ok(Value::NIL);
+    };
     let Some(selected) = eval.frames.selected_frame().map(|frame| frame.id) else {
         return Ok(Value::NIL);
     };
