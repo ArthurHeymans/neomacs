@@ -839,17 +839,31 @@ fn load_suffix_list(value: Option<&Value>, name: &str) -> Result<Vec<String>, Fl
     Ok(suffixes)
 }
 
-/// `(locate-file FILENAME PATH SUFFIXES &optional PREDICATE)`
+/// `(locate-file FILENAME PATH &optional SUFFIXES PREDICATE)`
 ///
 /// Search PATH for FILENAME with each suffix in SUFFIXES.
 pub(crate) fn builtin_locate_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("locate-file", &args, 3)?;
+    expect_min_args("locate-file", &args, 2)?;
     expect_max_args("locate-file", &args, 4)?;
     let filename = expect_lisp_string(&args[0])?;
     let path = parse_path_argument(&args[1])?;
-    let suffixes = parse_suffixes_argument(&args[2])?;
+    let suffixes = if args.len() > 2 {
+        parse_suffixes_argument(&args[2])?
+    } else {
+        Vec::new()
+    };
+    let predicate = match args.get(3).copied() {
+        Some(predicate) => Some(normalize_locate_file_public_predicate(eval, predicate)?),
+        None => None,
+    };
     Ok(
-        match locate_file_with_path_and_suffixes(eval, &filename, &path, &suffixes, args.get(3))? {
+        match locate_file_with_path_and_suffixes(
+            eval,
+            &filename,
+            &path,
+            &suffixes,
+            predicate.as_ref(),
+        )? {
             Some(found) => Value::heap_string(found),
             None => Value::NIL,
         },
@@ -967,6 +981,42 @@ fn parse_suffixes_argument(value: &Value) -> Result<Vec<LispString>, Flow> {
     Ok(suffixes)
 }
 
+fn normalize_locate_file_public_predicate(
+    eval: &mut super::eval::Context,
+    predicate: Value,
+) -> Result<Value, Flow> {
+    if predicate.is_nil() {
+        return Ok(predicate);
+    }
+
+    let functionp = crate::emacs_core::builtins::builtin_functionp_1(eval, predicate)?.is_truthy();
+    if matches!(predicate.kind(), ValueKind::Symbol(_)) && !functionp {
+        return Ok(access_mask_from_predicate_symbols(&[predicate]));
+    }
+    if predicate.is_cons() && !functionp {
+        if let Some(items) = list_to_vec(&predicate) {
+            return Ok(access_mask_from_predicate_symbols(&items));
+        }
+    }
+    Ok(predicate)
+}
+
+fn access_mask_from_predicate_symbols(items: &[Value]) -> Value {
+    let mut mask = 0;
+    for item in items {
+        if eq_value(item, &Value::symbol("executable")) {
+            mask |= 1;
+        }
+        if eq_value(item, &Value::symbol("writable")) {
+            mask |= 2;
+        }
+        if eq_value(item, &Value::symbol("readable")) {
+            mask |= 4;
+        }
+    }
+    Value::fixnum(mask)
+}
+
 fn locate_file_with_path_and_suffixes(
     eval: &mut super::eval::Context,
     filename: &LispString,
@@ -985,9 +1035,7 @@ fn locate_file_with_path_and_suffixes(
         let expanded = locate_file_expand_name(eval, filename, None)?;
         for suffix in &effective_suffixes {
             let candidate_lisp = append_lisp_file_name_suffix(&expanded, suffix);
-            if crate::emacs_core::fileio::lisp_file_name_to_path_buf(&candidate_lisp).exists()
-                && predicate_matches_candidate(eval, predicate, &candidate_lisp)?
-            {
+            if candidate_matches_openp(eval, predicate, &candidate_lisp)? {
                 return Ok(Some(candidate_lisp));
             }
         }
@@ -998,9 +1046,7 @@ fn locate_file_with_path_and_suffixes(
         let base = locate_file_expand_name(eval, filename, Some(dir))?;
         for suffix in &effective_suffixes {
             let candidate_lisp = append_lisp_file_name_suffix(&base, suffix);
-            if crate::emacs_core::fileio::lisp_file_name_to_path_buf(&candidate_lisp).exists()
-                && predicate_matches_candidate(eval, predicate, &candidate_lisp)?
-            {
+            if candidate_matches_openp(eval, predicate, &candidate_lisp)? {
                 return Ok(Some(candidate_lisp));
             }
         }
@@ -1035,38 +1081,53 @@ fn append_lisp_file_name_suffix(base: &LispString, suffix: &LispString) -> LispS
     }
 }
 
-fn predicate_matches_candidate(
+fn candidate_matches_openp(
     eval: &mut super::eval::Context,
     predicate: Option<&Value>,
     candidate: &LispString,
 ) -> Result<bool, Flow> {
     let Some(predicate) = predicate else {
-        return Ok(true);
+        return Ok(readable_non_directory_candidate(candidate));
     };
     if predicate.is_nil() {
-        return Ok(true);
+        return Ok(readable_non_directory_candidate(candidate));
+    }
+    if predicate.is_t() {
+        return Ok(readable_non_directory_candidate(candidate));
     }
 
     if let Some(mask) = predicate.as_fixnum() {
         return Ok(integer_access_predicate_matches(candidate, mask));
     }
 
-    let Some(symbol) = predicate.as_symbol_name() else {
-        // We currently only support symbol predicates via dispatch_subr;
-        // unknown predicate object shapes default to accepting candidate.
+    let result = eval.funcall_general(*predicate, vec![Value::heap_string(candidate.clone())])?;
+    if result.is_nil() {
+        return Ok(false);
+    }
+    if eq_value(&result, &Value::symbol("dir-ok")) {
         return Ok(true);
-    };
-    let Some(result) = eval.dispatch_subr(symbol, vec![Value::heap_string(candidate.clone())])
-    else {
-        // Emacs locate-file tolerates non-callable predicate values in practice.
-        // Keep search behavior instead of surfacing an execution error here.
-        return Ok(true);
-    };
-    Ok(result?.is_truthy())
+    }
+    Ok(!candidate_is_directory(candidate))
+}
+
+fn readable_non_directory_candidate(candidate: &LispString) -> bool {
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(candidate);
+    match std::fs::File::open(&path).and_then(|file| file.metadata()) {
+        Ok(meta) => !meta.is_dir(),
+        Err(_) => false,
+    }
+}
+
+fn candidate_is_directory(candidate: &LispString) -> bool {
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(candidate);
+    std::fs::metadata(path).is_ok_and(|meta| meta.is_dir())
 }
 
 fn integer_access_predicate_matches(candidate: &LispString, mask: i64) -> bool {
     let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(candidate);
+    if std::fs::metadata(&path).is_ok_and(|meta| meta.is_dir()) {
+        return false;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;

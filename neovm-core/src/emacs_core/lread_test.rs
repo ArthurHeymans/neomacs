@@ -1206,7 +1206,7 @@ fn locate_file_internal_finds_requested_suffix() {
 }
 
 #[test]
-fn locate_file_internal_treats_tilde_prefixed_names_as_absolute_like_gnu() {
+fn locate_file_internal_rejects_tilde_prefixed_directory_without_dir_ok() {
     crate::test_utils::init_test_tracing();
     let mut ctx = test_eval_ctx();
     use std::fs;
@@ -1238,10 +1238,9 @@ fn locate_file_internal_treats_tilde_prefixed_names_as_absolute_like_gnu() {
     )
     .expect("locate-file-internal tilde path should evaluate");
 
-    assert_eq!(
-        result.as_utf8_str(),
-        Some(dir.to_string_lossy().as_ref()),
-        "expected locate-file-internal to expand ~/ paths like GNU"
+    assert!(
+        result.is_nil(),
+        "GNU openp rejects directories unless the predicate returns dir-ok"
     );
 
     let _ = fs::remove_dir_all(&dir);
