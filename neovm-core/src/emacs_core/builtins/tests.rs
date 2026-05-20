@@ -5350,7 +5350,7 @@ fn pure_dispatch_native_comp_placeholders_match_compat_contracts() {
     let available = dispatch_builtin_pure("native-comp-available-p", vec![])
         .expect("builtin native-comp-available-p should resolve")
         .expect("builtin native-comp-available-p should evaluate");
-    assert!(available.is_truthy());
+    assert!(available.is_nil());
 
     let unit_file = dispatch_builtin_pure(
         "native-comp-unit-file",

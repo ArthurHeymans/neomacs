@@ -2284,7 +2284,7 @@ pub(crate) fn builtin_mouse_position(
 
 pub(crate) fn builtin_native_comp_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("native-comp-available-p", &args, 0)?;
-    Ok(Value::T)
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_native_comp_unit_file(args: Vec<Value>) -> EvalResult {
