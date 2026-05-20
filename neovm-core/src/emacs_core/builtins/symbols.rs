@@ -1419,8 +1419,27 @@ fn grow_obarray_vector_if_needed(obarray_val: Value) {
 
 pub(crate) fn is_global_obarray_proxy(eval: &super::eval::Context, value: &Value) -> bool {
     eval.obarray()
-        .symbol_value("obarray")
+        .symbol_value("neovm--obarray-object")
         .is_some_and(|proxy| *proxy == *value)
+}
+
+fn current_lisp_obarray_value(eval: &super::eval::Context) -> Value {
+    eval.obarray()
+        .symbol_value("obarray")
+        .copied()
+        .unwrap_or_else(|| {
+            eval.obarray()
+                .symbol_value("neovm--obarray-object")
+                .copied()
+                .unwrap_or(Value::NIL)
+        })
+}
+
+fn effective_obarray_arg(eval: &super::eval::Context, args: &[Value]) -> Value {
+    args.get(1)
+        .copied()
+        .filter(|value| !value.is_nil())
+        .unwrap_or_else(|| current_lisp_obarray_value(eval))
 }
 
 pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -1456,18 +1475,17 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
     }
     let name = expect_lisp_string(&args[0])?;
 
+    let effective_obarray = effective_obarray_arg(eval, &args);
+
     // Custom obarray path
-    if let Some(obarray_arg) = args
-        .get(1)
-        .filter(|v| !v.is_nil() && !is_global_obarray_proxy(eval, v))
-    {
-        let obarray_val = check_obarray_value(*obarray_arg)?;
+    if !is_global_obarray_proxy(eval, &effective_obarray) {
+        let obarray_val = check_obarray_value(effective_obarray)?;
         let vec_data = obarray_val.as_vector_data().unwrap();
         let vec_len = vec_data.len();
         if vec_len == 0 {
             return Err(signal(
                 "wrong-type-argument",
-                vec![Value::symbol("obarrayp"), *obarray_arg],
+                vec![Value::symbol("obarrayp"), effective_obarray],
             ));
         }
         let bucket_idx = obarray_hash_lisp_string(name, vec_len);
@@ -1478,10 +1496,13 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             return Ok(sym);
         }
 
-        // Not found: create symbol and prepend to bucket chain
-        let sym = Value::from_sym_id(crate::emacs_core::intern::intern_uninterned_lisp_string(
-            name,
-        ));
+        // Not found: create symbol and prepend to bucket chain.  GNU
+        // lread.c:intern_driver allocates the symbol with Fmake_symbol
+        // using the exact STRING object supplied to `intern`, so later
+        // mutation of that string is visible through `symbol-name`.
+        let sym = Value::from_sym_id(
+            crate::emacs_core::intern::make_uninterned_symbol_with_name_value(args[0]),
+        );
         let new_bucket = Value::cons(sym, bucket);
         let _ = obarray_val.set_vector_slot(bucket_idx, new_bucket);
         grow_obarray_vector_if_needed(obarray_val);
@@ -1494,23 +1515,18 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
 }
 
 pub(crate) fn builtin_intern_soft(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if let Some(obarray) = args.get(1).filter(|v| !v.is_nil()) {
-        if is_global_obarray_proxy(eval, obarray) {
-            let mut global_args = args;
-            global_args.truncate(1);
-            return intern_soft_impl(eval.obarray(), global_args);
-        }
-    }
-    intern_soft_impl(eval.obarray(), args)
+    intern_soft_impl(eval, args)
 }
 
-pub(crate) fn intern_soft_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResult {
+pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("intern-soft", &args, 1)?;
     expect_max_args("intern-soft", &args, 2)?;
 
+    let effective_obarray = effective_obarray_arg(eval, &args);
+
     // Custom obarray path
-    if let Some(obarray_arg) = args.get(1).filter(|v| !v.is_nil()) {
-        let obarray_val = check_obarray_value(*obarray_arg)?;
+    if !is_global_obarray_proxy(eval, &effective_obarray) {
+        let obarray_val = check_obarray_value(effective_obarray)?;
         let name = match args[0].kind() {
             ValueKind::String => std::borrow::Cow::Borrowed(args[0].as_lisp_string().unwrap()),
             ValueKind::Symbol(id) => {
@@ -1541,7 +1557,7 @@ pub(crate) fn intern_soft_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResul
         if vec_len == 0 {
             return Err(signal(
                 "wrong-type-argument",
-                vec![Value::symbol("obarrayp"), *obarray_arg],
+                vec![Value::symbol("obarrayp"), effective_obarray],
             ));
         }
         let bucket_idx = obarray_hash_lisp_string(name.as_ref(), vec_len);
@@ -1573,7 +1589,7 @@ pub(crate) fn intern_soft_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResul
             }
         }
     };
-    if let Some(id) = obarray.intern_soft_lisp_string(name.as_ref()) {
+    if let Some(id) = eval.obarray().intern_soft_lisp_string(name.as_ref()) {
         Ok(Value::from_sym_id(id))
     } else {
         Ok(Value::NIL)

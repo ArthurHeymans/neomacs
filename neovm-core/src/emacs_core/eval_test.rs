@@ -10715,6 +10715,32 @@ fn make_symbol_name_value_survives_exact_gc() {
 }
 
 #[test]
+fn custom_obarray_intern_preserves_exact_name_value() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = ev.eval_str(
+        r#"(let* ((obarray (make-vector 17 0))
+                  (name (copy-sequence "abc"))
+                  (sym (intern name obarray)))
+             (list (eq (symbol-name sym) name)
+                   (symbol-name sym)
+                   (progn (aset name 0 ?X) name)
+                   (eq (symbol-name sym) name)
+                   name
+                   (symbol-name sym)
+                   (eq sym (intern-soft name obarray))
+                   (intern-soft "abc" obarray)
+                   (intern-soft "Xbc" obarray)))"#,
+    );
+
+    assert_eq!(
+        format_eval_result(&result),
+        r#"OK (t "Xbc" "Xbc" t "Xbc" "Xbc" t nil Xbc)"#
+    );
+}
+
+#[test]
 fn extra_gc_roots_use_specpdl_when_no_runtime_frame_owns_them() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
