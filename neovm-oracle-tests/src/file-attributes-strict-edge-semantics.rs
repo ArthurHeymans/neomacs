@@ -66,3 +66,52 @@ fn oracle_file_attributes_shape_id_format_missing_bad_filename_and_lessp_edges()
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_attributes_symlink_type_and_dangling_link_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((dir (make-temp-file "neomacs-oracle-fileattrs-link-" t))
+       (file (expand-file-name "target.txt" dir))
+       (subdir (expand-file-name "target-dir" dir))
+       (file-link (expand-file-name "file-link" dir))
+       (dir-link (expand-file-name "dir-link" dir))
+       (dangling-link (expand-file-name "dangling-link" dir)))
+  (unwind-protect
+      (progn
+        (write-region "target" nil file nil 'silent)
+        (make-directory subdir)
+        (make-symbolic-link "target.txt" file-link)
+        (make-symbolic-link "target-dir" dir-link)
+        (make-symbolic-link "missing-target" dangling-link)
+        (let ((file-attrs (file-attributes file-link 'integer))
+              (dir-attrs (file-attributes dir-link 'integer))
+              (dangling-attrs (file-attributes dangling-link 'integer))
+              (target-attrs (file-attributes file 'integer)))
+          (list
+           ;; GNU `file-attributes' uses lstat/no-follow semantics for the
+           ;; type field: symlinks return the raw link target string, including
+           ;; dangling links whose targets do not exist.
+           (nth 0 file-attrs)
+           (nth 0 dir-attrs)
+           (nth 0 dangling-attrs)
+           (file-exists-p dangling-link)
+           (file-symlink-p dangling-link)
+           ;; Symlink attributes describe the link object, not the target.
+           (stringp (nth 0 file-attrs))
+           (stringp (nth 8 file-attrs))
+           (substring (nth 8 file-attrs) 0 1)
+           (equal (nth 10 file-attrs) (nth 10 target-attrs))
+           (length file-attrs)
+           (length dangling-attrs))))
+    (ignore-errors (delete-file file-link))
+    (ignore-errors (delete-file dir-link))
+    (ignore-errors (delete-file dangling-link))
+    (ignore-errors (delete-file file))
+    (ignore-errors (delete-directory subdir))
+    (ignore-errors (delete-directory dir))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
