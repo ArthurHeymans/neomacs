@@ -495,10 +495,12 @@ background transparent while keeping text fully opaque."
 
 ;; Menu bar keyboard access (F10)
 (defun neomacs-menu-bar-open (&optional _frame)
-  "Open the menu bar via the popup menu system.
-_FRAME is ignored; the menu opens on the selected frame."
+  "Open the menu bar.
+_FRAME is ignored; the menu opens on the selected frame.
+Uses `tmm-menubar' until the native GUI popup menu system is connected."
   (interactive "i")
-  (popup-menu (mouse-menu-bar-map) last-nonmenu-event))
+  (require 'tmm)
+  (tmm-menubar))
 
 ;; Window snapping
 (defun neomacs--workarea ()
