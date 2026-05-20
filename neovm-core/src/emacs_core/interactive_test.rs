@@ -2279,7 +2279,7 @@ fn describe_key_briefly_loads_from_gnu_help_el() {
     );
     assert_eq!(
         result[0],
-        r#"OK #("C-f runs the command forward-char" 0 3 (font-lock-face help-key-binding face help-key-binding))"#
+        r#"OK #("C-f runs the command forward-char" 0 3 (face help-key-binding font-lock-face help-key-binding))"#
     );
 }
 
@@ -2297,7 +2297,7 @@ fn describe_key_briefly_loaded_insert_writes_message() {
     );
     assert_eq!(
         result[0],
-        r#"OK (nil #("C-f runs the command forward-char" 0 3 (font-lock-face help-key-binding face help-key-binding)) nil)"#
+        r#"OK (nil #("C-f runs the command forward-char" 0 3 (face help-key-binding font-lock-face help-key-binding)) nil)"#
     );
 }
 
