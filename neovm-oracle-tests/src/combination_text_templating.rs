@@ -156,6 +156,8 @@ fn oracle_prop_template_loop_blocks() {
           (let* ((item-var (match-string 1 result))
                  (list-var (match-string 2 result))
                  (body (match-string 3 result))
+                 (block-start (match-beginning 0))
+                 (block-end (match-end 0))
                  (lst (cdr (assoc list-var context)))
                  (expanded ""))
             (dolist (elem (if (listp lst) lst nil))
@@ -170,9 +172,9 @@ fn oracle_prop_template_loop_blocks() {
                         start (+ (match-beginning 0)
                                  (length (format "%s" elem)))))
                 (setq expanded (concat expanded iteration))))
-            (setq result (concat (substring result 0 (match-beginning 0))
+            (setq result (concat (substring result 0 block-start)
                                  expanded
-                                 (substring result (match-end 0))))))
+                                 (substring result block-end)))))
         result)))
   (unwind-protect
       (let ((ctx '(("items" . ("apple" "banana" "cherry"))
@@ -257,6 +259,8 @@ fn oracle_prop_template_combined_features() {
           (let* ((item-var (match-string 1 result))
                  (list-var (match-string 2 result))
                  (body (match-string 3 result))
+                 (block-start (match-beginning 0))
+                 (block-end (match-end 0))
                  (lst (cdr (assoc list-var context)))
                  (expanded ""))
             (dolist (elem (if (listp lst) lst nil))
@@ -269,9 +273,9 @@ fn oracle_prop_template_combined_features() {
                         start (+ (match-beginning 0)
                                  (length (format "%s" elem)))))
                 (setq expanded (concat expanded iteration))))
-            (setq result (concat (substring result 0 (match-beginning 0))
+            (setq result (concat (substring result 0 block-start)
                                  expanded
-                                 (substring result (match-end 0))))))
+                                 (substring result block-end)))))
         result)))
   (fset 'neovm--tpl-render
     (lambda (template context)

@@ -281,13 +281,13 @@ fn oracle_prop_text_prop_comp_property_change_navigation() {
         (when pos (setq bwd (cons pos bwd))))
       ;; Forward with limit
       (let ((fwd-lim nil) (pos 0))
-        (while pos
+        (while (and pos (< pos 10))
           (setq pos (next-property-change pos s 10))
           (when pos (setq fwd-lim (cons pos fwd-lim))))
         (setq fwd-lim (nreverse fwd-lim))
         ;; Backward with limit
         (let ((bwd-lim nil) (pos (length s)))
-          (while pos
+          (while (and pos (> pos 10))
             (setq pos (previous-property-change pos s 10))
             (when pos (setq bwd-lim (cons pos bwd-lim))))
           (list
@@ -507,7 +507,7 @@ fn oracle_prop_text_prop_comp_buffer_vs_string_properties() {
                   (sub-face-after (get-text-property 2 'face sub)))
               ;; next-property-change in buffer
               (let ((npc (let ((positions nil) (pos 1))
-                           (while pos
+                           (while (and pos (< pos (point-max)))
                              (setq pos (next-property-change pos nil (point-max)))
                              (when (and pos (< pos (point-max)))
                                (setq positions (cons pos positions))))
