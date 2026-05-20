@@ -6729,12 +6729,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "debug-timer-check",
-        |_ctx, args| builtin_debug_timer_check(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "dbus-close-inhibitor-lock",
         |_ctx, args| builtin_dbus_close_inhibitor_lock(args),
         0,

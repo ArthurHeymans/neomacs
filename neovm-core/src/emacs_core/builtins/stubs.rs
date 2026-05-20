@@ -19,15 +19,6 @@ pub(crate) fn builtin_fontset_list_all(args: Vec<Value>) -> EvalResult {
 }
 
 // =========================================================================
-// atimer.c gap-fill stubs
-// =========================================================================
-
-pub(crate) fn builtin_debug_timer_check(args: Vec<Value>) -> EvalResult {
-    expect_args("debug-timer-check", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-// =========================================================================
 // inotify.c gap-fill stubs
 // =========================================================================
 

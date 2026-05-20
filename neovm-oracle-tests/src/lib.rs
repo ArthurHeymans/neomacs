@@ -66,6 +66,8 @@ mod assoc_delete_semantics;
 #[path = "assoc-member-strict-edge-semantics.rs"]
 mod assoc_member_strict_edge_semantics;
 mod assq;
+#[path = "atimer-debug-availability-semantics.rs"]
+mod atimer_debug_availability_semantics;
 #[path = "autoload-semantics.rs"]
 mod autoload_semantics;
 mod backquote;

@@ -6300,7 +6300,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
     assert_eq!(
         vm_eval_str(
             r##"(list
-                 (null (debug-timer-check))
+                 (not (fboundp 'debug-timer-check))
                  (let ((w (inotify-add-watch "/tmp" nil nil)))
                    (list (consp w)
                          (inotify-valid-p w)
