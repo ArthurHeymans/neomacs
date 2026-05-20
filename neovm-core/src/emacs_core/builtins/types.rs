@@ -207,8 +207,9 @@ pub(crate) fn builtin_vectorp(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_vector_or_char_table_p(args: Vec<Value>) -> EvalResult {
     expect_args("vector-or-char-table-p", &args, 1)?;
+    let is_plain_vector = args[0].is_vector() && !super::chartable::is_bool_vector(&args[0]);
     Ok(Value::bool_val(
-        args[0].is_vector() || super::chartable::is_char_table(&args[0]),
+        is_plain_vector || super::chartable::is_char_table(&args[0]),
     ))
 }
 

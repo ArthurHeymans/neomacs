@@ -3189,6 +3189,14 @@ fn compare_value_lt_inner(
         return Ok(ordering);
     }
 
+    if lhs.is_nil() && rhs.is_cons() {
+        return Ok(Ordering::Less);
+    }
+
+    if lhs.is_cons() && rhs.is_nil() {
+        return Ok(Ordering::Greater);
+    }
+
     if let (Some(left), Some(right)) =
         (symbol_name_for_value_lt(lhs), symbol_name_for_value_lt(rhs))
     {

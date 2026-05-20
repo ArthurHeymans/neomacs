@@ -648,7 +648,10 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
                 Ok(Value::list(std::mem::take(&mut sorted_values)))
             }
         }
-        ValueKind::Veclike(VecLikeType::Vector) => {
+        ValueKind::Veclike(VecLikeType::Vector)
+            if !super::chartable::is_bool_vector(&args[0])
+                && !super::chartable::is_char_table(&args[0]) =>
+        {
             let values = args[0].as_vector_data().unwrap().clone();
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(args[0]);
