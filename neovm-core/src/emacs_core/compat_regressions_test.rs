@@ -522,6 +522,51 @@ fn sqlite_execute_rejects_non_handle() {
 }
 
 #[test]
+fn sqlite_execute_values_validation_signals_sqlite_error() {
+    crate::test_utils::init_test_tracing();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
+        db,
+        Value::string("select ?"),
+        Value::fixnum(9),
+    ])
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
+
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
+        db,
+        Value::string("select ?"),
+        Value::vector(vec![Value::cons(Value::fixnum(1), Value::fixnum(2))]),
+    ])
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn sqlite_select_values_validation_signals_sqlite_error() {
+    crate::test_utils::init_test_tracing();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+
+    let err = crate::emacs_core::sqlite::builtin_sqlite_select(vec![
+        db,
+        Value::string("select ?"),
+        Value::fixnum(9),
+    ])
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn inotify_watch_lifecycle() {
     crate::test_utils::init_test_tracing();
     let watch = crate::emacs_core::builtins::builtin_inotify_add_watch(vec![

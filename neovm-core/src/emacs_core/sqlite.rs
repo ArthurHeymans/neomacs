@@ -250,10 +250,7 @@ fn bind_elisp_value(
                     .map_err(|e| sqlite_err(&e.to_string()))
             }
         }
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::string("Invalid SQLite value type"), *val],
-        )),
+        _ => Err(sqlite_err("invalid argument")),
     }
 }
 
@@ -422,10 +419,7 @@ fn bind_values(stmt: &mut rusqlite::Statement<'_>, values: &Value) -> Result<(),
             values.as_vector_data().unwrap().to_vec()
         }
         _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::string("VALUES must be a list or a vector"), *values],
-            ));
+            return Err(sqlite_err("VALUES must be a list or a vector"));
         }
     };
 
