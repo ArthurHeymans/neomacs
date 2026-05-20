@@ -2,7 +2,7 @@
 //! catch/throw, unwind-protect, prog1/prog2, condition-case handlers.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_via_binary};
 
 // --- catch / throw ---
 
@@ -70,7 +70,7 @@ fn oracle_prog1_side_effects() {
 #[test]
 fn oracle_condition_case_error_handler_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm(
+    let (o, n) = eval_oracle_and_neovm_via_binary(
         r#"(condition-case err (error "test-message") (error (symbol-name (car err))))"#,
     );
     assert_ok_eq("\"error\"", &o, &n);
