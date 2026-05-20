@@ -11,8 +11,7 @@ fn oracle_prop_syntax_table_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(list (syntax-table-p (standard-syntax-table)) (syntax-table-p (copy-syntax-table)) (syntax-table-p (make-syntax-table)) (eq (char-table-subtype (standard-syntax-table)) 'syntax-table))";
-    let (oracle, neovm) = eval_oracle_and_neovm(form);
-    assert_ok_eq("(t t t t)", &oracle, &neovm);
+    assert_oracle_parity_with_bootstrap(form);
 }
 
 #[test]
