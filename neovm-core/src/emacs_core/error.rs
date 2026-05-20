@@ -310,6 +310,9 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     let print_circle = obarray
         .symbol_value("print-circle")
         .is_some_and(|v| v.is_truthy());
+    let print_quoted = obarray
+        .symbol_value("print-quoted")
+        .map_or(true, |v| v.is_truthy());
     let print_symbols_bare = obarray
         .symbol_value("print-symbols-bare")
         .is_some_and(|v| v.is_truthy());
@@ -345,6 +348,7 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
         None
     };
     let mut opts = PrintOptions::new(print_gensym, print_circle, print_level, print_length);
+    opts.print_quoted = print_quoted;
     opts.print_symbols_bare = print_symbols_bare;
     opts.print_escape_newlines = print_escape_newlines;
     opts.print_escape_nonascii = print_escape_nonascii;
@@ -511,6 +515,11 @@ fn format_list_shorthand_in_state(
             "#s{}",
             format_value_in_state(obarray, buffers, frames, threads, &payload, options)
         ));
+    }
+
+    let is_reader_shorthand = matches!(head, "quote" | "function" | "`" | "," | ",@");
+    if is_reader_shorthand && !options.print_quoted {
+        return None;
     }
 
     let (prefix, quoted, nested_options) = match head {
@@ -729,6 +738,11 @@ fn format_list_shorthand_bytes_in_state(
             obarray, buffers, frames, threads, &payload, options,
         ));
         return Some(out);
+    }
+
+    let is_reader_shorthand = matches!(head, "quote" | "function" | "`" | "," | ",@");
+    if is_reader_shorthand && !options.print_quoted {
+        return None;
     }
 
     let (prefix, quoted, nested_options) = match head {

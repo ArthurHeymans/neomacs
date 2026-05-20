@@ -58,7 +58,7 @@ fn oracle_prop_read_print_comprehensive_prin1_all_types() {
   ;; Character
   (prin1-to-string ?A)
   (prin1-to-string ?\n)
-  (prin1-to-string ?\\))"#;
+  (prin1-to-string ?\\))"##;
     assert_oracle_parity_with_bootstrap(form);
 }
 
@@ -328,7 +328,7 @@ fn oracle_prop_read_print_comprehensive_format_percent_S() {
 fn oracle_prop_read_print_comprehensive_reader_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let form = r#"
+    let form = r##"
 (list
   ;; #'function reader macro
   (car (read-from-string "#'car"))

@@ -10253,6 +10253,41 @@ fn prin1_to_string_respects_print_overrides_for_control_characters() {
 }
 
 #[test]
+fn prin1_to_string_honors_print_quoted_binding_and_override() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (list
+             (let ((print-quoted t))
+               (prin1-to-string '(quote foo)))
+             (let ((print-quoted nil))
+               (prin1-to-string '(quote foo)))
+             (let ((print-quoted nil))
+               (prin1-to-string '(function bar)))
+             (let ((print-quoted nil))
+               (prin1-to-string '(quote foo) nil '((quoted . t))))
+             (let ((print-quoted t))
+               (prin1-to-string '(quote foo) nil '((quoted . nil)))))
+            "#,
+        )
+        .expect("prin1-to-string should honor GNU print-quoted semantics");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::string("'foo"),
+            Value::string("(quote foo)"),
+            Value::string("(function bar)"),
+            Value::string("'foo"),
+            Value::string("(quote foo)"),
+        ])
+    );
+}
+
+#[test]
 fn prin1_to_string_honors_print_number_table_string_alias() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

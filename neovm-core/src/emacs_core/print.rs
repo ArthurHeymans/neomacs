@@ -16,10 +16,11 @@ use super::value::{
 };
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PrintOptions {
     pub print_gensym: bool,
     pub print_circle: bool,
+    pub print_quoted: bool,
     pub print_symbols_bare: bool,
     pub print_escape_newlines: bool,
     pub print_escape_nonascii: bool,
@@ -32,6 +33,12 @@ pub struct PrintOptions {
     pub float_output_format: Option<Value>,
     pub print_noescape: bool,
     backquote_output_level: usize,
+}
+
+impl Default for PrintOptions {
+    fn default() -> Self {
+        Self::new(false, false, None, None)
+    }
 }
 
 fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
@@ -67,6 +74,7 @@ impl PrintOptions {
         Self {
             print_gensym,
             print_circle: false,
+            print_quoted: true,
             print_symbols_bare: false,
             print_escape_newlines: false,
             print_escape_nonascii: false,
@@ -92,6 +100,7 @@ impl PrintOptions {
         Self {
             print_gensym,
             print_circle,
+            print_quoted: true,
             print_symbols_bare: false,
             print_escape_newlines: false,
             print_escape_nonascii: false,
@@ -1492,7 +1501,12 @@ fn print_list_shorthand_with_buffers(
         }
         return None;
     }
-    let (prefix, nested_options) = match symbol_shorthand(head)? {
+    let shorthand = symbol_shorthand(head)?;
+    if !options.print_quoted {
+        return None;
+    }
+
+    let (prefix, nested_options) = match shorthand {
         SymbolShorthand::Quote => ("'", options),
         SymbolShorthand::Function => ("#'", options),
         SymbolShorthand::Backquote => ("`", options.enter_backquote()),
@@ -2350,7 +2364,12 @@ fn print_list_shorthand_bytes(value: &Value, options: PrintOptions) -> Option<Ve
         return Some(out);
     }
 
-    let (prefix, nested_options): (&[u8], PrintOptions) = match symbol_shorthand(head)? {
+    let shorthand = symbol_shorthand(head)?;
+    if !options.print_quoted {
+        return None;
+    }
+
+    let (prefix, nested_options): (&[u8], PrintOptions) = match shorthand {
         SymbolShorthand::Quote => (b"'", options),
         SymbolShorthand::Function => (b"#'", options),
         SymbolShorthand::Backquote => (b"`", options.enter_backquote()),

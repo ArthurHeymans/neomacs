@@ -1367,8 +1367,13 @@ pub(super) fn print_value_eval(eval: &super::eval::Context, value: &Value) -> St
 
 fn print_value_princ_list_shorthand(
     value: &Value,
+    print_quoted: bool,
     render: &dyn Fn(&Value) -> String,
 ) -> Option<String> {
+    if !print_quoted {
+        return None;
+    }
+
     let items = super::value::list_to_vec(value)?;
     if items.len() != 2 {
         return None;
@@ -1394,7 +1399,9 @@ pub(super) fn print_value_princ(value: &Value) -> String {
         ValueKind::String => runtime_string_value(*value),
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         ValueKind::Cons => {
-            if let Some(shorthand) = print_value_princ_list_shorthand(value, &print_value_princ) {
+            if let Some(shorthand) =
+                print_value_princ_list_shorthand(value, true, &print_value_princ)
+            {
                 return shorthand;
             }
             let mut out = String::from("(");
@@ -1446,6 +1453,10 @@ pub(crate) fn print_value_princ_in_state(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
 ) -> String {
+    let print_quoted = ctx
+        .obarray
+        .symbol_value("print-quoted")
+        .map_or(true, |v| v.is_truthy());
     if super::terminal::pure::print_terminal_handle(value).is_some()
         || ctx.threads.thread_id_from_handle(value).is_some()
         || ctx.threads.mutex_id_from_handle(value).is_some()
@@ -1470,9 +1481,11 @@ pub(crate) fn print_value_princ_in_state(
             super::error::print_value_in_state(ctx, value)
         }
         ValueKind::Cons => {
-            if let Some(shorthand) = print_value_princ_list_shorthand(value, &|item| {
-                print_value_princ_in_state(ctx, item)
-            }) {
+            if let Some(shorthand) =
+                print_value_princ_list_shorthand(value, print_quoted, &|item| {
+                    print_value_princ_in_state(ctx, item)
+                })
+            {
                 return shorthand;
             }
             let mut out = String::from("(");
@@ -1632,6 +1645,9 @@ fn apply_print_override_setting(
         "gensym" => {
             options.print_gensym = value.is_truthy();
         }
+        "quoted" => {
+            options.print_quoted = value.is_truthy();
+        }
         "continuous-numbering" => {
             options.print_continuous_numbering = value.is_truthy();
             if !options.print_continuous_numbering {
@@ -1649,8 +1665,7 @@ fn apply_print_override_setting(
         }
         // GNU accepts these override keys by dynamically binding print
         // variables that Neomacs does not yet model in PrintOptions.
-        "quoted"
-        | "charset-text-property"
+        "charset-text-property"
         | "unreadable-function"
         | "unreadeable-function"
         | "integers-as-characters" => {}
