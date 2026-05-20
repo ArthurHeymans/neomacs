@@ -17,9 +17,9 @@ fn oracle_next_property_change_finds() {
 fn oracle_next_property_change_none() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(
-        r#"(progn (switch-to-buffer (get-buffer-create "*npcn*")) (erase-buffer) (insert "abcdef") (next-property-change 1))"#,
+        r#"(progn (switch-to-buffer (get-buffer-create "*npcn*")) (erase-buffer) (insert "abcdef") (list (next-property-change 1) (next-property-change 1 nil t)))"#,
     );
-    assert_ok_eq("7", &o, &n);
+    assert_ok_eq("(nil 7)", &o, &n);
 }
 
 #[test]
