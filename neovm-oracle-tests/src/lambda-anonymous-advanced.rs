@@ -6,7 +6,10 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{
+    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
+    eval_oracle_and_neovm_with_bootstrap,
+};
 
 // ---------------------------------------------------------------------------
 // Lambda with complex parameter lists (&optional + &rest combined)
@@ -74,7 +77,7 @@ fn oracle_prop_lambda_adv_mapcar_closure_over_loop_var() {
                     (setq makers (nreverse makers))
                     ;; Call each maker with 100
                     (mapcar (lambda (f) (funcall f 100)) makers))"####;
-    let (o, n) = eval_oracle_and_neovm(form);
+    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
     assert_ok_eq("(100 101 102 103 104)", &o, &n);
 }
 

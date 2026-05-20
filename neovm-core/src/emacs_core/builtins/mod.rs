@@ -6753,54 +6753,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "lcms2-available-p",
-        |_ctx, args| builtin_lcms2_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "lcms-cie-de2000",
-        |_ctx, args| builtin_lcms_cie_de2000(args),
-        2,
-        Some(5),
-    );
-    ctx.defsubr(
-        "lcms-xyz->jch",
-        |_ctx, args| builtin_lcms_xyz_to_jch(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "lcms-jch->xyz",
-        |_ctx, args| builtin_lcms_jch_to_xyz(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "lcms-jch->jab",
-        |_ctx, args| builtin_lcms_jch_to_jab(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "lcms-jab->jch",
-        |_ctx, args| builtin_lcms_jab_to_jch(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "lcms-cam02-ucs",
-        |_ctx, args| builtin_lcms_cam02_ucs(args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "lcms-temp->white-point",
-        |_ctx, args| builtin_lcms_temp_to_white_point(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
         "neomacs-frame-geometry",
         |_ctx, args| builtin_neomacs_frame_geometry(args),
         0,

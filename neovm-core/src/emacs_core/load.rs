@@ -2275,6 +2275,30 @@ fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
 
     let mut hasher = Sha256::new();
     hasher.update(b"neomacs-bootstrap-source-fingerprint-v2\0");
+    hasher.update(b"rust-executable\0");
+    match std::env::current_exe().and_then(|path| {
+        let metadata = fs::metadata(&path)?;
+        Ok((path, metadata))
+    }) {
+        Ok((path, metadata)) => {
+            hasher.update([1]);
+            hasher.update(path.as_os_str().as_encoded_bytes());
+            hasher.update([0]);
+            hasher.update(metadata.len().to_le_bytes());
+            hasher.update([0]);
+            if let Ok(modified) = metadata.modified()
+                && let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
+            {
+                hasher.update(duration.as_secs().to_le_bytes());
+                hasher.update(duration.subsec_nanos().to_le_bytes());
+            }
+        }
+        Err(err) => {
+            hasher.update([0]);
+            hasher.update(err.to_string().as_bytes());
+        }
+    }
+    hasher.update([0xff]);
     for path in files {
         let rel = path.strip_prefix(runtime_root).unwrap_or(&path);
         hasher.update(rel.as_os_str().as_encoded_bytes());
