@@ -21,7 +21,38 @@ fn oracle_dbus_inhibitor_lock_argument_checks_and_initial_registry() {
    (error (cons (car err) (cdr err))))
  (condition-case err
      (dbus-make-inhibitor-lock "sleep" 2)
+   (error (cons (car err) (cdr err))))
+ (condition-case err
+     (dbus-make-inhibitor-lock "shutdown" "why")
    (error (cons (car err) (cdr err)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_dbus_inhibitor_lock_registry_and_call_arguments() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let (calls)
+  (fset 'dbus-call-method
+        (lambda (&rest args)
+          (push args calls)
+          -1))
+  (let* ((what (copy-sequence "shutdown"))
+         (lock1 (dbus-make-inhibitor-lock what "why"))
+         (reg1 (dbus-registered-inhibitor-locks))
+         (lock2 (dbus-make-inhibitor-lock what "why"))
+         (reg2 (dbus-registered-inhibitor-locks))
+         (copy-mutability
+          (progn
+            (setcar (car reg1) 99)
+            (dbus-registered-inhibitor-locks)))
+         (close1 (dbus-close-inhibitor-lock lock1))
+         (reg3 (dbus-registered-inhibitor-locks))
+         (close2 (dbus-close-inhibitor-lock lock1)))
+    (list lock1 lock2 calls reg1 reg2 copy-mutability close1 reg3 close2)))
 "#;
 
     assert_oracle_parity_with_bootstrap(form);

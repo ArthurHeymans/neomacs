@@ -1555,6 +1555,9 @@ pub struct Context {
     /// by `verify_interval_modification` before an insertion and replayed by
     /// `report_interval_modification` after the inserted text exists.
     pub(crate) interval_insert_in_front_hooks: Value,
+    /// GNU dbusbind.c `xd_registered_inhibitor_locks`: an alist whose entries
+    /// are `(LOCK WHAT WHY BLOCK)`.
+    pub(crate) dbus_registered_inhibitor_locks: Value,
     /// Match data from the last successful search/match operation.
     pub(crate) match_data: Option<MatchData>,
     /// Deferred after-change records, mirroring GNU Emacs's
@@ -4380,6 +4383,7 @@ impl Context {
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
+            dbus_registered_inhibitor_locks: Value::NIL,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -4548,6 +4552,7 @@ impl Context {
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
+            dbus_registered_inhibitor_locks: Value::NIL,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -4765,6 +4770,9 @@ impl Context {
         }
         if !self.interval_insert_in_front_hooks.is_nil() {
             visit(self.interval_insert_in_front_hooks);
+        }
+        if !self.dbus_registered_inhibitor_locks.is_nil() {
+            visit(self.dbus_registered_inhibitor_locks);
         }
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);

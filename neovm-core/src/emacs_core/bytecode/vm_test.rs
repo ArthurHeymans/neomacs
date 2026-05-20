@@ -6307,7 +6307,10 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                          (inotify-rm-watch w)))
                  (not (fboundp 'inotify-watch-list))
                  (not (fboundp 'inotify-allocated-p))
-                 (null (dbus-make-inhibitor-lock "session" "app"))
+                 (eq (condition-case err
+                         (dbus-make-inhibitor-lock "session" "app")
+                       (void-function (car err)))
+                     'void-function)
                  (condition-case err
                      (dbus-close-inhibitor-lock nil)
                    (wrong-type-argument (car err)))

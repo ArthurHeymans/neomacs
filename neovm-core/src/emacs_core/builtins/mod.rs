@@ -6730,19 +6730,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "dbus-close-inhibitor-lock",
-        |_ctx, args| builtin_dbus_close_inhibitor_lock(args),
+        builtin_dbus_close_inhibitor_lock,
         0,
         None,
     );
     ctx.defsubr(
         "dbus-make-inhibitor-lock",
-        |_ctx, args| builtin_dbus_make_inhibitor_lock(args),
+        builtin_dbus_make_inhibitor_lock,
         0,
         None,
     );
     ctx.defsubr(
         "dbus-registered-inhibitor-locks",
-        |_ctx, args| builtin_dbus_registered_inhibitor_locks(args),
+        builtin_dbus_registered_inhibitor_locks,
         0,
         None,
     );
