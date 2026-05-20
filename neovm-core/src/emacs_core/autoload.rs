@@ -420,18 +420,7 @@ pub(crate) fn plan_autoload_do_load_in_state(
         None
     };
 
-    // Before loading, check if the function cell has already been resolved
-    // (i.e., a previous load of the same file already defined this function).
-    // This prevents redundant re-loads that can cause side effects like
-    // advice being installed multiple times.
     if let Some(name) = funname {
-        if let Some(current) = obarray.symbol_function_id(name) {
-            if !is_autoload_value(&current) {
-                // The function is already defined (not an autoload) — a previous
-                // load already resolved it. Return the current definition.
-                return Ok(AutoloadDoLoadPlan::Return(current));
-            }
-        }
         if let Some(override_value) =
             super::eval::compiler_function_override_in_obarray(obarray, name)
         {
@@ -481,7 +470,7 @@ pub(crate) fn finish_autoload_do_load_in_state(
                     ));
                 }
             }
-            return Ok(func);
+            return Ok(obarray.indirect_function_id(name).unwrap_or(func));
         }
     }
     Ok(Value::NIL)

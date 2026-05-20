@@ -7265,7 +7265,15 @@ impl Context {
                                 vec![f, Value::from_sym_id(sym_id), Value::NIL],
                             )?;
                             match self.obarray.symbol_function_id(sym_id) {
-                                Some(reloaded) => reloaded,
+                                Some(reloaded) => {
+                                    if let Some(alias_id) = reloaded.as_symbol_id() {
+                                        self.obarray
+                                            .indirect_function_id(alias_id)
+                                            .unwrap_or(reloaded)
+                                    } else {
+                                        reloaded
+                                    }
+                                }
                                 _ => {
                                     return Err(signal(
                                         "void-function",
