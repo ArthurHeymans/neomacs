@@ -1329,22 +1329,27 @@ pub(crate) fn obarray_hash_lisp_string(s: &crate::heap_types::LispString, len: u
     } else {
         std::borrow::Cow::Borrowed(s)
     };
-    let hash = normalized.as_bytes().iter().fold(
-        if normalized.is_multibyte() {
-            1u64
-        } else {
-            0u64
-        },
-        |h, b| h.wrapping_mul(31).wrapping_add(*b as u64),
-    );
-    hash as usize % len
+    obarray_hash_bytes(normalized.as_bytes(), len)
 }
 
 pub(crate) fn obarray_hash(s: &str, len: usize) -> usize {
-    let hash = s
-        .bytes()
-        .fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(b as u64));
-    hash as usize % len
+    obarray_hash_bytes(s.as_bytes(), len)
+}
+
+fn obarray_hash_bytes(bytes: &[u8], len: usize) -> usize {
+    if len == 0 {
+        return 0;
+    }
+
+    let hash = crate::emacs_core::hashtab::reduce_emacs_uint_to_hash_hash(
+        crate::emacs_core::hashtab::emacs_hash_char_array(bytes),
+    );
+
+    if len.is_power_of_two() {
+        crate::emacs_core::hashtab::knuth_hash_index(hash, len.trailing_zeros())
+    } else {
+        (hash as usize) % len
+    }
 }
 
 /// Search a bucket chain (cons list) for a symbol with the given name.
@@ -1500,11 +1505,17 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
         }
 
         // Not found: create symbol and prepend to bucket chain.  GNU
-        // lread.c:intern_driver allocates the symbol with Fmake_symbol
-        // using the exact STRING object supplied to `intern`, so later
-        // mutation of that string is visible through `symbol-name`.
+        // canonicalizes ascii-only multibyte symbol names to unibyte before
+        // interning; non-ascii/raw names keep their exact Lisp string object.
+        let symbol_name_value = if name.is_ascii() && name.is_multibyte() {
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                name.as_bytes().to_vec(),
+            ))
+        } else {
+            args[0]
+        };
         let sym = Value::from_sym_id(
-            crate::emacs_core::intern::make_uninterned_symbol_with_name_value(args[0]),
+            crate::emacs_core::intern::make_uninterned_symbol_with_name_value(symbol_name_value),
         );
         let new_bucket = Value::cons(sym, bucket);
         let _ = obarray_val.set_vector_slot(bucket_idx, new_bucket);

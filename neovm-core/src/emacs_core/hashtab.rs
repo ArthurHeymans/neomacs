@@ -149,7 +149,7 @@ fn read_u64_ne(bytes: &[u8]) -> u64 {
     u64::from_ne_bytes(arr)
 }
 
-fn emacs_hash_char_array(bytes: &[u8]) -> u64 {
+pub(crate) fn emacs_hash_char_array(bytes: &[u8]) -> u64 {
     let mut hash = bytes.len() as u64;
     let word_bytes = std::mem::size_of::<u64>();
     if bytes.len() >= word_bytes {
@@ -311,7 +311,7 @@ fn reduce_emacs_uint_to_fixnum(x: u64) -> i64 {
     }
 }
 
-fn reduce_emacs_uint_to_hash_hash(x: u64) -> u32 {
+pub(crate) fn reduce_emacs_uint_to_hash_hash(x: u64) -> u32 {
     (x ^ (x >> 32)) as u32
 }
 
@@ -326,7 +326,7 @@ fn sxhash_eq_fixnum_uint(raw: u64) -> u64 {
     raw ^ xtype
 }
 
-fn knuth_hash_index(hash: u32, bits: u32) -> usize {
+pub(crate) fn knuth_hash_index(hash: u32, bits: u32) -> usize {
     if bits == 0 {
         return 0;
     }
