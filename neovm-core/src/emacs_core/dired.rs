@@ -1199,19 +1199,32 @@ fn predicate_callable_name(predicate: &Value) -> Option<&str> {
 }
 
 /// Context-backed variant of `file-attributes`.
-/// Resolves relative FILENAME against dynamic/default `default-directory`.
+/// Expands FILENAME and dispatches file-name handlers like GNU `file-attributes`.
 pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("file-attributes", &args, 1, 2)?;
 
-    // GNU Emacs (dired.c:1003-1006): If the filename is not a string
-    // (e.g., nil from buffer-file-name on a non-file buffer), return nil
-    // instead of signaling an error.
-    let filename = match args[0].as_lisp_string() {
-        Some(string) => dired_runtime_string(string),
+    // GNU dired.c:Ffile_attributes wraps expand-file-name in an all-error
+    // condition handler and returns nil if expansion fails or returns non-string.
+    let expanded = match super::fileio::builtin_expand_file_name(eval, vec![args[0], Value::NIL]) {
+        Ok(value) => value,
+        Err(_) => return Ok(Value::NIL),
+    };
+    let filename_lisp = match expanded.as_lisp_string() {
+        Some(string) => string.clone(),
         None => return Ok(Value::NIL),
     };
-    let filename =
-        super::fileio::resolve_filename_in_state(&eval.obarray, &[], &eval.buffers, &filename);
+    let filename = dired_runtime_string(&filename_lisp);
+
+    let mut handler_args = vec![Value::heap_string(filename_lisp.clone())];
+    if args.get(1).is_some_and(|value| value.is_truthy()) {
+        handler_args.push(args[1]);
+    }
+    if let Some(result) =
+        super::fileio::dispatch_file_handler(eval, "file-attributes", &handler_args)?
+    {
+        return Ok(result);
+    }
+
     // GNU Emacs: return string names unless ID-FORMAT is nil or 'integer.
     let id_format_string = args
         .get(1)

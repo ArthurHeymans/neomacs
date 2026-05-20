@@ -115,3 +115,56 @@ fn oracle_file_attributes_symlink_type_and_dangling_link_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_file_attributes_handler_and_expand_error_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-fileattrs-calls nil)
+  (defun neomacs--oracle-fileattrs-handler (operation &rest args)
+    (push (cons operation args) neomacs--oracle-fileattrs-calls)
+    (cond
+     ((eq operation 'file-attributes)
+      (list t 1 2 3 nil nil nil 0 "drwx------" nil 1 1))
+     ((eq operation 'expand-file-name)
+      17)
+     (t
+      (let ((file-name-handler-alist nil))
+        (apply operation args)))))
+  (unwind-protect
+      (list
+       ;; GNU catches expand-file-name errors in file-attributes and returns nil.
+       (let ((file-name-handler-alist
+              '(("\\`/oracle-fileattrs-root/" . neomacs--oracle-fileattrs-handler)))
+             (default-directory "/oracle-fileattrs-root/"))
+         (list
+          (file-attributes "child")
+          neomacs--oracle-fileattrs-calls))
+       (setq neomacs--oracle-fileattrs-calls nil)
+       ;; Restricting operations makes expand-file-name skip the handler; GNU
+       ;; then dispatches file-attributes with the expanded absolute name.
+       (progn
+         (put 'neomacs--oracle-fileattrs-handler 'operations '(file-attributes))
+         (let ((file-name-handler-alist
+                '(("\\`/oracle-fileattrs-root/" . neomacs--oracle-fileattrs-handler)))
+               (default-directory "/oracle-fileattrs-root/"))
+           (list
+            (file-attributes "child")
+            neomacs--oracle-fileattrs-calls)))
+       (setq neomacs--oracle-fileattrs-calls nil)
+       ;; Non-nil ID-FORMAT is forwarded to modern handlers.
+       (let ((file-name-handler-alist
+              '(("\\`/oracle-fileattrs-root/" . neomacs--oracle-fileattrs-handler)))
+             (default-directory "/oracle-fileattrs-root/"))
+         (list
+          (file-attributes "child" 'string)
+          neomacs--oracle-fileattrs-calls)))
+    (put 'neomacs--oracle-fileattrs-handler 'operations nil)
+    (fmakunbound 'neomacs--oracle-fileattrs-handler)
+    (makunbound 'neomacs--oracle-fileattrs-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
