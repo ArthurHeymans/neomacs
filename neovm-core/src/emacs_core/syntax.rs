@@ -778,10 +778,7 @@ fn skip_syntax_forward_with_options(
     limit: Option<usize>,
     honor_properties: bool,
 ) -> usize {
-    let classes: Vec<SyntaxClass> = syntax_chars
-        .chars()
-        .filter_map(SyntaxClass::from_char)
-        .collect();
+    let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
     let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
     let base = buf.point_min();
@@ -808,7 +805,7 @@ fn skip_syntax_forward_with_options(
             honor_properties,
         )
         .class;
-        if !classes.contains(&syn) {
+        if classes.contains(&syn) == negate {
             break;
         }
         idx += 1;
@@ -836,10 +833,7 @@ fn skip_syntax_backward_with_options(
     limit: Option<usize>,
     honor_properties: bool,
 ) -> usize {
-    let classes: Vec<SyntaxClass> = syntax_chars
-        .chars()
-        .filter_map(SyntaxClass::from_char)
-        .collect();
+    let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
     let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
     let base = buf.point_min();
@@ -864,7 +858,7 @@ fn skip_syntax_backward_with_options(
             honor_properties,
         )
         .class;
-        if !classes.contains(&syn) {
+        if classes.contains(&syn) == negate {
             break;
         }
         idx -= 1;
@@ -872,6 +866,15 @@ fn skip_syntax_backward_with_options(
 
     let abs_char = accessible_char_start + idx;
     buf.text.char_to_emacs_byte(abs_char)
+}
+
+fn parse_skip_syntax_classes(syntax_chars: &str) -> (Vec<SyntaxClass>, bool) {
+    let mut chars = syntax_chars.chars();
+    let negate = matches!(chars.clone().next(), Some('^'));
+    if negate {
+        chars.next();
+    }
+    (chars.filter_map(SyntaxClass::from_char).collect(), negate)
 }
 
 /// Scan for balanced expressions (sexps).
@@ -2482,7 +2485,7 @@ fn scan_forward_comment_body(
                     );
                     let flags2 = entry2.flags;
                     if flags2.contains(SyntaxFlags::COMMENT_END_SECOND) {
-                        let se_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
+                        let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                         if se_b == style_b {
                             buf.goto_char(next_pos + ch2.len_utf8());
                             nesting -= 1;

@@ -880,6 +880,54 @@ fn forward_comment_skips_whitespace_and_returns_nil() {
 }
 
 #[test]
+fn skip_syntax_forward_honors_complement_marker() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("  hello");
+        buf.goto_char(buf.point_min());
+    }
+
+    let out = builtin_skip_syntax_forward(&mut eval, vec![Value::string("^ w")]).unwrap();
+    assert_eq!(out, Value::fixnum(0));
+    let point_1 = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .point_char() as i64
+        + 1;
+    assert_eq!(point_1, 1);
+}
+
+#[test]
+fn forward_comment_two_char_end_style_uses_first_ender_char() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
+        tbl.modify_syntax_entry('/', string_to_syntax(". 124b").unwrap());
+        tbl.modify_syntax_entry('*', string_to_syntax(". 23").unwrap());
+        tbl.modify_syntax_entry('\n', string_to_syntax("> b").unwrap());
+        buf.insert("code /* block comment */ more // line comment\nrest");
+        buf.goto_char(buf.point_min() + 5);
+    }
+
+    let out = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    assert_eq!(out, Value::T);
+    let point_1 = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .point_char() as i64
+        + 1;
+    assert_eq!(point_1, 25);
+}
+
+#[test]
 fn forward_comment_validates_arity_and_type() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
