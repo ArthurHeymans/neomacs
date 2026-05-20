@@ -524,6 +524,26 @@ fn replace_regexp_subexp_unmatched_errors() {
 }
 
 #[test]
+fn replace_regexp_subexp_past_gnu_search_regs_errors_out_of_range() {
+    crate::test_utils::init_test_tracing();
+    let result = call_replace_regexp_in_string(vec![
+        Value::string("cat"),
+        Value::string("dog"),
+        Value::string("Cat sat on cat mat with cat"),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(10),
+    ]);
+
+    assert!(matches!(
+        result,
+        Err(crate::emacs_core::error::Flow::Signal(sig))
+            if sig.symbol_name() == "args-out-of-range"
+                && sig.data == vec![Value::fixnum(10), Value::fixnum(0), Value::fixnum(6)]
+    ));
+}
+
+#[test]
 fn replace_regexp_preserves_case_when_fixedcase_nil() {
     crate::test_utils::init_test_tracing();
     let result = call_replace_regexp_in_string(vec![

@@ -336,6 +336,18 @@ fn replace_match_on_substring(
     subexp: usize,
     match_data: &Option<super::regex::MatchData>,
 ) -> Result<crate::heap_types::LispString, Flow> {
+    if let Some(md) = match_data
+        && subexp >= md.groups.len()
+    {
+        return Err(signal(
+            "args-out-of-range",
+            vec![
+                Value::fixnum(subexp as i64),
+                Value::fixnum(0),
+                Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+            ],
+        ));
+    }
     replace_match_lisp_string_with_syntax(
         source,
         replacement,

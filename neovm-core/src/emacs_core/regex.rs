@@ -49,6 +49,7 @@ use crate::emacs_core::regex_emacs::{
 use crate::heap_types::LispString;
 
 pub(crate) const REPLACE_MATCH_SUBEXP_MISSING: &str = "replace-match subexpression does not exist";
+const GNU_SEARCH_REGS_BASE_CAPACITY: usize = 7;
 const SEARCH_PATTERN_CACHE_SIZE: usize = 20;
 // GNU's `\=` assertion compares against the current buffer's PT_BYTE even
 // during `string-match` (`regex-emacs.c:5201`). A standalone string has no
@@ -60,7 +61,7 @@ const STRING_MATCH_AT_DOT_UNREACHABLE: usize = usize::MAX;
 /// (the public representation used by Elisp builtins).
 fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData {
     let num_groups = regs.num_regs();
-    let mut groups = Vec::with_capacity(num_groups);
+    let mut groups = Vec::with_capacity(gnu_search_regs_capacity(num_groups));
     for i in 0..num_groups {
         if regs.start[i] >= 0 && regs.end[i] >= 0 {
             groups.push(Some((
@@ -71,6 +72,7 @@ fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData 
             groups.push(None);
         }
     }
+    extend_to_gnu_search_regs_capacity(&mut groups);
     MatchData {
         groups,
         searched_string: None,
@@ -86,7 +88,7 @@ fn storage_rel_to_emacs_byte(text: &str, base_emacs_byte: usize, storage_pos: us
 
 fn buffer_match_data_from_registers(regs: &MatchRegisters, base_emacs_byte: usize) -> MatchData {
     let num_groups = regs.num_regs();
-    let mut groups = Vec::with_capacity(num_groups);
+    let mut groups = Vec::with_capacity(gnu_search_regs_capacity(num_groups));
     for i in 0..num_groups {
         if regs.start[i] >= 0 && regs.end[i] >= 0 {
             groups.push(Some((
@@ -97,12 +99,31 @@ fn buffer_match_data_from_registers(regs: &MatchRegisters, base_emacs_byte: usiz
             groups.push(None);
         }
     }
+    extend_to_gnu_search_regs_capacity(&mut groups);
     MatchData {
         groups,
         searched_string: None,
         searched_buffer: None,
         buffer_positions_are_bytes: true,
     }
+}
+
+fn gnu_search_regs_capacity(required: usize) -> usize {
+    if required <= GNU_SEARCH_REGS_BASE_CAPACITY {
+        GNU_SEARCH_REGS_BASE_CAPACITY
+    } else {
+        required.max(GNU_SEARCH_REGS_BASE_CAPACITY + (GNU_SEARCH_REGS_BASE_CAPACITY >> 1))
+    }
+}
+
+fn extend_to_gnu_search_regs_capacity(groups: &mut Vec<Option<(usize, usize)>>) {
+    groups.resize(gnu_search_regs_capacity(groups.len()), None);
+}
+
+fn gnu_single_group_vec(group: Option<(usize, usize)>) -> Vec<Option<(usize, usize)>> {
+    let mut groups = vec![group];
+    extend_to_gnu_search_regs_capacity(&mut groups);
+    groups
 }
 
 #[derive(Clone)]
@@ -909,10 +930,10 @@ fn find_forward_match_data_compiled(
         CompiledSearchPattern::Literal(literal) => {
             let (match_start, match_end) = literal_find(&text[start..limit], literal, case_fold)?;
             Some(MatchData {
-                groups: vec![Some((
+                groups: gnu_single_group_vec(Some((
                     offset + start + match_start,
                     offset + start + match_end,
-                ))],
+                ))),
                 searched_string: None,
                 searched_buffer: None,
                 buffer_positions_are_bytes: false,
@@ -1014,7 +1035,7 @@ fn string_char_match_data(searched_string: SearchedString, byte_md: MatchData) -
 
 fn single_group_match_data(start: usize, end: usize) -> MatchData {
     MatchData {
-        groups: vec![Some((start, end))],
+        groups: gnu_single_group_vec(Some((start, end))),
         searched_string: None,
         searched_buffer: None,
         buffer_positions_are_bytes: false,
@@ -1390,7 +1411,7 @@ pub fn search_forward(
         let match_end = start + rel_end;
         buf.goto_byte(match_end);
         *match_data = Some(MatchData {
-            groups: vec![Some((match_start, match_end))],
+            groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
             searched_buffer: Some(buf.id),
             buffer_positions_are_bytes: true,
@@ -1439,7 +1460,7 @@ pub fn search_backward(
         let match_end = limit + rel_end;
         buf.goto_byte(match_start);
         *match_data = Some(MatchData {
-            groups: vec![Some((match_start, match_end))],
+            groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
             searched_buffer: Some(buf.id),
             buffer_positions_are_bytes: true,
@@ -1510,7 +1531,7 @@ pub fn re_search_forward_with_posix(
                 case_fold,
             )
             .map(|(rel_start, rel_end)| MatchData {
-                groups: vec![Some((start + rel_start, start + rel_end))],
+                groups: gnu_single_group_vec(Some((start + rel_start, start + rel_end))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,
@@ -1604,10 +1625,10 @@ pub fn re_search_backward_with_posix(
                 case_fold,
             )
             .map(|(rel_start, rel_end)| MatchData {
-                groups: vec![Some((
+                groups: gnu_single_group_vec(Some((
                     region_start + limit_rel + rel_start,
                     region_start + limit_rel + rel_end,
-                ))],
+                ))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,
@@ -1794,7 +1815,7 @@ pub fn looking_at_with_posix(
             }
             let full_match = (start, start + literal_bytes.len());
             *match_data = Some(MatchData {
-                groups: vec![Some(full_match)],
+                groups: gnu_single_group_vec(Some(full_match)),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,

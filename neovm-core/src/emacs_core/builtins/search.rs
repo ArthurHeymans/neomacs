@@ -1673,6 +1673,18 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         if md_snapshot.is_none() {
             return Err(missing_subexp_signal(raw_subexp));
         }
+        if let Some(md) = md_snapshot.as_ref()
+            && subexp >= md.groups.len()
+        {
+            return Err(signal(
+                "args-out-of-range",
+                vec![
+                    Value::fixnum(subexp as i64),
+                    Value::fixnum(0),
+                    Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+                ],
+            ));
+        }
         return match crate::emacs_core::search::replace_match_lisp_string_with_syntax(
             source,
             newtext_lisp,
@@ -1692,6 +1704,18 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         .is_some_and(|m| m.searched_string.is_some())
     {
         return Err(signal("args-out-of-range", vec![Value::fixnum(0)]));
+    }
+    if let Some(md) = md_snapshot.as_ref()
+        && subexp >= md.groups.len()
+    {
+        return Err(signal(
+            "args-out-of-range",
+            vec![
+                Value::fixnum(subexp as i64),
+                Value::fixnum(0),
+                Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+            ],
+        ));
     }
 
     let current_id = buffers
