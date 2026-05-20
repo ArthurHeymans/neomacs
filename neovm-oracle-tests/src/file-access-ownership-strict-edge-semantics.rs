@@ -49,3 +49,51 @@ fn oracle_file_accessible_access_file_and_ownership_edges() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_access_file_handler_and_argument_order_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (setq neomacs--oracle-access-file-calls nil)
+  (defun neomacs--oracle-access-file-handler (operation &rest args)
+    (push (cons operation args) neomacs--oracle-access-file-calls)
+    'handler-result)
+  (unwind-protect
+      (let ((file-name-handler-alist
+             '(("\\`/oracle-access-root/" . neomacs--oracle-access-file-handler)))
+            (default-directory "/oracle-access-root/"))
+        (list
+         ;; GNU checks FILENAME and calls `expand-file-name' before checking
+         ;; STRING.  Without an `operations' property, this handler is eligible
+         ;; for `expand-file-name'; a non-string handler result is rejected
+         ;; before `access-file' reaches its own handler dispatch.
+         (condition-case err
+             (access-file "child" "Reading child")
+           (error (list (car err) (cdr err))))
+         neomacs--oracle-access-file-calls
+         (setq neomacs--oracle-access-file-calls nil)
+         (put 'neomacs--oracle-access-file-handler 'operations '(access-file))
+         ;; With `operations' restricted to `access-file', expansion skips the
+         ;; handler and `access-file' dispatches the expanded filename.  The
+         ;; handler's return value is returned directly.
+         (access-file "child" "Reading child")
+         neomacs--oracle-access-file-calls
+         (setq neomacs--oracle-access-file-calls nil)
+         (condition-case err
+             (access-file "child" 42)
+           (error (list (car err) (cdr err))))
+         neomacs--oracle-access-file-calls
+         (setq neomacs--oracle-access-file-calls nil)
+         (condition-case err
+             (access-file 42 "Reading child")
+           (error (list (car err) (cdr err))))
+         neomacs--oracle-access-file-calls))
+    (fmakunbound 'neomacs--oracle-access-file-handler)
+    (put 'neomacs--oracle-access-file-handler 'operations nil)
+    (makunbound 'neomacs--oracle-access-file-calls)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

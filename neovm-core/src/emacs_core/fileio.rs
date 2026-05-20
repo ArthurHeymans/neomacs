@@ -2808,8 +2808,9 @@ fn delete_file_compat_path(path: &Path, path_value: Value) -> Result<(), Flow> {
 /// `(access-file FILENAME STRING)`
 pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("access-file", &args, 2)?;
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let resolved = resolve_filename_lisp_for_eval(eval, &filename);
+    expect_lisp_string_strict(&args[0])?;
+    let expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let resolved = expect_lisp_filename_string_strict(&expanded)?;
     let operation = expect_string_strict(&args[1])?;
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
@@ -2823,11 +2824,7 @@ pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalR
     let path = lisp_file_name_to_path_buf(&resolved);
     match access_file_path(&path) {
         Ok(_) => Ok(Value::NIL),
-        Err(err) => Err(signal_file_action_error_value(
-            err,
-            &operation,
-            Value::heap_string(filename),
-        )),
+        Err(err) => Err(signal_file_action_error_value(err, &operation, args[0])),
     }
 }
 
