@@ -5,6 +5,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
+use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::BufferManager;
@@ -901,10 +902,91 @@ pub(crate) fn builtin_backward_char(
     builtin_forward_char(eval, vec![Value::fixnum(-n)])
 }
 
-/// Parse a skip-chars set matching GNU syntax.c skip_chars behavior.
-/// Handles `\` as escape character and `-` as range operator.
-fn parse_skip_chars_set(codes: &[u32]) -> (bool, Vec<u32>) {
-    let mut chars: Vec<u32> = Vec::new();
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SkipCharClass {
+    Alnum,
+    Alpha,
+    Blank,
+    Cntrl,
+    Digit,
+    Graph,
+    Lower,
+    Print,
+    Punct,
+    Space,
+    Upper,
+    Xdigit,
+    Ascii,
+    Word,
+    Nonascii,
+    Unibyte,
+    Multibyte,
+}
+
+#[derive(Clone, Debug)]
+struct SkipCharsSet {
+    negate: bool,
+    ranges: Vec<(u32, u32)>,
+    classes: Vec<SkipCharClass>,
+}
+
+/// Parse GNU ISO C character class syntax used by `skip_chars`.
+///
+/// Mirrors GNU `re_wctype_parse`: only a leading `[:name:]` token is a class;
+/// if the token is closed but the class name is invalid, `skip_chars` signals
+/// `Invalid ISO C character class`.  If there is no closing `:]`, the leading
+/// `[` is treated as an ordinary character by the caller.
+fn parse_skip_char_class(codes: &[u32], i: usize) -> Result<Option<(SkipCharClass, usize)>, Flow> {
+    if codes.get(i) != Some(&('[' as u32)) || codes.get(i + 1) != Some(&(':' as u32)) {
+        return Ok(None);
+    }
+
+    let mut end = i + 2;
+    while end + 1 < codes.len() {
+        if codes[end] == ':' as u32 && codes[end + 1] == ']' as u32 {
+            let name: String = codes[i + 2..end]
+                .iter()
+                .filter_map(|code| char::from_u32(*code))
+                .collect();
+            let class = match name.as_str() {
+                "alnum" => SkipCharClass::Alnum,
+                "alpha" => SkipCharClass::Alpha,
+                "blank" => SkipCharClass::Blank,
+                "cntrl" => SkipCharClass::Cntrl,
+                "digit" => SkipCharClass::Digit,
+                "graph" => SkipCharClass::Graph,
+                "lower" => SkipCharClass::Lower,
+                "print" => SkipCharClass::Print,
+                "punct" => SkipCharClass::Punct,
+                "space" => SkipCharClass::Space,
+                "upper" => SkipCharClass::Upper,
+                "xdigit" => SkipCharClass::Xdigit,
+                "ascii" => SkipCharClass::Ascii,
+                "word" => SkipCharClass::Word,
+                "nonascii" => SkipCharClass::Nonascii,
+                "unibyte" => SkipCharClass::Unibyte,
+                "multibyte" => SkipCharClass::Multibyte,
+                _ => {
+                    return Err(signal(
+                        "error",
+                        vec![Value::string("Invalid ISO C character class")],
+                    ));
+                }
+            };
+            return Ok(Some((class, end + 2)));
+        }
+        end += 1;
+    }
+
+    Ok(None)
+}
+
+/// Parse a skip-chars set matching GNU `syntax.c:skip_chars` behavior.
+/// Handles `\` as escape character, `-` as range operator, and ISO C
+/// character classes such as `[:alpha:]`.
+fn parse_skip_chars_set(codes: &[u32]) -> Result<SkipCharsSet, Flow> {
+    let mut ranges: Vec<(u32, u32)> = Vec::new();
+    let mut classes: Vec<SkipCharClass> = Vec::new();
     let mut negate = false;
     let mut i = 0;
 
@@ -914,6 +996,14 @@ fn parse_skip_chars_set(codes: &[u32]) -> (bool, Vec<u32>) {
     }
 
     while i < codes.len() {
+        if let Some((class, next_i)) = parse_skip_char_class(codes, i)? {
+            if !classes.contains(&class) {
+                classes.push(class);
+            }
+            i = next_i;
+            continue;
+        }
+
         // Handle backslash escape (GNU syntax.c: `\-` = literal `-`)
         let c = if codes[i] == '\\' as u32 && i + 1 < codes.len() {
             i += 1;
@@ -934,17 +1024,105 @@ fn parse_skip_chars_set(codes: &[u32]) -> (bool, Vec<u32>) {
             };
             i += 1;
             if c <= end_c {
-                for code in c..=end_c {
-                    if !chars.contains(&code) {
-                        chars.push(code);
-                    }
-                }
+                ranges.push((c, end_c));
             }
-        } else if !chars.contains(&c) {
-            chars.push(c);
+        } else {
+            ranges.push((c, c));
         }
     }
-    (negate, chars)
+
+    Ok(SkipCharsSet {
+        negate,
+        ranges,
+        classes,
+    })
+}
+
+fn skip_char_in_explicit_ranges(set: &SkipCharsSet, code: u32) -> bool {
+    set.ranges
+        .iter()
+        .any(|(start, end)| code >= *start && code <= *end)
+}
+
+fn skip_char_class_matches(class: SkipCharClass, code: u32, syntax_table: &SyntaxTable) -> bool {
+    match class {
+        SkipCharClass::Alnum => {
+            is_ascii_alpha_code(code) || is_ascii_digit_code(code) || non_ascii_alnum(code)
+        }
+        SkipCharClass::Alpha => is_ascii_alpha_code(code) || non_ascii_alpha(code),
+        SkipCharClass::Blank => {
+            code == b' ' as u32 || code == b'\t' as u32 || non_ascii_blank(code)
+        }
+        SkipCharClass::Cntrl => code < 0x20 || code == 0x7f,
+        SkipCharClass::Digit => is_ascii_digit_code(code),
+        SkipCharClass::Graph => {
+            if code <= 0xff {
+                code > b' ' as u32 && !(0x7f..=0xa0).contains(&code)
+            } else {
+                char::from_u32(code).is_some_and(|ch| !ch.is_control() && !ch.is_whitespace())
+            }
+        }
+        SkipCharClass::Lower => char::from_u32(code).is_some_and(char::is_lowercase),
+        SkipCharClass::Print => {
+            if code <= 0xff {
+                code >= b' ' as u32 && !(0x7f..=0x9f).contains(&code)
+            } else {
+                char::from_u32(code).is_some_and(|ch| !ch.is_control())
+            }
+        }
+        SkipCharClass::Punct => {
+            if code < 0x80 {
+                code > b' ' as u32
+                    && code < 0x7f
+                    && !is_ascii_alpha_code(code)
+                    && !is_ascii_digit_code(code)
+            } else {
+                syntax_table.char_syntax_code(code) != SyntaxClass::Word
+            }
+        }
+        SkipCharClass::Space => syntax_table.char_syntax_code(code) == SyntaxClass::Whitespace,
+        SkipCharClass::Upper => char::from_u32(code).is_some_and(char::is_uppercase),
+        SkipCharClass::Xdigit => (code as u8).is_ascii_hexdigit() && code <= 0x7f,
+        SkipCharClass::Ascii => code < 0x80,
+        SkipCharClass::Word => syntax_table.char_syntax_code(code) == SyntaxClass::Word,
+        SkipCharClass::Nonascii => code >= 0x80,
+        // Neomacs stores raw byte characters as Emacs character codes in the
+        // 0x3FFF80..0x3FFFFF range, matching GNU's BYTE8_TO_CHAR space.
+        SkipCharClass::Unibyte => code <= 0xff || (0x3f_ff80..=0x3f_ffff).contains(&code),
+        SkipCharClass::Multibyte => {
+            !skip_char_class_matches(SkipCharClass::Unibyte, code, syntax_table)
+        }
+    }
+}
+
+fn skip_char_matches(set: &SkipCharsSet, code: u32, syntax_table: &SyntaxTable) -> bool {
+    let in_set = set
+        .classes
+        .iter()
+        .any(|class| skip_char_class_matches(*class, code, syntax_table))
+        || skip_char_in_explicit_ranges(set, code);
+    if set.negate { !in_set } else { in_set }
+}
+
+fn non_ascii_alpha(code: u32) -> bool {
+    code >= 0x80 && char::from_u32(code).is_some_and(char::is_alphabetic)
+}
+
+fn is_ascii_alpha_code(code: u32) -> bool {
+    code <= 0x7f && (code as u8).is_ascii_alphabetic()
+}
+
+fn is_ascii_digit_code(code: u32) -> bool {
+    code <= 0x7f && (code as u8).is_ascii_digit()
+}
+
+fn non_ascii_alnum(code: u32) -> bool {
+    code >= 0x80 && char::from_u32(code).is_some_and(char::is_alphanumeric)
+}
+
+fn non_ascii_blank(code: u32) -> bool {
+    code >= 0x80
+        && char::from_u32(code).is_some_and(|ch| ch.is_whitespace() && ch != '\n' && ch != '\r')
 }
 
 /// (skip-chars-forward STRING &optional LIM)
@@ -962,10 +1140,11 @@ pub(crate) fn builtin_skip_chars_forward(
             ));
         }
     };
-    let (negate, char_set) = parse_skip_chars_set(&set_codes);
+    let char_set = parse_skip_chars_set(&set_codes)?;
     let current_id = ctx.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (start_pos, pos, limit, moved_chars) = {
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
+        let syntax_table = SyntaxTable::for_buffer(buf);
         let lim_byte = if args.len() > 1 && !args[1].is_nil() {
             char_pos_to_byte(buf, expect_int(&args[1])?)
         } else {
@@ -978,12 +1157,7 @@ pub(crate) fn builtin_skip_chars_forward(
 
         while pos < limit {
             if let Some(code) = buf.char_code_after(pos) {
-                let in_set = char_set.contains(&code);
-                if negate {
-                    if in_set {
-                        break;
-                    }
-                } else if !in_set {
+                if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
                 pos += buf
@@ -1018,10 +1192,11 @@ pub(crate) fn builtin_skip_chars_backward(
             ));
         }
     };
-    let (negate, char_set) = parse_skip_chars_set(&set_codes);
+    let char_set = parse_skip_chars_set(&set_codes)?;
     let current_id = ctx.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (pos, moved_chars) = {
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
+        let syntax_table = SyntaxTable::for_buffer(buf);
         let limit = if args.len() > 1 && !args[1].is_nil() {
             char_pos_to_byte(buf, expect_int(&args[1])?)
         } else {
@@ -1034,12 +1209,7 @@ pub(crate) fn builtin_skip_chars_backward(
         while pos > limit {
             // Find the character before `pos`.
             if let Some(code) = buf.char_code_before(pos) {
-                let in_set = char_set.contains(&code);
-                if negate {
-                    if in_set {
-                        break;
-                    }
-                } else if !in_set {
+                if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
                 pos -= buf
