@@ -198,12 +198,13 @@ fn oracle_prop_count_lines_patterns_accuracy_multiline() {
     ;; Count lines from point-min to every position
     (let ((pos-counts nil))
       (goto-char (point-min))
-      (while (<= (point) (point-max))
-        (let ((cl (count-lines (point-min) (point))))
-          (push (cons (point) cl) pos-counts))
-        (if (= (point) (point-max))
-            (goto-char (1+ (point-max)))
-          (forward-char 1)))
+      (let ((done nil))
+        (while (not done)
+          (let ((cl (count-lines (point-min) (point))))
+            (push (cons (point) cl) pos-counts))
+          (if (= (point) (point-max))
+              (setq done t)
+            (forward-char 1))))
       (push (list :pos-counts (nreverse pos-counts)) results))
     ;; Verify intermediate ranges add up
     ;; count-lines(1,mid) + count-lines(mid,max) should relate to total
