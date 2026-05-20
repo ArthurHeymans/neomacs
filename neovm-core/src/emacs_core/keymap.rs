@@ -683,6 +683,7 @@ fn lookup_in_keymap_level_impl(
     let mut cursor = keymap_binding_spine(keymap)?;
     let mut entries = 0;
     let mut t_binding: Option<Value> = None;
+    let mut nil_binding_found = false;
     while cursor.is_cons() {
         if is_list_keymap(&cursor) {
             break; // parent boundary
@@ -712,7 +713,12 @@ fn lookup_in_keymap_level_impl(
                             } else {
                                 result
                             };
-                            return Some(maybe_resolve_keyelt(val, resolve_keyelt));
+                            let val = maybe_resolve_keyelt(val, resolve_keyelt);
+                            if val.is_nil() {
+                                nil_binding_found = true;
+                            } else {
+                                return Some(val);
+                            }
                         }
                         // nil in char-table means unbound — fall through
                     }
@@ -731,8 +737,11 @@ fn lookup_in_keymap_level_impl(
                     let items = entry_car.as_vector_data().unwrap();
                     if idx < items.len() {
                         let val = items[idx];
-                        if !val.is_nil() {
-                            return Some(maybe_resolve_keyelt(val, resolve_keyelt));
+                        let val = maybe_resolve_keyelt(val, resolve_keyelt);
+                        if val.is_nil() {
+                            nil_binding_found = true;
+                        } else {
+                            return Some(val);
                         }
                     }
                 }
@@ -750,7 +759,11 @@ fn lookup_in_keymap_level_impl(
             if let Some(found) =
                 lookup_in_keymap_level_impl(&entry_car, event, t_ok, resolve_keyelt)
             {
-                return Some(found);
+                if found.is_nil() {
+                    nil_binding_found = true;
+                } else {
+                    return Some(found);
+                }
             }
             cursor = entry_cdr;
             continue;
@@ -761,7 +774,12 @@ fn lookup_in_keymap_level_impl(
             let binding_car = entry_car.cons_car();
             let binding_cdr = entry_car.cons_cdr();
             if events_match(&binding_car, event) {
-                return Some(maybe_resolve_keyelt(binding_cdr, resolve_keyelt));
+                let val = maybe_resolve_keyelt(binding_cdr, resolve_keyelt);
+                if val.is_nil() {
+                    nil_binding_found = true;
+                } else {
+                    return Some(val);
+                }
             }
             // Check for (t . COMMAND) default binding.
             // GNU keymap.c:425-429: when t_ok, record the first t binding
@@ -776,7 +794,11 @@ fn lookup_in_keymap_level_impl(
 
     // If no specific binding found but we have a t default binding, use it.
     // Matches GNU keymap.c:486-487.
-    t_binding
+    if nil_binding_found {
+        Some(Value::NIL)
+    } else {
+        t_binding
+    }
 }
 
 /// Get the parent keymap from a keymap (the tail after all alist entries).

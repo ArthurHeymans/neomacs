@@ -16,7 +16,9 @@ fn oracle_copy_keymap_is_keymap() {
 fn oracle_copy_keymap_returns_copy_not_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(
-        r#"(progn (let ((orig (make-sparse-keymap)) (cpy (copy-keymap orig))) (not (eq orig cpy))))"#,
+        r#"(let* ((orig (make-sparse-keymap))
+                  (cpy (copy-keymap orig)))
+             (not (eq orig cpy)))"#,
     );
     assert_ok_eq("t", &o, &n);
 }

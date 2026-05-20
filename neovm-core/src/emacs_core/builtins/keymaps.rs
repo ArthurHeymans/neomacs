@@ -277,7 +277,16 @@ pub(super) fn builtin_make_keymap(
 
 pub(crate) fn builtin_make_keymap_pure(args: &[Value]) -> EvalResult {
     expect_max_args("make-keymap", &args, 1)?;
-    Ok(make_list_keymap())
+    let keymap = make_list_keymap();
+    if let Some(prompt) = args.first()
+        && !prompt.is_nil()
+    {
+        let tail = keymap.cons_cdr();
+        if tail.is_cons() {
+            tail.set_cdr(Value::cons(*prompt, Value::NIL));
+        }
+    }
+    Ok(keymap)
 }
 
 /// (make-sparse-keymap &optional NAME) -> keymap

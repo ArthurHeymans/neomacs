@@ -5183,22 +5183,31 @@ pub(crate) fn builtin_keymap_get_keyelt(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_keymap_prompt(args: Vec<Value>) -> EvalResult {
     expect_args("keymap-prompt", &args, 1)?;
-    let map = args[0];
-    // A keymap is (keymap [PROMPT] . BINDINGS).
-    // If the arg is a cons whose car is the symbol `keymap`, check if cadr is a string.
-    if map.is_cons() {
-        let car = map.cons_car();
-        if car.is_symbol_named("keymap") {
-            let cdr = map.cons_cdr();
-            if cdr.is_cons() {
-                let cadr = cdr.cons_car();
-                if cadr.is_string() {
-                    return Ok(cadr);
-                }
+    Ok(keymap_prompt_scan(args[0]))
+}
+
+fn keymap_prompt_scan(map: Value) -> Value {
+    let mut cursor = map;
+    let mut seen = 0usize;
+    while cursor.is_cons() {
+        seen += 1;
+        if seen > 10_000 {
+            return Value::NIL;
+        }
+
+        let item = cursor.cons_car();
+        if item.is_string() {
+            return item;
+        }
+        if item.is_cons() && item.cons_car().is_symbol_named("keymap") {
+            let prompt = keymap_prompt_scan(item);
+            if !prompt.is_nil() {
+                return prompt;
             }
         }
+        cursor = cursor.cons_cdr();
     }
-    Ok(Value::NIL)
+    Value::NIL
 }
 
 pub(crate) fn plan_kill_emacs_request(
