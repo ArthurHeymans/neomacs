@@ -27,6 +27,18 @@ fn oracle_inotify_public_lifecycle_and_error_semantics() {
    (condition-case err
        (inotify-add-watch "/tmp" 'neomacs-unknown-aspect #'ignore)
      (error (cons (car err) (cdr err))))
+   ;; These are event-report symbols, not add-watch aspect symbols.
+   (condition-case err
+       (inotify-add-watch "/tmp" 'isdir #'ignore)
+     (error (cons (car err) (cdr err))))
+   (condition-case err
+       (inotify-add-watch "/tmp" 'q-overflow #'ignore)
+     (error (cons (car err) (cdr err))))
+   (mapcar (lambda (descriptor)
+             (condition-case err
+                 (inotify-rm-watch descriptor)
+               (error (cons (car err) (cdr err)))))
+           '((-1 . 0) (0 . -1) (0 . "id") ("wd" . 0) (0 0)))
    (let ((w (inotify-add-watch "/tmp" '(modify) #'ignore)))
      (list (consp w)
            (integerp (car w))

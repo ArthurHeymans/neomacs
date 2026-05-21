@@ -2301,14 +2301,41 @@ fn inotify_watch_descriptor_parts(value: &Value) -> Option<(i32, i64)> {
 }
 
 fn inotify_file_notify_error(message: &str, errno: Option<i32>, object: Option<Value>) -> Flow {
-    let mut payload = vec![Value::string(message)];
     if let Some(errno) = errno {
-        payload.push(Value::string(inotify_errno_message(errno)));
+        inotify_set_errno(errno);
     }
-    if let Some(object) = object {
-        payload.push(object);
+    let errno = errno.or_else(inotify_current_errno);
+    let mut tail = match object {
+        Some(object) if object.is_cons() => object,
+        Some(object) if !object.is_nil() => Value::list(vec![object]),
+        _ => Value::NIL,
+    };
+    if let Some(errno) = errno {
+        tail = Value::cons(Value::string(inotify_errno_message(errno)), tail);
     }
-    signal("file-notify-error", payload)
+    let raw_data = Value::cons(Value::string(message), tail);
+    crate::emacs_core::error::signal_with_data("file-notify-error", raw_data)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn inotify_set_errno(errno: i32) {
+    unsafe {
+        *libc::__errno_location() = errno;
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn inotify_set_errno(_errno: i32) {}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn inotify_current_errno() -> Option<i32> {
+    let errno = unsafe { *libc::__errno_location() };
+    (errno != 0).then_some(errno)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn inotify_current_errno() -> Option<i32> {
+    std::io::Error::last_os_error().raw_os_error()
 }
 
 fn inotify_errno_message(errno: i32) -> String {
@@ -2525,7 +2552,7 @@ pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
     if inotify_watch_descriptor_parts(&args[0]).is_none() {
         return Err(inotify_file_notify_error(
             "Invalid descriptor ",
-            Some(libc::ENOENT),
+            None,
             Some(args[0]),
         ));
     }
