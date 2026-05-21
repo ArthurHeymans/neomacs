@@ -33,7 +33,11 @@ fn oracle_inotify_public_lifecycle_and_error_semantics() {
            (integerp (cdr w))
            (inotify-valid-p w)
            (inotify-rm-watch w)
-           (inotify-valid-p w)))))
+           (inotify-valid-p w)
+           ;; GNU validates descriptor shape but treats removing an already
+           ;; inactive valid-shaped descriptor as a successful no-op.
+           (inotify-rm-watch w)
+           (inotify-rm-watch (cons 0 0))))))
 "#;
 
     assert_oracle_parity_with_bootstrap(form);

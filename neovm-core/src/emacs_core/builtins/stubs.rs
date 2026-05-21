@@ -2522,14 +2522,15 @@ pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-rm-watch", &args, 1)?;
-    if inotify_remove_watch(&args[0])? {
-        return Ok(Value::T);
+    if inotify_watch_descriptor_parts(&args[0]).is_none() {
+        return Err(inotify_file_notify_error(
+            "Invalid descriptor ",
+            Some(libc::ENOENT),
+            Some(args[0]),
+        ));
     }
-    Err(inotify_file_notify_error(
-        "Invalid descriptor ",
-        Some(libc::ENOENT),
-        Some(args[0]),
-    ))
+    inotify_remove_watch(&args[0])?;
+    Ok(Value::T)
 }
 
 // =========================================================================

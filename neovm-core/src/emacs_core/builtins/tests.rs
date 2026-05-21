@@ -9314,6 +9314,11 @@ fn dispatch_builtin_pure_handles_inotify_watch_lifecycle() {
         .expect("inotify-valid-p should resolve")
         .expect("inotify-valid-p should evaluate");
     assert_eq!(inactive, Value::NIL);
+
+    let removed_again = dispatch_builtin_pure("inotify-rm-watch", vec![watch])
+        .expect("inotify-rm-watch should resolve")
+        .expect("inotify-rm-watch should evaluate");
+    assert_eq!(removed_again, Value::T);
 }
 
 #[test]
