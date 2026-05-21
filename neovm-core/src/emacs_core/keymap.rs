@@ -2894,36 +2894,46 @@ fn copy_keymap_item(item: &Value, depth: usize) -> Value {
 }
 
 /// Deep-copy a char-table used in a keymap.
-/// Clones the underlying vector and recursively copies any keymap entries.
+///
+/// GNU `copy_keymap_1` first calls `copy-sequence` on the char-table, then
+/// walks the copied table with `map_char_table` and replaces each binding with
+/// `copy_keymap_item`.  Keep that shape here so real char-table objects and
+/// legacy vector-backed tables follow the same semantics.
 fn copy_char_table_for_keymap(ct: &Value, depth: usize) -> Value {
-    if !ct.is_vector() {
+    let Some(copied) = super::chartable::copy_char_table(*ct) else {
         return *ct;
     };
-    let old_vec = ct.as_vector_data().unwrap();
-    let mut new_vec = old_vec.clone();
 
-    if let Some(cache_range) = char_table_ascii_cache_range(&new_vec) {
-        for i in cache_range {
-            let val = new_vec[i];
-            if is_list_keymap(&val) {
-                new_vec[i] = list_keymap_copy_impl(&val, depth + 1);
+    let Ok(entries) = super::chartable::char_table_local_entries(&copied) else {
+        return copied;
+    };
+    for (range, value) in entries {
+        let copied_value = copy_keymap_item(&value, depth + 1);
+        let _ = super::chartable::builtin_set_char_table_range(vec![copied, range, copied_value]);
+    }
+
+    if copied.is_vector() {
+        let Some(mut new_vec) = copied.as_vector_data().map(|data| data.to_vec()) else {
+            return copied;
+        };
+        if let Some(cache_range) = char_table_ascii_cache_range(&new_vec) {
+            for i in cache_range {
+                let val = new_vec[i];
+                new_vec[i] = copy_keymap_item(&val, depth + 1);
             }
         }
-    }
 
-    // Walk the data pairs and recursively copy any keymap values.
-    let data_start = char_table_data_start(&new_vec);
-    let mut i = data_start;
-    while i + 1 < new_vec.len() {
-        // i is the char-code, i+1 is the value
-        let val = new_vec[i + 1];
-        if is_list_keymap(&val) {
-            new_vec[i + 1] = list_keymap_copy_impl(&val, depth + 1);
+        let data_start = char_table_data_start(&new_vec);
+        let mut i = data_start;
+        while i + 1 < new_vec.len() {
+            let val = new_vec[i + 1];
+            new_vec[i + 1] = copy_keymap_item(&val, depth + 1);
+            i += 2;
         }
-        i += 2;
+        return Value::vector(new_vec);
     }
 
-    Value::vector(new_vec)
+    copied
 }
 
 /// Collect all accessible sub-keymaps with their key prefixes.

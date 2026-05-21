@@ -250,3 +250,33 @@ fn combine_after_change_still_updates_treesit_linecol_cache() {
     assert_eq!((cache.line, cache.col, cache.bytepos), (1, 1, 0));
     assert_eq!(eval.combine_after_change_list.len(), 1);
 }
+
+#[test]
+fn translate_region_accepts_real_char_table_translation_table() {
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    let mut eval = crate::emacs_core::Context::new();
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .insert_into_buffer(current, "abc")
+        .expect("insert test text");
+
+    let table = Value::make_char_table(Value::symbol("translation-table"), Value::NIL, 0);
+    crate::emacs_core::chartable::builtin_set_char_table_range(vec![
+        table,
+        Value::fixnum('b' as i64),
+        Value::fixnum('x' as i64),
+    ])
+    .expect("set translation table entry");
+
+    let changed = builtin_translate_region_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(4), table],
+    )
+    .expect("translate region through real char-table");
+
+    assert_eq!(changed, Value::fixnum(1));
+    let buf = eval.buffers.get(current).expect("current buffer");
+    assert_eq!(buf.buffer_string(), "axc");
+}

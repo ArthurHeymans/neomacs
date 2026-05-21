@@ -1,7 +1,7 @@
 use super::*;
 use crate::buffer::BufferText;
 use crate::buffer::buffer::{Buffer, BufferId};
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::eq_value;
 
 /// Helper: create a buffer with given text, point at start, full accessible range.
 fn buf_with_text(text: &str) -> Buffer {
@@ -656,19 +656,17 @@ fn copy_syntax_table_returns_fresh_syntax_table() {
     let subtype = crate::emacs_core::chartable::builtin_char_table_subtype(vec![copied]).unwrap();
     assert_eq!(subtype, Value::symbol("syntax-table"));
 
-    match (source.kind(), copied.kind()) {
-        (ValueKind::Veclike(VecLikeType::Vector), ValueKind::Veclike(VecLikeType::Vector)) => {
-            // `assert_ne!(source, copied)` would compare via the
-            // structural `equal` impl on TaggedValue and pass
-            // accidentally; use `eq_value` (identity / pointer equality)
-            // to assert the copy actually allocated a fresh vector.
-            assert!(
-                !crate::emacs_core::value::eq_value(&source, &copied),
-                "expected fresh allocation, got identity-equal"
-            );
-        }
-        other => panic!("expected vector-backed char tables, got {other:?}"),
-    }
+    assert!(
+        !eq_value(&source, &copied),
+        "expected fresh allocation, got identity-equal"
+    );
+
+    let parent = crate::emacs_core::chartable::builtin_char_table_parent(vec![copied]).unwrap();
+    assert!(
+        crate::emacs_core::chartable::builtin_char_table_p(vec![parent])
+            .unwrap()
+            .is_truthy()
+    );
 }
 
 #[test]
@@ -804,12 +802,7 @@ fn syntax_table_and_standard_default_to_same_object() {
     let mut eval = crate::emacs_core::eval::Context::new();
     let current = builtin_syntax_table(&mut eval, vec![]).unwrap();
     let standard = builtin_standard_syntax_table(vec![]).unwrap();
-    match (current.kind(), standard.kind()) {
-        (ValueKind::Veclike(VecLikeType::Vector), ValueKind::Veclike(VecLikeType::Vector)) => {
-            assert_eq!(current, standard)
-        }
-        other => panic!("expected syntax-table vectors, got {other:?}"),
-    }
+    assert!(eq_value(&current, &standard));
 }
 
 #[test]
@@ -837,12 +830,7 @@ fn set_syntax_table_updates_current_buffer_only() {
 
     eval.buffers.set_current(other_id);
     let other = builtin_syntax_table(&mut eval, vec![]).unwrap();
-    match (other.kind(), custom.kind()) {
-        (ValueKind::Veclike(VecLikeType::Vector), ValueKind::Veclike(VecLikeType::Vector)) => {
-            assert_ne!(other, custom)
-        }
-        pair => panic!("expected syntax-table vectors, got {pair:?}"),
-    }
+    assert!(!eq_value(&other, &custom));
 
     eval.buffers.set_current(current_id);
     let restored = builtin_syntax_table(&mut eval, vec![]).unwrap();

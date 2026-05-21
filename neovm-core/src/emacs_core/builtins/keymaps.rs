@@ -819,22 +819,22 @@ pub(crate) fn plan_keymap_iteration(keymap: Value) -> KeymapIterationPlan {
             break;
         }
 
-        match entry.kind() {
-            ValueKind::Cons => {
-                let pair_car = entry.cons_car();
-                let pair_cdr = entry.cons_cdr();
-                bindings.push((pair_car, map_keymap_binding_value(pair_cdr)));
-            }
-            ValueKind::Veclike(VecLikeType::Vector) => {
-                if crate::emacs_core::chartable::is_char_table(&entry) {
-                    let _ = crate::emacs_core::chartable::for_each_char_table_mapping(
-                        &entry,
-                        |event, binding| {
-                            bindings.push((event, map_keymap_binding_value(binding)));
-                            Ok(())
-                        },
-                    );
-                } else {
+        if crate::emacs_core::chartable::is_char_table(&entry) {
+            let _ = crate::emacs_core::chartable::for_each_char_table_mapping(
+                &entry,
+                |event, binding| {
+                    bindings.push((event, map_keymap_binding_value(binding)));
+                    Ok(())
+                },
+            );
+        } else {
+            match entry.kind() {
+                ValueKind::Cons => {
+                    let pair_car = entry.cons_car();
+                    let pair_cdr = entry.cons_cdr();
+                    bindings.push((pair_car, map_keymap_binding_value(pair_cdr)));
+                }
+                ValueKind::Veclike(VecLikeType::Vector) => {
                     let items = entry.as_vector_data().unwrap().clone();
                     for (idx, binding) in items.iter().enumerate() {
                         bindings.push((
@@ -843,8 +843,8 @@ pub(crate) fn plan_keymap_iteration(keymap: Value) -> KeymapIterationPlan {
                         ));
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
 
         cursor = cursor.cons_cdr();

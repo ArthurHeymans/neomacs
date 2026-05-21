@@ -1042,6 +1042,8 @@ fn mapped_heap_ref_target(value: &DumpValue, heap: &DumpTaggedHeap) -> Option<(u
             .flatten()
             .map(|span| (span.offset, TAG_STRING)),
         DumpValue::Vector(id)
+        | DumpValue::CharTable(id)
+        | DumpValue::SubCharTable(id)
         | DumpValue::Record(id)
         | DumpValue::Lambda(id)
         | DumpValue::Macro(id)

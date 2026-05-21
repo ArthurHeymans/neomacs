@@ -51,6 +51,8 @@ const EXTRA_TIMER: u8 = 108;
 const EXTRA_OVERLAY: u8 = 109;
 const EXTRA_MARKER: u8 = 110;
 const EXTRA_FREE: u8 = 111;
+const EXTRA_CHAR_TABLE: u8 = 112;
+const EXTRA_SUB_CHAR_TABLE: u8 = 113;
 
 /// Per-object extra data needed during load.
 #[derive(Debug, Clone)]
@@ -66,6 +68,21 @@ pub(crate) enum ObjectExtra {
     HashTable(DumpLispHashTable),
     /// Category C: bytecode function (no HeapImage bytes).
     ByteCode(DumpByteCodeFunction),
+    /// Category C: char-table (no HeapImage bytes).
+    CharTable {
+        defalt: DumpValue,
+        parent: DumpValue,
+        purpose: DumpValue,
+        ascii: DumpValue,
+        contents: Vec<DumpValue>,
+        extras: Vec<DumpValue>,
+    },
+    /// Category C: sub-char-table (no HeapImage bytes).
+    SubCharTable {
+        depth: i64,
+        min_char: i64,
+        contents: Vec<DumpValue>,
+    },
     /// Category C: subr (no HeapImage bytes).
     Subr {
         name: DumpNameId,
@@ -172,6 +189,14 @@ fn write_object_extra(out: &mut Vec<u8>, obj: &DumpHeapObject) -> Result<(), Dum
                 out,
                 &DumpHeapObject::ByteCode(function.clone()),
             )?;
+        }
+        DumpHeapObject::CharTable { .. } => {
+            object_value_codec::write_u8(out, EXTRA_CHAR_TABLE);
+            object_value_codec::write_heap_object(out, obj)?;
+        }
+        DumpHeapObject::SubCharTable { .. } => {
+            object_value_codec::write_u8(out, EXTRA_SUB_CHAR_TABLE);
+            object_value_codec::write_heap_object(out, obj)?;
         }
         DumpHeapObject::Subr {
             name,
@@ -333,6 +358,30 @@ fn object_extra_into_heap_object(extra: ObjectExtra) -> DumpHeapObject {
         },
         ObjectExtra::HashTable(table) => DumpHeapObject::HashTable(table),
         ObjectExtra::ByteCode(function) => DumpHeapObject::ByteCode(function),
+        ObjectExtra::CharTable {
+            defalt,
+            parent,
+            purpose,
+            ascii,
+            contents,
+            extras,
+        } => DumpHeapObject::CharTable {
+            defalt,
+            parent,
+            purpose,
+            ascii,
+            contents,
+            extras,
+        },
+        ObjectExtra::SubCharTable {
+            depth,
+            min_char,
+            contents,
+        } => DumpHeapObject::SubCharTable {
+            depth,
+            min_char,
+            contents,
+        },
         ObjectExtra::Subr {
             name,
             min_args,
@@ -435,6 +484,48 @@ fn read_object_extra(cursor: &mut object_value_codec::Cursor) -> Result<ObjectEx
                 DumpHeapObject::ByteCode(function) => Ok(ObjectExtra::ByteCode(function)),
                 other => Err(DumpError::ImageFormatError(format!(
                     "expected ByteCode in ObjectExtra, got {:?}",
+                    other.variant_name()
+                ))),
+            }
+        }
+        EXTRA_CHAR_TABLE => {
+            let obj = cursor.read_heap_object()?;
+            match obj {
+                DumpHeapObject::CharTable {
+                    defalt,
+                    parent,
+                    purpose,
+                    ascii,
+                    contents,
+                    extras,
+                } => Ok(ObjectExtra::CharTable {
+                    defalt,
+                    parent,
+                    purpose,
+                    ascii,
+                    contents,
+                    extras,
+                }),
+                other => Err(DumpError::ImageFormatError(format!(
+                    "expected CharTable in ObjectExtra, got {:?}",
+                    other.variant_name()
+                ))),
+            }
+        }
+        EXTRA_SUB_CHAR_TABLE => {
+            let obj = cursor.read_heap_object()?;
+            match obj {
+                DumpHeapObject::SubCharTable {
+                    depth,
+                    min_char,
+                    contents,
+                } => Ok(ObjectExtra::SubCharTable {
+                    depth,
+                    min_char,
+                    contents,
+                }),
+                other => Err(DumpError::ImageFormatError(format!(
+                    "expected SubCharTable in ObjectExtra, got {:?}",
                     other.variant_name()
                 ))),
             }
@@ -586,6 +677,8 @@ impl DumpHeapObject {
             DumpHeapObject::Lambda(_) => "Lambda",
             DumpHeapObject::Macro(_) => "Macro",
             DumpHeapObject::ByteCode(_) => "ByteCode",
+            DumpHeapObject::CharTable { .. } => "CharTable",
+            DumpHeapObject::SubCharTable { .. } => "SubCharTable",
             DumpHeapObject::Record(_) => "Record",
             DumpHeapObject::Marker(_) => "Marker",
             DumpHeapObject::Overlay(_) => "Overlay",

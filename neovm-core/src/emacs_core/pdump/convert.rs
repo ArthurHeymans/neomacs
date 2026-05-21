@@ -27,6 +27,10 @@ use crate::emacs_core::charset::{
     CharsetInfoSnapshot, CharsetMethodSnapshot, CharsetRegistrySnapshot, restore_charset_registry,
     snapshot_charset_registry,
 };
+use crate::emacs_core::chartable::{
+    char_table_external_slots, make_char_table_from_external_slots,
+    make_sub_char_table_from_external_slots, sub_char_table_external_slots,
+};
 use crate::emacs_core::coding::{CodingSystemInfo, CodingSystemManager, EolType};
 use crate::emacs_core::custom::CustomManager;
 use crate::emacs_core::eval::Context;
@@ -211,6 +215,12 @@ impl DumpEncoder {
             ValueKind::Cons => DumpValue::Cons(dump_heap_ref(self.value_to_heap_ref(v))),
             ValueKind::Veclike(VecLikeType::Vector) => {
                 DumpValue::Vector(dump_heap_ref(self.value_to_heap_ref(v)))
+            }
+            ValueKind::Veclike(VecLikeType::CharTable) => {
+                DumpValue::CharTable(dump_heap_ref(self.value_to_heap_ref(v)))
+            }
+            ValueKind::Veclike(VecLikeType::SubCharTable) => {
+                DumpValue::SubCharTable(dump_heap_ref(self.value_to_heap_ref(v)))
             }
             ValueKind::Veclike(VecLikeType::Record) => {
                 DumpValue::Record(dump_heap_ref(self.value_to_heap_ref(v)))
@@ -1068,6 +1078,8 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::Float(id) => self.state.spans.float(id.index as usize).is_some(),
             DumpValue::Str(id) => self.state.spans.string(id.index as usize).is_some(),
             DumpValue::Vector(id)
+            | DumpValue::CharTable(id)
+            | DumpValue::SubCharTable(id)
             | DumpValue::Record(id)
             | DumpValue::Lambda(id)
             | DumpValue::Macro(id)
@@ -1211,6 +1223,23 @@ impl<'a> LoadDecoder<'a> {
                 } else {
                     Value::make_vector(vec![Value::NIL; len])
                 }
+            }
+            DumpHeapObject::CharTable { extras, .. } => {
+                let extra_len = extras.len();
+                Value::make_char_table(Value::NIL, Value::NIL, extra_len)
+            }
+            DumpHeapObject::SubCharTable {
+                depth,
+                min_char,
+                contents,
+            } => {
+                let depth = i32::try_from(*depth).map_err(|_| {
+                    DumpError::ImageFormatError("sub-char-table depth overflows i32".into())
+                })?;
+                let min_char = i32::try_from(*min_char).map_err(|_| {
+                    DumpError::ImageFormatError("sub-char-table min-char overflows i32".into())
+                })?;
+                Value::make_sub_char_table(depth, min_char, vec![Value::NIL; contents.len()])
             }
             DumpHeapObject::HashTable(ht) => with_tagged_heap(|heap| {
                 // GNU pdumper restores the hash table header first and wires
@@ -1443,6 +1472,61 @@ impl<'a> LoadDecoder<'a> {
                     }
                 }
             }
+            DumpHeapObject::CharTable {
+                defalt,
+                parent,
+                purpose,
+                ascii,
+                contents,
+                extras,
+            } => {
+                if contents.len() != 64 {
+                    return Err(DumpError::ImageFormatError(format!(
+                        "char-table dump has {} content slots, expected 64",
+                        contents.len()
+                    )));
+                }
+                let mut slots = Vec::with_capacity(4 + contents.len() + extras.len());
+                slots.push(self.load_value(&defalt));
+                slots.push(self.load_value(&parent));
+                slots.push(self.load_value(&purpose));
+                slots.push(self.load_value(&ascii));
+                slots.extend(contents.iter().map(|slot| self.load_value(slot)));
+                slots.extend(extras.iter().map(|slot| self.load_value(slot)));
+                let restored = make_char_table_from_external_slots(&slots)
+                    .map_err(DumpError::ImageFormatError)?;
+                value.with_char_table_mut(|table| {
+                    let restored_obj = restored
+                        .as_char_table_obj()
+                        .expect("make-char-table returned char-table");
+                    table.defalt = restored_obj.defalt;
+                    table.parent = restored_obj.parent;
+                    table.purpose = restored_obj.purpose;
+                    table.ascii = restored_obj.ascii;
+                    table.contents = restored_obj.contents;
+                    table.extras = restored_obj.extras.clone();
+                });
+            }
+            DumpHeapObject::SubCharTable {
+                depth,
+                min_char,
+                contents,
+            } => {
+                let mut slots = Vec::with_capacity(2 + contents.len());
+                slots.push(Value::fixnum(depth));
+                slots.push(Value::fixnum(min_char));
+                slots.extend(contents.iter().map(|slot| self.load_value(slot)));
+                let restored = make_sub_char_table_from_external_slots(&slots)
+                    .map_err(DumpError::ImageFormatError)?;
+                value.with_sub_char_table_mut(|table| {
+                    let restored_obj = restored
+                        .as_sub_char_table_obj()
+                        .expect("make-sub-char-table returned sub-char-table");
+                    table.depth = restored_obj.depth;
+                    table.min_char = restored_obj.min_char;
+                    table.contents = restored_obj.contents.clone();
+                });
+            }
             DumpHeapObject::HashTable(ht) => {
                 let _ = value.with_hash_table_mut(|table| {
                     let DumpLispHashTable {
@@ -1571,10 +1655,28 @@ impl<'a> LoadDecoder<'a> {
                     stack.push(cdr);
                 }
                 DumpHeapObject::Vector(items)
+                | DumpHeapObject::SubCharTable {
+                    contents: items, ..
+                }
                 | DumpHeapObject::Lambda(items)
                 | DumpHeapObject::Macro(items)
                 | DumpHeapObject::Record(items) => {
                     stack.extend(items);
+                }
+                DumpHeapObject::CharTable {
+                    defalt,
+                    parent,
+                    purpose,
+                    ascii,
+                    contents,
+                    extras,
+                } => {
+                    stack.push(defalt);
+                    stack.push(parent);
+                    stack.push(purpose);
+                    stack.push(ascii);
+                    stack.extend(contents);
+                    stack.extend(extras);
                 }
                 DumpHeapObject::HashTable(ht) => {
                     for (_, value) in ht.entries {
@@ -1631,6 +1733,8 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::Str(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Cons(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Vector(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
+            DumpValue::CharTable(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
+            DumpValue::SubCharTable(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Record(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::HashTable(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Lambda(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
@@ -1669,6 +1773,8 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::Str(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Cons(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Vector(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::CharTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::SubCharTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Record(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::HashTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Lambda(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
@@ -1729,6 +1835,8 @@ fn dump_value_heap_ref(value: &DumpValue) -> Option<TaggedHeapRef> {
         | DumpValue::Str(id)
         | DumpValue::Cons(id)
         | DumpValue::Vector(id)
+        | DumpValue::CharTable(id)
+        | DumpValue::SubCharTable(id)
         | DumpValue::Record(id)
         | DumpValue::HashTable(id)
         | DumpValue::Lambda(id)
@@ -2295,6 +2403,39 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
                 .map(|item| encoder.dump_value(item))
                 .collect(),
         ),
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            let slots = char_table_external_slots(&value).expect("char-table");
+            let mut iter = slots.into_iter();
+            let defalt = encoder.dump_value(&iter.next().expect("char-table default slot"));
+            let parent = encoder.dump_value(&iter.next().expect("char-table parent slot"));
+            let purpose = encoder.dump_value(&iter.next().expect("char-table purpose slot"));
+            let ascii = encoder.dump_value(&iter.next().expect("char-table ascii slot"));
+            let rest: Vec<_> = iter.collect();
+            let (contents, extras) = rest.split_at(64);
+            DumpHeapObject::CharTable {
+                defalt,
+                parent,
+                purpose,
+                ascii,
+                contents: contents
+                    .iter()
+                    .map(|item| encoder.dump_value(item))
+                    .collect(),
+                extras: extras.iter().map(|item| encoder.dump_value(item)).collect(),
+            }
+        }
+        ValueKind::Veclike(VecLikeType::SubCharTable) => {
+            let (depth, min_char, contents) =
+                sub_char_table_external_slots(&value).expect("sub-char-table");
+            DumpHeapObject::SubCharTable {
+                depth,
+                min_char,
+                contents: contents
+                    .iter()
+                    .map(|item| encoder.dump_value(item))
+                    .collect(),
+            }
+        }
         ValueKind::Veclike(VecLikeType::HashTable) => DumpHeapObject::HashTable(dump_hash_table(
             encoder,
             value.as_hash_table().expect("hash-table"),

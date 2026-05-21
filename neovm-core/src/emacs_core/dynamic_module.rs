@@ -800,6 +800,8 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
             VecLikeType::Sqlite => "sqlite",
             VecLikeType::UserPtr => "user-ptr",
             VecLikeType::ModuleFunction => "module-function",
+            VecLikeType::CharTable => "char-table",
+            VecLikeType::SubCharTable => "sub-char-table",
         },
         _ => "unknown",
     };

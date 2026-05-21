@@ -60,6 +60,9 @@ const BV_SIZE: usize = 1; // logical length
 
 /// Return `true` if `v` is a char-table (tagged vector).
 pub fn is_char_table(v: &Value) -> bool {
+    if v.is_char_table() {
+        return true;
+    }
     if v.is_vector() {
         let vec = v.as_vector_data().unwrap();
         vec.len() >= CT_EXTRA_START
@@ -69,6 +72,10 @@ pub fn is_char_table(v: &Value) -> bool {
     } else {
         false
     }
+}
+
+fn is_sub_char_table(v: Value) -> bool {
+    v.is_sub_char_table()
 }
 
 /// Return `true` if `v` is a bool-vector (tagged vector).
@@ -121,6 +128,9 @@ pub(crate) fn bool_vector_ref_value(v: &Value, index: usize) -> Option<Value> {
 
 /// Return the logical sequence length if `v` is a char-table.
 pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
+    if v.is_char_table() {
+        return Some(CT_LOGICAL_LENGTH);
+    }
     if !v.is_vector() {
         return None;
     };
@@ -134,6 +144,228 @@ pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
     } else {
         None
     }
+}
+
+fn chartab_idx(c: i64, depth: usize, min_char: i64) -> usize {
+    ((c - min_char) / GNU_CHARTAB_CHARS[depth]) as usize
+}
+
+fn make_sub_char_table(depth: usize, min_char: i64, init: Value) -> Value {
+    Value::make_sub_char_table(
+        depth as i32,
+        min_char as i32,
+        vec![init; GNU_CHARTAB_SIZE[depth]],
+    )
+}
+
+fn sub_char_table_contents(value: Value) -> Option<&'static [Value]> {
+    value
+        .as_sub_char_table_obj()
+        .map(|obj| obj.contents.as_slice())
+}
+
+fn sub_char_table_set_slot(table: Value, idx: usize, value: Value) {
+    let _ = table.with_sub_char_table_mut(|obj| {
+        let contents = obj.contents.ensure_owned();
+        if idx < contents.len() {
+            contents[idx] = value;
+        }
+    });
+}
+
+fn sub_char_table_ref(table: Value, c: i64, is_uniprop: bool) -> Value {
+    let Some(obj) = table.as_sub_char_table_obj() else {
+        return table;
+    };
+    let depth = obj.depth as usize;
+    let min_char = obj.min_char as i64;
+    let idx = chartab_idx(c, depth, min_char);
+    let Some(mut val) = obj.contents.get(idx).copied() else {
+        return Value::NIL;
+    };
+    if is_uniprop && uniprop_compressed_string(val).is_some() {
+        val = uniprop_table_uncompress(table, idx).unwrap_or(val);
+    }
+    if is_sub_char_table(val) {
+        sub_char_table_ref(val, c, is_uniprop)
+    } else {
+        val
+    }
+}
+
+fn char_table_ascii(table: Value) -> Value {
+    let Some(obj) = table.as_char_table_obj() else {
+        return Value::NIL;
+    };
+    let mut sub = obj.contents[0];
+    if !is_sub_char_table(sub) {
+        return sub;
+    }
+    sub = sub_char_table_contents(sub)
+        .and_then(|contents| contents.first().copied())
+        .unwrap_or(Value::NIL);
+    if !is_sub_char_table(sub) {
+        return sub;
+    }
+    let val = sub_char_table_contents(sub)
+        .and_then(|contents| contents.first().copied())
+        .unwrap_or(Value::NIL);
+    if is_char_code_property_table(&table) && uniprop_compressed_string(val).is_some() {
+        uniprop_table_uncompress(sub, 0).unwrap_or(val)
+    } else {
+        val
+    }
+}
+
+fn set_char_table_ascii(table: Value, value: Value) {
+    let _ = table.with_char_table_mut(|obj| obj.ascii = value);
+}
+
+fn set_char_table_contents(table: Value, idx: usize, value: Value) {
+    let _ = table.with_char_table_mut(|obj| {
+        if idx < obj.contents.len() {
+            obj.contents[idx] = value;
+        }
+    });
+}
+
+fn sub_char_table_set(table: Value, c: i64, value: Value, is_uniprop: bool) {
+    let Some(obj) = table.as_sub_char_table_obj() else {
+        return;
+    };
+    let depth = obj.depth as usize;
+    let min_char = obj.min_char as i64;
+    let idx = chartab_idx(c, depth, min_char);
+    if depth == 3 {
+        sub_char_table_set_slot(table, idx, value);
+        return;
+    }
+
+    let current = obj.contents.get(idx).copied().unwrap_or(Value::NIL);
+    let child = if is_sub_char_table(current) {
+        current
+    } else if is_uniprop && uniprop_compressed_string(current).is_some() {
+        uniprop_table_uncompress(table, idx).unwrap_or(current)
+    } else {
+        let child = make_sub_char_table(
+            depth + 1,
+            min_char + idx as i64 * GNU_CHARTAB_CHARS[depth],
+            current,
+        );
+        sub_char_table_set_slot(table, idx, child);
+        child
+    };
+    sub_char_table_set(child, c, value, is_uniprop);
+}
+
+fn char_table_set_char_direct(table: Value, c: i64, value: Value) {
+    let Some(obj) = table.as_char_table_obj() else {
+        return;
+    };
+    if (0..CT_ASCII_CACHE_LEN as i64).contains(&c) && is_sub_char_table(obj.ascii) {
+        sub_char_table_set_slot(obj.ascii, c as usize, value);
+        return;
+    }
+
+    let idx = chartab_idx(c, 0, 0);
+    let current = obj.contents[idx];
+    let child = if is_sub_char_table(current) {
+        current
+    } else {
+        let child = make_sub_char_table(1, idx as i64 * GNU_CHARTAB_CHARS[0], current);
+        set_char_table_contents(table, idx, child);
+        child
+    };
+    sub_char_table_set(child, c, value, is_char_code_property_table(&table));
+    if (0..CT_ASCII_CACHE_LEN as i64).contains(&c) {
+        set_char_table_ascii(table, char_table_ascii(table));
+    }
+}
+
+fn sub_char_table_set_range(table: Value, from: i64, to: i64, value: Value, is_uniprop: bool) {
+    let Some(obj) = table.as_sub_char_table_obj() else {
+        return;
+    };
+    let depth = obj.depth as usize;
+    let min_char = obj.min_char as i64;
+    let chars_in_block = GNU_CHARTAB_CHARS[depth];
+    let mut i = chartab_idx(from.max(min_char), depth, min_char);
+    let mut c = min_char + chars_in_block * i as i64;
+    while i < GNU_CHARTAB_SIZE[depth] {
+        if c > to {
+            break;
+        }
+        if from <= c && c + chars_in_block - 1 <= to {
+            sub_char_table_set_slot(table, i, value);
+        } else {
+            let current = obj.contents.get(i).copied().unwrap_or(Value::NIL);
+            let child = if is_sub_char_table(current) {
+                current
+            } else if is_uniprop && uniprop_compressed_string(current).is_some() {
+                uniprop_table_uncompress(table, i).unwrap_or(current)
+            } else {
+                let child = make_sub_char_table(depth + 1, c, current);
+                sub_char_table_set_slot(table, i, child);
+                child
+            };
+            sub_char_table_set_range(child, from, to, value, is_uniprop);
+        }
+        i += 1;
+        c += chars_in_block;
+    }
+}
+
+fn char_table_set_range_direct(table: Value, from: i64, to: i64, value: Value) {
+    if from == to {
+        char_table_set_char_direct(table, from, value);
+        return;
+    }
+    let is_uniprop = is_char_code_property_table(&table);
+    let start_idx = chartab_idx(from, 0, 0);
+    let end_idx = chartab_idx(to, 0, 0);
+    for idx in start_idx..=end_idx {
+        let c = idx as i64 * GNU_CHARTAB_CHARS[0];
+        if c > to {
+            break;
+        }
+        if from <= c && c + GNU_CHARTAB_CHARS[0] - 1 <= to {
+            set_char_table_contents(table, idx, value);
+        } else {
+            let current = table
+                .as_char_table_obj()
+                .map(|obj| obj.contents[idx])
+                .unwrap_or(Value::NIL);
+            let child = if is_sub_char_table(current) {
+                current
+            } else {
+                let child = make_sub_char_table(1, c, current);
+                set_char_table_contents(table, idx, child);
+                child
+            };
+            sub_char_table_set_range(child, from, to, value, is_uniprop);
+        }
+    }
+    if from < CT_ASCII_CACHE_LEN as i64 {
+        set_char_table_ascii(table, char_table_ascii(table));
+    }
+}
+
+fn uniprop_table_uncompress(table: Value, idx: usize) -> Option<Value> {
+    let obj = table.as_sub_char_table_obj()?;
+    let depth = obj.depth as usize;
+    if depth != 2 {
+        return obj.contents.get(idx).copied();
+    }
+    let compressed = obj.contents.get(idx).copied()?;
+    uniprop_compressed_string(compressed)?;
+    let min_char = obj.min_char as i64 + idx as i64 * GNU_CHARTAB_CHARS[depth];
+    let mut contents = Vec::with_capacity(GNU_CHARTAB_SIZE[3]);
+    for offset in 0..GNU_CHARTAB_SIZE[3] {
+        contents.push(uniprop_compressed_value_at(compressed, offset as i64).unwrap_or(Value::NIL));
+    }
+    let child = Value::make_sub_char_table(3, min_char as i32, contents);
+    sub_char_table_set_slot(table, idx, child);
+    Some(child)
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +540,12 @@ fn ct_update_ascii_cache(vec: &mut [Value], min: i64, max: i64, value: Value) {
 }
 
 fn prepare_uniprop_ascii_cache(table: &Value) {
+    if table.is_char_table() {
+        if is_char_code_property_table(table) {
+            set_char_table_ascii(*table, char_table_ascii(*table));
+        }
+        return;
+    }
     let Some(original) = table.as_vector_data() else {
         return;
     };
@@ -381,10 +619,11 @@ pub(crate) fn make_sub_char_table_from_external_slots(items: &[Value]) -> Result
         return Err("Invalid size in sub-char-table".to_string());
     }
 
-    let mut vec = Vec::with_capacity(items.len() + 1);
-    vec.push(Value::symbol(SUB_CHAR_TABLE_TAG));
-    vec.extend_from_slice(items);
-    Ok(Value::vector(vec))
+    Ok(Value::make_sub_char_table(
+        depth as i32,
+        min_char as i32,
+        items[2..].to_vec(),
+    ))
 }
 
 fn char_table_extra_count(vec: &[Value]) -> usize {
@@ -398,6 +637,11 @@ fn char_table_extra_slot_value(table: &Value, idx: usize) -> Option<Value> {
     if !is_char_table(table) {
         return None;
     }
+    if table.is_char_table() {
+        return table
+            .as_char_table_obj()
+            .and_then(|obj| obj.extras.get(idx).copied());
+    }
     let vec = table.as_vector_data().unwrap();
     let extra_count = char_table_extra_count(vec);
     (idx < extra_count).then(|| vec[CT_EXTRA_START + idx])
@@ -406,6 +650,10 @@ fn char_table_extra_slot_value(table: &Value, idx: usize) -> Option<Value> {
 fn is_char_code_property_table(table: &Value) -> bool {
     if !is_char_table(table) {
         return false;
+    }
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        return obj.purpose.is_symbol_named("char-code-property-table") && obj.extras.len() == 5;
     }
     let vec = table.as_vector_data().unwrap();
     is_char_code_property_vec(vec)
@@ -702,45 +950,68 @@ pub(crate) fn make_char_table_from_external_slots(items: &[Value]) -> Result<Val
     let parent = items[1];
     let purpose = items[2];
     let extra_count = items.len() - GNU_CHAR_TABLE_STANDARD_SLOTS;
-    let mut vec = vec![
-        Value::symbol(CHAR_TABLE_TAG),
-        default,
-        parent,
-        purpose,
-        Value::fixnum(extra_count as i64),
-    ];
-    vec.extend_from_slice(&items[GNU_CHAR_TABLE_STANDARD_SLOTS..]);
-    append_ascii_cache(&mut vec, Value::NIL);
+    let table = Value::make_char_table(purpose, default, extra_count);
+    let _ = table.with_char_table_mut(|obj| {
+        obj.parent = parent;
+        obj.ascii = items[GNU_CHAR_TABLE_ASCII_SLOT];
+        obj.contents
+            .copy_from_slice(&items[GNU_CHAR_TABLE_CONTENT_START..GNU_CHAR_TABLE_STANDARD_SLOTS]);
+        obj.extras
+            .ensure_owned()
+            .clone_from(&items[GNU_CHAR_TABLE_STANDARD_SLOTS..].to_vec());
+    });
+    if purpose.is_symbol_named("char-code-property-table") && extra_count == 5 {
+        set_char_table_ascii(table, char_table_ascii(table));
+    }
+    Ok(table)
+}
 
-    let is_uniprop = purpose.is_symbol_named("char-code-property-table") && extra_count == 5;
-    for block in 0..GNU_CHAR_TABLE_CONTENT_BLOCKS_USIZE {
-        let start = block as i64 * GNU_CHAR_TABLE_BLOCK_CHARS;
-        flatten_char_table_slot(
-            &mut vec,
-            items[GNU_CHAR_TABLE_CONTENT_START + block],
-            start,
-            GNU_CHAR_TABLE_BLOCK_CHARS,
-            is_uniprop,
-        );
+fn copy_sub_char_table_direct(table: Value) -> Option<Value> {
+    let obj = table.as_sub_char_table_obj()?;
+    let depth = obj.depth as usize;
+    let min_char = obj.min_char;
+    let contents: Vec<Value> = obj
+        .contents
+        .iter()
+        .map(|value| {
+            if is_sub_char_table(*value) {
+                copy_sub_char_table_direct(*value).unwrap_or(*value)
+            } else {
+                *value
+            }
+        })
+        .collect();
+    Some(Value::make_sub_char_table(depth as i32, min_char, contents))
+}
+
+pub(crate) fn copy_char_table(table: Value) -> Option<Value> {
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj()?;
+        let copy = Value::make_char_table(obj.purpose, obj.defalt, obj.extras.len());
+        let contents = obj.contents.map(|value| {
+            if is_sub_char_table(value) {
+                copy_sub_char_table_direct(value).unwrap_or(value)
+            } else {
+                value
+            }
+        });
+        let extras = obj.extras.to_vec();
+        let _ = copy.with_char_table_mut(|copy_obj| {
+            copy_obj.parent = obj.parent;
+            copy_obj.contents = contents;
+            copy_obj.extras.ensure_owned().clone_from(&extras);
+        });
+        set_char_table_ascii(copy, char_table_ascii(copy));
+        return Some(copy);
     }
 
-    // GNU keeps an ASCII cache slot that takes precedence for ordinary
-    // char-tables.  Unicode property tables are different: `uniprop_table`
-    // recomputes their ASCII cache from the decompressed contents before
-    // returning the table, so the stale readable-literal ASCII slot must not
-    // overwrite the decompressed ASCII values.
-    if !is_uniprop {
-        flatten_char_table_slot(
-            &mut vec,
-            items[GNU_CHAR_TABLE_ASCII_SLOT],
-            0,
-            128,
-            is_uniprop,
-        );
+    if is_char_table(&table) && table.is_vector() {
+        return table
+            .as_vector_data()
+            .map(|items| Value::vector(items.clone()));
     }
 
-    maybe_optimize_loaded_char_table_storage(&mut vec);
-    Ok(Value::vector(vec))
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -754,29 +1025,16 @@ pub fn make_char_table_value(sub_type: Value, default: Value) -> Value {
 
 /// Create a char-table with a specified number of extra slots.
 pub fn make_char_table_with_extra_slots(sub_type: Value, default: Value, n_extras: i64) -> Value {
-    let mut vec = vec![
-        Value::symbol(CHAR_TABLE_TAG),
-        default,                 // CT_DEFAULT
-        Value::NIL,              // CT_PARENT
-        sub_type,                // CT_SUBTYPE
-        Value::fixnum(n_extras), // CT_EXTRA_COUNT
-    ];
-    // GNU `make-char-table` creates one vector initialized to DEFAULT, then
-    // overwrites only the parent and purpose slots.  Extra slots and ordinary
-    // contents therefore start as DEFAULT too.
-    for _ in 0..n_extras {
-        vec.push(default);
-    }
-    append_ascii_cache(&mut vec, default);
-    if !default.is_nil() {
-        ct_set_range_no_ascii_cache(&mut vec, 0, MAX_CHAR, default);
-    }
-    Value::vector(vec)
+    Value::make_char_table(sub_type, default, n_extras.max(0) as usize)
 }
 
 /// Set a single character entry in a char-table Value (for bootstrap code).
 /// Panics if `table` is not a char-table Vector.
 pub fn ct_set_single(table: &Value, ch: i64, value: Value) {
+    if table.is_char_table() {
+        char_table_set_char_direct(*table, ch, value);
+        return;
+    }
     if table.is_vector() {
         table.with_vector_data_mut(|vec| {
             ct_set_char(vec, ch, value);
@@ -819,6 +1077,13 @@ pub(crate) fn fill_char_table_from_fillarray(table: &Value, item: Value) -> Resu
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
+    if table.is_char_table() {
+        let _ = table.with_char_table_mut(|obj| {
+            obj.defalt = item;
+            obj.contents.fill(item);
+        });
+        return Ok(());
+    }
 
     let mut vec = table.as_vector_data().unwrap().clone();
     vec[CT_DEFAULT] = item;
@@ -855,12 +1120,21 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
     match range.kind() {
         // nil -> set default
         ValueKind::Nil => {
+            if table.is_char_table() {
+                let _ = table.with_char_table_mut(|obj| obj.defalt = *value);
+                return Ok(*value);
+            }
             table.with_vector_data_mut(|vec| {
                 vec[CT_DEFAULT] = *value;
             });
         }
         // t -> set all characters, but not the default slot.
         ValueKind::T => {
+            if table.is_char_table() {
+                set_char_table_ascii(*table, *value);
+                let _ = table.with_char_table_mut(|obj| obj.contents.fill(*value));
+                return Ok(*value);
+            }
             let key = Value::cons(Value::fixnum(0), Value::fixnum(MAX_CHAR));
             table.with_vector_data_mut(|vec| {
                 ct_push_range_entry(vec, 0, MAX_CHAR, key, *value);
@@ -872,6 +1146,10 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
                 Ok(ch) => ch,
                 Err(_) => return Err(invalid_range_error("set-char-table-range")),
             };
+            if table.is_char_table() {
+                char_table_set_char_direct(*table, ch, *value);
+                return Ok(*value);
+            }
             table.with_vector_data_mut(|vec| {
                 ct_set_char(vec, ch, *value);
             });
@@ -883,6 +1161,10 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
             let min = expect_character_code(&pair_car)?;
             let max = expect_character_code(&pair_cdr)?;
             if min <= max {
+                if table.is_char_table() {
+                    char_table_set_range_direct(*table, min, max, *value);
+                    return Ok(*value);
+                }
                 let key = Value::cons(Value::fixnum(min), Value::fixnum(max));
                 table.with_vector_data_mut(|vec| {
                     ct_push_range_entry(vec, min, max, key, *value);
@@ -1029,7 +1311,29 @@ fn ct_lookup_ascii_cached(table: &Value, ch: i64) -> Option<Value> {
     if !(0..CT_ASCII_CACHE_LEN as i64).contains(&ch) {
         return None;
     }
-
+    if table.is_char_table() {
+        let mut current = *table;
+        loop {
+            let obj = current.as_char_table_obj()?;
+            let value = if is_sub_char_table(obj.ascii) {
+                sub_char_table_contents(obj.ascii)
+                    .and_then(|contents| contents.get(ch as usize).copied())
+                    .unwrap_or(Value::NIL)
+            } else {
+                obj.ascii
+            };
+            if !value.is_nil() {
+                return Some(value);
+            }
+            if !obj.defalt.is_nil() {
+                return Some(obj.defalt);
+            }
+            if !is_char_table(&obj.parent) {
+                return Some(Value::NIL);
+            }
+            current = obj.parent;
+        }
+    }
     let ch = ch as usize;
     let mut current = *table;
     loop {
@@ -1078,6 +1382,9 @@ pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
     match range.kind() {
         ValueKind::Nil => {
             // Return the default value.
+            if table.is_char_table() {
+                return Ok(table.as_char_table_obj().unwrap().defalt);
+            }
             let vec = table.as_vector_data().unwrap();
             Ok(vec[CT_DEFAULT])
         }
@@ -1107,11 +1414,29 @@ pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
 /// 2. If the local entry is nil or absent, use the char-table's default value
 /// 3. If default is nil, recursively check the parent char-table
 pub(crate) fn ct_lookup(table: &Value, ch: i64) -> EvalResult {
-    if !table.is_vector() {
+    if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
     if let Some(value) = ct_lookup_ascii_cached(table, ch) {
         return Ok(value);
+    }
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        let idx = chartab_idx(ch, 0, 0);
+        let mut val = obj.contents[idx];
+        if is_sub_char_table(val) {
+            val = sub_char_table_ref(val, ch, is_char_code_property_table(table));
+        }
+        if !val.is_nil() {
+            return Ok(val);
+        }
+        if !obj.defalt.is_nil() {
+            return Ok(obj.defalt);
+        }
+        if is_char_table(&obj.parent) {
+            return ct_lookup(&obj.parent, ch);
+        }
+        return Ok(Value::NIL);
     }
     // Borrow the Vec instead of cloning — the 115K clones/sec we used to
     // do in font-lock's syntax-ppss path each allocated a ~50+-entry Vec
@@ -1241,6 +1566,14 @@ fn ct_lookup_atomic_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), F
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
+    if table.is_char_table() {
+        for run in ct_effective_runs(table) {
+            if ch >= run.start && ch <= run.end {
+                return Ok((run.value, run.start, run.end));
+            }
+        }
+        return Ok((Value::NIL, 0, MAX_CHAR));
+    }
     if !(0..=MAX_CHAR).contains(&ch) {
         return Ok((Value::NIL, 0, MAX_CHAR));
     }
@@ -1306,6 +1639,18 @@ fn ct_local_atomic_runs(
     requested_start: i64,
     requested_end: i64,
 ) -> (Vec<LocalAtomicRun>, Value, Value) {
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        let runs = clipped_runs(ct_local_direct_runs(table), requested_start, requested_end)
+            .into_iter()
+            .map(|run| LocalAtomicRun {
+                value: Some(run.value),
+                start: run.start,
+                end: run.end,
+            })
+            .collect();
+        return (runs, obj.defalt, obj.parent);
+    }
     let vec = table.as_vector_data().unwrap();
     let default = vec[CT_DEFAULT];
     let parent = vec[CT_PARENT];
@@ -1433,8 +1778,12 @@ pub(crate) fn builtin_char_table_parent(args: Vec<Value>) -> EvalResult {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
-    let vec = table.as_vector_data().unwrap();
-    Ok(vec[CT_PARENT])
+    if table.is_char_table() {
+        Ok(table.as_char_table_obj().unwrap().parent)
+    } else {
+        let vec = table.as_vector_data().unwrap();
+        Ok(vec[CT_PARENT])
+    }
 }
 
 /// Return the sparse local `(key . value)` entries stored directly in a char-table.
@@ -1445,6 +1794,12 @@ pub(crate) fn builtin_char_table_parent(args: Vec<Value>) -> EvalResult {
 pub(crate) fn char_table_local_entries(table: &Value) -> Result<Vec<(Value, Value)>, Flow> {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
+    }
+    if table.is_char_table() {
+        return Ok(ct_collect_raw_entries_for_table(*table, false)
+            .into_iter()
+            .map(|run| (run_key(run.start, run.end), run.value))
+            .collect());
     }
     let vec = table.as_vector_data().unwrap().clone();
     let start = ct_data_start(&vec);
@@ -1477,26 +1832,28 @@ pub(crate) fn builtin_set_char_table_parent(args: Vec<Value>) -> EvalResult {
     if !parent.is_nil() {
         let mut cursor = *parent;
         while is_char_table(&cursor) {
-            if cursor.is_vector() && table.is_vector() {
-                // Check pointer equality to detect cycles
-                if std::ptr::eq(
-                    cursor.as_vector_data().unwrap() as *const _,
-                    table.as_vector_data().unwrap() as *const _,
-                ) {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string(
-                            "Attempt to make a chartable be its own parent",
-                        )],
-                    ));
-                }
+            if cursor.bits() == table.bits() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(
+                        "Attempt to make a chartable be its own parent",
+                    )],
+                ));
             }
-            let vec = cursor.as_vector_data().unwrap().clone();
-            cursor = vec[CT_PARENT];
+            cursor = if cursor.is_char_table() {
+                cursor.as_char_table_obj().unwrap().parent
+            } else {
+                let vec = cursor.as_vector_data().unwrap().clone();
+                vec[CT_PARENT]
+            };
         }
     }
 
-    let _ = table.set_vector_slot(CT_PARENT, *parent);
+    if table.is_char_table() {
+        let _ = table.with_char_table_mut(|obj| obj.parent = *parent);
+    } else {
+        let _ = table.set_vector_slot(CT_PARENT, *parent);
+    }
     Ok(*parent)
 }
 
@@ -1573,6 +1930,28 @@ fn ct_resolved_entries(table: &Value) -> Vec<(Value, Value)> {
 }
 
 fn ct_local_direct_runs(table: &Value) -> Vec<EffectiveRun> {
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        let raws = ct_collect_raw_entries_for_table(*table, true);
+        let mut runs = Vec::new();
+        for raw in raws {
+            let value = if raw.value.is_nil() && !obj.defalt.is_nil() {
+                obj.defalt
+            } else {
+                raw.value
+            };
+            push_effective_run(&mut runs, raw.start, raw.end, value);
+        }
+        return if runs.is_empty() {
+            vec![EffectiveRun {
+                start: 0,
+                end: MAX_CHAR,
+                value: Value::NIL,
+            }]
+        } else {
+            runs
+        };
+    }
     if !table.is_vector() {
         return vec![EffectiveRun {
             start: 0,
@@ -1710,11 +2089,19 @@ fn ct_map_char_table_runs(table: &Value) -> Vec<EffectiveRun> {
     if !is_char_table(table) {
         return Vec::new();
     }
-    let vec = table.as_vector_data().unwrap().clone();
-    let parent = vec[CT_PARENT];
+    let vec = table.as_vector_data().map(|v| v.to_vec());
+    let parent = if table.is_char_table() {
+        table.as_char_table_obj().unwrap().parent
+    } else {
+        vec.as_ref().unwrap()[CT_PARENT]
+    };
     let local_runs = ct_local_direct_runs(table);
     let mut out = Vec::new();
-    let mut val = ct_ascii_initial_value(&vec);
+    let mut val = if table.is_char_table() {
+        table.as_char_table_obj().unwrap().ascii
+    } else {
+        ct_ascii_initial_value(vec.as_ref().unwrap())
+    };
     let mut from = 0;
 
     for run in local_runs {
@@ -1806,6 +2193,48 @@ fn ct_collect_raw_entries(vec: &[Value], is_uniprop: bool) -> Vec<RawEntry> {
         i += 2;
     }
     raws
+}
+
+fn collect_sub_char_table_raw_entries(out: &mut Vec<RawEntry>, table: Value, is_uniprop: bool) {
+    let Some(obj) = table.as_sub_char_table_obj() else {
+        return;
+    };
+    let depth = obj.depth as usize;
+    let min_char = obj.min_char as i64;
+    let span = GNU_CHARTAB_CHARS[depth];
+    for (idx, mut value) in obj.contents.iter().copied().enumerate() {
+        let start = min_char + idx as i64 * span;
+        let end = (start + span - 1).min(MAX_CHAR);
+        if is_uniprop
+            && uniprop_compressed_string(value).is_some()
+            && let Some(child) = uniprop_table_uncompress(table, idx)
+        {
+            value = child;
+        }
+        if is_sub_char_table(value) {
+            collect_sub_char_table_raw_entries(out, value, is_uniprop);
+        } else {
+            out.push(RawEntry { start, end, value });
+        }
+    }
+}
+
+fn ct_collect_raw_entries_for_table(table: Value, include_nil: bool) -> Vec<RawEntry> {
+    let Some(obj) = table.as_char_table_obj() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let is_uniprop = is_char_code_property_table(&table);
+    for (idx, value) in obj.contents.iter().copied().enumerate() {
+        let start = idx as i64 * GNU_CHARTAB_CHARS[0];
+        let end = (start + GNU_CHARTAB_CHARS[0] - 1).min(MAX_CHAR);
+        if is_sub_char_table(value) {
+            collect_sub_char_table_raw_entries(&mut out, value, is_uniprop);
+        } else if include_nil || !value.is_nil() {
+            out.push(RawEntry { start, end, value });
+        }
+    }
+    out
 }
 
 fn ct_collect_local_raw_entries(vec: &[Value]) -> Vec<RawEntry> {
@@ -1919,6 +2348,17 @@ pub(crate) fn optimize_char_table(table: &Value, test: OptimizeCharTableTest) ->
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
+    if table.is_char_table() {
+        for idx in 0..GNU_CHARTAB_SIZE[0] {
+            let value = table.as_char_table_obj().unwrap().contents[idx];
+            if is_sub_char_table(value) {
+                let optimized = optimize_sub_char_table_direct(value, test);
+                set_char_table_contents(*table, idx, optimized);
+            }
+        }
+        set_char_table_ascii(*table, char_table_ascii(*table));
+        return Ok(());
+    }
     table.with_vector_data_mut(|vec| {
         let runs = ct_optimized_local_runs(vec, test);
         ct_replace_local_entries_with_runs(vec, runs);
@@ -1926,7 +2366,55 @@ pub(crate) fn optimize_char_table(table: &Value, test: OptimizeCharTableTest) ->
     Ok(())
 }
 
+fn optimize_sub_char_table_direct(table: Value, test: OptimizeCharTableTest) -> Value {
+    let Some(obj) = table.as_sub_char_table_obj() else {
+        return table;
+    };
+    let depth = obj.depth as usize;
+    let Some(mut first) = obj.contents.first().copied() else {
+        return table;
+    };
+    if is_sub_char_table(first) {
+        first = optimize_sub_char_table_direct(first, test);
+        sub_char_table_set_slot(table, 0, first);
+    }
+    let mut optimizable = !is_sub_char_table(first);
+    for idx in 1..GNU_CHARTAB_SIZE[depth] {
+        let mut current = table
+            .as_sub_char_table_obj()
+            .and_then(|obj| obj.contents.get(idx).copied())
+            .unwrap_or(Value::NIL);
+        if is_sub_char_table(current) {
+            current = optimize_sub_char_table_direct(current, test);
+            sub_char_table_set_slot(table, idx, current);
+        }
+        if optimizable && !optimize_values_equal(current, first, test) {
+            optimizable = false;
+        }
+    }
+    if optimizable { first } else { table }
+}
+
 fn ct_effective_runs(table: &Value) -> Vec<EffectiveRun> {
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        let local_runs = ct_local_direct_runs(table);
+        if !is_char_table(&obj.parent) {
+            return local_runs;
+        }
+        let parent_runs = ct_effective_runs(&obj.parent);
+        let mut out = Vec::new();
+        for run in local_runs {
+            if !run.value.is_nil() {
+                push_effective_run(&mut out, run.start, run.end, run.value);
+                continue;
+            }
+            for parent_run in clipped_runs(parent_runs.clone(), run.start, run.end) {
+                push_effective_run(&mut out, parent_run.start, parent_run.end, parent_run.value);
+            }
+        }
+        return out;
+    }
     if !table.is_vector() {
         return vec![EffectiveRun {
             start: 0,
@@ -2150,6 +2638,14 @@ fn external_ascii_slot_from_cache(vec: &[Value], raws: &[RawEntry]) -> Value {
 }
 
 pub(crate) fn sub_char_table_external_slots(table: &Value) -> Option<(i64, i64, Vec<Value>)> {
+    if table.is_sub_char_table() {
+        let obj = table.as_sub_char_table_obj()?;
+        return Some((
+            obj.depth as i64,
+            obj.min_char as i64,
+            obj.contents.as_slice().to_vec(),
+        ));
+    }
     let (depth, min_char, contents) = sub_char_table_depth_min_contents(table)?;
     Some((depth as i64, min_char, contents))
 }
@@ -2159,6 +2655,9 @@ pub(crate) fn char_table_external_slots(table: &Value) -> Option<Vec<Value>> {
         return None;
     }
 
+    if table.is_char_table() {
+        return table.char_table_external_slots();
+    }
     if !table.is_vector() {
         return None;
     };
@@ -2197,6 +2696,13 @@ pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
+    if table.is_char_table() {
+        let obj = table.as_char_table_obj().unwrap();
+        if n < 0 || n as usize >= obj.extras.len() {
+            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        }
+        return Ok(obj.extras[n as usize]);
+    }
     let v = table.as_vector_data().unwrap();
     let extra_count = match v[CT_EXTRA_COUNT].kind() {
         ValueKind::Fixnum(c) => c,
@@ -2219,6 +2725,14 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
 
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
+    }
+    if table.is_char_table() {
+        let extra_len = table.as_char_table_obj().unwrap().extras.len();
+        if n < 0 || n as usize >= extra_len {
+            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        }
+        let _ = table.with_char_table_mut(|obj| obj.extras.ensure_owned()[n as usize] = *value);
+        return Ok(*value);
     }
     let v = table.as_vector_data().unwrap();
     let extra_count = match v[CT_EXTRA_COUNT].kind() {
@@ -2245,8 +2759,12 @@ pub(crate) fn builtin_char_table_subtype(args: Vec<Value>) -> EvalResult {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
-    let vec = table.as_vector_data().unwrap();
-    Ok(vec[CT_SUBTYPE])
+    if table.is_char_table() {
+        Ok(table.as_char_table_obj().unwrap().purpose)
+    } else {
+        let vec = table.as_vector_data().unwrap();
+        Ok(vec[CT_SUBTYPE])
+    }
 }
 
 fn assq_cell_eq(key: Value, list: Value) -> Result<Value, Flow> {

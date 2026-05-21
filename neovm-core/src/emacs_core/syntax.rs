@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
-use super::value::{RuntimeBindingValue, Value, ValueKind, VecLikeType, list_to_vec};
+use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
 use crate::buffer::{Buffer, BufferManager};
 
 thread_local! {
@@ -1571,23 +1571,15 @@ pub(crate) fn builtin_copy_syntax_table(args: Vec<Value>) -> EvalResult {
         table
     };
 
-    match source.kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            let copy = Value::vector(source.as_vector_data().unwrap().clone());
-            super::chartable::builtin_set_char_table_range(vec![copy, Value::NIL, Value::NIL])?;
-            if super::chartable::builtin_char_table_parent(vec![copy])?.is_nil() {
-                super::chartable::builtin_set_char_table_parent(vec![
-                    copy,
-                    ensure_standard_syntax_table_object()?,
-                ])?;
-            }
-            Ok(copy)
-        }
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("syntax-table-p"), source],
-        )),
+    let copy = super::builtins::builtin_copy_sequence(vec![source])?;
+    super::chartable::builtin_set_char_table_range(vec![copy, Value::NIL, Value::NIL])?;
+    if super::chartable::builtin_char_table_parent(vec![copy])?.is_nil() {
+        super::chartable::builtin_set_char_table_parent(vec![
+            copy,
+            ensure_standard_syntax_table_object()?,
+        ])?;
     }
+    Ok(copy)
 }
 
 fn ensure_standard_syntax_table_object() -> EvalResult {

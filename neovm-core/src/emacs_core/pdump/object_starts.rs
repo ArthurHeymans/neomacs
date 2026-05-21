@@ -114,6 +114,8 @@ fn write_object_span(
         }
         // Category C: no HeapImage representation.
         DumpHeapObject::HashTable(_)
+        | DumpHeapObject::CharTable { .. }
+        | DumpHeapObject::SubCharTable { .. }
         | DumpHeapObject::ByteCode(_)
         | DumpHeapObject::Subr { .. }
         | DumpHeapObject::Buffer(_)

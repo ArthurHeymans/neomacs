@@ -1437,7 +1437,7 @@ pub(crate) fn builtin_translate_region_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    use super::chartable::{ct_lookup, is_char_table};
+    use super::chartable::{builtin_char_table_subtype, ct_lookup, is_char_table};
     use super::emacs_char::{
         MAX_CHAR, MAX_MULTIBYTE_LENGTH, byte8_to_char, char_string, chars_in_multibyte,
         string_char_advance,
@@ -1457,9 +1457,7 @@ pub(crate) fn builtin_translate_region_internal(
         ));
     }
     if is_ct_table {
-        let vec = table.as_vector_data().unwrap();
-        // CT_SUBTYPE slot is the `purpose' symbol (chartab.c:528).
-        let purpose = vec[3];
+        let purpose = builtin_char_table_subtype(vec![*table])?;
         let translation_sym = Value::symbol("translation-table");
         if !super::value::eq_value(&purpose, &translation_sym) {
             return Err(signal(

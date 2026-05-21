@@ -582,6 +582,9 @@ fn builtin_length_value(sequence: Value) -> EvalResult {
             let s = sequence.as_lisp_string().expect("string");
             Ok(Value::fixnum(s.schars() as i64))
         }
+        ValueKind::Veclike(VecLikeType::CharTable) => Ok(Value::fixnum(
+            super::chartable::char_table_length(&sequence).unwrap(),
+        )),
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             Ok(Value::fixnum(vector_sequence_length(&sequence)))
         }
@@ -647,6 +650,9 @@ fn sequence_length_less_than(sequence: &Value, target: i64) -> Result<bool, Flow
         ValueKind::String => {
             Ok((sequence.as_lisp_string().expect("string").schars() as i64) < target)
         }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            Ok(super::chartable::char_table_length(sequence).unwrap() < target)
+        }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             Ok(vector_sequence_length(sequence) < target)
         }
@@ -669,6 +675,9 @@ fn sequence_length_equal(sequence: &Value, target: i64) -> Result<bool, Flow> {
         }
         ValueKind::String => {
             Ok((sequence.as_lisp_string().expect("string").schars() as i64) == target)
+        }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            Ok(super::chartable::char_table_length(sequence).unwrap() == target)
         }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             Ok(vector_sequence_length(sequence) == target)
@@ -696,6 +705,9 @@ fn sequence_length_greater_than(sequence: &Value, target: i64) -> Result<bool, F
         }
         ValueKind::String => {
             Ok((sequence.as_lisp_string().expect("string").schars() as i64) > target)
+        }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            Ok(super::chartable::char_table_length(sequence).unwrap() > target)
         }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             Ok(vector_sequence_length(sequence) > target)
@@ -1539,6 +1551,14 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
             }
             Ok(Value::vector(elems))
         }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            crate::emacs_core::chartable::copy_char_table(args[0]).ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("sequencep"), args[0]],
+                )
+            })
+        }
         ValueKind::Veclike(VecLikeType::Record) => {
             let items = args[0].as_record_data().unwrap().clone();
             Ok(Value::make_record(items))
@@ -1710,9 +1730,9 @@ pub(crate) fn builtin_elt(args: Vec<Value>) -> EvalResult {
     expect_args("elt", &args, 2)?;
     match args[0].kind() {
         ValueKind::Cons | ValueKind::Nil => builtin_nth(vec![args[1], args[0]]),
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
-            builtin_aref(vec![args[0], args[1]])
-        }
+        ValueKind::Veclike(VecLikeType::Vector)
+        | ValueKind::Veclike(VecLikeType::CharTable)
+        | ValueKind::String => builtin_aref(vec![args[0], args[1]]),
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), args[0]],
@@ -1727,9 +1747,9 @@ pub(crate) fn builtin_elt_2(
 ) -> EvalResult {
     match sequence.kind() {
         ValueKind::Cons | ValueKind::Nil => builtin_nth_2(eval, n, sequence),
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => {
-            builtin_aref_2(eval, sequence, n)
-        }
+        ValueKind::Veclike(VecLikeType::Vector)
+        | ValueKind::Veclike(VecLikeType::CharTable)
+        | ValueKind::String => builtin_aref_2(eval, sequence, n),
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), sequence],

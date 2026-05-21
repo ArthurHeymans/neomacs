@@ -398,6 +398,8 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         ValueKind::Symbol(_) => "symbol",
         ValueKind::Cons => "cons",
         ValueKind::Veclike(VecLikeType::Vector) => "vector",
+        ValueKind::Veclike(VecLikeType::CharTable) => "char-table",
+        ValueKind::Veclike(VecLikeType::SubCharTable) => "sub-char-table",
         ValueKind::Veclike(VecLikeType::Record) => unreachable!(),
         ValueKind::Veclike(VecLikeType::HashTable) => "hash-table",
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => "primitive-function",
@@ -429,7 +431,11 @@ pub(crate) fn builtin_sequencep(args: Vec<Value>) -> EvalResult {
     expect_args("sequencep", &args, 1)?;
     // GNU: sequences are lists, vectors, strings, bool-vectors, char-tables.
     // Lambdas and records are NOT sequences.
-    let is_seq = args[0].is_list() || args[0].is_vector() || args[0].is_string();
+    let is_seq = args[0].is_list()
+        || args[0].is_vector()
+        || args[0].is_string()
+        || chartable::is_char_table(&args[0])
+        || chartable::is_bool_vector(&args[0]);
     Ok(Value::bool_val(is_seq))
 }
 
@@ -437,7 +443,10 @@ pub(crate) fn builtin_arrayp(args: Vec<Value>) -> EvalResult {
     expect_args("arrayp", &args, 1)?;
     // GNU: arrays are vectors, strings, char-tables, bool-vectors.
     // Records are NOT arrays.
-    let is_arr = args[0].is_vector() || args[0].is_string();
+    let is_arr = args[0].is_vector()
+        || args[0].is_string()
+        || chartable::is_char_table(&args[0])
+        || chartable::is_bool_vector(&args[0]);
     Ok(Value::bool_val(is_arr))
 }
 

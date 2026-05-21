@@ -477,6 +477,12 @@ fn set_current_case_table_for_buffer_in_state(
 }
 
 fn case_table_extra(table: Value, idx: usize) -> Value {
+    if table.is_char_table() {
+        return table
+            .as_char_table_obj()
+            .and_then(|obj| obj.extras.as_slice().get(idx).copied())
+            .unwrap_or(Value::NIL);
+    }
     table
         .as_vector_data()
         .and_then(|vec| vec.get(CT_EXTRA_START + idx).copied())
@@ -484,9 +490,23 @@ fn case_table_extra(table: Value, idx: usize) -> Value {
 }
 
 fn set_case_table_extra(table: Value, idx: usize, value: Value) {
+    if table.is_char_table() {
+        let _ = table.with_char_table_mut(|obj| {
+            if let Some(slot) = obj.extras.ensure_owned().get_mut(idx) {
+                *slot = value;
+            }
+        });
+        return;
+    }
     table.with_vector_data_mut(|vec| {
-        vec[CT_EXTRA_START + idx] = value;
+        if let Some(slot) = vec.get_mut(CT_EXTRA_START + idx) {
+            *slot = value;
+        }
     });
+}
+
+fn make_empty_case_table() -> Value {
+    Value::make_char_table(Value::symbol("case-table"), Value::NIL, 3)
 }
 
 fn fixnum_char(value: Value) -> Option<i64> {
@@ -572,7 +592,7 @@ fn ensure_case_table_derived_slots(table: Value) -> Result<(), Flow> {
 
     let mut up = case_table_extra(table, 0);
     if up.is_nil() {
-        up = build_char_table("case-table", &[], Value::NIL, &[]);
+        up = make_empty_case_table();
         map_case_table(table, |key, elt| set_identity(up, key, elt))?;
         map_case_table(table, |key, elt| shuffle(up, key, elt))?;
         set_case_table_extra(table, 0, up);
@@ -580,18 +600,19 @@ fn ensure_case_table_derived_slots(table: Value) -> Result<(), Flow> {
 
     let mut canon = case_table_extra(table, 1);
     if canon.is_nil() {
-        canon = build_char_table("case-table", &[], Value::NIL, &[]);
+        canon = make_empty_case_table();
         set_case_table_extra(table, 1, canon);
         map_case_table(table, |key, elt| set_canon(table, key, elt))?;
     }
 
     let mut eqv = case_table_extra(table, 2);
     if eqv.is_nil() {
-        eqv = build_char_table("case-table", &[], Value::NIL, &[]);
+        eqv = make_empty_case_table();
         map_case_table(canon, |key, elt| set_identity(eqv, key, elt))?;
         map_case_table(canon, |key, elt| shuffle(eqv, key, elt))?;
         set_case_table_extra(table, 2, eqv);
     }
+    set_case_table_extra(canon, 2, eqv);
 
     Ok(())
 }
@@ -601,6 +622,23 @@ pub fn is_case_table(v: &Value) -> bool {
     use super::chartable::is_char_table;
     if !is_char_table(v) {
         return false;
+    }
+
+    if v.is_char_table() {
+        let Some(obj) = v.as_char_table_obj() else {
+            return false;
+        };
+        if !obj.purpose.is_symbol_named("case-table") || obj.extras.len() < 3 {
+            return false;
+        }
+
+        let up = obj.extras[0];
+        let canon = obj.extras[1];
+        let eqv = obj.extras[2];
+
+        return (up.is_nil() || is_char_table(&up))
+            && ((canon.is_nil() && eqv.is_nil())
+                || (is_char_table(&canon) && (eqv.is_nil() || is_char_table(&eqv))));
     }
 
     let Some(vec) = v.as_vector_data() else {

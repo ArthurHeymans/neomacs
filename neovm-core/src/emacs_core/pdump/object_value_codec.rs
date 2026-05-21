@@ -29,6 +29,8 @@ const HEAP_FRAME: u8 = 13;
 const HEAP_TIMER: u8 = 14;
 const HEAP_SUBR: u8 = 15;
 const HEAP_FREE: u8 = 16;
+const HEAP_CHAR_TABLE: u8 = 17;
+const HEAP_SUB_CHAR_TABLE: u8 = 18;
 
 pub(crate) fn write_heap_object(
     out: &mut Vec<u8>,
@@ -43,6 +45,32 @@ pub(crate) fn write_heap_object(
         DumpHeapObject::Vector(values) => {
             write_u8(out, HEAP_VECTOR);
             write_values(out, values)?;
+        }
+        DumpHeapObject::CharTable {
+            defalt,
+            parent,
+            purpose,
+            ascii,
+            contents,
+            extras,
+        } => {
+            write_u8(out, HEAP_CHAR_TABLE);
+            write_value(out, defalt)?;
+            write_value(out, parent)?;
+            write_value(out, purpose)?;
+            write_value(out, ascii)?;
+            write_values(out, contents)?;
+            write_values(out, extras)?;
+        }
+        DumpHeapObject::SubCharTable {
+            depth,
+            min_char,
+            contents,
+        } => {
+            write_u8(out, HEAP_SUB_CHAR_TABLE);
+            write_i64(out, *depth);
+            write_i64(out, *min_char);
+            write_values(out, contents)?;
         }
         DumpHeapObject::HashTable(table) => {
             write_u8(out, HEAP_HASH_TABLE);
@@ -165,6 +193,8 @@ const VALUE_FRAME: u8 = 18;
 const VALUE_TIMER: u8 = 19;
 const VALUE_BIGNUM: u8 = 20;
 const VALUE_UNBOUND: u8 = 21;
+const VALUE_CHAR_TABLE: u8 = 22;
+const VALUE_SUB_CHAR_TABLE: u8 = 23;
 
 pub(crate) fn write_value(out: &mut Vec<u8>, value: &DumpValue) -> Result<(), DumpError> {
     match value {
@@ -182,6 +212,8 @@ pub(crate) fn write_value(out: &mut Vec<u8>, value: &DumpValue) -> Result<(), Du
         DumpValue::Str(id) => write_heap_ref_value(out, VALUE_STR, id),
         DumpValue::Cons(id) => write_heap_ref_value(out, VALUE_CONS, id),
         DumpValue::Vector(id) => write_heap_ref_value(out, VALUE_VECTOR, id),
+        DumpValue::CharTable(id) => write_heap_ref_value(out, VALUE_CHAR_TABLE, id),
+        DumpValue::SubCharTable(id) => write_heap_ref_value(out, VALUE_SUB_CHAR_TABLE, id),
         DumpValue::Record(id) => write_heap_ref_value(out, VALUE_RECORD, id),
         DumpValue::HashTable(id) => write_heap_ref_value(out, VALUE_HASH_TABLE, id),
         DumpValue::Lambda(id) => write_heap_ref_value(out, VALUE_LAMBDA, id),
@@ -884,6 +916,19 @@ impl<'a> Cursor<'a> {
                 cdr: self.read_value()?,
             }),
             HEAP_VECTOR => Ok(DumpHeapObject::Vector(self.read_values()?)),
+            HEAP_CHAR_TABLE => Ok(DumpHeapObject::CharTable {
+                defalt: self.read_value()?,
+                parent: self.read_value()?,
+                purpose: self.read_value()?,
+                ascii: self.read_value()?,
+                contents: self.read_values()?,
+                extras: self.read_values()?,
+            }),
+            HEAP_SUB_CHAR_TABLE => Ok(DumpHeapObject::SubCharTable {
+                depth: self.read_i64("sub-char-table depth")?,
+                min_char: self.read_i64("sub-char-table min-char")?,
+                contents: self.read_values()?,
+            }),
             HEAP_HASH_TABLE => Ok(DumpHeapObject::HashTable(self.read_hash_table()?)),
             HEAP_STRING => Ok(DumpHeapObject::Str {
                 data: self.read_byte_data()?,
@@ -943,6 +988,12 @@ impl<'a> Cursor<'a> {
             VALUE_STR => Ok(DumpValue::Str(self.read_heap_ref("string heap ref")?)),
             VALUE_CONS => Ok(DumpValue::Cons(self.read_heap_ref("cons heap ref")?)),
             VALUE_VECTOR => Ok(DumpValue::Vector(self.read_heap_ref("vector heap ref")?)),
+            VALUE_CHAR_TABLE => Ok(DumpValue::CharTable(
+                self.read_heap_ref("char-table heap ref")?,
+            )),
+            VALUE_SUB_CHAR_TABLE => Ok(DumpValue::SubCharTable(
+                self.read_heap_ref("sub-char-table heap ref")?,
+            )),
             VALUE_RECORD => Ok(DumpValue::Record(self.read_heap_ref("record heap ref")?)),
             VALUE_HASH_TABLE => Ok(DumpValue::HashTable(
                 self.read_heap_ref("hash table heap ref")?,

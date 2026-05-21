@@ -1011,6 +1011,10 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
 
     expect_args("fillarray", &args, 2)?;
     match args[0].kind() {
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            super::chartable::fill_char_table_from_fillarray(&args[0], args[1])?;
+            Ok(args[0])
+        }
         ValueKind::Veclike(VecLikeType::Vector) => {
             let is_bool_vector = super::chartable::is_bool_vector(&args[0]);
             let is_char_table = !is_bool_vector && super::chartable::is_char_table(&args[0]);

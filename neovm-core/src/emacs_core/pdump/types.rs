@@ -102,6 +102,8 @@ pub enum DumpValue {
     Str(DumpHeapRef),
     Cons(DumpHeapRef),
     Vector(DumpHeapRef),
+    CharTable(DumpHeapRef),
+    SubCharTable(DumpHeapRef),
     Record(DumpHeapRef),
     HashTable(DumpHeapRef),
     Lambda(DumpHeapRef),
@@ -142,6 +144,19 @@ pub enum DumpHeapObject {
         cdr: DumpValue,
     },
     Vector(Vec<DumpValue>),
+    CharTable {
+        defalt: DumpValue,
+        parent: DumpValue,
+        purpose: DumpValue,
+        ascii: DumpValue,
+        contents: Vec<DumpValue>,
+        extras: Vec<DumpValue>,
+    },
+    SubCharTable {
+        depth: i64,
+        min_char: i64,
+        contents: Vec<DumpValue>,
+    },
     HashTable(DumpLispHashTable),
     Str {
         data: DumpByteData,

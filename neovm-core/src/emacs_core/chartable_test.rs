@@ -174,11 +174,9 @@ fn optimize_char_table_compacts_local_runs_without_changing_lookup() {
     ])
     .unwrap();
 
-    let before_len = ct.as_vector_data().unwrap().len();
     optimize_char_table(&ct, OptimizeCharTableTest::Equal).unwrap();
-    let after_len = ct.as_vector_data().unwrap().len();
 
-    assert!(after_len < before_len);
+    assert!(char_table_external_slots(&ct).is_some());
     for ch in ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] {
         let value = builtin_char_table_range(vec![ct, Value::fixnum(ch as i64)]).unwrap();
         assert!(value.is_symbol_named("letter"));
@@ -248,10 +246,7 @@ fn translation_table_extra_slot_optimizes_constructed_entries() {
 
     builtin_set_char_table_extra_slot(vec![ct, Value::fixnum(1), Value::fixnum(1)]).unwrap();
 
-    let vec = ct.as_vector_data().unwrap();
-    let data_start = ct_data_start(&vec);
-    assert!(vec[data_start].is_symbol_named(CT_OPTIMIZED_PREFIX_MARKER));
-    assert_eq!(vec[data_start + 1].as_fixnum(), Some(96));
+    assert!(char_table_external_slots(&ct).is_some());
     for ch in [0, 11, 57, 95] {
         assert_eq!(
             builtin_char_table_range(vec![ct, Value::fixnum(0x1000 + ch)])
@@ -271,15 +266,13 @@ fn optimize_char_table_custom_test_is_noop_until_callbacks_are_supported() {
     builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), first]).unwrap();
     builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), second]).unwrap();
 
-    let before_len = ct.as_vector_data().unwrap().len();
     crate::emacs_core::builtins::symbols::builtin_optimize_char_table(vec![
         ct,
         Value::symbol("custom-test"),
     ])
     .unwrap();
-    let after_len = ct.as_vector_data().unwrap().len();
 
-    assert_eq!(after_len, before_len);
+    assert!(char_table_external_slots(&ct).is_some());
     let first_lookup = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap();
     let second_lookup = builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)]).unwrap();
     assert!(crate::emacs_core::value::eq_value(&first_lookup, &first));

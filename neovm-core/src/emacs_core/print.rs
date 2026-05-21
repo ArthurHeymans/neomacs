@@ -711,6 +711,41 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 state.depth -= 1;
             });
         }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            if let Some(slots) = char_table_external_slots(value) {
+                with_default_cycle_guard(value, out, state, |out, state| {
+                    state.depth += 1;
+                    out.push_str("#^[");
+                    for (idx, item) in slots.iter().enumerate() {
+                        if idx > 0 {
+                            out.push(' ');
+                        }
+                        write_value_stateful(item, out, state);
+                    }
+                    out.push(']');
+                    state.depth -= 1;
+                });
+            }
+        }
+        ValueKind::Veclike(VecLikeType::SubCharTable) => {
+            if let Some((depth, min_char, slots)) =
+                super::chartable::sub_char_table_external_slots(value)
+            {
+                with_default_cycle_guard(value, out, state, |out, state| {
+                    state.depth += 1;
+                    out.push_str("#^^[");
+                    out.push_str(&depth.to_string());
+                    out.push(' ');
+                    out.push_str(&min_char.to_string());
+                    for item in &slots {
+                        out.push(' ');
+                        write_value_stateful(item, out, state);
+                    }
+                    out.push(']');
+                    state.depth -= 1;
+                });
+            }
+        }
         ValueKind::Veclike(VecLikeType::Vector) => {
             if let Some(nbits) = bool_vector_length(value) {
                 out.push_str(&format_bool_vector(value, nbits as usize));
@@ -1641,6 +1676,43 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             out.push(b'(');
             print_cons_bytes(value, out, options);
             out.push(b')');
+            pop_bytes_cycle_object(pushed);
+        }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            if append_bytes_cycle_ref_if_any(value, out) {
+                return;
+            }
+            let pushed = push_bytes_cycle_object(value);
+            if let Some(slots) = char_table_external_slots(value) {
+                out.extend_from_slice(b"#^[");
+                for (idx, item) in slots.iter().enumerate() {
+                    if idx > 0 {
+                        out.push(b' ');
+                    }
+                    append_print_value_bytes(item, out, options);
+                }
+                out.push(b']');
+            }
+            pop_bytes_cycle_object(pushed);
+        }
+        ValueKind::Veclike(VecLikeType::SubCharTable) => {
+            if append_bytes_cycle_ref_if_any(value, out) {
+                return;
+            }
+            let pushed = push_bytes_cycle_object(value);
+            if let Some((depth, min_char, slots)) =
+                super::chartable::sub_char_table_external_slots(value)
+            {
+                out.extend_from_slice(b"#^^[");
+                out.extend_from_slice(depth.to_string().as_bytes());
+                out.push(b' ');
+                out.extend_from_slice(min_char.to_string().as_bytes());
+                for item in &slots {
+                    out.push(b' ');
+                    append_print_value_bytes(item, out, options);
+                }
+                out.push(b']');
+            }
             pop_bytes_cycle_object(pushed);
         }
         ValueKind::Veclike(VecLikeType::Vector) => {

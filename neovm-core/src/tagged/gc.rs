@@ -1031,6 +1031,16 @@ impl TaggedHeap {
                             size_of::<VectorObj>()
                                 .saturating_add(Self::lisp_value_vec_storage_bytes(&obj.data))
                         }
+                        VecLikeType::CharTable => {
+                            let obj = &*(ptr as *const CharTableObj);
+                            size_of::<CharTableObj>()
+                                .saturating_add(Self::lisp_value_vec_storage_bytes(&obj.extras))
+                        }
+                        VecLikeType::SubCharTable => {
+                            let obj = &*(ptr as *const SubCharTableObj);
+                            size_of::<SubCharTableObj>()
+                                .saturating_add(Self::lisp_value_vec_storage_bytes(&obj.contents))
+                        }
                         VecLikeType::HashTable => {
                             Self::hash_table_object_bytes(&*(ptr as *const HashTableObj))
                         }
@@ -1152,6 +1162,62 @@ impl TaggedHeap {
             size_of::<VectorObj>()
                 .saturating_add(Self::lisp_value_vec_storage_bytes(unsafe { &(*ptr).data })),
         );
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a GNU-shaped char-table.
+    pub fn alloc_char_table(
+        &mut self,
+        purpose: TaggedValue,
+        init: TaggedValue,
+        n_extras: usize,
+    ) -> TaggedValue {
+        let contents = [init; CHAR_TABLE_TOP_SLOTS];
+        let extras = vec![init; n_extras];
+        self.add_memory_use_count(
+            MemoryUseCountSlot::VectorCells,
+            (4 + CHAR_TABLE_TOP_SLOTS + n_extras) as u64,
+        );
+        let obj = Box::new(CharTableObj {
+            header: VecLikeHeader::new(VecLikeType::CharTable),
+            defalt: init,
+            parent: TaggedValue::NIL,
+            purpose,
+            ascii: init,
+            contents,
+            extras: extras.into(),
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(unsafe {
+            size_of::<CharTableObj>()
+                .saturating_add(Self::lisp_value_vec_storage_bytes(&(*ptr).extras))
+        });
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a GNU-shaped sub-char-table.
+    pub fn alloc_sub_char_table(
+        &mut self,
+        depth: i32,
+        min_char: i32,
+        contents: Vec<TaggedValue>,
+    ) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, contents.len() as u64);
+        let obj = Box::new(SubCharTableObj {
+            header: VecLikeHeader::new(VecLikeType::SubCharTable),
+            depth,
+            min_char,
+            contents: contents.into(),
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(unsafe {
+            size_of::<SubCharTableObj>()
+                .saturating_add(Self::lisp_value_vec_storage_bytes(&(*ptr).contents))
+        });
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -1863,6 +1929,37 @@ impl TaggedHeap {
                     }
                 }
             }
+            VecLikeType::CharTable => {
+                let obj = unsafe { &*(ptr as *const CharTableObj) };
+                for (value, origin) in [
+                    (obj.defalt, "char-table-default"),
+                    (obj.parent, "char-table-parent"),
+                    (obj.purpose, "char-table-purpose"),
+                    (obj.ascii, "char-table-ascii"),
+                ] {
+                    if value.is_heap_object() {
+                        self.push_gray(value, origin);
+                    }
+                }
+                for val in &obj.contents {
+                    if val.is_heap_object() {
+                        self.push_gray(*val, "char-table-content");
+                    }
+                }
+                for val in &obj.extras {
+                    if val.is_heap_object() {
+                        self.push_gray(*val, "char-table-extra");
+                    }
+                }
+            }
+            VecLikeType::SubCharTable => {
+                let obj = unsafe { &*(ptr as *const SubCharTableObj) };
+                for val in &obj.contents {
+                    if val.is_heap_object() {
+                        self.push_gray(*val, "sub-char-table-content");
+                    }
+                }
+            }
             VecLikeType::Record => {
                 let obj = ptr as *const RecordObj;
                 for val in unsafe { &(*obj).data } {
@@ -2075,6 +2172,12 @@ impl TaggedHeap {
                 let type_tag = unsafe { (*ptr).type_tag };
                 match type_tag {
                     VecLikeType::Vector => unsafe { drop(Box::from_raw(ptr as *mut VectorObj)) },
+                    VecLikeType::CharTable => unsafe {
+                        drop(Box::from_raw(ptr as *mut CharTableObj))
+                    },
+                    VecLikeType::SubCharTable => unsafe {
+                        drop(Box::from_raw(ptr as *mut SubCharTableObj))
+                    },
                     VecLikeType::HashTable => unsafe {
                         drop(Box::from_raw(ptr as *mut HashTableObj))
                     },

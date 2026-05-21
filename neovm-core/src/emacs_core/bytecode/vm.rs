@@ -500,7 +500,9 @@ impl<'a> Vm<'a> {
         // code did even for the lexical case) is dead work that dominated
         // debug-build batch-byte-compile runtime.
         let has_named_params = nonrest > 0 || has_rest;
-        let params_on_stack = func.lexical || func.env.is_some();
+        let params_on_stack = func.lexical
+            || func.env.is_some()
+            || matches!(func.arglist.kind(), ValueKind::Fixnum(_));
         if params_on_stack {
             // Lexical bytecode follows GNU bytecode.c: exec_byte_code receives
             // the encoded arg template and pushes incoming arguments into the

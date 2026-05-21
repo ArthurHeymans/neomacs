@@ -155,6 +155,10 @@ pub enum VecLikeType {
     UserPtr = 16,
     /// Dynamic module function (like GNU's PVEC_MODULE_FUNCTION).
     ModuleFunction = 17,
+    /// Character table (like GNU's PVEC_CHAR_TABLE).
+    CharTable = 18,
+    /// Internal sub character table (like GNU's PVEC_SUB_CHAR_TABLE).
+    SubCharTable = 19,
 }
 
 use std::sync::OnceLock;
@@ -354,6 +358,36 @@ impl VecLikeHeader {
 pub struct VectorObj {
     pub header: VecLikeHeader,
     pub data: LispValueVec,
+}
+
+/// Number of slots in GNU's top-level char-table contents vector.
+pub const CHAR_TABLE_TOP_SLOTS: usize = 64;
+
+/// Heap-allocated character table.
+///
+/// Mirrors GNU Emacs's `struct Lisp_Char_Table`: default, parent, purpose,
+/// ASCII cache, 64 top-level contents slots, then extra slots.
+#[repr(C)]
+pub struct CharTableObj {
+    pub header: VecLikeHeader,
+    pub defalt: TaggedValue,
+    pub parent: TaggedValue,
+    pub purpose: TaggedValue,
+    pub ascii: TaggedValue,
+    pub contents: [TaggedValue; CHAR_TABLE_TOP_SLOTS],
+    pub extras: LispValueVec,
+}
+
+/// Heap-allocated sub character table.
+///
+/// Mirrors GNU Emacs's `struct Lisp_Sub_Char_Table`: depth, minimum
+/// character, and a depth-dependent contents vector.
+#[repr(C)]
+pub struct SubCharTableObj {
+    pub header: VecLikeHeader,
+    pub depth: i32,
+    pub min_char: i32,
+    pub contents: LispValueVec,
 }
 
 /// Heap-allocated hash table.

@@ -37,6 +37,10 @@ pub(crate) fn builtin_aref_2(
 fn builtin_aref_values(array: Value, index: Value) -> EvalResult {
     let idx_fixnum = expect_fixnum(&index)?;
     match array.kind() {
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            let ch = expect_char_table_index(&index)?;
+            super::chartable::ct_lookup(&array, ch)
+        }
         ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(&array) => {
             let ch = expect_char_table_index(&index)?;
             super::chartable::ct_lookup(&array, ch)
@@ -189,6 +193,14 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
     // whether ARRAY is mutable by `aset`.
     let idx_fixnum = expect_fixnum(&args[1])?;
     match args[0].kind() {
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            let ch = expect_char_table_index(&args[1])?;
+            super::chartable::builtin_set_char_table_range(vec![
+                args[0],
+                Value::fixnum(ch),
+                args[2],
+            ])
+        }
         ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(&args[0]) => {
             let ch = expect_char_table_index(&args[1])?;
             super::chartable::builtin_set_char_table_range(vec![
@@ -290,6 +302,12 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                 }
             }
             ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(arg) => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("sequencep"), *arg],
+                ));
+            }
+            ValueKind::Veclike(VecLikeType::CharTable) => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("sequencep"), *arg],

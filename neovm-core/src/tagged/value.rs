@@ -773,6 +773,18 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::Vector)
     }
 
+    /// True if this value is a char-table (GNU PVEC_CHAR_TABLE shape).
+    #[inline]
+    pub fn is_char_table(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::CharTable)
+    }
+
+    /// True if this value is a sub-char-table (GNU PVEC_SUB_CHAR_TABLE shape).
+    #[inline]
+    pub fn is_sub_char_table(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::SubCharTable)
+    }
+
     /// True if this value is a record (veclike with Record type tag).
     #[inline]
     pub fn is_record(self) -> bool {
@@ -851,6 +863,8 @@ impl TaggedValue {
                 VecLikeType::Sqlite => "sqlite",
                 VecLikeType::UserPtr => "user-ptr",
                 VecLikeType::ModuleFunction => "module-function",
+                VecLikeType::CharTable => "char-table",
+                VecLikeType::SubCharTable => "sub-char-table",
             },
             ValueKind::Unbound => "unbound",
             ValueKind::Unknown => "unknown",

@@ -26,9 +26,9 @@ use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
 use crate::tagged::header::{
-    BufferObj, ByteCodeObj, ConsCell, FloatObj, FrameObj, HashTableObj, LambdaObj, LispValueSlice,
-    MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj, TimerObj, VecLikeHeader, VectorObj,
-    WindowObj,
+    BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
+    HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj,
+    SubCharTableObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1214,6 +1214,16 @@ impl TaggedValue {
         with_tagged_heap(|h| h.alloc_vector(values))
     }
 
+    /// Allocate a GNU-shaped char-table.
+    pub fn make_char_table(purpose: Value, init: Value, n_extras: usize) -> Self {
+        with_tagged_heap(|h| h.alloc_char_table(purpose, init, n_extras))
+    }
+
+    /// Allocate a GNU-shaped sub-char-table.
+    pub fn make_sub_char_table(depth: i32, min_char: i32, contents: Vec<Value>) -> Self {
+        with_tagged_heap(|h| h.alloc_sub_char_table(depth, min_char, contents))
+    }
+
     /// Allocate a record.
     pub fn make_record(values: Vec<Value>) -> Self {
         with_tagged_heap(|h| h.alloc_record(values))
@@ -1634,6 +1644,61 @@ impl TaggedValue {
     /// Update a single vector slot through the centralized write path.
     pub fn set_vector_slot(self, index: usize, value: Value) -> bool {
         mutate::set_vector_slot(self, index, value)
+    }
+
+    /// Borrow a GNU-shaped char-table object.
+    pub fn as_char_table_obj(self) -> Option<&'static CharTableObj> {
+        if self.is_char_table() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const CharTableObj;
+            Some(unsafe { &*ptr })
+        } else {
+            None
+        }
+    }
+
+    /// Mutate a GNU-shaped char-table object.
+    pub fn with_char_table_mut<R>(self, f: impl FnOnce(&mut CharTableObj) -> R) -> Option<R> {
+        if !self.is_char_table() {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *mut CharTableObj;
+        Some(f(unsafe { &mut *ptr }))
+    }
+
+    /// Borrow a GNU-shaped sub-char-table object.
+    pub fn as_sub_char_table_obj(self) -> Option<&'static SubCharTableObj> {
+        if self.is_sub_char_table() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const SubCharTableObj;
+            Some(unsafe { &*ptr })
+        } else {
+            None
+        }
+    }
+
+    /// Mutate a GNU-shaped sub-char-table object.
+    pub fn with_sub_char_table_mut<R>(
+        self,
+        f: impl FnOnce(&mut SubCharTableObj) -> R,
+    ) -> Option<R> {
+        if !self.is_sub_char_table() {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *mut SubCharTableObj;
+        Some(f(unsafe { &mut *ptr }))
+    }
+
+    /// Expose GNU's readable char-table slots:
+    /// DEFAULT PARENT PURPOSE ASCII CONTENTS[64] EXTRAS...
+    pub fn char_table_external_slots(self) -> Option<Vec<Value>> {
+        let table = self.as_char_table_obj()?;
+        let mut slots = Vec::with_capacity(4 + CHAR_TABLE_TOP_SLOTS + table.extras.len());
+        slots.push(table.defalt);
+        slots.push(table.parent);
+        slots.push(table.purpose);
+        slots.push(table.ascii);
+        slots.extend_from_slice(&table.contents);
+        slots.extend_from_slice(table.extras.as_slice());
+        Some(slots)
     }
 
     /// Get record elements.
