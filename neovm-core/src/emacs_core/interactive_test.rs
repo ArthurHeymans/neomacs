@@ -181,6 +181,10 @@ fn gnu_simple_command_execute_eval() -> Context {
         (fset 'macroexp--obsolete-warning (lambda (&rest _args) ""))
         (fset 'help--key-description-fontified (lambda (&rest _args) ""))
         (fset 'where-is-internal (lambda (&rest _args) nil))
+        (fset 'mouse-drag-region (lambda (&rest _args) nil))
+        (fset 'mouse-set-point (lambda (&rest _args) nil))
+        (global-set-key [down-mouse-1] #'mouse-drag-region)
+        (global-set-key [mouse-1] #'mouse-set-point)
         "#,
     )
     .expect("eval command-execute test stubs");

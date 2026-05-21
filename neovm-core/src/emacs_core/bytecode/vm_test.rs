@@ -3058,6 +3058,12 @@ fn vm_call_interactively_handles_k_k_capital_and_u_specs_on_shared_runtime() {
     assert_eq!(
         vm_eval_str(
             r#"(list
+                 (progn
+                   (fset 'mouse-drag-region (lambda (&rest _args) nil))
+                   (fset 'mouse-set-point (lambda (&rest _args) nil))
+                   (global-set-key [down-mouse-1] #'mouse-drag-region)
+                   (global-set-key [mouse-1] #'mouse-set-point)
+                   nil)
                  (let ((unread-command-events (list '(down-mouse-1) '(mouse-1))))
                    (call-interactively
                     '(lambda (keys up) (interactive "k
@@ -3067,7 +3073,7 @@ U") (list keys up))))
                     '(lambda (keys up) (interactive "K
 U") (list keys up)))))"#
         ),
-        "OK (([(down-mouse-1)] [(mouse-1)]) ([(down-mouse-1)] [(mouse-1)]))"
+        "OK (nil ([(down-mouse-1)] [(mouse-1)]) ([(down-mouse-1)] [(mouse-1)]))"
     );
 }
 
