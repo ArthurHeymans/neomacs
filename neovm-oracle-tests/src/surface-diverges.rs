@@ -4,13 +4,12 @@
 //! Tests that FAIL expose an active divergence; tests that PASS serve as
 //! regression guards verifying parity.
 //!
-//! ## Confirmed divergence (FAILING as of 2026-05-19)
+//! ## Previously confirmed divergence (now passing)
 //!
-//! - **D4** `signal_after_change` not called for property mutations.
-//!   `after-change-functions` and `before-change-functions` are not fired
-//!   when text properties are modified via put-text-property,
-//!   add-text-properties, remove-text-properties, or set-text-properties.
-//!   GNU Emacs fires these hooks (used by font-lock, jit-lock, etc.).
+//! - **D4** property mutations must fire buffer change hooks.
+//!   GNU Emacs calls `prepare_to_modify_buffer_1` before buffer text-property
+//!   changes and `signal_after_change` after mutations in `src/textprop.c`.
+//!   These tests now pass and remain as regression guards.
 //!
 //! ## Audit corrections (tests PASS — audit was wrong)
 //!
@@ -240,13 +239,13 @@ fn surface_d3_undo_restores_previous_property() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  D4 · No signal_after_change for property mutations  ★ CONFIRMED ★
+//  D4 · signal_after_change for property mutations (regression guard)
 //
 //  GNU: all property mutation functions call signal_after_change after
 //       modifying intervals (textprop.c).  This fires after-change-functions
 //       used by font-lock, jit-lock, etc.
-//  NeoMacs: signal_after_change is never called in the property mutation
-//           path (textprop.rs).  Only the modified tick is bumped.
+//  NeoMacs: the text property path mirrors this hook behavior; keep these
+//           oracle cases strict so regressions stay visible.
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
@@ -254,7 +253,6 @@ fn surface_d4_after_change_fired_on_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // after-change-functions should fire when put-text-property mutates.
-    // GNU → ((1 12 11)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(
         r#"
 (with-temp-buffer
@@ -275,7 +273,6 @@ fn surface_d4_after_change_fired_on_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for add-text-properties.
-    // GNU → ((1 6 5)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(
         r#"
 (with-temp-buffer
@@ -296,7 +293,6 @@ fn surface_d4_after_change_fired_on_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Same for remove-text-properties.
-    // GNU → ((1 12 11)), NeoMacs → nil
     assert_oracle_parity_with_bootstrap(
         r#"
 (with-temp-buffer
@@ -318,8 +314,7 @@ fn surface_d4_before_change_fired_on_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // GNU calls prepare_to_modify_buffer_1 before property mutations,
-    // which runs before-change-functions.  NeoMacs skips this.
-    // GNU → ((1 6)), NeoMacs → nil
+    // which runs before-change-functions.
     assert_oracle_parity_with_bootstrap(
         r#"
 (with-temp-buffer
