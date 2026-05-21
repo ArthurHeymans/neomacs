@@ -3856,12 +3856,20 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_posix_string_match_shared(&mut self, args: &[Value]) -> EvalResult {
+        let case_fold = self.case_fold_search_enabled();
+        let case_translation = if case_fold {
+            let canon = crate::emacs_core::casetab::current_case_canon_table(&mut self.ctx)?;
+            Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+        } else {
+            None
+        };
         let current_buffer = self.ctx.buffers.current_buffer();
         let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
         let category_table =
             Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
         crate::emacs_core::builtins::search::builtin_posix_string_match_with_state(
-            self.case_fold_search_enabled(),
+            case_fold,
+            case_translation,
             syntax_table.as_ref(),
             category_table,
             &mut self.ctx.match_data,

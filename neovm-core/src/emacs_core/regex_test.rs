@@ -380,7 +380,7 @@ fn string_match_match_at_point_escape_does_not_skip_past_start() {
 fn string_match_digit_escape_uses_backref_engine_semantics() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
-    let result = string_match_full_with_case_fold("\\d+", "123x", 0, false, &mut md);
+    let result = string_match_full_with_case_fold("\\d+", "dddx", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
     assert_eq!(md.groups[0], Some((0, 3)));
@@ -390,7 +390,7 @@ fn string_match_digit_escape_uses_backref_engine_semantics() {
 fn string_match_control_escape_uses_backref_engine_semantics() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
-    let result = string_match_full_with_case_fold("a\\tb", "a\tb", 0, false, &mut md);
+    let result = string_match_full_with_case_fold("a\\tb", "atb", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
     assert_eq!(md.groups[0], Some((0, 3)));

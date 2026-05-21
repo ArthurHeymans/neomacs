@@ -374,6 +374,7 @@ pub(crate) fn builtin_set_case_table(
     }
     let table = args[0];
     let _ = ensure_standard_case_table_object_in_state(&mut ctx.obarray)?;
+    ensure_case_table_derived_slots(table)?;
     set_current_case_table_for_buffer_in_state(&mut ctx.buffers, table)?;
     Ok(table)
 }
@@ -394,6 +395,7 @@ pub(crate) fn builtin_set_standard_case_table(
         *slot.borrow_mut() = Some(args[0]);
     });
     let table = args[0];
+    ensure_case_table_derived_slots(table)?;
     ctx.obarray
         .set_symbol_value(STANDARD_CASE_TABLE_SYMBOL, table);
     Ok(table)
@@ -444,6 +446,14 @@ pub(crate) fn sync_current_buffer_case_table_state(
     Ok(())
 }
 
+pub(crate) fn current_case_canon_table(
+    ctx: &mut crate::emacs_core::eval::Context,
+) -> Result<Value, Flow> {
+    let table = current_case_table_for_buffer_in_state(&mut ctx.obarray, &mut ctx.buffers)?;
+    ensure_case_table_derived_slots(table)?;
+    Ok(case_table_extra(table, 1))
+}
+
 fn set_current_case_table_for_buffer_in_state(
     buffers: &mut crate::buffer::BufferManager,
     table: Value,
@@ -463,6 +473,126 @@ fn set_current_case_table_for_buffer_in_state(
     // 3 case tables. The case-table slot is always-local
     // (`local_flags_idx == -1`), so no flag bit needs setting.
     buf.slots[BUFFER_SLOT_CASE_TABLE] = table;
+    Ok(())
+}
+
+fn case_table_extra(table: Value, idx: usize) -> Value {
+    table
+        .as_vector_data()
+        .and_then(|vec| vec.get(CT_EXTRA_START + idx).copied())
+        .unwrap_or(Value::NIL)
+}
+
+fn set_case_table_extra(table: Value, idx: usize, value: Value) {
+    table.with_vector_data_mut(|vec| {
+        vec[CT_EXTRA_START + idx] = value;
+    });
+}
+
+fn fixnum_char(value: Value) -> Option<i64> {
+    match value.kind() {
+        ValueKind::Fixnum(n)
+            if (0..=crate::emacs_core::emacs_char::MAX_CHAR as i64).contains(&n) =>
+        {
+            Some(n)
+        }
+        _ => None,
+    }
+}
+
+fn range_bounds(key: Value) -> Option<(i64, i64)> {
+    match key.kind() {
+        ValueKind::Fixnum(n) => Some((n, n)),
+        ValueKind::Cons => Some((key.cons_car().as_fixnum()?, key.cons_cdr().as_fixnum()?)),
+        _ => None,
+    }
+}
+
+fn set_char_table_range_value(table: Value, range: Value, value: Value) -> Result<(), Flow> {
+    super::chartable::builtin_set_char_table_range(vec![table, range, value])?;
+    Ok(())
+}
+
+fn set_identity(table: Value, key: Value, elt: Value) -> Result<(), Flow> {
+    let Some(_elt) = fixnum_char(elt) else {
+        return Ok(());
+    };
+    let Some((from, to)) = range_bounds(key) else {
+        return Ok(());
+    };
+    for ch in from..=to {
+        set_char_table_range_value(table, Value::fixnum(ch), Value::fixnum(ch))?;
+    }
+    Ok(())
+}
+
+fn shuffle(table: Value, key: Value, elt: Value) -> Result<(), Flow> {
+    let Some(elt) = fixnum_char(elt) else {
+        return Ok(());
+    };
+    let Some((from, to)) = range_bounds(key) else {
+        return Ok(());
+    };
+    for ch in from..=to {
+        let tem = super::chartable::ct_lookup(&table, elt)?;
+        set_char_table_range_value(table, Value::fixnum(elt), Value::fixnum(ch))?;
+        set_char_table_range_value(table, Value::fixnum(ch), tem)?;
+    }
+    Ok(())
+}
+
+fn set_canon(case_table: Value, key: Value, elt: Value) -> Result<(), Flow> {
+    let Some(elt) = fixnum_char(elt) else {
+        return Ok(());
+    };
+    let up = case_table_extra(case_table, 0);
+    let canon = case_table_extra(case_table, 1);
+    let up_elt = super::chartable::ct_lookup(&up, elt)?;
+    let Some(up_elt) = fixnum_char(up_elt) else {
+        return Ok(());
+    };
+    let canonical = super::chartable::ct_lookup(&case_table, up_elt)?;
+    set_char_table_range_value(canon, key, canonical)
+}
+
+fn map_case_table(
+    table: Value,
+    mut f: impl FnMut(Value, Value) -> Result<(), Flow>,
+) -> Result<(), Flow> {
+    super::chartable::for_each_char_table_mapping(&table, |key, value| f(key, value))
+}
+
+fn ensure_case_table_derived_slots(table: Value) -> Result<(), Flow> {
+    if !is_case_table(&table) {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("case-table-p"), table],
+        ));
+    }
+
+    let mut up = case_table_extra(table, 0);
+    if up.is_nil() {
+        up = build_char_table("case-table", &[], Value::NIL, &[]);
+        map_case_table(table, |key, elt| set_identity(up, key, elt))?;
+        map_case_table(table, |key, elt| shuffle(up, key, elt))?;
+        set_case_table_extra(table, 0, up);
+    }
+
+    let mut canon = case_table_extra(table, 1);
+    if canon.is_nil() {
+        canon = build_char_table("case-table", &[], Value::NIL, &[]);
+        set_case_table_extra(table, 1, canon);
+        map_case_table(table, |key, elt| set_canon(table, key, elt))?;
+    }
+
+    let mut eqv = case_table_extra(table, 2);
+    if eqv.is_nil() {
+        eqv = build_char_table("case-table", &[], Value::NIL, &[]);
+        map_case_table(canon, |key, elt| set_identity(eqv, key, elt))?;
+        map_case_table(canon, |key, elt| shuffle(eqv, key, elt))?;
+        set_case_table_extra(table, 2, eqv);
+    }
+
     Ok(())
 }
 

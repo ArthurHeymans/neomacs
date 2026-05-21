@@ -182,3 +182,26 @@ fn oracle_prop_regexp_gnu_unicode_case_folding() {
    (funcall probe "[[:lower:]]+" "ABC")))"#;
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_prop_regexp_gnu_custom_case_table_folding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(let ((tbl (make-char-table 'case-table nil)))
+  (set-char-table-range tbl ?X ?q)
+  (set-case-table tbl)
+  (list
+   (char-table-range (current-case-table) ?X)
+   (char-table-p (char-table-extra-slot (current-case-table) 0))
+   (char-table-range (char-table-extra-slot (current-case-table) 1) ?X)
+   (char-table-range (char-table-extra-slot (current-case-table) 1) ?q)
+   (char-table-range (char-table-extra-slot (current-case-table) 2) ?X)
+   (char-table-range (char-table-extra-slot (current-case-table) 2) ?q)
+   (let ((case-fold-search t))
+     (string-match "X" "q"))
+   (let ((case-fold-search t))
+     (string-match-p "X" "q"))
+   (let ((case-fold-search t))
+     (posix-string-match "X" "q"))))"#;
+    assert_oracle_parity_with_bootstrap(form);
+}

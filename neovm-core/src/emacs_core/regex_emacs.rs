@@ -277,22 +277,41 @@ pub(crate) struct CompiledPattern {
 #[derive(Clone, Debug)]
 pub struct CaseTranslation {
     byte: [u32; 256],
+    table: Option<crate::emacs_core::value::Value>,
 }
 
 impl CaseTranslation {
-    fn standard() -> Self {
+    pub(crate) fn standard() -> Self {
         let mut byte = [0u32; 256];
         for i in 0..=255u32 {
             byte[i as usize] = Self::canonicalize_char(i);
         }
-        Self { byte }
+        Self { byte, table: None }
+    }
+
+    pub(crate) fn from_char_table(table: crate::emacs_core::value::Value) -> Self {
+        let mut byte = [0u32; 256];
+        for i in 0..=255i64 {
+            byte[i as usize] = crate::emacs_core::chartable::translate_char(&table, i) as u32;
+        }
+        Self {
+            byte,
+            table: Some(table),
+        }
+    }
+
+    pub(crate) fn cache_key(&self) -> usize {
+        self.table.map_or(0, |table| table.bits())
     }
 
     fn translate(&self, c: u32) -> u32 {
-        self.byte
-            .get(c as usize)
-            .copied()
-            .unwrap_or_else(|| Self::canonicalize_char(c))
+        if let Some(translated) = self.byte.get(c as usize).copied() {
+            return translated;
+        }
+        if let Some(table) = self.table {
+            return crate::emacs_core::chartable::translate_char(&table, c as i64) as u32;
+        }
+        Self::canonicalize_char(c)
     }
 
     fn translate_byte(&self, c: u8) -> u8 {
@@ -482,14 +501,21 @@ pub(crate) fn regex_compile_lisp(
     posix: bool,
     case_fold: bool,
 ) -> Result<CompiledPattern, RegexCompileError> {
+    let translation = case_fold.then(CaseTranslation::standard);
+    regex_compile_lisp_with_translation(pattern, posix, translation)
+}
+
+pub(crate) fn regex_compile_lisp_with_translation(
+    pattern: &crate::heap_types::LispString,
+    posix: bool,
+    translation: Option<CaseTranslation>,
+) -> Result<CompiledPattern, RegexCompileError> {
     let mut buf = CompiledPattern::new();
     buf.posix = posix;
     buf.multibyte = pattern.is_multibyte();
     buf.target_multibyte = pattern.is_multibyte();
-
-    if case_fold {
-        buf.translate = Some(CaseTranslation::standard());
-    }
+    buf.translate = translation;
+    let case_fold = buf.translate.is_some();
 
     let pattern_bytes = pattern.as_bytes();
     let plen = pattern_bytes.len();

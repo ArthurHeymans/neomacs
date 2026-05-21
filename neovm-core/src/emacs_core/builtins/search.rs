@@ -779,6 +779,7 @@ pub(crate) fn builtin_posix_looking_at_with_state(
 
 pub(crate) fn builtin_string_match_with_state(
     case_fold: bool,
+    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     match_data: &mut Option<super::regex::MatchData>,
@@ -820,6 +821,7 @@ pub(crate) fn builtin_string_match_with_state(
                         start,
                         case_fold,
                         false,
+                        case_translation.clone(),
                         syntax,
                         target,
                     ) {
@@ -866,6 +868,12 @@ pub(crate) fn builtin_string_match_slice(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let case_translation = if case_fold {
+        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
+        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+    } else {
+        None
+    };
     let current_buffer = eval.buffers.current_buffer();
     let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
     let category_table =
@@ -879,6 +887,7 @@ pub(crate) fn builtin_string_match_slice(
     };
     let result = builtin_string_match_with_state(
         case_fold,
+        case_translation,
         syntax_table.as_ref(),
         category_table,
         md_slot,
@@ -891,6 +900,7 @@ pub(crate) fn builtin_string_match_slice(
 
 pub(crate) fn builtin_posix_string_match_with_state(
     case_fold: bool,
+    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     match_data: &mut Option<super::regex::MatchData>,
@@ -938,6 +948,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         start,
                         case_fold,
                         true,
+                        case_translation.clone(),
                         syntax,
                         target,
                     ) {
@@ -971,6 +982,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
 
 pub(crate) fn builtin_string_match_p_with_case_fold(
     case_fold: bool,
+    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     args: &[Value],
@@ -999,6 +1011,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
                 start,
                 case_fold,
                 false,
+                case_translation,
                 syntax,
                 &mut throwaway,
             ) {
@@ -1035,11 +1048,23 @@ pub(crate) fn builtin_string_match_p(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let case_translation = if case_fold {
+        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
+        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+    } else {
+        None
+    };
     let current_buffer = eval.buffers.current_buffer();
     let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
     let category_table =
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
-    builtin_string_match_p_with_case_fold(case_fold, syntax_table.as_ref(), category_table, &args)
+    builtin_string_match_p_with_case_fold(
+        case_fold,
+        case_translation,
+        syntax_table.as_ref(),
+        category_table,
+        &args,
+    )
 }
 
 pub(crate) fn builtin_posix_string_match(
@@ -1049,6 +1074,12 @@ pub(crate) fn builtin_posix_string_match(
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let case_translation = if case_fold {
+        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
+        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+    } else {
+        None
+    };
     let current_buffer = eval.buffers.current_buffer();
     let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
     let category_table =
@@ -1062,6 +1093,7 @@ pub(crate) fn builtin_posix_string_match(
     };
     builtin_posix_string_match_with_state(
         case_fold,
+        case_translation,
         syntax_table.as_ref(),
         category_table,
         md_slot,

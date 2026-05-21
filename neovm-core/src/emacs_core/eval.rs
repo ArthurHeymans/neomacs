@@ -2735,6 +2735,7 @@ impl Context {
                 );
                 if builtins::search::builtin_string_match_p_with_case_fold(
                     false,
+                    None,
                     syntax_table.as_ref(),
                     category_table,
                     &[entry, message],

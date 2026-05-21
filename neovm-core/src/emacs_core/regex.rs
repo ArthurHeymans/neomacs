@@ -44,7 +44,8 @@ use std::rc::Rc;
 use crate::buffer::{Buffer, BufferId};
 use crate::emacs_core::casefiddle::apply_replace_match_case;
 use crate::emacs_core::regex_emacs::{
-    self, BufferSyntaxLookup, CompiledPattern, DefaultSyntaxLookup, MatchRegisters, SyntaxLookup,
+    self, BufferSyntaxLookup, CaseTranslation, CompiledPattern, DefaultSyntaxLookup,
+    MatchRegisters, SyntaxLookup,
 };
 use crate::heap_types::LispString;
 
@@ -186,7 +187,7 @@ thread_local! {
     static SEARCH_PATTERN_CACHE: RefCell<Vec<(bool, bool, String, CompiledSearchPattern)>> =
         const { RefCell::new(Vec::new()) };
 
-    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<(bool, bool, bool, bool, Vec<u8>, Rc<CompiledPattern>)>> =
+    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<(bool, bool, Option<usize>, bool, bool, Vec<u8>, Rc<CompiledPattern>)>> =
         const { RefCell::new(Vec::new()) };
 }
 
@@ -863,6 +864,25 @@ fn compile_lisp_pattern_with_posix(
     posix: bool,
     target_multibyte: bool,
 ) -> Result<Rc<CompiledPattern>, String> {
+    compile_lisp_pattern_with_posix_translation(pattern, case_fold, posix, target_multibyte, None)
+}
+
+fn compile_lisp_pattern_with_posix_translation(
+    pattern: &LispString,
+    case_fold: bool,
+    posix: bool,
+    target_multibyte: bool,
+    translation: Option<CaseTranslation>,
+) -> Result<Rc<CompiledPattern>, String> {
+    let effective_translation = if case_fold {
+        translation.or_else(|| Some(CaseTranslation::standard()))
+    } else {
+        None
+    };
+    let translation_key = effective_translation
+        .as_ref()
+        .map(CaseTranslation::cache_key);
+
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
         || {
@@ -872,6 +892,7 @@ fn compile_lisp_pattern_with_posix(
                     |(
                         cached_posix,
                         cached_case_fold,
+                        cached_translation_key,
                         cached_pattern_multibyte,
                         cached_target_multibyte,
                         cached_pattern,
@@ -879,6 +900,7 @@ fn compile_lisp_pattern_with_posix(
                     )| {
                         *cached_posix == posix
                             && *cached_case_fold == case_fold
+                            && *cached_translation_key == translation_key
                             && *cached_pattern_multibyte == pattern.is_multibyte()
                             && *cached_target_multibyte == target_multibyte
                             && cached_pattern.as_slice() == pattern.as_bytes()
@@ -886,7 +908,7 @@ fn compile_lisp_pattern_with_posix(
                 )?;
                 let entry = cache.remove(index);
                 cache.insert(0, entry.clone());
-                Some(entry.5)
+                Some(entry.6)
             })
         },
     ) {
@@ -895,7 +917,10 @@ fn compile_lisp_pattern_with_posix(
 
     let mut compiled = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileMiss,
-        || regex_emacs::regex_compile_lisp(pattern, posix, case_fold).map_err(|e| e.message),
+        || {
+            regex_emacs::regex_compile_lisp_with_translation(pattern, posix, effective_translation)
+                .map_err(|e| e.message)
+        },
     )?;
     compiled.target_multibyte = target_multibyte;
     let compiled = Rc::new(compiled);
@@ -907,6 +932,7 @@ fn compile_lisp_pattern_with_posix(
             (
                 posix,
                 case_fold,
+                translation_key,
                 pattern.is_multibyte(),
                 target_multibyte,
                 pattern.as_bytes().to_vec(),
@@ -2026,6 +2052,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix(
         start,
         case_fold,
         posix,
+        None,
         &DefaultSyntaxLookup,
         match_data,
     )
@@ -2038,6 +2065,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     start: usize,
     case_fold: bool,
     posix: bool,
+    translation: Option<CaseTranslation>,
     syntax: &dyn SyntaxLookup,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
@@ -2045,8 +2073,13 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
         return Ok(None);
     }
 
-    let compiled =
-        compile_lisp_pattern_with_posix(pattern, case_fold, posix, string.is_multibyte())?;
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        string.is_multibyte(),
+        translation,
+    )?;
     let text_bytes = string.as_bytes();
     let range = (text_bytes.len() - start) as isize;
     if let Some((_pos, regs)) = regex_emacs::re_search(
